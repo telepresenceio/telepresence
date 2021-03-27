@@ -21,11 +21,11 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-  // Adds a deployment intercept.  Requires having already called
+  // Adds an intercept to a workload.  Requires having already called
   // Connect.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
 
-  // Deactivates and removes an existent deployment intercept.
+  // Deactivates and removes an existent workload intercept.
   // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
@@ -33,9 +33,9 @@ service Connector {
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);
 
-  // Returns a list of deployments and their current intercept status.
+  // Returns a list of workloads and their current intercept status.
   // Requires having already called Connect.
-  rpc List(ListRequest) returns (DeploymentInfoSnapshot);
+  rpc List(ListRequest) returns (WorkloadInfoSnapshot);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -78,7 +78,7 @@ message UninstallRequest {
   enum UninstallType {
     UNSPECIFIED = 0;
 
-    // Uninstalls an agent from the named deployments
+    // Uninstalls an agent from the named workloads
     NAMED_AGENTS = 1;
 
     // Uninstalls all agents
@@ -118,7 +118,7 @@ enum InterceptError {
   TRAFFIC_MANAGER_ERROR = 5;
   ALREADY_EXISTS = 6;
   LOCAL_TARGET_IN_USE = 7;
-  NO_ACCEPTABLE_DEPLOYMENT = 8;
+  NO_ACCEPTABLE_WORKLOAD = 8;
   AMBIGUOUS_MATCH = 9;
   FAILED_TO_ESTABLISH = 10;
   FAILED_TO_REMOVE = 11;
@@ -140,23 +140,27 @@ message ListRequest {
   string namespace = 2;
 }
 
-// DeploymentInfo contains information about a deployment
-message DeploymentInfo {
-  // Name of deployment
+// WorkloadInfo contains information about a workload
+// https://kubernetes.io/docs/concepts/workloads/
+message WorkloadInfo {
+  // Name of workload
   string name = 1;
 
-  // Reason why deployment cannot be intercepted, or empty if it can.
+  // Reason why workload cannot be intercepted, or empty if it can.
   string not_interceptable_reason = 2;
 
-  // AgentInfo reported from the traffic manager in case the deployment has a traffic-agent installed
+  // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
   telepresence.manager.AgentInfo agent_info = 3;
 
-  // InterceptInfo reported from the traffic manager in case the deployment is currently intercepted
+  // InterceptInfo reported from the traffic manager in case the workload is currently intercepted
   telepresence.manager.InterceptInfo intercept_info = 4;
+
+  // Workload Resource type (e.g. Deployment, ReplicaSet)
+  string workload_resource_type = 5;
 }
 
-message DeploymentInfoSnapshot {
-  repeated DeploymentInfo deployments = 1;
+message WorkloadInfoSnapshot {
+  repeated WorkloadInfo workloads = 1;
 }
 
 message InterceptResult {
@@ -167,6 +171,9 @@ message InterceptResult {
   // The environment of the app
   map<string,string> environment = 4;
 
-  // The service uid associated with the deployment intercepted
+  // The service uid associated with the workload intercepted
   string service_uid = 5;
+
+  // The kind of workload in this intercept
+  string workload_kind = 6;
 }

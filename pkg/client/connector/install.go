@@ -3,7 +3,6 @@ package connector
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -147,14 +147,34 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.findDeployment(c, ai.Namespace, ai.Name)
+			kind, err := ki.findObjectKind(c, ai.Namespace, ai.Name)
 			if err != nil {
-				if !errors2.IsNotFound(err) {
-					addError(err)
-				}
+				addError(err)
 				return
 			}
-			if err = ki.undoDeploymentMods(c, agent); err != nil {
+			var agent kates.Object
+			switch kind {
+			case "ReplicaSet":
+				agent, err = ki.findReplicaSet(c, ai.Namespace, ai.Name)
+				if err != nil {
+					if !errors2.IsNotFound(err) {
+						addError(err)
+					}
+					return
+				}
+			case "Deployment":
+				agent, err = ki.findDeployment(c, ai.Namespace, ai.Name)
+				if err != nil {
+					if !errors2.IsNotFound(err) {
+						addError(err)
+					}
+					return
+				}
+			default:
+				addError(fmt.Errorf("Agent associated with unknown workload kind, can't be removed: %s", ai.Name))
+				return
+			}
+			if err = ki.undoObjectMods(c, agent); err != nil {
 				addError(err)
 				return
 			}
@@ -247,8 +267,7 @@ func svcPortByName(svc *kates.Service, name string) []*kates.ServicePort {
 	return svcPorts
 }
 
-func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment) []*kates.Service {
-	labels := dep.Spec.Template.Labels
+func (ki *installer) findMatchingServices(portName, svcName string, labels map[string]string) []*kates.Service {
 	matching := make([]*kates.Service, 0)
 
 	ki.accLock.Lock()
@@ -257,6 +276,10 @@ func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment
 		for _, svc := range watch.Services {
 			selector := svc.Spec.Selector
 			if len(selector) == 0 {
+				continue nextSvc
+			}
+			// Only check if the service names are equal when supplied by user
+			if svcName != "" && svc.Name != svcName {
 				continue nextSvc
 			}
 			for k, v := range selector {
@@ -273,22 +296,27 @@ func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment
 	return matching
 }
 
-func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Service) (
+func findMatchingPort(obj kates.Object, portName string, svcs []*kates.Service) (
 	service *kates.Service,
 	sPort *kates.ServicePort,
 	cn *kates.Container,
 	cPortIndex int,
 	err error,
 ) {
+	podTemplate, objType, err := GetPodTemplateFromObject(obj)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
 	// Sort slice of services so that the ones in the same namespace get prioritized.
 	sort.Slice(svcs, func(i, j int) bool {
 		a := svcs[i]
 		b := svcs[j]
+		objNamespace := obj.GetNamespace()
 		if a.Namespace != b.Namespace {
-			if a.Namespace == dep.Namespace {
+			if a.Namespace == objNamespace {
 				return true
 			}
-			if b.Namespace == dep.Namespace {
+			if b.Namespace == objNamespace {
 				return false
 			}
 			return a.Namespace < b.Namespace
@@ -296,7 +324,7 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 		return a.Name < b.Name
 	})
 
-	cns := dep.Spec.Template.Spec.Containers
+	cns := podTemplate.Spec.Containers
 	for _, svc := range svcs {
 		// For now, we only support intercepting one port on a given service.
 		ports := svcPortByName(svc, portName)
@@ -305,8 +333,10 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 			continue
 		}
 		if len(ports) > 1 {
-			return nil, nil, nil, 0, fmt.Errorf(
-				"found matching service with multiple ports for deployment %s. Please specify the service port you want to intercept like so --port local:svcPortName", dep.Name)
+			return nil, nil, nil, 0, fmt.Errorf(`
+found matching service with multiple ports for %s %s.%s. Please specify the
+service port you want to intercept like so --port local:svcPortName`,
+				objType, obj.GetName(), obj.GetNamespace())
 		}
 		port := ports[0]
 		var msp *corev1.ServicePort
@@ -372,200 +402,304 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 		default:
 			// Conflict
 			return nil, nil, nil, 0, fmt.Errorf(
-				"found services with conflicting port mappings to deployment %s. Please use --service to specify", dep.Name)
+				"found services with conflicting port mappings to %s %s.%s. Please use --service to specify", objType, obj.GetName(), obj.GetNamespace())
 		}
 	}
 
 	if sPort == nil {
-		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in deployment %s", dep.Name)
+		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in %s %s.%s", objType, obj.GetName(), obj.GetNamespace())
 	}
 	return service, sPort, cn, cPortIndex, nil
 }
 
-// Finds the Referenced Service in a deployment's annotations
-func (ki *installer) getSvcFromDepAnnotation(c context.Context, dep *kates.Deployment) (*kates.Service, error) {
-	var actions deploymentActions
-	annotationsFound, err := getAnnotation(dep, &actions)
+// Finds the Referenced Service in an objects' annotations
+func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object) (*kates.Service, error) {
+	var actions workloadActions
+	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
 		return nil, err
 	}
+	namespace := obj.GetNamespace()
 	if !annotationsFound {
-		return nil, fmt.Errorf("No annotations found on deployment: %s.%s", dep.Name, dep.Namespace)
+		return nil, fmt.Errorf("No annotations found on deployment: %s.%s", obj.GetName(), namespace)
 	}
 	svcName := actions.ReferencedService
 	if svcName == "" {
-		return nil, fmt.Errorf("No ReferencedService found on deployment: %s.%s", dep.Name, dep.Namespace)
+		return nil, fmt.Errorf("No ReferencedService found on deployment: %s.%s", obj.GetName(), namespace)
 	}
 
-	svc := ki.findSvc(dep.Namespace, svcName)
+	svc := ki.findSvc(namespace, svcName)
 	if svc == nil {
-		return nil, fmt.Errorf("Deployment %s.%s referenced unfound service: %s", dep.Name, dep.Namespace, svcName)
+		return nil, fmt.Errorf("Deployment %s.%s referenced unfound service: %s", obj.GetName(), namespace, svcName)
 	}
 	return svc, nil
 }
 
-// Determines if the port associated with a past-intercepted deployment has
-// changed
-func portChanged(c context.Context, dep *kates.Deployment, portName string) (bool, error) {
-	var actions deploymentActions
-	annotationsFound, err := getAnnotation(dep, &actions)
+// Determines if the service associated with a pre-existing intercept exists or if
+// the port to-be-intercepted has changed. It raises an error if either of these
+// cases exist since to go forward with an intercept would require changing the
+// configuration of the agent.
+func checkSvcSame(c context.Context, obj kates.Object, svcName, portName string) error {
+	var actions workloadActions
+	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if annotationsFound {
+		// If the Service in the annotation doesn't match the svcName passed in
+		// then the service to be used with the intercept has changed
+		curSvc := actions.ReferencedService
+		if svcName != "" && curSvc != svcName {
+			return fmt.Errorf("Service for %s changed from %s -> %s", obj.GetName(), curSvc, svcName)
+		}
+
 		// If the portName in the annotation doesn't match the portName passed in
 		// then the ports have changed.
 		curSvcPort := actions.ReferencedServicePortName
 		if curSvcPort != portName {
-			dlog.Infof(c, "Port for %s changed from %s -> %s", dep.Name, curSvcPort, portName)
-			return true, nil
+			return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portName)
 		}
 	}
-	return false, nil
+	return nil
 }
 
 var agentNotFound = errors.New("no such agent")
 
 // This does a lot of things but at a high level it ensures that the traffic agent
-// is installed alongside the proper deployment.  In doing that, it also ensures that
-// the deployment is referenced by a service. Lastly, it returns the service UID
-// associated with the deployment since this is where that correlation is made.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) (string, error) {
-	dep, err := ki.findDeployment(c, namespace, name)
+// is installed alongside the proper workload. In doing that, it also ensures that
+// the workload is referenced by a service. Lastly, it returns the service UID
+// associated with the workload since this is where that correlation is made.
+func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portName, agentImageName string) (string, string, error) {
+	kind, err := ki.findObjectKind(c, namespace, name)
 	if err != nil {
-		if errors2.IsNotFound(err) {
-			err = agentNotFound
+		return "", "", err
+	}
+	var obj kates.Object
+	switch kind {
+	case "ReplicaSet":
+		obj, err = ki.findReplicaSet(c, namespace, name)
+		if err != nil {
+			return "", "", err
 		}
-		return "", err
+	case "Deployment":
+		obj, err = ki.findDeployment(c, namespace, name)
+		if err != nil {
+			return "", "", err
+		}
+	default:
+		return "", "", fmt.Errorf("Cannot ensure agent on unsupported workload: %s", kind)
+	}
+
+	podTemplate, _, err := GetPodTemplateFromObject(obj)
+	if err != nil {
+		return "", "", err
 	}
 	var agentContainer *kates.Container
-	for i := range dep.Spec.Template.Spec.Containers {
-		container := &dep.Spec.Template.Spec.Containers[i]
+	for i := range podTemplate.Spec.Containers {
+		container := &podTemplate.Spec.Containers[i]
 		if container.Name == agentContainerName {
 			agentContainer = container
 			break
 		}
 	}
 
-	svcPortChanged, err := portChanged(c, dep, portName)
-	if err != nil {
-		return "", err
+	if err := checkSvcSame(c, obj, svcName, portName); err != nil {
+		msg := fmt.Sprintf(
+			`%s already being used for intercept with a different service
+configuration. To intercept this with your new configuration, please use
+telepresence uninstall --agent %s This will cancel any intercepts that
+already exist for this service`, kind, obj.GetName())
+		return "", "", errors.Wrap(err, msg)
 	}
 	var svc *kates.Service
 
 	switch {
-	case svcPortChanged:
-		dlog.Infof(c, "Port to be intercepted changed for deployment %s.%s", name, namespace)
-		dlog.Info(c, "Undoing dep+svc modifications and removing agent")
-		// Remove deployment+svc modifications, as well as traffic-agent since
-		// the port is vital in configuring all of those
-		if err = ki.undoDeploymentMods(c, dep); err != nil {
-			return "", err
-		}
-
-		if err = ki.waitForApply(c, namespace, name, dep); err != nil {
-			return "", err
-		}
-		// Since the agent has been removed, we find the updated version of
-		// the deployment and fallthrough to the no agent case
-		dep, err = ki.findDeployment(c, namespace, name)
-		if err != nil {
-			return "", err
-		}
-		fallthrough
 	case agentContainer == nil:
-		dlog.Infof(c, "no agent found for deployment %s.%s", name, namespace)
+		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name %q", portName)
-		matchingSvcs := ki.findMatchingServices(portName, dep)
-		if len(matchingSvcs) == 0 {
-			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", dep.Spec.Template.Labels)
+		matchingSvcs := ki.findMatchingServices(portName, svcName, podTemplate.Labels)
+
+		switch numSvcs := len(matchingSvcs); {
+		case numSvcs == 0:
+			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", podTemplate.Labels)
 			if portName != "" {
 				errMsg += fmt.Sprintf(" and a port named %s", portName)
 			}
-			return "", errors.New(errMsg)
-		}
-		var err error
-		dep, svc, err = addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
-		if err != nil {
-			return "", err
-		}
-	case agentContainer.Image != agentImageName:
-		var actions deploymentActions
-		ok, err := getAnnotation(dep, &actions)
-		if err != nil {
-			return "", err
-		} else if !ok {
-			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return "", fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
+			return "", "", errors.New(errMsg)
+		case numSvcs > 1:
+			svcNames := make([]string, 0, numSvcs)
+			for _, svc := range matchingSvcs {
+				svcNames = append(svcNames, svc.Name)
+			}
+
+			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v: %s",
+				podTemplate.Labels, strings.Join(svcNames, ","))
+			if portName != "" {
+				errMsg += fmt.Sprintf(" and a port named %s", portName)
+			}
+			return "", "", errors.New(errMsg)
+		default:
 		}
 
-		dlog.Debugf(c, "Updating agent for deployment %s.%s", name, namespace)
-		aaa := &deploymentActions{
+		var err error
+		obj, svc, err = addAgentToDeployment(c, portName, agentImageName, obj, matchingSvcs)
+		if err != nil {
+			return "", "", err
+		}
+	case agentContainer.Image != agentImageName:
+		var actions workloadActions
+		ok, err := getAnnotation(obj, &actions)
+		if err != nil {
+			return "", "", err
+		} else if !ok {
+			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
+			return "", "", fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
+		}
+
+		dlog.Debugf(c, "Updating agent for %s %s.%s", kind, name, namespace)
+		aaa := &workloadActions{
 			Version:         actions.Version,
 			AddTrafficAgent: actions.AddTrafficAgent,
 		}
-		explainUndo(c, aaa, dep)
+		explainUndo(c, aaa, obj)
 		aaa.AddTrafficAgent.ImageName = agentImageName
 		agentContainer.Image = agentImageName
-		explainDo(c, aaa, dep)
+		explainDo(c, aaa, obj)
 	default:
-		dlog.Debugf(c, "Deployment %s.%s already has an installed and up-to-date agent", name, namespace)
+		dlog.Debugf(c, "%s %s.%s already has an installed and up-to-date agent", kind, name, namespace)
 	}
 
-	if err := ki.client.Update(c, dep, dep); err != nil {
-		return "", err
+	if err := ki.client.Update(c, obj, obj); err != nil {
+		return "", "", err
 	}
 	if svc != nil {
 		if err := ki.client.Update(c, svc, svc); err != nil {
-			return "", err
+			return "", "", err
 		}
 	} else {
 		// If the service is still nil, that's because an agent already exists that we can reuse.
 		// So we get the service from the deployments annotation so that we can extract the UID.
-		svc, err = ki.getSvcFromDepAnnotation(c, dep)
+		svc, err = ki.getSvcFromObjAnnotation(c, obj)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
 
-	if err := ki.waitForApply(c, namespace, name, dep); err != nil {
-		return "", err
+	if err := ki.waitForApply(c, namespace, name, obj); err != nil {
+		return "", "", err
 	}
-	return string(svc.GetUID()), nil
+	return string(svc.GetUID()), kind, nil
 }
 
-func (ki *installer) waitForApply(c context.Context, namespace, name string, dep *kates.Deployment) error {
+func (ki *installer) waitForApply(c context.Context, namespace, name string, obj kates.Object) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := context.WithTimeout(c, tos.Apply)
 	defer cancel()
 
 	origGeneration := int64(0)
-	if dep != nil {
-		origGeneration = dep.ObjectMeta.Generation
+	if obj != nil {
+		origGeneration = obj.GetGeneration()
+	}
+	kind, err := ki.findObjectKind(c, namespace, name)
+	if err != nil {
+		return err
+	}
+	switch kind {
+	case "ReplicaSet":
+		err := ki.refreshReplicaSet(c, name, namespace)
+		if err != nil {
+			return err
+		}
+		for {
+			dtime.SleepWithContext(c, time.Second)
+			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+				return err
+			}
+
+			rs, err := ki.findReplicaSet(c, namespace, name)
+			if err != nil {
+				return client.CheckTimeout(c, &tos.Apply, err)
+			}
+
+			deployed := rs.ObjectMeta.Generation >= origGeneration &&
+				rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
+				(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
+				rs.Status.FullyLabeledReplicas == rs.Status.Replicas &&
+				rs.Status.AvailableReplicas == rs.Status.Replicas
+
+			if deployed {
+				dlog.Debugf(c, "Replica Set %s.%s successfully applied", name, namespace)
+				return nil
+			}
+		}
+	case "Deployment":
+		for {
+			dtime.SleepWithContext(c, time.Second)
+			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+				return err
+			}
+
+			dep, err := ki.findDeployment(c, namespace, name)
+			if err != nil {
+				return client.CheckTimeout(c, &tos.Apply, err)
+			}
+
+			deployed := dep.ObjectMeta.Generation >= origGeneration &&
+				dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
+				(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
+				dep.Status.UpdatedReplicas == dep.Status.Replicas &&
+				dep.Status.AvailableReplicas == dep.Status.Replicas
+
+			if deployed {
+				dlog.Debugf(c, "deployment %s.%s successfully applied", name, namespace)
+				return nil
+			}
+		}
+
+	default:
+		return fmt.Errorf("Can't wait for apply of unknown workload type: %s", kind)
+	}
+}
+
+// refreshReplicaSet finds pods owned by a given ReplicaSet and deletes them.
+// We need this because updating a Replica Set does *not* generate new
+// pods if the desired amount already exists.
+func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string) error {
+	rs, err := ki.findReplicaSet(c, namespace, name)
+	if err != nil {
+		return err
 	}
 
-	for {
-		dtime.SleepWithContext(c, time.Second)
-		if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+	podNames, err := ki.podNames(c, namespace)
+	if err != nil {
+		return err
+	}
+
+	for _, podName := range podNames {
+		podInfo, err := ki.findPod(c, namespace, podName)
+		if err != nil {
 			return err
 		}
 
-		dep, err := ki.findDeployment(c, namespace, name)
-		if err != nil {
-			return client.CheckTimeout(c, &tos.Apply, err)
-		}
-
-		deployed := dep.ObjectMeta.Generation >= origGeneration &&
-			dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
-			(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
-			dep.Status.UpdatedReplicas == dep.Status.Replicas &&
-			dep.Status.AvailableReplicas == dep.Status.Replicas
-
-		if deployed {
-			dlog.Debugf(c, "deployment %s.%s successfully applied", name, namespace)
-			return nil
+		for _, ownerRef := range podInfo.OwnerReferences {
+			if ownerRef.UID == rs.UID {
+				dlog.Infof(c, "Deleting pod %s owned by rs %s", podInfo.Name, rs.Name)
+				pod := &kates.Pod{
+					TypeMeta: kates.TypeMeta{
+						Kind: "Pod",
+					},
+					ObjectMeta: kates.ObjectMeta{
+						Namespace: podInfo.Namespace,
+						Name:      podInfo.Name,
+					},
+				}
+				if err := ki.client.Delete(c, pod, pod); err != nil {
+					return err
+				}
+			}
 		}
 	}
+	return nil
 }
 
 func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
@@ -596,37 +730,38 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	return true, nil
 }
 
-func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment) error {
-	referencedService, err := undoDeploymentMods(c, dep)
+func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
+	referencedService, err := undoObjectMods(c, obj)
 	if err != nil {
 		return err
 	}
-	if svc := ki.findSvc(dep.Namespace, referencedService); svc != nil {
+	if svc := ki.findSvc(obj.GetNamespace(), referencedService); svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}
 	}
-	return ki.client.Update(c, dep, dep)
+	return ki.client.Update(c, obj, obj)
 }
 
-func undoDeploymentMods(c context.Context, dep *kates.Deployment) (string, error) {
-	var actions deploymentActions
-	ok, err := getAnnotation(dep, &actions)
-	if err != nil {
+func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
+	var actions workloadActions
+	ok, err := getAnnotation(obj, &actions)
+	if !ok {
 		return "", err
 	}
 	if !ok {
-		return "", fmt.Errorf("deployment %s.%s has no agent installed", dep.Name, dep.Namespace)
+		return "", fmt.Errorf("deployment %s.%s has no agent installed", obj.GetName(), obj.GetNamespace())
 	}
 
-	if err = actions.Undo(dep); err != nil {
+	if err = actions.Undo(obj); err != nil {
 		return "", err
 	}
-	delete(dep.Annotations, annTelepresenceActions)
-	if len(dep.Annotations) == 0 {
-		dep.Annotations = nil
+	annotations := obj.GetAnnotations()
+	delete(annotations, annTelepresenceActions)
+	if len(annotations) == 0 {
+		obj.SetAnnotations(nil)
 	}
-	explainUndo(c, &actions, dep)
+	explainUndo(c, &actions, obj)
 	return actions.ReferencedService, nil
 }
 
@@ -658,17 +793,21 @@ func addAgentToDeployment(
 	c context.Context,
 	portName string,
 	agentImageName string,
-	deployment *kates.Deployment, matchingServices []*kates.Service,
+	object kates.Object, matchingServices []*kates.Service,
 ) (
-	*kates.Deployment,
+	kates.Object,
 	*kates.Service,
 	error,
 ) {
-	service, servicePort, container, containerPortIndex, err := findMatchingPort(deployment, portName, matchingServices)
+	_, kind, err := GetPodTemplateFromObject(object)
 	if err != nil {
 		return nil, nil, err
 	}
-	dlog.Debugf(c, "using service %q port %q when intercepting deployment %q",
+	service, servicePort, container, containerPortIndex, err := findMatchingPort(object, portName, matchingServices)
+	if err != nil {
+		return nil, nil, err
+	}
+	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
 		service.Name,
 		func() string {
 			if servicePort.Name != "" {
@@ -676,7 +815,8 @@ func addAgentToDeployment(
 			}
 			return strconv.Itoa(int(servicePort.Port))
 		}(),
-		deployment.Name)
+		kind,
+		object.GetName())
 
 	version := client.Semver().String()
 
@@ -718,14 +858,14 @@ func addAgentToDeployment(
 		}
 	}
 	if containerPort.Number == 0 {
-		return nil, nil, fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", deployment.Name)
+		return nil, nil, fmt.Errorf("unable to add agent to %s %s.%s. The container port cannot be determined", kind, object.GetName(), object.GetNamespace())
 	}
 	if containerPort.Name == "" {
 		containerPort.Name = fmt.Sprintf("tel2px-%d", containerPort.Number)
 	}
 
 	// Figure what modifications we need to make.
-	deploymentMod := &deploymentActions{
+	deploymentMod := &workloadActions{
 		Version:                   version,
 		ReferencedService:         service.Name,
 		ReferencedServicePortName: portName,
@@ -776,17 +916,19 @@ func addAgentToDeployment(
 	}
 
 	// Apply the actions on the Deployment.
-	if err = deploymentMod.Do(deployment); err != nil {
+	if err = deploymentMod.Do(object); err != nil {
 		return nil, nil, err
 	}
-	if deployment.Annotations == nil {
-		deployment.Annotations = make(map[string]string)
+	annotations := object.GetAnnotations()
+	if object.GetAnnotations() == nil {
+		annotations = make(map[string]string)
 	}
-	deployment.Annotations[annTelepresenceActions], err = deploymentMod.MarshalAnnotation()
+	annotations[annTelepresenceActions], err = deploymentMod.MarshalAnnotation()
 	if err != nil {
 		return nil, nil, err
 	}
-	explainDo(c, deploymentMod, deployment)
+	object.SetAnnotations(annotations)
+	explainDo(c, deploymentMod, object)
 
 	// Apply the actions on the Service.
 	if serviceMod != nil {
@@ -805,7 +947,7 @@ func addAgentToDeployment(
 		service = nil
 	}
 
-	return deployment, service, nil
+	return object, service, nil
 }
 
 func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
@@ -835,7 +977,7 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labelMap,
 			},
-			Template: corev1.PodTemplateSpec{
+			Template: kates.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labelMap,
 				},

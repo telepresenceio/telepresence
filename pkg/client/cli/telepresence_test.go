@@ -122,6 +122,14 @@ func (ts *telepresenceSuite) SetupSuite() {
 	}()
 	wg.Wait()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = ts.applyApp(ctx, "rs-echo", "rs-echo", 80)
+		ts.NoError(err)
+	}()
+	wg.Wait()
+
 	// Ensure that no telepresence is running when the tests start
 	_, _ = telepresence(ts.T(), "quit")
 
@@ -321,13 +329,25 @@ func (cs *connectedSuite) TestF_SuccessfullyInterceptsDeploymentWithProbes() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "with-probes", "--port", "9090")
 	require.Empty(stderr)
-	require.Contains(stdout, "Using deployment with-probes")
+	require.Contains(stdout, "Using Deployment with-probes")
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "with-probes: intercepted")
 }
 
-func (cs *connectedSuite) TestG_LocalOnlyIntercept() {
+func (cs *connectedSuite) TestG_SuccessfullyInterceptsReplicaSet() {
+	defer telepresence(cs.T(), "leave", "rs-echo-"+cs.ns())
+
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "rs-echo", "--port", "9091")
+	require.Empty(stderr)
+	require.Contains(stdout, "Using ReplicaSet rs-echo")
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+	require.Empty(stderr)
+	require.Contains(stdout, "rs-echo: intercepted")
+}
+
+func (cs *connectedSuite) TestH_LocalOnlyIntercept() {
 	cs.Run("intercept can be established", func() {
 		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--local-only", "mylocal")
 		cs.Empty(stdout)
@@ -362,7 +382,7 @@ func (cs *connectedSuite) TestG_LocalOnlyIntercept() {
 	})
 }
 
-func (cs *connectedSuite) TestH_ListOnlyMapped() {
+func (cs *connectedSuite) TestI_ListOnlyMapped() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
 	require.Empty(stderr)
@@ -370,7 +390,7 @@ func (cs *connectedSuite) TestH_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.Contains(stdout, "No deployments")
+	require.Contains(stdout, "No Workloads (Deployments or ReplicaSets)")
 
 	stdout, stderr = telepresence(cs.T(), "connect", "--mapped-namespaces", "all")
 	require.Empty(stderr)
@@ -378,10 +398,10 @@ func (cs *connectedSuite) TestH_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.NotContains(stdout, "No deployments")
+	require.NotContains(stdout, "No Workloads (Deployments or ReplicaSets)")
 }
 
-func (cs *connectedSuite) TestI_Uninstall() {
+func (cs *connectedSuite) TestJ_Uninstall() {
 	cs.Run("Uninstalls agent on given deployment", func() {
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
@@ -400,6 +420,24 @@ func (cs *connectedSuite) TestI_Uninstall() {
 		)
 	})
 
+	cs.Run("Uninstalls agent on given replicaset", func() {
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+		require.Empty(stderr)
+		require.Contains(stdout, "rs-echo")
+		_, stderr = telepresence(cs.T(), "uninstall", "--namespace", cs.ns(), "--agent", "rs-echo")
+		require.Empty(stderr)
+		require.Eventually(
+			// condition
+			func() bool {
+				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+				return !strings.Contains(stdout, "rs-echo")
+			},
+			30*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
+	})
+
 	cs.Run("Uninstalls all agents", func() {
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
@@ -410,7 +448,7 @@ func (cs *connectedSuite) TestI_Uninstall() {
 		require.Eventually(
 			func() bool {
 				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
-				return stdout == "No deployments"
+				return stdout == "No Workloads (Deployments or ReplicaSets)"
 			},
 			30*time.Second,     // waitFor
 			2*time.Millisecond, // polling interval
@@ -463,7 +501,7 @@ func (is *interceptedSuite) SetupSuite() {
 			stdout, stderr := telepresence(is.T(), "intercept", "--namespace", is.ns(), "--mount", "false", svc, "--port", port)
 			is.Require().Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
-			is.Contains(stdout, "Using deployment "+svc)
+			is.Contains(stdout, "Using Deployment "+svc)
 		}
 	})
 
@@ -558,9 +596,17 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
 	c, cancel := context.WithTimeout(c, 30*time.Second)
 	defer cancel()
+
+	// Since this function can be called multiple times in parallel
+	// we add the name of the servie to the title of the pod so they
+	// can run at the same time. We strip out any characters that we
+	// can't use in a name in k8s.
+	reg := regexp.MustCompile("[^a-zA-Z0-9-]+")
+	k8sSafeName := reg.ReplaceAllString(name, "")
+	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
 	for i := 0; i < 30; i++ {
 		time.Sleep(time.Second)
-		err := ts.kubectl(c, "run", "curl-from-cluster", "--rm", "-it",
+		err := ts.kubectl(c, "run", containerName, "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
 			fmt.Sprintf("http://%s.%s:%d", name, ts.namespace, port),

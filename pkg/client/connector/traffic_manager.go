@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -197,13 +198,117 @@ func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
-func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.DeploymentInfoSnapshot {
+// hasOwner parses an object and determines whether the object has an
+// owner that is of a kind we prefer. Currently the only owner that we
+// prefer is a Deployment, but this may grow in the future
+func (tm *trafficManager) hasOwner(obj kates.Object) bool {
+	for _, owner := range obj.GetOwnerReferences() {
+		if owner.Kind == "Deployment" {
+			return true
+		}
+	}
+	return false
+}
+
+func (tm *trafficManager) getInfosForWorkflow(
+	ctx context.Context,
+	names []string,
+	objectKind,
+	namespace string,
+	iMap map[string]*manager.InterceptInfo,
+	aMap map[string]*manager.AgentInfo,
+	filter rpc.ListRequest_Filter,
+) []*rpc.WorkloadInfo {
+	workloadInfos := make([]*rpc.WorkloadInfo, 0)
+	for _, name := range names {
+		iCept, ok := iMap[name]
+		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
+			continue
+		}
+		agent, ok := aMap[name]
+		if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			continue
+		}
+		reason := ""
+		if agent == nil && iCept == nil {
+			// Check if interceptable
+			var object kates.Object
+			var labels map[string]string
+			switch objectKind {
+			case "Deployment":
+				dep, err := tm.findDeployment(ctx, namespace, name)
+				if err != nil {
+					// Removed from snapshot since the name slice was obtained
+					if !errors2.IsNotFound(err) {
+						dlog.Error(ctx, err)
+					}
+					continue
+				}
+
+				if dep.Status.Replicas == int32(0) {
+					reason = "Has 0 replicas"
+				}
+				object = dep
+				labels = dep.Spec.Template.Labels
+
+			case "ReplicaSet":
+				rs, err := tm.findReplicaSet(ctx, namespace, name)
+				if err != nil {
+					// Removed from snapshot since the name slice was obtained
+					if !errors2.IsNotFound(err) {
+						dlog.Error(ctx, err)
+					}
+					continue
+				}
+
+				if rs.Status.Replicas == int32(0) {
+					reason = "Has 0 replicas"
+				}
+				object = rs
+				labels = rs.Spec.Template.Labels
+
+			default:
+				reason = "No workload telepresence knows how to intercept"
+			}
+
+			// If an object is owned by a higher level workload, then users should
+			// intercept that workload so we will not include it in our slice.
+			if tm.hasOwner(object) {
+				dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", object.GetName(), object.GetNamespace())
+				continue
+			}
+
+			matchingSvcs := tm.findMatchingServices("", "", labels)
+			if len(matchingSvcs) == 0 {
+				reason = "No service with matching selector"
+			}
+
+			// If we have a reason, that means it's not interceptable, so we only
+			// pass the workload through if they want to see all workloads, not
+			// just the interceptable ones
+			if !ok && filter <= rpc.ListRequest_INTERCEPTABLE && reason != "" {
+				continue
+			}
+		}
+
+		workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{
+			Name:                   name,
+			NotInterceptableReason: reason,
+			AgentInfo:              agent,
+			InterceptInfo:          iCept,
+			WorkloadResourceType:   objectKind,
+		})
+	}
+	return workloadInfos
+}
+
+func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
 	namespace := tm.actualNamespace(rq.Namespace)
 	if namespace == "" {
 		// namespace is not currently mapped
-		return &rpc.DeploymentInfoSnapshot{}
+		return &rpc.WorkloadInfoSnapshot{}
 	}
 
 	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
@@ -229,52 +334,25 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 	}
 
 	filter := rq.Filter
-	depInfos := make([]*rpc.DeploymentInfo, 0)
+	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 	depNames, err := tm.deploymentNames(ctx, namespace)
 	if err != nil {
 		dlog.Error(ctx, err)
-		return &rpc.DeploymentInfoSnapshot{}
+		return &rpc.WorkloadInfoSnapshot{}
 	}
-	for _, depName := range depNames {
-		iCept, ok := iMap[depName]
-		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
-			continue
-		}
-		agent, ok := aMap[depName]
-		if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
-			continue
-		}
-		reason := ""
-		if agent == nil && iCept == nil {
-			// Check if interceptable
-			dep, err := tm.findDeployment(ctx, namespace, depName)
-			if err != nil {
-				// Removed from snapshot since the name slice was obtained
-				if !errors2.IsNotFound(err) {
-					dlog.Error(ctx, err)
-				}
-				continue
-			}
-			matchingSvcs := tm.findMatchingServices("", dep)
-			if len(matchingSvcs) == 0 {
-				if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
-					continue
-				}
-				reason = "No service with matching selector"
-			}
-		}
+	depWorkloadInfos := tm.getInfosForWorkflow(ctx, depNames, "Deployment", namespace, iMap, aMap, filter)
+	workloadInfos = append(workloadInfos, depWorkloadInfos...)
 
-		depInfos = append(depInfos, &rpc.DeploymentInfo{
-			Name:                   depName,
-			NotInterceptableReason: reason,
-			AgentInfo:              agent,
-			InterceptInfo:          iCept,
-		})
+	rsNames, err := tm.replicaSetNames(ctx, namespace)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return &rpc.WorkloadInfoSnapshot{}
 	}
-
+	rsWorkloadInfos := tm.getInfosForWorkflow(ctx, rsNames, "ReplicaSet", namespace, iMap, aMap, filter)
+	workloadInfos = append(workloadInfos, rsWorkloadInfos...)
 	for localIntercept, localNs := range tm.localIntercepts {
 		if localNs == namespace {
-			depInfos = append(depInfos, &rpc.DeploymentInfo{InterceptInfo: &manager.InterceptInfo{
+			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
 				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
 				Disposition:       manager.InterceptDispositionType_ACTIVE,
 				MechanismArgsDesc: "as local-only",
@@ -282,7 +360,7 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 		}
 	}
 
-	return &rpc.DeploymentInfoSnapshot{Deployments: depInfos}
+	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}
 }
 
 func (tm *trafficManager) remain(c context.Context) error {
@@ -332,15 +410,15 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 // Given a slice of AgentInfo, this returns another slice of agents with one
 // agent per namespace, name pair.
 func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
-	type deployment struct {
+	type workload struct {
 		name, namespace string
 	}
-	deployments := map[deployment]bool{}
+	workloads := map[workload]bool{}
 	var representativeAgents []*manager.AgentInfo
 	for _, agent := range agents {
-		dep := deployment{name: agent.Name, namespace: agent.Namespace}
-		if !deployments[dep] {
-			deployments[dep] = true
+		wk := workload{name: agent.Name, namespace: agent.Namespace}
+		if !workloads[wk] {
+			workloads[wk] = true
 			representativeAgents = append(representativeAgents, agent)
 		}
 	}

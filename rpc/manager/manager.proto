@@ -24,8 +24,8 @@ message ClientInfo {
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
 // reports at boot-up when it connects to the Telepresence Manager.
 message AgentInfo {
-  string name = 1;      // name of the Deployment
-  string namespace = 7; // namespace of the Deployment
+  string name = 1;      // name of the Workload
+  string namespace = 7; // namespace of the Workload
   string hostname = 2;
   string product = 3; // distinguish open source, our closed source, someone else's thing
   string version = 4;
@@ -58,7 +58,7 @@ message AgentInfo {
 message InterceptSpec {
   // A human-friendly name for this intercept.  This is usally the
   // same as the agent name below; the name/namespace of the
-  // Deployment, but it could be something else.  It is invalid for
+  // Workload, but it could be something else.  It is invalid for
   // the same client to attempt to create multiple intercepts with the
   // same name.
   string name = 1;
@@ -66,10 +66,13 @@ message InterceptSpec {
   // Same as ClientInfo.Name; "user@hostname".
   string client = 2;
 
-  // Same as AgentInfo.Name of the Deployment.
+  // Same as AgentInfo.Name of the Workload.
   string agent = 3;
 
-  // Same as AgentInfo.Namespace of the Deployment
+  // Kind of the Workload
+  string workload_kind = 13;
+
+  // Same as AgentInfo.Namespace of the Workload
   string namespace = 8;
 
   // How to decide which subset of requests to that agent to intercept.
@@ -93,6 +96,9 @@ message InterceptSpec {
 
   // .uid.metadata of service associated with intercept
   string service_uid = 12;
+
+  // name of the aforementioned service
+  string service_name = 14;
 }
 
 enum InterceptDispositionType {

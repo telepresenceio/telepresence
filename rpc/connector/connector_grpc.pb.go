@@ -29,18 +29,18 @@ type ConnectorClient interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
-	// Adds a deployment intercept.  Requires having already called
+	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
-	// Deactivates and removes an existent deployment intercept.
+	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
-	// Returns a list of deployments and their current intercept status.
+	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
-	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error)
+	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -98,8 +98,8 @@ func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, o
 	return out, nil
 }
 
-func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error) {
-	out := new(DeploymentInfoSnapshot)
+func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error) {
+	out := new(WorkloadInfoSnapshot)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/List", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -129,18 +129,18 @@ type ConnectorServer interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
-	// Adds a deployment intercept.  Requires having already called
+	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
-	// Deactivates and removes an existent deployment intercept.
+	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
-	// Returns a list of deployments and their current intercept status.
+	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
-	List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error)
+	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -165,7 +165,7 @@ func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.Re
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
-func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error) {
+func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {

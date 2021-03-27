@@ -175,10 +175,10 @@ func (kc *k8sCluster) check(c context.Context) error {
 	return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, nil)
 }
 
-// deploymentNames  returns the names of all deployments found in the given Namespace
-func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]string, error) {
+// kindNames returns the names of all objects of a specified Kind in a given Namespace
+func (kc *k8sCluster) kindNames(c context.Context, kind, namespace string) ([]string, error) {
 	var objNames []objName
-	if err := kc.client.List(c, kates.Query{Kind: "Deployment", Namespace: namespace}, &objNames); err != nil {
+	if err := kc.client.List(c, kates.Query{Kind: kind, Namespace: namespace}, &objNames); err != nil {
 		return nil, err
 	}
 	names := make([]string, len(objNames))
@@ -186,6 +186,21 @@ func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]st
 		names[i] = n.Name
 	}
 	return names, nil
+}
+
+// deploymentNames returns the names of all deployments found in the given Namespace
+func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "Deployment", namespace)
+}
+
+// replicaSetNames returns the names of all replica sets found in the given Namespace
+func (kc *k8sCluster) replicaSetNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "ReplicaSet", namespace)
+}
+
+// PodSetNames returns the names of all replica sets found in the given Namespace
+func (kc *k8sCluster) podNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "Pod", namespace)
 }
 
 // findDeployment returns a deployment with the given name in the given namespace or nil
@@ -199,6 +214,62 @@ func (kc *k8sCluster) findDeployment(c context.Context, namespace, name string) 
 		return nil, err
 	}
 	return dep, nil
+}
+
+// findReplicaSet returns a replica set with the given name in the given namespace or nil
+// if no such replica set could be found.
+func (kc *k8sCluster) findReplicaSet(c context.Context, namespace, name string) (*kates.ReplicaSet, error) {
+	rs := &kates.ReplicaSet{
+		TypeMeta:   kates.TypeMeta{Kind: "ReplicaSet"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	if err := kc.client.Get(c, rs, rs); err != nil {
+		return nil, err
+	}
+	return rs, nil
+}
+
+// findPod returns a replica set with the given name in the given namespace or nil
+// if no such replica set could be found.
+func (kc *k8sCluster) findPod(c context.Context, namespace, name string) (*kates.Pod, error) {
+	rs := &kates.Pod{
+		TypeMeta:   kates.TypeMeta{Kind: "Pod"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	if err := kc.client.Get(c, rs, rs); err != nil {
+		return nil, err
+	}
+	return rs, nil
+}
+
+// findObjectKind returns a workload for the given name and namespace. We
+// search in a specific order based on how we prefer workload objects:
+// 1. Deployments
+// 2. ReplicaSets
+// And return the kind as soon as we find one that matches
+func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) (string, error) {
+	depNames, err := kc.deploymentNames(c, namespace)
+	if err != nil {
+		return "", err
+	}
+	for _, depName := range depNames {
+		if depName == name {
+			return "Deployment", nil
+		}
+	}
+
+	// Since Deployments manage ReplicaSets, we only look for matching
+	// ReplicaSets if no Deployment was found
+	rsNames, err := kc.replicaSetNames(c, namespace)
+	if err != nil {
+		return "", err
+	}
+	for _, rsName := range rsNames {
+		if rsName == name {
+			return "ReplicaSet", nil
+		}
+	}
+	return "", errors.New("No supported Object Kind Found")
 }
 
 // findSvc finds a service with the given name in the given Namespace and returns
