@@ -264,6 +264,11 @@ func (s *service) GetCloudToken(ctx context.Context, req *rpc.TokenReq) (*rpc.To
 	ctx = s.callCtx(ctx, "GetCloudToken")
 	token, err := s.getCloudToken(ctx, req.GetAutoLogin())
 	if err != nil {
+		if _err := s.loginExecutor.Login(ctx); _err == nil {
+			token, err = s.loginExecutor.GetToken(ctx)
+		}
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &rpc.TokenData{AccessToken: token}, nil
