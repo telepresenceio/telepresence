@@ -31,8 +31,8 @@ import (
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
-	*installer     // installer is also a k8sCluster
-	getAccessToken func(context.Context, bool) (string, error)
+	*installer // installer is also a k8sCluster
+	getAPIKey  func(context.Context, string, bool) (string, error)
 
 	// local information
 	env         client.Env
@@ -65,7 +65,7 @@ func newTrafficManager(
 	env client.Env,
 	cluster *k8sCluster,
 	installID string,
-	getAccessToken func(context.Context, bool) (string, error),
+	getAPIKey func(context.Context, string, bool) (string, error),
 ) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
@@ -82,12 +82,12 @@ func newTrafficManager(
 		return nil, errors.Wrap(err, "new installer")
 	}
 	tm := &trafficManager{
-		installer:      ti,
-		env:            env,
-		installID:      installID,
-		startup:        make(chan bool),
-		userAndHost:    fmt.Sprintf("%s@%s", userinfo.Username, host),
-		getAccessToken: getAccessToken,
+		installer:   ti,
+		env:         env,
+		installID:   installID,
+		startup:     make(chan bool),
+		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
+		getAPIKey:   getAPIKey,
 	}
 
 	return tm, nil
@@ -168,11 +168,11 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 
 	mClient := manager.NewManagerClient(conn)
 	si, err := mClient.ArriveAsClient(tc, &manager.ClientInfo{
-		Name:        tm.userAndHost,
-		InstallId:   tm.installID,
-		Product:     "telepresence",
-		Version:     client.Version(),
-		BearerToken: func() string { tok, _ := tm.getAccessToken(c, false); return tok }(),
+		Name:      tm.userAndHost,
+		InstallId: tm.installID,
+		Product:   "telepresence",
+		Version:   client.Version(),
+		ApiKey:    func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
 	})
 
 	if err != nil {
@@ -373,8 +373,8 @@ func (tm *trafficManager) remain(c context.Context) error {
 			return nil
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
-				Session:     tm.session(),
-				BearerToken: func() string { tok, _ := tm.getAccessToken(c, false); return tok }(),
+				Session: tm.session(),
+				ApiKey:  func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
 			})
 			if err != nil {
 				if c.Err() != nil {

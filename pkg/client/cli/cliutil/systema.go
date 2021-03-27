@@ -78,11 +78,12 @@ func GetCloudAccessToken(ctx context.Context, autoLogin bool) (string, error) {
 	return tokenData.GetAccessToken(), nil
 }
 
-func GetCloudAPIKey(ctx context.Context, description string) (string, error) {
+func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (string, error) {
 	var keyData *connector.KeyData
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		keyData, err = connectorClient.GetCloudAPIKey(ctx, &connector.KeyRequest{
+			AutoLogin:   autoLogin,
 			Description: description,
 		})
 		return err

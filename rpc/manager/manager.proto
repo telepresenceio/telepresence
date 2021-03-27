@@ -18,7 +18,7 @@ message ClientInfo {
   string install_id = 2;
   string product = 3;  // "telepresence"
   string version = 4;
-  string bearer_token = 5;
+  string api_key = 5;
 }
 
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
@@ -210,6 +210,7 @@ message InterceptInfoSnapshot {
 message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
+  string api_key = 3;
 }
 
 message UpdateInterceptRequest {
@@ -244,7 +245,7 @@ message ReviewInterceptRequest {
 
 message RemainRequest {
   SessionInfo session = 1;
-  string bearer_token = 2;
+  string api_key = 2;
 }
 
 // VersionInfo2 is different than telepresence.common.VersionInfo in

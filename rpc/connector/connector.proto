@@ -214,7 +214,8 @@ message TokenData {
 }
 
 message KeyRequest {
-  string description = 1;
+  bool auto_login = 1;
+  string description = 2;
 }
 
 message KeyData {
