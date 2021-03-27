@@ -17,6 +17,7 @@ import (
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth"
@@ -213,10 +214,12 @@ func TestLoginFlow(t *testing.T) {
 		return setupWithCacheFuncs(t, nil, nil)
 	}
 	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
-		errs := make(chan error)
-		go func() {
-			errs <- f.Runner.LoginFlow(dlog.NewTestContext(t, false))
-		}()
+		grp := dgroup.NewGroup(dlog.NewTestContext(t, false), dgroup.GroupConfig{
+			EnableWithSoftness: true,
+			ShutdownOnNonError: true,
+		})
+		grp.Go("worker", f.Runner.Worker)
+		grp.Go("login", f.Runner.Login)
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
 		callbackQuery := callbackUrl.Query()
@@ -228,8 +231,7 @@ func TestLoginFlow(t *testing.T) {
 		}
 		callbackUrl.RawQuery = callbackQuery.Encode()
 		callbackResponse := sendCallbackRequest(t, callbackUrl)
-		err := <-errs
-		return callbackResponse, rawAuthUrl, err
+		return callbackResponse, rawAuthUrl, grp.Wait()
 	}
 	executeDefaultLoginFlow := func(t *testing.T, f *fixture) (*http.Response, string, error) {
 		return executeLoginFlowWithErrorParam(t, f, "", "")
@@ -386,15 +388,17 @@ func TestLoginFlow(t *testing.T) {
 		ctx := dlog.NewTestContext(t, false)
 		f := setupWithCacheFuncs(t, authdata.SaveTokenToUserCache, authdata.SaveUserInfoToUserCache)
 		defer f.MockOauth2Server.TearDown(t)
-		errs := make(chan error)
 
 		// a fake user cache directory
 		ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
 		// when
-		go func() {
-			errs <- f.Runner.LoginFlow(ctx)
-		}()
+		grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+			EnableWithSoftness: true,
+			ShutdownOnNonError: true,
+		})
+		grp.Go("worker", f.Runner.Worker)
+		grp.Go("login", f.Runner.Login)
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
 		callbackQuery := callbackUrl.Query()
@@ -402,7 +406,7 @@ func TestLoginFlow(t *testing.T) {
 		callbackUrl.RawQuery = callbackQuery.Encode()
 		callbackResponse := sendCallbackRequest(t, callbackUrl)
 		defer callbackResponse.Body.Close()
-		err := <-errs
+		err := grp.Wait()
 
 		// then
 		require.NoError(t, err, "no error running login flow")

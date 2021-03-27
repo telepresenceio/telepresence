@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -37,6 +38,7 @@ type oauth2Callback struct {
 
 type loginExecutor struct {
 	// static
+
 	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
 	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
@@ -45,14 +47,18 @@ type loginExecutor struct {
 	scout            chan<- scout.ScoutReport
 
 	// stateful
-	loginMu      sync.Mutex
-	callbacks    chan oauth2Callback
-	oauth2Config oauth2.Config
+
+	oauth2ConfigMu sync.RWMutex // locked unless a .Worker is running
+	oauth2Config   oauth2.Config
+
+	loginMu   sync.Mutex
+	callbacks chan oauth2Callback
 }
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
-	LoginFlow(ctx context.Context) error
+	Worker(ctx context.Context) error
+	Login(ctx context.Context) error
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -64,7 +70,7 @@ func NewLoginExecutor(
 	stdout io.Writer,
 	scout chan<- scout.ScoutReport,
 ) LoginExecutor {
-	return &loginExecutor{
+	ret := &loginExecutor{
 		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
@@ -74,6 +80,8 @@ func NewLoginExecutor(
 
 		callbacks: make(chan oauth2Callback),
 	}
+	ret.oauth2ConfigMu.Lock()
+	return ret
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
@@ -103,21 +111,16 @@ func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport
 		stdout,
 		scout,
 	)
-	return l.LoginFlow(ctx)
+	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableWithSoftness: ctx == dcontext.HardContext(ctx),
+		ShutdownOnNonError: true,
+	})
+	grp.Go("worker", l.Worker)
+	grp.Go("fncall", l.Login)
+	return grp.Wait()
 }
 
-// LoginFlow tries logging the user by opening a browser window and authenticating against the
-// configured OAuth2 provider user a code flow. An HTTP server is started in the background during
-// authentication to handle the callback url. Once the callback url is invoked, the login flow will
-// invoke the token endpoint to get the user's access & refresh tokens and persist them with the
-// SaveTokenFunc (which would usually write to user cache).
-// If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
-// using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(ctx context.Context) error {
-	// Only one login attempt at a time
-	l.loginMu.Lock()
-	defer l.loginMu.Unlock()
-
+func (l *loginExecutor) Worker(ctx context.Context) error {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return err
@@ -131,6 +134,8 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
+	l.oauth2ConfigMu.Unlock()
+	defer l.oauth2ConfigMu.Lock()
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableWithSoftness: ctx == dcontext.HardContext(ctx),
@@ -141,27 +146,22 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 		sc := dhttp.ServerConfig{
 			Handler: http.HandlerFunc(l.httpHandler),
 		}
-		err := sc.Serve(ctx, listener)
-		if err != nil {
-			cb := oauth2Callback{
-				Code:             "",
-				Error:            "Could not start callback server",
-				ErrorDescription: err.Error(),
-			}
-			// don't block
-			select {
-			case l.callbacks <- cb:
-			default:
-			}
-		}
-		return err
+		return sc.Serve(ctx, listener)
 	})
-	grp.Go("actor", l.login)
 
 	return grp.Wait()
 }
 
-func (l *loginExecutor) login(ctx context.Context) (err error) {
+// Login tries logging the user by opening a browser window and authenticating against the
+// configured (in `l.env`) OAuth2 authorization server using the authorization-code flow.  This
+// relies on the .Worker() HTTP server being already running in the background, as it is needed to
+// serve the redirection endpoint (called the "callback URL" in this code).  Once the callback URL
+// is invoked, this function will receive notification of that on the l.callbacks channel, and will
+// invoke the authorization server's token endpoint to get the user's access & refresh tokens and
+// persist them with the l.SaveTokenFunc (which would usually write to user cache).  If login
+// succeeds, the this function will then try invoking the authorization server's userinfo endpoint
+// and persisting it using l.SaveUserInfoFunc (which would usually write to user cache).
+func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	// Whatever the result is, report it to the terminal and report it to Metriton.
 	var token *oauth2.Token
 	defer func() {
@@ -188,6 +188,14 @@ func (l *loginExecutor) login(ctx context.Context) (err error) {
 		}
 	}()
 
+	// We'll be making use of l.auth2config
+	l.oauth2ConfigMu.RLock()
+	defer l.oauth2ConfigMu.RUnlock()
+
+	// Only one login attempt at a time
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
 	pkceVerifier, err := NewCodeVerifier()
@@ -207,7 +215,10 @@ func (l *loginExecutor) login(ctx context.Context) (err error) {
 
 	// wait for callback completion or interruption
 	select {
-	case callback := <-l.callbacks:
+	case callback, ok := <-l.callbacks:
+		if !ok {
+			return errors.New("connector shutting down")
+		}
 		if callback.Error != "" {
 			return fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
 		}
@@ -287,9 +298,15 @@ func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
 		dlog.Errorf(r.Context(), "Error writing callback response body: %v", err)
 	}
 
-	l.callbacks <- oauth2Callback{
+	resp := oauth2Callback{
 		Code:             code,
 		Error:            errorName,
 		ErrorDescription: errorDescription,
+	}
+	// Only send the resp if there's still a listener waiting for it.  The user might have hit
+	// Ctrl-C and hung up!
+	select {
+	case l.callbacks <- resp:
+	default:
 	}
 }
