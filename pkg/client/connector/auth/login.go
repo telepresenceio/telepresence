@@ -42,12 +42,14 @@ type loginExecutor struct {
 	OpenURLFunc      func(string) error
 
 	// stateful
-	scout chan<- scout.ScoutReport
+	stdout    io.Writer
+	scout     chan<- scout.ScoutReport
+	callbacks chan oauth2Callback
 }
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
-	LoginFlow(ctx context.Context, stdout io.Writer) error
+	LoginFlow(ctx context.Context) error
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -56,13 +58,18 @@ func NewLoginExecutor(
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
-	scout chan<- scout.ScoutReport) LoginExecutor {
+	stdout io.Writer,
+	scout chan<- scout.ScoutReport,
+) LoginExecutor {
 	return &loginExecutor{
 		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
 		OpenURLFunc:      openURLFunc,
-		scout:            scout,
+
+		stdout:    stdout,
+		scout:     scout,
+		callbacks: make(chan oauth2Callback),
 	}
 }
 
@@ -90,9 +97,10 @@ func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,
 		browser.OpenURL,
+		stdout,
 		scout,
 	)
-	return l.LoginFlow(ctx, stdout)
+	return l.LoginFlow(ctx)
 }
 
 // LoginFlow tries logging the user by opening a browser window and authenticating against the
@@ -102,7 +110,7 @@ func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport
 // SaveTokenFunc (which would usually write to user cache).
 // If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
 // using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(ctx context.Context, stdout io.Writer) error {
+func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return err
@@ -122,24 +130,22 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout io.Writer) error {
 		ShutdownOnNonError: true,
 	})
 
-	callbacks := make(chan oauth2Callback)
-
 	grp.Go("server-http", func(ctx context.Context) error {
-		defer close(callbacks)
+		defer close(l.callbacks)
 
 		sc := dhttp.ServerConfig{
-			Handler: l.httpHandler(callbacks),
+			Handler: http.HandlerFunc(l.httpHandler),
 		}
 		return sc.Serve(ctx, listener)
 	})
 	grp.Go("actor", func(ctx context.Context) error {
-		return l.login(ctx, stdout, oauth2Config, callbacks)
+		return l.login(ctx, oauth2Config)
 	})
 
 	return grp.Wait()
 }
 
-func (l *loginExecutor) login(ctx context.Context, stdout io.Writer, oauth2Config oauth2.Config, callbacks <-chan oauth2Callback) error {
+func (l *loginExecutor) login(ctx context.Context, oauth2Config oauth2.Config) error {
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
 	pkceVerifier, err := NewCodeVerifier()
@@ -152,14 +158,14 @@ func (l *loginExecutor) login(ctx context.Context, stdout io.Writer, oauth2Confi
 		oauth2.SetAuthURLParam("code_challenge_method", PKCEChallengeMethodS256),
 	)
 
-	fmt.Fprintln(stdout, "Launching browser authentication flow...")
+	fmt.Fprintln(l.stdout, "Launching browser authentication flow...")
 	if err := l.OpenURLFunc(url); err != nil {
-		fmt.Fprintf(stdout, "Could not open browser, please access this URL: %v\n", url)
+		fmt.Fprintf(l.stdout, "Could not open browser, please access this URL: %v\n", url)
 	}
 
 	// wait for callback completion or interruption
 	select {
-	case callback := <-callbacks:
+	case callback := <-l.callbacks:
 		token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
 		if err != nil {
 			l.scout <- scout.ScoutReport{
@@ -169,7 +175,7 @@ func (l *loginExecutor) login(ctx context.Context, stdout io.Writer, oauth2Confi
 				},
 			}
 		} else {
-			fmt.Fprintln(stdout, "Login successful.")
+			fmt.Fprintln(l.stdout, "Login successful.")
 			_ = l.retrieveUserInfo(ctx, token)
 			l.scout <- scout.ScoutReport{
 				Action: "login_success",
@@ -177,7 +183,7 @@ func (l *loginExecutor) login(ctx context.Context, stdout io.Writer, oauth2Confi
 		}
 		return err
 	case <-ctx.Done():
-		fmt.Fprintln(stdout, "Login aborted.")
+		fmt.Fprintln(l.stdout, "Login aborted.")
 		l.scout <- scout.ScoutReport{
 			Action: "login_interrupted",
 		}
@@ -237,40 +243,38 @@ func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Toke
 	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 
-func (l *loginExecutor) httpHandler(callbacks chan<- oauth2Callback) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != callbackPath {
-			http.NotFound(w, r)
-			return
-		}
-		query := r.URL.Query()
-		code := query.Get("code")
-		errorName := query.Get("error")
-		errorDescription := query.Get("error_description")
+func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != callbackPath {
+		http.NotFound(w, r)
+		return
+	}
+	query := r.URL.Query()
+	code := query.Get("code")
+	errorName := query.Get("error")
+	errorDescription := query.Get("error_description")
 
-		var sb strings.Builder
-		sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
-		if errorName == "" && code != "" {
-			w.Header().Set("Location", l.env.LoginCompletionURL)
-			w.WriteHeader(http.StatusTemporaryRedirect)
-			sb.WriteString("<h1>Authentication Successful</h1>")
-			sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")
-		} else {
-			sb.WriteString("<h1>Authentication Error</h1>")
-			sb.WriteString(fmt.Sprintf("<p>%s: %s</p>", errorName, errorDescription))
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		sb.WriteString("</body></html>")
+	var sb strings.Builder
+	sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
+	if errorName == "" && code != "" {
+		w.Header().Set("Location", l.env.LoginCompletionURL)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		sb.WriteString("<h1>Authentication Successful</h1>")
+		sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")
+	} else {
+		sb.WriteString("<h1>Authentication Error</h1>")
+		sb.WriteString(fmt.Sprintf("<p>%s: %s</p>", errorName, errorDescription))
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	sb.WriteString("</body></html>")
 
-		w.Header().Set("Content-Type", "text/html")
-		if _, err := io.WriteString(w, sb.String()); err != nil {
-			dlog.Errorf(r.Context(), "Error writing callback response body: %v", err)
-		}
+	w.Header().Set("Content-Type", "text/html")
+	if _, err := io.WriteString(w, sb.String()); err != nil {
+		dlog.Errorf(r.Context(), "Error writing callback response body: %v", err)
+	}
 
-		callbacks <- oauth2Callback{
-			Code:             code,
-			Error:            errorName,
-			ErrorDescription: errorDescription,
-		}
-	})
+	l.callbacks <- oauth2Callback{
+		Code:             code,
+		Error:            errorName,
+		ErrorDescription: errorDescription,
+	}
 }

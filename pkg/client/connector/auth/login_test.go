@@ -176,6 +176,8 @@ func TestLoginFlow(t *testing.T) {
 		mockOpenURLWrapper := &MockOpenURLWrapper{}
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
+		ctx := dlog.NewTestContext(t, false)
+		stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
 		scout := make(chan scout.ScoutReport)
 		t.Cleanup(func() { close(scout) })
 		go func() {
@@ -202,6 +204,7 @@ func TestLoginFlow(t *testing.T) {
 					openUrlChan <- url
 					return mockOpenURLWrapper.OpenURL(url)
 				},
+				stdout,
 				scout,
 			),
 		}
@@ -212,9 +215,7 @@ func TestLoginFlow(t *testing.T) {
 	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
 		errs := make(chan error)
 		go func() {
-			ctx := dlog.NewTestContext(t, false)
-			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-			errs <- f.Runner.LoginFlow(ctx, stdout)
+			errs <- f.Runner.LoginFlow(dlog.NewTestContext(t, false))
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
@@ -392,9 +393,7 @@ func TestLoginFlow(t *testing.T) {
 
 		// when
 		go func() {
-			ctx := dlog.NewTestContext(t, false)
-			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-			errs <- f.Runner.LoginFlow(ctx, stdout)
+			errs <- f.Runner.LoginFlow(dlog.NewTestContext(t, false))
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
