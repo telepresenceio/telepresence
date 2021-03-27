@@ -277,6 +277,28 @@ func (s *service) GetCloudAccessToken(ctx context.Context, req *rpc.TokenReq) (*
 	return &rpc.TokenData{AccessToken: token}, nil
 }
 
+func (s *service) getCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
+	key, err := s.loginExecutor.GetAPIKey(ctx, desc)
+	if autoLogin && err != nil {
+		if _err := s.loginExecutor.Login(ctx); _err == nil {
+			key, err = s.loginExecutor.GetAPIKey(ctx, desc)
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
+	ctx = s.callCtx(ctx, "GetCloudAPIKey")
+	key, err := s.getCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.KeyData{ApiKey: key}, nil
+}
+
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.cancel()
 	return &empty.Empty{}, nil

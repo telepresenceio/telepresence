@@ -24,12 +24,14 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 )
 
 const (
 	callbackPath = "/callback"
+	apikeysFile  = "apikeys.json"
 )
 
 var ErrNotLoggedIn = errors.New("not logged in")
@@ -59,6 +61,7 @@ type loginExecutor struct {
 	callbacks             chan oauth2Callback
 	tokenSource           oauth2.TokenSource
 	userInfo              *authdata.UserInfo
+	apikeys               map[string]map[string]string // map[env.LoginDomain]map[apikeyDescription]apikey
 	refreshTimer          *time.Timer
 	refreshTimerIsStopped bool
 }
@@ -69,6 +72,7 @@ type LoginExecutor interface {
 	Login(ctx context.Context) error
 	Logout(ctx context.Context) error
 	GetToken(ctx context.Context) (string, error)
+	GetAPIKey(ctx context.Context, description string) (string, error)
 	GetUserInfo(ctx context.Context) (*authdata.UserInfo, error)
 }
 
@@ -174,6 +178,16 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	l.userInfo, err = authdata.LoadUserInfoFromUserCache(ctx)
 	if err != nil && !os.IsNotExist(err) {
 		return err
+	}
+
+	if err := cache.LoadFromUserCache(ctx, &l.apikeys, apikeysFile); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if l.apikeys == nil {
+		l.apikeys = make(map[string]map[string]string)
+	}
+	if l.apikeys[l.env.LoginDomain] == nil {
+		l.apikeys[l.env.LoginDomain] = make(map[string]string)
 	}
 
 	l.oauth2ConfigMu.Unlock()
@@ -309,11 +323,18 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	if l.tokenSource == nil {
 		return fmt.Errorf("Logout: %w", ErrNotLoggedIn)
 	}
+
 	l.resetRefreshTimer(0)
 	l.tokenSource = nil
-	l.userInfo = nil
 	_ = authdata.DeleteTokenFromUserCache(ctx)
+
+	l.userInfo = nil
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)
+
+	delete(l.apikeys, l.env.LoginDomain)
+	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -339,6 +360,27 @@ func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, er
 		return nil, fmt.Errorf("GetUserInfo: %w", ErrNotLoggedIn)
 	}
 	return l.userInfo, nil
+}
+
+func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (string, error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
+	if key, ok := l.apikeys[l.env.LoginDomain][description]; ok {
+		return key, nil
+	} else if l.tokenSource == nil {
+		return "", fmt.Errorf("GetAPIKey: %w", ErrNotLoggedIn)
+	} else if tokenInfo, err := l.tokenSource.Token(); err != nil {
+		return "", err
+	} else if key, err := getAPIKey(ctx, l.env, tokenInfo.AccessToken, description); err != nil {
+		return "", err
+	} else {
+		l.apikeys[l.env.LoginDomain][description] = key
+		if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
+			return "", err
+		}
+		return key, nil
+	}
 }
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
