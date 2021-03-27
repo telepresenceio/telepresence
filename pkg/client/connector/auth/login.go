@@ -83,25 +83,20 @@ func NewLoginExecutor(
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
-func EnsureLoggedIn(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport) (connector.LoginResult_Code, error) {
+func EnsureLoggedIn(ctx context.Context, executor LoginExecutor) (connector.LoginResult_Code, error) {
 	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
 		return connector.LoginResult_OLD_LOGIN_REUSED, nil
 	}
 
-	if err := Login(ctx, stdout, scout); err != nil {
+	if err := executor.Login(ctx); err != nil {
 		return connector.LoginResult_UNSPECIFIED, err
 	}
 
 	return connector.LoginResult_NEW_LOGIN_SUCCEEDED, nil
 }
 
-func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport) error {
-	env, err := client.LoadEnv(ctx)
-	if err != nil {
-		return err
-	}
-
-	l := NewLoginExecutor(
+func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
+	return NewLoginExecutor(
 		env,
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,
@@ -109,12 +104,6 @@ func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport
 		stdout,
 		scout,
 	)
-	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		ShutdownOnNonError: true,
-	})
-	grp.Go("worker", l.Worker)
-	grp.Go("fncall", l.Login)
-	return grp.Wait()
 }
 
 func (l *loginExecutor) Worker(ctx context.Context) error {
