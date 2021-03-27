@@ -24,6 +24,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 )
@@ -43,6 +44,11 @@ type oauth2Callback struct {
 type tokenResp struct {
 	token string
 	err   error
+}
+
+type keyResp struct {
+	key string
+	err error
 }
 
 type userInfoResp struct {
@@ -70,6 +76,8 @@ type loginExecutor struct {
 	logoutResp   chan error
 	tokenReq     chan struct{}
 	tokenResp    chan tokenResp
+	keyReq       chan string
+	keyResp      chan keyResp
 	userInfoReq  chan struct{}
 	userInfoResp chan userInfoResp
 }
@@ -80,6 +88,7 @@ type LoginExecutor interface {
 	Login(ctx context.Context) error
 	Logout(ctx context.Context) error
 	GetToken(ctx context.Context) (string, error)
+	GetAPIKey(ctx context.Context, description string) (string, error)
 	GetUserInfo(ctx context.Context) (*authdata.UserInfo, error)
 }
 
@@ -108,6 +117,8 @@ func NewLoginExecutor(
 		logoutResp:   make(chan error),
 		tokenReq:     make(chan struct{}),
 		tokenResp:    make(chan tokenResp),
+		keyReq:       make(chan string),
+		keyResp:      make(chan keyResp),
 		userInfoReq:  make(chan struct{}),
 		userInfoResp: make(chan userInfoResp),
 	}
@@ -206,6 +217,10 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
+		apikeys := make(map[string]string)
+		if err := cache.LoadFromUserCache(ctx, &apikeys, "apikeys.json"); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 
 		for {
 			select {
@@ -258,8 +273,10 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 					resetTimer(0)
 					tokenSource = nil
 					userInfo = nil
+					apikeys = make(map[string]string)
 					_ = authdata.DeleteTokenFromUserCache(ctx)
 					_ = authdata.DeleteUserInfoFromUserCache(ctx)
+					_ = cache.DeleteFromUserCache(ctx, "apikeys.json")
 					maybeSend(l.logoutResp, nil)
 				}
 			case <-l.tokenReq:
@@ -273,6 +290,31 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				}
 				select {
 				case l.tokenResp <- resp:
+				default:
+				}
+			case desc := <-l.keyReq:
+				var resp keyResp
+				if key, ok := apikeys[desc]; ok {
+					resp.key = key
+				} else if tokenSource == nil {
+					resp.err = ErrNotLoggedIn
+				} else if tokenInfo, err := tokenSource.Token(); err != nil {
+					resp.err = err
+				} else {
+					key, err := getAPIKey(ctx, l.env, tokenInfo.AccessToken, desc)
+					if err != nil {
+						resp.err = err
+					} else {
+						apikeys[desc] = key
+						if err := cache.SaveToUserCache(ctx, apikeys, "apikeys.json"); err != nil {
+							resp.err = err
+						} else {
+							resp.key = key
+						}
+					}
+				}
+				select {
+				case l.keyResp <- resp:
 				default:
 				}
 			case <-l.userInfoReq:
@@ -362,6 +404,18 @@ func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, er
 		return resp.userInfo, resp.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (string, error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+	l.keyReq <- description
+	select {
+	case resp := <-l.keyResp:
+		return resp.key, resp.err
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
 }
 

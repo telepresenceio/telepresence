@@ -247,7 +247,7 @@ func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, err
 	return &empty.Empty{}, nil
 }
 
-func (s *service) getCloudToken(ctx context.Context, autoLogin bool) (string, error) {
+func (s *service) getCloudAccessToken(ctx context.Context, autoLogin bool) (string, error) {
 	token, err := s.loginExecutor.GetToken(ctx)
 	if autoLogin && err != nil {
 		if _err := s.loginExecutor.Login(ctx); _err == nil {
@@ -260,9 +260,9 @@ func (s *service) getCloudToken(ctx context.Context, autoLogin bool) (string, er
 	return token, nil
 }
 
-func (s *service) GetCloudToken(ctx context.Context, req *rpc.TokenReq) (*rpc.TokenData, error) {
+func (s *service) GetCloudAccessToken(ctx context.Context, req *rpc.TokenReq) (*rpc.TokenData, error) {
 	ctx = s.callCtx(ctx, "GetCloudToken")
-	token, err := s.getCloudToken(ctx, req.GetAutoLogin())
+	token, err := s.getCloudAccessToken(ctx, req.GetAutoLogin())
 	if err != nil {
 		if _err := s.loginExecutor.Login(ctx); _err == nil {
 			token, err = s.loginExecutor.GetToken(ctx)
@@ -272,6 +272,26 @@ func (s *service) GetCloudToken(ctx context.Context, req *rpc.TokenReq) (*rpc.To
 		return nil, err
 	}
 	return &rpc.TokenData{AccessToken: token}, nil
+}
+
+func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
+	ctx = s.callCtx(ctx, "GetCloudAPIKey")
+	// Preflight: Make sure we can get a token
+	_, err := s.loginExecutor.GetToken(ctx)
+	if err != nil {
+		if _err := s.loginExecutor.Login(ctx); _err == nil {
+			_, err = s.loginExecutor.GetToken(ctx)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	// OK, now do the actual work
+	key, err := s.loginExecutor.GetAPIKey(ctx, req.GetDescription())
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.KeyData{ApiKey: key}, nil
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
@@ -394,7 +414,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID(), s.getCloudToken)
+	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID(), s.getCloudAccessToken)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager

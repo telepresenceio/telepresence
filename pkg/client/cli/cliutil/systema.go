@@ -63,11 +63,11 @@ func HasLoggedIn(ctx context.Context) bool {
 	return token != nil
 }
 
-func GetCloudToken(ctx context.Context, autoLogin bool) (string, error) {
+func GetCloudAccessToken(ctx context.Context, autoLogin bool) (string, error) {
 	var tokenData *connector.TokenData
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		tokenData, err = connectorClient.GetCloudToken(ctx, &connector.TokenReq{
+		tokenData, err = connectorClient.GetCloudAccessToken(ctx, &connector.TokenReq{
 			AutoLogin: autoLogin,
 		})
 		return err
@@ -76,4 +76,19 @@ func GetCloudToken(ctx context.Context, autoLogin bool) (string, error) {
 		return "", err
 	}
 	return tokenData.GetAccessToken(), nil
+}
+
+func GetCloudAPIKey(ctx context.Context, description string) (string, error) {
+	var keyData *connector.KeyData
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		var err error
+		keyData, err = connectorClient.GetCloudAPIKey(ctx, &connector.KeyRequest{
+			Description: description,
+		})
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return keyData.GetApiKey(), nil
 }
