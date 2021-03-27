@@ -63,11 +63,13 @@ func HasLoggedIn(ctx context.Context) bool {
 	return token != nil
 }
 
-func GetCloudToken(ctx context.Context) (string, error) {
+func GetCloudToken(ctx context.Context, autoLogin bool) (string, error) {
 	var tokenData *connector.TokenData
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		tokenData, err = connectorClient.GetCloudToken(ctx, &empty.Empty{})
+		tokenData, err = connectorClient.GetCloudToken(ctx, &connector.TokenReq{
+			AutoLogin: autoLogin,
+		})
 		return err
 	})
 	if err != nil {

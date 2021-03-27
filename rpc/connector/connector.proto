@@ -46,7 +46,7 @@ service Connector {
   // Returns an error with code=NotFound if not currently logged in.
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  rpc GetCloudToken(google.protobuf.Empty) returns (TokenData);
+  rpc GetCloudToken(TokenReq) returns (TokenData);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -201,6 +201,10 @@ message LoginResult {
     // There is no failure code; a gRPC error code is returned instead.
   }
   Code code = 1;
+}
+
+message TokenReq {
+  bool auto_login = 1;
 }
 
 message TokenData {
