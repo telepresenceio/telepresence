@@ -69,6 +69,8 @@ type service struct {
 
 	userNotifications broadcastqueue.BroadcastQueue
 
+	loginExecutor auth.LoginExecutor
+
 	connectMu sync.Mutex
 	// These get set by .connect() and are protected by connectMu.
 	cluster    *k8sCluster
@@ -236,7 +238,7 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 
 func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
 	ctx = s.callCtx(ctx, "Login")
-	resultCode, err := auth.EnsureLoggedIn(ctx, &s.userNotifications, s.scout)
+	resultCode, err := auth.EnsureLoggedIn(ctx, s.loginExecutor)
 	if err != nil {
 		return nil, err
 	}
@@ -495,6 +497,7 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
+	s.loginExecutor = auth.NewStandardLoginExecutor(env, &s.userNotifications, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {
@@ -636,6 +639,8 @@ func run(c context.Context) error {
 		}
 		return nil
 	})
+
+	g.Go("background-systema", s.loginExecutor.Worker)
 
 	err = g.Wait()
 	if err != nil {
