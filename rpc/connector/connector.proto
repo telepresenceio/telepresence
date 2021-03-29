@@ -64,7 +64,7 @@ message ConnectInfo {
   string cluster_server = 3;
   string cluster_context = 4;
   bool bridge_ok = 5;
-  bool cluster_ok = 6;
+  reserved 6;
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;

@@ -64,11 +64,7 @@ func status(cmd *cobra.Command, _ []string) error {
 	}
 	switch cs.Error {
 	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
-		if cs.ClusterOk {
-			fmt.Fprintln(out, "Connected")
-		} else {
-			fmt.Fprintln(out, "Attempting to reconnect...")
-		}
+		fmt.Fprintln(out, "Connected")
 		fmt.Fprintf(out, "  Context:       %s (%s)\n", cs.ClusterContext, cs.ClusterServer)
 		if cs.BridgeOk {
 			fmt.Fprintln(out, "  Proxy:         ON (networking to the cluster is enabled)")

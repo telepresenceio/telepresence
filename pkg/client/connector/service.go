@@ -238,7 +238,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		}
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
-			ClusterOk:      true,
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
@@ -249,7 +248,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	case s.cluster != nil /* && !s.cluster.k8sConfig.equals(k8sConfig) */ :
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterOk:      true,
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
@@ -380,7 +378,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterOk:      true,
 		ClusterContext: s.cluster.k8sConfig.Context,
 		ClusterServer:  s.cluster.k8sConfig.Server,
 		ClusterId:      s.cluster.getClusterId(c),
