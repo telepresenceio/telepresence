@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.1.4 (TBD)
+
+- Bugfix: Fix race condition that occurred when intercepting a ReplicaSet while another pod was terminating in the same namespace (this fixes a transient test failure)
+
 ### 2.1.3 (March 29, 2021)
 
 - Feature: Telepresence now supports intercepting ReplicaSets (that aren't owned by a Deployment)
