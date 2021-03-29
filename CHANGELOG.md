@@ -10,7 +10,7 @@
 - Bugfix: Telepresence will now make /var/run/secrets/kubernetes.io available when mounting remote volumes.
 - Bugfix: Hiccups in the connection to the cluster will no longer cause the connector to shut down; it now retries properly.
 - Bugfix: Fix a crash when binary dependencies are missing.
-- Bugfix: You can now specify a service when doing an intercept (--service), this is useful if you have two services that select on the same labels (e.g. If using Argo CD to do deployments)
+- Bugfix: You can now specify a service when doing an intercept (--service), this is useful if you have two services that select on the same labels (e.g. If using Argo Rollouts do deployments)
 
 ### 2.1.2 (March 19, 2021)
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
