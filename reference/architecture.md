@@ -36,7 +36,7 @@ URL, it forwards the request to the ingress service specified at the Preview URL
 ## Traffic Agent
 
 The Traffic Agent is a sidecar container that facilitates intercepts. When an intercept is started, the Traffic Agent
-container is injected into the deployment's pod(s). You can see the Traffic Agent's status by running `kubectl describe
+container is injected into the workload's pod(s). You can see the Traffic Agent's status by running `kubectl describe
 pod <pod-name>`.
 
 Depending on the type of intercept that gets created, the Traffic Agent will either route the incoming request to the
