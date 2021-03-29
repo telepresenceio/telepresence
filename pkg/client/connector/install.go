@@ -676,6 +676,11 @@ func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string
 	}
 
 	for _, podName := range podNames {
+		// We only care about pods that are associated with the ReplicaSet
+		// so we filter them out here
+		if !strings.Contains(podName, name) {
+			continue
+		}
 		podInfo, err := ki.findPod(c, namespace, podName)
 		if err != nil {
 			return err
