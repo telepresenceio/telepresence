@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.1.3 (TBD)
+### 2.1.3 (March 29, 2021)
 
 - Feature: Telepresence now supports intercepting ReplicaSets (that aren't owned by a Deployment)
 - Change: The --deployment (-d) flag is now --workload (-w), as we start supporting more workloads than just Deployments
