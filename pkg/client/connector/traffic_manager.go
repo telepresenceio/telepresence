@@ -209,6 +209,65 @@ func (tm *trafficManager) hasOwner(obj kates.Object) bool {
 	return false
 }
 
+func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, namespace, name string) (kates.Object, map[string]string, string, error) {
+	var object kates.Object
+	var labels map[string]string
+	var reason string
+	switch objectKind {
+	case "Deployment":
+		dep, err := tm.findDeployment(ctx, namespace, name)
+		if err != nil {
+			// Removed from snapshot since the name slice was obtained
+			if !errors2.IsNotFound(err) {
+				dlog.Error(ctx, err)
+			}
+
+			return nil, nil, "", err
+		}
+
+		if dep.Status.Replicas == int32(0) {
+			reason = "Has 0 replicas"
+		}
+		object = dep
+		labels = dep.Spec.Template.Labels
+
+	case "ReplicaSet":
+		rs, err := tm.findReplicaSet(ctx, namespace, name)
+		if err != nil {
+			// Removed from snapshot since the name slice was obtained
+			if !errors2.IsNotFound(err) {
+				dlog.Error(ctx, err)
+			}
+			return nil, nil, "", err
+		}
+
+		if rs.Status.Replicas == int32(0) {
+			reason = "Has 0 replicas"
+		}
+		object = rs
+		labels = rs.Spec.Template.Labels
+
+	case "StatefulSet":
+		statefulSet, err := tm.findStatefulSet(ctx, namespace, name)
+		if err != nil {
+			// Removed from snapshot since the name slice was obtained
+			if !errors2.IsNotFound(err) {
+				dlog.Error(ctx, err)
+			}
+			return nil, nil, "", err
+		}
+
+		if statefulSet.Status.Replicas == int32(0) {
+			reason = "Has 0 replicas"
+		}
+		object = statefulSet
+		labels = statefulSet.Spec.Template.Labels
+	default:
+		reason = "No workload telepresence knows how to intercept"
+	}
+	return object, labels, reason, nil
+}
+
 func (tm *trafficManager) getInfosForWorkflow(
 	ctx context.Context,
 	names []string,
@@ -230,56 +289,22 @@ func (tm *trafficManager) getInfosForWorkflow(
 		}
 		reason := ""
 		if agent == nil && iCept == nil {
-			// Check if interceptable
-			var object kates.Object
-			var labels map[string]string
-			switch objectKind {
-			case "Deployment":
-				dep, err := tm.findDeployment(ctx, namespace, name)
-				if err != nil {
-					// Removed from snapshot since the name slice was obtained
-					if !errors2.IsNotFound(err) {
-						dlog.Error(ctx, err)
-					}
-					continue
-				}
-
-				if dep.Status.Replicas == int32(0) {
-					reason = "Has 0 replicas"
-				}
-				object = dep
-				labels = dep.Spec.Template.Labels
-
-			case "ReplicaSet":
-				rs, err := tm.findReplicaSet(ctx, namespace, name)
-				if err != nil {
-					// Removed from snapshot since the name slice was obtained
-					if !errors2.IsNotFound(err) {
-						dlog.Error(ctx, err)
-					}
-					continue
-				}
-
-				if rs.Status.Replicas == int32(0) {
-					reason = "Has 0 replicas"
-				}
-				object = rs
-				labels = rs.Spec.Template.Labels
-
-			default:
-				reason = "No workload telepresence knows how to intercept"
-			}
-
-			// If an object is owned by a higher level workload, then users should
-			// intercept that workload so we will not include it in our slice.
-			if tm.hasOwner(object) {
-				dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", object.GetName(), object.GetNamespace())
+			object, labels, reason, err := tm.getObjectAndLabels(ctx, objectKind, namespace, name)
+			if err != nil {
 				continue
 			}
+			if reason == "" {
+				// If an object is owned by a higher level workload, then users should
+				// intercept that workload so we will not include it in our slice.
+				if tm.hasOwner(object) {
+					dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", object.GetName(), object.GetNamespace())
+					continue
+				}
 
-			matchingSvcs := tm.findMatchingServices("", "", namespace, labels)
-			if len(matchingSvcs) == 0 {
-				reason = "No service with matching selector"
+				matchingSvcs := tm.findMatchingServices("", "", namespace, labels)
+				if len(matchingSvcs) == 0 {
+					reason = "No service with matching selector"
+				}
 			}
 
 			// If we have a reason, that means it's not interceptable, so we only
@@ -358,6 +383,15 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 			}})
 		}
 	}
+
+	statefulSetNames, err := tm.statefulSetNames(ctx, namespace)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return &rpc.WorkloadInfoSnapshot{}
+	}
+
+	statefulSetWorkloadInfos := tm.getInfosForWorkflow(ctx, statefulSetNames, "StatefulSet", namespace, iMap, aMap, filter)
+	workloadInfos = append(workloadInfos, statefulSetWorkloadInfos...)
 
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}
 }

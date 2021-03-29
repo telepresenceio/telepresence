@@ -201,6 +201,11 @@ func (kc *k8sCluster) replicaSetNames(c context.Context, namespace string) ([]st
 	return kc.kindNames(c, "ReplicaSet", namespace)
 }
 
+// statefulSetNames returns the names of all replica sets found in the given Namespace
+func (kc *k8sCluster) statefulSetNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "StatefulSet", namespace)
+}
+
 // PodSetNames returns the names of all replica sets found in the given Namespace
 func (kc *k8sCluster) podNames(c context.Context, namespace string) ([]string, error) {
 	return kc.kindNames(c, "Pod", namespace)
@@ -217,6 +222,19 @@ func (kc *k8sCluster) findDeployment(c context.Context, namespace, name string) 
 		return nil, err
 	}
 	return dep, nil
+}
+
+// findStatefulSet returns a statefulSet with the given name in the given namespace or nil
+// if no such statefulSet could be found.
+func (kc *k8sCluster) findStatefulSet(c context.Context, namespace, name string) (*kates.StatefulSet, error) {
+	statefulSet := &kates.StatefulSet{
+		TypeMeta:   kates.TypeMeta{Kind: "StatefulSet"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	if err := kc.client.Get(c, statefulSet, statefulSet); err != nil {
+		return nil, err
+	}
+	return statefulSet, nil
 }
 
 // findReplicaSet returns a replica set with the given name in the given namespace or nil

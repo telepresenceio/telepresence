@@ -63,7 +63,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	}
 	stdout := cmd.OutOrStdout()
 	if len(r.Workloads) == 0 {
-		fmt.Fprintln(stdout, "No Workloads (Deployments or ReplicaSets)")
+		fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		return nil
 	}
 

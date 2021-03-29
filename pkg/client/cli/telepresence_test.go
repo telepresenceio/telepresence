@@ -391,7 +391,7 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.Contains(stdout, "No Workloads (Deployments or ReplicaSets)")
+	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 
 	stdout, stderr = telepresence(cs.T(), "connect", "--mapped-namespaces", "all")
 	require.Empty(stderr)
@@ -399,7 +399,7 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.NotContains(stdout, "No Workloads (Deployments or ReplicaSets)")
+	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 }
 
 func (cs *connectedSuite) TestJ_Uninstall() {
@@ -449,7 +449,7 @@ func (cs *connectedSuite) TestJ_Uninstall() {
 		require.Eventually(
 			func() bool {
 				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
-				return stdout == "No Workloads (Deployments or ReplicaSets)"
+				return stdout == "No Workloads (Deployments, StatefulSets, or ReplicaSets)"
 			},
 			30*time.Second,     // waitFor
 			2*time.Millisecond, // polling interval
