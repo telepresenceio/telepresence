@@ -79,7 +79,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 func (cs *connectorState) setConnectInfo() error {
 	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		KubeFlags:        cs.kubeFlagMap(),
+		KubeFlags:        kubeFlagMap(),
 		MappedNamespaces: mappedNamespaces,
 	})
 	if err != nil {

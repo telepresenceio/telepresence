@@ -151,7 +151,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	})
 	ts.Run("Status", func() {
 		out, _ := telepresence(ts.T(), "status")
-		ts.Contains(out, "The telepresence daemon has not been started")
+		ts.Contains(out, "Root Daemon: Not running")
+		ts.Contains(out, "User Daemon: Not running")
 	})
 
 	ts.Run("Connect using invalid KUBECONFIG", func() {
@@ -182,8 +183,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			require.Empty(stderr)
 			require.Contains(stdout, "Launching Telepresence Daemon")
 			require.Contains(stdout, "Connected to context")
-			require.Contains(stdout, "Context:")
-			require.Regexp(`Proxy:\s+ON`, stdout)
+			require.Contains(stdout, "Kubernetes context:")
+			require.Regexp(`Telepresence proxy:\s+ON`, stdout)
 			require.Contains(stdout, "Daemon quitting")
 		})
 	})
@@ -241,7 +242,7 @@ func (cs *connectedSuite) SetupSuite() {
 		// condition
 		func() bool {
 			stdout, _ := telepresence(cs.T(), "status")
-			return regexp.MustCompile(`Proxy:\s+ON`).FindString(stdout) != ""
+			return regexp.MustCompile(`Telepresence proxy:\s+ON`).FindString(stdout) != ""
 		},
 		15*time.Second, // waitFor
 		time.Second,    // polling interval
@@ -267,7 +268,7 @@ func (cs *connectedSuite) TestA_ReportsVersionFromDaemon() {
 func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
 	stdout, stderr := telepresence(cs.T(), "status")
 	cs.Empty(stderr)
-	cs.Contains(stdout, "Context:")
+	cs.Contains(stdout, "Kubernetes context:")
 }
 
 func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {

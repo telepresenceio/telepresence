@@ -57,11 +57,11 @@ message ConnectInfo {
     UNSPECIFIED            = 0; // success
     ALREADY_CONNECTED      = 2; // success
     MUST_RESTART           = 7; // failure: would-be-success, but kubeconfig has changed
-    NOT_STARTED            = 1; // failure: not really used -- synthesized client side
     DISCONNECTED           = 3; // failure: Connect has not yet been called (only returned from Status)
     CLUSTER_FAILED         = 4; // failure: error parsing kubeconfig or talking to the cluster; error_text is set
     TRAFFIC_MANAGER_FAILED = 6; // failure: error talking to the in-cluster traffic-manager; error_text is set
 
+    reserved 1;
     reserved 5;
   }
   ErrType error = 1;
