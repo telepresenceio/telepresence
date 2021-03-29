@@ -12,7 +12,7 @@ Telepresence enables you to connect your local development machine seamlessly to
 
 Ultimately, this empowers you to develop services locally and still test integrations with dependent services or data stores running in the remote cluster. 
 
-You can “intercept” any requests made to a target Kubernetes deployment, and code and debug your associated service locally using your favourite local IDE and in-process debugger. You can test your integrations by making requests against the remote cluster’s ingress and watching how the resulting internal traffic is handled by your service running locally.
+You can “intercept” any requests made to a target Kubernetes workload, and code and debug your associated service locally using your favourite local IDE and in-process debugger. You can test your integrations by making requests against the remote cluster’s ingress and watching how the resulting internal traffic is handled by your service running locally.
 
 By using the preview URL functionality you can share access with additional developers or stakeholders to the application via an entry point associated with your intercept and locally developed service. You can make changes that are visible in near real-time to all of the participants authenticated and viewing the preview URL. All other viewers of the application entrypoint will not see the results of your changes.
 
@@ -57,7 +57,7 @@ You can connect to databases or middleware running in the cluster, such as MySQL
 
 Telepresence will discover/prompt during first use for this info and make its best guess at figuring this out and ask you to confirm or update this. 
 
-** Will Telepresence be able to intercept deployments running on a private cluster or cluster running within a virtual private cloud (VPC)?**
+** Will Telepresence be able to intercept workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?**
 
  Yes. The cluster has to have outbound access to the internet for the preview URLs to function correctly, but it doesn’t need to have a publicly accessible IP address. 
 
@@ -73,7 +73,7 @@ On Fedora, Telepresence also creates a virtual network device (a TUN network) fo
 
  A single Traffic Manager service is deployed in the `ambassador` namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
 
-A Traffic Agent container is injected per pod that is being intercepted. The first time a deployment is intercepted all pods associated with this deployment will be restarted with the Traffic Agent automatically injected.
+A Traffic Agent container is injected per pod that is being intercepted. The first time a workload is intercepted all pods associated with this workload will be restarted with the Traffic Agent automatically injected.
 
 ** How can I remove all of the Telepresence components installed within my cluster?**
 

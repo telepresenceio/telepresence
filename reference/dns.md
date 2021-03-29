@@ -46,10 +46,11 @@ Now we'll start an intercept against another service in the same namespace. Reme
 ```
 $ telepresence intercept dataprocessingservice --port 3000
   
-  Using deployment dataprocessingservice
+  Using Deployment dataprocessingservice
   intercepted
       Intercept name: dataprocessingservice
       State         : ACTIVE
+      Workload kind : Deployment
       Destination   : 127.0.0.1:3000
       Intercepting  : all TCP connections
   
