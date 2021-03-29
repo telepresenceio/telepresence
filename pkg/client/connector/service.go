@@ -173,7 +173,13 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Connect")
 	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.connect(c, cr), nil
+	return s.connect(c, cr, false), nil
+}
+
+func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+	c = s.callCtx(c, "Status")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	return s.connect(c, cr, true), nil
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
@@ -216,12 +222,12 @@ func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 }
 
 // connect the connector to a cluster
-func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo {
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
 	k8sConfig, err := newK8sConfig(cr.KubeFlags)
-	if err != nil {
+	if err != nil && !dryRun {
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
 			ErrorText: err.Error(),
@@ -258,12 +264,18 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	default:
 		// This is the first call to Connect; we have to tell the background connect
 		// goroutine to actually do the work.
-		s.connectRequest <- parsedConnectRequest{
-			ConnectRequest: cr,
-			k8sConfig:      k8sConfig,
+		if dryRun {
+			return &rpc.ConnectInfo{
+				Error: rpc.ConnectInfo_DISCONNECTED,
+			}
+		} else {
+			s.connectRequest <- parsedConnectRequest{
+				ConnectRequest: cr,
+				k8sConfig:      k8sConfig,
+			}
+			close(s.connectRequest)
+			return <-s.connectResponse
 		}
-		close(s.connectRequest)
-		return <-s.connectResponse
 	}
 }
 

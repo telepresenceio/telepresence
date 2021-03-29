@@ -86,8 +86,8 @@ func status(cmd *cobra.Command, _ []string) error {
 		}
 	case connector.ConnectInfo_NOT_STARTED:
 		fmt.Fprintln(out, errConnectorIsNotRunning)
-	case connector.ConnectInfo_DISCONNECTING:
-		fmt.Fprintln(out, "Disconnecting")
+	case connector.ConnectInfo_DISCONNECTED:
+		fmt.Fprintln(out, "Not connected")
 	}
 	return nil
 }
