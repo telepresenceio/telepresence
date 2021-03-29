@@ -36,45 +36,83 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func status(cmd *cobra.Command, _ []string) error {
-	var ds *daemon.DaemonStatus
-	var err error
-	if ds, err = daemonStatus(cmd); err != nil {
+	keepGoing, err := daemonStatus(cmd)
+	if err != nil {
+		return err
+	}
+	if !keepGoing {
+		return nil
+	}
+
+	if err := connectorStatus(cmd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func daemonStatus(cmd *cobra.Command) (keepGoing bool, err error) {
+	var status *daemon.DaemonStatus
+	err = withStartedDaemon(cmd, func(ds *daemonState) error {
+		status, err = ds.grpc.Status(cmd.Context(), &empty.Empty{})
+		return err
+	})
+	if err == errDaemonIsNotRunning {
+		err = nil
+		status = &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}
+	}
+	if err != nil {
+		return false, err
+	}
+
+	out := cmd.OutOrStdout()
+	switch status.Error {
+	case daemon.DaemonStatus_NOT_STARTED:
+		fmt.Fprintln(out, "The telepresence daemon has not been started")
+		return false, nil
+	case daemon.DaemonStatus_NO_NETWORK:
+		fmt.Fprintln(out, "Network overrides NOT established")
+		return false, nil
+	}
+
+	if status.Dns != "" {
+		fmt.Fprintf(out, "DNS = %s\n", status.Dns)
+	}
+	if status.Fallback != "" {
+		fmt.Fprintf(out, "Fallback = %s\n", status.Fallback)
+	}
+
+	return true, nil
+}
+
+func connectorStatus(cmd *cobra.Command) error {
+	var status *connector.ConnectInfo
+	err := withStartedConnector(cmd, func(cs *connectorState) error {
+		status = cs.info
+		return nil
+	})
+	if err == errConnectorIsNotRunning {
+		err = nil
+		status = &connector.ConnectInfo{Error: connector.ConnectInfo_NOT_STARTED}
+	}
+	if err != nil {
 		return err
 	}
 
 	out := cmd.OutOrStdout()
-	switch ds.Error {
-	case daemon.DaemonStatus_NOT_STARTED:
-		fmt.Fprintln(out, "The telepresence daemon has not been started")
-		return nil
-	case daemon.DaemonStatus_NO_NETWORK:
-		fmt.Fprintln(out, "Network overrides NOT established")
-		return nil
-	}
-
-	if ds.Dns != "" {
-		fmt.Fprintf(out, "DNS = %s\n", ds.Dns)
-	}
-	if ds.Fallback != "" {
-		fmt.Fprintf(out, "Fallback = %s\n", ds.Fallback)
-	}
-	var cs *connector.ConnectInfo
-	if cs, err = connectorStatus(cmd); err != nil {
-		return err
-	}
-	switch cs.Error {
+	switch status.Error {
 	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
 		fmt.Fprintln(out, "Connected")
-		fmt.Fprintf(out, "  Context:       %s (%s)\n", cs.ClusterContext, cs.ClusterServer)
-		if cs.BridgeOk {
+		fmt.Fprintf(out, "  Context:       %s (%s)\n", status.ClusterContext, status.ClusterServer)
+		if status.BridgeOk {
 			fmt.Fprintln(out, "  Proxy:         ON (networking to the cluster is enabled)")
 		} else {
 			fmt.Fprintln(out, "  Proxy:         OFF (attempting to connect...)")
 		}
-		if cs.ErrorText != "" {
-			fmt.Fprintf(out, "  Intercepts:    %s\n", cs.ErrorText)
+		if status.ErrorText != "" {
+			fmt.Fprintf(out, "  Intercepts:    %s\n", status.ErrorText)
 		} else {
-			ic := cs.Intercepts
+			ic := status.Intercepts
 			if ic == nil {
 				fmt.Fprintln(out, "  Intercepts:    Unavailable: no traffic manager")
 			} else {
@@ -89,31 +127,8 @@ func status(cmd *cobra.Command, _ []string) error {
 	case connector.ConnectInfo_DISCONNECTED:
 		fmt.Fprintln(out, "Not connected")
 	}
+
 	return nil
-}
-
-func daemonStatus(cmd *cobra.Command) (status *daemon.DaemonStatus, err error) {
-	err = withStartedDaemon(cmd, func(ds *daemonState) error {
-		status, err = ds.grpc.Status(cmd.Context(), &empty.Empty{})
-		return err
-	})
-	if err == errDaemonIsNotRunning {
-		err = nil
-		status = &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}
-	}
-	return
-}
-
-func connectorStatus(cmd *cobra.Command) (status *connector.ConnectInfo, err error) {
-	err = withStartedConnector(cmd, func(cs *connectorState) error {
-		status = cs.info
-		return nil
-	})
-	if err == errConnectorIsNotRunning {
-		err = nil
-		status = &connector.ConnectInfo{Error: connector.ConnectInfo_NOT_STARTED}
-	}
-	return
 }
 
 // quit sends the quit message to the daemon and waits for it to exit.
