@@ -26,8 +26,6 @@
               link: /howtos/intercepts
             - title: Share Dev Environments with Preview URLs
               link: /howtos/preview-urls
-            - title: Create a Demo Cluster
-              link: /howtos/democluster
             - title: Proxy Outbound Traffic to My Cluster
               link: /howtos/outbound
         - title: Technical Reference
