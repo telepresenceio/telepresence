@@ -1,0 +1,54 @@
+- title: Home
+  link: /docs/
+
+- title: Products
+  collapsable: false
+  items:
+    - title: Telepresence
+      items:
+        - title: Quick Start
+          link: /quick-start
+        - title: Install Telepresence
+          items:
+            - title: Install
+              link: /install/
+            - title: Upgrade
+              link: /install/upgrade/
+        - title: Core Concepts
+          items:
+            - title: Inner and Outer Dev Loop
+              link: /concepts/devloop
+            - title: Context Propagation
+              link: /concepts/context-prop
+        - title: How Do I...
+          items:
+            - title: Intercept a Service
+              link: /howtos/intercepts
+            - title: Share Dev Environments with Preview URLs
+              link: /howtos/preview-urls
+            - title: Create a Demo Cluster
+              link: /howtos/democluster
+            - title: Proxy Outbound Traffic to My Cluster
+              link: /howtos/outbound
+        - title: Technical Reference
+          items:
+            - title: Architecture
+              link: /reference/architecture
+            - title: Client Reference
+              link: /reference/client
+            - title: Configuration File
+              link: /reference/config
+            - title: Environment Variables
+              link: /reference/environment
+            - title: Intercepts
+              link: /reference/intercepts
+            - title: Volume Mounts
+              link: /reference/volume
+            - title: DNS Resolution
+              link: /reference/dns
+            - title: RBAC
+              link: /reference/rbac
+        - title: FAQs
+          link: /faqs
+        - title: Troubleshooting
+          link: /troubleshooting
