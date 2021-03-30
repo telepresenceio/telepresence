@@ -9,7 +9,7 @@ import QSTabs from '../quick-start/qs-tabs'
 
 Intercepts enable you to test and debug services locally without needing to run dependent services or redeploy code updates to your cluster on every change.  A typical workflow would be to run the service you wish to develop on locally, then start an intercept. Changes to the local code can then be tested immediately along side other services running in the cluster.
 
-When starting an intercept, Telepresence will create a preview URLs. When visiting the preview URL, your request is proxied to your ingress with a special header set.  When the traffic within the cluster requests the service you are intercepting, the [Traffic Manager](../../reference/client) will proxy that traffic to your laptop.  Other traffic  entering your ingress will use the service running in the cluster as normal.
+When starting an intercept, Telepresence will create a preview URLs. When visiting the preview URL, your request is proxied to your ingress with a special header set.  When the traffic within the cluster requests the service you are intercepting, the [Traffic Manager](../../reference/architecture) will proxy that traffic to your laptop.  Other traffic  entering your ingress will use the service running in the cluster as normal.
 
 Preview URLs are all managed through Ambassador Cloud.  You must run `telepresence login` to access Ambassador Cloud and access the preview URL dashboard. From the dashboard you can see all your active intercepts, delete active intercepts, and change them between private and public for collaboration. Private preview URLs can be accessed by anyone else in the GitHub organization you select when logging in. Public URLs can be accessed by anyone who has the link.
 
@@ -29,7 +29,7 @@ The following quick overview on creating an intercept assumes you have a deploym
 
   <Alert severity="info">If you are logged in and close the dashboard browser tab, you can quickly reopen it by running <code>telepresence dashboard</code>.</Alert>
 
-2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../../reference/client) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
+2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../../reference/architecture) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
 
 3. Start the service on your laptop and make a change to the code that will be apparent in the browser when the service runs, such as a text or other UI change.
 
