@@ -2,8 +2,10 @@ package cliutil
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -38,4 +40,20 @@ func WithConnector(ctx context.Context, fn func(context.Context, connector.Conne
 	connectorClient := connector.NewConnectorClient(conn)
 
 	return fn(ctx, connectorClient)
+}
+
+func QuitConnector(ctx context.Context) error {
+	if IsConnectorRunning() {
+		err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+			_, err := connectorClient.Quit(ctx, &empty.Empty{})
+			return err
+		})
+		if err == nil {
+			err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

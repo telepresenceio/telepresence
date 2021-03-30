@@ -8,6 +8,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.
@@ -43,14 +44,11 @@ func quit(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Ensure the connector is killed even if daemon isn't running
-	err = assertConnectorStarted()
-	if err != nil {
-		return nil
+	if err := cliutil.QuitConnector(cmd.Context()); err != nil {
+		return err
 	}
-	return si.withConnector(true, func(cs *connectorState) error {
-		defer cs.disconnect()
-		return cs.DeactivateState()
-	})
+
+	return nil
 }
 
 func daemonVersion(cmd *cobra.Command) (apiVersion int, version string, err error) {
