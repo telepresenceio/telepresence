@@ -1,0 +1,44 @@
+- title: Home
+  link: /docs/
+
+- title: Products
+  collapsable: false
+  items:
+    - title: Telepresence
+      items:
+        - title: Quick Start
+          link: /quick-start
+        - title: How-to Guides
+          items:
+            - title: Intercept a Service
+              link: /howtos/intercepts
+            - title: Collaborating with Preview URLs
+              link: /howtos/preview-urls
+            - title: Create a Demo Cluster
+              link: /howtos/democluster
+            - title: Outbound Sessions
+              link: /howtos/outbound
+            - title: Upgrading and Previous Versions
+              link: /howtos/upgrading
+        - title: Core Concepts
+          items:
+            - title: Inner and Outer Dev Loop
+              link: /concepts/devloop
+            - title: Context Propagation
+              link: /concepts/context-prop
+        - title: Technical Reference
+          items:
+            - title: Architecture
+              link: /reference/architecture
+            - title: Client Reference
+              link: /reference/client
+            - title: Environment Variables
+              link: /reference/environment
+            - title: Volume Mounts
+              link: /reference/volume
+            - title: DNS Resolution
+              link: /reference/dns
+        - title: FAQs
+          link: /faqs
+        - title: Troubleshooting
+          link: /troubleshooting

@@ -31,7 +31,7 @@ GitHub's documentation provides more detail about [managing access granted to th
 
 The first time you login to Ambassador Cloud, GitHub will ask to authorize Ambassador Labs to access your orgs and certain user data.
 
-<img src="../../images/github-login.png" width="50%"/>
+<img src="../images/github-login.png" width="50%"/>
 
 Any listed org with a green check has already granted access to Ambassador Labs (you still need to authorize to allow Ambassador Labs to read your user data and org membership).
 

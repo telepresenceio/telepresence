@@ -1,0 +1,6 @@
+version: 1.11.2
+aproVersion: 0.11.0
+qotmVersion: 1.7
+quoteVersion: 0.4.1
+branch: release/v1.11
+docsVersion: "2.0"
