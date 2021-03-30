@@ -170,6 +170,14 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 					}
 					return
 				}
+			case "StatefulSet":
+				agent, err = ki.findStatefulSet(c, ai.Namespace, ai.Name)
+				if err != nil {
+					if !errors2.IsNotFound(err) {
+						addError(err)
+					}
+					return
+				}
 			default:
 				addError(fmt.Errorf("Agent associated with unknown workload kind, can't be removed: %s", ai.Name))
 				return
@@ -491,6 +499,11 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 		if err != nil {
 			return "", "", err
 		}
+	case "StatefulSet":
+		obj, err = ki.findStatefulSet(c, namespace, name)
+		if err != nil {
+			return "", "", err
+		}
 	default:
 		return "", "", fmt.Errorf("Cannot ensure agent on unsupported workload: %s", kind)
 	}
@@ -596,6 +609,37 @@ already exist for this service`, kind, obj.GetName())
 	return string(svc.GetUID()), kind, nil
 }
 
+// The following <workload>Updated functions all contain the logic for
+// determining if that specific workload type has successfully been updated
+// based on the object's metadata. We have separate ones for each object
+// because the criteria is slightly different for each.
+func replicaSetUpdated(rs *kates.ReplicaSet, origGeneration int64) bool {
+	applied := rs.ObjectMeta.Generation >= origGeneration &&
+		rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
+		(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
+		rs.Status.FullyLabeledReplicas == rs.Status.Replicas &&
+		rs.Status.AvailableReplicas == rs.Status.Replicas
+	return applied
+}
+
+func deploymentUpdated(dep *kates.Deployment, origGeneration int64) bool {
+	applied := dep.ObjectMeta.Generation >= origGeneration &&
+		dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
+		(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
+		dep.Status.UpdatedReplicas == dep.Status.Replicas &&
+		dep.Status.AvailableReplicas == dep.Status.Replicas
+	return applied
+}
+
+func statefulSetUpdated(statefulSet *kates.StatefulSet, origGeneration int64) bool {
+	applied := statefulSet.ObjectMeta.Generation >= origGeneration &&
+		statefulSet.Status.ObservedGeneration == statefulSet.ObjectMeta.Generation &&
+		(statefulSet.Spec.Replicas == nil || statefulSet.Status.UpdatedReplicas >= *statefulSet.Spec.Replicas) &&
+		statefulSet.Status.UpdatedReplicas == statefulSet.Status.Replicas &&
+		statefulSet.Status.CurrentReplicas == statefulSet.Status.Replicas
+	return applied
+}
+
 func (ki *installer) waitForApply(c context.Context, namespace, name string, obj kates.Object) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := context.WithTimeout(c, tos.Apply)
@@ -626,13 +670,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return client.CheckTimeout(c, &tos.Apply, err)
 			}
 
-			deployed := rs.ObjectMeta.Generation >= origGeneration &&
-				rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
-				(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
-				rs.Status.FullyLabeledReplicas == rs.Status.Replicas &&
-				rs.Status.AvailableReplicas == rs.Status.Replicas
-
-			if deployed {
+			if replicaSetUpdated(rs, origGeneration) {
 				dlog.Debugf(c, "Replica Set %s.%s successfully applied", name, namespace)
 				return nil
 			}
@@ -649,14 +687,25 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return client.CheckTimeout(c, &tos.Apply, err)
 			}
 
-			deployed := dep.ObjectMeta.Generation >= origGeneration &&
-				dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
-				(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
-				dep.Status.UpdatedReplicas == dep.Status.Replicas &&
-				dep.Status.AvailableReplicas == dep.Status.Replicas
-
-			if deployed {
+			if deploymentUpdated(dep, origGeneration) {
 				dlog.Debugf(c, "deployment %s.%s successfully applied", name, namespace)
+				return nil
+			}
+		}
+	case "StatefulSet":
+		for {
+			dtime.SleepWithContext(c, time.Second)
+			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+				return err
+			}
+
+			statefulSet, err := ki.findStatefulSet(c, namespace, name)
+			if err != nil {
+				return client.CheckTimeout(c, &tos.Apply, err)
+			}
+
+			if statefulSetUpdated(statefulSet, origGeneration) {
+				dlog.Debugf(c, "statefulset %s.%s successfully applied", name, namespace)
 				return nil
 			}
 		}

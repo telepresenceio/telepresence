@@ -267,6 +267,7 @@ func (kc *k8sCluster) findPod(c context.Context, namespace, name string) (*kates
 // search in a specific order based on how we prefer workload objects:
 // 1. Deployments
 // 2. ReplicaSets
+// 3. StatefulSets
 // And return the kind as soon as we find one that matches
 func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) (string, error) {
 	depNames, err := kc.deploymentNames(c, namespace)
@@ -288,6 +289,18 @@ func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) 
 	for _, rsName := range rsNames {
 		if rsName == name {
 			return "ReplicaSet", nil
+		}
+	}
+
+	// Like ReplicaSets, StatefulSets only manage pods so we check for
+	// them next
+	statefulSetNames, err := kc.statefulSetNames(c, namespace)
+	if err != nil {
+		return "", err
+	}
+	for _, statefulSetName := range statefulSetNames {
+		if statefulSetName == name {
+			return "StatefulSet", nil
 		}
 	}
 	return "", errors.New("No supported Object Kind Found")

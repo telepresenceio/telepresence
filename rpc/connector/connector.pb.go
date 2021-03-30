@@ -751,7 +751,7 @@ type WorkloadInfo struct {
 	AgentInfo *manager.AgentInfo `protobuf:"bytes,3,opt,name=agent_info,json=agentInfo,proto3" json:"agent_info,omitempty"`
 	// InterceptInfo reported from the traffic manager in case the workload is currently intercepted
 	InterceptInfo *manager.InterceptInfo `protobuf:"bytes,4,opt,name=intercept_info,json=interceptInfo,proto3" json:"intercept_info,omitempty"`
-	// Workload Resource type (e.g. Deployment, ReplicaSet)
+	// Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
 	WorkloadResourceType string `protobuf:"bytes,5,opt,name=workload_resource_type,json=workloadResourceType,proto3" json:"workload_resource_type,omitempty"`
 }
 
