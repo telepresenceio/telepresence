@@ -450,16 +450,10 @@ func run(c context.Context) error {
 	dlog.Info(c, "")
 
 	g.Go("server-grpc", func(c context.Context) error {
-		if client.SocketExists(client.ConnectorSocketName) {
-			return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
-				client.SocketURL(client.ConnectorSocketName), processName)
-		}
 		defer func() {
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
-			_ = os.Remove(client.ConnectorSocketName)
-
 			// Close s.connectRequest if it hasn't already been closed.
 			select {
 			case <-s.connectRequest:
@@ -469,6 +463,13 @@ func run(c context.Context) error {
 		}()
 
 		// Listen on unix domain socket
+		if client.SocketExists(client.ConnectorSocketName) {
+			return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
+				client.SocketURL(client.ConnectorSocketName), processName)
+		}
+		defer func() {
+			_ = os.Remove(client.ConnectorSocketName)
+		}()
 		listener, err := net.Listen("unix", client.ConnectorSocketName)
 		if err != nil {
 			return err
