@@ -350,11 +350,11 @@ func TestAddAgentToDeployment(t *testing.T) {
 			expectedSvc := tc.OutputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
+			actualDep, actualSvc, actualErr := addAgentToWorkload(ctx,
 				tc.InputPortName,
 				managerImageName(env), // ignore extensions
 				tc.InputDeployment.DeepCopy(),
-				[]*kates.Service{tc.InputService.DeepCopy()},
+				tc.InputService.DeepCopy(),
 			)
 			if !assert.NoError(t, actualErr) {
 				return
@@ -393,7 +393,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 	}
 }
 
-// I (Donny) would like to unify this w/ the "TestAddAgentToDeployment
+// I (Donny) would like to unify this w/ the "TestAddAgentToWorkload
 // since this is a lot of copy pasta, I will likely do that when I move
 // onto adding StatefulSets
 func TestAddAgentToReplicaSet(t *testing.T) {
@@ -480,11 +480,11 @@ func TestAddAgentToReplicaSet(t *testing.T) {
 			expectedSvc := tc.OutputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
+			actualDep, actualSvc, actualErr := addAgentToWorkload(ctx,
 				tc.InputPortName,
 				managerImageName(env), // ignore extensions
 				tc.InputReplicaSet.DeepCopy(),
-				[]*kates.Service{tc.InputService.DeepCopy()},
+				tc.InputService.DeepCopy(),
 			)
 			if !assert.NoError(t, actualErr) {
 				return

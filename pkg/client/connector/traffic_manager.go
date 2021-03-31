@@ -209,6 +209,8 @@ func (tm *trafficManager) hasOwner(obj kates.Object) bool {
 	return false
 }
 
+// getObjectAndLabels gets the object + its associated labels, as well as a reason
+// it cannot be intercepted if that is the case.
 func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, namespace, name string) (kates.Object, map[string]string, string, error) {
 	var object kates.Object
 	var labels map[string]string
@@ -268,7 +270,11 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 	return object, labels, reason, nil
 }
 
-func (tm *trafficManager) getInfosForWorkflow(
+// getInfosForWorkload creates a WorkloadInfo for every workload in names
+// of the given objectKind.  Additionally, it uses information about the
+// filter param, which is configurable, to decide which workloads to add
+// or ignore based on the filter criteria.
+func (tm *trafficManager) getInfosForWorkload(
 	ctx context.Context,
 	names []string,
 	objectKind,
@@ -359,21 +365,26 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 
 	filter := rq.Filter
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
-	depNames, err := tm.deploymentNames(ctx, namespace)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return &rpc.WorkloadInfoSnapshot{}
-	}
-	depWorkloadInfos := tm.getInfosForWorkflow(ctx, depNames, "Deployment", namespace, iMap, aMap, filter)
-	workloadInfos = append(workloadInfos, depWorkloadInfos...)
 
-	rsNames, err := tm.replicaSetNames(ctx, namespace)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return &rpc.WorkloadInfoSnapshot{}
+	// These are all the workloads we care about and their associated function
+	// to get the names of those workloads
+	workloadsToGet := map[string]func(context.Context, string) ([]string, error){
+		"Deployment":  tm.deploymentNames,
+		"ReplicaSet":  tm.replicaSetNames,
+		"StatefulSet": tm.statefulSetNames,
 	}
-	rsWorkloadInfos := tm.getInfosForWorkflow(ctx, rsNames, "ReplicaSet", namespace, iMap, aMap, filter)
-	workloadInfos = append(workloadInfos, rsWorkloadInfos...)
+
+	for workloadKind, namesFunc := range workloadsToGet {
+		workloadNames, err := namesFunc(ctx, namespace)
+		if err != nil {
+			dlog.Error(ctx, err)
+			dlog.Infof(ctx, "Skipping getting info for workloads: %s", workloadKind)
+			continue
+		}
+		newWorkloadInfos := tm.getInfosForWorkload(ctx, workloadNames, workloadKind, namespace, iMap, aMap, filter)
+		workloadInfos = append(workloadInfos, newWorkloadInfos...)
+	}
+
 	for localIntercept, localNs := range tm.localIntercepts {
 		if localNs == namespace {
 			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
@@ -383,15 +394,6 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 			}})
 		}
 	}
-
-	statefulSetNames, err := tm.statefulSetNames(ctx, namespace)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return &rpc.WorkloadInfoSnapshot{}
-	}
-
-	statefulSetWorkloadInfos := tm.getInfosForWorkflow(ctx, statefulSetNames, "StatefulSet", namespace, iMap, aMap, filter)
-	workloadInfos = append(workloadInfos, statefulSetWorkloadInfos...)
 
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}
 }
@@ -462,10 +464,10 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 	result := &rpc.UninstallResult{}
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
 
-	// Since deployments can have more than one replica, we get a slice of agents
-	// where the agent to deployment mapping is 1-to-1.  This is important
+	// Since workloads can have more than one replica, we get a slice of agents
+	// where the agent to workload mapping is 1-to-1.  This is important
 	// because in the ALL_AGENTS or default case, we could edit the same
-	// deployment n times for n replicas, which could cause race conditions
+	// workload n times for n replicas, which could cause race conditions
 	agents = getRepresentativeAgents(c, agents)
 
 	_ = tm.clearIntercepts(c)
@@ -487,7 +489,7 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 				}
 			}
 			if !found {
-				result.ErrorText = fmt.Sprintf("unable to find a deployment named %s.%s with an agent installed", di, namespace)
+				result.ErrorText = fmt.Sprintf("unable to find a workload named %s.%s with an agent installed", di, namespace)
 			}
 		}
 		agents = selectedAgents
