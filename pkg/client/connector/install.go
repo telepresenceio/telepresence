@@ -831,6 +831,12 @@ func addAgentToWorkload(
 	if err != nil {
 		return nil, nil, err
 	}
+	if matchingService.Spec.ClusterIP == "None" {
+		dlog.Debugf(c,
+			"Intercepts of headless service: %s likely won't work as expected "+
+				"see https://github.com/telepresenceio/telepresence/issues/1632",
+			matchingService.Name)
+	}
 	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
 		matchingService.Name,
 		func() string {
