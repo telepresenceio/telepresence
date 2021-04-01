@@ -3,22 +3,21 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 
+	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -119,24 +118,13 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	// also listen for interruption to cancel the flow
-	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
-
-	// start the background server on which we'll be listening for the OAuth2 callback
-	backgroundServer, err := l.startBackgroundServer()
-	defer func() {
-		err := backgroundServer.Shutdown(context.Background())
-		if err != nil {
-			dlog.Errorf(ctx, "error shutting down callback server: %v", err)
-		}
-	}()
+	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return err
 	}
 	l.oauth2Config = oauth2.Config{
 		ClientID:    l.env.LoginClientID,
-		RedirectURL: fmt.Sprintf("http://%v%v", backgroundServer.Addr, callbackPath),
+		RedirectURL: fmt.Sprintf("http://localhost:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  l.env.LoginAuthURL,
 			TokenURL: l.env.LoginTokenURL,
@@ -144,6 +132,20 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 		Scopes: []string{"openid", "profile", "email"},
 	}
 
+	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableWithSoftness: ctx == dcontext.HardContext(ctx),
+		ShutdownOnNonError: true,
+	})
+
+	grp.Go("server-http", func(ctx context.Context) error {
+		return l.runBackgroundServer(ctx, listener)
+	})
+	grp.Go("actor", l.login)
+
+	return grp.Wait()
+}
+
+func (l *loginExecutor) login(ctx context.Context) error {
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
 	pkceVerifier, err := NewCodeVerifier()
@@ -180,7 +182,7 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 			}
 		}
 		return err
-	case <-interrupts:
+	case <-ctx.Done():
 		fmt.Fprintln(l.stdout, "Login aborted.")
 		l.scout <- scout.ScoutReport{
 			Action: "login_interrupted",
@@ -241,32 +243,31 @@ func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Toke
 	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 
-func (l *loginExecutor) startBackgroundServer() (*http.Server, error) {
-	// start listening on the next available port
-	listener, err := net.Listen("tcp", ":0")
+func (l *loginExecutor) runBackgroundServer(ctx context.Context, listener net.Listener) error {
+	sc := dhttp.ServerConfig{
+		Handler: http.HandlerFunc(l.httpHandler),
+	}
+	err := sc.Serve(ctx, listener)
 	if err != nil {
-		return &http.Server{}, err
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	handler := http.NewServeMux()
-	handler.HandleFunc(callbackPath, l.httpHandler)
-	server := &http.Server{
-		Addr:    fmt.Sprintf("localhost:%v", port),
-		Handler: handler,
-	}
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			l.callbacks <- oauth2Callback{
-				Code:             "",
-				Error:            "Could not start callback server",
-				ErrorDescription: err.Error(),
-			}
+		cb := oauth2Callback{
+			Code:             "",
+			Error:            "Could not start callback server",
+			ErrorDescription: err.Error(),
 		}
-	}()
-	return server, nil
+		// don't block
+		select {
+		case l.callbacks <- cb:
+		default:
+		}
+	}
+	return err
 }
 
 func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != callbackPath {
+		http.NotFound(w, r)
+		return
+	}
 	query := r.URL.Query()
 	code := query.Get("code")
 	errorName := query.Get("error")
