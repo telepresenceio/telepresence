@@ -138,7 +138,23 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 	})
 
 	grp.Go("server-http", func(ctx context.Context) error {
-		return l.runBackgroundServer(ctx, listener)
+		sc := dhttp.ServerConfig{
+			Handler: http.HandlerFunc(l.httpHandler),
+		}
+		err := sc.Serve(ctx, listener)
+		if err != nil {
+			cb := oauth2Callback{
+				Code:             "",
+				Error:            "Could not start callback server",
+				ErrorDescription: err.Error(),
+			}
+			// don't block
+			select {
+			case l.callbacks <- cb:
+			default:
+			}
+		}
+		return err
 	})
 	grp.Go("actor", l.login)
 
@@ -192,37 +208,28 @@ func (l *loginExecutor) login(ctx context.Context) (err error) {
 	// wait for callback completion or interruption
 	select {
 	case callback := <-l.callbacks:
-		token, err = l.handleCallback(ctx, callback, pkceVerifier)
-		return err
+		if callback.Error != "" {
+			return fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
+		}
+
+		// retrieve access token from callback code
+		token, err = l.oauth2Config.Exchange(
+			ctx,
+			callback.Code,
+			oauth2.SetAuthURLParam("code_verifier", pkceVerifier.String()),
+		)
+		if err != nil {
+			return fmt.Errorf("error while exchanging code for token: %w", err)
+		}
+
+		if err := l.SaveTokenFunc(ctx, token); err != nil {
+			return fmt.Errorf("could not save access token to user cache: %w", err)
+		}
+
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-func (l *loginExecutor) handleCallback(
-	ctx context.Context,
-	callback oauth2Callback, pkceVerifier CodeVerifier,
-) (*oauth2.Token, error) {
-	if callback.Error != "" {
-		return nil, fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
-	}
-
-	// retrieve access token from callback code
-	token, err := l.oauth2Config.Exchange(
-		ctx,
-		callback.Code,
-		oauth2.SetAuthURLParam("code_verifier", pkceVerifier.String()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error while exchanging code for token: %w", err)
-	}
-
-	err = l.SaveTokenFunc(ctx, token)
-	if err != nil {
-		return nil, fmt.Errorf("could not save access token to user cache: %w", err)
-	}
-
-	return token, nil
 }
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
@@ -249,26 +256,6 @@ func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Toke
 		return err
 	}
 	return l.SaveUserInfoFunc(ctx, &userInfo)
-}
-
-func (l *loginExecutor) runBackgroundServer(ctx context.Context, listener net.Listener) error {
-	sc := dhttp.ServerConfig{
-		Handler: http.HandlerFunc(l.httpHandler),
-	}
-	err := sc.Serve(ctx, listener)
-	if err != nil {
-		cb := oauth2Callback{
-			Code:             "",
-			Error:            "Could not start callback server",
-			ErrorDescription: err.Error(),
-		}
-		// don't block
-		select {
-		case l.callbacks <- cb:
-		default:
-		}
-	}
-	return err
 }
 
 func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
