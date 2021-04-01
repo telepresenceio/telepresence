@@ -151,6 +151,7 @@ func (l *loginExecutor) login(ctx context.Context) (err error) {
 	defer func() {
 		switch {
 		case err != nil && err != ctx.Err():
+			fmt.Fprintln(l.stdout, "Login failure.")
 			l.scout <- scout.ScoutReport{
 				Action: "login_failure",
 				Metadata: map[string]interface{}{
