@@ -75,7 +75,7 @@ func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	}
 	if update != nil {
 		fmt.Fprintf(cmd.OutOrStdout(),
-			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/latest/telepresence/install/upgrade/ for more info.\n",
+			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/telepresence/latest/install/upgrade/ for more info.\n",
 			binaryName, &ourVersion, update)
 	}
 	return uc.storeNextCheck(cmd.Context(), checkDuration)

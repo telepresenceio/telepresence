@@ -3,6 +3,7 @@
 ### 2.1.4 (TBD)
 
 - Bugfix: Fix race condition that occurred when intercepting a ReplicaSet while another pod was terminating in the same namespace (this fixes a transient test failure)
+- Bugfix: Fix error when intercepting a ReplicaSet requires the containerPort to be hidden.
 - Change: Telepresence no longer require that port 1080 must be available.
 
 ### 2.1.3 (March 29, 2021)

@@ -164,7 +164,7 @@ func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string,
 }
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
-// symbolic name so that an traffic-agent in a designated Deployment can reference the symbol
+// symbolic name so that an traffic-agent in a designated Workload can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
 type makePortSymbolicAction struct {
 	PortName     string
@@ -586,13 +586,13 @@ func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string)
 	p.Name = to
 }
 
-func (hcp *hideContainerPortAction) Do(dep kates.Object) error {
-	return hcp.do(dep.(*kates.Deployment))
+func (hcp *hideContainerPortAction) Do(obj kates.Object) error {
+	return hcp.do(obj)
 }
 
-func (hcp *hideContainerPortAction) do(dep *kates.Deployment) error {
+func (hcp *hideContainerPortAction) do(obj kates.Object) error {
 	// New name must be max 15 characters long
-	cn, p, err := hcp.getPort(dep, hcp.PortName)
+	cn, p, err := hcp.getPort(obj, hcp.PortName)
 	if err != nil {
 		return err
 	}
@@ -611,17 +611,17 @@ func (hcp *hideContainerPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
 		hcp.HiddenName, hcp.ContainerName, hcp.PortName)
 }
 
-func (hcp *hideContainerPortAction) IsDone(dep kates.Object) bool {
-	_, _, err := hcp.getPort(dep.(*kates.Deployment), hcp.HiddenName)
+func (hcp *hideContainerPortAction) IsDone(obj kates.Object) bool {
+	_, _, err := hcp.getPort(obj, hcp.HiddenName)
 	return err == nil
 }
 
-func (hcp *hideContainerPortAction) Undo(dep kates.Object) error {
-	return hcp.undo(dep.(*kates.Deployment))
+func (hcp *hideContainerPortAction) Undo(obj kates.Object) error {
+	return hcp.undo(obj)
 }
 
-func (hcp *hideContainerPortAction) undo(dep *kates.Deployment) error {
-	cn, p, err := hcp.getPort(dep, hcp.HiddenName)
+func (hcp *hideContainerPortAction) undo(obj kates.Object) error {
+	cn, p, err := hcp.getPort(obj, hcp.HiddenName)
 	if err != nil {
 		return err
 	}
