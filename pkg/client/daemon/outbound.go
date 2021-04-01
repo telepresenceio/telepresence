@@ -45,6 +45,8 @@ type outbound struct {
 
 	overridePrimaryDNS bool
 
+	proxy *proxy.Proxy
+
 	// proxyRedirPort is the port to which we redirect translated IP requests intended for the cluster
 	proxyRedirPort int
 
@@ -117,6 +119,7 @@ func (o *outbound) firewall2socksWorker(c context.Context, onReady func()) error
 	if err != nil {
 		return errors.Wrap(err, "Proxy")
 	}
+	o.proxy = pr
 	o.proxyRedirPort, err = pr.ListenerPort()
 	if err != nil {
 		return errors.Wrap(err, "Proxy")
@@ -248,6 +251,7 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 
 func (o *outbound) update(table *rpc.Table) (err error) {
 	// Update stems from the connector so the destination target must be set on all routes
+	o.proxy.SetSocksPort(table.SocksPort)
 	routes := make([]*nat.Route, 0, len(table.Routes))
 	domains := make(map[string][]string)
 	for _, route := range table.Routes {

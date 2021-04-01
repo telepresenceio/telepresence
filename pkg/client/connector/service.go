@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -514,9 +515,12 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		tm.sshPortForward(c,
-			"-D", "localhost:1080",
-		)
+		addr, port, err := nextFreePort()
+		if err != nil {
+			return err
+		}
+		tm.socksPort = int32(port)
+		tm.sshPortForward(c, "-D", addr)
 		return nil
 	})
 
@@ -581,4 +585,23 @@ func run(c context.Context) error {
 		dlog.Error(c, err)
 	}
 	return err
+}
+
+// nextFreePort uses net.Listen to choose a free port for the localhost. It then immediately closes that
+// connection and returns the port that was allocated. The local address string and port number is returned.
+//
+// NOTE: Since the connection is closed, there's chance that someone else might allocate this port before
+// it is actually used. The chances are slim though since tests show that in most cases (at least on
+// MacOS and Linux), the same port isn't allocated for a while even if the allocation is made from different
+// processes.
+func nextFreePort() (string, int, error) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return "", 0, err
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	_, portStr, _ := net.SplitHostPort(addr)
+	port, _ := strconv.Atoi(portStr)
+	return addr, port, nil
 }
