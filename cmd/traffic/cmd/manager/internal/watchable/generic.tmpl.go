@@ -6,7 +6,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	"VALPKG"
 )

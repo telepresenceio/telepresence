@@ -36,7 +36,7 @@ func SaveToUserCache(ctx context.Context, object interface{}, file string) error
 }
 
 func LoadFromUserCache(ctx context.Context, dest interface{}, file string) error {
-	dir, err := ensureCacheDir(ctx)
+	dir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
 		return err
 	}
@@ -51,16 +51,12 @@ func LoadFromUserCache(ctx context.Context, dest interface{}, file string) error
 }
 
 func DeleteFromUserCache(ctx context.Context, file string) error {
-	dir, err := ensureCacheDir(ctx)
+	dir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
 		return err
 	}
-	cacheFile := filepath.Join(dir, file)
-	if _, err := os.Stat(cacheFile); err != nil {
-		if os.IsNotExist(err) {
-			err = nil
-		}
+	if err := os.Remove(filepath.Join(dir, file)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return os.Remove(cacheFile)
+	return nil
 }
