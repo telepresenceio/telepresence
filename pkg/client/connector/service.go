@@ -509,7 +509,7 @@ func run(c context.Context) error {
 		if err != nil {
 			return err
 		}
-		tm.dynamicSshPort = int32(port)
+		tm.socksPort = int32(port)
 		tm.sshPortForward(c, "-D", addr)
 		return nil
 	})

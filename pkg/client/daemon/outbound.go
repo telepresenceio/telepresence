@@ -251,7 +251,7 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 
 func (o *outbound) update(table *rpc.Table) (err error) {
 	// Update stems from the connector so the destination target must be set on all routes
-	o.proxy.SetDynamicSshPort(table.DynamicSshPort)
+	o.proxy.SetSocksPort(table.SocksPort)
 	routes := make([]*nat.Route, 0, len(table.Routes))
 	domains := make(map[string][]string)
 	for _, route := range table.Routes {

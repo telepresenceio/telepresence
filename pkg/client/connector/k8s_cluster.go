@@ -45,7 +45,7 @@ type k8sCluster struct {
 	localInterceptedNamespaces map[string]struct{}
 
 	// The local port that is forwarded to the traffic-managers dynamic (SOCKS) ssh port.
-	dynamicSshPort int32
+	socksPort int32
 
 	accLock         sync.Mutex
 	accWait         chan struct{}

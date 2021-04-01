@@ -20,10 +20,10 @@ import (
 
 // A Proxy listens to a port and forwards incoming connections to a router
 type Proxy struct {
-	dynamicSshPort int32
-	listener       net.Listener
-	connHandler    func(*Proxy, context.Context, *net.TCPConn)
-	router         func(*net.TCPConn) (string, error)
+	socksPort   int32
+	listener    net.Listener
+	connHandler func(*Proxy, context.Context, *net.TCPConn)
+	router      func(*net.TCPConn) (string, error)
 }
 
 // NewProxy returns a new Proxy instance that is listening to the given tcp address
@@ -36,9 +36,9 @@ func NewProxy(c context.Context, router func(*net.TCPConn) (string, error)) (pro
 	return
 }
 
-// SetDynamicSshPort sets the port that the connector has assigned for dynamic ssh port forwarding
-func (pxy *Proxy) SetDynamicSshPort(dynamicSshPort int32) {
-	pxy.dynamicSshPort = dynamicSshPort
+// SetSocksPort sets the port that the connector has assigned for dynamic ssh port forwarding
+func (pxy *Proxy) SetSocksPort(socksPort int32) {
+	pxy.socksPort = socksPort
 }
 
 func setRlimit(c context.Context) {
@@ -123,7 +123,7 @@ func (pxy *Proxy) Run(c context.Context, limit int64) {
 }
 
 func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
-	if pxy.dynamicSshPort == 0 {
+	if pxy.socksPort == 0 {
 		// shouldn't happen really, since the traffic manager provides this when
 		// updating the ip-tables.
 		dlog.Error(c, "SOCKS port is not yet configured")
@@ -140,7 +140,7 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 
 	// setting up an ssh tunnel with dynamic socks proxy at this end
 	// seems faster than connecting directly to a socks proxy
-	forwardAddress := fmt.Sprintf("localhost:%d", pxy.dynamicSshPort)
+	forwardAddress := fmt.Sprintf("localhost:%d", pxy.socksPort)
 	dialer, err := proxy.SOCKS5("tcp", forwardAddress, nil, proxy.Direct)
 	//	dialer, err := proxy.SOCKS5("tcp", "localhost:9050", nil, proxy.Direct)
 	if err != nil {
