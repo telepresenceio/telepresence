@@ -173,7 +173,13 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Connect")
 	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.connect(c, cr), nil
+	return s.connect(c, cr, false), nil
+}
+
+func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+	c = s.callCtx(c, "Status")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	return s.connect(c, cr, true), nil
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
@@ -216,12 +222,12 @@ func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 }
 
 // connect the connector to a cluster
-func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo {
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
 	k8sConfig, err := newK8sConfig(cr.KubeFlags)
-	if err != nil {
+	if err != nil && !dryRun {
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
 			ErrorText: err.Error(),
@@ -238,7 +244,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		}
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
-			ClusterOk:      true,
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
@@ -249,7 +254,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	case s.cluster != nil /* && !s.cluster.k8sConfig.equals(k8sConfig) */ :
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterOk:      true,
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
@@ -260,12 +264,18 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	default:
 		// This is the first call to Connect; we have to tell the background connect
 		// goroutine to actually do the work.
-		s.connectRequest <- parsedConnectRequest{
-			ConnectRequest: cr,
-			k8sConfig:      k8sConfig,
+		if dryRun {
+			return &rpc.ConnectInfo{
+				Error: rpc.ConnectInfo_DISCONNECTED,
+			}
+		} else {
+			s.connectRequest <- parsedConnectRequest{
+				ConnectRequest: cr,
+				k8sConfig:      k8sConfig,
+			}
+			close(s.connectRequest)
+			return <-s.connectResponse
 		}
-		close(s.connectRequest)
-		return <-s.connectResponse
 	}
 }
 
@@ -380,7 +390,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterOk:      true,
 		ClusterContext: s.cluster.k8sConfig.Context,
 		ClusterServer:  s.cluster.k8sConfig.Server,
 		ClusterId:      s.cluster.getClusterId(c),
@@ -441,16 +450,10 @@ func run(c context.Context) error {
 	dlog.Info(c, "")
 
 	g.Go("server-grpc", func(c context.Context) error {
-		if client.SocketExists(client.ConnectorSocketName) {
-			return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
-				client.SocketURL(client.ConnectorSocketName), processName)
-		}
 		defer func() {
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
-			_ = os.Remove(client.ConnectorSocketName)
-
 			// Close s.connectRequest if it hasn't already been closed.
 			select {
 			case <-s.connectRequest:
@@ -460,6 +463,13 @@ func run(c context.Context) error {
 		}()
 
 		// Listen on unix domain socket
+		if client.SocketExists(client.ConnectorSocketName) {
+			return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
+				client.SocketURL(client.ConnectorSocketName), processName)
+		}
+		defer func() {
+			_ = os.Remove(client.ConnectorSocketName)
+		}()
 		listener, err := net.Listen("unix", client.ConnectorSocketName)
 		if err != nil {
 			return err

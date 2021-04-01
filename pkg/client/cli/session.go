@@ -27,7 +27,7 @@ func (si *sessionInfo) withDaemon(retain bool, f func(state *daemonState) error)
 	return client.WithEnsuredState(ds, retain, func() error { return f(ds) })
 }
 
-func (si *sessionInfo) kubeFlagMap() map[string]string {
+func kubeFlagMap() map[string]string {
 	kubeFlagMap := make(map[string]string)
 	kubeFlags.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {

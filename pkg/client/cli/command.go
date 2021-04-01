@@ -35,16 +35,6 @@ recommended) which in turn may result in a password prompt.`
 
 // TODO: Provide a link in the help text to more info about telepresence
 
-func statusCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "status",
-		Args: cobra.NoArgs,
-
-		Short: "Show connectivity status",
-		RunE:  status,
-	}
-}
-
 func versionCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:  "version",

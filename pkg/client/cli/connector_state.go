@@ -79,7 +79,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 func (cs *connectorState) setConnectInfo() error {
 	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		KubeFlags:        cs.kubeFlagMap(),
+		KubeFlags:        kubeFlagMap(),
 		MappedNamespaces: mappedNamespaces,
 	})
 	if err != nil {
@@ -94,8 +94,8 @@ func (cs *connectorState) setConnectInfo() error {
 		return nil
 	case connector.ConnectInfo_ALREADY_CONNECTED:
 		return nil
-	case connector.ConnectInfo_DISCONNECTING:
-		msg = "Unable to connect while disconnecting"
+	case connector.ConnectInfo_DISCONNECTED:
+		msg = "Not connected"
 	case connector.ConnectInfo_MUST_RESTART:
 		msg = "Cluster configuration changed, please quit telepresence and reconnect"
 	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED:

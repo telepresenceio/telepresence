@@ -21,6 +21,10 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
+  // Status is much like Connect, except that it doesn't actually do
+  // anything.  It's a dry-run.
+  rpc Status(ConnectRequest) returns (ConnectInfo);
+
   // Adds an intercept to a workload.  Requires having already called
   // Connect.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
@@ -50,21 +54,26 @@ message ConnectRequest {
 
 message ConnectInfo {
   enum ErrType {
-    UNSPECIFIED = 0; // success
-    NOT_STARTED = 1;
-    ALREADY_CONNECTED = 2; // success
-    DISCONNECTING = 3;
-    CLUSTER_FAILED = 4;
+    UNSPECIFIED            = 0; // success
+    ALREADY_CONNECTED      = 2; // success
+    MUST_RESTART           = 7; // failure: would-be-success, but kubeconfig has changed
+    DISCONNECTED           = 3; // failure: Connect has not yet been called (only returned from Status)
+    CLUSTER_FAILED         = 4; // failure: error parsing kubeconfig or talking to the cluster; error_text is set
+    TRAFFIC_MANAGER_FAILED = 6; // failure: error talking to the in-cluster traffic-manager; error_text is set
+
+    reserved 1;
     reserved 5;
-    TRAFFIC_MANAGER_FAILED = 6;
-    MUST_RESTART = 7;
   }
   ErrType error = 1;
-  string error_text = 2;
+  string error_text = 2; // only set for some error codes, see above
+
+  // everything else is only set for error=UNSPECIFIED,
+  // error=ALREADY_CONNECTED, or error=MUST_RESTART.
+
   string cluster_server = 3;
   string cluster_context = 4;
   bool bridge_ok = 5;
-  bool cluster_ok = 6;
+  reserved 6;
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
