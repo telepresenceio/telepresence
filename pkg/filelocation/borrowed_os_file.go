@@ -101,7 +101,7 @@ func userCacheDir(ctx context.Context) (string, error) {
 
 	default: // Unix
 		dir = os.Getenv("XDG_CACHE_HOME")
-		if dir == "" {
+		if dir == "" || (ctx.Value(homeCtxKey{}) != nil) {
 			home, _ := UserHomeDir(ctx)
 			if home == "" {
 				return "", errors.New("neither $XDG_CACHE_HOME nor $HOME are defined")
@@ -161,7 +161,7 @@ func UserConfigDir(ctx context.Context) (string, error) {
 
 	default: // Unix
 		dir = os.Getenv("XDG_CONFIG_HOME")
-		if dir == "" {
+		if dir == "" || (ctx.Value(homeCtxKey{}) != nil) {
 			home, _ := UserHomeDir(ctx)
 			if home == "" {
 				return "", errors.New("neither $XDG_CONFIG_HOME nor $HOME are defined")

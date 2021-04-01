@@ -2,9 +2,12 @@
 
 ### 2.1.4 (TBD)
 
+- Feature: `telepresence status` has been enhanced to provide more information.  In particular, it now provides separate information on the daemon and connector processes, as well as showing login status.
+- Change: Telepresence no longer requires that port 1080 must be available.
 - Bugfix: Fix race condition that occurred when intercepting a ReplicaSet while another pod was terminating in the same namespace (this fixes a transient test failure)
 - Bugfix: Fix error when intercepting a ReplicaSet requires the containerPort to be hidden.
-- Change: Telepresence no longer require that port 1080 must be available.
+- Bugfix: `telepresence quit` no longer starts the daemon process just to shut it down.
+- Bugfix: Telepresence no longer hangs the next time it's run after getting killed.
 
 ### 2.1.3 (March 29, 2021)
 

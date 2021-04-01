@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/browser"
-	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -34,11 +33,7 @@ type oauth2Callback struct {
 }
 
 type loginExecutor struct {
-	Oauth2AuthUrl    string
-	Oauth2TokenUrl   string
-	CompletionUrl    string
-	Oauth2ClientId   string
-	UserInfoUrl      string
+	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
 	SaveUserInfoFunc func(context.Context, *cache.UserInfo) error
 	OpenURLFunc      func(string) error
@@ -47,25 +42,18 @@ type loginExecutor struct {
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
-	LoginFlow(cmd *cobra.Command) error
+	LoginFlow(ctx context.Context, stdout, stderr io.Writer) error
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
-func NewLoginExecutor(oauth2AuthUrl string,
-	oauth2TokenUrl string,
-	oauth2ClientId string,
-	completionUrl string,
-	userInfoUrl string,
+func NewLoginExecutor(
+	env client.Env,
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *cache.UserInfo) error,
 	openURLFunc func(string) error,
 	scout *client.Scout) LoginExecutor {
 	return &loginExecutor{
-		Oauth2AuthUrl:    oauth2AuthUrl,
-		Oauth2TokenUrl:   oauth2TokenUrl,
-		CompletionUrl:    completionUrl,
-		Oauth2ClientId:   oauth2ClientId,
-		UserInfoUrl:      userInfoUrl,
+		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
 		OpenURLFunc:      openURLFunc,
@@ -74,28 +62,28 @@ func NewLoginExecutor(oauth2AuthUrl string,
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
-func EnsureLoggedIn(cmd *cobra.Command) error {
-	if token, _ := cache.LoadTokenFromUserCache(cmd.Context()); token != nil {
+func EnsureLoggedIn(ctx context.Context, stdout, stderr io.Writer) error {
+	if token, _ := cache.LoadTokenFromUserCache(ctx); token != nil {
 		return nil
 	}
 
-	env, err := client.LoadEnv(cmd.Context())
+	return Login(ctx, stdout, stderr)
+}
+
+func Login(ctx context.Context, stdout, stderr io.Writer) error {
+	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		return err
 	}
 
 	l := NewLoginExecutor(
-		env.LoginAuthURL,
-		env.LoginTokenURL,
-		env.LoginClientID,
-		env.LoginCompletionURL,
-		env.UserInfoURL,
+		env,
 		cache.SaveTokenToUserCache,
 		cache.SaveUserInfoToUserCache,
 		browser.OpenURL,
-		client.NewScout(cmd.Context(), "cli"),
+		client.NewScout(ctx, "cli"),
 	)
-	return l.LoginFlow(cmd)
+	return l.LoginFlow(ctx, stdout, stderr)
 }
 
 // LoginFlow tries logging the user by opening a browser window and authenticating against the
@@ -105,7 +93,7 @@ func EnsureLoggedIn(cmd *cobra.Command) error {
 // SaveTokenFunc (which would usually write to user cache).
 // If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
 // using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(cmd *cobra.Command) error {
+func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer) error {
 	// oauth2Callback chan that will receive the callback info
 	callbacks := make(chan oauth2Callback)
 	// also listen for interruption to cancel the flow
@@ -113,66 +101,73 @@ func (l *loginExecutor) LoginFlow(cmd *cobra.Command) error {
 	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
 
 	// start the background server on which we'll be listening for the OAuth2 callback
-	backgroundServer, err := startBackgroundServer(callbacks, cmd.ErrOrStderr(), l.CompletionUrl)
+	backgroundServer, err := startBackgroundServer(callbacks, stderr, l.env.LoginCompletionURL)
 	defer func() {
 		err := backgroundServer.Shutdown(context.Background())
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "error shutting down callback server: %v", err)
+			fmt.Fprintf(stderr, "error shutting down callback server: %v", err)
 		}
 	}()
 	if err != nil {
 		return err
 	}
 	oauth2Config := oauth2.Config{
-		ClientID:    l.Oauth2ClientId,
+		ClientID:    l.env.LoginClientID,
 		RedirectURL: fmt.Sprintf("http://%v%v", backgroundServer.Addr, callbackPath),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  l.Oauth2AuthUrl,
-			TokenURL: l.Oauth2TokenUrl,
+			AuthURL:  l.env.LoginAuthURL,
+			TokenURL: l.env.LoginTokenURL,
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
-	pkceVerifier := CreateCodeVerifier()
+	pkceVerifier, err := NewCodeVerifier()
+	if err != nil {
+		return err
+	}
 	url := oauth2Config.AuthCodeURL(
 		state,
 		oauth2.SetAuthURLParam("code_challenge", pkceVerifier.CodeChallengeS256()),
 		oauth2.SetAuthURLParam("code_challenge_method", PKCEChallengeMethodS256),
 	)
-	fmt.Fprintln(cmd.OutOrStdout(), "Launching browser authentication flow...")
-	err = l.OpenURLFunc(url)
-	if err != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Could not open browser, please access this URL: %v\n", url)
+
+	fmt.Fprintln(stdout, "Launching browser authentication flow...")
+	if err := l.OpenURLFunc(url); err != nil {
+		fmt.Fprintf(stdout, "Could not open browser, please access this URL: %v\n", url)
 	}
 
 	// wait for callback completion or interruption
 	select {
 	case callback := <-callbacks:
-		token, err := l.handleCallback(cmd, callback, oauth2Config, pkceVerifier)
+		token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
 		if err != nil {
-			_ = l.Scout.Report(cmd.Context(), "login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
+			_ = l.Scout.Report(ctx, "login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
 		} else {
-			_ = l.retrieveUserInfo(cmd.Context(), token)
-			_ = l.Scout.Report(cmd.Context(), "login_success")
+			fmt.Fprintln(stdout, "Login successful.")
+			_ = l.retrieveUserInfo(ctx, token)
+			_ = l.Scout.Report(ctx, "login_success")
 		}
 		return err
 	case <-interrupts:
-		fmt.Fprintln(cmd.OutOrStdout(), "Login aborted.")
-		_ = l.Scout.Report(cmd.Context(), "login_interrupted")
+		fmt.Fprintln(stdout, "Login aborted.")
+		_ = l.Scout.Report(ctx, "login_interrupted")
 		return nil
 	}
 }
 
-func (l *loginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callback, oauth2Config oauth2.Config, pkceVerifier *CodeVerifier) (*oauth2.Token, error) {
+func (l *loginExecutor) handleCallback(
+	ctx context.Context,
+	callback oauth2Callback, oauth2Config oauth2.Config, pkceVerifier CodeVerifier,
+) (*oauth2.Token, error) {
 	if callback.Error != "" {
 		return nil, fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
 	}
 
 	// retrieve access token from callback code
 	token, err := oauth2Config.Exchange(
-		cmd.Context(),
+		ctx,
 		callback.Code,
 		oauth2.SetAuthURLParam("code_verifier", pkceVerifier.String()),
 	)
@@ -180,18 +175,17 @@ func (l *loginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callba
 		return nil, fmt.Errorf("error while exchanging code for token: %w", err)
 	}
 
-	err = l.SaveTokenFunc(cmd.Context(), token)
+	err = l.SaveTokenFunc(ctx, token)
 	if err != nil {
 		return nil, fmt.Errorf("could not save access token to user cache: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "Login successful.")
 	return token, nil
 }
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
 	var userInfo cache.UserInfo
-	req, err := http.NewRequest("GET", l.UserInfoUrl, nil)
+	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
 	if err != nil {
 		return err
 	}
@@ -262,8 +256,7 @@ func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer, com
 		sb.WriteString("</body></html>")
 
 		w.Header().Set("Content-Type", "text/html")
-		_, err := w.Write([]byte(sb.String()))
-		if err != nil {
+		if _, err := io.WriteString(w, sb.String()); err != nil {
 			fmt.Fprintf(stderr, "Error writing callback response body: %v", err)
 		}
 

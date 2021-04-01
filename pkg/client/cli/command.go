@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 )
@@ -35,16 +34,6 @@ This will involve a call to sudo unless this command is run as root (not
 recommended) which in turn may result in a password prompt.`
 
 // TODO: Provide a link in the help text to more info about telepresence
-
-func statusCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "status",
-		Args: cobra.NoArgs,
-
-		Short: "Show connectivity status",
-		RunE:  status,
-	}
-}
 
 func versionCommand() *cobra.Command {
 	return &cobra.Command{
@@ -194,7 +183,7 @@ func Command(ctx context.Context) *cobra.Command {
 	AddCommandGroups(rootCmd, []CommandGroup{
 		{
 			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), auth.LoginCommand(), auth.LogoutCommand(), statusCommand(), quitCommand()},
+			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), statusCommand(), quitCommand()},
 		},
 		{
 			Name:     "Traffic Commands",

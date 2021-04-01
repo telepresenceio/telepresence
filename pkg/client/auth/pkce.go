@@ -1,11 +1,9 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"math/rand"
-	"strings"
-	"time"
 )
 
 const (
@@ -13,37 +11,26 @@ const (
 	PKCEChallengeMethodS256 = "S256"
 )
 
-type CodeVerifier struct {
-	Value string
-}
+type CodeVerifier string
 
-func CreateCodeVerifier() *CodeVerifier {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+func NewCodeVerifier() (CodeVerifier, error) {
 	b := make([]byte, codeVerifierLength)
-	for i := 0; i < codeVerifierLength; i++ {
-		b[i] = byte(r.Intn(255))
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	return &CodeVerifier{encode(b)}
+	return CodeVerifier(base64.RawURLEncoding.EncodeToString(b)), nil
 }
 
-func (v *CodeVerifier) String() string {
-	return v.Value
+func (v CodeVerifier) String() string {
+	return string(v)
 }
 
-func (v *CodeVerifier) CodeChallengePlain() string {
-	return v.Value
+func (v CodeVerifier) CodeChallengePlain() string {
+	return string(v)
 }
 
-func (v *CodeVerifier) CodeChallengeS256() string {
+func (v CodeVerifier) CodeChallengeS256() string {
 	h := sha256.New()
-	_, _ = h.Write([]byte(v.Value))
-	return encode(h.Sum(nil))
-}
-
-func encode(msg []byte) string {
-	encoded := base64.StdEncoding.EncodeToString(msg)
-	encoded = strings.ReplaceAll(encoded, "+", "-")
-	encoded = strings.ReplaceAll(encoded, "/", "_")
-	encoded = strings.ReplaceAll(encoded, "=", "")
-	return encoded
+	_, _ = h.Write([]byte(v))
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }

@@ -9,7 +9,6 @@ require (
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
-	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.0
 	github.com/google/uuid v1.1.2
 	github.com/miekg/dns v1.1.35
