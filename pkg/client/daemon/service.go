@@ -90,8 +90,8 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) Update(c context.Context, table *rpc.Table) (*empty.Empty, error) {
-	err := d.outbound.update(table)
+func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, error) {
+	err := d.outbound.update(d.callCtx, table)
 	return &empty.Empty{}, err
 }
 

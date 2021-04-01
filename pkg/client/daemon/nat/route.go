@@ -1,44 +1,11 @@
 package nat
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
-	"time"
 )
-
-// FirewallRouter is an interface to what is essentially a routing table, but implemented in the
-// firewall.
-//
-// TODO(lukeshu): Why have we implemented the routing table in the firewall?  Mostly historical
-// reasons, and we should consider using the real routing table.
-type FirewallRouter interface {
-	// Flush will flush any pending rule changes that needs to be committed
-	Flush(ctx context.Context) error
-
-	// Clear the given route. Returns true if the route was cleared and  false if no such route was found.
-	Clear(ctx context.Context, route *Route) (bool, error)
-
-	// Add the given route. If the route already exists and is different from the given route, it is
-	// cleared before the new route is added. Returns true if the route was add and false if it was already present.
-	Add(ctx context.Context, route *Route) (bool, error)
-
-	// Disable the router.
-	Disable(ctx context.Context) error
-
-	// Enable the router
-	Enable(ctx context.Context) error
-
-	// Get the original destination for a connection that has been routed.
-	GetOriginalDst(conn *net.TCPConn) (host string, err error)
-}
-
-func NewRouter(name string, localIPv4, localIPv6 net.IP) FirewallRouter {
-	// newRouter is implemented in platform-specific files.
-	return newRouter(name, localIPv4, localIPv6)
-}
 
 type Table struct {
 	Name   string
@@ -86,20 +53,3 @@ func (e *Route) Equal(o *Route) bool {
 func (e *Route) String() string {
 	return fmt.Sprintf("%s->%d", e.Destination, e.ToPort)
 }
-
-type routingTableCommon struct {
-	Name string
-	// mappings is the routing table itself.  Unlike a real routing table, we have the
-	// capability of doing per-port routes.  Unlike a real routing table, instead of routing to
-	// an IP, we route to a localhost port number.
-	mappings map[Destination]*Route
-}
-
-type withoutCancel struct {
-	context.Context
-}
-
-func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
-func (withoutCancel) Done() <-chan struct{}                   { return nil }
-func (withoutCancel) Err() error                              { return nil }
-func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
