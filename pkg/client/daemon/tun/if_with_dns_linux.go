@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -12,17 +11,17 @@ import (
 
 	"golang.org/x/net/ipv4"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 )
 
 const (
 	// I use TUN interface, so only plain IP packet, no ethernet header + mtu is set to 1300
 	bufSize      = 1500
-	mtu          = "1300"
+	mtu          = 1300
 	udpProto     = 0x11
 	udpHeaderLen = 8
 )
@@ -30,11 +29,10 @@ const (
 // An InterfaceWithDNS is a TUN device capable of dispatching DNS requests that are sent to
 // its configured DNS to a DNS server that uses a local address.
 type InterfaceWithDNS struct {
-	io.ReadWriteCloser
+	*tun.Device
 	requestCount  uint64
 	responderPool *sync.Pool
 	ifIP          net.IP
-	tunIfd        *net.Interface
 	dnsIP         net.IP
 }
 
@@ -133,52 +131,42 @@ func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*Interface
 		return nil, err
 	}
 
-	vni, vName, err := OpenTun()
+	dev, err := tun.OpenTun()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open virtual network \"tun\": %v", err)
 	}
 	defer func() {
 		if err != nil {
-			vni.Close()
+			dev.Close()
 		}
 	}()
 
-	tunIfd, err := net.InterfaceByName(vName)
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve kernel interface for %q: %v", vName, err)
-	}
-	dlog.Infof(c, "network interface %q has index %d", vName, tunIfd.Index)
+	dlog.Infof(c, "network interface %q has index %d", dev.Name(), dev.Index())
 
 	// Place the DNS server in the private network at x.x.x.2
 	dnsIP := make(net.IP, len(ifCIDR.IP))
 	copy(dnsIP, ifCIDR.IP)
 	dnsIP[len(dnsIP)-1] = 2
 
-	// Configure interface with DNS and search domains
-	err = dConn.SetLinkDNS(tunIfd.Index, dnsIP)
-	if err != nil {
+	// Configure interface with DNS and search domains, MTU, and subnet
+	if err = dConn.SetLinkDNS(int(dev.Index()), dnsIP); err != nil {
+		return nil, err
+	}
+	if err = dev.SetMTU(mtu); err != nil {
 		return nil, err
 	}
 
-	err = dexec.CommandContext(c, "ip", "link", "set", "dev", vName, "mtu", mtu).Run()
-	if err != nil {
-		return nil, err
-	}
-
-	err = dexec.CommandContext(c, "ip", "addr", "add", ifCIDR.String(), "dev", vName).Run()
-	if err != nil {
-		return nil, err
-	}
-
-	err = dexec.CommandContext(c, "ip", "link", "set", "dev", vName, "up").Run()
-	if err != nil {
+	// Use x.x.x.1 as the destination address
+	toIP := make(net.IP, len(ifCIDR.IP))
+	copy(toIP, ifCIDR.IP)
+	toIP[len(toIP)-1] = 1
+	if err = dev.AddSubnet(c, ifCIDR, toIP); err != nil {
 		return nil, err
 	}
 	return &InterfaceWithDNS{
-		ReadWriteCloser: vni,
-		ifIP:            ifCIDR.IP,
-		tunIfd:          tunIfd,
-		dnsIP:           dnsIP,
+		Device: dev,
+		ifIP:   ifCIDR.IP,
+		dnsIP:  dnsIP,
 	}, nil
 }
 
@@ -198,7 +186,7 @@ func (t *InterfaceWithDNS) ForwardDNS(c context.Context, forwardAddr *net.UDPAdd
 	initDone.Done()
 
 	for {
-		n, err := t.Read(buf)
+		n, err := t.File.Read(buf)
 		if err != nil {
 			if c.Err() == nil {
 				err = fmt.Errorf("unable to read virtual network %s: %v", t.Name(), err)
@@ -226,7 +214,7 @@ func (t *InterfaceWithDNS) ForwardDNS(c context.Context, forwardAddr *net.UDPAdd
 }
 
 func (t *InterfaceWithDNS) InterfaceIndex() int {
-	return t.tunIfd.Index
+	return int(t.Index())
 }
 
 func (t *InterfaceWithDNS) RequestCount() uint64 {
@@ -272,7 +260,7 @@ func (t *InterfaceWithDNS) forwardLoop(c context.Context, acs <-chan *responder,
 }
 
 func (t *InterfaceWithDNS) Name() string {
-	return t.tunIfd.Name
+	return t.Name()
 }
 
 func (ac *responder) respond(c context.Context) {
@@ -319,7 +307,7 @@ func (ac *responder) respond(c context.Context) {
 	ug.setValues(53, ac.port, buf)
 	ug.setChecksum(h.Src, h.Dst, udpProto)
 
-	if _, err = ac.tun.Write(raw); err != nil && c.Err() == nil {
+	if _, err = ac.tun.File.Write(raw); err != nil && c.Err() == nil {
 		dlog.Error(c, err)
 	}
 }
