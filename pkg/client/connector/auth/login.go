@@ -145,7 +145,32 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 	return grp.Wait()
 }
 
-func (l *loginExecutor) login(ctx context.Context) error {
+func (l *loginExecutor) login(ctx context.Context) (err error) {
+	// Whatever the result is, report it to the terminal and report it to Metriton.
+	var token *oauth2.Token
+	defer func() {
+		switch {
+		case err != nil && err != ctx.Err():
+			l.scout <- scout.ScoutReport{
+				Action: "login_failure",
+				Metadata: map[string]interface{}{
+					"error": err.Error(),
+				},
+			}
+		case err != nil && err == ctx.Err():
+			fmt.Fprintln(l.stdout, "Login aborted.")
+			l.scout <- scout.ScoutReport{
+				Action: "login_interrupted",
+			}
+		default:
+			fmt.Fprintln(l.stdout, "Login successful.")
+			_ = l.retrieveUserInfo(ctx, token)
+			l.scout <- scout.ScoutReport{
+				Action: "login_success",
+			}
+		}
+	}()
+
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
 	pkceVerifier, err := NewCodeVerifier()
@@ -166,28 +191,10 @@ func (l *loginExecutor) login(ctx context.Context) error {
 	// wait for callback completion or interruption
 	select {
 	case callback := <-l.callbacks:
-		token, err := l.handleCallback(ctx, callback, pkceVerifier)
-		if err != nil {
-			l.scout <- scout.ScoutReport{
-				Action: "login_failure",
-				Metadata: map[string]interface{}{
-					"error": err.Error(),
-				},
-			}
-		} else {
-			fmt.Fprintln(l.stdout, "Login successful.")
-			_ = l.retrieveUserInfo(ctx, token)
-			l.scout <- scout.ScoutReport{
-				Action: "login_success",
-			}
-		}
+		token, err = l.handleCallback(ctx, callback, pkceVerifier)
 		return err
 	case <-ctx.Done():
-		fmt.Fprintln(l.stdout, "Login aborted.")
-		l.scout <- scout.ScoutReport{
-			Action: "login_interrupted",
-		}
-		return nil
+		return ctx.Err()
 	}
 }
 
