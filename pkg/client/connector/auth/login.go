@@ -307,7 +307,7 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	defer l.loginMu.Unlock()
 
 	if l.tokenSource == nil {
-		return ErrNotLoggedIn
+		return fmt.Errorf("Logout: %w", ErrNotLoggedIn)
 	}
 	l.resetRefreshTimer(0)
 	l.tokenSource = nil
@@ -323,7 +323,7 @@ func (l *loginExecutor) GetToken(ctx context.Context) (string, error) {
 	defer l.loginMu.Unlock()
 
 	if l.tokenSource == nil {
-		return "", ErrNotLoggedIn
+		return "", fmt.Errorf("GetToken: %w", ErrNotLoggedIn)
 	} else if tokenInfo, err := l.tokenSource.Token(); err != nil {
 		return "", err
 	} else {
@@ -336,7 +336,7 @@ func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, er
 	defer l.loginMu.Unlock()
 
 	if l.userInfo == nil {
-		return nil, ErrNotLoggedIn
+		return nil, fmt.Errorf("GetUserInfo: %w", ErrNotLoggedIn)
 	}
 	return l.userInfo, nil
 }

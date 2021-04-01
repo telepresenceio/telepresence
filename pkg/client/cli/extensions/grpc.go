@@ -38,7 +38,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 
 	accessToken, err := cliutil.GetCloudAccessToken(ctx, true)
 	if err != nil {
-		return "", fmt.Errorf("not logged in: %w", err)
+		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: login error: %w", err)
 	}
 	creds := systemaCredentials(accessToken)
 
@@ -47,7 +47,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: u.Hostname()})),
 		grpc.WithPerRPCCredentials(creds))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: dial error: %w", err)
 	}
 	defer conn.Close()
 
@@ -58,7 +58,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		Version:    client.Version(),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: gRPC error: %w", err)
 	}
 
 	return resp.GetImageName(), nil

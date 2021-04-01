@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -246,8 +247,8 @@ func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, 
 func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Logout")
 	if err := s.loginExecutor.Logout(ctx); err != nil {
-		if err == auth.ErrNotLoggedIn {
-			return nil, grpcStatus.Error(grpcCodes.NotFound, err.Error())
+		if errors.Is(err, auth.ErrNotLoggedIn) {
+			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
 		}
 		return nil, err
 	}
