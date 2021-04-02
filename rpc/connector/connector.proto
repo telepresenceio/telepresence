@@ -52,6 +52,8 @@ service Connector {
 
   rpc GetCloudAccessToken(TokenReq) returns (TokenData);
 
+  rpc GetCloudAPIKey(KeyRequest) returns (KeyData);
+
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
@@ -218,4 +220,13 @@ message TokenReq {
 
 message TokenData {
   string access_token = 1;
+}
+
+message KeyRequest {
+  bool auto_login = 1;
+  string description = 2;
+}
+
+message KeyData {
+  string api_key = 1;
 }

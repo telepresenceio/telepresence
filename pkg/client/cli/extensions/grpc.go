@@ -20,7 +20,7 @@ type systemaCredentials string
 // GetRequestMetadata implements credentials.PerRPCCredentials.
 func (c systemaCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
 	md := map[string]string{
-		"Authorization": "Bearer " + string(c),
+		"X-Ambassador-Api-Key": string(c),
 	}
 	return md, nil
 }
@@ -36,18 +36,18 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		return "", err
 	}
 
-	accessToken, err := cliutil.GetCloudAccessToken(ctx, true)
+	apikey, err := cliutil.GetCloudAPIKey(ctx, "laptop", true)
 	if err != nil {
-		return "", fmt.Errorf("not logged in: %w", err)
+		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: login error: %w", err)
 	}
-	creds := systemaCredentials(accessToken)
+	creds := systemaCredentials(apikey)
 
 	conn, err := grpc.DialContext(ctx,
 		(&url.URL{Scheme: "dns", Path: "/" + u.Host}).String(), // https://github.com/grpc/grpc/blob/master/doc/naming.md
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: u.Hostname()})),
 		grpc.WithPerRPCCredentials(creds))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: dial error: %w", err)
 	}
 	defer conn.Close()
 
@@ -58,7 +58,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		Version:    client.Version(),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: gRPC error: %w", err)
 	}
 
 	return resp.GetImageName(), nil

@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -246,8 +247,8 @@ func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, 
 func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Logout")
 	if err := s.loginExecutor.Logout(ctx); err != nil {
-		if err == auth.ErrNotLoggedIn {
-			return nil, grpcStatus.Error(grpcCodes.NotFound, err.Error())
+		if errors.Is(err, auth.ErrNotLoggedIn) {
+			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
 		}
 		return nil, err
 	}
@@ -274,6 +275,28 @@ func (s *service) GetCloudAccessToken(ctx context.Context, req *rpc.TokenReq) (*
 		return nil, err
 	}
 	return &rpc.TokenData{AccessToken: token}, nil
+}
+
+func (s *service) getCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
+	key, err := s.loginExecutor.GetAPIKey(ctx, desc)
+	if autoLogin && err != nil {
+		if _err := s.loginExecutor.Login(ctx); _err == nil {
+			key, err = s.loginExecutor.GetAPIKey(ctx, desc)
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
+	ctx = s.callCtx(ctx, "GetCloudAPIKey")
+	key, err := s.getCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.KeyData{ApiKey: key}, nil
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
