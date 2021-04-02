@@ -167,3 +167,7 @@ func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewIn
 	}
 	return client.ReviewIntercept(ctx, arg, callOptions...)
 }
+
+func (p *mgrProxy) UDPTunnel(_ managerrpc.Manager_UDPTunnelServer) error {
+	return errors.New("UDPTunnel is not implemented by the mgrProxy")
+}

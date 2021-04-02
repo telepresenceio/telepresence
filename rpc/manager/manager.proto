@@ -274,9 +274,18 @@ message AmbassadorCloudConfig {
   string port = 2;
 }
 
-// 
+//
 message AmbassadorCloudConnection {
   bool can_connect = 1;
+}
+
+// UDPDatagram describes a UDP datagram in full
+message UDPDatagram {
+  bytes source_ip = 1;
+  int32 source_port = 2;
+  bytes destination_ip = 3;
+  int32 destination_port = 4;
+  bytes payload = 5;
 }
 
 service Manager {
@@ -286,7 +295,7 @@ service Manager {
   // GetLicense returns the License information (the license itself and
   // domain that granted it) known to the manager.
   rpc GetLicense(google.protobuf.Empty) returns (License);
-  
+
   // CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
   // Ambassador Cloud
   rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
@@ -344,4 +353,8 @@ service Manager {
   // changing the disposition from "WATING" to "ACTIVE" or to an
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
+
+  // UDPTunnel receives datagrams from the client, dials a UDP connection based on
+  // the destination address, and posts the replies that it receives.
+  rpc UDPTunnel(stream UDPDatagram) returns (stream UDPDatagram);
 }

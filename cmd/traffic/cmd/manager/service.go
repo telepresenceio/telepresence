@@ -8,6 +8,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/udpgrpc"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -33,6 +37,7 @@ type Manager struct {
 	ID      string
 	state   *state.State
 	systema *systemaPool
+	udpPool *connpool.Pool
 
 	rpc.UnsafeManagerServer
 }
@@ -45,11 +50,12 @@ func (wall) Now() time.Time {
 
 func NewManager(ctx context.Context, env Env) *Manager {
 	ret := &Manager{
-		ctx:   ctx,
-		clock: wall{},
-		env:   env,
-		ID:    uuid.New().String(),
-		state: state.NewState(ctx),
+		ctx:     ctx,
+		clock:   wall{},
+		env:     env,
+		ID:      uuid.New().String(),
+		state:   state.NewState(ctx),
+		udpPool: connpool.NewPool(),
 	}
 	ret.systema = NewSystemAPool(ret)
 	return ret
@@ -449,6 +455,31 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	}
 
 	return &empty.Empty{}, nil
+}
+
+func (m *Manager) UDPTunnel(server rpc.Manager_UDPTunnelServer) error {
+	for {
+		dg, err := server.Recv()
+		if err != nil {
+			if m.ctx.Err() != nil {
+				err = nil
+			}
+			return err
+		}
+		m.handleUDPPackage(server, dg)
+	}
+}
+
+func (m *Manager) handleUDPPackage(server rpc.Manager_UDPTunnelServer, dg *rpc.UDPDatagram) {
+	id := connpool.NewConnID(dg.SourceIp, dg.DestinationIp, uint16(dg.SourcePort), uint16(dg.DestinationPort))
+	utuh, err := m.udpPool.Get(m.ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+		return udpgrpc.NewHandler(ctx, id, server, release)
+	})
+	if err != nil {
+		dlog.Errorf(m.ctx, "failed to get UDP handler: %v", err)
+		return
+	}
+	utuh.(*udpgrpc.Handler).Send(m.ctx, dg)
 }
 
 // expire removes stale sessions.

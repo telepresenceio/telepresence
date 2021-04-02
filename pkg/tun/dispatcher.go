@@ -8,6 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"google.golang.org/grpc"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
@@ -21,12 +25,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/socks"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/tcp"
+	"github.com/telepresenceio/telepresence/v2/pkg/tun/udp"
 )
 
 type Dispatcher struct {
 	dev            *Device
 	socksTCPDialer socks.Dialer
 	managerClient  manager.ManagerClient
+	udpStream      *udp.Stream
 	udpHandlers    *connpool.Pool
 	tcpHandlers    *connpool.Pool
 	handlersWg     sync.WaitGroup
@@ -49,11 +55,27 @@ func NewDispatcher(dev *Device) *Dispatcher {
 
 var closeDialers = sync.Once{}
 
-func (d *Dispatcher) SetProxyPort(ctx context.Context, socksPort uint16) (err error) {
+func (d *Dispatcher) SetPorts(ctx context.Context, socksPort, managerPort uint16) (err error) {
 	if d.socksTCPDialer == nil || d.socksTCPDialer.ProxyPort() != socksPort {
 		if d.socksTCPDialer, err = socks.Proxy.NewDialer(ctx, "tcp", socksPort); err != nil {
 			return err
 		}
+	}
+	if managerPort != 0 && d.managerClient == nil {
+		// First check. Establish connection
+		tos := &client.GetConfig(ctx).Timeouts
+		tc, cancel := context.WithTimeout(ctx, tos.TrafficManagerAPI)
+		defer cancel()
+
+		var conn *grpc.ClientConn
+		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", managerPort),
+			grpc.WithInsecure(),
+			grpc.WithNoProxy(),
+			grpc.WithBlock())
+		if err != nil {
+			return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
+		}
+		d.managerClient = manager.NewManagerClient(conn)
 	}
 	closeDialers.Do(func() { close(d.dialersSet) })
 	return nil
@@ -66,6 +88,12 @@ func (d *Dispatcher) Stop(c context.Context) {
 	d.handlersWg.Wait()
 	atomic.StoreInt32(&d.closing, 2)
 	d.dev.Close()
+}
+
+var blockedUDPPorts = map[uint16]bool{
+	137: true, // NETBIOS Name Service
+	138: true, // NETBIOS Datagram Service
+	139: true, // NETBIOS
 }
 
 func (d *Dispatcher) Run(c context.Context) error {
@@ -88,6 +116,26 @@ func (d *Dispatcher) Run(c context.Context) error {
 					return err
 				}
 			}
+		}
+		return nil
+	})
+
+	g.Go("MGR udp-stream", func(c context.Context) error {
+		// Block here until socks dialers are configured
+		select {
+		case <-c.Done():
+			return nil
+		case <-d.dialersSet:
+		}
+
+		if d.managerClient != nil {
+			// TODO: UDPTunnel should probably provide a sessionID
+			udpStream, err := d.managerClient.UDPTunnel(c)
+			if err != nil {
+				return err
+			}
+			d.udpStream = udp.NewStream(udpStream, d.toTunCh)
+			return d.udpStream.ReadLoop(c)
 		}
 		return nil
 	})
@@ -162,12 +210,32 @@ func (d *Dispatcher) handlePacket(c context.Context, data *buffer.Data) {
 		d.tcp(c, tcp.MakePacket(ipHdr, data))
 		data = nil
 	case unix.IPPROTO_UDP:
-		// Not yet handled
-		d.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), hdr, icmp.ProtocolUnreachable)
+		if d.udpStream == nil {
+			d.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), hdr, icmp.ProtocolUnreachable)
+			return
+		}
+		dst := ipHdr.Destination()
+		if dst.IsLinkLocalUnicast() || dst.IsLinkLocalMulticast() {
+			// Just ignore at this point.
+			return
+		}
+		if ip4 := dst.To4(); ip4 != nil && ip4[2] == 0 && ip4[3] == 0 {
+			// Write to the a subnet's zero address. Not sure why this is happening but there's no point in
+			// passing them on.
+			d.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), hdr, icmp.HostUnreachable)
+			return
+		}
+		dg := udp.MakeDatagram(ipHdr, data)
+		if blockedUDPPorts[dg.Header().SourcePort()] || blockedUDPPorts[dg.Header().DestinationPort()] {
+			d.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), hdr, icmp.PortUnreachable)
+			return
+		}
+		data = nil
+		d.udp(c, dg)
 	case unix.IPPROTO_ICMP:
 	case unix.IPPROTO_ICMPV6:
-		// pkt := icmp.MakePacket(ipHdr, data)
-		// dlog.Debugf(c, "<- TUN %s", pkt)
+		pkt := icmp.MakePacket(ipHdr, data)
+		dlog.Debugf(c, "<- TUN %s", pkt)
 	default:
 		// An L4 protocol that we don't handle.
 		d.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), hdr, icmp.ProtocolUnreachable)
@@ -200,6 +268,24 @@ func (d *Dispatcher) tcp(c context.Context, pkt tcp.Packet) {
 		return
 	}
 	wf.(*tcp.Workflow).NewPacket(c, pkt)
+}
+
+func (d *Dispatcher) udp(c context.Context, dg udp.Datagram) {
+	dlog.Debugf(c, "<- TUN %s", dg)
+	ipHdr := dg.IPHeader()
+	udpHdr := dg.Header()
+	connID := connpool.NewConnID(ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
+	uh, err := d.udpHandlers.Get(c, connID, func(c context.Context, release func()) (connpool.Handler, error) {
+		handler := udp.NewHandler(d.udpStream, connID, release)
+		d.handlersWg.Add(1)
+		go handler.Run(c, &d.handlersWg)
+		return handler, nil
+	})
+	if err != nil {
+		dlog.Error(c, err)
+		return
+	}
+	uh.(*udp.Handler).NewDatagram(c, dg)
 }
 
 func (d *Dispatcher) AddSubnets(c context.Context, subnets []*net.IPNet) error {

@@ -147,7 +147,9 @@ func (tm *trafficManager) run(c context.Context) error {
 func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
 	ports := portsIf.([]string)
 	sshPort, _ := strconv.Atoi(ports[0])
+	grpcPort, _ := strconv.Atoi(ports[1])
 	tm.sshPort = int32(sshPort)
+	tm.grpcPort = int32(grpcPort)
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
@@ -155,7 +157,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err = grpc.DialContext(tc, "127.0.0.1:"+ports[1],
+	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", grpcPort),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock())

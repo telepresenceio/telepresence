@@ -4,9 +4,8 @@ import (
 	"context"
 	"net"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
-
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 )
 
@@ -32,6 +31,7 @@ type tunRouter struct {
 	dispatcher *tun.Dispatcher
 	ips        map[string]net.IP
 	subnets    map[string]*net.IPNet
+	socksPort  int32
 }
 
 func NewTunRouter() (Router, error) {
@@ -46,8 +46,8 @@ func NewTunRouter() (Router, error) {
 	}, nil
 }
 
-func (t *tunRouter) SetSocksPort(c context.Context, socksPort int32) error {
-	return t.dispatcher.SetProxyPort(c, uint16(socksPort))
+func (t *tunRouter) SetPorts(c context.Context, socksPort, managerPort int32) error {
+	return t.dispatcher.SetPorts(c, uint16(socksPort), uint16(managerPort))
 }
 
 func (t *tunRouter) Flush(c context.Context) error {
@@ -114,8 +114,4 @@ func (t *tunRouter) Enable(c context.Context) error {
 		_ = t.dispatcher.Run(c)
 	}()
 	return nil
-}
-
-func (t *tunRouter) GetOriginalDst(_ *net.TCPConn) (host string, err error) {
-	panic("implement me")
 }

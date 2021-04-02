@@ -256,7 +256,7 @@ func shuffleIPs(ips []string) []string {
 
 func (o *outbound) update(c context.Context, table *rpc.Table) (err error) {
 	// Update stems from the connector so the destination target must be set on all routes
-	if err = o.translator.(*tunRouter).SetSocksPort(c, table.SocksPort); err != nil {
+	if err = o.translator.(*tunRouter).SetPorts(c, table.SocksPort, table.ManagerGrpcPort); err != nil {
 		return err
 	}
 	// o.proxy.SetSocksPort(table.SocksPort)

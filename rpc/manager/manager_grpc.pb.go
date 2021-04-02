@@ -63,6 +63,9 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// UDPTunnel receives datagrams from the client, dials a UDP connection based on
+	// the destination address, and posts the replies that it receives.
+	UDPTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_UDPTunnelClient, error)
 }
 
 type managerClient struct {
@@ -245,6 +248,37 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
+func (c *managerClient) UDPTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_UDPTunnelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/UDPTunnel", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerUDPTunnelClient{stream}
+	return x, nil
+}
+
+type Manager_UDPTunnelClient interface {
+	Send(*UDPDatagram) error
+	Recv() (*UDPDatagram, error)
+	grpc.ClientStream
+}
+
+type managerUDPTunnelClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerUDPTunnelClient) Send(m *UDPDatagram) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *managerUDPTunnelClient) Recv() (*UDPDatagram, error) {
+	m := new(UDPDatagram)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ManagerServer is the server API for Manager service.
 // All implementations must embed UnimplementedManagerServer
 // for forward compatibility
@@ -294,6 +328,9 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
+	// UDPTunnel receives datagrams from the client, dials a UDP connection based on
+	// the destination address, and posts the replies that it receives.
+	UDPTunnel(Manager_UDPTunnelServer) error
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -342,6 +379,9 @@ func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterc
 }
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
+}
+func (UnimplementedManagerServer) UDPTunnel(Manager_UDPTunnelServer) error {
+	return status.Errorf(codes.Unimplemented, "method UDPTunnel not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
 
@@ -614,6 +654,32 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_UDPTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerServer).UDPTunnel(&managerUDPTunnelServer{stream})
+}
+
+type Manager_UDPTunnelServer interface {
+	Send(*UDPDatagram) error
+	Recv() (*UDPDatagram, error)
+	grpc.ServerStream
+}
+
+type managerUDPTunnelServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerUDPTunnelServer) Send(m *UDPDatagram) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *managerUDPTunnelServer) Recv() (*UDPDatagram, error) {
+	m := new(UDPDatagram)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var _Manager_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
@@ -677,6 +743,12 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchIntercepts",
 			Handler:       _Manager_WatchIntercepts_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "UDPTunnel",
+			Handler:       _Manager_UDPTunnel_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "rpc/manager/manager.proto",

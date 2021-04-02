@@ -60,7 +60,7 @@ func (ts *tunSuite) SetupSuite() {
 
 	socks.Proxy = ts
 	ts.dispatcher = NewDispatcher(tun)
-	require.NoError(ts.dispatcher.SetProxyPort(ctx, 1080))
+	require.NoError(ts.dispatcher.SetPorts(ctx, 1080, 0))
 	dlog.Debugf(ctx, "setup complete")
 }
 

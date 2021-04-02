@@ -47,6 +47,9 @@ type k8sCluster struct {
 	// The local port that is forwarded to the traffic-managers dynamic (SOCKS) ssh port.
 	socksPort int32
 
+	// The traffic-managers grpc port.
+	grpcPort int32
+
 	accLock         sync.Mutex
 	accWait         chan struct{}
 	watchers        map[string]*k8sWatcher
