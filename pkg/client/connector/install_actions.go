@@ -376,6 +376,21 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 		return fmt.Errorf("unable to find app container %s in %s %s.%s", ata.containerName, objKind, obj.GetName(), obj.GetNamespace())
 	}
 
+	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, corev1.Volume{
+		Name: agentAnnotationVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			DownwardAPI: &corev1.DownwardAPIVolumeSource{
+				Items: []corev1.DownwardAPIVolumeFile{
+					{
+						FieldRef: &corev1.ObjectFieldSelector{
+							FieldPath: "metadata.annotations",
+						},
+						Path: "annotations",
+					},
+				},
+			},
+		},
+	})
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers, corev1.Container{
 		Name:  agentContainerName,
 		Image: ata.ImageName,
@@ -469,13 +484,14 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 }
 
 func (ata *addTrafficAgentAction) agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
-	if mounts == nil {
-		return nil
-	}
-	agentMounts := make([]corev1.VolumeMount, len(mounts))
+	agentMounts := make([]corev1.VolumeMount, len(mounts)+1)
 	for i, mount := range mounts {
 		mount.MountPath = filepath.Join(telAppMountPoint, mount.MountPath)
 		agentMounts[i] = mount
+	}
+	agentMounts[len(mounts)] = corev1.VolumeMount{
+		Name:      agentAnnotationVolumeName,
+		MountPath: "/tel_pod_info",
 	}
 	return agentMounts
 }
@@ -521,20 +537,35 @@ func (ata *addTrafficAgentAction) Undo(obj kates.Object) error {
 	if err != nil {
 		return err
 	}
-	cns := tplSpec.Spec.Containers
-	for i := range cns {
-		cn := &cns[i]
-		if cn.Name != agentContainerName {
-			continue
-		}
 
-		// remove and keep order
-		copy(cns[i:], cns[i+1:])
-		last := len(cns) - 1
-		cns[last] = kates.Container{}
-		tplSpec.Spec.Containers = cns[:last]
-		break
+	containerIdx := -1
+	for i := range tplSpec.Spec.Containers {
+		if tplSpec.Spec.Containers[i].Name == agentContainerName {
+			containerIdx = i
+			break
+		}
 	}
+	if containerIdx < 0 {
+		return fmt.Errorf("object does not contain a %q container", agentContainerName)
+	}
+	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
+
+	volumeIdx := -1
+	for i := range tplSpec.Spec.Volumes {
+		if tplSpec.Spec.Volumes[i].Name == agentAnnotationVolumeName {
+			volumeIdx = i
+			break
+		}
+	}
+	if volumeIdx < 0 {
+		return fmt.Errorf("object does not contain a %q volume", agentAnnotationVolumeName)
+	}
+	if len(tplSpec.Spec.Volumes) == 1 {
+		tplSpec.Spec.Volumes = nil
+	} else {
+		tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes[:volumeIdx], tplSpec.Spec.Volumes[volumeIdx+1:]...)
+	}
+
 	return nil
 }
 
