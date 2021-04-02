@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -170,6 +169,14 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 					}
 					return
 				}
+			case "StatefulSet":
+				agent, err = ki.findStatefulSet(c, ai.Namespace, ai.Name)
+				if err != nil {
+					if !errors2.IsNotFound(err) {
+						addError(err)
+					}
+					return
+				}
 			default:
 				addError(fmt.Errorf("Agent associated with unknown workload kind, can't be removed: %s", ai.Name))
 				return
@@ -301,8 +308,9 @@ func (ki *installer) findMatchingServices(portName, svcName, namespace string, l
 	return matching
 }
 
-func findMatchingPort(obj kates.Object, portName string, svcs []*kates.Service) (
-	service *kates.Service,
+// findMathingPort find the matching container associated with portName in
+// the given service.
+func findMatchingPort(obj kates.Object, portName string, svc *kates.Service) (
 	sPort *kates.ServicePort,
 	cn *kates.Container,
 	cPortIndex int,
@@ -310,111 +318,73 @@ func findMatchingPort(obj kates.Object, portName string, svcs []*kates.Service) 
 ) {
 	podTemplate, objType, err := GetPodTemplateFromObject(obj)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, 0, err
 	}
-	// Sort slice of services so that the ones in the same namespace get prioritized.
-	sort.Slice(svcs, func(i, j int) bool {
-		a := svcs[i]
-		b := svcs[j]
-		objNamespace := obj.GetNamespace()
-		if a.Namespace != b.Namespace {
-			if a.Namespace == objNamespace {
-				return true
-			}
-			if b.Namespace == objNamespace {
-				return false
-			}
-			return a.Namespace < b.Namespace
-		}
-		return a.Name < b.Name
-	})
 
 	cns := podTemplate.Spec.Containers
-	for _, svc := range svcs {
-		// For now, we only support intercepting one port on a given service.
-		ports := svcPortByName(svc, portName)
-		if len(ports) == 0 {
-			// this may happen when portName is specified but none of the ports match
-			continue
-		}
-		if len(ports) > 1 {
-			return nil, nil, nil, 0, fmt.Errorf(`
+	// For now, we only support intercepting one port on a given service.
+	ports := svcPortByName(svc, portName)
+	switch numPorts := len(ports); {
+	case numPorts == 0:
+		// this may happen when portName is specified but none of the ports match
+		return nil, nil, 0, fmt.Errorf(`
+found no services with a port that matches a container in %s %s.%s`,
+			objType, obj.GetName(), obj.GetNamespace())
+
+	case numPorts > 1:
+		return nil, nil, 0, fmt.Errorf(`
 found matching service with multiple ports for %s %s.%s. Please specify the
 service port you want to intercept like so --port local:svcPortName`,
-				objType, obj.GetName(), obj.GetNamespace())
-		}
-		port := ports[0]
-		var msp *corev1.ServicePort
-		var ccn *corev1.Container
-		var cpi int
+			objType, obj.GetName(), obj.GetNamespace())
+	default:
+	}
+	port := ports[0]
+	var matchingServicePort *corev1.ServicePort
+	var matchingContainer *corev1.Container
+	var containerPortIndex int
 
-		if port.TargetPort.Type == intstr.String {
-			portName := port.TargetPort.StrVal
-			for ci := 0; ci < len(cns) && ccn == nil; ci++ {
-				cn := &cns[ci]
-				for pi := range cn.Ports {
-					if cn.Ports[pi].Name == portName {
-						msp = port
-						ccn = cn
-						cpi = pi
-						break
-					}
-				}
-			}
-		} else {
-			portNum := port.TargetPort.IntVal
-			// Here we are using cpi <=0 instead of ccn == nil because if a
-			// container has no ports, we want to use it but we don't want
-			// to break out of the loop looking at containers in case there
-			// is a better fit.  Currently, that is a container where the
-			// ContainerPort matches the targetPort in the service.
-			for ci := 0; ci < len(cns) && cpi <= 0; ci++ {
-				cn := &cns[ci]
-				if len(cn.Ports) == 0 {
-					msp = port
-					ccn = cn
-					cpi = -1
-				}
-				for pi := range cn.Ports {
-					if cn.Ports[pi].ContainerPort == portNum {
-						msp = port
-						ccn = cn
-						cpi = pi
-						break
-					}
+	if port.TargetPort.Type == intstr.String {
+		portName := port.TargetPort.StrVal
+		for ci := 0; ci < len(cns) && matchingContainer == nil; ci++ {
+			cn := &cns[ci]
+			for pi := range cn.Ports {
+				if cn.Ports[pi].Name == portName {
+					matchingServicePort = port
+					matchingContainer = cn
+					containerPortIndex = pi
+					break
 				}
 			}
 		}
-
-		switch {
-		case msp == nil:
-			continue
-		case sPort == nil:
-			service = svc
-			sPort = msp
-			cPortIndex = cpi
-			cn = ccn
-		case sPort.TargetPort == msp.TargetPort:
-			// Keep the chosen one
-		case sPort.TargetPort.Type == intstr.String && msp.TargetPort.Type == intstr.Int:
-			// Keep the chosen one
-		case sPort.TargetPort.Type == intstr.Int && msp.TargetPort.Type == intstr.String:
-			// Prefer targetPort in string format
-			service = svc
-			sPort = msp
-			cPortIndex = cpi
-			cn = ccn
-		default:
-			// Conflict
-			return nil, nil, nil, 0, fmt.Errorf(
-				"found services with conflicting port mappings to %s %s.%s. Please use --service to specify", objType, obj.GetName(), obj.GetNamespace())
+	} else {
+		portNum := port.TargetPort.IntVal
+		// Here we are using containerPortIndex <=0 instead of matchingContainer == nil because if a
+		// container has no ports, we want to use it but we don't want
+		// to break out of the loop looking at containers in case there
+		// is a better fit.  Currently, that is a container where the
+		// ContainerPort matches the targetPort in the service.
+		for ci := 0; ci < len(cns) && containerPortIndex <= 0; ci++ {
+			cn := &cns[ci]
+			if len(cn.Ports) == 0 {
+				matchingServicePort = port
+				matchingContainer = cn
+				containerPortIndex = -1
+			}
+			for pi := range cn.Ports {
+				if cn.Ports[pi].ContainerPort == portNum {
+					matchingServicePort = port
+					matchingContainer = cn
+					containerPortIndex = pi
+					break
+				}
+			}
 		}
 	}
 
-	if sPort == nil {
-		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in %s %s.%s", objType, obj.GetName(), obj.GetNamespace())
+	if matchingServicePort == nil {
+		return nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in %s %s.%s", objType, obj.GetName(), obj.GetNamespace())
 	}
-	return service, sPort, cn, cPortIndex, nil
+	return matchingServicePort, matchingContainer, containerPortIndex, nil
 }
 
 // Finds the Referenced Service in an objects' annotations
@@ -491,6 +461,11 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 		if err != nil {
 			return "", "", err
 		}
+	case "StatefulSet":
+		obj, err = ki.findStatefulSet(c, namespace, name)
+		if err != nil {
+			return "", "", err
+		}
 	default:
 		return "", "", fmt.Errorf("Cannot ensure agent on unsupported workload: %s", kind)
 	}
@@ -547,7 +522,7 @@ already exist for this service`, kind, obj.GetName())
 		}
 
 		var err error
-		obj, svc, err = addAgentToDeployment(c, portName, agentImageName, obj, matchingSvcs)
+		obj, svc, err = addAgentToWorkload(c, portName, agentImageName, obj, matchingSvcs[0])
 		if err != nil {
 			return "", "", err
 		}
@@ -596,6 +571,37 @@ already exist for this service`, kind, obj.GetName())
 	return string(svc.GetUID()), kind, nil
 }
 
+// The following <workload>Updated functions all contain the logic for
+// determining if that specific workload type has successfully been updated
+// based on the object's metadata. We have separate ones for each object
+// because the criteria is slightly different for each.
+func replicaSetUpdated(rs *kates.ReplicaSet, origGeneration int64) bool {
+	applied := rs.ObjectMeta.Generation >= origGeneration &&
+		rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
+		(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
+		rs.Status.FullyLabeledReplicas == rs.Status.Replicas &&
+		rs.Status.AvailableReplicas == rs.Status.Replicas
+	return applied
+}
+
+func deploymentUpdated(dep *kates.Deployment, origGeneration int64) bool {
+	applied := dep.ObjectMeta.Generation >= origGeneration &&
+		dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
+		(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
+		dep.Status.UpdatedReplicas == dep.Status.Replicas &&
+		dep.Status.AvailableReplicas == dep.Status.Replicas
+	return applied
+}
+
+func statefulSetUpdated(statefulSet *kates.StatefulSet, origGeneration int64) bool {
+	applied := statefulSet.ObjectMeta.Generation >= origGeneration &&
+		statefulSet.Status.ObservedGeneration == statefulSet.ObjectMeta.Generation &&
+		(statefulSet.Spec.Replicas == nil || statefulSet.Status.UpdatedReplicas >= *statefulSet.Spec.Replicas) &&
+		statefulSet.Status.UpdatedReplicas == statefulSet.Status.Replicas &&
+		statefulSet.Status.CurrentReplicas == statefulSet.Status.Replicas
+	return applied
+}
+
 func (ki *installer) waitForApply(c context.Context, namespace, name string, obj kates.Object) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := context.WithTimeout(c, tos.Apply)
@@ -626,13 +632,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return client.CheckTimeout(c, &tos.Apply, err)
 			}
 
-			deployed := rs.ObjectMeta.Generation >= origGeneration &&
-				rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
-				(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
-				rs.Status.FullyLabeledReplicas == rs.Status.Replicas &&
-				rs.Status.AvailableReplicas == rs.Status.Replicas
-
-			if deployed {
+			if replicaSetUpdated(rs, origGeneration) {
 				dlog.Debugf(c, "Replica Set %s.%s successfully applied", name, namespace)
 				return nil
 			}
@@ -649,14 +649,25 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return client.CheckTimeout(c, &tos.Apply, err)
 			}
 
-			deployed := dep.ObjectMeta.Generation >= origGeneration &&
-				dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
-				(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
-				dep.Status.UpdatedReplicas == dep.Status.Replicas &&
-				dep.Status.AvailableReplicas == dep.Status.Replicas
-
-			if deployed {
+			if deploymentUpdated(dep, origGeneration) {
 				dlog.Debugf(c, "deployment %s.%s successfully applied", name, namespace)
+				return nil
+			}
+		}
+	case "StatefulSet":
+		for {
+			dtime.SleepWithContext(c, time.Second)
+			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+				return err
+			}
+
+			statefulSet, err := ki.findStatefulSet(c, namespace, name)
+			if err != nil {
+				return client.CheckTimeout(c, &tos.Apply, err)
+			}
+
+			if statefulSetUpdated(statefulSet, origGeneration) {
+				dlog.Debugf(c, "statefulset %s.%s successfully applied", name, namespace)
 				return nil
 			}
 		}
@@ -799,11 +810,14 @@ func undoServiceMods(c context.Context, svc *kates.Service) error {
 	return nil
 }
 
-func addAgentToDeployment(
+// addAgentToWorkload takes a given workload object and a service and
+// determines which container + port to use for an intercept. It also
+// prepares and performs modifications to the obj and/or service.
+func addAgentToWorkload(
 	c context.Context,
 	portName string,
 	agentImageName string,
-	object kates.Object, matchingServices []*kates.Service,
+	object kates.Object, matchingService *kates.Service,
 ) (
 	kates.Object,
 	*kates.Service,
@@ -813,12 +827,18 @@ func addAgentToDeployment(
 	if err != nil {
 		return nil, nil, err
 	}
-	service, servicePort, container, containerPortIndex, err := findMatchingPort(object, portName, matchingServices)
+	servicePort, container, containerPortIndex, err := findMatchingPort(object, portName, matchingService)
 	if err != nil {
 		return nil, nil, err
 	}
+	if matchingService.Spec.ClusterIP == "None" {
+		dlog.Debugf(c,
+			"Intercepts of headless service: %s likely won't work as expected "+
+				"see https://github.com/telepresenceio/telepresence/issues/1632",
+			matchingService.Name)
+	}
 	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
-		service.Name,
+		matchingService.Name,
 		func() string {
 			if servicePort.Name != "" {
 				return servicePort.Name
@@ -875,9 +895,9 @@ func addAgentToDeployment(
 	}
 
 	// Figure what modifications we need to make.
-	deploymentMod := &workloadActions{
+	workloadMod := &workloadActions{
 		Version:                   version,
-		ReferencedService:         service.Name,
+		ReferencedService:         matchingService.Name,
 		ReferencedServicePortName: portName,
 		AddTrafficAgent: &addTrafficAgentAction{
 			containerName:       container.Name,
@@ -912,52 +932,52 @@ func addAgentToDeployment(
 		// if that value came from the container, then we need to hide it
 		// since the service is using the targetPort's int.
 		if usedContainerName {
-			deploymentMod.HideContainerPort = &hideContainerPortAction{
+			workloadMod.HideContainerPort = &hideContainerPortAction{
 				ContainerName: container.Name,
 				PortName:      containerPort.Name,
 			}
 		}
 	} else {
 		// Hijack the port name in the Deployment.
-		deploymentMod.HideContainerPort = &hideContainerPortAction{
+		workloadMod.HideContainerPort = &hideContainerPortAction{
 			ContainerName: container.Name,
 			PortName:      containerPort.Name,
 		}
 	}
 
-	// Apply the actions on the Deployment.
-	if err = deploymentMod.Do(object); err != nil {
+	// Apply the actions on the workload.
+	if err = workloadMod.Do(object); err != nil {
 		return nil, nil, err
 	}
 	annotations := object.GetAnnotations()
 	if object.GetAnnotations() == nil {
 		annotations = make(map[string]string)
 	}
-	annotations[annTelepresenceActions], err = deploymentMod.MarshalAnnotation()
+	annotations[annTelepresenceActions], err = workloadMod.MarshalAnnotation()
 	if err != nil {
 		return nil, nil, err
 	}
 	object.SetAnnotations(annotations)
-	explainDo(c, deploymentMod, object)
+	explainDo(c, workloadMod, object)
 
 	// Apply the actions on the Service.
 	if serviceMod != nil {
-		if err = serviceMod.Do(service); err != nil {
+		if err = serviceMod.Do(matchingService); err != nil {
 			return nil, nil, err
 		}
-		if service.Annotations == nil {
-			service.Annotations = make(map[string]string)
+		if matchingService.Annotations == nil {
+			matchingService.Annotations = make(map[string]string)
 		}
-		service.Annotations[annTelepresenceActions], err = serviceMod.MarshalAnnotation()
+		matchingService.Annotations[annTelepresenceActions], err = serviceMod.MarshalAnnotation()
 		if err != nil {
 			return nil, nil, err
 		}
-		explainDo(c, serviceMod, service)
+		explainDo(c, serviceMod, matchingService)
 	} else {
-		service = nil
+		matchingService = nil
 	}
 
-	return object, service, nil
+	return object, matchingService, nil
 }
 
 func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {

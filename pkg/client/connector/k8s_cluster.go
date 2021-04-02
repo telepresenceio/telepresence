@@ -201,6 +201,11 @@ func (kc *k8sCluster) replicaSetNames(c context.Context, namespace string) ([]st
 	return kc.kindNames(c, "ReplicaSet", namespace)
 }
 
+// statefulSetNames returns the names of all replica sets found in the given Namespace
+func (kc *k8sCluster) statefulSetNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "StatefulSet", namespace)
+}
+
 // PodSetNames returns the names of all replica sets found in the given Namespace
 func (kc *k8sCluster) podNames(c context.Context, namespace string) ([]string, error) {
 	return kc.kindNames(c, "Pod", namespace)
@@ -217,6 +222,19 @@ func (kc *k8sCluster) findDeployment(c context.Context, namespace, name string) 
 		return nil, err
 	}
 	return dep, nil
+}
+
+// findStatefulSet returns a statefulSet with the given name in the given namespace or nil
+// if no such statefulSet could be found.
+func (kc *k8sCluster) findStatefulSet(c context.Context, namespace, name string) (*kates.StatefulSet, error) {
+	statefulSet := &kates.StatefulSet{
+		TypeMeta:   kates.TypeMeta{Kind: "StatefulSet"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	if err := kc.client.Get(c, statefulSet, statefulSet); err != nil {
+		return nil, err
+	}
+	return statefulSet, nil
 }
 
 // findReplicaSet returns a replica set with the given name in the given namespace or nil
@@ -249,6 +267,7 @@ func (kc *k8sCluster) findPod(c context.Context, namespace, name string) (*kates
 // search in a specific order based on how we prefer workload objects:
 // 1. Deployments
 // 2. ReplicaSets
+// 3. StatefulSets
 // And return the kind as soon as we find one that matches
 func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) (string, error) {
 	depNames, err := kc.deploymentNames(c, namespace)
@@ -270,6 +289,18 @@ func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) 
 	for _, rsName := range rsNames {
 		if rsName == name {
 			return "ReplicaSet", nil
+		}
+	}
+
+	// Like ReplicaSets, StatefulSets only manage pods so we check for
+	// them next
+	statefulSetNames, err := kc.statefulSetNames(c, namespace)
+	if err != nil {
+		return "", err
+	}
+	for _, statefulSetName := range statefulSetNames {
+		if statefulSetName == name {
+			return "StatefulSet", nil
 		}
 	}
 	return "", errors.New("No supported Object Kind Found")

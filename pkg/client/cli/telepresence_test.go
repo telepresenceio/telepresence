@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -101,6 +102,27 @@ func (ts *telepresenceSuite) SetupSuite() {
 		os.Setenv("KUBECONFIG", kubeconfig)
 		err = run(ctx, "kubectl", "create", "namespace", ts.namespace)
 		ts.NoError(err)
+		err = run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml")
+		ts.NoError(err)
+
+		// This is how we create a user that has their rbac restricted to what we have in
+		// k8s/client_rbac.yaml. We do this by creating a service account and then getting
+		// the token from said service account and storing it in our kubeconfig.
+		secret, err := output(ctx, "kubectl", "get", "sa", "telepresence-test-developer", "-o", "jsonpath={.secrets[0].name}")
+		ts.NoError(err)
+		encSecret, err := output(ctx, "kubectl", "get", "secret", secret, "-o", "jsonpath={.data.token}")
+		ts.NoError(err)
+		token, err := base64.StdEncoding.DecodeString(encSecret)
+		ts.NoError(err)
+		err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--token", string(token))
+		ts.NoError(err)
+		err = run(ctx, "kubectl", "config", "set-context", "telepresence-test-developer", "--user", "telepresence-test-developer", "--cluster", "default")
+		ts.NoError(err)
+
+		// We start with the default context, and will switch to the
+		// telepresence-test-developer user later in the tests
+		err = run(ctx, "kubectl", "config", "use-context", "default")
+		ts.NoError(err)
 	}()
 	wg.Wait()
 
@@ -120,12 +142,18 @@ func (ts *telepresenceSuite) SetupSuite() {
 		err = ts.applyApp(ctx, "with-probes", "with-probes", 80)
 		ts.NoError(err)
 	}()
-	wg.Wait()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err = ts.applyApp(ctx, "rs-echo", "rs-echo", 80)
+		ts.NoError(err)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = ts.applyApp(ctx, "ss-echo", "ss-echo", 80)
 		ts.NoError(err)
 	}()
 	wg.Wait()
@@ -139,8 +167,13 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 func (ts *telepresenceSuite) TearDownSuite() {
 	ctx := dlog.NewTestContext(ts.T(), false)
+	_ = run(ctx, "kubectl", "config", "use-context", "default")
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.namespace)
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.managerTestNamespace)
+	// Undo RBAC things
+	_ = run(ctx, "kubectl", "delete", "-f", "k8s/client_rbac.yaml")
+	_ = run(ctx, "kubectl", "config", "delete-context", "telepresence-test-developer")
+	_ = run(ctx, "kubectl", "config", "delete-user", "telepresence-test-developer")
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
@@ -233,6 +266,8 @@ func (cs *connectedSuite) ns() string {
 
 func (cs *connectedSuite) SetupSuite() {
 	require := cs.Require()
+	c := dlog.NewTestContext(cs.T(), false)
+	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "telepresence-test-developer"))
 	stdout, stderr := telepresence(cs.T(), "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
@@ -254,6 +289,8 @@ func (cs *connectedSuite) TearDownSuite() {
 	stdout, stderr := telepresence(cs.T(), "quit")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "quitting")
+	c := dlog.NewTestContext(cs.T(), false)
+	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "default"))
 	time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
 }
 
@@ -310,8 +347,8 @@ func (cs *connectedSuite) TestE_PodWithSubdomain() {
 	c := dlog.NewTestContext(cs.T(), false)
 	require.NoError(cs.tpSuite.applyApp(c, "echo-w-subdomain", "echo.subsonic", 8080))
 	defer func() {
-		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic"))
-		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic"))
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic", "--context", "default"))
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic", "--context", "default"))
 	}()
 
 	cc, cancel := context.WithTimeout(c, 3*time.Second)
@@ -348,7 +385,19 @@ func (cs *connectedSuite) TestG_SuccessfullyInterceptsReplicaSet() {
 	require.Contains(stdout, "rs-echo: intercepted")
 }
 
-func (cs *connectedSuite) TestH_LocalOnlyIntercept() {
+func (cs *connectedSuite) TestH_SuccessfullyInterceptsStatefulSet() {
+	defer telepresence(cs.T(), "leave", "ss-echo-"+cs.ns())
+
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "ss-echo", "--port", "9091")
+	require.Empty(stderr)
+	require.Contains(stdout, "Using StatefulSet ss-echo")
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+	require.Empty(stderr)
+	require.Contains(stdout, "ss-echo: intercepted")
+}
+
+func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 	cs.Run("intercept can be established", func() {
 		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--local-only", "mylocal")
 		cs.Empty(stdout)
@@ -383,7 +432,7 @@ func (cs *connectedSuite) TestH_LocalOnlyIntercept() {
 	})
 }
 
-func (cs *connectedSuite) TestI_ListOnlyMapped() {
+func (cs *connectedSuite) TestJ_ListOnlyMapped() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
 	require.Empty(stderr)
@@ -391,7 +440,7 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.Contains(stdout, "No Workloads (Deployments or ReplicaSets)")
+	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 
 	stdout, stderr = telepresence(cs.T(), "connect", "--mapped-namespaces", "all")
 	require.Empty(stderr)
@@ -399,10 +448,10 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.NotContains(stdout, "No Workloads (Deployments or ReplicaSets)")
+	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 }
 
-func (cs *connectedSuite) TestJ_Uninstall() {
+func (cs *connectedSuite) TestK_Uninstall() {
 	cs.Run("Uninstalls agent on given deployment", func() {
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
@@ -439,6 +488,24 @@ func (cs *connectedSuite) TestJ_Uninstall() {
 		)
 	})
 
+	cs.Run("Uninstalls agent on given statefulset", func() {
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+		require.Empty(stderr)
+		require.Contains(stdout, "ss-echo")
+		_, stderr = telepresence(cs.T(), "uninstall", "--namespace", cs.ns(), "--agent", "ss-echo")
+		require.Empty(stderr)
+		require.Eventually(
+			// condition
+			func() bool {
+				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+				return !strings.Contains(stdout, "ss-echo")
+			},
+			30*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
+	})
+
 	cs.Run("Uninstalls all agents", func() {
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
@@ -449,7 +516,7 @@ func (cs *connectedSuite) TestJ_Uninstall() {
 		require.Eventually(
 			func() bool {
 				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
-				return stdout == "No Workloads (Deployments or ReplicaSets)"
+				return stdout == "No Workloads (Deployments, StatefulSets, or ReplicaSets)"
 			},
 			30*time.Second,     // waitFor
 			2*time.Millisecond, // polling interval
@@ -575,7 +642,7 @@ func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
 }
 
 func (ts *telepresenceSuite) applyApp(c context.Context, name, svcName string, port int) error {
-	err := ts.kubectl(c, "apply", "-f", fmt.Sprintf("k8s/%s.yaml", name))
+	err := ts.kubectl(c, "apply", "-f", fmt.Sprintf("k8s/%s.yaml", name), "--context", "default")
 	if err != nil {
 		return fmt.Errorf("failed to deploy %s: %v", name, err)
 	}
@@ -595,7 +662,7 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 }
 
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
-	c, cancel := context.WithTimeout(c, 30*time.Second)
+	c, cancel := context.WithTimeout(c, 60*time.Second)
 	defer cancel()
 
 	// Since this function can be called multiple times in parallel
@@ -605,9 +672,9 @@ func (ts *telepresenceSuite) waitForService(c context.Context, name string, port
 	reg := regexp.MustCompile("[^a-zA-Z0-9-]+")
 	k8sSafeName := reg.ReplaceAllString(name, "")
 	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
-		err := ts.kubectl(c, "run", containerName, "--rm", "-it",
+		err := ts.kubectl(c, "run", containerName, "--context", "default", "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
 			fmt.Sprintf("http://%s.%s:%d", name, ts.namespace, port),

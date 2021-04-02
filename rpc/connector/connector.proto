@@ -177,7 +177,7 @@ message WorkloadInfo {
   // InterceptInfo reported from the traffic manager in case the workload is currently intercepted
   telepresence.manager.InterceptInfo intercept_info = 4;
 
-  // Workload Resource type (e.g. Deployment, ReplicaSet)
+  // Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
   string workload_resource_type = 5;
 }
 

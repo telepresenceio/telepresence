@@ -3,6 +3,8 @@
 ### 2.1.4 (TBD)
 
 - Feature: `telepresence status` has been enhanced to provide more information.  In particular, it now provides separate information on the daemon and connector processes, as well as showing login status.
+- Feature: Telepresence now supports intercepting StatefulSets
+- Change: Telepresence necessary RBAC has been refined to support StatefulSets and now requires "get,list,update" for StatefulSets
 - Change: Telepresence no longer requires that port 1080 must be available.
 - Change: Telepresence now makes use of refresh tokens to avoid requiring the user to manually log in so often.
 - Bugfix: Fix race condition that occurred when intercepting a ReplicaSet while another pod was terminating in the same namespace (this fixes a transient test failure)

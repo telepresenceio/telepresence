@@ -156,6 +156,9 @@ func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string,
 	case "Deployment":
 		dep := obj.(*kates.Deployment)
 		tplSpec = &dep.Spec.Template
+	case "StatefulSet":
+		statefulSet := obj.(*kates.StatefulSet)
+		tplSpec = &statefulSet.Spec.Template
 	default:
 		return nil, "", fmt.Errorf("Unsupported workload kind: %s", kind)
 	}
