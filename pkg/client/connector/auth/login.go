@@ -61,6 +61,7 @@ type loginExecutor struct {
 	userInfo              *authdata.UserInfo
 	refreshTimer          *time.Timer
 	refreshTimerIsStopped bool
+	refreshTimerReset     chan time.Duration
 }
 
 // LoginExecutor controls the execution of a login flow
@@ -89,12 +90,16 @@ func NewLoginExecutor(
 		stdout:           stdout,
 		scout:            scout,
 
-		callbacks:    make(chan oauth2Callback),
-		refreshTimer: time.NewTimer(1 * time.Minute),
+		callbacks: make(chan oauth2Callback),
+		// AFAICT, it's not possible to create a timer in a stopped state.  So we create it
+		// in a running state with 1 minute left, and then immediately stop it below with
+		// resetRefreshTimerUnlocked.
+		refreshTimer:      time.NewTimer(1 * time.Minute),
+		refreshTimerReset: make(chan time.Duration),
 	}
 	ret.oauth2ConfigMu.Lock()
 	ret.loginMu.Lock()
-	ret.resetRefreshTimer(0)
+	ret.resetRefreshTimerUnlocked(0)
 	return ret
 }
 
@@ -130,13 +135,32 @@ func (l *loginExecutor) tokenCB(ctx context.Context, tokenInfo *oauth2.Token) er
 	return nil
 }
 
+// resetRefreshTimer resets the timer to have `delta` time left on it.  If `delta` is <= 0, then it
+// stops the timer.  It is safe to call resetRefreshTimer(0) on an already-stopped timer.  May only
+// be called while the "refresh" goroutine is running.
 func (l *loginExecutor) resetRefreshTimer(delta time.Duration) {
+	// We pass this along to the "refresh" goroutine to call .Stop() and .Reset(), because the
+	// time.Timer godoc tells us that this "cannot be done concurrent to other receives from the
+	// Timer's channel or other calls to the Timer's Stop method."; and without doing it in the
+	// refresh goroutine's main select loop, it'd be impossible to guard against concurrent
+	// receives.
+	l.refreshTimerReset <- delta
+}
+
+// resetRefreshTimerUnlocked is like resetRefreshTimer, but you need to be careful about not calling
+// it concurrent to the "refresh" goroutine or other calls to resetRefreshTimerUnlocked (what that
+// means at the moment: only call this from NewLoginExecutor() or .Worker()).
+func (l *loginExecutor) resetRefreshTimerUnlocked(delta time.Duration) {
+	// The timer must be stopped before we reset it.  We have to track l.refreshTimerIsStopped
+	// because the <-l.refreshTimer.C receive will hang on subsequent calls (even though we're
+	// checking the return value of .Stop()!).
 	if !l.refreshTimerIsStopped {
 		if !l.refreshTimer.Stop() {
 			<-l.refreshTimer.C
 		}
 		l.refreshTimerIsStopped = true
 	}
+	// Reset the timer if delta > 0.  Leave it stopped if delta <= 0.
 	if delta > 0 {
 		l.refreshTimer.Reset(delta)
 	}
@@ -158,18 +182,18 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	}
 
 	l.tokenSource, err = func() (oauth2.TokenSource, error) {
-		l.resetRefreshTimer(0)
+		l.resetRefreshTimerUnlocked(0)
 		tokenInfo, err := authdata.LoadTokenFromUserCache(ctx)
 		if err != nil || tokenInfo == nil {
 			return nil, err
 		}
-		l.resetRefreshTimer(time.Until(tokenInfo.Expiry))
+		l.resetRefreshTimerUnlocked(time.Until(tokenInfo.Expiry))
 		return newTokenSource(ctx, l.oauth2Config, tokenInfo, l.tokenCB), nil
 	}()
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	defer l.resetRefreshTimer(0)
+	defer l.resetRefreshTimerUnlocked(0)
 
 	l.userInfo, err = authdata.LoadUserInfoFromUserCache(ctx)
 	if err != nil && !os.IsNotExist(err) {
@@ -202,6 +226,8 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				} else if token != "" {
 					dlog.Infof(ctx, "got new access token")
 				}
+			case delta := <-l.refreshTimerReset:
+				l.resetRefreshTimerUnlocked(delta)
 			case <-ctx.Done():
 				return nil
 			}
