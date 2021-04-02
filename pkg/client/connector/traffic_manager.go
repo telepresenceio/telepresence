@@ -277,7 +277,7 @@ func (tm *trafficManager) getInfosForWorkflow(
 				continue
 			}
 
-			matchingSvcs := tm.findMatchingServices("", "", labels)
+			matchingSvcs := tm.findMatchingServices("", "", namespace, labels)
 			if len(matchingSvcs) == 0 {
 				reason = "No service with matching selector"
 			}
