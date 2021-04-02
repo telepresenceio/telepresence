@@ -142,12 +142,18 @@ func (ts *telepresenceSuite) SetupSuite() {
 		err = ts.applyApp(ctx, "with-probes", "with-probes", 80)
 		ts.NoError(err)
 	}()
-	wg.Wait()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err = ts.applyApp(ctx, "rs-echo", "rs-echo", 80)
+		ts.NoError(err)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = ts.applyApp(ctx, "ss-echo", "ss-echo", 80)
 		ts.NoError(err)
 	}()
 	wg.Wait()
@@ -379,7 +385,19 @@ func (cs *connectedSuite) TestG_SuccessfullyInterceptsReplicaSet() {
 	require.Contains(stdout, "rs-echo: intercepted")
 }
 
-func (cs *connectedSuite) TestH_LocalOnlyIntercept() {
+func (cs *connectedSuite) TestH_SuccessfullyInterceptsStatefulSet() {
+	defer telepresence(cs.T(), "leave", "ss-echo-"+cs.ns())
+
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "ss-echo", "--port", "9091")
+	require.Empty(stderr)
+	require.Contains(stdout, "Using StatefulSet ss-echo")
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+	require.Empty(stderr)
+	require.Contains(stdout, "ss-echo: intercepted")
+}
+
+func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 	cs.Run("intercept can be established", func() {
 		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--local-only", "mylocal")
 		cs.Empty(stdout)
@@ -414,7 +432,7 @@ func (cs *connectedSuite) TestH_LocalOnlyIntercept() {
 	})
 }
 
-func (cs *connectedSuite) TestI_ListOnlyMapped() {
+func (cs *connectedSuite) TestJ_ListOnlyMapped() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
 	require.Empty(stderr)
@@ -433,7 +451,7 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 }
 
-func (cs *connectedSuite) TestJ_Uninstall() {
+func (cs *connectedSuite) TestK_Uninstall() {
 	cs.Run("Uninstalls agent on given deployment", func() {
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
@@ -464,6 +482,24 @@ func (cs *connectedSuite) TestJ_Uninstall() {
 			func() bool {
 				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
 				return !strings.Contains(stdout, "rs-echo")
+			},
+			30*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
+	})
+
+	cs.Run("Uninstalls agent on given statefulset", func() {
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+		require.Empty(stderr)
+		require.Contains(stdout, "ss-echo")
+		_, stderr = telepresence(cs.T(), "uninstall", "--namespace", cs.ns(), "--agent", "ss-echo")
+		require.Empty(stderr)
+		require.Eventually(
+			// condition
+			func() bool {
+				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+				return !strings.Contains(stdout, "ss-echo")
 			},
 			30*time.Second, // waitFor
 			2*time.Second,  // polling interval
