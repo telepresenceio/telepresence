@@ -34,3 +34,7 @@ spec:
           image: jmalloc/echo-server
           ports:
             - containerPort: 8080
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

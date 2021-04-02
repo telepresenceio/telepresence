@@ -662,7 +662,7 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 }
 
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
-	c, cancel := context.WithTimeout(c, 30*time.Second)
+	c, cancel := context.WithTimeout(c, 60*time.Second)
 	defer cancel()
 
 	// Since this function can be called multiple times in parallel
@@ -672,7 +672,7 @@ func (ts *telepresenceSuite) waitForService(c context.Context, name string, port
 	reg := regexp.MustCompile("[^a-zA-Z0-9-]+")
 	k8sSafeName := reg.ReplaceAllString(name, "")
 	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
 		err := ts.kubectl(c, "run", containerName, "--context", "default", "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
