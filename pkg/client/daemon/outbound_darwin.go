@@ -231,6 +231,9 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	}
 
 	defer func() {
+		o.searchPathLock.Lock()
+		defer o.searchPathLock.Unlock()
+
 		// Remove the main resolver file
 		_ = os.Remove(resolverFileName)
 

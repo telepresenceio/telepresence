@@ -38,6 +38,9 @@ type outbound struct {
 	// The domainsLock locks usage of namespaces, domains, and search
 	domainsLock sync.RWMutex
 
+	// Lock preventing concurrent calls to setSearchPath
+	searchPathLock sync.Mutex
+
 	setSearchPathFunc func(c context.Context, paths []string)
 
 	overridePrimaryDNS bool
@@ -404,6 +407,8 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (o *outbound) setSearchPath(c context.Context, paths []string) {
+	o.searchPathLock.Lock()
+	defer o.searchPathLock.Unlock()
 	o.setSearchPathFunc(c, paths)
 	dns.Flush(c)
 }
