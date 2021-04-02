@@ -18,7 +18,7 @@ To use telepresence, users will need to have at least the following permissions:
   verbs: ["create"]
 - apiGroups:
   - "apps"
-  resources: ["deployments", "replicasets"]
+  resources: ["deployments", "replicasets", "statefulsets"]
   verbs: ["get", "list", "update"]
 - apiGroups:
   - "getambassador.io"
