@@ -267,7 +267,7 @@ func svcPortByName(svc *kates.Service, name string) []*kates.ServicePort {
 	return svcPorts
 }
 
-func (ki *installer) findMatchingServices(portName, svcName string, labels map[string]string) []*kates.Service {
+func (ki *installer) findMatchingServices(portName, svcName, namespace string, labels map[string]string) []*kates.Service {
 	matching := make([]*kates.Service, 0)
 
 	ki.accLock.Lock()
@@ -276,6 +276,11 @@ func (ki *installer) findMatchingServices(portName, svcName string, labels map[s
 		for _, svc := range watch.Services {
 			selector := svc.Spec.Selector
 			if len(selector) == 0 {
+				continue nextSvc
+			}
+
+			// Only check services in the given namespace
+			if svc.Namespace != namespace {
 				continue nextSvc
 			}
 			// Only check if the service names are equal when supplied by user
@@ -517,7 +522,7 @@ already exist for this service`, kind, obj.GetName())
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name %q", portName)
-		matchingSvcs := ki.findMatchingServices(portName, svcName, podTemplate.Labels)
+		matchingSvcs := ki.findMatchingServices(portName, svcName, namespace, podTemplate.Labels)
 
 		switch numSvcs := len(matchingSvcs); {
 		case numSvcs == 0:
@@ -532,7 +537,7 @@ already exist for this service`, kind, obj.GetName())
 				svcNames = append(svcNames, svc.Name)
 			}
 
-			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v: %s",
+			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v, use --service and one of: %s",
 				podTemplate.Labels, strings.Join(svcNames, ","))
 			if portName != "" {
 				errMsg += fmt.Sprintf(" and a port named %s", portName)

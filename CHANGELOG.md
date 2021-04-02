@@ -10,6 +10,7 @@
 - Bugfix: `telepresence quit` no longer starts the daemon process just to shut it down.
 - Bugfix: Telepresence no longer hangs the next time it's run after getting killed.
 - Bugfix: Telepresence now does a better job of automatically logging in as necessary, especially with regard to expired logins.
+- Bugfix: Telepresence was incorrectly looking across all namespaces for services when intercepting, but now it only looks in the given namespace.  This should prevent people from running into "Found multiple services" errors when services with the same selectors existed in other namespaces.
 
 ### 2.1.3 (March 29, 2021)
 
