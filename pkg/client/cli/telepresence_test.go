@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -101,6 +102,27 @@ func (ts *telepresenceSuite) SetupSuite() {
 		os.Setenv("KUBECONFIG", kubeconfig)
 		err = run(ctx, "kubectl", "create", "namespace", ts.namespace)
 		ts.NoError(err)
+		err = run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml")
+		ts.NoError(err)
+
+		// This is how we create a user that has their rbac restricted to what we have in
+		// k8s/client_rbac.yaml. We do this by creating a service account and then getting
+		// the token from said service account and storing it in our kubeconfig.
+		secret, err := output(ctx, "kubectl", "get", "sa", "telepresence-test-developer", "-o", "jsonpath={.secrets[0].name}")
+		ts.NoError(err)
+		encSecret, err := output(ctx, "kubectl", "get", "secret", secret, "-o", "jsonpath={.data.token}")
+		ts.NoError(err)
+		token, err := base64.StdEncoding.DecodeString(encSecret)
+		ts.NoError(err)
+		err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--token", string(token))
+		ts.NoError(err)
+		err = run(ctx, "kubectl", "config", "set-context", "telepresence-test-developer", "--user", "telepresence-test-developer", "--cluster", "default")
+		ts.NoError(err)
+
+		// We start with the default context, and will switch to the
+		// telepresence-test-developer user later in the tests
+		err = run(ctx, "kubectl", "config", "use-context", "default")
+		ts.NoError(err)
 	}()
 	wg.Wait()
 
@@ -139,8 +161,13 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 func (ts *telepresenceSuite) TearDownSuite() {
 	ctx := dlog.NewTestContext(ts.T(), false)
+	_ = run(ctx, "kubectl", "config", "use-context", "default")
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.namespace)
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.managerTestNamespace)
+	// Undo RBAC things
+	_ = run(ctx, "kubectl", "delete", "-f", "k8s/client_rbac.yaml")
+	_ = run(ctx, "kubectl", "config", "delete-context", "telepresence-test-developer")
+	_ = run(ctx, "kubectl", "config", "delete-user", "telepresence-test-developer")
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
@@ -233,6 +260,8 @@ func (cs *connectedSuite) ns() string {
 
 func (cs *connectedSuite) SetupSuite() {
 	require := cs.Require()
+	c := dlog.NewTestContext(cs.T(), false)
+	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "telepresence-test-developer"))
 	stdout, stderr := telepresence(cs.T(), "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
@@ -254,6 +283,8 @@ func (cs *connectedSuite) TearDownSuite() {
 	stdout, stderr := telepresence(cs.T(), "quit")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "quitting")
+	c := dlog.NewTestContext(cs.T(), false)
+	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "default"))
 	time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
 }
 
@@ -310,8 +341,8 @@ func (cs *connectedSuite) TestE_PodWithSubdomain() {
 	c := dlog.NewTestContext(cs.T(), false)
 	require.NoError(cs.tpSuite.applyApp(c, "echo-w-subdomain", "echo.subsonic", 8080))
 	defer func() {
-		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic"))
-		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic"))
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic", "--context", "default"))
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic", "--context", "default"))
 	}()
 
 	cc, cancel := context.WithTimeout(c, 3*time.Second)
@@ -575,7 +606,7 @@ func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
 }
 
 func (ts *telepresenceSuite) applyApp(c context.Context, name, svcName string, port int) error {
-	err := ts.kubectl(c, "apply", "-f", fmt.Sprintf("k8s/%s.yaml", name))
+	err := ts.kubectl(c, "apply", "-f", fmt.Sprintf("k8s/%s.yaml", name), "--context", "default")
 	if err != nil {
 		return fmt.Errorf("failed to deploy %s: %v", name, err)
 	}
@@ -607,7 +638,7 @@ func (ts *telepresenceSuite) waitForService(c context.Context, name string, port
 	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
 	for i := 0; i < 30; i++ {
 		time.Sleep(time.Second)
-		err := ts.kubectl(c, "run", containerName, "--rm", "-it",
+		err := ts.kubectl(c, "run", containerName, "--context", "default", "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
 			fmt.Sprintf("http://%s.%s:%d", name, ts.namespace, port),
