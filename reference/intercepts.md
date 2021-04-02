@@ -9,8 +9,8 @@ In order to do this, it will prompt you for four options.  For the first, `Ingre
 Also because you're logged in, Telepresence will default to `--mechanism=http --http-match=auto` (or just `--http-match=auto`; `--http-match` implies `--mechanism=http`). If you hadn't been logged in it would have defaulted to `--mechanism=tcp`.  This tells it to do smart intercepts and only intercept a subset of HTTP requests, rather than just intercepting the entirety of all TCP connections.  This is important for working in a shared cluster with teammates, and is important for the preview URL functionality.  See `telepresence intercept --help` for information on using `--http-match` to customize which requests it intercepts.
 
 ## Supported Workloads
-Kubernetes has various [workloads](https://kubernetes.io/docs/concepts/workloads/). Currently, telepresence supports intercepting Deployments and ReplicaSets.
-<Alert severity="info"> While many of our examples may use Deployments, they would also work on ReplicaSets </Alert>
+Kubernetes has various [workloads](https://kubernetes.io/docs/concepts/workloads/). Currently, telepresence supports intercepting Deployments, ReplicaSets, and StatefulSets.
+<Alert severity="info"> While many of our examples may use Deployments, they would also work on ReplicaSets and StatefulSets </Alert>
 
 ## Specifying a namespace for an intercept
 
