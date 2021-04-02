@@ -41,6 +41,17 @@ service Connector {
   // Requires having already called Connect.
   rpc List(ListRequest) returns (WorkloadInfoSnapshot);
 
+  // Returns a stream of messages to display to the user.  Does NOT
+  // require having called anything else first.
+  rpc UserNotifications(google.protobuf.Empty) returns (stream Notification);
+
+  rpc Login(google.protobuf.Empty) returns (LoginResult);
+
+  // Returns an error with code=NotFound if not currently logged in.
+  rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  rpc GetCloudAccessToken(TokenReq) returns (TokenData);
+
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
@@ -185,4 +196,26 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
+}
+
+message Notification {
+  string message = 1;
+}
+
+message LoginResult {
+  enum Code {
+    UNSPECIFIED = 0;
+    OLD_LOGIN_REUSED = 1; // success; already logged in
+    NEW_LOGIN_SUCCEEDED = 2; // success
+    // There is no failure code; a gRPC error code is returned instead.
+  }
+  Code code = 1;
+}
+
+message TokenReq {
+  bool auto_login = 1;
+}
+
+message TokenData {
+  string access_token = 1;
 }

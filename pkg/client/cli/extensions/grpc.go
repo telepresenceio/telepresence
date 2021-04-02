@@ -12,7 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 type systemaCredentials string
@@ -36,11 +36,11 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		return "", err
 	}
 
-	tokenData, err := cache.LoadTokenFromUserCache(ctx)
+	accessToken, err := cliutil.GetCloudAccessToken(ctx, true)
 	if err != nil {
 		return "", fmt.Errorf("not logged in: %w", err)
 	}
-	creds := systemaCredentials(tokenData.AccessToken)
+	creds := systemaCredentials(accessToken)
 
 	conn, err := grpc.DialContext(ctx,
 		(&url.URL{Scheme: "dns", Path: "/" + u.Host}).String(), // https://github.com/grpc/grpc/blob/master/doc/naming.md

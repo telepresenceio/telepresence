@@ -1,9 +1,11 @@
-package cache
+package authdata
 
 import (
 	"context"
 
 	"golang.org/x/oauth2"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
 const (
@@ -13,14 +15,14 @@ const (
 // SaveTokenToUserCache saves the provided token to user cache and returns an error if something
 // goes wrong while marshalling or persisting.
 func SaveTokenToUserCache(ctx context.Context, token *oauth2.Token) error {
-	return SaveToUserCache(ctx, token, tokenFile)
+	return cache.SaveToUserCache(ctx, token, tokenFile)
 }
 
 // LoadTokenFromUserCache gets the token instance from cache or returns an error if something goes
 // wrong while loading or unmarshalling.
 func LoadTokenFromUserCache(ctx context.Context) (*oauth2.Token, error) {
 	var token oauth2.Token
-	err := LoadFromUserCache(ctx, &token, tokenFile)
+	err := cache.LoadFromUserCache(ctx, &token, tokenFile)
 	if err != nil {
 		return nil, err
 	}
@@ -29,5 +31,5 @@ func LoadTokenFromUserCache(ctx context.Context) (*oauth2.Token, error) {
 
 // DeleteTokenFromUserCache removes token cache if existing or returns an error
 func DeleteTokenFromUserCache(ctx context.Context) error {
-	return DeleteFromUserCache(ctx, tokenFile)
+	return cache.DeleteFromUserCache(ctx, tokenFile)
 }

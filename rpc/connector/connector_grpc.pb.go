@@ -44,6 +44,13 @@ type ConnectorClient interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
+	// Returns a stream of messages to display to the user.  Does NOT
+	// require having called anything else first.
+	UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
+	Login(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*LoginResult, error)
+	// Returns an error with code=NotFound if not currently logged in.
+	Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
+	GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -119,6 +126,65 @@ func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grp
 	return out, nil
 }
 
+func (c *connectorClient) UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Connector_serviceDesc.Streams[0], "/telepresence.connector.Connector/UserNotifications", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &connectorUserNotificationsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Connector_UserNotificationsClient interface {
+	Recv() (*Notification, error)
+	grpc.ClientStream
+}
+
+type connectorUserNotificationsClient struct {
+	grpc.ClientStream
+}
+
+func (x *connectorUserNotificationsClient) Recv() (*Notification, error) {
+	m := new(Notification)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *connectorClient) Login(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*LoginResult, error) {
+	out := new(LoginResult)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Login", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Logout", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error) {
+	out := new(TokenData)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetCloudAccessToken", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Quit", in, out, opts...)
@@ -156,6 +222,13 @@ type ConnectorServer interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
+	// Returns a stream of messages to display to the user.  Does NOT
+	// require having called anything else first.
+	UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error
+	Login(context.Context, *empty.Empty) (*LoginResult, error)
+	// Returns an error with code=NotFound if not currently logged in.
+	Logout(context.Context, *empty.Empty) (*empty.Empty, error)
+	GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -185,6 +258,18 @@ func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
+}
+func (UnimplementedConnectorServer) UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error {
+	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
+}
+func (UnimplementedConnectorServer) Login(context.Context, *empty.Empty) (*LoginResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
+}
+func (UnimplementedConnectorServer) Logout(context.Context, *empty.Empty) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
+}
+func (UnimplementedConnectorServer) GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAccessToken not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -328,6 +413,81 @@ func _Connector_List_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_UserNotifications_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(empty.Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ConnectorServer).UserNotifications(m, &connectorUserNotificationsServer{stream})
+}
+
+type Connector_UserNotificationsServer interface {
+	Send(*Notification) error
+	grpc.ServerStream
+}
+
+type connectorUserNotificationsServer struct {
+	grpc.ServerStream
+}
+
+func (x *connectorUserNotificationsServer) Send(m *Notification) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).Login(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/Login",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).Login(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).Logout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/Logout",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).Logout(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_GetCloudAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetCloudAccessToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GetCloudAccessToken",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetCloudAccessToken(ctx, req.(*TokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
@@ -379,10 +539,28 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_List_Handler,
 		},
 		{
+			MethodName: "Login",
+			Handler:    _Connector_Login_Handler,
+		},
+		{
+			MethodName: "Logout",
+			Handler:    _Connector_Logout_Handler,
+		},
+		{
+			MethodName: "GetCloudAccessToken",
+			Handler:    _Connector_GetCloudAccessToken_Handler,
+		},
+		{
 			MethodName: "Quit",
 			Handler:    _Connector_Quit_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "UserNotifications",
+			Handler:       _Connector_UserNotifications_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "rpc/connector/connector.proto",
 }

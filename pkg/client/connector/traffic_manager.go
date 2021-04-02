@@ -26,13 +26,13 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
-	*installer // installer is also a k8sCluster
+	*installer     // installer is also a k8sCluster
+	getAccessToken func(context.Context, bool) (string, error)
 
 	// local information
 	env         client.Env
@@ -60,7 +60,13 @@ type trafficManager struct {
 
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, installID string) (*trafficManager, error) {
+func newTrafficManager(
+	_ context.Context,
+	env client.Env,
+	cluster *k8sCluster,
+	installID string,
+	getAccessToken func(context.Context, bool) (string, error),
+) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -76,11 +82,12 @@ func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, i
 		return nil, errors.Wrap(err, "new installer")
 	}
 	tm := &trafficManager{
-		installer:   ti,
-		env:         env,
-		installID:   installID,
-		startup:     make(chan bool),
-		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
+		installer:      ti,
+		env:            env,
+		installID:      installID,
+		startup:        make(chan bool),
+		userAndHost:    fmt.Sprintf("%s@%s", userinfo.Username, host),
+		getAccessToken: getAccessToken,
 	}
 
 	return tm, nil
@@ -137,14 +144,6 @@ func (tm *trafficManager) run(c context.Context) error {
 	}, 2*time.Second, 6*time.Second)
 }
 
-func (tm *trafficManager) bearerToken(ctx context.Context) string {
-	token, err := cache.LoadTokenFromUserCache(ctx)
-	if err != nil {
-		return ""
-	}
-	return token.AccessToken
-}
-
 func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
 	ports := portsIf.([]string)
 	sshPort, _ := strconv.Atoi(ports[0])
@@ -173,7 +172,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		InstallId:   tm.installID,
 		Product:     "telepresence",
 		Version:     client.Version(),
-		BearerToken: tm.bearerToken(c),
+		BearerToken: func() string { tok, _ := tm.getAccessToken(c, false); return tok }(),
 	})
 
 	if err != nil {
@@ -375,7 +374,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
-				BearerToken: tm.bearerToken(c),
+				BearerToken: func() string { tok, _ := tm.getAccessToken(c, false); return tok }(),
 			})
 			if err != nil {
 				if c.Err() != nil {

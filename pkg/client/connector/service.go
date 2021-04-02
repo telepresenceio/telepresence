@@ -14,6 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -24,6 +26,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -47,11 +52,7 @@ type parsedConnectRequest struct {
 	*k8sConfig
 }
 
-type ScoutReport struct {
-	Action             string
-	Metadata           map[string]interface{}
-	PersistentMetadata map[string]interface{}
-}
+type ScoutReport = scout.ScoutReport
 
 // service represents the state of the Telepresence Connector
 type service struct {
@@ -63,6 +64,10 @@ type service struct {
 
 	managerProxy mgrProxy
 	cancel       func()
+
+	userNotifications broadcastqueue.BroadcastQueue
+
+	loginExecutor auth.LoginExecutor
 
 	connectMu sync.Mutex
 	// These get set by .connect() and are protected by connectMu.
@@ -217,6 +222,60 @@ func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 	return s.trafficMgr.uninstall(c, ur)
 }
 
+func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
+	ctx := s.callCtx(stream.Context(), "UserNotifications")
+
+	for msg := range s.userNotifications.Subscribe(ctx) {
+		if err := stream.Send(&rpc.Notification{Message: msg}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
+	ctx = s.callCtx(ctx, "Login")
+	resultCode, err := auth.EnsureLoggedIn(ctx, s.loginExecutor)
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.LoginResult{Code: resultCode}, nil
+}
+
+func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	ctx = s.callCtx(ctx, "Logout")
+	if err := s.loginExecutor.Logout(ctx); err != nil {
+		if err == auth.ErrNotLoggedIn {
+			return nil, grpcStatus.Error(grpcCodes.NotFound, err.Error())
+		}
+		return nil, err
+	}
+	return &empty.Empty{}, nil
+}
+
+func (s *service) getCloudAccessToken(ctx context.Context, autoLogin bool) (string, error) {
+	token, err := s.loginExecutor.GetToken(ctx)
+	if autoLogin && err != nil {
+		if _err := s.loginExecutor.Login(ctx); _err == nil {
+			token, err = s.loginExecutor.GetToken(ctx)
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (s *service) GetCloudAccessToken(ctx context.Context, req *rpc.TokenReq) (*rpc.TokenData, error) {
+	ctx = s.callCtx(ctx, "GetCloudAccessToken")
+	token, err := s.getCloudAccessToken(ctx, req.GetAutoLogin())
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.TokenData{AccessToken: token}, nil
+}
+
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.cancel()
 	return &empty.Empty{}, nil
@@ -341,7 +400,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID())
+	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID(), s.getCloudAccessToken)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
@@ -438,6 +497,7 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
+	s.loginExecutor = auth.NewStandardLoginExecutor(env, &s.userNotifications, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {
@@ -579,6 +639,8 @@ func run(c context.Context) error {
 		}
 		return nil
 	})
+
+	g.Go("background-systema", s.loginExecutor.Worker)
 
 	err = g.Wait()
 	if err != nil {
