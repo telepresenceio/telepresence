@@ -357,7 +357,7 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	l.userInfo = nil
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)
 
-	delete(l.apikeys, l.env.LoginDomain)
+	l.apikeys[l.env.LoginDomain] = make(map[string]string)
 	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
 		return err
 	}
