@@ -20,9 +20,9 @@ Connecting to the cluster starts the background daemon on your machine and insta
 
   ```
   $ telepresence connect
-  Launching Telepresence Daemon v2.0.0 (api v3)
-  Need root privileges to run "/usr/local/bin/telepresence daemon-foreground"
-  Password:
+  Launching Telepresence Daemon v2.1.4 (api v3)
+  Need root privileges to run "/usr/local/bin/telepresence daemon-foreground /home/<user>/.cache/telepresence/logs '' ''"
+  [sudo] password:
   Connecting to traffic manager...
   Connected to context default (https://<cluster public IP>)
   ```
@@ -31,10 +31,18 @@ Connecting to the cluster starts the background daemon on your machine and insta
 
   ```
   $ telepresence status
-  Connected
-    Context:       default (https://<cluster public IP>)
-    Proxy:         ON (networking to the cluster is enabled)
-    Intercepts:    0 total
+  Root Daemon: Running
+    Version     : v2.1.4 (api 3)
+    Primary DNS : ""
+    Fallback DNS: ""
+  User Daemon: Running
+    Version           : v2.1.4 (api 3)
+    Ambassador Cloud  : Logged out
+    Status            : Connected
+    Kubernetes server : https://<cluster public IP>
+    Kubernetes context: default
+    Telepresence proxy: ON (networking to the cluster is enabled)
+    Intercepts        : 0 total
   ```
 
 1. Now try to access your service by name with `curl verylargejavaservice.default:8080`. Telepresence will route the request to the cluster, as if your laptop is actually running in the cluster.

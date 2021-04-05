@@ -55,27 +55,33 @@ This will output a header that you can set on your request for that traffic to b
 
 ```
 $ telepresence intercept <deployment name>  --port=<TCP port> --preview-url=false
-  
-  Using Deployment <deployment name>
-  intercepted
-      Intercept name: <full name of intercept>
-      State         : ACTIVE
-      Workload kind : Deployment
-      Destination   : 127.0.0.1:<local TCP port>
-      Intercepting  : HTTP requests that match all of:
-        header("x-telepresence-intercept-id") ~= regexp("<uuid unique to you>:<full name of intercept>")
+Using Deployment <deployment name>
+intercepted
+    Intercept name: <full name of intercept>
+    State         : ACTIVE
+    Workload kind : Deployment
+    Destination   : 127.0.0.1:<local TCP port>
+    Intercepting  : HTTP requests that match all of:
+      header("x-telepresence-intercept-id") ~= regexp("<uuid unique to you>:<full name of intercept>")
 ```
 
 Run `telepresence status` to see the list of active intercepts.
 
 ```
 $ telepresence status
-  
-  Connected
-    Context:       default (https://<cluster public IP>)
-    Proxy:         ON (networking to the cluster is enabled)
-    Intercepts:    1 total
-      <deployment name>: <your laptop name>
+Root Daemon: Running
+  Version     : v2.1.4 (api 3)
+  Primary DNS : ""
+  Fallback DNS: ""
+User Daemon: Running
+  Version           : v2.1.4 (api 3)
+  Ambassador Cloud  : Logged out
+  Status            : Connected
+  Kubernetes server : https://<cluster public IP>
+  Kubernetes context: default
+  Telepresence proxy: ON (networking to the cluster is enabled)
+  Intercepts        : 1 total
+    dataprocessingnodeservice: <laptop username>@<laptop name>
 ```
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
@@ -85,15 +91,15 @@ Finally, run `telepresence leave <name of intercept>` to stop the intercept.
 If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. You can see the name of the service ports available to be intercepted by using kubectl to describe your service or look in the yaml for the service. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
 
 ```
-telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortName>
-  Using Deployment <name of deployment>
-  intercepted
-      Intercept name   : <full name of intercept>
-      State            : ACTIVE
-      Workload kind    : Deployment
-      Destination      : 127.0.0.1:<local TCP port>
-      Service Port Name: <servicePortName>
-      Intercepting     : all TCP connections
+$ telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortName>
+Using Deployment <name of deployment>
+intercepted
+    Intercept name   : <full name of intercept>
+    State            : ACTIVE
+    Workload kind    : Deployment
+    Destination      : 127.0.0.1:<local TCP port>
+    Service Port Name: <servicePortName>
+    Intercepting     : all TCP connections
 ```
 
 When intercepting a service that has multiple ports, the name of the service port that has been intercepted is also listed.
@@ -106,13 +112,13 @@ Oftentimes, there's a 1-to-1 relationship between a service and a workload, so t
 
 Fortunately, if you know which service you want to use when intercepting a workload, you can use the --service flag.  So in the aforementioned demo, if you wanted to use the `echo-stable` service when intercepting your workload, your command would look like this:
 ```
-telepresence intercept echo-rollout-<generatedHash> --port <local TCP port> --service echo-stable
-  Using ReplicaSet echo-rollout-<generatedHash>
-  intercepted
-      Intercept name    : echo-rollout-<generatedHash>
-      State             : ACTIVE
-      Workload kind     : ReplicaSet
-      Destination       : 127.0.0.1:3000
-      Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-921196036
-      Intercepting      : all TCP connections
+$ telepresence intercept echo-rollout-<generatedHash> --port <local TCP port> --service echo-stable
+Using ReplicaSet echo-rollout-<generatedHash>
+intercepted
+    Intercept name    : echo-rollout-<generatedHash>
+    State             : ACTIVE
+    Workload kind     : ReplicaSet
+    Destination       : 127.0.0.1:3000
+    Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-921196036
+    Intercepting      : all TCP connections
 ```
