@@ -158,11 +158,11 @@ func (ts *telepresenceSuite) SetupSuite() {
 	}()
 	wg.Wait()
 
-	// Ensure that no telepresence is running when the tests start
-	_, _ = telepresence(ts.T(), "quit")
-
 	// Also ensure that telepresence is not logged in
 	_, _ = telepresence(ts.T(), "logout")
+
+	// Ensure that no telepresence is running when the tests start
+	_, _ = telepresence(ts.T(), "quit")
 }
 
 func (ts *telepresenceSuite) TearDownSuite() {
