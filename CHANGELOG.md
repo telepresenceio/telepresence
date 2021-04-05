@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.1.4 (TBD)
+### 2.1.4 (April 5, 2021)
 
 - Feature: `telepresence status` has been enhanced to provide more information.  In particular, it now provides separate information on the daemon and connector processes, as well as showing login status.
 - Feature: Telepresence now supports intercepting StatefulSets
