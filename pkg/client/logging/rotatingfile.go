@@ -115,7 +115,6 @@ func OpenRotatingFile(
 	strategy RotationStrategy,
 	maxFiles uint16,
 ) (*RotatingFile, error) {
-
 	logfileDir, logfileBase := filepath.Split(logfilePath)
 
 	if err := os.MkdirAll(logfileDir, 0755); err != nil {
