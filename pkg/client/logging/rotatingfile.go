@@ -107,23 +107,23 @@ type RotatingFile struct {
 // - maxFiles: maximum number of files in rotation, including the currently active logfile. A value of zero means
 // unlimited
 func OpenRotatingFile(
-	dirName,
-	fileName,
+	logfilePath string,
 	timeFormat string,
-	localTime,
+	localTime bool,
 	captureStd bool,
 	fileMode os.FileMode,
 	strategy RotationStrategy,
-	maxFiles uint16) (*RotatingFile, error) {
-	dir := filepath.Dir(fileName)
-	err := os.MkdirAll(dir, 0755)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create directory %s: %v", dir, err)
+	maxFiles uint16,
+) (*RotatingFile, error) {
+	logfileDir, logfileBase := filepath.Split(logfilePath)
+
+	if err := os.MkdirAll(logfileDir, 0755); err != nil {
+		return nil, err
 	}
 
 	rf := &RotatingFile{
-		dirName:    dirName,
-		fileName:   fileName,
+		dirName:    logfileDir,
+		fileName:   logfileBase,
 		fileMode:   fileMode,
 		strategy:   strategy,
 		localTime:  localTime,
@@ -132,9 +132,9 @@ func OpenRotatingFile(
 		maxFiles:   maxFiles,
 	}
 
-	fullPath := filepath.Join(dirName, fileName)
 	var info os.FileInfo
-	if info, err = os.Stat(fullPath); err != nil {
+	var err error
+	if info, err = os.Stat(logfilePath); err != nil {
 		if os.IsNotExist(err) {
 			if err = rf.openNew(); err == nil {
 				return rf, nil
@@ -147,7 +147,7 @@ func OpenRotatingFile(
 	rf.size = info.Size()
 
 	// Open existing file for append
-	if rf.file, err = os.OpenFile(fullPath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
+	if rf.file, err = os.OpenFile(logfilePath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
 		return nil, err
 	}
 	rf.afterOpen()

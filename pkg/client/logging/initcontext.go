@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
@@ -27,7 +28,7 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 		if err != nil {
 			return ctx, err
 		}
-		rf, err := OpenRotatingFile(dir, name+".log", "20060102T150405", true, true, 0600, NewRotateOnce(), 5)
+		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, true, 0600, NewRotateOnce(), 5)
 		if err != nil {
 			return ctx, err
 		}
