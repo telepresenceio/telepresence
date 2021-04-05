@@ -180,4 +180,26 @@ There are two logs. The `connector.log` which contains output from the interacti
 The logs are rotating and a new log is created every time telepresence creates a new connection to the cluster, e.g. on `telepresence connect` after a `telepresence quit` that terminated the last session.
 
 ### Watching the logs
+
 A convenient way to watch rotating logs is to use `tail -F <filename>`. It will automatically and seamlessly follow the rotation.
+
+### Debugging early-initialization errors
+
+If there's an error from the connector or daemon during early
+initialization, it might quit before the logfiles are set up.  Perhaps
+the problem is even with setting up the logfile itself.
+
+You can run the `connector-foreground` or `daemon-foreground` commands
+directly, to see what they spit out on stderr before dying:
+
+```console
+$ telepresence connector-foreground    # or daemon-foreground
+```
+
+If stdout is a TTY device, they don't set up logfiles and instead log
+to stderr.  In order to debug the logfile setup, simply pipe the
+command to `cat` to trigger the usual logfile setup:
+
+```console
+$ telepresence connector-foreground | cat
+```
