@@ -8,7 +8,6 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 )
@@ -32,12 +31,6 @@ func Logout(ctx context.Context) error {
 		_, err := connectorClient.Logout(ctx, &empty.Empty{})
 		return err
 	})
-	// We want to ensure the daemon is cancelled on logout
-	defer func() {
-		if err := QuitConnector(ctx); err != nil {
-			dlog.Error(ctx, err)
-		}
-	}()
 	if grpcStatus.Code(err) == grpcCodes.NotFound {
 		err = errors.New(grpcStatus.Convert(err).Message())
 	}
