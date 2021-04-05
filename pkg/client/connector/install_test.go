@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,79 +24,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-var kubeconfig string
-var namespace string
-var registry string
-var testVersion string
-var managerTestNamespace string
-
-func TestMain(m *testing.M) {
-	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
-	kubeconfig = dtest.Kubeconfig()
-	testVersion = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
-	managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
-
-	registry = dtest.DockerRegistry()
-	version.Version = testVersion
-
-	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-	os.Setenv("KO_DOCKER_REPO", registry)
-	os.Setenv("TELEPRESENCE_REGISTRY", registry)
-
-	var exitCode int
-	dtest.WithMachineLock(func() {
-		capture(nil, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace)
-		defer capture(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", namespace, "--wait=false")
-		defer capture(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", managerTestNamespace, "--wait=false")
-		exitCode = m.Run()
-	})
-	os.Exit(exitCode)
-}
-
-func showArgs(exe string, args []string) {
-	fmt.Print("+ ")
-	fmt.Print(exe)
-	for _, arg := range args {
-		fmt.Print(" ", arg)
-	}
-	fmt.Println()
-}
-
-func capture(t *testing.T, exe string, args ...string) string {
-	showArgs(exe, args)
-	ctx := context.Background()
-	if t != nil {
-		ctx = dlog.NewTestContext(t, false)
-	}
-	cmd := dexec.CommandContext(ctx, exe, args...)
-	cmd.DisableLogging = true
-	out, err := cmd.CombinedOutput()
-	sout := string(out)
-	if err != nil {
-		if t != nil {
-			t.Fatalf("%s\n%v", sout, err)
-		} else {
-			log.Fatalf("%s\n%v", sout, err)
-		}
-	}
-	return sout
-}
-
-var imageName string
-
-func publishManager(ctx context.Context, t *testing.T) {
+func publishManager(t *testing.T) {
 	t.Helper()
-	if imageName != "" {
-		return
-	}
+	ctx := dlog.NewTestContext(t, false)
 
 	cmd := dexec.CommandContext(ctx, "make", "-C", "../../..", "push-image")
 
 	// Go sets a lot of variables that we don't want to pass on to the ko executable. If we do,
 	// then it builds for the platform indicated by those variables.
 	cmd.Env = []string{
-		"TELEPRESENCE_VERSION=" + testVersion,
+		"TELEPRESENCE_VERSION=" + version.Version,
 		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(),
 	}
 	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
@@ -114,7 +50,9 @@ func publishManager(ctx context.Context, t *testing.T) {
 	}
 }
 
-func removeManager(ctx context.Context, t *testing.T) {
+func removeManager(t *testing.T, kubeconfig, managerNamespace string) {
+	ctx := dlog.NewTestContext(t, false)
+
 	// Remove service and deployment
 	cmd := dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "delete", "svc,deployment", "traffic-manager")
 	_, _ = cmd.Output()
@@ -146,127 +84,153 @@ func removeManager(ctx context.Context, t *testing.T) {
 	}
 }
 
-func Test_findTrafficManager_notPresent(t *testing.T) {
-	saveManagerNamespace := managerNamespace
-	defer func() {
-		managerNamespace = saveManagerNamespace
-	}()
-	managerNamespace = managerTestNamespace
+func TestE2E(t *testing.T) {
+	kubeconfig := dtest.Kubeconfig()
+	testVersion := fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
+	namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
+	managerTestNamespace := fmt.Sprintf("ambassador-%d", os.Getpid())
 
-	ctx := dlog.NewTestContext(t, false)
-	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
-	if err != nil {
-		t.Fatal(err)
-	}
-	kc, err := newKCluster(ctx, cfgAndFlags, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ti, err := newTrafficManagerInstaller(kc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	version.Version = "v0.0.0-bogus"
-	defer func() { version.Version = testVersion }()
+	registry := dtest.DockerRegistry()
+	version.Version = testVersion
 
-	if _, err := ti.findDeployment(ctx, managerNamespace, managerAppName); err == nil {
-		t.Fatal("expected find to not find deployment")
-	}
-}
+	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+	os.Setenv("KO_DOCKER_REPO", registry)
+	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 
-func Test_findTrafficManager_present(t *testing.T) {
-	saveManagerNamespace := managerNamespace
-	defer func() {
-		managerNamespace = saveManagerNamespace
-	}()
-	managerNamespace = managerTestNamespace
+	dtest.WithMachineLock(func() {
+		ctx := dlog.NewTestContext(t, false)
+		_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace).Run()
+		defer func() {
+			_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", managerTestNamespace, "--wait=false").Run()
+			_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", namespace, "--wait=false").Run()
+		}()
 
-	c := dlog.NewTestContext(t, false)
-	publishManager(c, t)
-	defer removeManager(c, t)
+		t.Run("findTrafficManager_notPresent", func(t *testing.T) {
+			saveManagerNamespace := managerNamespace
+			defer func() {
+				managerNamespace = saveManagerNamespace
+			}()
+			managerNamespace = managerTestNamespace
 
-	env, err := client.LoadEnv(c)
-	if err != nil {
-		t.Fatal(err)
-	}
+			ctx := dlog.NewTestContext(t, false)
+			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+			if err != nil {
+				t.Fatal(err)
+			}
+			kc, err := newKCluster(ctx, cfgAndFlags, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ti, err := newTrafficManagerInstaller(kc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			version.Version = "v0.0.0-bogus"
+			defer func() { version.Version = testVersion }()
 
-	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
-	if err != nil {
-		t.Fatal(err)
-	}
-	kc, err := newKCluster(c, cfgAndFlags, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	watcherErr := make(chan error)
-	watchCtx, watchCancel := context.WithCancel(c)
-	defer func() {
-		watchCancel()
-		if err := <-watcherErr; err != nil {
-			t.Error(err)
-		}
-	}()
-	go func() {
-		watcherErr <- kc.runWatchers(watchCtx)
-	}()
-	waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
-	defer waitCancel()
-	if err := kc.waitUntilReady(waitCtx); err != nil {
-		t.Fatal(err)
-	}
+			if _, err := ti.findDeployment(ctx, managerNamespace, managerAppName); err == nil {
+				t.Fatal("expected find to not find deployment")
+			}
+		})
 
-	ti, err := newTrafficManagerInstaller(kc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = ti.createManagerSvc(c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = ti.createManagerDeployment(c, env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 50; i++ {
-		if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatal("traffic-manager deployment not found")
-}
+		t.Run("findTrafficManager_present", func(t *testing.T) {
+			saveManagerNamespace := managerNamespace
+			defer func() {
+				managerNamespace = saveManagerNamespace
+			}()
+			managerNamespace = managerTestNamespace
 
-func Test_ensureTrafficManager_notPresent(t *testing.T) {
-	saveManagerNamespace := managerNamespace
-	defer func() {
-		managerNamespace = saveManagerNamespace
-	}()
-	managerNamespace = managerTestNamespace
-	c := dlog.NewTestContext(t, false)
-	publishManager(c, t)
-	defer removeManager(c, t)
-	env, err := client.LoadEnv(c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
-	if err != nil {
-		t.Fatal(err)
-	}
-	kc, err := newKCluster(c, cfgAndFlags, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ti, err := newTrafficManagerInstaller(kc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ti.ensureManager(c, env); err != nil {
-		t.Fatal(err)
-	}
+			c := dlog.NewTestContext(t, false)
+			publishManager(t)
+			defer removeManager(t, kubeconfig, managerNamespace)
+
+			env, err := client.LoadEnv(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+			if err != nil {
+				t.Fatal(err)
+			}
+			kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			watcherErr := make(chan error)
+			watchCtx, watchCancel := context.WithCancel(c)
+			defer func() {
+				watchCancel()
+				if err := <-watcherErr; err != nil {
+					t.Error(err)
+				}
+			}()
+			go func() {
+				watcherErr <- kc.runWatchers(watchCtx)
+			}()
+			waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
+			defer waitCancel()
+			if err := kc.waitUntilReady(waitCtx); err != nil {
+				t.Fatal(err)
+			}
+
+			ti, err := newTrafficManagerInstaller(kc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = ti.createManagerSvc(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = ti.createManagerDeployment(c, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 50; i++ {
+				if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			t.Fatal("traffic-manager deployment not found")
+		})
+
+		t.Run("ensureTrafficManager_notPresent", func(t *testing.T) {
+			saveManagerNamespace := managerNamespace
+			defer func() {
+				managerNamespace = saveManagerNamespace
+			}()
+			managerNamespace = managerTestNamespace
+			c := dlog.NewTestContext(t, false)
+			publishManager(t)
+			defer removeManager(t, kubeconfig, managerNamespace)
+			env, err := client.LoadEnv(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+			if err != nil {
+				t.Fatal(err)
+			}
+			kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ti, err := newTrafficManagerInstaller(kc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ti.ensureManager(c, env); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
 }
 
 func TestAddAgentToDeployment(t *testing.T) {
+	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
+	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
+
 	type testcase struct {
 		InputPortName   string
 		InputDeployment *kates.Deployment
@@ -295,7 +259,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 
 			var buff bytes.Buffer
 			err = tmpl.Execute(&buff, map[string]interface{}{
-				"Version": strings.TrimPrefix(testVersion, "v"),
+				"Version": strings.TrimPrefix(version.Version, "v"),
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
@@ -397,6 +361,9 @@ func TestAddAgentToDeployment(t *testing.T) {
 // since this is a lot of copy pasta, I will likely do that when I move
 // onto adding StatefulSets
 func TestAddAgentToReplicaSet(t *testing.T) {
+	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
+	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
+
 	type testcase struct {
 		InputPortName   string
 		InputReplicaSet *kates.ReplicaSet
@@ -425,7 +392,7 @@ func TestAddAgentToReplicaSet(t *testing.T) {
 
 			var buff bytes.Buffer
 			err = tmpl.Execute(&buff, map[string]interface{}{
-				"Version": strings.TrimPrefix(testVersion, "v"),
+				"Version": strings.TrimPrefix(version.Version, "v"),
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
@@ -526,6 +493,9 @@ func TestAddAgentToReplicaSet(t *testing.T) {
 // I (Donny) would like to unify this w/ the "TestAddAgentToWorkload
 // since this is a lot of copy pasta, I will likely do that now
 func TestAddAgentToStatefulSet(t *testing.T) {
+	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
+	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
+
 	type testcase struct {
 		InputPortName    string
 		InputStatefulSet *kates.StatefulSet
@@ -554,7 +524,7 @@ func TestAddAgentToStatefulSet(t *testing.T) {
 
 			var buff bytes.Buffer
 			err = tmpl.Execute(&buff, map[string]interface{}{
-				"Version": strings.TrimPrefix(testVersion, "v"),
+				"Version": strings.TrimPrefix(version.Version, "v"),
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
