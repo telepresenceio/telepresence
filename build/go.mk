@@ -111,7 +111,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix li
 
 .PHONY: test check
 test check: $(tools/ko) ## (Test) Run the test suite
-	go test ./...
+	go test -v ./...
 
 .PHONY: all
 all: test
