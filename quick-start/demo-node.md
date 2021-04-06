@@ -23,21 +23,11 @@ import QSCards from './qs-cards'
 
 </div>
 
-In this guide we'll give you **everything you need in a preconfigured demo cluster**. If you want to use **your own cluster**, choose an option below to go to that language option and get started:
+In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally. 
 
-<div class="docs-language-toc">
-
-* <a href="../qs-node/" title="Node.js">Node.js</a>
-* <a href="../qs-go/" title="Go">Go</a>
-* <a href="../qs-java/" title="Java">Java</a>
-* <a href="../qs-python/" title="Python (Flask)">Python (Flask)</a>
-* <a href="../qs-python-fastapi/" title="Python (FastAPI)">Python (FastAPI)</a>
-
-</div>
-
-## Prerequisites
-
-There are none for this guide! Everything you need will be provided in the archive file below: the Telepresence CLI, a config file for connecting to our preconfigured demo cluster, and code for a service to run locally.
+<Alert severity="info">
+    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node.md">version of this guide</a> that takes you though the same steps using your own cluster.
+</Alert>
 
 ## 1. Download the demo cluster archive
 
@@ -67,7 +57,7 @@ There are none for this guide! Everything you need will be provided in the archi
 
 Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-1. Connect to the cluster:  
+1. Connect to the cluster (this requires root privileges and will ask for your password):  
 `telepresence connect`
 
   ```
@@ -85,10 +75,6 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
 `curl -ik https://kubernetes.default`
 
-  <Alert severity="info">
-    <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../install/upgrade/">here</a> if needed.
-  </Alert>
-
   ```
   $ curl -ik https://kubernetes.default
     
@@ -98,9 +84,14 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
     ...
 
   ```
-<Alert severity="info">
+
+  <Alert severity="info">
+    <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../install/upgrade/">here</a> if needed.
+  </Alert>
+
+  <Alert severity="info">
     The 401 response is expected.  What's important is that you were able to contact the API.
-</Alert>
+  </Alert>
 
 <Alert severity="success">
     <strong>Congratulations!</strong> You’ve just accessed your remote Kubernetes API server, as if you were on the same network! With Telepresence, you’re able to use any tool that you have locally to connect to any service in the cluster.
@@ -111,40 +102,6 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
 We'll use a sample app that is already installed in your demo cluster.  Let's take a quick look at it's architecture before continuing.
-
-<Alert severity="info">
-    While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>,<a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.
-</Alert>
-
-<!--
-1. Start by installing a sample application that consists of multiple services:  
-`kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
-
-  ```
-  $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
-    
-    deployment.apps/dataprocessingservice created
-    service/dataprocessingservice created
-    ...
-
-  ```
-
-2. Give your cluster a few moments to deploy the sample application.
-
-  Use `kubectl get pods` to check the status of your pods:
-
-  ```
-  $ kubectl get pods
-    
-    NAME                                         READY   STATUS    RESTARTS   AGE
-    verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
-    verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
-    dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
-  ```
-
-3. Once all the pods are in a `Running` state, go to the frontend service in your browser at [http://verylargejavaservice.default:8080](http://verylargejavaservice.default:8080).
-
--->
 
 1. Use `kubectl get pods` to check the status of your pods:
 
@@ -165,42 +122,6 @@ We'll use a sample app that is already installed in your demo cluster.  Let's ta
   <strong>Congratulations</strong>, you can now access services running in your cluster by name from your laptop!
 </Alert>
 
-<!--
-
-## 4. Set up a local development environment
-You will now download the repo containing the services' code and run the DataProcessingService service locally. This version of the code has the UI color set to <strong style="color:blue">blue</strong> instead of <strong style="color:green">green</strong>.
-
-<Alert severity="info">
-    Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.
-</Alert>
-
-1. Clone the web app’s GitHub repo:  
-`git clone https://github.com/datawire/edgey-corp-nodejs.git`
-
-  ```
-  $ git clone https://github.com/datawire/edgey-corp-nodejs.git
-    
-    Cloning into 'edgey-corp-nodejs'...
-    remote: Enumerating objects: 441, done.
-    ...
-  ```
-
-2. Change into the repo directory, then into DataProcessingService:  
-`cd edgey-corp-nodejs/DataProcessingService/`
-
-3. Install the dependencies and start the Node server:  
-`npm install && npm start`
-
-  ```
-  $ npm install && npm start
-    
-    ...
-    Welcome to the DataProcessingService!
-    { _: [] }
-    Server running on port 3000
-  ```
--->
-
 ## 4. Run a service on your laptop
 
 Now start up the DataProcessingService service on your laptop. This version of the code has the UI color set to <strong style="color:blue">blue</strong> instead of <strong style="color:green">green</strong>.
@@ -211,9 +132,14 @@ Now start up the DataProcessingService service on your laptop. This version of t
 2. Start the application:
   `npm start`
 
-  <Alert severity="info">
-    <a href="https://nodejs.org/en/download/package-manager/">Install Node.js from here</a> if needed.
-  </Alert>
+  ```
+  $ npm start
+    
+    ...
+    Welcome to the DataProcessingService!
+    { _: [] }
+    Server running on port 3000
+  ```
 
 4. **Back in your <u>previous</u> terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:  
 `curl localhost:3000/color`
@@ -234,9 +160,9 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 1. Start the intercept with the `intercept` command, setting the service name and port:  
 `telepresence intercept dataprocessingservice --port 3000`
 
-<Alert severity="info">
+  <Alert severity="info">
     <strong>Didn't work?</strong> Make sure you are working in the terminal window where you ran the script because it sets environment variables to access the demo cluster.  Those variables will only will apply to that terminal session.
-</Alert>
+  </Alert>
 
   ```
   $ telepresence intercept dataprocessingservice --port 3000
@@ -249,16 +175,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
         Intercepting  : all TCP connections
   ```
 
-
-
-
 2. Go to the frontend service again in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <strong style="color:blue">blue</strong> elements in the app.
-
-<!--
-  <Alert severity="info">
-    See <a href="../../reference/dns">this doc</a> for more information on how Telepresence resolves DNS.
-  </Alert>
--->
 
 <Alert severity="success">
     The frontend’s request to DataProcessingService is being <strong>intercepted and rerouted</strong> to the Node server on your laptop!
