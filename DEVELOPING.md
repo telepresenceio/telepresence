@@ -106,6 +106,21 @@ ok      github.com/telepresenceio/telepresence/v2/pkg/manager   (cached)
 
 You can also use `gotestsum` or manually run `go test` as you prefer.
 
+### I've made a change to the agent-installer, how do I update the testdata output files?
+
+If you've made a change to the agent-installer that requires updating
+the `testadata/addAgentToWorkload/*.output.yaml` files, it can be
+tedious to update each file separately.
+
+If you set the `DEV_TELEPRESENCE_GENERATE_GOLD` environment variable
+to a non-empty value, and run the test again, it will update the files
+based on the current behavior (the test will still fail that first
+run, though).  Be sure to look at the diff and make sure that new
+behavior is actually correct!
+
+```console
+$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/connector
+```
 
 ## Build the image
 

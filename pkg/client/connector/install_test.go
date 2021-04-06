@@ -326,6 +326,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 	}
 
 	for tcName, tc := range testcases {
+		tcName := tcName
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, true)
@@ -352,8 +353,31 @@ func TestAddAgentToWorkload(t *testing.T) {
 			}
 			sanitizeService(actualSvc)
 
-			assert.Equal(t, expectedWrk, actualWrk)
-			assert.Equal(t, expectedSvc, actualSvc)
+			goldOK := true
+			goldOK = goldOK && assert.Equal(t, expectedWrk, actualWrk)
+			goldOK = goldOK && assert.Equal(t, expectedSvc, actualSvc)
+			if os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" && !goldOK {
+				workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
+
+				goldBytes, err := yaml.Marshal(map[string]interface{}{
+					strings.ToLower(workloadKind): actualWrk,
+					"service":                     actualSvc,
+				})
+				if !assert.NoError(t, err) {
+					return
+				}
+				goldBytes = bytes.ReplaceAll(goldBytes,
+					[]byte(strings.TrimPrefix(version.Version, "v")),
+					[]byte("{{.Version}}"))
+
+				err = ioutil.WriteFile(
+					filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
+					goldBytes,
+					0644)
+				if !assert.NoError(t, err) {
+					return
+				}
+			}
 
 			expectedWrk = deepCopyObject(tc.InputWorkload)
 			sanitizeWorkload(expectedWrk)
