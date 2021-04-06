@@ -5,13 +5,11 @@ deployment:
     annotations:
       deployment.kubernetes.io/revision: "1"
       telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-7","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
-    generation: 2
+    creationTimestamp: null
     labels:
       app: hello-7
     name: hello-7
     namespace: telepresence-5759
-    resourceVersion: "985"
     selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-7
     uid: 4fcf1b28-41ca-11eb-b40f-0242ac110002
   spec:
@@ -34,13 +32,10 @@ deployment:
       spec:
         containers:
         - image: jmalloc/echo-server:0.1.0
-          imagePullPolicy: IfNotPresent
           name: echo-server
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
           volumeMounts:
-          - mountPath: "/usr/share/nginx/html"
+          - mountPath: /usr/share/nginx/html
             name: hello-storage
         - args:
           - agent
@@ -62,29 +57,26 @@ deployment:
           - name: APP_PORT
             value: "8080"
           - name: APP_MOUNTS
-            value: "/tel_app_mounts"
+            value: /tel_app_mounts
           - name: TEL_APP_TELEPRESENCE_MOUNTS
-            value: "/usr/share/nginx/html"
+            value: /usr/share/nginx/html
           - name: MANAGER_HOST
-            value: "traffic-manager.ambassador"
-          readinessProbe:
-            exec:
-              command:
-              - "/bin/stat"
-              - "/tmp/agent/ready"
+            value: traffic-manager.ambassador
           image: localhost:5000/tel2:{{.Version}}
-          imagePullPolicy: IfNotPresent
           name: traffic-agent
           ports:
           - containerPort: 9900
             name: tel2px-8080
             protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: "/tel_app_mounts/usr/share/nginx/html"
-              name: hello-storage
+          - mountPath: /tel_app_mounts/usr/share/nginx/html
+            name: hello-storage
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler
@@ -115,12 +107,11 @@ service:
   metadata:
     annotations:
       telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
+    creationTimestamp: null
     labels:
       app: hello-7
     name: hello-7
     namespace: telepresence-5759
-    resourceVersion: "987"
     selfLink: /api/v1/namespaces/telepresence-5759/services/hello-7
     uid: 501190e3-41ca-11eb-b40f-0242ac110002
   spec:

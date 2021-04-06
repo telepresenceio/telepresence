@@ -5,13 +5,11 @@ deployment:
     annotations:
       deployment.kubernetes.io/revision: "1"
       telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-3","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
-    generation: 2
+    creationTimestamp: null
     labels:
       app: hello-3
     name: hello-3
     namespace: telepresence-5759
-    resourceVersion: "829"
     selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-3
     uid: 4fa97690-41ca-11eb-b40f-0242ac110002
   spec:
@@ -34,11 +32,8 @@ deployment:
       spec:
         containers:
         - image: jmalloc/echo-server:0.1.0
-          imagePullPolicy: IfNotPresent
           name: echo-server
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         - args:
           - agent
           env:
@@ -59,22 +54,19 @@ deployment:
           - name: APP_PORT
             value: "8080"
           - name: MANAGER_HOST
-            value: "traffic-manager.ambassador"
-          readinessProbe:
-            exec:
-              command:
-              - "/bin/stat"
-              - "/tmp/agent/ready"
+            value: traffic-manager.ambassador
           image: localhost:5000/tel2:{{.Version}}
-          imagePullPolicy: IfNotPresent
           name: traffic-agent
           ports:
           - containerPort: 9900
             name: tel2px-8080
             protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler
@@ -105,12 +97,11 @@ service:
   metadata:
     annotations:
       telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
+    creationTimestamp: null
     labels:
       app: hello-3
     name: hello-3
     namespace: telepresence-5759
-    resourceVersion: "832"
     selfLink: /api/v1/namespaces/telepresence-5759/services/hello-3
     uid: 5003ea3f-41ca-11eb-b40f-0242ac110002
   spec:
