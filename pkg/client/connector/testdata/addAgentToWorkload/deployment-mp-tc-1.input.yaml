@@ -20,3 +20,4 @@ deployment:
         containers:
           - name: app
             imagePullPolicy: Always
+interceptPort: https
