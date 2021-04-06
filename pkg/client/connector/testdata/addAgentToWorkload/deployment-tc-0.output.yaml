@@ -4,7 +4,7 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-0","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-0","referenced_service_port":"80","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     labels:
       app: hello-0

@@ -21,7 +21,7 @@ statefulset:
   kind: StatefulSet
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port":"8080","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     name: app
   spec:
