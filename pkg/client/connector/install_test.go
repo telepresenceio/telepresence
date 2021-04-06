@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"text/template"
@@ -227,21 +228,21 @@ func TestE2E(t *testing.T) {
 	})
 }
 
-func TestAddAgentToDeployment(t *testing.T) {
+func TestAddAgentToWorkload(t *testing.T) {
 	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
 	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
 
 	type testcase struct {
-		InputPortName   string
-		InputDeployment *kates.Deployment
-		InputService    *kates.Service
+		InputPortName string
+		InputWorkload kates.Object
+		InputService  *kates.Service
 
-		OutputDeployment *kates.Deployment
-		OutputService    *kates.Service
+		OutputWorkload kates.Object
+		OutputService  *kates.Service
 	}
 	testcases := map[string]testcase{}
 
-	fileinfos, err := ioutil.ReadDir("testdata/addAgentToDeployment")
+	fileinfos, err := ioutil.ReadDir("testdata/addAgentToWorkload")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,8 +252,8 @@ func TestAddAgentToDeployment(t *testing.T) {
 		}
 		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
 
-		loadFile := func(filename string) (*kates.Deployment, *kates.Service, error) {
-			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToDeployment", filename))
+		loadFile := func(filename string) (kates.Object, *kates.Service, error) {
+			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
 			if err != nil {
 				return nil, nil, fmt.Errorf("read template: %s: %w", filename, err)
 			}
@@ -266,290 +267,46 @@ func TestAddAgentToDeployment(t *testing.T) {
 			}
 
 			var dat struct {
-				Deployment *kates.Deployment `json:"deployment"`
-				Service    *kates.Service    `json:"service"`
-			}
-			if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
-				return nil, nil, fmt.Errorf("parse yaml: %s: %w", filename, err)
-			}
-
-			return dat.Deployment, dat.Service, nil
-		}
-
-		var tc testcase
-		var err error
-
-		tc.InputDeployment, tc.InputService, err = loadFile(tcName + ".input.yaml")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		tc.OutputDeployment, tc.OutputService, err = loadFile(tcName + ".output.yaml")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// If it is a test case for a service with multiple ports,
-		// we need to specify the name of the port we want to intercept
-		if strings.Contains(tcName, "mp-tc") {
-			tc.InputPortName = "https"
-		}
-
-		testcases[tcName] = tc
-	}
-
-	env, err := client.LoadEnv(dlog.NewTestContext(t, true))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for tcName, tc := range testcases {
-		tc := tc
-		t.Run(tcName, func(t *testing.T) {
-			ctx := dlog.NewTestContext(t, true)
-
-			expectedDep := tc.OutputDeployment.DeepCopy()
-			sanitizeWorkload(expectedDep)
-
-			expectedSvc := tc.OutputService.DeepCopy()
-			sanitizeService(expectedSvc)
-
-			actualDep, actualSvc, actualErr := addAgentToWorkload(ctx,
-				tc.InputPortName,
-				managerImageName(env), // ignore extensions
-				tc.InputDeployment.DeepCopy(),
-				tc.InputService.DeepCopy(),
-			)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-
-			sanitizeWorkload(actualDep)
-			if actualSvc == nil {
-				actualSvc = tc.InputService.DeepCopy()
-			}
-			sanitizeService(actualSvc)
-
-			assert.Equal(t, expectedDep, actualDep)
-			assert.Equal(t, expectedSvc, actualSvc)
-
-			expectedDep = tc.InputDeployment.DeepCopy()
-			sanitizeWorkload(expectedDep)
-
-			expectedSvc = tc.InputService.DeepCopy()
-			sanitizeService(expectedSvc)
-
-			_, actualErr = undoObjectMods(ctx, actualDep)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-			sanitizeWorkload(actualDep)
-
-			actualErr = undoServiceMods(ctx, actualSvc)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-			sanitizeWorkload(actualDep)
-
-			assert.Equal(t, expectedDep, actualDep)
-			assert.Equal(t, expectedSvc, actualSvc)
-		})
-	}
-}
-
-// I (Donny) would like to unify this w/ the "TestAddAgentToWorkload
-// since this is a lot of copy pasta, I will likely do that when I move
-// onto adding StatefulSets
-func TestAddAgentToReplicaSet(t *testing.T) {
-	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
-
-	type testcase struct {
-		InputPortName   string
-		InputReplicaSet *kates.ReplicaSet
-		InputService    *kates.Service
-
-		OutputReplicaSet *kates.ReplicaSet
-		OutputService    *kates.Service
-	}
-	testcases := map[string]testcase{}
-
-	fileinfos, err := ioutil.ReadDir("testdata/addAgentToReplicaSet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, fi := range fileinfos {
-		if !strings.HasSuffix(fi.Name(), ".input.yaml") {
-			continue
-		}
-		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
-
-		loadFile := func(filename string) (*kates.ReplicaSet, *kates.Service, error) {
-			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToReplicaSet", filename))
-			if err != nil {
-				return nil, nil, fmt.Errorf("read template: %s: %w", filename, err)
-			}
-
-			var buff bytes.Buffer
-			err = tmpl.Execute(&buff, map[string]interface{}{
-				"Version": strings.TrimPrefix(version.Version, "v"),
-			})
-			if err != nil {
-				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
-			}
-
-			var dat struct {
-				ReplicaSet *kates.ReplicaSet `json:"replicaset"`
-				Service    *kates.Service    `json:"service"`
-			}
-			if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
-				return nil, nil, fmt.Errorf("parse yaml: %s: %w", filename, err)
-			}
-
-			return dat.ReplicaSet, dat.Service, nil
-		}
-
-		var tc testcase
-		var err error
-
-		tc.InputReplicaSet, tc.InputService, err = loadFile(tcName + ".input.yaml")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		tc.OutputReplicaSet, tc.OutputService, err = loadFile(tcName + ".output.yaml")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// If it is a test case for a service with multiple ports,
-		// we need to specify the name of the port we want to intercept
-		if strings.Contains(tcName, "mp-") {
-			tc.InputPortName = "https"
-		}
-
-		testcases[tcName] = tc
-	}
-
-	env, err := client.LoadEnv(dlog.NewTestContext(t, true))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for tcName, tc := range testcases {
-		tc := tc
-		t.Run(tcName, func(t *testing.T) {
-			ctx := dlog.NewTestContext(t, true)
-
-			expectedDep := tc.OutputReplicaSet.DeepCopy()
-			sanitizeWorkload(expectedDep)
-
-			expectedSvc := tc.OutputService.DeepCopy()
-			sanitizeService(expectedSvc)
-
-			actualDep, actualSvc, actualErr := addAgentToWorkload(ctx,
-				tc.InputPortName,
-				managerImageName(env), // ignore extensions
-				tc.InputReplicaSet.DeepCopy(),
-				tc.InputService.DeepCopy(),
-			)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-
-			sanitizeWorkload(actualDep)
-			if actualSvc == nil {
-				actualSvc = tc.InputService.DeepCopy()
-			}
-			sanitizeService(actualSvc)
-
-			assert.Equal(t, expectedDep, actualDep)
-			assert.Equal(t, expectedSvc, actualSvc)
-
-			expectedDep = tc.InputReplicaSet.DeepCopy()
-			sanitizeWorkload(expectedDep)
-
-			expectedSvc = tc.InputService.DeepCopy()
-			sanitizeService(expectedSvc)
-
-			_, actualErr = undoObjectMods(ctx, actualDep)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-			sanitizeWorkload(actualDep)
-
-			actualErr = undoServiceMods(ctx, actualSvc)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-			sanitizeWorkload(actualDep)
-
-			assert.Equal(t, expectedDep, actualDep)
-			assert.Equal(t, expectedSvc, actualSvc)
-		})
-	}
-}
-
-// I (Donny) would like to unify this w/ the "TestAddAgentToWorkload
-// since this is a lot of copy pasta, I will likely do that now
-func TestAddAgentToStatefulSet(t *testing.T) {
-	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
-
-	type testcase struct {
-		InputPortName    string
-		InputStatefulSet *kates.StatefulSet
-		InputService     *kates.Service
-
-		OutputStatefulSet *kates.StatefulSet
-		OutputService     *kates.Service
-	}
-	testcases := map[string]testcase{}
-
-	fileinfos, err := ioutil.ReadDir("testdata/addAgentToStatefulSet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, fi := range fileinfos {
-		if !strings.HasSuffix(fi.Name(), ".input.yaml") {
-			continue
-		}
-		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
-
-		loadFile := func(filename string) (*kates.StatefulSet, *kates.Service, error) {
-			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToStatefulSet", filename))
-			if err != nil {
-				return nil, nil, fmt.Errorf("read template: %s: %w", filename, err)
-			}
-
-			var buff bytes.Buffer
-			err = tmpl.Execute(&buff, map[string]interface{}{
-				"Version": strings.TrimPrefix(version.Version, "v"),
-			})
-			if err != nil {
-				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
-			}
-
-			var dat struct {
+				Deployment  *kates.Deployment  `json:"deployment"`
+				ReplicaSet  *kates.ReplicaSet  `json:"replicaset"`
 				StatefulSet *kates.StatefulSet `json:"statefulset"`
-				Service     *kates.Service     `json:"service"`
+
+				Service *kates.Service `json:"service"`
 			}
 			if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
 				return nil, nil, fmt.Errorf("parse yaml: %s: %w", filename, err)
 			}
 
-			return dat.StatefulSet, dat.Service, nil
+			cnt := 0
+			var workload kates.Object
+			if dat.Deployment != nil {
+				cnt++
+				workload = dat.Deployment
+			}
+			if dat.ReplicaSet != nil {
+				cnt++
+				workload = dat.ReplicaSet
+			}
+			if dat.StatefulSet != nil {
+				cnt++
+				workload = dat.StatefulSet
+			}
+			if cnt != 1 {
+				return nil, nil, fmt.Errorf("yaml must contain exactly one of 'deployment', 'replicaset', or 'statefulset'; got %d of them", cnt)
+			}
+
+			return workload, dat.Service, nil
 		}
 
 		var tc testcase
 		var err error
 
-		tc.InputStatefulSet, tc.InputService, err = loadFile(tcName + ".input.yaml")
+		tc.InputWorkload, tc.InputService, err = loadFile(tcName + ".input.yaml")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		tc.OutputStatefulSet, tc.OutputService, err = loadFile(tcName + ".output.yaml")
+		tc.OutputWorkload, tc.OutputService, err = loadFile(tcName + ".output.yaml")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -573,50 +330,50 @@ func TestAddAgentToStatefulSet(t *testing.T) {
 		t.Run(tcName, func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, true)
 
-			expectedDep := tc.OutputStatefulSet.DeepCopy()
-			sanitizeWorkload(expectedDep)
+			expectedWrk := deepCopyObject(tc.OutputWorkload)
+			sanitizeWorkload(expectedWrk)
 
 			expectedSvc := tc.OutputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			actualDep, actualSvc, actualErr := addAgentToWorkload(ctx,
+			actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
 				tc.InputPortName,
 				managerImageName(env), // ignore extensions
-				tc.InputStatefulSet.DeepCopy(),
+				deepCopyObject(tc.InputWorkload),
 				tc.InputService.DeepCopy(),
 			)
 			if !assert.NoError(t, actualErr) {
 				return
 			}
 
-			sanitizeWorkload(actualDep)
+			sanitizeWorkload(actualWrk)
 			if actualSvc == nil {
 				actualSvc = tc.InputService.DeepCopy()
 			}
 			sanitizeService(actualSvc)
 
-			assert.Equal(t, expectedDep, actualDep)
+			assert.Equal(t, expectedWrk, actualWrk)
 			assert.Equal(t, expectedSvc, actualSvc)
 
-			expectedDep = tc.InputStatefulSet.DeepCopy()
-			sanitizeWorkload(expectedDep)
+			expectedWrk = deepCopyObject(tc.InputWorkload)
+			sanitizeWorkload(expectedWrk)
 
 			expectedSvc = tc.InputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			_, actualErr = undoObjectMods(ctx, actualDep)
+			_, actualErr = undoObjectMods(ctx, actualWrk)
 			if !assert.NoError(t, actualErr) {
 				return
 			}
-			sanitizeWorkload(actualDep)
+			sanitizeWorkload(actualWrk)
 
 			actualErr = undoServiceMods(ctx, actualSvc)
 			if !assert.NoError(t, actualErr) {
 				return
 			}
-			sanitizeWorkload(actualDep)
+			sanitizeWorkload(actualWrk)
 
-			assert.Equal(t, expectedDep, actualDep)
+			assert.Equal(t, expectedWrk, actualWrk)
 			assert.Equal(t, expectedSvc, actualSvc)
 		})
 	}
@@ -639,4 +396,10 @@ func sanitizeService(svc *kates.Service) {
 	svc.ObjectMeta.ResourceVersion = ""
 	svc.ObjectMeta.Generation = 0
 	svc.ObjectMeta.CreationTimestamp = metav1.Time{}
+}
+
+func deepCopyObject(obj kates.Object) kates.Object {
+	objValue := reflect.ValueOf(obj)
+	retValues := objValue.MethodByName("DeepCopy").Call([]reflect.Value{})
+	return retValues[0].Interface().(kates.Object)
 }
