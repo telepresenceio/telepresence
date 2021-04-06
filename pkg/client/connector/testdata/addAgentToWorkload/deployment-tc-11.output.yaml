@@ -4,23 +4,21 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-1","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
-    generation: 2
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-11","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+    creationTimestamp: null
     labels:
-      app: hello-1
-    name: hello-1
+      app: hello-11
+    name: hello-11
     namespace: telepresence-5759
-    resourceVersion: "749"
-    selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-1
-    uid: 4fad4d91-41ca-11eb-b40f-0242ac110002
+    selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-11
+    uid: 1ab652ac-41ca-11eb-b40f-0242ac110002
   spec:
     progressDeadlineSeconds: 600
     replicas: 1
     revisionHistoryLimit: 10
     selector:
       matchLabels:
-        app: hello-1
+        app: hello-11
     strategy:
       rollingUpdate:
         maxSurge: 25%
@@ -30,24 +28,29 @@ deployment:
       metadata:
         creationTimestamp: null
         labels:
-          app: hello-1
+          app: hello-11
       spec:
         containers:
-        - image: jmalloc/echo-server:0.1.0
-          imagePullPolicy: IfNotPresent
-          name: echo-server
+        - env:
+          - name: PORT
+            value: "9090"
+          image: jmalloc/echo-server:0.1.0
+          name: echo-server-dont-pick
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
+        - image: jmalloc/echo-server:0.1.0
+          name: echo-server-pick
+          ports:
+          - containerPort: 8080
+          resources: {}
         - args:
           - agent
           env:
           - name: TELEPRESENCE_CONTAINER
-            value: echo-server
+            value: echo-server-pick
           - name: LOG_LEVEL
             value: debug
           - name: AGENT_NAME
-            value: hello-1
+            value: hello-11
           - name: AGENT_POD_NAME
             valueFrom:
               fieldRef:
@@ -59,22 +62,19 @@ deployment:
           - name: APP_PORT
             value: "8080"
           - name: MANAGER_HOST
-            value: "traffic-manager.ambassador"
-          readinessProbe:
-            exec:
-              command:
-              - "/bin/stat"
-              - "/tmp/agent/ready"
+            value: traffic-manager.ambassador
           image: localhost:5000/tel2:{{.Version}}
-          imagePullPolicy: IfNotPresent
           name: traffic-agent
           ports:
           - containerPort: 9900
             name: tel2px-8080
             protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler
@@ -83,15 +83,15 @@ deployment:
   status:
     availableReplicas: 1
     conditions:
-    - lastTransitionTime: "2020-12-19T07:18:54Z"
-      lastUpdateTime: "2020-12-19T07:18:54Z"
+    - lastTransitionTime: "2021-03-10T07:18:55Z"
+      lastUpdateTime: "2021-03-10T07:18:55Z"
       message: Deployment has minimum availability.
       reason: MinimumReplicasAvailable
       status: "True"
       type: Available
-    - lastTransitionTime: "2020-12-19T07:18:00Z"
-      lastUpdateTime: "2020-12-19T07:18:54Z"
-      message: ReplicaSet "hello-1-7757d89758" has successfully progressed.
+    - lastTransitionTime: "2021-03-10T07:18:00Z"
+      lastUpdateTime: "2021-03-10T07:18:55Z"
+      message: ReplicaSet "hello-11-5c9696799" has successfully progressed.
       reason: NewReplicaSetAvailable
       status: "True"
       type: Progressing
@@ -105,22 +105,21 @@ service:
   metadata:
     annotations:
       telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
+    creationTimestamp: null
     labels:
-      app: hello-1
-    name: hello-1
+      app: hello-11
+    name: hello-11
     namespace: telepresence-5759
-    resourceVersion: "751"
-    selfLink: /api/v1/namespaces/telepresence-5759/services/hello-1
-    uid: 500232eb-41ca-11eb-b40f-0242ac110002
+    selfLink: /api/v1/namespaces/telepresence-5759/services/hello-11
+    uid: 423ef12f-41ca-11eb-b40f-0242ac110002
   spec:
-    clusterIP: 10.43.96.131
+    clusterIP: 10.43.145.123
     ports:
     - port: 80
       protocol: TCP
       targetPort: tel2px-8080
     selector:
-      app: hello-1
+      app: hello-11
     sessionAffinity: None
     type: ClusterIP
   status:

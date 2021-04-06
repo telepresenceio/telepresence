@@ -4,23 +4,21 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-10","hide_container_port":{"container_name":"echo-server","port_name":"http","hidden_name":"tel2mv-http"},"add_traffic_agent":{"container_port_name":"http","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
-    generation: 2
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-3","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+    creationTimestamp: null
     labels:
-      app: hello-10
-    name: hello-10
+      app: hello-3
+    name: hello-3
     namespace: telepresence-5759
-    resourceVersion: "726"
-    selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-10
-    uid: 5ba789ba-41ca-11eb-b40f-0242ac110002
+    selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-3
+    uid: 4fa97690-41ca-11eb-b40f-0242ac110002
   spec:
     progressDeadlineSeconds: 600
     replicas: 1
     revisionHistoryLimit: 10
     selector:
       matchLabels:
-        app: hello-10
+        app: hello-3
     strategy:
       rollingUpdate:
         maxSurge: 25%
@@ -30,19 +28,12 @@ deployment:
       metadata:
         creationTimestamp: null
         labels:
-          app: hello-10
+          app: hello-3
       spec:
         containers:
         - image: jmalloc/echo-server:0.1.0
-          ports:
-          - containerPort: 8080
-            name: tel2mv-http
-            protocol: TCP
-          imagePullPolicy: IfNotPresent
           name: echo-server
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         - args:
           - agent
           env:
@@ -51,7 +42,7 @@ deployment:
           - name: LOG_LEVEL
             value: debug
           - name: AGENT_NAME
-            value: hello-10
+            value: hello-3
           - name: AGENT_POD_NAME
             valueFrom:
               fieldRef:
@@ -63,22 +54,19 @@ deployment:
           - name: APP_PORT
             value: "8080"
           - name: MANAGER_HOST
-            value: "traffic-manager.ambassador"
-          readinessProbe:
-            exec:
-              command:
-              - "/bin/stat"
-              - "/tmp/agent/ready"
+            value: traffic-manager.ambassador
           image: localhost:5000/tel2:{{.Version}}
-          imagePullPolicy: IfNotPresent
           name: traffic-agent
           ports:
           - containerPort: 9900
-            name: http
+            name: tel2px-8080
             protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
           resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler
@@ -87,15 +75,15 @@ deployment:
   status:
     availableReplicas: 1
     conditions:
-    - lastTransitionTime: "2021-12-19T07:18:55Z"
-      lastUpdateTime: "2021-12-19T07:18:55Z"
+    - lastTransitionTime: "2020-12-19T07:18:53Z"
+      lastUpdateTime: "2020-12-19T07:18:53Z"
       message: Deployment has minimum availability.
       reason: MinimumReplicasAvailable
       status: "True"
       type: Available
-    - lastTransitionTime: "2021-12-19T07:18:00Z"
-      lastUpdateTime: "2021-12-19T07:18:55Z"
-      message: ReplicaSet "hello-10-6b4343800" has successfully progressed.
+    - lastTransitionTime: "2020-12-19T07:18:00Z"
+      lastUpdateTime: "2020-12-19T07:18:53Z"
+      message: ReplicaSet "hello-3-7cf4f7d464" has successfully progressed.
       reason: NewReplicaSetAvailable
       status: "True"
       type: Progressing
@@ -108,24 +96,22 @@ service:
   kind: Service
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"http","TargetPort":8080,"SymbolicName":"http"}}'
-    creationTimestamp: "2020-12-19T07:17:54Z"
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
+    creationTimestamp: null
     labels:
-      app: hello-10
-    name: hello-10
+      app: hello-3
+    name: hello-3
     namespace: telepresence-5759
-    resourceVersion: "734"
-    selfLink: /api/v1/namespaces/telepresence-5759/services/hello-10
-    uid: 914bc54d-41ca-11eb-b40f-0242ac110002
+    selfLink: /api/v1/namespaces/telepresence-5759/services/hello-3
+    uid: 5003ea3f-41ca-11eb-b40f-0242ac110002
   spec:
-    clusterIP: 10.43.149.126
+    clusterIP: 10.43.7.113
     ports:
-    - name: http
-      port: 80
+    - port: 80
       protocol: TCP
-      targetPort: http
+      targetPort: tel2px-8080
     selector:
-      app: hello-10
+      app: hello-3
     sessionAffinity: None
     type: ClusterIP
   status:
