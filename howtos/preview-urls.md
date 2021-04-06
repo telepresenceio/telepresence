@@ -82,14 +82,14 @@ If it isn't:
        
      Using deployment example-service
      intercepted
-         Intercept name   : example-service
-         State            : ACTIVE
-         Destination      : 127.0.0.1:8080
-         Service Port Name: http
-         Intercepting     : HTTP requests that match all of:
+         Intercept name         : example-service
+         State                  : ACTIVE
+         Destination            : 127.0.0.1:8080
+         Service Port Identifier: http
+         Intercepting           : HTTP requests that match all of:
            header("x-telepresence-intercept-id") ~= regexp("<intercept-id>:example-service")
-         Preview URL      : https://<random-domain-name>.preview.edgestack.me
-         Layer 5 Hostname : dev-environment.edgestack.me
+         Preview URL            : https://<random-domain-name>.preview.edgestack.me
+         Layer 5 Hostname       : dev-environment.edgestack.me
    ```
 
 4. Start your local environment using the environment variables retrieved in the previous step.
