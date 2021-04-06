@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
-
 	"golang.org/x/sys/unix"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
@@ -25,7 +24,7 @@ type packet struct {
 	withAck bool
 }
 
-func MakePacket(ipHdr ip.Header, data *buffer.Data) Packet {
+func PacketFromData(ipHdr ip.Header, data *buffer.Data) Packet {
 	return &packet{ipHdr: ipHdr, data: data}
 }
 
@@ -70,8 +69,8 @@ func (p *packet) String() string {
 	b := bytes.Buffer{}
 	ipHdr := p.IPHeader()
 	tcpHdr := p.Header()
-	fmt.Fprintf(&b, "tcp sq %.3d, an %.3d, %s.%d -> %s.%d, flags=",
-		tcpHdr.Sequence(), tcpHdr.AckNumber(), ipHdr.Source(), tcpHdr.SourcePort(), ipHdr.Destination(), tcpHdr.DestinationPort())
+	fmt.Fprintf(&b, "tcp %s:%d -> %s:%d, sq %.3d, an %.3d, wz %d, len %d, flags=",
+		ipHdr.Source(), tcpHdr.SourcePort(), ipHdr.Destination(), tcpHdr.DestinationPort(), tcpHdr.Sequence(), tcpHdr.AckNumber(), tcpHdr.WindowSize(), len(tcpHdr.Payload()))
 	tcpHdr.AppendFlags(&b)
 	return b.String()
 }
@@ -90,7 +89,6 @@ func (p *packet) Reset() Packet {
 	tcpHdr.SetDataOffset(5)
 	tcpHdr.SetSourcePort(incTcp.SourcePort())
 	tcpHdr.SetDestinationPort(incTcp.DestinationPort())
-	tcpHdr.SetWindowSize(uint16(maxReceiveWindow))
 	tcpHdr.SetRST(true)
 	tcpHdr.SetACK(true)
 

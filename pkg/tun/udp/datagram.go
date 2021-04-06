@@ -20,7 +20,7 @@ type datagram struct {
 	data  *buffer.Data
 }
 
-func MakeDatagram(ipHdr ip.Header, data *buffer.Data) Datagram {
+func DatagramFromData(ipHdr ip.Header, data *buffer.Data) Datagram {
 	return &datagram{ipHdr: ipHdr, data: data}
 }
 
@@ -59,5 +59,5 @@ func (p *datagram) Header() Header {
 func (p *datagram) String() string {
 	ipHdr := p.IPHeader()
 	udpHdr := p.Header()
-	return fmt.Sprintf("udp %s.%d -> %s.%d", ipHdr.Source(), udpHdr.SourcePort(), ipHdr.Destination(), udpHdr.DestinationPort())
+	return fmt.Sprintf("udp %s:%d -> %s:%d", ipHdr.Source(), udpHdr.SourcePort(), ipHdr.Destination(), udpHdr.DestinationPort())
 }

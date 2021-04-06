@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+
+	"golang.org/x/sys/unix"
 )
 
 // A ConnID is a compact and immutable representation of source IP, source port, destination IP and destination port which
@@ -11,7 +13,7 @@ import (
 type ConnID string
 
 // NewConnID returns a new ConnID for the given values.
-func NewConnID(src, dst net.IP, srcPort, dstPort uint16) ConnID {
+func NewConnID(proto int, src, dst net.IP, srcPort, dstPort uint16) ConnID {
 	src4 := src.To4()
 	dst4 := dst.To4()
 	if src4 != nil && dst4 != nil {
@@ -25,19 +27,21 @@ func NewConnID(src, dst net.IP, srcPort, dstPort uint16) ConnID {
 	}
 	ls := len(src)
 	ld := len(dst)
-	bs := make([]byte, ls+ld+4)
+	bs := make([]byte, ls+ld+5)
 	copy(bs, src)
 	binary.BigEndian.PutUint16(bs[ls:], srcPort)
 	ls += 2
 	copy(bs[ls:], dst)
 	ls += ld
 	binary.BigEndian.PutUint16(bs[ls:], dstPort)
+	ls += 2
+	bs[ls] = byte(proto)
 	return ConnID(bs)
 }
 
 // ISIPv4 returns true if the source and destination of this ConnID are IPv4
 func (id ConnID) IsIPv4() bool {
-	return len(id) == 12
+	return len(id) == 13
 }
 
 // Source returns the source IP
@@ -72,6 +76,33 @@ func (id ConnID) DestinationPort() uint16 {
 	return binary.BigEndian.Uint16([]byte(id)[34:])
 }
 
+// Protocol returns the protocol, e.g. unix.IPPROTO_TCP
+func (id ConnID) Protocol() int {
+	return int(id[len(id)-1])
+}
+
+// ProtocolString returns the protocol string, e.g. "tcp4"
+func (id ConnID) ProtocolString() (proto string) {
+	p := id.Protocol()
+	switch p {
+	case unix.IPPROTO_TCP:
+		if id.IsIPv4() {
+			proto = "tcp4"
+		} else {
+			proto = "tcp6"
+		}
+	case unix.IPPROTO_UDP:
+		if id.IsIPv4() {
+			proto = "udp4"
+		} else {
+			proto = "udp6"
+		}
+	default:
+		proto = fmt.Sprintf("unknown-%d", p)
+	}
+	return proto
+}
+
 // Network returns either "ip4" or "ip6"
 func (id ConnID) Network() string {
 	if id.IsIPv4() {
@@ -80,7 +111,27 @@ func (id ConnID) Network() string {
 	return "ip6"
 }
 
+func protoString(proto int) string {
+	switch proto {
+	case unix.IPPROTO_ICMP:
+		return "icmp"
+	case unix.IPPROTO_TCP:
+		return "tcp"
+	case unix.IPPROTO_UDP:
+		return "udp"
+	case unix.IPPROTO_ICMPV6:
+		return "icmpv6"
+	default:
+		return fmt.Sprintf("IP-protocol %d", proto)
+	}
+}
+
+// ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort
+func (id ConnID) ReplyString() string {
+	return fmt.Sprintf("%s %s:%d -> %s:%d", protoString(id.Protocol()), id.Destination(), id.DestinationPort(), id.Source(), id.SourcePort())
+}
+
 // String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort
 func (id ConnID) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d", id.Source(), id.SourcePort(), id.Destination(), id.DestinationPort())
+	return fmt.Sprintf("%s %s:%d -> %s:%d", protoString(id.Protocol()), id.Source(), id.SourcePort(), id.Destination(), id.DestinationPort())
 }

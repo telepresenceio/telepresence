@@ -31,7 +31,6 @@ type tunRouter struct {
 	dispatcher *tun.Dispatcher
 	ips        map[string]net.IP
 	subnets    map[string]*net.IPNet
-	socksPort  int32
 }
 
 func NewTunRouter() (Router, error) {

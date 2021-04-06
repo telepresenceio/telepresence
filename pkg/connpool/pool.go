@@ -5,16 +5,24 @@ import (
 	"sync"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type Pool struct {
 	handlers map[ConnID]Handler
-	lock     sync.Mutex
+
+	lock sync.Mutex
 }
 
 type Handler interface {
 	// Close closes the handle
 	Close(context.Context)
+
+	HandleControl(ctx context.Context, ctrl *ControlMessage)
+
+	HandleMessage(ctx context.Context, message *manager.ConnMessage)
+
+	Start(ctx context.Context)
 }
 
 func NewPool() *Pool {
@@ -33,18 +41,24 @@ func (p *Pool) Get(ctx context.Context, id ConnID, createHandler func(ctx contex
 	defer p.lock.Unlock()
 
 	handler, ok := p.handlers[id]
-	if ok {
+	if ok || createHandler == nil {
 		return handler, nil
 	}
 
 	var err error
-	handler, err = createHandler(ctx, func() {
+	handlerCtx, cancel := context.WithCancel(ctx)
+	handler, err = createHandler(handlerCtx, func() {
 		p.release(id)
+		cancel()
+		dlog.Debugf(ctx, "-- CPL %s (count now is %d)", id, len(p.handlers))
 	})
-	if err == nil {
-		p.handlers[id] = handler
+	if err != nil {
+		return nil, err
 	}
-	return handler, err
+	handler.Start(handlerCtx)
+	p.handlers[id] = handler
+	dlog.Debugf(ctx, "++ CPL %s (count now is %d)", id, len(p.handlers))
+	return handler, nil
 }
 
 func (p *Pool) CloseAll(ctx context.Context) {

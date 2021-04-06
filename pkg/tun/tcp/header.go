@@ -3,10 +3,11 @@ package tcp
 import (
 	"bytes"
 	"encoding/binary"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
+	"errors"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
 // HeaderLen is the length of a TCP header that doesn't have any options
@@ -15,6 +16,59 @@ const HeaderMaxLen = 60
 
 // Header represents a TCP header. The header is obtained by simply casting the IP headers payload.
 type Header []byte
+
+type optionKind byte
+
+const (
+	endOfOptions = optionKind(iota)
+	noOp
+	maximumSegmentSize
+	windowScale
+	selectiveAckPermitted
+)
+
+type option []byte
+
+func (o option) kind() optionKind {
+	return optionKind(o[0])
+}
+
+func (o option) len() int {
+	return int(o[1])
+}
+
+func (o option) data() []byte {
+	return o[2:o.len()]
+}
+
+func options(h Header) ([]option, error) {
+	var opts []option
+	ob := h.OptionBytes()
+	obl := len(ob)
+	if obl == 0 {
+		return opts, nil
+	}
+	for i := 0; i < obl; {
+		switch optionKind(ob[i]) {
+		case endOfOptions:
+			return opts, nil
+		case noOp:
+			i++
+			continue
+		default:
+			if i+1 < obl {
+				ol := int(ob[i+1])
+				if i+ol <= obl {
+					opts = append(opts, option(ob[i:i+ol]))
+					i += ol
+					continue
+				}
+			}
+			return nil, errors.New("header too short for option data")
+		}
+	}
+	return opts, nil
+}
 
 func (h Header) SourcePort() uint16 {
 	return binary.BigEndian.Uint16(h)

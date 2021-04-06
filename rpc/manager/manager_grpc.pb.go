@@ -63,9 +63,10 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
-	// UDPTunnel receives datagrams from the client, dials a UDP connection based on
-	// the destination address, and posts the replies that it receives.
-	UDPTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_UDPTunnelClient, error)
+	// ConnTunnel receives messages from the client and dispatches them to tracked
+	// net.Conn instances in the traffic-manager. Responses from tracked instances
+	// are sent back on the returned message stream
+	ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error)
 }
 
 type managerClient struct {
@@ -248,31 +249,31 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
-func (c *managerClient) UDPTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_UDPTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/UDPTunnel", opts...)
+func (c *managerClient) ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/ConnTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &managerUDPTunnelClient{stream}
+	x := &managerConnTunnelClient{stream}
 	return x, nil
 }
 
-type Manager_UDPTunnelClient interface {
-	Send(*UDPDatagram) error
-	Recv() (*UDPDatagram, error)
+type Manager_ConnTunnelClient interface {
+	Send(*ConnMessage) error
+	Recv() (*ConnMessage, error)
 	grpc.ClientStream
 }
 
-type managerUDPTunnelClient struct {
+type managerConnTunnelClient struct {
 	grpc.ClientStream
 }
 
-func (x *managerUDPTunnelClient) Send(m *UDPDatagram) error {
+func (x *managerConnTunnelClient) Send(m *ConnMessage) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *managerUDPTunnelClient) Recv() (*UDPDatagram, error) {
-	m := new(UDPDatagram)
+func (x *managerConnTunnelClient) Recv() (*ConnMessage, error) {
+	m := new(ConnMessage)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -328,9 +329,10 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
-	// UDPTunnel receives datagrams from the client, dials a UDP connection based on
-	// the destination address, and posts the replies that it receives.
-	UDPTunnel(Manager_UDPTunnelServer) error
+	// ConnTunnel receives messages from the client and dispatches them to tracked
+	// net.Conn instances in the traffic-manager. Responses from tracked instances
+	// are sent back on the returned message stream
+	ConnTunnel(Manager_ConnTunnelServer) error
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -380,8 +382,8 @@ func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterc
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
-func (UnimplementedManagerServer) UDPTunnel(Manager_UDPTunnelServer) error {
-	return status.Errorf(codes.Unimplemented, "method UDPTunnel not implemented")
+func (UnimplementedManagerServer) ConnTunnel(Manager_ConnTunnelServer) error {
+	return status.Errorf(codes.Unimplemented, "method ConnTunnel not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
 
@@ -654,26 +656,26 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_UDPTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ManagerServer).UDPTunnel(&managerUDPTunnelServer{stream})
+func _Manager_ConnTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerServer).ConnTunnel(&managerConnTunnelServer{stream})
 }
 
-type Manager_UDPTunnelServer interface {
-	Send(*UDPDatagram) error
-	Recv() (*UDPDatagram, error)
+type Manager_ConnTunnelServer interface {
+	Send(*ConnMessage) error
+	Recv() (*ConnMessage, error)
 	grpc.ServerStream
 }
 
-type managerUDPTunnelServer struct {
+type managerConnTunnelServer struct {
 	grpc.ServerStream
 }
 
-func (x *managerUDPTunnelServer) Send(m *UDPDatagram) error {
+func (x *managerConnTunnelServer) Send(m *ConnMessage) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *managerUDPTunnelServer) Recv() (*UDPDatagram, error) {
-	m := new(UDPDatagram)
+func (x *managerConnTunnelServer) Recv() (*ConnMessage, error) {
+	m := new(ConnMessage)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -745,8 +747,8 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "UDPTunnel",
-			Handler:       _Manager_UDPTunnel_Handler,
+			StreamName:    "ConnTunnel",
+			Handler:       _Manager_ConnTunnel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

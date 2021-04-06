@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
-
 	"golang.org/x/sys/unix"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
 const HeaderLen = 8

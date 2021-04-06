@@ -279,12 +279,10 @@ message AmbassadorCloudConnection {
   bool can_connect = 1;
 }
 
-// UDPDatagram describes a UDP datagram in full
-message UDPDatagram {
-  bytes source_ip = 1;
-  int32 source_port = 2;
-  bytes destination_ip = 3;
-  int32 destination_port = 4;
+// ConnMessage is a payload intended for a connection with a given id.
+message ConnMessage {
+  // conn_id is composed of L4 protocol, source IP, source port, destination IP and destination port
+  bytes conn_id = 1;
   bytes payload = 5;
 }
 
@@ -354,7 +352,8 @@ service Manager {
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
 
-  // UDPTunnel receives datagrams from the client, dials a UDP connection based on
-  // the destination address, and posts the replies that it receives.
-  rpc UDPTunnel(stream UDPDatagram) returns (stream UDPDatagram);
+  // ConnTunnel receives messages from the client and dispatches them to tracked
+  // net.Conn instances in the traffic-manager. Responses from tracked instances
+  // are sent back on the returned message stream
+  rpc ConnTunnel(stream ConnMessage) returns (stream ConnMessage);
 }

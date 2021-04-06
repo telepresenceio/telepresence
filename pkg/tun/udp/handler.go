@@ -5,73 +5,94 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
-
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
-type Handler struct {
-	*Stream
-	id        connpool.ConnID
-	remove    func()
-	fromTun   chan Datagram
-	idleTimer *time.Timer
+type DatagramHandler interface {
+	connpool.Handler
+	NewDatagram(ctx context.Context, dg Datagram)
 }
 
-func (c *Handler) Close(_ context.Context) {
+type handler struct {
+	*connpool.Stream
+	id        connpool.ConnID
+	remove    func()
+	toTun     chan<- ip.Packet
+	fromTun   chan Datagram
+	idleTimer *time.Timer
+	idleLock  sync.Mutex
 }
 
 const ioChannelSize = 0x40
 const idleDuration = time.Second
 
-func (c *Handler) Run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithCancel(ctx)
-	c.idleTimer = time.AfterFunc(idleDuration, func() {
-		c.remove()
-		cancel()
-	})
-	go c.writerLoop(ctx)
-	<-ctx.Done()
-}
-
-func (c *Handler) NewDatagram(ctx context.Context, dg Datagram) {
+func (h *handler) NewDatagram(ctx context.Context, dg Datagram) {
 	select {
 	case <-ctx.Done():
-	case c.fromTun <- dg:
+	case h.fromTun <- dg:
 	}
 }
 
-func NewHandler(stream *Stream, id connpool.ConnID, remove func()) *Handler {
-	return &Handler{
+func (h *handler) Close(_ context.Context) {
+	h.remove()
+}
+
+func NewHandler(stream *connpool.Stream, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) DatagramHandler {
+	return &handler{
 		Stream:  stream,
 		id:      id,
+		toTun:   toTun,
 		remove:  remove,
 		fromTun: make(chan Datagram, ioChannelSize),
 	}
 }
 
-func (c *Handler) writerLoop(ctx context.Context) {
+func (h *handler) HandleControl(_ context.Context, _ *connpool.ControlMessage) {
+}
+
+func (h *handler) HandleMessage(ctx context.Context, mdg *manager.ConnMessage) {
+	pkt := NewDatagram(HeaderLen+len(mdg.Payload), h.id.Destination(), h.id.Source())
+	ipHdr := pkt.IPHeader()
+	ipHdr.SetChecksum()
+
+	udpHdr := Header(ipHdr.Payload())
+	udpHdr.SetSourcePort(h.id.DestinationPort())
+	udpHdr.SetDestinationPort(h.id.SourcePort())
+	udpHdr.SetPayloadLen(uint16(len(mdg.Payload)))
+	copy(udpHdr.Payload(), mdg.Payload)
+	udpHdr.SetChecksum(ipHdr)
+
+	select {
+	case <-ctx.Done():
+		return
+	case h.toTun <- pkt:
+	}
+}
+
+func (h *handler) Start(ctx context.Context) {
+	h.idleTimer = time.NewTimer(idleDuration)
+	go h.writeLoop(ctx)
+}
+
+func (h *handler) writeLoop(ctx context.Context) {
+	defer h.Close(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case dg := <-c.fromTun:
-			c.idleTimer.Reset(idleDuration)
-
+		case <-h.idleTimer.C:
+			return
+		case dg := <-h.fromTun:
+			if !h.resetIdle() {
+				return
+			}
+			dlog.Debugf(ctx, "<- TUN %s", dg)
+			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			dlog.Debugf(ctx, "-> SOC: %s", dg)
-			err := c.bidiStream.Send(&manager.UDPDatagram{
-				SourceIp:        c.id.Source(),
-				SourcePort:      int32(c.id.SourcePort()),
-				DestinationIp:   c.id.Destination(),
-				DestinationPort: int32(c.id.DestinationPort()),
-				Payload:         udpHdr.Payload(),
-			})
+			err := h.SendMsg(&manager.ConnMessage{ConnId: []byte(h.id), Payload: udpHdr.Payload()})
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {
@@ -81,4 +102,14 @@ func (c *Handler) writerLoop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (h *handler) resetIdle() bool {
+	h.idleLock.Lock()
+	stopped := h.idleTimer.Stop()
+	if stopped {
+		h.idleTimer.Reset(idleDuration)
+	}
+	h.idleLock.Unlock()
+	return stopped
 }
