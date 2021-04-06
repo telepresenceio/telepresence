@@ -45,8 +45,8 @@ func NewTunRouter() (Router, error) {
 	}, nil
 }
 
-func (t *tunRouter) SetPorts(c context.Context, socksPort, managerPort int32) error {
-	return t.dispatcher.SetPorts(c, uint16(socksPort), uint16(managerPort))
+func (t *tunRouter) SetManagerPort(c context.Context, managerPort int32) error {
+	return t.dispatcher.SetManagerPort(c, uint16(managerPort))
 }
 
 func (t *tunRouter) Flush(c context.Context) error {

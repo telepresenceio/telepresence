@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -153,41 +152,15 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	// Don't configure the firewall before firewall-to-socks is running so that the place we
-	// tell the firewall to send the packets exists, and don't configure the firewall before DNS
-	// is working so that... hrmph, I (LukeShu) am not actually sure why, but it seems to be
-	// important on ResolveD systems.
-	var readyForFirewall sync.WaitGroup
-	readyForFirewall.Add(2)
-	readyForFirewallCh := make(chan struct{})
-	go func() {
-		readyForFirewall.Wait()
-		close(readyForFirewallCh)
-	}()
-
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
 	g.Go("server-dns", func(ctx context.Context) error {
-		return d.outbound.dnsServerWorker(ctx, readyForFirewall.Done)
-	})
-
-	// tunnel-firewall-to-socks listens on TCP localhost:<proxyRedirPort> and forwards those connections to
-	// the connector's SOCKS server, which then forwards them to the cluster.  It counts on
-	// tunnel-firewall-configurator (below) having configured the host firewall to send all
-	// cluster-bound TCP connections to this port, and we make special syscalls/ioctls to
-	// determine where each connection was originally bound for, so that we know what to tell
-	// SOCKS.
-	g.Go("firewall-to-socks", func(ctx context.Context) error {
-		return d.outbound.firewall2socksWorker(ctx, readyForFirewall.Done)
+		return d.outbound.dnsServerWorker(ctx)
 	})
 
 	// The 'Update' gRPC (below) call puts firewall updates in to a work queue;
 	// tunnel-firewall-configurator is the worker process that reads that work queue.
 	g.Go("firewall-configurator", func(ctx context.Context) error {
-		select {
-		case <-ctx.Done():
-		case <-readyForFirewallCh:
-		}
 		return d.outbound.firewallConfiguratorWorker(ctx)
 	})
 

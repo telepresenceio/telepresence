@@ -19,16 +19,16 @@ import (
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
-	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), onReady)
+func (o *outbound) dnsServerWorker(c context.Context) error {
+	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"))
 	if err == errResolveDNotConfigured {
 		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), onReady)
+		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
 	}
 	return err
 }
 
-func (o *outbound) runOverridingServer(c context.Context, onReady func()) error {
+func (o *outbound) runOverridingServer(c context.Context) error {
 	if o.dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -87,7 +87,6 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	o.dnsRedirPort = dnsAddr.Port
 
 	o.overridePrimaryDNS = true
-	onReady()
 
 	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", o.resolveWithSearch)
 	dlog.Debug(c, "Starting server")

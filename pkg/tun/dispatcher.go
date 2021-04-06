@@ -20,42 +20,35 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/icmp"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/socks"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/tcp"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/udp"
 )
 
 type Dispatcher struct {
-	dev            *Device
-	socksTCPDialer socks.Dialer
-	managerClient  manager.ManagerClient
-	connStream     *connpool.Stream
-	handlers       *connpool.Pool
-	handlersWg     sync.WaitGroup
-	toTunCh        chan ip.Packet
-	fragmentMap    map[uint16][]*buffer.Data
-	closing        int32
-	dialersSet     chan struct{}
+	dev           *Device
+	managerClient manager.ManagerClient
+	connStream    *connpool.Stream
+	handlers      *connpool.Pool
+	handlersWg    sync.WaitGroup
+	toTunCh       chan ip.Packet
+	fragmentMap   map[uint16][]*buffer.Data
+	closing       int32
+	mgrConfigured chan struct{}
 }
 
 func NewDispatcher(dev *Device) *Dispatcher {
 	return &Dispatcher{
-		dev:         dev,
-		handlers:    connpool.NewPool(),
-		toTunCh:     make(chan ip.Packet, 100),
-		dialersSet:  make(chan struct{}),
-		fragmentMap: make(map[uint16][]*buffer.Data),
+		dev:           dev,
+		handlers:      connpool.NewPool(),
+		toTunCh:       make(chan ip.Packet, 100),
+		mgrConfigured: make(chan struct{}),
+		fragmentMap:   make(map[uint16][]*buffer.Data),
 	}
 }
 
-var closeDialers = sync.Once{}
+var closeMgrConfigured = sync.Once{}
 
-func (d *Dispatcher) SetPorts(ctx context.Context, socksPort, managerPort uint16) (err error) {
-	if d.socksTCPDialer == nil || d.socksTCPDialer.ProxyPort() != socksPort {
-		if d.socksTCPDialer, err = socks.Proxy.NewDialer(ctx, "tcp", socksPort); err != nil {
-			return err
-		}
-	}
+func (d *Dispatcher) SetManagerPort(ctx context.Context, managerPort uint16) (err error) {
 	if managerPort != 0 && d.managerClient == nil {
 		// First check. Establish connection
 		tos := &client.GetConfig(ctx).Timeouts
@@ -72,7 +65,7 @@ func (d *Dispatcher) SetPorts(ctx context.Context, socksPort, managerPort uint16
 		}
 		d.managerClient = manager.NewManagerClient(conn)
 	}
-	closeDialers.Do(func() { close(d.dialersSet) })
+	closeMgrConfigured.Do(func() { close(d.mgrConfigured) })
 	return nil
 }
 
@@ -115,11 +108,11 @@ func (d *Dispatcher) Run(c context.Context) error {
 	})
 
 	g.Go("MGR stream", func(c context.Context) error {
-		// Block here until socks dialers are configured
+		// Block here until traffic-manager tunnel is configured
 		select {
 		case <-c.Done():
 			return nil
-		case <-d.dialersSet:
+		case <-d.mgrConfigured:
 		}
 
 		if d.managerClient != nil {
@@ -135,11 +128,11 @@ func (d *Dispatcher) Run(c context.Context) error {
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {
-		// Block here until socks dialers are configured
+		// Block here until traffic-manager tunnel is configured
 		select {
 		case <-c.Done():
 			return nil
-		case <-d.dialersSet:
+		case <-d.mgrConfigured:
 		}
 
 		for atomic.LoadInt32(&d.closing) < 2 {

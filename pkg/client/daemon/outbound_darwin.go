@@ -132,7 +132,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //   man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
+func (o *outbound) dnsServerWorker(c context.Context) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -252,7 +252,5 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 		return v.Run(c)
 	})
 	dns.Flush(c)
-
-	onReady()
 	return g.Wait()
 }

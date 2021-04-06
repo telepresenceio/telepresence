@@ -13,6 +13,5 @@ message Route {
 message Table {
   string name = 1;
   repeated Route routes = 2;
-  int32 socks_port = 3;
-  int32 manager_grpc_port = 4;
+  int32 manager_grpc_port = 3;
 }

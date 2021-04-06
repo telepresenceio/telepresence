@@ -111,35 +111,6 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 	return ret, nil
 }
 
-// firewall2socksWorker listens on localhost:<proxyRedirPort> and forwards those connections to the connector's
-// SOCKS server, for them to be forwarded to the cluster.  We count on firewallConfiguratorWorker
-// having configured the host firewall to send all cluster-bound TCP connections to this port, and
-// we make special syscalls/ioctls to determine where each connection was originally bound for, so
-// that we know what to tell SOCKS.
-func (o *outbound) firewall2socksWorker(c context.Context, onReady func()) error {
-	/*
-		// hmm, we may not actually need to get the original
-		// destination, we could just forward each ip to a unique port
-		// and either listen on that port or run port-forward
-		pr, err := proxy.NewProxy(c, o.destination)
-		if err != nil {
-			return errors.Wrap(err, "Proxy")
-		}
-		o.proxy = pr
-		o.proxyRedirPort, err = pr.ListenerPort()
-		if err != nil {
-			return errors.Wrap(err, "Proxy")
-		}
-		dlog.Debug(c, "Starting server")
-		onReady()
-		pr.Run(c, 10000)
-		dlog.Debug(c, "Server done")
-	*/
-	onReady()
-	<-c.Done()
-	return nil
-}
-
 // firewallConfiguratorWorker reads from the work queue of firewall config changes that is written
 // to by the 'Update' gRPC call.
 func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
@@ -256,7 +227,7 @@ func shuffleIPs(ips []string) []string {
 
 func (o *outbound) update(c context.Context, table *rpc.Table) (err error) {
 	// Update stems from the connector so the destination target must be set on all routes
-	if err = o.translator.(*tunRouter).SetPorts(c, table.SocksPort, table.ManagerGrpcPort); err != nil {
+	if err = o.translator.(*tunRouter).SetManagerPort(c, table.ManagerGrpcPort); err != nil {
 		return err
 	}
 	// o.proxy.SetSocksPort(table.SocksPort)

@@ -14,7 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/tun"
 )
 
-func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
+func (o *outbound) tryResolveD(c context.Context) error {
 	// Connect to ResolveD via DBUS.
 	dConn, err := dbus.NewResolveD()
 	if err != nil {
@@ -106,7 +106,6 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 		if t.RequestCount() == 0 {
 			return errResolveDNotConfigured
 		}
-		onReady()
 		return nil
 	})
 	return g.Wait()
