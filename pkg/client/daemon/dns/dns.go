@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync/atomic"
 
 	"github.com/miekg/dns"
 
@@ -14,10 +15,11 @@ import (
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
-	ctx       context.Context // necessary to make logging work in ServeDNS function
-	listeners []net.PacketConn
-	fallback  string
-	resolve   func(string) []string
+	ctx          context.Context // necessary to make logging work in ServeDNS function
+	listeners    []net.PacketConn
+	fallback     string
+	resolve      func(string) []string
+	requestCount int64
 }
 
 // NewServer returns a new dns.Server
@@ -30,6 +32,11 @@ func NewServer(c context.Context, listeners []net.PacketConn, fallback string, r
 	}
 }
 
+// RequestCount returns the number of requests that this server has received.
+func (s *Server) RequestCount() int {
+	return int(atomic.LoadInt64(&s.requestCount))
+}
+
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	c := s.ctx
@@ -39,6 +46,8 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			_ = w.Close()
 		}
 	}()
+
+	atomic.AddInt64(&s.requestCount, 1)
 
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
