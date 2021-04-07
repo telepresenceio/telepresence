@@ -53,7 +53,7 @@ func (s *outboundSuite) SetupSuite() {
 		return s.o.dnsServerWorker(ctx, func() {})
 	})
 	s.g.Go("firewall-configurator", func(ctx context.Context) error {
-		return s.o.firewallConfiguratorWorker(ctx)
+		return s.o.routerConfigurationWorker(ctx)
 	})
 }
 

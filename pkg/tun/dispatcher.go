@@ -33,6 +33,9 @@ type Dispatcher struct {
 	handlersWg    sync.WaitGroup
 	toTunCh       chan ip.Packet
 	fragmentMap   map[uint16][]*buffer.Data
+	dnsIP         net.IP
+	dnsPort       uint16
+	dnsLocalAddr  *net.UDPAddr
 	closing       int32
 	mgrConfigured <-chan struct{}
 }
@@ -45,6 +48,17 @@ func NewDispatcher(dev *Device, managerConfigured <-chan struct{}) *Dispatcher {
 		mgrConfigured: managerConfigured,
 		fragmentMap:   make(map[uint16][]*buffer.Data),
 	}
+}
+
+func (d *Dispatcher) Device() *Device {
+	return d.dev
+}
+
+func (d *Dispatcher) ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
+	d.dnsIP = dnsIP
+	d.dnsPort = dnsPort
+	d.dnsLocalAddr = dnsLocalAddr
+	return nil
 }
 
 func (d *Dispatcher) SetManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) (err error) {
@@ -215,7 +229,7 @@ func (d *Dispatcher) handlePacket(c context.Context, data *buffer.Data) {
 		d.udp(c, dg)
 	case unix.IPPROTO_ICMP:
 	case unix.IPPROTO_ICMPV6:
-		pkt := icmp.MakePacket(ipHdr, data)
+		pkt := icmp.PacketFromData(ipHdr, data)
 		dlog.Debugf(c, "<- TUN %s", pkt)
 	default:
 		// An L4 protocol that we don't handle.
@@ -244,6 +258,10 @@ func (d *Dispatcher) udp(c context.Context, dg udp.Datagram) {
 	udpHdr := dg.Header()
 	connID := connpool.NewConnID(unix.IPPROTO_UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
 	uh, err := d.handlers.Get(c, connID, func(c context.Context, release func()) (connpool.Handler, error) {
+		d.handlersWg.Add(1)
+		if udpHdr.DestinationPort() == d.dnsPort && ipHdr.Destination().Equal(d.dnsIP) {
+			return udp.NewDnsInterceptor(d.connStream, d.toTunCh, connID, release, d.dnsLocalAddr)
+		}
 		return udp.NewHandler(d.connStream, d.toTunCh, connID, release), nil
 	})
 	if err != nil {

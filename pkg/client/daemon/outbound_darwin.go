@@ -252,5 +252,6 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		return v.Run(c)
 	})
 	dns.Flush(c)
+	close(o.dnsConfigured)
 	return g.Wait()
 }

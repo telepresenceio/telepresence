@@ -136,7 +136,8 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 			},
 		},
 	}
-	d.outbound, err = newOutbound(c, "traffic-manager", dns, fallback, false)
+
+	d.outbound, err = newOutbound(c, dns, fallback, false)
 	if err != nil {
 		return err
 	}
@@ -160,13 +161,18 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
 	g.Go("server-dns", func(ctx context.Context) error {
-		return d.outbound.dnsServerWorker(ctx)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-d.outbound.managerConfigured:
+			return d.outbound.dnsServerWorker(ctx)
+		}
 	})
 
 	// The 'Update' gRPC (below) call puts firewall updates in to a work queue;
 	// tunnel-firewall-configurator is the worker process that reads that work queue.
 	g.Go("firewall-configurator", func(ctx context.Context) error {
-		return d.outbound.firewallConfiguratorWorker(ctx)
+		return d.outbound.routerConfigurationWorker(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests

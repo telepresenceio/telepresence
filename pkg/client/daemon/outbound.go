@@ -41,6 +41,13 @@ type outbound struct {
 	managerConfigured      chan struct{}
 	closeManagerConfigured sync.Once
 
+	// dnsConfigured is closed when the dnsWorker has configured
+	// the dnsServer.
+	dnsConfigured chan struct{}
+
+	kubeDNS     chan net.IP
+	onceKubeDNS sync.Once
+
 	// The domainsLock locks usage of namespaces, domains, and search
 	domainsLock sync.RWMutex
 
@@ -86,7 +93,7 @@ func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
+func newOutbound(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
 	lc := &net.ListenConfig{}
 	listener, err := lc.ListenPacket(c, "udp", "127.0.0.1:0")
 	if err != nil {
@@ -106,7 +113,9 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		domains:           make(map[string][]string),
 		search:            []string{""},
 		work:              make(chan func(context.Context) error),
+		dnsConfigured:     make(chan struct{}),
 		managerConfigured: make(chan struct{}),
+		kubeDNS:           make(chan net.IP, 1),
 	}
 
 	if ret.translator, err = NewTunRouter(ret.managerConfigured); err != nil {
@@ -116,9 +125,9 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 	return ret, nil
 }
 
-// firewallConfiguratorWorker reads from the work queue of firewall config changes that is written
+// routerConfigurationWorker reads from the work queue of firewall config changes that is written
 // to by the 'Update' gRPC call.
-func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
+func (o *outbound) routerConfigurationWorker(c context.Context) (err error) {
 	defer func() {
 		o.tablesLock.Lock()
 		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
@@ -314,6 +323,7 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 		}
 	}
 
+	var kubeDNS net.IP
 	for k, nIps := range domains {
 		// Ensure that all added entries contain unique, sorted, and non-empty IPs
 		nIps = uniqueSortedAndNotEmpty(nIps)
@@ -336,6 +346,12 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 			}
 		} else {
 			dnsChanged = true
+			if k == "kube-dns.kube-system.svc.cluster.local." && len(nIps) >= 1 {
+				kubeDNS = net.ParseIP(nIps[0])
+				if ip4 := kubeDNS.To4(); ip4 != nil {
+					kubeDNS = ip4 // ensure that we don't get the 16-byte version of an ipv4 address
+				}
+			}
 			dlog.Debugf(c, "STORE %s -> %s", k, strings.Join(nIps, ","))
 		}
 	}
@@ -366,7 +382,7 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 	}
 
 	if routesChanged {
-		if err := o.translator.Flush(c); err != nil {
+		if err := o.translator.Flush(c, kubeDNS); err != nil {
 			dlog.Errorf(c, "flush: %v", err)
 		}
 	}
@@ -376,6 +392,9 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 		dns.Flush(c)
 	}
 
+	if kubeDNS != nil {
+		o.onceKubeDNS.Do(func() { o.kubeDNS <- kubeDNS })
+	}
 	if table.Routes == nil || len(table.Routes) == 0 {
 		delete(o.tables, table.Name)
 	} else {
@@ -386,8 +405,12 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (o *outbound) setSearchPath(c context.Context, paths []string) {
-	o.searchPathLock.Lock()
-	defer o.searchPathLock.Unlock()
-	o.setSearchPathFunc(c, paths)
-	dns.Flush(c)
+	select {
+	case <-c.Done():
+	case <-o.dnsConfigured:
+		o.searchPathLock.Lock()
+		defer o.searchPathLock.Unlock()
+		o.setSearchPathFunc(c, paths)
+		dns.Flush(c)
+	}
 }

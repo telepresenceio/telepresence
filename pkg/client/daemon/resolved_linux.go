@@ -9,15 +9,17 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/tun"
+	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 )
 
-func (o *outbound) tryResolveD(c context.Context) error {
+func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	// Connect to ResolveD via DBUS.
 	dConn, err := dbus.NewResolveD()
 	if err != nil {
+		dlog.Error(c, err)
 		return errResolveDNotConfigured
 	}
 	defer func() {
@@ -25,21 +27,17 @@ func (o *outbound) tryResolveD(c context.Context) error {
 	}()
 
 	if !dConn.IsRunning() {
+		dlog.Error(c, "systemd.resolved is not running")
 		return errResolveDNotConfigured
 	}
 
 	// Create a new local address that the DNS resolver can listen to.
 	dnsResolverListener, err := net.ListenPacket("udp", "127.0.0.1:")
 	if err != nil {
+		dlog.Error(c, err)
 		return errResolveDNotConfigured
 	}
 	dnsResolverAddr, err := splitToUDPAddr(dnsResolverListener.LocalAddr())
-	if err != nil {
-		return errResolveDNotConfigured
-	}
-
-	dlog.Info(c, "systemd-resolved is running")
-	t, err := tun.CreateInterfaceWithDNS(c, dConn)
 	if err != nil {
 		dlog.Error(c, err)
 		return errResolveDNotConfigured
@@ -65,35 +63,40 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		o.namespaces = namespaces
 		o.search = search
 		o.domainsLock.Unlock()
-		err := dConn.SetLinkDomains(t.InterfaceIndex(), paths...)
-		if err != nil {
-			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
+		if err := dConn.SetLinkDomains(int(dev.Index()), paths...); err != nil {
+			dlog.Errorf(c, "failed to set link domains on %q: %v", dev.Name(), err)
+		} else {
+			dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
 		}
 	}
 
-	c, cancel := context.WithCancel(c)
-	defer cancel()
-
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	g.Go("Closer", func(c context.Context) error {
-		<-c.Done()
-		dlog.Infof(c, "Reverting link %s", t.Name())
-		if err := dConn.RevertLink(t.InterfaceIndex()); err != nil {
-			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
-		}
-		_ = t.Close() // This will terminate the ForwardDNS read loop gracefully
-		return nil
-	})
 
 	// DNS resolver
-	g.Go("Server", func(c context.Context) error {
-		v := dns.NewServer(c, []net.PacketConn{dnsResolverListener}, "", o.resolveNoSearch)
-		return v.Run(c)
-	})
 	initDone := &sync.WaitGroup{}
 	initDone.Add(1)
-	g.Go("Forwarder", func(c context.Context) error {
-		return t.ForwardDNS(c, dnsResolverAddr, initDone)
+
+	var dnsServer *dns.Server
+	g.Go("Server", func(c context.Context) error {
+		select {
+		case <-c.Done():
+			return nil
+		case dnsIP := <-o.kubeDNS:
+			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
+			if err = dConn.SetLinkDNS(int(dev.Index()), dnsIP); err != nil {
+				dlog.Error(c, err)
+				initDone.Done()
+				return errResolveDNotConfigured
+			}
+			dnsServer = dns.NewServer(c, []net.PacketConn{dnsResolverListener}, "", o.resolveNoSearch)
+			if err = o.translator.ConfigureDNS(c, dnsIP, uint16(53), dnsResolverAddr); err != nil {
+				dlog.Error(c, err)
+				initDone.Done()
+				return err
+			}
+			initDone.Done()
+			return dnsServer.Run(c)
+		}
 	})
 	g.Go("SanityCheck", func(c context.Context) error {
 		initDone.Wait()
@@ -102,11 +105,16 @@ func (o *outbound) tryResolveD(c context.Context) error {
 
 		cmdC, cmdCancel := context.WithTimeout(c, 300*time.Millisecond)
 		defer cmdCancel()
-		_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta")
-		if t.RequestCount() == 0 {
-			return errResolveDNotConfigured
+		for cmdC.Err() == nil {
+			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
+			if dnsServer.RequestCount() > 0 {
+				close(o.dnsConfigured)
+				return nil
+			}
+			dtime.SleepWithContext(cmdC, 30*time.Millisecond)
 		}
-		return nil
+		dlog.Error(c, "resolver did not receive requests from systemd.resolved")
+		return errResolveDNotConfigured
 	})
 	return g.Wait()
 }

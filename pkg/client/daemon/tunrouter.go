@@ -12,7 +12,7 @@ import (
 
 type Router interface {
 	// Flush will flush any pending rule changes that needs to be committed
-	Flush(ctx context.Context) error
+	Flush(ctx context.Context, dnsIP net.IP) error
 
 	// Clear the given route. Returns true if the route was cleared and  false if no such route was found.
 	Clear(ctx context.Context, route *nat.Route) (bool, error)
@@ -26,6 +26,12 @@ type Router interface {
 
 	// Enable the router
 	Enable(ctx context.Context) error
+
+	// Device returns the TUN device
+	Device() *tun.Device
+
+	// ConfigureDNS configures the router's dispatch of DNS to the local DNS resolver
+	ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error
 }
 
 type tunRouter struct {
@@ -50,7 +56,11 @@ func (t *tunRouter) SetManagerInfo(c context.Context, info *daemon.ManagerInfo) 
 	return t.dispatcher.SetManagerInfo(c, info)
 }
 
-func (t *tunRouter) Flush(c context.Context) error {
+func (t *tunRouter) ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
+	return t.dispatcher.ConfigureDNS(ctx, dnsIP, dnsPort, dnsLocalAddr)
+}
+
+func (t *tunRouter) Flush(c context.Context, dnsIP net.IP) error {
 	addedNets := make(map[string]*net.IPNet)
 	ips := make([]net.IP, len(t.ips))
 	i := 0
@@ -59,6 +69,14 @@ func (t *tunRouter) Flush(c context.Context) error {
 		i++
 	}
 	for _, sn := range subnet.AnalyzeIPs(ips) {
+		// TODO: Figure out how networks cover each other, merge and remove as needed.
+		// For now, we just have one 16-bit mask for the whole subnet
+		if sn.IP.To4() != nil {
+			sn = &net.IPNet{
+				IP:   sn.IP,
+				Mask: net.CIDRMask(16, 32),
+			}
+		}
 		addedNets[sn.String()] = sn
 	}
 
@@ -75,6 +93,12 @@ func (t *tunRouter) Flush(c context.Context) error {
 		i = 0
 		for k, sn := range addedNets {
 			t.subnets[k] = sn
+			if i > 0 && dnsIP != nil && sn.Contains(dnsIP) {
+				// Ensure that the subnet for the DNS is placed first
+				first := subnets[0]
+				subnets[0] = sn
+				sn = first
+			}
 			subnets[i] = sn
 			i++
 		}
@@ -114,4 +138,8 @@ func (t *tunRouter) Enable(c context.Context) error {
 		_ = t.dispatcher.Run(c)
 	}()
 	return nil
+}
+
+func (t *tunRouter) Device() *tun.Device {
+	return t.dispatcher.Device()
 }
