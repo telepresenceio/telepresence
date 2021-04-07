@@ -31,10 +31,21 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
 
 ## 1. Download the demo cluster archive
 
-1. [Go to this page on Ambassador Cloud](https://app.getambassador.io/cloud/demo-cluster) and sign in to download your demo cluster archive.
+1. [Sign in to Ambassador Cloud](https://app.getambassador.io/cloud/demo-cluster) to download your demo cluster archive.  The archive contains all the tools and configurations you need to run the demos.
 
-2. Extract the content of the archive and run the installer:
-  `./install.sh`
+2.  Extract the archive file, open the `ambassador-demo-cluster` folder and run the installer script:
+
+  ```
+  # macOS
+  
+  $ cd ~/Downloads
+  $ unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
+  $ ./ambassador-demo-cluster/install.sh
+  ```
+  
+<Alert severity="info">
+    This step will also install some dependency packages onto your laptop using npm, you can see the packages at <code>ambassador-demo-cluster/edgey-corp-nodejs/DataProcessingService/package.json</code>.
+</Alert>
 
 3. List the Kubernetes services after running the installer:
   `kubectl get services`
@@ -126,8 +137,8 @@ We'll use a sample app that is already installed in your demo cluster.  Let's ta
 
 Now start up the DataProcessingService service on your laptop. This version of the code has the UI color set to <strong style="color:blue">blue</strong> instead of <strong style="color:green">green</strong>.
 
-1. **In a <u>new</u> terminal window**, go the demo application directory:
-  `cd <extracted archive directory>/edgey-corp-nodejs/DataProcessingService`
+1. **In a <u>new</u> terminal window**, go the demo application directory in the extracted archive folder:
+  `cd ambassador-demo-cluster/edgey-corp-nodejs/DataProcessingService`
 
 2. Start the application:
   `npm start`
@@ -171,8 +182,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
     intercepted
         Intercept name: dataprocessingservice
         State         : ACTIVE
-        Destination   : 127.0.0.1:3000
-        Intercepting  : all TCP connections
+    ...
   ```
 
 2. Go to the frontend service again in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <strong style="color:blue">blue</strong> elements in the app.
