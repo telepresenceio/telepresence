@@ -255,10 +255,8 @@ func (d *Dispatcher) udp(c context.Context, dg udp.Datagram) {
 
 func (d *Dispatcher) AddSubnets(c context.Context, subnets []*net.IPNet) error {
 	for _, sn := range subnets {
-		to := make(net.IP, len(sn.IP))
-		copy(to, sn.IP)
-		to[len(to)-1] = 1
-		if err := d.dev.AddSubnet(c, sn, to); err != nil {
+		dlog.Debugf(c, "Adding subnet %s", sn)
+		if err := d.dev.AddSubnet(c, sn); err != nil {
 			return err
 		}
 	}

@@ -60,7 +60,11 @@ func OpenTun() (*Device, error) {
 
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
 // is associated with the device (removing the device will automatically remove the route).
-func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet, to net.IP) error {
+func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet) error {
+	to := make(net.IP, len(subnet.IP))
+	copy(to, subnet.IP)
+	to[len(to)-1] = 1
+
 	if err := t.setAddr(subnet, to); err != nil {
 		return err
 	}

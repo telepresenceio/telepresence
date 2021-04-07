@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 )
 
@@ -90,8 +90,8 @@ func OpenTun() (*Device, error) {
 	return &Device{File: os.NewFile(uintptr(fd), devicePath), name: name, index: index}, nil
 }
 
-func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet, to net.IP) error {
-	return t.setAddr(subnet, to)
+func (t *Device) AddSubnet(ctx context.Context, subnet *net.IPNet) error {
+	return dexec.CommandContext(ctx, "ip", "a", "add", subnet.String(), "dev", t.name).Run()
 }
 
 // Index returns the index of this device
@@ -111,50 +111,6 @@ func (t *Device) SetMTU(mtu int) error {
 		if err != nil {
 			err = fmt.Errorf("set MTU on %s failed: %w", t.name, err)
 		}
-		return err
-	})
-}
-
-func (t *Device) setAddr(subnet *net.IPNet, to net.IP) error {
-	if sub4, to4, ok := addrToIp4(subnet, to); ok {
-		return withSocket(unix.AF_INET, func(fd int) error {
-			var addressRequest struct {
-				name [unix.IFNAMSIZ]byte
-				addr unix.RawSockaddrInet4
-			}
-			copy(addressRequest.name[:], t.name)
-			addressRequest.addr.Family = unix.AF_INET
-			copy(addressRequest.addr.Addr[:], sub4.IP)
-			err := unix.IoctlSetInt(fd, unix.SIOCSIFADDR, int(uintptr(unsafe.Pointer(&addressRequest))))
-			if err != nil {
-				return fmt.Errorf("set address on %s failed: %w", t.name, err)
-			}
-			copy(addressRequest.addr.Addr[:], to4)
-			err = unix.IoctlSetInt(fd, unix.SIOCSIFDSTADDR, int(uintptr(unsafe.Pointer(&addressRequest))))
-			if err != nil {
-				return fmt.Errorf("set destination address on %s failed: %w", t.name, err)
-			}
-			copy(addressRequest.addr.Addr[:], sub4.Mask)
-			err = unix.IoctlSetInt(fd, unix.SIOCSIFNETMASK, int(uintptr(unsafe.Pointer(&addressRequest))))
-			if err != nil {
-				return fmt.Errorf("set netmask on %s failed: %w", t.name, err)
-			}
-			runtime.KeepAlive(&addressRequest)
-			return nil
-		})
-	}
-	return withSocket(unix.AF_INET6, func(fd int) error {
-		// struct in6_ifreq in linux/ipv6.h
-		var addressRequest struct {
-			addr      [16]byte // struct in6_addr (u6_addr8[16]) in linux/in6.h
-			prefixLen uint32
-			index     uint32
-		}
-		copy(addressRequest.addr[:], subnet.IP)
-		addressRequest.prefixLen = 64
-		addressRequest.index = t.index
-		err := ioctl(fd, unix.SIOCSIFADDR, unsafe.Pointer(&addressRequest))
-		runtime.KeepAlive(&addressRequest)
 		return err
 	})
 }
