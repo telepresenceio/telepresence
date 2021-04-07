@@ -26,28 +26,26 @@ import QSCards from './qs-cards'
 In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally. 
 
 <Alert severity="info">
-    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node.md">version of this guide</a> that takes you though the same steps using your own cluster.
+    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
 </Alert>
 
 ## 1. Download the demo cluster archive
 
-1. [Sign in to Ambassador Cloud](https://app.getambassador.io/cloud/demo-cluster) to download your demo cluster archive.  The archive contains all the tools and configurations you need to run the demos.
+1. [Sign in to Ambassador Cloud](https://app.getambassador.io/cloud/demo-cluster) to download your demo cluster archive.  The archive contains all the tools and configurations you need to complete this guide.
 
-2.  Extract the archive file, open the `ambassador-demo-cluster` folder and run the installer script:
+2.  Extract the archive file, open the `ambassador-demo-cluster` folder, and run the installer script (the commands below might vary based on where your browser saves downloaded files).
+
+  <Alert severity="info">
+    This step will also install some dependency packages onto your laptop using npm, you can see those packages at <code>ambassador-demo-cluster/edgey-corp-nodejs/DataProcessingService/package.json</code>.
+  </Alert>
 
   ```
-  # macOS
-  
   $ cd ~/Downloads
   $ unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
   $ ./ambassador-demo-cluster/install.sh
   ```
-  
-<Alert severity="info">
-    This step will also install some dependency packages onto your laptop using npm, you can see the packages at <code>ambassador-demo-cluster/edgey-corp-nodejs/DataProcessingService/package.json</code>.
-</Alert>
-
-3. List the Kubernetes services after running the installer:
+ 
+3. The demo cluster we provided already has a demo app running. List the app's services:
   `kubectl get services`
 
   ```
@@ -59,6 +57,20 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
     verylargejavaservice    ClusterIP   10.43.223.61    <none>        8080/TCP   14h
     verylargedatastore      ClusterIP   10.43.203.19    <none>        8080/TCP   14h
   ```
+
+4. Confirm that Telepresence is now installed, we expect to see that the components are not yet running:
+`telepresence status`
+
+  ```
+  $ telepresence status
+
+    Root Daemon: Not running
+    User Daemon: Not running
+  ```
+
+  <Alert severity="info">
+    <strong>macOS users:</strong> If you receive an error when running Telepresence that the developer cannot be verified, open <strong>System Preferences → Security & Privacy → General</strong>. Click <strong>Open Anyway</strong> at the bottom to bypass the security block. Then retry the <code>telepresence status</code> command.
+  </Alert>
 
 <Alert severity="success">
     You now have Telepresence installed on your workstation and a Kubernetes cluster configured in your terminal.
@@ -78,10 +90,6 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
     ...
     Connected to context default (https://<cluster-public-IP>)
   ```
-
-  <Alert severity="info">
-    macOS users: If you receive an error when running Telepresence that the developer cannot be verified, open <strong>System Preferences → Security & Privacy → General</strong>. Click <strong>Open Anyway</strong> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.
-  </Alert>
 
 2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
 `curl -ik https://kubernetes.default`
