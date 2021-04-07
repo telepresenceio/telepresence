@@ -304,6 +304,6 @@ Normal traffic coming to your app gets the <strong style="color:green">green</st
   The <strong>Preview URL</strong> now shows exactly what is running on your local laptop -- in a way that can be securely shared with anyone you work with.
 </Alert>
 
-## <img class="os-logo" src="../../../images/logo.png"/> What's Next?
+## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
 <QSCards/>
