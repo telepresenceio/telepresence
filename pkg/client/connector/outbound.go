@@ -313,7 +313,7 @@ func (kc *k8sCluster) updateDaemonTable(c context.Context) {
 		// NOTE! Some tests dont't set the daemon
 		return
 	}
-	table := &daemon.Table{ManagerGrpcPort: kc.grpcPort, Name: "kubernetes"}
+	table := &daemon.Table{Name: "kubernetes"}
 	kc.accLock.Lock()
 	for _, watcher := range kc.watchers {
 		for _, svc := range watcher.Services {

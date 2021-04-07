@@ -225,11 +225,11 @@ func shuffleIPs(ips []string) []string {
 	return ips
 }
 
+func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) error {
+	return o.translator.(*tunRouter).SetManagerInfo(c, info)
+}
+
 func (o *outbound) update(c context.Context, table *rpc.Table) (err error) {
-	// Update stems from the connector so the destination target must be set on all routes
-	if err = o.translator.(*tunRouter).SetManagerPort(c, table.ManagerGrpcPort); err != nil {
-		return err
-	}
 	// o.proxy.SetSocksPort(table.SocksPort)
 	routes := make([]*nat.Route, 0, len(table.Routes))
 	domains := make(map[string][]string)

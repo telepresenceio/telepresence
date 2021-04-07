@@ -99,6 +99,11 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 	return &empty.Empty{}, nil
 }
 
+func (d *service) SetManagerInfo(_ context.Context, info *rpc.ManagerInfo) (*empty.Empty, error) {
+	d.outbound.setManagerInfo(d.callCtx, info)
+	return &empty.Empty{}, nil
+}
+
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, dns, fallback string) error {
 	if os.Geteuid() != 0 {

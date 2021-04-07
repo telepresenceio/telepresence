@@ -48,15 +48,15 @@ func NewDispatcher(dev *Device) *Dispatcher {
 
 var closeMgrConfigured = sync.Once{}
 
-func (d *Dispatcher) SetManagerPort(ctx context.Context, managerPort uint16) (err error) {
-	if managerPort != 0 && d.managerClient == nil {
+func (d *Dispatcher) SetManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) (err error) {
+	if d.managerClient == nil {
 		// First check. Establish connection
 		tos := &client.GetConfig(ctx).Timeouts
 		tc, cancel := context.WithTimeout(ctx, tos.TrafficManagerAPI)
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", managerPort),
+		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.GrpcPort),
 			grpc.WithInsecure(),
 			grpc.WithNoProxy(),
 			grpc.WithBlock())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
@@ -45,8 +46,8 @@ func NewTunRouter() (Router, error) {
 	}, nil
 }
 
-func (t *tunRouter) SetManagerPort(c context.Context, managerPort int32) error {
-	return t.dispatcher.SetManagerPort(c, uint16(managerPort))
+func (t *tunRouter) SetManagerInfo(c context.Context, info *daemon.ManagerInfo) error {
+	return t.dispatcher.SetManagerInfo(c, info)
 }
 
 func (t *tunRouter) Flush(c context.Context) error {
