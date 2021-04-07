@@ -35,6 +35,12 @@ type outbound struct {
 	domains    map[string][]string
 	search     []string
 
+	// managerConfigured is closed when the traffic manager has performed
+	// its first update. The DNS resolver awaits this close and so does
+	// the TUN device readers and writers
+	managerConfigured      chan struct{}
+	closeManagerConfigured sync.Once
+
 	// The domainsLock locks usage of namespaces, domains, and search
 	domainsLock sync.RWMutex
 
@@ -90,24 +96,23 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
-	router, err := NewTunRouter()
-	if err != nil {
-		return nil, err
+	ret := &outbound{
+		dnsListener:       listener,
+		dnsIP:             dnsIP,
+		fallbackIP:        fallbackIP,
+		noSearch:          noSearch,
+		tables:            make(map[string]*nat.Table),
+		namespaces:        make(map[string]struct{}),
+		domains:           make(map[string][]string),
+		search:            []string{""},
+		work:              make(chan func(context.Context) error),
+		managerConfigured: make(chan struct{}),
 	}
 
-	ret := &outbound{
-		dnsListener: listener,
-		dnsIP:       dnsIP,
-		fallbackIP:  fallbackIP,
-		noSearch:    noSearch,
-		tables:      make(map[string]*nat.Table),
-		translator:  router,
-		namespaces:  make(map[string]struct{}),
-		domains:     make(map[string][]string),
-		search:      []string{""},
-		work:        make(chan func(context.Context) error),
+	if ret.translator, err = NewTunRouter(ret.managerConfigured); err != nil {
+		return nil, err
 	}
-	ret.tablesLock.Lock() // leave it locked until firewallConfiguratorWorker unlocks it
+	ret.tablesLock.Lock() // leave it locked until routerConfigurationWorker unlocks it
 	return ret, nil
 }
 
@@ -226,6 +231,9 @@ func shuffleIPs(ips []string) []string {
 }
 
 func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) error {
+	defer o.closeManagerConfigured.Do(func() {
+		close(o.managerConfigured)
+	})
 	return o.translator.(*tunRouter).SetManagerInfo(c, info)
 }
 

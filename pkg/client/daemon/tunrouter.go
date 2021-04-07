@@ -34,13 +34,13 @@ type tunRouter struct {
 	subnets    map[string]*net.IPNet
 }
 
-func NewTunRouter() (Router, error) {
+func NewTunRouter(managerConfigured <-chan struct{}) (Router, error) {
 	td, err := tun.OpenTun()
 	if err != nil {
 		return nil, err
 	}
 	return &tunRouter{
-		dispatcher: tun.NewDispatcher(td),
+		dispatcher: tun.NewDispatcher(td, managerConfigured),
 		ips:        make(map[string]net.IP),
 		subnets:    make(map[string]*net.IPNet),
 	}, nil

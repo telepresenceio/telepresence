@@ -14,6 +14,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
@@ -33,20 +34,18 @@ type Dispatcher struct {
 	toTunCh       chan ip.Packet
 	fragmentMap   map[uint16][]*buffer.Data
 	closing       int32
-	mgrConfigured chan struct{}
+	mgrConfigured <-chan struct{}
 }
 
-func NewDispatcher(dev *Device) *Dispatcher {
+func NewDispatcher(dev *Device, managerConfigured <-chan struct{}) *Dispatcher {
 	return &Dispatcher{
 		dev:           dev,
 		handlers:      connpool.NewPool(),
 		toTunCh:       make(chan ip.Packet, 100),
-		mgrConfigured: make(chan struct{}),
+		mgrConfigured: managerConfigured,
 		fragmentMap:   make(map[uint16][]*buffer.Data),
 	}
 }
-
-var closeMgrConfigured = sync.Once{}
 
 func (d *Dispatcher) SetManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) (err error) {
 	if d.managerClient == nil {
@@ -65,7 +64,6 @@ func (d *Dispatcher) SetManagerInfo(ctx context.Context, mi *daemon.ManagerInfo)
 		}
 		d.managerClient = manager.NewManagerClient(conn)
 	}
-	closeMgrConfigured.Do(func() { close(d.mgrConfigured) })
 	return nil
 }
 
