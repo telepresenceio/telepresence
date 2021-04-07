@@ -277,6 +277,11 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	}
 
 	kc.accLock.Lock()
+	if len(kc.Namespaces) == 0 {
+		// daemon must not be updated until the namespace watcher has made its first delivery
+		kc.accLock.Unlock()
+		return
+	}
 	namespaces := make([]string, 0, len(kc.interceptedNamespaces)+len(kc.localIntercepts))
 	for ns := range kc.interceptedNamespaces {
 		namespaces = append(namespaces, ns)
@@ -300,7 +305,7 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	for _, ns := range namespaces {
 		paths = append(paths, ns+clusterServerSuffix+".")
 	}
-	dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
+	dlog.Debugf(c, "posting search paths [%s]", strings.Join(paths, " "))
 	if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
 		dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
 	}
