@@ -17,6 +17,7 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
@@ -267,6 +268,13 @@ func (ki *installer) updateDeployment(c context.Context, env client.Env, current
 func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.ServicePort {
 	svcPorts := make([]*kates.ServicePort, 0)
 	ports := svc.Spec.Ports
+	var isName bool
+	validName := validation.IsValidPortName(nameOrNumber)
+	if len(validName) > 0 {
+		isName = false
+	} else {
+		isName = true
+	}
 	for i := range ports {
 		port := &ports[i]
 		matchFound := false
@@ -274,10 +282,18 @@ func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.Ser
 		if nameOrNumber == "" {
 			matchFound = true
 		}
-		// If a nameOrNumber has been specified, we check if it matches the Name
-		// or Port number, and add it if either case is true
-		if nameOrNumber == port.Name || nameOrNumber == strconv.Itoa(int(port.Port)) {
-			matchFound = true
+		// If the nameOrNumber is a valid name, we compare it to the
+		// name listed in the servicePort
+		if isName {
+			if nameOrNumber == port.Name {
+				matchFound = true
+			}
+		} else {
+			// Otherwise we compare it to the port number
+			givenPort, err := strconv.Atoi(nameOrNumber)
+			if err == nil && int32(givenPort) == port.Port {
+				matchFound = true
+			}
 		}
 		if matchFound {
 			svcPorts = append(svcPorts, port)
