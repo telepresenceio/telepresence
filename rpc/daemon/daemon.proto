@@ -36,7 +36,7 @@ message DaemonStatus {
   }
   ErrType error = 1;
   string dns = 2;
-  string fallback = 3;
+  reserved 3;
 }
 
 message Paths {

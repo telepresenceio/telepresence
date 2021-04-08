@@ -92,9 +92,7 @@ func (t *tunRouter) Flush(c context.Context, dnsIP net.IP) error {
 			t.subnets[k] = sn
 			if i > 0 && dnsIP != nil && sn.Contains(dnsIP) {
 				// Ensure that the subnet for the DNS is placed first
-				first := subnets[0]
-				subnets[0] = sn
-				sn = first
+				subnets[0], sn = sn, subnets[0]
 			}
 			subnets[i] = sn
 			i++

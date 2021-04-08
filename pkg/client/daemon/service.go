@@ -44,7 +44,6 @@ to troubleshoot problems.
 type service struct {
 	rpc.UnsafeDaemonServer
 	dns      string
-	fallback string
 	hClient  *http.Client
 	outbound *outbound
 	cancel   context.CancelFunc
@@ -60,11 +59,11 @@ func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    processName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(3),
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), args[0], args[1], args[2])
+			return run(cmd.Context(), args[0], args[1])
 		},
 	}
 }
@@ -79,7 +78,6 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	r := &rpc.DaemonStatus{}
 	r.Dns = d.dns
-	r.Fallback = d.fallback
 	return r, nil
 }
 
@@ -100,12 +98,11 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 }
 
 func (d *service) SetManagerInfo(_ context.Context, info *rpc.ManagerInfo) (*empty.Empty, error) {
-	d.outbound.setManagerInfo(d.callCtx, info)
-	return &empty.Empty{}, nil
+	return &empty.Empty{}, d.outbound.setManagerInfo(d.callCtx, info)
 }
 
 // run is the main function when executing as the daemon
-func run(c context.Context, loggingDir, dns, fallback string) error {
+func run(c context.Context, loggingDir, dns string) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
@@ -120,8 +117,7 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 	}
 
 	d := &service{
-		dns:      dns,
-		fallback: fallback,
+		dns: dns,
 		hClient: &http.Client{
 			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
@@ -137,7 +133,7 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 		},
 	}
 
-	d.outbound, err = newOutbound(c, dns, fallback, false)
+	d.outbound, err = newOutbound(c, dns, false)
 	if err != nil {
 		return err
 	}

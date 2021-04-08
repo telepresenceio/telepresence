@@ -88,7 +88,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				initDone.Done()
 				return errResolveDNotConfigured
 			}
-			dnsServer = dns.NewServer(c, []net.PacketConn{dnsResolverListener}, "", o.resolveNoSearch)
+			dnsServer = dns.NewServer(c, []net.PacketConn{dnsResolverListener}, nil, o.resolveNoSearch)
 			if err = o.router.ConfigureDNS(c, dnsIP, uint16(53), dnsResolverAddr); err != nil {
 				dlog.Error(c, err)
 				initDone.Done()

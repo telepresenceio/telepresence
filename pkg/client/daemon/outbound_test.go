@@ -38,7 +38,7 @@ func (s *outboundSuite) SetupSuite() {
 	require := s.Require()
 	s.ctx, s.cancel = context.WithCancel(dlog.NewTestContext(s.T(), false))
 	var err error
-	s.o, err = newOutbound(s.ctx, "", "", false)
+	s.o, err = newOutbound(s.ctx, "", false)
 	require.NoError(err)
 
 	// What normally would be a proxy is replaced with a http server that just

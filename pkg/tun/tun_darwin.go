@@ -64,7 +64,6 @@ func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet) error {
 	to := make(net.IP, len(subnet.IP))
 	copy(to, subnet.IP)
 	to[len(to)-1] = 1
-
 	if err := t.setAddr(subnet, to); err != nil {
 		return err
 	}
@@ -145,6 +144,17 @@ type addrIfReq6 struct {
 // SIOCAIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCAIFADDR adjusted with size of addrIfReq6
 const SIOCAIFADDR_IN6 = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
 const ND6_INFINITE_LIFETIME = 0xffffffff
+
+func addrToIp4(subnet *net.IPNet, to net.IP) (*net.IPNet, net.IP, bool) {
+	if to4 := to.To4(); to4 != nil {
+		if dest4 := subnet.IP.To4(); dest4 != nil {
+			if _, bits := subnet.Mask.Size(); bits == 32 {
+				return &net.IPNet{IP: dest4, Mask: subnet.Mask}, to4, true
+			}
+		}
+	}
+	return nil, nil, false
+}
 
 func (t *Device) setAddr(subnet *net.IPNet, to net.IP) error {
 	if sub4, to4, ok := addrToIp4(subnet, to); ok {

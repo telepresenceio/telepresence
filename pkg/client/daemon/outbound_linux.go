@@ -7,8 +7,11 @@ import (
 	"math"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
+	dns2 "github.com/miekg/dns"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
@@ -29,7 +32,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 }
 
 func (o *outbound) runOverridingServer(c context.Context) error {
-	if o.dnsIP == "" {
+	if o.dnsIP == nil {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -37,26 +40,14 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
-				o.dnsIP = fields[1]
-				dlog.Infof(c, "Automatically set -dns=%v", o.dnsIP)
+				o.dnsIP = net.ParseIP(fields[1])
+				dlog.Infof(c, "Automatically set -dns=%s", o.dnsIP)
 				break
 			}
 		}
 	}
-	if o.dnsIP == "" {
+	if o.dnsIP == nil {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
-	}
-
-	if o.fallbackIP == "" {
-		if o.dnsIP == "8.8.8.8" {
-			o.fallbackIP = "8.8.4.4"
-		} else {
-			o.fallbackIP = "8.8.8.8"
-		}
-		dlog.Infof(c, "Automatically set -fallback=%v", o.fallbackIP)
-	}
-	if o.fallbackIP == o.dnsIP {
-		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
@@ -80,17 +71,33 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	dnsAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
+	dnsResolverAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
 	if err != nil {
 		return err
 	}
-	o.dnsRedirPort = dnsAddr.Port
+	ncc := withoutCancel{c}
+	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port)
 
-	o.overridePrimaryDNS = true
-
-	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", o.resolveWithSearch)
-	dlog.Debug(c, "Starting server")
+	// Create the connection later used for fallback. We need to create this before the firewall
+	// rule because the rule must exclude the local address of this connection in order to
+	// let it reach the original destination and not cause an endless loop.
+	conn, err := dns2.Dial("udp", o.dnsIP.String()+":53")
+	if err != nil {
+		return err
+	}
+	if err = routeDNS(ncc, o.dnsIP, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr)); err != nil {
+		return err
+	}
+	defer func() {
+		_ = conn.Close()
+		if err = unrouteDNS(ncc); err != nil {
+			dlog.Error(c, err)
+		}
+	}()
+	dns.Flush(c)
+	srv := dns.NewServer(c, listeners, conn, o.resolveWithSearch)
 	close(o.dnsConfigured)
+	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
 	return err
@@ -101,7 +108,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 // Queries using qualified names will be dispatched to the resolveNoSearch() function.
 // An unqualified name query will be tried with all the suffixes in the search path
 // and the IPs of the first match will be returned.
-func (o *outbound) resolveWithSearch(query string) []string {
+func (o *outbound) resolveWithSearch(query string) []net.IP {
 	if strings.Count(query, ".") > 1 {
 		// More than just the ending dot, so don't use search-path
 		return o.resolveNoSearch(query)
@@ -187,4 +194,69 @@ func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 			return nil, fmt.Errorf("unable to find a free port for both %s and %s", localAddr.IP, extraAddr.IP)
 		}
 	}
+}
+
+type withoutCancel struct {
+	context.Context
+}
+
+func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
+func (withoutCancel) Done() <-chan struct{}                   { return nil }
+func (withoutCancel) Err() error                              { return nil }
+func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
+
+// runNatTableCmd runs "iptables -t nat ..."
+func runNatTableCmd(c context.Context, args ...string) error {
+	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
+	// want to leave things in a half-cleaned-up state.
+	return dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...).Run()
+}
+
+const tpDNSChain = "telepresence-dns"
+
+// routeDNS creates a new chain in the "nat" table with two rules in it. One rule ensures
+// that all packages sent to the currently configured DNS service are rerouted to our local
+// DNS service. Another rule ensures that when our local DNS service cannot resolve and
+// uses a fallback, that fallback reaches the original DNS service.
+func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr) (err error) {
+	// create the chain
+	_ = unrouteDNS(c)
+	if err = runNatTableCmd(c, "-N", tpDNSChain); err != nil {
+		return err
+	}
+	// Alter locally generated packages before routing
+	if err = runNatTableCmd(c, "-I", "OUTPUT", "1", "-j", tpDNSChain); err != nil {
+		return err
+	}
+
+	// This rule prevents that any rules in this table applies to the fallback address. I.e. we
+	// let the fallback reach the original DNS service
+	if err = runNatTableCmd(c, "-A", tpDNSChain,
+		"-p", "udp",
+		"--source", fallback.IP.String(),
+		"--sport", strconv.Itoa(fallback.Port),
+		"-j", "RETURN",
+	); err != nil {
+		return err
+	}
+
+	// This rule redirects all packages intended for the DNS service to our local DNS service
+	return runNatTableCmd(c, "-A", tpDNSChain,
+		"-p", "udp",
+		"--dest", dnsIP.String()+"/32",
+		"--dport", "53",
+		"-j", "REDIRECT",
+		"--to-ports", strconv.Itoa(toPort),
+	)
+}
+
+// unrouteDNS removes the chain installed by routeDNS.
+func unrouteDNS(c context.Context) (err error) {
+	if err = runNatTableCmd(c, "-D", "OUTPUT", "-j", tpDNSChain); err != nil {
+		return err
+	}
+	if err = runNatTableCmd(c, "-F", tpDNSChain); err != nil {
+		return err
+	}
+	return runNatTableCmd(c, "-X", tpDNSChain)
 }

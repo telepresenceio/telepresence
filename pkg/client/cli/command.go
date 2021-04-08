@@ -57,7 +57,6 @@ func quitCommand() *cobra.Command {
 
 // global options
 var dnsIP string
-var fallbackIP string
 var mappedNamespaces []string
 var kubeFlags *pflag.FlagSet
 
@@ -185,10 +184,6 @@ func Command(ctx context.Context) *cobra.Command {
 				netflags.StringVarP(&dnsIP,
 					"dns", "", "",
 					"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-				)
-				netflags.StringVarP(&fallbackIP,
-					"fallback", "", "",
-					"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
 				)
 			}
 			netflags.StringSliceVar(&mappedNamespaces,

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -17,19 +18,38 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
 
+type IPs []net.IP
+
+func (ips IPs) String() string {
+	nips := len(ips)
+	switch nips {
+	case 0:
+		return ""
+	case 1:
+		return ips[0].String()
+	default:
+		sb := strings.Builder{}
+		sb.WriteString(ips[0].String())
+		for i := 1; i < nips; i++ {
+			sb.WriteByte(',')
+			sb.WriteString(ips[i].String())
+		}
+		return sb.String()
+	}
+}
+
 // outbound does stuff, idk, I didn't write it.
 //
 // A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
 	dnsListener net.PacketConn
-	dnsIP       string
-	fallbackIP  string
+	dnsIP       net.IP
 	noSearch    bool
 	router      *tunRouter
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
-	domains    map[string][]string
+	domains    map[string]IPs
 	search     []string
 
 	// managerConfigured is closed when the traffic manager has performed
@@ -53,15 +73,8 @@ type outbound struct {
 
 	setSearchPathFunc func(c context.Context, paths []string)
 
-	overridePrimaryDNS bool
-
-	// proxy *proxy.Proxy
-
 	// proxyRedirPort is the port to which we redirect translated IP requests intended for the cluster
 	proxyRedirPort int
-
-	// dnsRedirPort is the port to which we redirect dns requests.
-	dnsRedirPort int
 
 	work chan func(context.Context) error
 }
@@ -88,9 +101,7 @@ func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-//
-// If fallbackIP is empty, it will default to Google DNS.
-func newOutbound(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
+func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, error) {
 	lc := &net.ListenConfig{}
 	listener, err := lc.ListenPacket(c, "udp", "127.0.0.1:0")
 	if err != nil {
@@ -100,13 +111,18 @@ func newOutbound(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*o
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
+	var dnsIP net.IP
+	if dnsIP = net.ParseIP(dnsIPStr); dnsIP != nil {
+		if ip4 := dnsIP.To4(); ip4 != nil {
+			dnsIP = ip4
+		}
+	}
 	ret := &outbound{
 		dnsListener:       listener,
 		dnsIP:             dnsIP,
-		fallbackIP:        fallbackIP,
 		noSearch:          noSearch,
 		namespaces:        make(map[string]struct{}),
-		domains:           make(map[string][]string),
+		domains:           make(map[string]IPs),
 		search:            []string{""},
 		work:              make(chan func(context.Context) error),
 		dnsConfigured:     make(chan struct{}),
@@ -167,7 +183,7 @@ func (o *outbound) routerConfigurationWorker(c context.Context) (err error) {
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
 
-func (o *outbound) resolveNoSearch(query string) []string {
+func (o *outbound) resolveNoSearch(query string) []net.IP {
 	query = strings.ToLower(query)
 	ds := strings.Split(query, ".")
 	dl := len(ds) - 1 // -1 to encounter for ending dot.
@@ -190,7 +206,7 @@ func (o *outbound) resolveNoSearch(query string) []string {
 	return shuffleIPs(ips)
 }
 
-func (o *outbound) resolveWithSearchLocked(n string) []string {
+func (o *outbound) resolveWithSearchLocked(n string) []net.IP {
 	for _, p := range o.search {
 		if ips, ok := o.domains[n+p]; ok {
 			return shuffleIPs(ips)
@@ -201,10 +217,10 @@ func (o *outbound) resolveWithSearchLocked(n string) []string {
 
 // Since headless and externalName services can have multiple IPs,
 // we return a shuffled list of the IPs if there are more than one.
-func shuffleIPs(ips []string) []string {
+func shuffleIPs(ips IPs) IPs {
 	switch lenIPs := len(ips); lenIPs {
 	case 0:
-		return []string{}
+		return IPs{}
 	case 1:
 	default:
 		// If there are multiple elements in the slice, we shuffle the
@@ -226,20 +242,22 @@ func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) erro
 func (o *outbound) update(_ context.Context, table *rpc.Table) (err error) {
 	// o.proxy.SetSocksPort(table.SocksPort)
 	ips := make(map[IPKey]struct{}, len(table.Routes))
-	domains := make(map[string][]string)
+	domains := make(map[string]IPs)
 	for _, route := range table.Routes {
+		dIps := make(IPs, 0, len(route.Ips))
 		for _, ipStr := range route.Ips {
 			if ip := net.ParseIP(ipStr); ip != nil {
 				// ParseIP returns ipv4 that are 16 bytes long. Normalize them into 4 bytes
 				if ip4 := ip.To4(); ip4 != nil {
 					ip = ip4
 				}
+				dIps = append(dIps, ip)
 				ips[IPKey(ip)] = struct{}{}
 			}
 		}
 		if dn := route.Name; dn != "" {
 			dn = strings.ToLower(dn) + "."
-			domains[dn] = append(domains[dn], route.Ips...)
+			domains[dn] = append(domains[dn], dIps...)
 		}
 	}
 	o.work <- func(c context.Context) error {
@@ -252,24 +270,26 @@ func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
-func uniqueSortedAndNotEmpty(ss []string) []string {
-	sort.Strings(ss)
-	prev := ""
-	last := len(ss) - 1
+func (ips IPs) uniqueSorted() IPs {
+	sort.Slice(ips, func(i, j int) bool {
+		return bytes.Compare(ips[i], ips[j]) < 0
+	})
+	var prev net.IP
+	last := len(ips) - 1
 	for i := 0; i <= last; i++ {
-		s := ss[i]
-		if s == prev {
-			copy(ss[i:], ss[i+1:])
+		s := ips[i]
+		if s.Equal(prev) {
+			copy(ips[i:], ips[i+1:])
 			last--
 			i--
 		} else {
 			prev = s
 		}
 	}
-	return ss[:last+1]
+	return ips[:last+1]
 }
 
-func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table map[IPKey]struct{}) error {
+func (o *outbound) doUpdate(c context.Context, domains map[string]IPs, table map[IPKey]struct{}) error {
 	// We're updating routes. Make sure DNS waits until the new answer
 	// is ready, i.e. don't serve old answers.
 	o.domainsLock.Lock()
@@ -279,7 +299,7 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 	for k, ips := range o.domains {
 		if _, ok := domains[k]; !ok {
 			dnsChanged = true
-			dlog.Debugf(c, "CLEAR %s -> %s", k, strings.Join(ips, ","))
+			dlog.Debugf(c, "CLEAR %s -> %s", k, ips)
 			delete(o.domains, k)
 		}
 	}
@@ -287,7 +307,7 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 	var kubeDNS net.IP
 	for k, nIps := range domains {
 		// Ensure that all added entries contain unique, sorted, and non-empty IPs
-		nIps = uniqueSortedAndNotEmpty(nIps)
+		nIps = nIps.uniqueSorted()
 		if len(nIps) == 0 {
 			delete(domains, k)
 			continue
@@ -296,24 +316,21 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 		if oIps, ok := o.domains[k]; ok {
 			if ok = len(nIps) == len(oIps); ok {
 				for i, ip := range nIps {
-					if ok = ip == oIps[i]; !ok {
+					if ok = ip.Equal(oIps[i]); !ok {
 						break
 					}
 				}
 			}
 			if !ok {
 				dnsChanged = true
-				dlog.Debugf(c, "REPLACE %s -> %s with %s", strings.Join(oIps, ","), k, strings.Join(nIps, ","))
+				dlog.Debugf(c, "REPLACE %s -> %s with %s", oIps, k, nIps)
 			}
 		} else {
 			dnsChanged = true
 			if k == "kube-dns.kube-system.svc.cluster.local." && len(nIps) >= 1 {
-				kubeDNS = net.ParseIP(nIps[0])
-				if ip4 := kubeDNS.To4(); ip4 != nil {
-					kubeDNS = ip4 // ensure that we don't get the 16-byte version of an ipv4 address
-				}
+				kubeDNS = nIps[0]
 			}
-			dlog.Debugf(c, "STORE %s -> %s", k, strings.Join(nIps, ","))
+			dlog.Debugf(c, "STORE %s -> %s", k, nIps)
 		}
 	}
 

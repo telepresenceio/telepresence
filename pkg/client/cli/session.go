@@ -15,7 +15,7 @@ type sessionInfo struct {
 // withDaemon establishes a daemon session and calls the function with the gRPC client. If
 // retain is false, the session will end unless it was already started.
 func (si *sessionInfo) withDaemon(retain bool, f func(state *daemonState) error) error {
-	// OK with dns and fallback empty. Daemon must be up and running
+	// OK with dns empty. Daemon must be up and running
 	ds, err := si.newDaemonState()
 	if err == errDaemonIsNotRunning {
 		err = nil

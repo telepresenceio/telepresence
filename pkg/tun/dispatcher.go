@@ -54,7 +54,7 @@ func (d *Dispatcher) Device() *Device {
 	return d.dev
 }
 
-func (d *Dispatcher) ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
+func (d *Dispatcher) ConfigureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
 	d.dnsIP = dnsIP
 	d.dnsPort = dnsPort
 	d.dnsLocalAddr = dnsLocalAddr

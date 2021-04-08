@@ -72,8 +72,7 @@ func daemonStatus(cmd *cobra.Command) error {
 		fmt.Fprintln(out, "Root Daemon: Running")
 	}
 	fmt.Fprintf(out, "  Version     : %s (api %d)\n", version.Version, version.ApiVersion)
-	fmt.Fprintf(out, "  Primary DNS : %q\n", status.Dns)
-	fmt.Fprintf(out, "  Fallback DNS: %q\n", status.Fallback)
+	fmt.Fprintf(out, "  DNS : %q\n", status.Dns)
 	return nil
 }
 
