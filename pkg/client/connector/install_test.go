@@ -252,10 +252,10 @@ func TestAddAgentToWorkload(t *testing.T) {
 		}
 		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
 
-		loadFile := func(filename string) (kates.Object, *kates.Service, error) {
+		loadFile := func(filename string) (kates.Object, *kates.Service, string, error) {
 			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
 			if err != nil {
-				return nil, nil, fmt.Errorf("read template: %s: %w", filename, err)
+				return nil, nil, "", fmt.Errorf("read template: %s: %w", filename, err)
 			}
 
 			var buff bytes.Buffer
@@ -263,7 +263,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 				"Version": strings.TrimPrefix(version.Version, "v"),
 			})
 			if err != nil {
-				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
+				return nil, nil, "", fmt.Errorf("execute template: %s: %w", filename, err)
 			}
 
 			var dat struct {
@@ -271,10 +271,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 				ReplicaSet  *kates.ReplicaSet  `json:"replicaset"`
 				StatefulSet *kates.StatefulSet `json:"statefulset"`
 
-				Service *kates.Service `json:"service"`
+				Service       *kates.Service `json:"service"`
+				InterceptPort string         `json:"interceptPort"`
 			}
 			if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
-				return nil, nil, fmt.Errorf("parse yaml: %s: %w", filename, err)
+				return nil, nil, "", fmt.Errorf("parse yaml: %s: %w", filename, err)
 			}
 
 			cnt := 0
@@ -292,29 +293,23 @@ func TestAddAgentToWorkload(t *testing.T) {
 				workload = dat.StatefulSet
 			}
 			if cnt != 1 {
-				return nil, nil, fmt.Errorf("yaml must contain exactly one of 'deployment', 'replicaset', or 'statefulset'; got %d of them", cnt)
+				return nil, nil, "", fmt.Errorf("yaml must contain exactly one of 'deployment', 'replicaset', or 'statefulset'; got %d of them", cnt)
 			}
 
-			return workload, dat.Service, nil
+			return workload, dat.Service, dat.InterceptPort, nil
 		}
 
 		var tc testcase
 		var err error
 
-		tc.InputWorkload, tc.InputService, err = loadFile(tcName + ".input.yaml")
+		tc.InputWorkload, tc.InputService, tc.InputPortName, err = loadFile(tcName + ".input.yaml")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		tc.OutputWorkload, tc.OutputService, err = loadFile(tcName + ".output.yaml")
+		tc.OutputWorkload, tc.OutputService, _, err = loadFile(tcName + ".output.yaml")
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		// If it is a test case for a service with multiple ports,
-		// we need to specify the name of the port we want to intercept
-		if strings.Contains(tcName, "mp-") {
-			tc.InputPortName = "https"
 		}
 
 		testcases[tcName] = tc

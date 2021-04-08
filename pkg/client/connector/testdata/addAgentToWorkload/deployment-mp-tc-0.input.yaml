@@ -96,3 +96,4 @@ service:
     type: ClusterIP
   status:
     loadBalancer: {}
+interceptPort: https

@@ -20,4 +20,7 @@ deployment:
         containers:
           - name: app
             imagePullPolicy: Always
-interceptPort: https
+# This input yaml should be the same as deployment-mp-tc-2.input.yaml
+# except the port number has a leading 0, which a user could technically
+# have
+interceptPort: 08080

@@ -1,4 +1,6 @@
 # Changelog
+### 2.1.5 (TBD)
+- Feature: When intercepting `--port` now supports specifying a service port or a service name. Previously, only service name was supported.
 
 ### 2.1.4 (April 5, 2021)
 

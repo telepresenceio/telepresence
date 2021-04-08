@@ -137,8 +137,8 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	fields = append(fields, kv{"Destination",
 		net.JoinHostPort(ii.Spec.TargetHost, fmt.Sprintf("%d", ii.Spec.TargetPort))})
 
-	if ii.Spec.ServicePortName != "" {
-		fields = append(fields, kv{"Service Port Name", ii.Spec.ServicePortName})
+	if ii.Spec.ServicePortIdentifier != "" {
+		fields = append(fields, kv{"Service Port Identifier", ii.Spec.ServicePortIdentifier})
 	}
 	if debug {
 		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})

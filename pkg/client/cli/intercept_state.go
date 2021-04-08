@@ -68,7 +68,9 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags := cmd.Flags()
 
 	flags.StringVarP(&ii.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
-	flags.StringVarP(&ii.port, "port", "p", "8080", "Local port to forward to. If intercepting a service with multiple ports, use <local port>:<service port name> format")
+	flags.StringVarP(&ii.port, "port", "p", "8080", ``+
+		`Local port to forward to. If intercepting a service with multiple ports, `+
+		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number`)
 
 	flags.StringVar(&ii.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
 
@@ -288,9 +290,9 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", portMapping[0])
 		}
 		spec.TargetPort = int32(port)
-		spec.ServicePortName = portMapping[1]
+		spec.ServicePortIdentifier = portMapping[1]
 	default:
-		return nil, errors.New("Ports must be of the format --ports local[:svcPortName]")
+		return nil, errors.New("Ports must be of the format --ports local[:svcPortIdentifier]")
 	}
 
 	err := checkMountCapability(is.cmd.Context())

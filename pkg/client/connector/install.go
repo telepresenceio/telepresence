@@ -17,6 +17,7 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
@@ -262,19 +263,46 @@ func (ki *installer) updateDeployment(c context.Context, env client.Env, current
 	return dep, err
 }
 
-func svcPortByName(svc *kates.Service, name string) []*kates.ServicePort {
+// svcPortByNameOrNumber iterates through a list of ports in a service and
+// only returns the ports that match the given nameOrNumber
+func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.ServicePort {
 	svcPorts := make([]*kates.ServicePort, 0)
 	ports := svc.Spec.Ports
+	var isName bool
+	validName := validation.IsValidPortName(nameOrNumber)
+	if len(validName) > 0 {
+		isName = false
+	} else {
+		isName = true
+	}
 	for i := range ports {
 		port := &ports[i]
-		if name == "" || name == port.Name {
+		matchFound := false
+		// If no nameOrNumber has been specified, we include it
+		if nameOrNumber == "" {
+			matchFound = true
+		}
+		// If the nameOrNumber is a valid name, we compare it to the
+		// name listed in the servicePort
+		if isName {
+			if nameOrNumber == port.Name {
+				matchFound = true
+			}
+		} else {
+			// Otherwise we compare it to the port number
+			givenPort, err := strconv.Atoi(nameOrNumber)
+			if err == nil && int32(givenPort) == port.Port {
+				matchFound = true
+			}
+		}
+		if matchFound {
 			svcPorts = append(svcPorts, port)
 		}
 	}
 	return svcPorts
 }
 
-func (ki *installer) findMatchingServices(portName, svcName, namespace string, labels map[string]string) []*kates.Service {
+func (ki *installer) findMatchingServices(portNameOrNumber, svcName, namespace string, labels map[string]string) []*kates.Service {
 	matching := make([]*kates.Service, 0)
 
 	ki.accLock.Lock()
@@ -299,7 +327,7 @@ func (ki *installer) findMatchingServices(portName, svcName, namespace string, l
 					continue nextSvc
 				}
 			}
-			if len(svcPortByName(svc, portName)) > 0 {
+			if len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
 				matching = append(matching, svc)
 			}
 		}
@@ -308,9 +336,9 @@ func (ki *installer) findMatchingServices(portName, svcName, namespace string, l
 	return matching
 }
 
-// findMathingPort find the matching container associated with portName in
-// the given service.
-func findMatchingPort(obj kates.Object, portName string, svc *kates.Service) (
+// findMatchingPort finds the matching container associated with portNameOrNumber
+// in the given service.
+func findMatchingPort(obj kates.Object, portNameOrNumber string, svc *kates.Service) (
 	sPort *kates.ServicePort,
 	cn *kates.Container,
 	cPortIndex int,
@@ -323,12 +351,13 @@ func findMatchingPort(obj kates.Object, portName string, svc *kates.Service) (
 
 	cns := podTemplate.Spec.Containers
 	// For now, we only support intercepting one port on a given service.
-	ports := svcPortByName(svc, portName)
+	ports := svcPortByNameOrNumber(svc, portNameOrNumber)
 	switch numPorts := len(ports); {
 	case numPorts == 0:
-		// this may happen when portName is specified but none of the ports match
+		// this may happen when portNameOrNumber is specified but none of the
+		// ports match
 		return nil, nil, 0, fmt.Errorf(`
-found no services with a port that matches a container in %s %s.%s`,
+found no service with a port that matches a container in %s %s.%s`,
 			objType, obj.GetName(), obj.GetNamespace())
 
 	case numPorts > 1:
@@ -414,7 +443,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 // the port to-be-intercepted has changed. It raises an error if either of these
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
-func checkSvcSame(c context.Context, obj kates.Object, svcName, portName string) error {
+func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber string) error {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -428,11 +457,13 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portName string)
 			return fmt.Errorf("Service for %s changed from %s -> %s", obj.GetName(), curSvc, svcName)
 		}
 
-		// If the portName in the annotation doesn't match the portName passed in
-		// then the ports have changed.
-		curSvcPort := actions.ReferencedServicePortName
-		if curSvcPort != portName {
-			return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portName)
+		// If the portNameOrNumber passed in doesn't match the referenced service
+		// port name or number in the annotation, then the servicePort to be intercepted
+		// has changed.
+		curSvcPortName := actions.ReferencedServicePortName
+		curSvcPort := actions.ReferencedServicePort
+		if curSvcPortName != portNameOrNumber && curSvcPort != portNameOrNumber {
+			return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portNameOrNumber)
 		}
 	}
 	return nil
@@ -444,7 +475,7 @@ var agentNotFound = errors.New("no such agent")
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portName, agentImageName string) (string, string, error) {
+func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
 	kind, err := ki.findObjectKind(c, namespace, name)
 	if err != nil {
 		return "", "", err
@@ -483,7 +514,7 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 		}
 	}
 
-	if err := checkSvcSame(c, obj, svcName, portName); err != nil {
+	if err := checkSvcSame(c, obj, svcName, portNameOrNumber); err != nil {
 		msg := fmt.Sprintf(
 			`%s already being used for intercept with a different service
 configuration. To intercept this with your new configuration, please use
@@ -496,14 +527,14 @@ already exist for this service`, kind, obj.GetName())
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
-		dlog.Infof(c, "Using port name %q", portName)
-		matchingSvcs := ki.findMatchingServices(portName, svcName, namespace, podTemplate.Labels)
+		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
+		matchingSvcs := ki.findMatchingServices(portNameOrNumber, svcName, namespace, podTemplate.Labels)
 
 		switch numSvcs := len(matchingSvcs); {
 		case numSvcs == 0:
 			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", podTemplate.Labels)
-			if portName != "" {
-				errMsg += fmt.Sprintf(" and a port named %s", portName)
+			if portNameOrNumber != "" {
+				errMsg += fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
 			}
 			return "", "", errors.New(errMsg)
 		case numSvcs > 1:
@@ -514,15 +545,15 @@ already exist for this service`, kind, obj.GetName())
 
 			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v, use --service and one of: %s",
 				podTemplate.Labels, strings.Join(svcNames, ","))
-			if portName != "" {
-				errMsg += fmt.Sprintf(" and a port named %s", portName)
+			if portNameOrNumber != "" {
+				errMsg += fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
 			}
 			return "", "", errors.New(errMsg)
 		default:
 		}
 
 		var err error
-		obj, svc, err = addAgentToWorkload(c, portName, agentImageName, obj, matchingSvcs[0])
+		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, obj, matchingSvcs[0])
 		if err != nil {
 			return "", "", err
 		}
@@ -815,7 +846,7 @@ func undoServiceMods(c context.Context, svc *kates.Service) error {
 // prepares and performs modifications to the obj and/or service.
 func addAgentToWorkload(
 	c context.Context,
-	portName string,
+	portNameOrNumber string,
 	agentImageName string,
 	object kates.Object, matchingService *kates.Service,
 ) (
@@ -827,7 +858,7 @@ func addAgentToWorkload(
 	if err != nil {
 		return nil, nil, err
 	}
-	servicePort, container, containerPortIndex, err := findMatchingPort(object, portName, matchingService)
+	servicePort, container, containerPortIndex, err := findMatchingPort(object, portNameOrNumber, matchingService)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -898,7 +929,8 @@ func addAgentToWorkload(
 	workloadMod := &workloadActions{
 		Version:                   version,
 		ReferencedService:         matchingService.Name,
-		ReferencedServicePortName: portName,
+		ReferencedServicePort:     strconv.Itoa(int(servicePort.Port)),
+		ReferencedServicePortName: servicePort.Name,
 		AddTrafficAgent: &addTrafficAgentAction{
 			containerName:       container.Name,
 			ContainerPortName:   containerPort.Name,

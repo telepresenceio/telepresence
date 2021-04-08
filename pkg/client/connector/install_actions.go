@@ -637,6 +637,7 @@ func (hcp *hideContainerPortAction) undo(obj kates.Object) error {
 type workloadActions struct {
 	Version                   string `json:"version"`
 	ReferencedService         string
+	ReferencedServicePort     string                   `json:"referenced_service_port,omitempty"`
 	ReferencedServicePortName string                   `json:"referenced_service_port_name,omitempty"`
 	HideContainerPort         *hideContainerPortAction `json:"hide_container_port,omitempty"`
 	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`

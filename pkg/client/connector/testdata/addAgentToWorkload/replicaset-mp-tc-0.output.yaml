@@ -1,32 +1,13 @@
-service:
-  apiVersion: v1
-  kind: Service
-  metadata:
-    annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","add_symbolic_port":{"PortName":"https","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
-    creationTimestamp: null
-    name: app
-  spec:
-    ports:
-    - name: https
-      port: 8080
-      targetPort: tel2px-8080
-    - name: grpc
-      port: 47555
-      targetPort: 0
-  status:
-    loadBalancer: {}
-statefulset:
+replicaset:
   apiVersion: apps/v1
-  kind: StatefulSet
+  kind: ReplicaSet
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port":"8080","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     name: app
   spec:
     selector: null
-    serviceName: ""
     template:
       metadata:
         creationTimestamp: null
@@ -66,6 +47,23 @@ statefulset:
               - /bin/stat
               - /tmp/agent/ready
           resources: {}
-    updateStrategy: {}
   status:
     replicas: 0
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","add_symbolic_port":{"PortName":"https","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
+    creationTimestamp: null
+    name: app
+  spec:
+    ports:
+    - name: https
+      port: 8080
+      targetPort: tel2px-8080
+    - name: grpc
+      port: 47555
+      targetPort: 0
+  status:
+    loadBalancer: {}
