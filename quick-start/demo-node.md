@@ -31,7 +31,7 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
 
 ## 1. Download the demo cluster archive
 
-1. [Sign in to Ambassador Cloud](https://app.getambassador.io/cloud/demo-cluster) to download your demo cluster archive.  The archive contains all the tools and configurations you need to complete this guide.
+1. <a href="https://app.getambassador.io/cloud/demo-cluster-download-popup" onClick={(e) => {window.open('https://app.getambassador.io/cloud/demo-cluster-download-popup', 'ambassador-cloud-demo-cluster', 'menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,width=550,height=750'); e.preventDefault(); }} target="_blank">Sign in to Ambassador Cloud to download your demo cluster archive.</a>  The archive contains all the tools and configurations you need to complete this guide.
 
 2.  Extract the archive file, open the `ambassador-demo-cluster` folder, and run the installer script (the commands below might vary based on where your browser saves downloaded files).
 
