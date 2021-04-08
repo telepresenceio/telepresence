@@ -15,7 +15,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
 )
 
 // outbound does stuff, idk, I didn't write it.
@@ -26,9 +25,7 @@ type outbound struct {
 	dnsIP       string
 	fallbackIP  string
 	noSearch    bool
-	translator  Router
-	tables      map[string]*nat.Table
-	tablesLock  sync.Mutex
+	router      *tunRouter
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
@@ -108,7 +105,6 @@ func newOutbound(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*o
 		dnsIP:             dnsIP,
 		fallbackIP:        fallbackIP,
 		noSearch:          noSearch,
-		tables:            make(map[string]*nat.Table),
 		namespaces:        make(map[string]struct{}),
 		domains:           make(map[string][]string),
 		search:            []string{""},
@@ -118,10 +114,9 @@ func newOutbound(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*o
 		kubeDNS:           make(chan net.IP, 1),
 	}
 
-	if ret.translator, err = NewTunRouter(ret.managerConfigured); err != nil {
+	if ret.router, err = NewTunRouter(ret.managerConfigured); err != nil {
 		return nil, err
 	}
-	ret.tablesLock.Lock() // leave it locked until routerConfigurationWorker unlocks it
 	return ret, nil
 }
 
@@ -129,8 +124,7 @@ func newOutbound(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*o
 // to by the 'Update' gRPC call.
 func (o *outbound) routerConfigurationWorker(c context.Context) (err error) {
 	defer func() {
-		o.tablesLock.Lock()
-		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
+		if err2 := o.router.Disable(dcontext.HardContext(c)); err2 != nil {
 			if err == nil {
 				err = err2
 			} else {
@@ -146,26 +140,9 @@ func (o *outbound) routerConfigurationWorker(c context.Context) (err error) {
 	}()
 
 	dlog.Debug(c, "Enabling")
-	err = o.translator.Enable(c)
+	err = o.router.Enable(c)
 	if err != nil {
 		return err
-	}
-	o.tablesLock.Unlock()
-
-	if o.overridePrimaryDNS {
-		dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-		route, err := nat.NewRoute("udp", net.ParseIP(o.dnsIP), nil, o.dnsRedirPort)
-		if err != nil {
-			return err
-		}
-		err = o.doUpdate(c, nil, &nat.Table{
-			Name:   "bootstrap",
-			Routes: []*nat.Route{route},
-		})
-		if err != nil {
-			dlog.Error(c, err)
-		}
-		dns.Flush(c)
 	}
 
 	dlog.Debug(c, "Starting server")
@@ -243,24 +220,22 @@ func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) erro
 	defer o.closeManagerConfigured.Do(func() {
 		close(o.managerConfigured)
 	})
-	return o.translator.(*tunRouter).SetManagerInfo(c, info)
+	return o.router.SetManagerInfo(c, info)
 }
 
-func (o *outbound) update(c context.Context, table *rpc.Table) (err error) {
+func (o *outbound) update(_ context.Context, table *rpc.Table) (err error) {
 	// o.proxy.SetSocksPort(table.SocksPort)
-	routes := make([]*nat.Route, 0, len(table.Routes))
+	ips := make(map[IPKey]struct{}, len(table.Routes))
 	domains := make(map[string][]string)
 	for _, route := range table.Routes {
-		ports, err := nat.ParsePorts(route.Port)
-		if err != nil {
-			return err
-		}
-		for _, ip := range uniqueSortedAndNotEmpty(route.Ips) {
-			r, err := nat.NewRoute(route.Proto, net.ParseIP(ip), ports, o.proxyRedirPort)
-			if err != nil {
-				return err
+		for _, ipStr := range route.Ips {
+			if ip := net.ParseIP(ipStr); ip != nil {
+				// ParseIP returns ipv4 that are 16 bytes long. Normalize them into 4 bytes
+				if ip4 := ip.To4(); ip4 != nil {
+					ip = ip4
+				}
+				ips[IPKey(ip)] = struct{}{}
 			}
-			routes = append(routes, r)
 		}
 		if dn := route.Name; dn != "" {
 			dn = strings.ToLower(dn) + "."
@@ -268,10 +243,7 @@ func (o *outbound) update(c context.Context, table *rpc.Table) (err error) {
 		}
 	}
 	o.work <- func(c context.Context) error {
-		return o.doUpdate(c, domains, &nat.Table{
-			Name:   table.Name,
-			Routes: routes,
-		})
+		return o.doUpdate(c, domains, ips)
 	}
 	return nil
 }
@@ -297,18 +269,7 @@ func uniqueSortedAndNotEmpty(ss []string) []string {
 	return ss[:last+1]
 }
 
-func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table *nat.Table) error {
-	// Make a copy of the current table
-	o.tablesLock.Lock()
-	defer o.tablesLock.Unlock()
-	oldTable, ok := o.tables[table.Name]
-	oldRoutes := make(map[nat.Destination]*nat.Route)
-	if ok {
-		for _, route := range oldTable.Routes {
-			oldRoutes[route.Destination] = route
-		}
-	}
-
+func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table map[IPKey]struct{}) error {
 	// We're updating routes. Make sure DNS waits until the new answer
 	// is ready, i.e. don't serve old answers.
 	o.domainsLock.Lock()
@@ -357,32 +318,23 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 	}
 
 	// Operate on the copy of the current table and the new table
-	routesChanged := false
-	for _, newRoute := range table.Routes {
-		// Add the new version. This will clear out the old one if it exists
-		changed, err := o.translator.Add(c, newRoute)
-		if err != nil {
-			dlog.Errorf(c, "forward %s: %v", newRoute, err)
-		} else if changed {
-			routesChanged = true
+	ipsChanged := false
+	oldIPs := o.router.Snapshot()
+	for ip := range table {
+		if o.router.Add(c, ip) {
+			ipsChanged = true
 		}
-
-		// remove the route from our map of old routes so we
-		// don't end up deleting it below
-		delete(oldRoutes, newRoute.Destination)
+		delete(oldIPs, ip)
 	}
 
-	for _, route := range oldRoutes {
-		changed, err := o.translator.Clear(c, route)
-		if err != nil {
-			dlog.Errorf(c, "clear %s: %v", route, err)
-		} else if changed {
-			routesChanged = true
+	for ip := range oldIPs {
+		if o.router.Clear(c, ip) {
+			ipsChanged = true
 		}
 	}
 
-	if routesChanged {
-		if err := o.translator.Flush(c, kubeDNS); err != nil {
+	if ipsChanged {
+		if err := o.router.Flush(c, kubeDNS); err != nil {
 			dlog.Errorf(c, "flush: %v", err)
 		}
 	}
@@ -394,11 +346,6 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 
 	if kubeDNS != nil {
 		o.onceKubeDNS.Do(func() { o.kubeDNS <- kubeDNS })
-	}
-	if table.Routes == nil || len(table.Routes) == 0 {
-		delete(o.tables, table.Name)
-	} else {
-		o.tables[table.Name] = table
 	}
 	return nil
 }

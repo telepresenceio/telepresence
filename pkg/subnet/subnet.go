@@ -50,16 +50,16 @@ func AnalyzeIPs(ips []net.IP) []*net.IPNet {
 				ipv4Subnets[bk] = bytes
 			}
 			bytes.Add(ip4[2])
-		} else {
+		} else if ip16 := ip.To16(); ip16 != nil {
 			r := ipv6SubnetKey{}
-			copy(r[:], ip)
+			copy(r[:], ip16)
 			byteSets, ok := ipv6Subnets[r]
 			if !ok {
 				byteSets = &[7]ByteSet{}
 				ipv6Subnets[r] = byteSets
 			}
 			for i := range byteSets {
-				byteSets[i].Add(ip[i+8])
+				byteSets[i].Add(ip16[i+8])
 			}
 		}
 	}

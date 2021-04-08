@@ -5,67 +5,64 @@ import (
 	"net"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 )
 
-type Router interface {
-	// Flush will flush any pending rule changes that needs to be committed
-	Flush(ctx context.Context, dnsIP net.IP) error
+// IPKey is cast of a net.IP. It must be created using IPKey(ip)
+type IPKey string
 
-	// Clear the given route. Returns true if the route was cleared and  false if no such route was found.
-	Clear(ctx context.Context, route *nat.Route) (bool, error)
+func (k IPKey) IP() net.IP {
+	return net.IP(k)
+}
 
-	// Add the given route. If the route already exists and is different from the given route, it is
-	// cleared before the new route is added. Returns true if the route was add and false if it was already present.
-	Add(ctx context.Context, route *nat.Route) (bool, error)
-
-	// Disable the router.
-	Disable(ctx context.Context) error
-
-	// Enable the router
-	Enable(ctx context.Context) error
-
-	// Device returns the TUN device
-	Device() *tun.Device
-
-	// ConfigureDNS configures the router's dispatch of DNS to the local DNS resolver
-	ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error
+func (k IPKey) String() string {
+	return net.IP(k).String()
 }
 
 type tunRouter struct {
 	dispatcher *tun.Dispatcher
-	ips        map[string]net.IP
+	ips        map[IPKey]struct{}
 	subnets    map[string]*net.IPNet
 }
 
-func NewTunRouter(managerConfigured <-chan struct{}) (Router, error) {
+func NewTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
 	td, err := tun.OpenTun()
 	if err != nil {
 		return nil, err
 	}
 	return &tunRouter{
 		dispatcher: tun.NewDispatcher(td, managerConfigured),
-		ips:        make(map[string]net.IP),
+		ips:        make(map[IPKey]struct{}),
 		subnets:    make(map[string]*net.IPNet),
 	}, nil
+}
+
+// Snapshot returns a copy of the current IP table.
+func (t *tunRouter) Snapshot() map[IPKey]struct{} {
+	ips := make(map[IPKey]struct{}, len(t.ips))
+	for k, v := range t.ips {
+		ips[k] = v
+	}
+	return ips
 }
 
 func (t *tunRouter) SetManagerInfo(c context.Context, info *daemon.ManagerInfo) error {
 	return t.dispatcher.SetManagerInfo(c, info)
 }
 
+// ConfigureDNS configures the router's dispatch of DNS to the local DNS resolver
 func (t *tunRouter) ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
 	return t.dispatcher.ConfigureDNS(ctx, dnsIP, dnsPort, dnsLocalAddr)
 }
 
+// Flush will flush any pending rule changes that needs to be committed
 func (t *tunRouter) Flush(c context.Context, dnsIP net.IP) error {
 	addedNets := make(map[string]*net.IPNet)
 	ips := make([]net.IP, len(t.ips))
 	i := 0
-	for _, ip := range t.ips {
-		ips[i] = ip
+	for ip := range t.ips {
+		ips[i] = net.IP(ip)
 		i++
 	}
 	for _, sn := range subnet.AnalyzeIPs(ips) {
@@ -108,31 +105,29 @@ func (t *tunRouter) Flush(c context.Context, dnsIP net.IP) error {
 	return nil
 }
 
-func (t *tunRouter) Clear(_ context.Context, route *nat.Route) (bool, error) {
-	ip := route.IP()
-	k := ip.String()
-	if _, ok := t.ips[k]; ok {
-		delete(t.ips, k)
-		return true, nil
+// Clear the given ip. Returns true if the ip was cleared and false if not found.
+func (t *tunRouter) Clear(_ context.Context, ip IPKey) (found bool) {
+	if _, found = t.ips[ip]; found {
+		delete(t.ips, ip)
 	}
-	return false, nil
+	return found
 }
 
-func (t *tunRouter) Add(_ context.Context, route *nat.Route) (bool, error) {
-	ip := route.IP()
-	k := ip.String()
-	if _, ok := t.ips[k]; ok {
-		return false, nil
+// Add the given ip. Returns true if the io was added and false if it was already present.
+func (t *tunRouter) Add(_ context.Context, ip IPKey) (found bool) {
+	if _, found = t.ips[ip]; !found {
+		t.ips[ip] = struct{}{}
 	}
-	t.ips[k] = ip
-	return true, nil
+	return !found
 }
 
+// Disable the router.
 func (t *tunRouter) Disable(c context.Context) error {
 	t.dispatcher.Stop(c)
 	return nil
 }
 
+// Enable the router
 func (t *tunRouter) Enable(c context.Context) error {
 	go func() {
 		_ = t.dispatcher.Run(c)
@@ -140,6 +135,7 @@ func (t *tunRouter) Enable(c context.Context) error {
 	return nil
 }
 
+// Device returns the TUN device
 func (t *tunRouter) Device() *tun.Device {
 	return t.dispatcher.Device()
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
 )
 
 type outboundSuite struct {
@@ -39,7 +38,7 @@ func (s *outboundSuite) SetupSuite() {
 	require := s.Require()
 	s.ctx, s.cancel = context.WithCancel(dlog.NewTestContext(s.T(), false))
 	var err error
-	s.o, err = newOutbound(s.ctx, "test-outbound", "", "", false)
+	s.o, err = newOutbound(s.ctx, "", "", false)
 	require.NoError(err)
 
 	// What normally would be a proxy is replaced with a http server that just
@@ -50,7 +49,7 @@ func (s *outboundSuite) SetupSuite() {
 
 	s.g = dgroup.NewGroup(s.ctx, dgroup.GroupConfig{})
 	s.g.Go("server-dns", func(ctx context.Context) error {
-		return s.o.dnsServerWorker(ctx, func() {})
+		return s.o.dnsServerWorker(ctx)
 	})
 	s.g.Go("firewall-configurator", func(ctx context.Context) error {
 		return s.o.routerConfigurationWorker(ctx)
@@ -101,12 +100,8 @@ var networks = []net.IP{
 func (s *outboundSuite) TestMassiveUpdate() {
 	require := s.Require()
 
-	table := &nat.Table{
-		Name: "tel2",
-	}
-
 	// Fill all three networks with 255 routes (last byte 1 - 255)
-	routes := make([]*nat.Route, 255*3)
+	routes := make(map[IPKey]struct{}, 255*3)
 	ri := 0
 	var err error
 	for _, network := range networks {
@@ -114,15 +109,14 @@ func (s *outboundSuite) TestMassiveUpdate() {
 			ip := make(net.IP, 4)
 			copy(ip, network)
 			ip[3] = byte(i)
-			routes[ri], err = nat.NewRoute("tcp", ip, []int{80, 8080}, s.o.proxyRedirPort)
+			routes[IPKey(ip)] = struct{}{}
 			require.NoError(err)
 			ri++
 		}
 	}
 
-	table.Routes = routes
 	start := time.Now()
-	err = s.o.doUpdate(s.ctx, nil, table)
+	err = s.o.doUpdate(s.ctx, nil, routes)
 	require.NoError(err)
 	timeSpent := time.Since(start)
 	s.Truef(5*time.Second > timeSpent, "Update of routes took %s", timeSpent)
