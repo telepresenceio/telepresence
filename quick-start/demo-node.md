@@ -40,17 +40,17 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
   </Alert>
 
   ```
-  $ cd ~/Downloads
-  $ unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
-  $ ./ambassador-demo-cluster/install.sh
+  cd ~/Downloads
+  unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
+  ./ambassador-demo-cluster/install.sh
   ```
  
-3. The demo cluster we provided already has a demo app running. List the app's services:
+3. The demo cluster we provided already has a demo app running. List the app's services:  
   `kubectl get services`
 
   ```
    $ kubectl get services
-  
+    
     NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
     kubernetes              ClusterIP   10.43.0.1       <none>        443/TCP    14h
     dataprocessingservice   ClusterIP   10.43.159.239   <none>        3000/TCP   14h
@@ -58,12 +58,12 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
     verylargedatastore      ClusterIP   10.43.203.19    <none>        8080/TCP   14h
   ```
 
-4. Confirm that Telepresence is now installed, we expect to see that the components are not yet running:
+4. Confirm that the Telepresence CLI is now installed, we expect to see that the daemons are not yet running:  
 `telepresence status`
 
   ```
   $ telepresence status
-
+    
     Root Daemon: Not running
     User Daemon: Not running
   ```
