@@ -74,9 +74,6 @@ type outbound struct {
 
 	setSearchPathFunc func(c context.Context, paths []string)
 
-	// proxyRedirPort is the port to which we redirect translated IP requests intended for the cluster
-	proxyRedirPort int
-
 	work chan func(context.Context) error
 }
 
