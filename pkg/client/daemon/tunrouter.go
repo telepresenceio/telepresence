@@ -21,7 +21,7 @@ func (k IPKey) String() string {
 }
 
 type tunRouter struct {
-	dispatcher *tun.Dispatcher
+	dispatcher *Dispatcher
 	ips        map[IPKey]struct{}
 	subnets    map[string]*net.IPNet
 }
@@ -32,7 +32,7 @@ func NewTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
 		return nil, err
 	}
 	return &tunRouter{
-		dispatcher: tun.NewDispatcher(td, managerConfigured),
+		dispatcher: NewDispatcher(td, managerConfigured),
 		ips:        make(map[IPKey]struct{}),
 		subnets:    make(map[string]*net.IPNet),
 	}, nil

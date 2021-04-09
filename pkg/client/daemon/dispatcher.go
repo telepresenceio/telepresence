@@ -1,4 +1,4 @@
-package tun
+package daemon
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -26,7 +28,7 @@ import (
 )
 
 type Dispatcher struct {
-	dev           *Device
+	dev           *tun.Device
 	managerClient manager.ManagerClient
 	connStream    *connpool.Stream
 	handlers      *connpool.Pool
@@ -40,7 +42,7 @@ type Dispatcher struct {
 	mgrConfigured <-chan struct{}
 }
 
-func NewDispatcher(dev *Device, managerConfigured <-chan struct{}) *Dispatcher {
+func NewDispatcher(dev *tun.Device, managerConfigured <-chan struct{}) *Dispatcher {
 	return &Dispatcher{
 		dev:           dev,
 		handlers:      connpool.NewPool(),
@@ -50,7 +52,7 @@ func NewDispatcher(dev *Device, managerConfigured <-chan struct{}) *Dispatcher {
 	}
 }
 
-func (d *Dispatcher) Device() *Device {
+func (d *Dispatcher) Device() *tun.Device {
 	return d.dev
 }
 
