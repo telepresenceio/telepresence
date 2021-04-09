@@ -38,8 +38,8 @@ func NewTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
 	}, nil
 }
 
-// Snapshot returns a copy of the current IP table.
-func (t *tunRouter) Snapshot() map[IPKey]struct{} {
+// snapshot returns a copy of the current IP table.
+func (t *tunRouter) snapshot() map[IPKey]struct{} {
 	ips := make(map[IPKey]struct{}, len(t.ips))
 	for k, v := range t.ips {
 		ips[k] = v
@@ -47,7 +47,7 @@ func (t *tunRouter) Snapshot() map[IPKey]struct{} {
 	return ips
 }
 
-func (t *tunRouter) SetManagerInfo(c context.Context, info *daemon.ManagerInfo) error {
+func (t *tunRouter) setManagerInfo(c context.Context, info *daemon.ManagerInfo) error {
 	return t.dispatcher.SetManagerInfo(c, info)
 }
 
@@ -56,8 +56,8 @@ func (t *tunRouter) ConfigureDNS(ctx context.Context, dnsIP net.IP, dnsPort uint
 	return t.dispatcher.ConfigureDNS(ctx, dnsIP, dnsPort, dnsLocalAddr)
 }
 
-// Flush will flush any pending rule changes that needs to be committed
-func (t *tunRouter) Flush(c context.Context, dnsIP net.IP) error {
+// flush will flush any pending rule changes that needs to be committed
+func (t *tunRouter) flush(c context.Context, dnsIP net.IP) error {
 	addedNets := make(map[string]*net.IPNet)
 	ips := make([]net.IP, len(t.ips))
 	i := 0
@@ -103,37 +103,18 @@ func (t *tunRouter) Flush(c context.Context, dnsIP net.IP) error {
 	return nil
 }
 
-// Clear the given ip. Returns true if the ip was cleared and false if not found.
-func (t *tunRouter) Clear(_ context.Context, ip IPKey) (found bool) {
+// clear the given ip. Returns true if the ip was cleared and false if not found.
+func (t *tunRouter) clear(_ context.Context, ip IPKey) (found bool) {
 	if _, found = t.ips[ip]; found {
 		delete(t.ips, ip)
 	}
 	return found
 }
 
-// Add the given ip. Returns true if the io was added and false if it was already present.
-func (t *tunRouter) Add(_ context.Context, ip IPKey) (found bool) {
+// add the given ip. Returns true if the io was added and false if it was already present.
+func (t *tunRouter) add(_ context.Context, ip IPKey) (found bool) {
 	if _, found = t.ips[ip]; !found {
 		t.ips[ip] = struct{}{}
 	}
 	return !found
-}
-
-// Disable the router.
-func (t *tunRouter) Disable(c context.Context) error {
-	t.dispatcher.Stop(c)
-	return nil
-}
-
-// Enable the router
-func (t *tunRouter) Enable(c context.Context) error {
-	go func() {
-		_ = t.dispatcher.Run(c)
-	}()
-	return nil
-}
-
-// Device returns the TUN device
-func (t *tunRouter) Device() *tun.Device {
-	return t.dispatcher.Device()
 }

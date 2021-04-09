@@ -165,10 +165,11 @@ func run(c context.Context, loggingDir, dns string) error {
 		}
 	})
 
-	// The 'Update' gRPC (below) call puts firewall updates in to a work queue;
-	// tunnel-firewall-configurator is the worker process that reads that work queue.
-	g.Go("firewall-configurator", func(ctx context.Context) error {
-		return d.outbound.routerConfigurationWorker(ctx)
+	// The 'Update' gRPC (below) call puts updates in to a work queue;
+	// server-router is the worker process starts the router and continuously configures
+	// it based on what is read from that work queue.
+	g.Go("server-router", func(ctx context.Context) error {
+		return d.outbound.routerServerWorker(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests

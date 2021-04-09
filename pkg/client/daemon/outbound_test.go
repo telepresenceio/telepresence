@@ -51,8 +51,8 @@ func (s *outboundSuite) SetupSuite() {
 	s.g.Go("server-dns", func(ctx context.Context) error {
 		return s.o.dnsServerWorker(ctx)
 	})
-	s.g.Go("firewall-configurator", func(ctx context.Context) error {
-		return s.o.routerConfigurationWorker(ctx)
+	s.g.Go("server-router", func(ctx context.Context) error {
+		return s.o.routerServerWorker(ctx)
 	})
 }
 

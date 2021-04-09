@@ -136,44 +136,26 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 	return ret, nil
 }
 
-// routerConfigurationWorker reads from the work queue of firewall config changes that is written
-// to by the 'Update' gRPC call.
-func (o *outbound) routerConfigurationWorker(c context.Context) (err error) {
-	defer func() {
-		if err2 := o.router.Disable(dcontext.HardContext(c)); err2 != nil {
-			if err == nil {
-				err = err2
-			} else {
-				dlog.Error(c, err2)
-			}
-		}
-		if err != nil {
-			dlog.Errorf(c, "Server exited with error %v", err)
-		} else {
-			dlog.Debug(c, "Server done")
-		}
-		// leave it locked
-	}()
-
-	dlog.Debug(c, "Enabling")
-	err = o.router.Enable(c)
-	if err != nil {
-		return err
-	}
+// routerServerWorker starts the TUN router and reads from the work queue of firewall config
+// changes that is written to by the 'Update' gRPC call.
+func (o *outbound) routerServerWorker(c context.Context) (err error) {
+	defer o.router.dispatcher.Stop(dcontext.HardContext(c))
 
 	dlog.Debug(c, "Starting server")
-	// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
-	// shutting down.
-	for f := range o.work {
-		if c.Err() == nil {
-			// As long as we're not shutting down, keep doing work.  (If we are shutting
-			// down, do nothing but don't 'break'; keep draining the queue.)
-			if err = f(c); err != nil {
-				dlog.Error(c, err)
+	go func() {
+		// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
+		// shutting down.
+		for f := range o.work {
+			if c.Err() == nil {
+				// As long as we're not shutting down, keep doing work.  (If we are shutting
+				// down, do nothing but don't 'break'; keep draining the queue.)
+				if err = f(c); err != nil {
+					dlog.Error(c, err)
+				}
 			}
 		}
-	}
-	return nil
+	}()
+	return o.router.dispatcher.Run(c)
 }
 
 // On a MacOS, Docker uses its own search-path for single label names. This means that the search path that is declared
@@ -236,7 +218,7 @@ func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) erro
 	defer o.closeManagerConfigured.Do(func() {
 		close(o.managerConfigured)
 	})
-	return o.router.SetManagerInfo(c, info)
+	return o.router.setManagerInfo(c, info)
 }
 
 func (o *outbound) update(_ context.Context, table *rpc.Table) (err error) {
@@ -336,22 +318,22 @@ func (o *outbound) doUpdate(c context.Context, domains map[string]IPs, table map
 
 	// Operate on the copy of the current table and the new table
 	ipsChanged := false
-	oldIPs := o.router.Snapshot()
+	oldIPs := o.router.snapshot()
 	for ip := range table {
-		if o.router.Add(c, ip) {
+		if o.router.add(c, ip) {
 			ipsChanged = true
 		}
 		delete(oldIPs, ip)
 	}
 
 	for ip := range oldIPs {
-		if o.router.Clear(c, ip) {
+		if o.router.clear(c, ip) {
 			ipsChanged = true
 		}
 	}
 
 	if ipsChanged {
-		if err := o.router.Flush(c, kubeDNS); err != nil {
+		if err := o.router.flush(c, kubeDNS); err != nil {
 			dlog.Errorf(c, "flush: %v", err)
 		}
 	}
