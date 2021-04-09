@@ -17,6 +17,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
 
+const kubernetesZone = "cluster.local"
+
 type IPs []net.IP
 
 func (ips IPs) String() string {

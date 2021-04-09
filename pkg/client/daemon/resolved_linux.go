@@ -56,6 +56,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				paths[i] = "~" + path
 			}
 		}
+		paths = append(paths, kubernetesZone+".")
 		namespaces[tel2SubDomain] = struct{}{}
 
 		o.domainsLock.Lock()

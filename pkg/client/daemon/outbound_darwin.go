@@ -18,8 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
 
-const kubernetesZone = "cluster.local"
-
 type resolveFile struct {
 	port        int
 	domain      string
