@@ -227,7 +227,7 @@ func run(c context.Context, loggingDir, dns string) error {
 
 // quitAll shuts down the router and calls quitConnector
 func (d *service) quitAll(c context.Context) error {
-	d.outbound.router.dispatcher.Stop(c)
+	d.outbound.router.stop(c)
 	return d.quitConnector(c)
 }
 

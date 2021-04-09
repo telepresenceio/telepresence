@@ -129,7 +129,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 		kubeDNS:           make(chan net.IP, 1),
 	}
 
-	if ret.router, err = NewTunRouter(ret.managerConfigured); err != nil {
+	if ret.router, err = newTunRouter(ret.managerConfigured); err != nil {
 		return nil, err
 	}
 	return ret, nil
@@ -151,7 +151,7 @@ func (o *outbound) routerServerWorker(c context.Context) (err error) {
 			}
 		}
 	}()
-	return o.router.dispatcher.Run(c)
+	return o.router.run(c)
 }
 
 // On a MacOS, Docker uses its own search-path for single label names. This means that the search path that is declared

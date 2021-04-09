@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	dns2 "github.com/miekg/dns"
-	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
@@ -23,7 +23,7 @@ import (
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
 func (o *outbound) dnsServerWorker(c context.Context) error {
-	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), o.router.Device())
+	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), o.router.dev)
 	if err == errResolveDNotConfigured {
 		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
 		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
