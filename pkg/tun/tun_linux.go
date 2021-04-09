@@ -94,6 +94,12 @@ func (t *Device) AddSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return dexec.CommandContext(ctx, "ip", "a", "add", subnet.String(), "dev", t.name).Run()
 }
 
+// RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
+// is associated with the device.
+func (t *Device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) error {
+	return dexec.CommandContext(ctx, "ip", "a", "del", subnet.String(), "dev", t.name).Run()
+}
+
 // Index returns the index of this device
 func (t *Device) Index() uint32 {
 	return t.index

@@ -161,27 +161,35 @@ func (t *tunRouter) flush(c context.Context, dnsIP net.IP) error {
 		ips[i] = net.IP(ip)
 		i++
 	}
+
+	droppedNets := make(map[string]*net.IPNet)
 	for _, sn := range subnet.AnalyzeIPs(ips) {
 		// TODO: Figure out how networks cover each other, merge and remove as needed.
 		// For now, we just have one 16-bit mask for the whole subnet
-		if sn.IP.To4() != nil {
-			sn = &net.IPNet{
-				IP:   sn.IP,
-				Mask: net.CIDRMask(16, 32),
+		alreadyCovered := false
+		for _, esn := range t.subnets {
+			if subnet.Covers(esn, sn) {
+				alreadyCovered = true
+				break
 			}
 		}
-		addedNets[sn.String()] = sn
-	}
-
-	droppedNets := make(map[string]*net.IPNet)
-	for k, sn := range t.subnets {
-		if _, ok := addedNets[k]; ok {
-			delete(addedNets, k)
-		} else {
-			droppedNets[k] = sn
+		if !alreadyCovered {
+			for k, esn := range t.subnets {
+				if subnet.Covers(sn, esn) {
+					droppedNets[k] = esn
+					break
+				}
+			}
+			addedNets[sn.String()] = sn
 		}
 	}
-	// TODO remove subnets that are no longer in use (if we expect that to ever happen)
+
+	for k, dropped := range droppedNets {
+		if err := t.dev.RemoveSubnet(c, dropped); err != nil {
+			return err
+		}
+		delete(t.subnets, k)
+	}
 
 	if len(addedNets) == 0 {
 		return nil

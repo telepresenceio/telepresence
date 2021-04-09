@@ -72,6 +72,20 @@ func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet) error {
 	})
 }
 
+// RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
+// is associated with the device.
+func (t *Device) RemoveSubnet(_ context.Context, subnet *net.IPNet) error {
+	to := make(net.IP, len(subnet.IP))
+	copy(to, subnet.IP)
+	to[len(to)-1] = 1
+	if err := t.removeAddr(subnet, to); err != nil {
+		return err
+	}
+	return withRouteSocket(func(s int) error {
+		return t.routeClear(s, 1, subnet, to)
+	})
+}
+
 func (t *Device) SetMTU(mtu int) error {
 	return withSocket(unix.AF_INET, func(fd int) error {
 		var ifr unix.IfreqMTU
@@ -145,6 +159,9 @@ type addrIfReq6 struct {
 const SIOCAIFADDR_IN6 = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
 const ND6_INFINITE_LIFETIME = 0xffffffff
 
+// SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6
+const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
+
 func addrToIp4(subnet *net.IPNet, to net.IP) (*net.IPNet, net.IP, bool) {
 	if to4 := to.To4(); to4 != nil {
 		if dest4 := subnet.IP.To4(); dest4 != nil {
@@ -186,6 +203,42 @@ func (t *Device) setAddr(subnet *net.IPNet, to net.IP) error {
 			copy(ifreq.mask.Addr[:], subnet.Mask)
 			copy(ifreq.dest.Addr[:], to.To16())
 			err := ioctl(fd, SIOCAIFADDR_IN6, unsafe.Pointer(ifreq))
+			runtime.KeepAlive(ifreq)
+			return err
+		})
+	}
+}
+
+func (t *Device) removeAddr(subnet *net.IPNet, to net.IP) error {
+	if sub4, to4, ok := addrToIp4(subnet, to); ok {
+		return withSocket(unix.AF_INET, func(fd int) error {
+			ifreq := &addrIfReq{
+				addr: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
+				dest: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
+				mask: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
+			}
+			copy(ifreq.name[:], t.name)
+			copy(ifreq.addr.Addr[:], sub4.IP)
+			copy(ifreq.mask.Addr[:], sub4.Mask)
+			copy(ifreq.dest.Addr[:], to4)
+			err := ioctl(fd, unix.SIOCDIFADDR, unsafe.Pointer(ifreq))
+			runtime.KeepAlive(ifreq)
+			return err
+		})
+	} else {
+		return withSocket(unix.AF_INET6, func(fd int) error {
+			ifreq := &addrIfReq6{
+				addr:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
+				dest:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
+				mask:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
+				validLifeTime:  ND6_INFINITE_LIFETIME,
+				prefixLifeTime: ND6_INFINITE_LIFETIME,
+			}
+			copy(ifreq.name[:], t.name)
+			copy(ifreq.addr.Addr[:], subnet.IP.To16())
+			copy(ifreq.mask.Addr[:], subnet.Mask)
+			copy(ifreq.dest.Addr[:], to.To16())
+			err := ioctl(fd, SIOCDIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
 		})

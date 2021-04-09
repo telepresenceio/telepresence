@@ -13,39 +13,39 @@ import (
 func Test_covers(t *testing.T) {
 	_, network1, _ := net.ParseCIDR("10.127.0.0/16")
 	_, network2, _ := net.ParseCIDR("10.127.201.0/24")
-	assert.True(t, covers(network1, network2))
+	assert.True(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.127.202.0/24")
-	assert.True(t, covers(network1, network2))
+	assert.True(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.127.0.0/16")
-	assert.True(t, covers(network1, network2))
+	assert.True(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.127.0.0/18")
-	assert.True(t, covers(network1, network2))
+	assert.True(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.124.0.0/14")
-	assert.False(t, covers(network1, network2))
+	assert.False(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.127.201.0/8")
-	assert.False(t, covers(network1, network2))
+	assert.False(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.128.0.0/16")
-	assert.False(t, covers(network1, network2))
+	assert.False(t, Covers(network1, network2))
 
 	_, network1, _ = net.ParseCIDR("10.127.192.0/18")
 	_, network2, _ = net.ParseCIDR("10.127.192.0/18")
-	assert.True(t, covers(network1, network2))
+	assert.True(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.127.0.0/16")
-	assert.False(t, covers(network1, network2))
+	assert.False(t, Covers(network1, network2))
 
 	_, network2, _ = net.ParseCIDR("10.127.192.0/19")
-	assert.True(t, covers(network1, network2))
+	assert.True(t, Covers(network1, network2))
 
 	_, network1, _ = net.ParseCIDR("192.168.0.0/21")
 	_, network2, _ = net.ParseCIDR("192.168.8.0/24")
-	assert.False(t, covers(network1, network2))
+	assert.False(t, Covers(network1, network2))
 }
 
 func Test_findAvailableIPV4CIDR(t *testing.T) {

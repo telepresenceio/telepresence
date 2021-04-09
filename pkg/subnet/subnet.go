@@ -1,7 +1,6 @@
 // Package subnet contains functions for finding available subnets
 package subnet
 
-import "C"
 import (
 	"bytes"
 	"errors"
@@ -137,7 +136,7 @@ func Available(subnet *net.IPNet) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("failed to parse interface address: %v", err)
 		}
-		if covers(network, subnet) {
+		if Covers(network, subnet) {
 			return false, nil
 		}
 	}
@@ -177,8 +176,8 @@ func cidr24(ar1, ar2, ar3 int) *net.IPNet {
 	}
 }
 
-// covers answers the question if network range a contains all of network range b
-func covers(a, b *net.IPNet) bool {
+// Covers answers the question if network range a contains all of network range b
+func Covers(a, b *net.IPNet) bool {
 	if !a.Contains(b.IP) {
 		return false
 	}
@@ -206,7 +205,7 @@ func covers(a, b *net.IPNet) bool {
 func findAvailableChunk(wantedRange *net.IPNet, cidrs []*ipAndNetwork) int {
 	inUse := [256]bool{}
 	for _, cid := range cidrs {
-		if covers(cid.network, wantedRange) {
+		if Covers(cid.network, wantedRange) {
 			return -1
 		}
 		if !wantedRange.Contains(cid.ip) {
