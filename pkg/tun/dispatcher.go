@@ -120,33 +120,32 @@ func (d *Dispatcher) Run(c context.Context) error {
 	})
 
 	g.Go("MGR stream", func(c context.Context) error {
-		// Block here until traffic-manager tunnel is configured
+		dlog.Debug(c, "Waiting until manager gRPC is configured")
 		select {
 		case <-c.Done():
 			return nil
 		case <-d.mgrConfigured:
 		}
 
-		if d.managerClient != nil {
-			// TODO: ConnTunnel should probably provide a sessionID
-			tcpStream, err := d.managerClient.ConnTunnel(c)
-			if err != nil {
-				return err
-			}
-			d.connStream = connpool.NewStream(tcpStream, d.handlers)
-			return d.connStream.ReadLoop(c, &d.closing)
+		// TODO: ConnTunnel should probably provide a sessionID
+		tunnel, err := d.managerClient.ConnTunnel(c)
+		if err != nil {
+			return err
 		}
-		return nil
+		d.connStream = connpool.NewStream(tunnel, d.handlers)
+		dlog.Debug(c, "MGR read loop starting")
+		return d.connStream.ReadLoop(c, &d.closing)
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {
-		// Block here until traffic-manager tunnel is configured
+		dlog.Debug(c, "Waiting until manager gRPC is configured")
 		select {
 		case <-c.Done():
 			return nil
 		case <-d.mgrConfigured:
 		}
 
+		dlog.Debug(c, "TUN read loop starting")
 		for atomic.LoadInt32(&d.closing) < 2 {
 			data := buffer.DataPool.Get(buffer.DataPool.MTU)
 			for {

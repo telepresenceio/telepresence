@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
@@ -139,9 +138,6 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 // routerServerWorker starts the TUN router and reads from the work queue of firewall config
 // changes that is written to by the 'Update' gRPC call.
 func (o *outbound) routerServerWorker(c context.Context) (err error) {
-	defer o.router.dispatcher.Stop(dcontext.HardContext(c))
-
-	dlog.Debug(c, "Starting server")
 	go func() {
 		// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
 		// shutting down.

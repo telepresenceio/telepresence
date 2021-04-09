@@ -147,7 +147,7 @@ func run(c context.Context, loggingDir, dns string) error {
 	})
 
 	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
-	d.cancel = func() { g.Go(processName+"-quit", d.quitConnector) }
+	d.cancel = func() { g.Go(processName+"-quit", d.quitAll) }
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", processName, client.DisplayVersion())
@@ -223,6 +223,12 @@ func run(c context.Context, loggingDir, dns string) error {
 		dlog.Error(c, err)
 	}
 	return err
+}
+
+// quitAll shuts down the router and calls quitConnector
+func (d *service) quitAll(c context.Context) error {
+	d.outbound.router.dispatcher.Stop(c)
+	return d.quitConnector(c)
 }
 
 // quitConnector ensures that the connector quits gracefully.
