@@ -42,7 +42,8 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
   ```
   cd ~/Downloads
   unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
-  ./ambassador-demo-cluster/install.sh
+  cd ambassador-demo-cluster
+  ./install.sh
   ```
  
 3. The demo cluster we provided already has a demo app running. List the app's services:  
@@ -146,7 +147,7 @@ We'll use a sample app that is already installed in your demo cluster.  Let's ta
 Now start up the DataProcessingService service on your laptop. This version of the code has the UI color set to <strong style="color:blue">blue</strong> instead of <strong style="color:green">green</strong>.
 
 1. **In a <u>new</u> terminal window**, go the demo application directory in the extracted archive folder:
-  `cd ambassador-demo-cluster/edgey-corp-nodejs/DataProcessingService`
+  `cd edgey-corp-nodejs/DataProcessingService`
 
 2. Start the application:
   `npm start`
@@ -208,7 +209,7 @@ We’ve now set up a local development environment for the DataProcessingService
 
 <Alert severity="success">
   We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
-  <br / >
+  <br />
   Normally, this process would require a container build, push to registry, and deploy.
   <br />
   With Telepresence, these changes happen instantly.
