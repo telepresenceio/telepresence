@@ -1,5 +1,8 @@
 # Changelog
 
+### 2.1.5 (TBD)
+- Bugfix: One of the log messages was using the incorrect variable, which led to misleading error messages on telepresence uninstall.
+
 ### 2.1.4 (April 5, 2021)
 
 - Feature: `telepresence status` has been enhanced to provide more information.  In particular, it now provides separate information on the daemon and connector processes, as well as showing login status.
