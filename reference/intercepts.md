@@ -88,18 +88,18 @@ Finally, run `telepresence leave <name of intercept>` to stop the intercept.
 
 ## Creating an Intercept When a Service has Multiple Ports
 
-If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. You can see the name of the service ports available to be intercepted by using kubectl to describe your service or look in the yaml for the service. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
+If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. To specify, you can either use the name of the service port or the port number itself. To see which options might be available to you and your service, use kubectl to describe your service or look in the object's yaml. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
 
 ```
-$ telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortName>
+$ telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortIdentifier>
 Using Deployment <name of deployment>
 intercepted
-    Intercept name   : <full name of intercept>
-    State            : ACTIVE
-    Workload kind    : Deployment
-    Destination      : 127.0.0.1:<local TCP port>
-    Service Port Name: <servicePortName>
-    Intercepting     : all TCP connections
+    Intercept name         : <full name of intercept>
+    State                  : ACTIVE
+    Workload kind          : Deployment
+    Destination            : 127.0.0.1:<local TCP port>
+    Service Port Identifier: <servicePortIdentifier>
+    Intercepting           : all TCP connections
 ```
 
 When intercepting a service that has multiple ports, the name of the service port that has been intercepted is also listed.
