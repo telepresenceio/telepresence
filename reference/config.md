@@ -1,4 +1,4 @@
-# Configuration File
+# Laptop-side configuration
 
 Telepresence uses a `config.yml` file to store and change certain values.  The location of this file varies based on your OS:
 
