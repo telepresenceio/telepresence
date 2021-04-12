@@ -460,10 +460,12 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber
 		// If the portNameOrNumber passed in doesn't match the referenced service
 		// port name or number in the annotation, then the servicePort to be intercepted
 		// has changed.
-		curSvcPortName := actions.ReferencedServicePortName
-		curSvcPort := actions.ReferencedServicePort
-		if curSvcPortName != portNameOrNumber && curSvcPort != portNameOrNumber {
-			return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portNameOrNumber)
+		if portNameOrNumber != "" {
+			curSvcPortName := actions.ReferencedServicePortName
+			curSvcPort := actions.ReferencedServicePort
+			if curSvcPortName != portNameOrNumber && curSvcPort != portNameOrNumber {
+				return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portNameOrNumber)
+			}
 		}
 	}
 	return nil
