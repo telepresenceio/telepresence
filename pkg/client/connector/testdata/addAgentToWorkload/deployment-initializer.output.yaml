@@ -76,9 +76,19 @@ deployment:
               - /bin/stat
               - /tmp/agent/ready
           resources: {}
+          volumeMounts:
+          - mountPath: /tel_pod_info
+            name: traffic-annotations
         restartPolicy: Always
         securityContext:
           runAsUser: 8888
+        volumes:
+        - downwardAPI:
+            items:
+            - fieldRef:
+                fieldPath: metadata.annotations
+              path: annotations
+          name: traffic-annotations
   status: {}
 service:
   apiVersion: v1

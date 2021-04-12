@@ -41,6 +41,7 @@ const telName = "manager"
 const domainPrefix = "telepresence.getambassador.io/"
 const annTelepresenceActions = domainPrefix + "actions"
 const agentContainerName = "traffic-agent"
+const agentAnnotationVolumeName = "traffic-annotations"
 
 // this is modified in tests
 var managerNamespace = func() string {

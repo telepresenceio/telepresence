@@ -1,6 +1,9 @@
 # Changelog
+
 ### 2.1.5 (TBD)
+
 - Feature: When intercepting `--port` now supports specifying a service port or a service name. Previously, only service name was supported.
+- Feature: Intercepts using `--mechanism=http` now support mTLS.
 
 ### 2.1.5 (TBD)
 - Bugfix: One of the log messages was using the incorrect variable, which led to misleading error messages on telepresence uninstall.
