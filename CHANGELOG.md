@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.1.5 (TBD)
+### 2.1.5 (April 12, 2021)
 
 - Feature: When intercepting `--port` now supports specifying a service port or a service name.  Previously, only service name was supported.
 - Feature: Intercepts using `--mechanism=http` now support mTLS.
