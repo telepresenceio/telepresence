@@ -3,7 +3,7 @@ deployment:
   kind: Deployment
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"sample-app","referenced_service_port":"80","referenced_service_port_name":"http","hide_container_port":{"container_name":"sample-app","port_name":"http","hidden_name":"tel2mv-http"},"add_traffic_agent":{"container_port_name":"http","container_port_proto":"","app_port":3000,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"sample-app","referenced_service_port":"80","referenced_service_port_name":"someverylongnam","hide_container_port":{"container_name":"sample-app","port_name":"someverylongnam","hidden_name":"tm-someverylong"},"add_traffic_agent":{"container_port_name":"someverylongnam","container_port_proto":"","app_port":3000,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     name: sample-app
     namespace: default
@@ -30,16 +30,16 @@ deployment:
           livenessProbe:
             httpGet:
               path: /health
-              port: tel2mv-http
+              port: tm-someverylong
             periodSeconds: 10
           name: sample-app
           ports:
           - containerPort: 3000
-            name: tel2mv-http
+            name: tm-someverylong
           readinessProbe:
             httpGet:
               path: /health
-              port: tel2mv-http
+              port: tm-someverylong
             periodSeconds: 10
           resources: {}
         - args:
@@ -69,7 +69,7 @@ deployment:
           name: traffic-agent
           ports:
           - containerPort: 9900
-            name: http
+            name: someverylongnam
           readinessProbe:
             exec:
               command:
@@ -101,9 +101,9 @@ service:
     namespace: default
   spec:
     ports:
-    - name: http
+    - name: someverylongnam
       port: 80
-      targetPort: http
+      targetPort: someverylongnam
     selector:
       service: sample-app
   status:

@@ -1,12 +1,11 @@
 # Changelog
 
-### 2.1.5 (TBD)
+### 2.1.5 (April 12, 2021)
 
-- Feature: When intercepting `--port` now supports specifying a service port or a service name. Previously, only service name was supported.
+- Feature: When intercepting `--port` now supports specifying a service port or a service name.  Previously, only service name was supported.
 - Feature: Intercepts using `--mechanism=http` now support mTLS.
-
-### 2.1.5 (TBD)
-- Bugfix: One of the log messages was using the incorrect variable, which led to misleading error messages on telepresence uninstall.
+- Bugfix: One of the log messages was using the incorrect variable, which led to misleading error messages on `telepresence uninstall`.
+- Bugfix: Telepresence no longer generates port names longer than 15 characters.
 
 ### 2.1.4 (April 5, 2021)
 

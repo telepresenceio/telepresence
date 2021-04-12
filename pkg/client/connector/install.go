@@ -925,7 +925,7 @@ func addAgentToWorkload(
 		return nil, nil, fmt.Errorf("unable to add agent to %s %s.%s. The container port cannot be determined", kind, object.GetName(), object.GetNamespace())
 	}
 	if containerPort.Name == "" {
-		containerPort.Name = fmt.Sprintf("tel2px-%d", containerPort.Number)
+		containerPort.Name = fmt.Sprintf("tx-%d", containerPort.Number)
 	}
 
 	// Figure what modifications we need to make.
@@ -970,6 +970,7 @@ func addAgentToWorkload(
 			workloadMod.HideContainerPort = &hideContainerPortAction{
 				ContainerName: container.Name,
 				PortName:      containerPort.Name,
+				ordinal:       0,
 			}
 		}
 	} else {
@@ -977,6 +978,7 @@ func addAgentToWorkload(
 		workloadMod.HideContainerPort = &hideContainerPortAction{
 			ContainerName: container.Name,
 			PortName:      containerPort.Name,
+			ordinal:       0,
 		}
 	}
 

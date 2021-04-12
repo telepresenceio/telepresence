@@ -6,7 +6,7 @@ deployment:
   kind: Deployment
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port":"8080","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port":"8080","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tx-8080","container_port_proto":"","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     name: app
   spec:
@@ -44,7 +44,7 @@ deployment:
           name: traffic-agent
           ports:
           - containerPort: 9900
-            name: tel2px-8080
+            name: tx-8080
           readinessProbe:
             exec:
               command:
@@ -67,14 +67,14 @@ service:
   kind: Service
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","add_symbolic_port":{"PortName":"https","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","add_symbolic_port":{"PortName":"https","TargetPort":8080,"SymbolicName":"tx-8080"}}'
     creationTimestamp: null
     name: app
   spec:
     ports:
     - name: https
       port: 8080
-      targetPort: tel2px-8080
+      targetPort: tx-8080
     - name: grpc
       port: 47555
       targetPort: 0

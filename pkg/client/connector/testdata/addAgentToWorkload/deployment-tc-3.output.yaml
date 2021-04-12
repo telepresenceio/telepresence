@@ -4,7 +4,7 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-3","referenced_service_port":"80","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-3","referenced_service_port":"80","add_traffic_agent":{"container_port_name":"tx-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     labels:
       app: hello-3
@@ -59,7 +59,7 @@ deployment:
           name: traffic-agent
           ports:
           - containerPort: 9900
-            name: tel2px-8080
+            name: tx-8080
             protocol: TCP
           readinessProbe:
             exec:
@@ -106,7 +106,7 @@ service:
   kind: Service
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tx-8080"}}'
     creationTimestamp: null
     labels:
       app: hello-3
@@ -119,7 +119,7 @@ service:
     ports:
     - port: 80
       protocol: TCP
-      targetPort: tel2px-8080
+      targetPort: tx-8080
     selector:
       app: hello-3
     sessionAffinity: None
