@@ -34,8 +34,10 @@
               link: /reference/architecture
             - title: Client Reference
               link: /reference/client
-            - title: Configuration File
+            - title: Laptop-side configuration
               link: /reference/config
+            - title: Cluster-side configuration
+              link: /reference/cluster-config
             - title: Environment Variables
               link: /reference/environment
             - title: Intercepts
