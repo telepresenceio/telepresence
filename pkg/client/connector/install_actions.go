@@ -579,6 +579,11 @@ type hideContainerPortAction struct {
 	PortName      string `json:"port_name"`
 	// HiddenName is the name that we swapped it to; this is set by Do(), and read by Undo().
 	HiddenName string `json:"hidden_name"`
+
+	// ordinal is only used for avoiding ambiguities when generating the HiddenName. It
+	// is the zero based order of all hideContainerPortAction instances for a workload.
+	// Right now we only use one port so this is always zero.
+	ordinal int
 }
 
 var _ partialAction = (*hideContainerPortAction)(nil)
@@ -624,13 +629,23 @@ func (hcp *hideContainerPortAction) Do(obj kates.Object) error {
 	return hcp.do(obj)
 }
 
+const maxPortNameLen = 15
+
 func (hcp *hideContainerPortAction) do(obj kates.Object) error {
-	// New name must be max 15 characters long
 	cn, p, err := hcp.getPort(obj, hcp.PortName)
 	if err != nil {
 		return err
 	}
-	hcp.HiddenName = "tel2mv-" + p.Name
+
+	// New name must be max 15 characters long
+	hcp.HiddenName = "tm-" + p.Name
+	if len(hcp.HiddenName) > maxPortNameLen {
+		if hcp.ordinal > 0 {
+			hcp.HiddenName = hcp.HiddenName[:maxPortNameLen-2] + strconv.FormatInt(int64(hcp.ordinal), 16) // we don't expect more than 256 ports
+		} else {
+			hcp.HiddenName = hcp.HiddenName[:maxPortNameLen]
+		}
+	}
 	swapPortName(cn, p, hcp.PortName, hcp.HiddenName)
 	return nil
 }

@@ -4,7 +4,7 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-mp-0","referenced_service_port":"443","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tel2px-9090","container_port_proto":"TCP","app_port":9090,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"hello-mp-0","referenced_service_port":"443","referenced_service_port_name":"https","add_traffic_agent":{"container_port_name":"tx-9090","container_port_proto":"TCP","app_port":9090,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
     creationTimestamp: null
     labels:
       app: hello-mp-0
@@ -64,7 +64,7 @@ deployment:
           name: traffic-agent
           ports:
           - containerPort: 9900
-            name: tel2px-9090
+            name: tx-9090
             protocol: TCP
           readinessProbe:
             exec:
@@ -111,7 +111,7 @@ service:
   kind: Service
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"https","TargetPort":9090,"SymbolicName":"tel2px-9090"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"https","TargetPort":9090,"SymbolicName":"tx-9090"}}'
     creationTimestamp: null
     labels:
       app: hello-mp-0
@@ -129,7 +129,7 @@ service:
     - name: https
       port: 443
       protocol: TCP
-      targetPort: tel2px-9090
+      targetPort: tx-9090
     selector:
       app: hello-mp-0
     sessionAffinity: None

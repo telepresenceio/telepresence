@@ -27,16 +27,16 @@ deployment:
             livenessProbe:
               httpGet:
                 path: /health
-                port: http
+                port: someverylongnam
               periodSeconds: 10
             readinessProbe:
               httpGet:
                 path: /health
-                port: http
+                port: someverylongnam
               periodSeconds: 10
             ports:
               - containerPort: 3000
-                name: http
+                name: someverylongnam
         restartPolicy: Always
         securityContext:
           runAsUser: 8888
@@ -51,7 +51,7 @@ service:
   spec:
     ports:
       - port: 80
-        name: http
-        targetPort: http
+        name: someverylongnam
+        targetPort: someverylongnam
     selector:
       service: sample-app
