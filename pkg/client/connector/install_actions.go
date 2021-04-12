@@ -571,7 +571,7 @@ func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kat
 			}
 		}
 	}
-	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in %s %s.%s", hcp.PortName, hcp.ContainerName, objKind, obj.GetName(), obj.GetNamespace())
+	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in %s %s.%s", name, hcp.ContainerName, objKind, obj.GetName(), obj.GetNamespace())
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {
