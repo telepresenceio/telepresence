@@ -28,7 +28,7 @@ func OpenTun() (*Device, error) {
 
 	fd, err := unix.Open(devicePath, unix.O_RDWR, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open TUN device %s: %v", devicePath, err)
 	}
 
 	var flagsRequest struct {

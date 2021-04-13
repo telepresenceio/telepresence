@@ -29,7 +29,7 @@ type Device struct {
 func OpenTun() (*Device, error) {
 	fd, err := unix.Socket(unix.AF_SYSTEM, unix.SOCK_DGRAM, sysProtoControl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open DGRAM socket: %v", err)
 	}
 	defer func() {
 		if err != nil {
@@ -40,7 +40,7 @@ func OpenTun() (*Device, error) {
 	info := &unix.CtlInfo{}
 	copy(info.Name[:], uTunControlName)
 	if err = unix.IoctlCtlInfo(fd, info); err != nil {
-		return nil, fmt.Errorf("failed to getBuffer IOCTL info: %w", err)
+		return nil, fmt.Errorf("failed to getBuffer IOCTL info for %s: %w", uTunControlName, err)
 	}
 
 	if err = unix.Connect(fd, &unix.SockaddrCtl{ID: info.Id, Unit: 0}); err != nil {
