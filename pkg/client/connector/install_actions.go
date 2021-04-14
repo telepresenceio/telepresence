@@ -150,7 +150,7 @@ func unmarshalString(in string, out completeAction) error {
 	return json.Unmarshal([]byte(in), out)
 }
 
-func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string, error) {
+func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) {
 	var tplSpec *kates.PodTemplateSpec
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
 	switch kind {
@@ -164,10 +164,10 @@ func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string,
 		statefulSet := obj.(*kates.StatefulSet)
 		tplSpec = &statefulSet.Spec.Template
 	default:
-		return nil, "", fmt.Errorf("Unsupported workload kind: %s", kind)
+		return nil, objErrorf(obj, "unsupported workload kind %q", kind)
 	}
 
-	return tplSpec, kind, nil
+	return tplSpec, nil
 }
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
@@ -196,8 +196,8 @@ func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.Int
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("unable to find target port %s in Service %s",
-		m.portName(targetPort.String()), svc.GetName())
+	return nil, objErrorf(svc, "unable to find target port %q",
+		m.portName(targetPort.String()))
 }
 
 func (m *makePortSymbolicAction) Do(svc kates.Object) error {
@@ -253,7 +253,7 @@ func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*ka
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("unable to find port %d in Service %s", targetPort, svc.GetName())
+	return nil, objErrorf(svc, "unable to find port %d", targetPort)
 }
 
 func (m *addSymbolicPortAction) ExplainDo(_ kates.Object, out io.Writer) {
@@ -374,14 +374,14 @@ func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Con
 }
 
 func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
-	tplSpec, objKind, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
 	cns := tplSpec.Spec.Containers
 	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
-		return fmt.Errorf("unable to find app container %s in %s %s.%s", ata.containerName, objKind, obj.GetName(), obj.GetNamespace())
+		return objErrorf(obj, "unable to find app container %q in", ata.containerName)
 	}
 
 	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, corev1.Volume{
@@ -526,7 +526,7 @@ func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
 }
 
 func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
-	tplSpec, _, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return false
 	}
@@ -541,7 +541,7 @@ func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
 }
 
 func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) error {
-	tplSpec, _, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
@@ -554,7 +554,7 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 		}
 	}
 	if containerIdx < 0 {
-		return fmt.Errorf("object does not contain a %q container", agentContainerName)
+		return objErrorf(obj, "does not contain a %q container", agentContainerName)
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
@@ -568,7 +568,7 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 		}
 
 		if volumeIdx < 0 {
-			return fmt.Errorf("object does not contain a %q volume", agentAnnotationVolumeName)
+			return objErrorf(obj, "does not contain a %q volume", agentAnnotationVolumeName)
 		}
 		if len(tplSpec.Spec.Volumes) == 1 {
 			tplSpec.Spec.Volumes = nil
@@ -600,7 +600,7 @@ type hideContainerPortAction struct {
 var _ partialAction = (*hideContainerPortAction)(nil)
 
 func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	tplSpec, objKind, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -618,7 +618,7 @@ func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kat
 			}
 		}
 	}
-	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in %s %s.%s", name, hcp.ContainerName, objKind, obj.GetName(), obj.GetNamespace())
+	return nil, nil, objErrorf(obj, "unable to locate port %q in container %q", name, hcp.ContainerName)
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {

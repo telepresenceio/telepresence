@@ -171,7 +171,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 					return
 				}
 			default:
-				addError(fmt.Errorf("Agent associated with unknown workload kind, can't be removed: %s", ai.Name))
+				addError(fmt.Errorf("agent %q associated with unsupported workload kind %q, cannot be removed", ai.Name, kind))
 				return
 			}
 			if err = ki.undoObjectMods(c, agent); err != nil {
@@ -336,7 +336,7 @@ func findMatchingPort(obj kates.Object, portNameOrNumber string, svc *kates.Serv
 	cPortIndex int,
 	err error,
 ) {
-	podTemplate, objType, err := GetPodTemplateFromObject(obj)
+	podTemplate, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -348,15 +348,11 @@ func findMatchingPort(obj kates.Object, portNameOrNumber string, svc *kates.Serv
 	case numPorts == 0:
 		// this may happen when portNameOrNumber is specified but none of the
 		// ports match
-		return nil, nil, 0, fmt.Errorf(`
-found no service with a port that matches a container in %s %s.%s`,
-			objType, obj.GetName(), obj.GetNamespace())
+		return nil, nil, 0, objErrorf(obj, "found no Service with a port that matches any container in this workload")
 
 	case numPorts > 1:
-		return nil, nil, 0, fmt.Errorf(`
-found matching service with multiple ports for %s %s.%s. Please specify the
-service port you want to intercept like so --port local:svcPortName`,
-			objType, obj.GetName(), obj.GetNamespace())
+		return nil, nil, 0, objErrorf(obj, `found matching Service with multiple matching ports.
+Please specify the Service port you want to intercept by passing the --port=local:svcPortName flag.`)
 	default:
 	}
 	port := ports[0]
@@ -403,7 +399,7 @@ service port you want to intercept like so --port local:svcPortName`,
 	}
 
 	if matchingServicePort == nil {
-		return nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in %s %s.%s", objType, obj.GetName(), obj.GetNamespace())
+		return nil, nil, 0, objErrorf(obj, "found no Service with a port that matches any container in this workload")
 	}
 	return matchingServicePort, matchingContainer, containerPortIndex, nil
 }
@@ -417,16 +413,16 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 	}
 	namespace := obj.GetNamespace()
 	if !annotationsFound {
-		return nil, fmt.Errorf("No annotations found on deployment: %s.%s", obj.GetName(), namespace)
+		return nil, objErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 	}
 	svcName := actions.ReferencedService
 	if svcName == "" {
-		return nil, fmt.Errorf("No ReferencedService found on deployment: %s.%s", obj.GetName(), namespace)
+		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
 	svc := ki.findSvc(namespace, svcName)
 	if svc == nil {
-		return nil, fmt.Errorf("Deployment %s.%s referenced unfound service: %s", obj.GetName(), namespace, svcName)
+		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
 	}
 	return svc, nil
 }
@@ -446,7 +442,7 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber
 		// then the service to be used with the intercept has changed
 		curSvc := actions.ReferencedService
 		if svcName != "" && curSvc != svcName {
-			return fmt.Errorf("Service for %s changed from %s -> %s", obj.GetName(), curSvc, svcName)
+			return objErrorf(obj, "associated Service changed from %q to %q", curSvc, svcName)
 		}
 
 		// If the portNameOrNumber passed in doesn't match the referenced service
@@ -456,7 +452,7 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber
 			curSvcPortName := actions.ReferencedServicePortName
 			curSvcPort := actions.ReferencedServicePort
 			if curSvcPortName != portNameOrNumber && curSvcPort != portNameOrNumber {
-				return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portNameOrNumber)
+				return objErrorf(obj, "port changed from %q to %q", curSvcPort, portNameOrNumber)
 			}
 		}
 	}
@@ -492,10 +488,10 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 			return "", "", err
 		}
 	default:
-		return "", "", fmt.Errorf("Cannot ensure agent on unsupported workload: %s", kind)
+		return "", "", fmt.Errorf("unsupported workload kind %q, cannot ensure agent", kind)
 	}
 
-	podTemplate, _, err := GetPodTemplateFromObject(obj)
+	podTemplate, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return "", "", err
 	}
@@ -558,7 +554,7 @@ already exist for this service`, kind, obj.GetName())
 			return "", "", err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return "", "", fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
+			return "", "", objErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 		}
 
 		dlog.Debugf(c, "Updating agent for %s %s.%s", kind, name, namespace)
@@ -698,7 +694,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 		}
 
 	default:
-		return fmt.Errorf("Can't wait for apply of unknown workload type: %s", kind)
+		return fmt.Errorf("unsupported workload kind %q, cannot wait for apply", kind)
 	}
 }
 
@@ -748,6 +744,12 @@ func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string
 	return nil
 }
 
+func objErrorf(obj kates.Object, format string, args ...interface{}) error {
+	return fmt.Errorf("%s name=%q namespace=%q: %w",
+		obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), obj.GetNamespace(),
+		fmt.Errorf(format, args...))
+}
+
 func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	ann := obj.GetAnnotations()
 	if ann == nil {
@@ -758,20 +760,22 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 		return false, nil
 	}
 	if err := data.UnmarshalAnnotation(ajs); err != nil {
-		return false, err
+		return false, objErrorf(obj, "annotations[%q]: unable to parse annotation: %q: %w",
+			annTelepresenceActions, ajs, err)
 	}
 
 	annV, err := data.TelVersion()
 	if err != nil {
-		return false, fmt.Errorf("unable to parse semantic version in annotation %s of %s %s", annTelepresenceActions,
-			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+		return false, objErrorf(obj, "annotations[%q]: unable to parse semantic version %q: %w",
+			annTelepresenceActions, ajs, err)
 	}
 	ourV := client.Semver()
 
 	// Compare major and minor versions. 100% backward compatibility is assumed and greater patch versions are allowed
 	if ourV.Major < annV.Major || ourV.Major == annV.Major && ourV.Minor < annV.Minor {
-		return false, fmt.Errorf("the version %v found in annotation %s of %s %s is more recent than version %v of this binary",
-			annV, annTelepresenceActions, obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), ourV)
+		return false, objErrorf(obj, "annotations[%q]: the version in the annotation (%v) is more recent than this binary's version (%v)",
+			annTelepresenceActions,
+			annV, ourV)
 	}
 	return true, nil
 }
@@ -796,7 +800,7 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 		return "", err
 	}
 	if !ok {
-		return "", fmt.Errorf("deployment %s.%s has no agent installed", obj.GetName(), obj.GetNamespace())
+		return "", objErrorf(obj, "agent is not installed")
 	}
 
 	if err = actions.Undo(obj); err != nil {
@@ -848,7 +852,7 @@ func addAgentToWorkload(
 	*kates.Service,
 	error,
 ) {
-	_, kind, err := GetPodTemplateFromObject(object)
+	_, err := GetPodTemplateFromObject(object)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -870,7 +874,7 @@ func addAgentToWorkload(
 			}
 			return strconv.Itoa(int(servicePort.Port))
 		}(),
-		kind,
+		object.GetObjectKind().GroupVersionKind().Kind,
 		object.GetName())
 
 	version := client.Semver().String()
@@ -913,7 +917,7 @@ func addAgentToWorkload(
 		}
 	}
 	if containerPort.Number == 0 {
-		return nil, nil, fmt.Errorf("unable to add agent to %s %s.%s. The container port cannot be determined", kind, object.GetName(), object.GetNamespace())
+		return nil, nil, objErrorf(object, "unable to add: the container port cannot be determined")
 	}
 	if containerPort.Name == "" {
 		containerPort.Name = fmt.Sprintf("tx-%d", containerPort.Number)

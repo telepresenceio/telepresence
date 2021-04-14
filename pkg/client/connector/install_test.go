@@ -436,7 +436,7 @@ func sanitizeWorkload(obj kates.Object) {
 	obj.SetResourceVersion("")
 	obj.SetGeneration(int64(0))
 	obj.SetCreationTimestamp(metav1.Time{})
-	podTemplate, _, _ := GetPodTemplateFromObject(obj)
+	podTemplate, _ := GetPodTemplateFromObject(obj)
 	for i, c := range podTemplate.Spec.Containers {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""
