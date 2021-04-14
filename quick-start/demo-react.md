@@ -6,7 +6,7 @@ import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
-# Telepresence Quick Start
+# Telepresence Quick Start - React
 
 <div class="docs-article-toc">
 <h3>Contents</h3>
@@ -26,12 +26,14 @@ import QSCards from './qs-cards'
 In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally. 
 
 <Alert severity="info">
-    While Telepresence works with any language, this guide uses a sample app written in NodeJS. We have a version in <a href="../demo-react/">React</a> if you prefer.
+    While Telepresence works with any language, this guide uses a sample app with a frontend written in React. We have a version with a <a href="../qs-node/">NodeJS backend</a> if you prefer.
 </Alert>
 
+<!--
 <Alert severity="info">
     <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
 </Alert>
+-->
 
 ## 1. Download the demo cluster archive
 
@@ -48,19 +50,17 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
   unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
   cd ambassador-demo-cluster
   ./install.sh
+  [type y to install the npm dependencies when asked]
   ```
  
-3. The demo cluster we provided already has a demo app running. List the app's services:  
-  `kubectl get services`
+3. Confirm that your `kubectl` is configured to use the demo cluster by getting the status of the cluster nodes, you should see a single node named `tpdemo-prod-...`:    
+  `kubectl get nodes`
 
   ```
-   $ kubectl get services
+   $ kubectl get nodes
     
-    NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-    kubernetes              ClusterIP   10.43.0.1       <none>        443/TCP    14h
-    dataprocessingservice   ClusterIP   10.43.159.239   <none>        3000/TCP   14h
-    verylargejavaservice    ClusterIP   10.43.223.61    <none>        8080/TCP   14h
-    verylargedatastore      ClusterIP   10.43.203.19    <none>        8080/TCP   14h
+    NAME               STATUS   ROLES                  AGE     VERSION
+    tpdemo-prod-1234   Ready    control-plane,master   5d10h   v1.20.2+k3s1
   ```
 
 4. Confirm that the Telepresence CLI is now installed (we expect to see the daemons are not running yet):  
@@ -78,7 +78,7 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
   </Alert>
 
 <Alert severity="success">
-    You now have Telepresence installed on your workstation and a Kubernetes cluster configured in your terminal.
+    You now have Telepresence installed on your workstation and a Kubernetes cluster configured in your terminal!
 </Alert>
 
 ## 2. Test Telepresence
@@ -117,95 +117,126 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
     <strong>Congratulations!</strong> You’ve just accessed your remote Kubernetes API server, as if you were on the same network! With Telepresence, you’re able to use any tool that you have locally to connect to any service in the cluster.
 </Alert>
 
-## 3. Check out the sample application
+## 3. Set up the sample application
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
+<!--
 We'll use a sample app that is already installed in your demo cluster.  Let's take a quick look at it's architecture before continuing.
+-->
 
-1. Use `kubectl get pods` to check the status of your pods:
+1. Clone the emojivoto app:  
+`git clone https://github.com/datawire/emojivoto.git`
+
+1. Deploy the app to your cluster:  
+`kubectl apply -k emojivoto/kustomize/deployment`
+
+1. Change the kubectl namespace:  
+`kubectl config set-context --current --namespace=emojivoto`
+
+1. List the Services:  
+`kubectl get svc`
 
   ```
-  $ kubectl get pods
+  $ kubectl get svc
     
-    NAME                                         READY   STATUS    RESTARTS   AGE
-    verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
-    verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
-    dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
+    NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
+    emoji-svc    ClusterIP   10.43.162.236   <none>        8080/TCP,8801/TCP   29s
+    voting-svc   ClusterIP   10.43.51.201    <none>        8080/TCP,8801/TCP   29s
+    web-app      ClusterIP   10.43.242.240   <none>        80/TCP              29s
+    web-svc      ClusterIP   10.43.182.119   <none>        8080/TCP            29s
   ```
 
-2. Since you’ve already connected Telepresence to your cluster, you can access the frontend service in your browser at http://verylargejavaservice.default:8080.
-
-3. You should see the EdgyCorp WebApp with a <strong style="color:green">green</strong> title and <strong style="color:green">green</strong> pod in the diagram.
+1. Since you’ve already connected Telepresence to your cluster, you can access the frontend service in your browser at [http://web-app.emojivoto](http://web-app.emojivoto).  This is the namespace qualified DNS name in the form of `service.namespace`.
 
 <Alert severity="success">
   <strong>Congratulations</strong>, you can now access services running in your cluster by name from your laptop!
 </Alert>
 
-## 4. Run a service on your laptop
+## 4. Test app
 
-Now start up the DataProcessingService service on your laptop. This version of the code has the UI color set to <strong style="color:blue">blue</strong> instead of <strong style="color:green">green</strong>.
+1. Vote for some emojis and see how the [leaderboard](http://web-app.emojivoto/leaderboard) changes. 
 
-1. **In a <u>new</u> terminal window**, go the demo application directory in the extracted archive folder:
-  `cd edgey-corp-nodejs/DataProcessingService`
+1. There is one emoji that causes an error when you vote for it. Vote for 🍩 and the leaderboard does not actually update. Also an error is shown on the browser dev console:
+`GET http://web-svc.emojivoto:8080/api/vote?choice=:doughnut: 500 (Internal Server Error)`
 
-2. Start the application:
-  `npm start`
-
-  ```
-  $ npm start
-    
-    ...
-    Welcome to the DataProcessingService!
-    { _: [] }
-    Server running on port 3000
-  ```
-
-4. **Back in your <u>previous</u> terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:  
-`curl localhost:3000/color`
-
-  ```
-  $ curl localhost:3000/color
-    
-    "blue"
-  ```
-
-<Alert severity="success">
-    <strong>Victory</strong>, your local Node server is running a-ok!
+<Alert severity="info">
+    Open the dev console in <strong>Chrome or Firefox</strong> with Option + ⌘ + J (macOS) or Shift + CTRL + J (Windows/Linux).<br/>
+    Open the dev console in <strong>Safari</strong> with Option + ⌘ + C.
 </Alert>
 
-## 5. Intercept all traffic to the service
+The error is on a backend service, so **we can add an error page to notify the user** while the bug is fixed.
+
+## 5. Run the backend service on your laptop
+
+Now start up the `web-app` backend service on your laptop. We'll then make a code change and intercept this service so that we can see the immediate results of a code change to the backend.
+
+1. **In a <u>new</u> terminal window**, change into the repo directory and build the application:
+
+  `cd <cloned repo location>/emojivoto`  
+  `make web-app-local`
+
+2. Change into the code directory and start the server:
+
+  `cd emojivoto-web-app`  
+  `yarn webpack serve`
+
+  ```
+  $ yarn webpack server
+    
+    ...
+    ℹ ｢wds｣: Project is running at http://localhost:8080/
+    ...
+    ℹ ｢wdm｣: Compiled successfully.
+  ```
+
+4. Access the application at http://localhost:8080 and see how voting for the 🍩 is generating the same error as the application deployed in the cluster.
+
+<Alert severity="success">
+    <strong>Victory</strong>, your local React server is running a-ok!
+</Alert>
+
+## 6. Make a code change
+We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
+
+1. In your editor, open the file `emojivoto/emojivoto-web-app/js/components/Vote.jsx` and replace the render() function with the following:
+
+  ```
+  https://github.com/BuoyantIO/emojivoto/blob/fbe3ecba84ea44dff771524b664bd25af25e8b51/emojivoto-web/webapp/js/components/Vote.jsx#L83-L149
+  ```
+
+1. In a new terminal window, change to the `emojivoto-web-dir` directory and run webpack to fully recompile the code:
+
+  `cd <cloned repo location>/emojivoto/emojivoto-web-app/`  
+  `yarn webpack`
+
+1. Reload the browser tab showing `localhost:8080` and see how the error generated by voting for the 🍩 is handled in a better way and improves the user experience.
+
+## 7. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead:
 
-1. Start the intercept with the `intercept` command, setting the service name and port:  
-`telepresence intercept dataprocessingservice --port 3000`
+1. Start the intercept with the `intercept` command, setting the workload name (a Deployment in this case), namespace, and port:  
+`telepresence intercept web-app --namespace emojivoto --port 8080`
 
   <Alert severity="info">
     <strong>Didn't work?</strong> Make sure you are working in the terminal window where you ran the script because it sets environment variables to access the demo cluster.  Those variables will only will apply to that terminal session.
   </Alert>
 
   ```
-  $ telepresence intercept dataprocessingservice --port 3000
+  $ telepresence intercept web-app --namespace emojivoto --port 8080
     
-    Using deployment dataprocessingservice
+    Using deployment web-app
     intercepted
-        Intercept name: dataprocessingservice
+        Intercept name: web-app
         State         : ACTIVE
     ...
   ```
 
-2. Go to the frontend service again in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <strong style="color:blue">blue</strong> elements in the app.
+2. Go to the frontend service again in your browser at [http://web-app.emojivoto](http://web-app.emojivoto). Voting for 🍩 should now show a message to the user that it's broke.
 
 <Alert severity="success">
-    The frontend’s request to DataProcessingService is being <strong>intercepted and rerouted</strong> to the Node server on your laptop!
+    The frontend’s request the <code>web-app</code> Deployment is being <strong>intercepted and rerouted</strong> to the Node server on your laptop!
 </Alert>
-
-## 6. Make a code change
-We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
-
-1. Open `edgey-corp-nodejs/DataProcessingService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
-
-2. Now visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the <strong style="color:orange">orange</strong> elements in the application. The frontend `verylargejavaservice` is still running on the cluster, but it's request to the `DataProcessingService` for retrieve the color to show is being proxied by Telepresence to your laptop.
 
 <Alert severity="success">
   We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
@@ -215,11 +246,11 @@ We’ve now set up a local development environment for the DataProcessingService
   With Telepresence, these changes happen instantly.
 </Alert>
 
-## 7. Create a Preview URL
+## 8. Create a Preview URL
 Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
 
 1. Clean up your previous intercept by removing it:  
-`telepresence leave dataprocessingservice`
+`telepresence leave web-app`
 
 2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
 `telepresence login`
@@ -234,13 +265,13 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
   ```
 
 3. Start the intercept again:  
-`telepresence intercept dataprocessingservice --port 3000`
+`telepresence intercept web-app --port 8080`
 
-   You will be asked for your ingress layer 3 address; specify the front end service: `verylargejavaservice.default`
+   You will be asked for your ingress layer 3 address; specify the front end service: `web-app.emojivoto`
    Then when asked for the port, type `8080`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it
 
   ```
-  $ telepresence intercept dataprocessingservice --port 3000
+  $ telepresence intercept web-app --port 8080
     
     To create a preview URL, telepresence needs to know how cluster
     ingress works for this service.  Please Select the ingress to use.
@@ -249,7 +280,7 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
          You may use an IP address or a DNS name (this is usually a
          "service.namespace" DNS name).
     
-           [no default]: verylargejavaservice.default
+           [no default]: web-app.default
     
     2/4: What's your ingress' layer 4 address (TCP port number)?
     
@@ -262,17 +293,17 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
     4/4: If required by your ingress, specify a different layer 5 hostname
          (TLS-SNI, HTTP "Host" header) to access this service.
     
-           [default: verylargejavaservice.default]:
+           [default: web-app.default]:
     
-    Using deployment dataprocessingservice
+    Using deployment web-app
     intercepted
-        Intercept name  : dataprocessingservice
+        Intercept name  : web-app
         State           : ACTIVE
         Destination     : 127.0.0.1:3000
         Intercepting    : HTTP requests that match all of:
-          header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
+          header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:web-app")
         Preview URL     : https://<random-subdomain>.preview.edgestack.me
-        Layer 5 Hostname: verylargejavaservice.default
+        Layer 5 Hostname: web-app.default
   ```
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
