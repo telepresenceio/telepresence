@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/blang/semver"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -762,7 +761,7 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 		return false, err
 	}
 
-	annV, err := semver.Parse(data.TelVersion())
+	annV, err := data.TelVersion()
 	if err != nil {
 		return false, fmt.Errorf("unable to parse semantic version in annotation %s of %s %s", annTelepresenceActions,
 			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
