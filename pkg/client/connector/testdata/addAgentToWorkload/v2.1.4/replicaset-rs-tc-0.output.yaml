@@ -1,0 +1,62 @@
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: app
+    annotations:
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"http","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
+  spec:
+    ports:
+      - name: http
+        port: 80
+        protocol: TCP
+        targetPort: tel2px-8080
+replicaset:
+  apiVersion: apps/v1
+  kind: ReplicaSet
+  metadata:
+    name: app
+    annotations:
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+  spec:
+    template:
+      spec:
+        containers:
+          - name: app
+            imagePullPolicy: Always
+          - args:
+              - agent
+            env:
+              - name: TELEPRESENCE_CONTAINER
+                value: app
+              - name: LOG_LEVEL
+                value: debug
+              - name: AGENT_NAME
+                value: app
+              - name: AGENT_POD_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+              - name: AGENT_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace
+              - name: APP_PORT
+                value: "8080"
+              - name: MANAGER_HOST
+                value: "traffic-manager.ambassador"
+            readinessProbe:
+              exec:
+                command:
+                  - "/bin/stat"
+                  - "/tmp/agent/ready"
+            image: localhost:5000/tel2:{{.Version}}
+            imagePullPolicy: IfNotPresent
+            name: traffic-agent
+            ports:
+              - containerPort: 9900
+                name: tel2px-8080
+                protocol: TCP
+            resources: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
