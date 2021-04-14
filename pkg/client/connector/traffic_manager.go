@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/user"
 	"regexp"
@@ -13,7 +14,9 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	v1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
@@ -23,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -171,7 +175,12 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	if _, err = tm.daemon.SetManagerInfo(c, &daemon.ManagerInfo{GrpcPort: int32(grpcPort), Session: tm.sessionInfo}); err != nil {
+	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
+	outboundInfo, err := tm.getOutboundInfo(c, int32(grpcPort))
+	if err != nil {
+		return err
+	}
+	if _, err = tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
 		return err
 	}
 
@@ -297,7 +306,10 @@ func (tm *trafficManager) getInfosForWorkload(
 					continue
 				}
 
-				matchingSvcs := tm.findMatchingServices("", "", namespace, labels)
+				matchingSvcs, err := tm.findMatchingServices(ctx, "", "", namespace, labels)
+				if err != nil {
+					continue
+				}
 				if len(matchingSvcs) == 0 {
 					reason = "No service with matching selector"
 				}
@@ -498,4 +510,95 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		}
 	}
 	return result, nil
+}
+
+var svcCIDRrx = regexp.MustCompile(`range of valid IPs is (.*)$`)
+
+// getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
+func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*daemon.OutboundInfo, error) {
+	// Get all nodes
+	var nodes []kates.Node
+	var cidr *net.IPNet
+
+	svc := kates.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-dns",
+			Namespace: "kube-system",
+		},
+	}
+	err := tm.client.Get(c, &svc, &svc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kube-dns.kube-system service")
+	}
+	kubeDNS := iputil.Parse(svc.Spec.ClusterIP)
+
+	// make an attempt to create a service with ClusterIP that is out of range and then
+	// check the error message for the correct range as suggested tin the second answer here:
+	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
+	// This requires an additional permission to create a service, which we might not have
+	svc = kates.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "t2-tst-dummy",
+		},
+		Spec: v1.ServiceSpec{
+			Ports:     []kates.ServicePort{{Port: 443}},
+			ClusterIP: "1.1.1.1",
+		},
+	}
+
+	var serviceSubnet *daemon.IPNet
+	if err = tm.client.Create(c, &svc, &svc); err != nil {
+		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
+			_, cidr, err = net.ParseCIDR(match[1])
+			if err != nil {
+				dlog.Errorf(c, "unable to parse service CIDR %q", match[1])
+			} else {
+				serviceSubnet = iputil.IPNetToRPC(cidr)
+			}
+		} else {
+			dlog.Debugf(c, "Probably insufficient permissions to attempt dummy service creation in order to find service subnet: %v", err)
+		}
+	}
+
+	if serviceSubnet == nil {
+		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
+		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
+		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
+		// unlikely to cover less than half the bits.
+		dlog.Debugf(c, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", kubeDNS)
+		bits := len(kubeDNS) * 8
+		ones := bits / 2
+		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
+		serviceSubnet = &daemon.IPNet{Ip: kubeDNS.Mask(mask), Mask: int32(ones)}
+	}
+
+	if err = tm.client.List(c, kates.Query{Kind: "Node"}, &nodes); err != nil {
+		return nil, fmt.Errorf("failed to get nodes: %v", err)
+	}
+	podCIDRs := make([]*daemon.IPNet, 0, len(nodes)+1)
+	for i := range nodes {
+		node := &nodes[i]
+		for _, podCIDR := range node.Spec.PodCIDRs {
+			_, cidr, err = net.ParseCIDR(podCIDR)
+			if err != nil {
+				dlog.Errorf(c, "unable to parse podCIDR %q in %s.%s", podCIDR, node.Name, node.Namespace)
+				continue
+			}
+			podCIDRs = append(podCIDRs, iputil.IPNetToRPC(cidr))
+		}
+	}
+
+	return &daemon.OutboundInfo{
+		Session:       tm.sessionInfo,
+		ManagerPort:   mgrPort,
+		KubeDnsIp:     kubeDNS,
+		ServiceSubnet: serviceSubnet,
+		PodSubnets:    podCIDRs,
+	}, nil
 }

@@ -298,38 +298,39 @@ func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.Ser
 	return svcPorts
 }
 
-func (ki *installer) findMatchingServices(portNameOrNumber, svcName, namespace string, labels map[string]string) []*kates.Service {
-	matching := make([]*kates.Service, 0)
+func (ki *installer) findMatchingServices(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*kates.Service, error) {
+	// TODO: Expensive on large clusters but the problem goes away once we move the installer to the traffic-manager
+	var svcs []*kates.Service
+	err := ki.client.List(c, kates.Query{
+		Name:      svcName,
+		Kind:      "Service",
+		Namespace: namespace,
+	}, &svcs)
+	if err != nil {
+		return nil, err
+	}
 
-	ki.accLock.Lock()
-	for _, watch := range ki.watchers {
-	nextSvc:
-		for _, svc := range watch.Services {
-			selector := svc.Spec.Selector
-			if len(selector) == 0 {
-				continue nextSvc
-			}
+	var matching []*kates.Service
+	for _, svc := range svcs {
+		selector := svc.Spec.Selector
+		if len(selector) == 0 {
+			continue
+		}
 
-			// Only check services in the given namespace
-			if svc.Namespace != namespace {
-				continue nextSvc
-			}
-			// Only check if the service names are equal when supplied by user
-			if svcName != "" && svc.Name != svcName {
-				continue nextSvc
-			}
-			for k, v := range selector {
-				if labels[k] != v {
-					continue nextSvc
-				}
-			}
-			if len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
-				matching = append(matching, svc)
+		// Only check if the service names are equal when supplied by user
+		if svcName != "" && svc.Name != svcName {
+			continue
+		}
+		for k, v := range selector {
+			if labels[k] != v {
+				continue
 			}
 		}
+		if len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
+			matching = append(matching, svc)
+		}
 	}
-	ki.accLock.Unlock()
-	return matching
+	return matching, nil
 }
 
 // findMatchingPort finds the matching container associated with portNameOrNumber
@@ -424,7 +425,10 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
-	svc := ki.findSvc(namespace, svcName)
+	svc, err := ki.findSvc(c, namespace, svcName)
+	if err != nil && !kates.IsNotFound(err) {
+		return nil, err
+	}
 	if svc == nil {
 		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
 	}
@@ -522,7 +526,10 @@ already exist for this service`, kind, obj.GetName())
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
-		matchingSvcs := ki.findMatchingServices(portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvcs, err := ki.findMatchingServices(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		if err != nil {
+			return "", "", err
+		}
 
 		switch numSvcs := len(matchingSvcs); {
 		case numSvcs == 0:
@@ -546,7 +553,6 @@ already exist for this service`, kind, obj.GetName())
 		default:
 		}
 
-		var err error
 		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, obj, matchingSvcs[0])
 		if err != nil {
 			return "", "", err
@@ -789,7 +795,11 @@ func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
 	if err != nil {
 		return err
 	}
-	if svc := ki.findSvc(obj.GetNamespace(), referencedService); svc != nil {
+	svc, err := ki.findSvc(c, obj.GetNamespace(), referencedService)
+	if err != nil && !kates.IsNotFound(err) {
+		return err
+	}
+	if svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}

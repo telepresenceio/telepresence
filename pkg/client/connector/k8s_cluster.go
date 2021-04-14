@@ -46,7 +46,6 @@ type k8sCluster struct {
 
 	accLock         sync.Mutex
 	accWait         chan struct{}
-	watchers        map[string]*k8sWatcher
 	localIntercepts map[string]string
 
 	// watcherChanged is a channel that accumulates the channels of all watchers.
@@ -331,57 +330,34 @@ func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) 
 
 // findSvc finds a service with the given name in the given Namespace and returns
 // either a copy of that service or nil if no such service could be found.
-func (kc *k8sCluster) findSvc(namespace, name string) *kates.Service {
-	var svcCopy *kates.Service
-	kc.accLock.Lock()
-	if watcher, ok := kc.watchers[namespace]; ok {
-		for _, svc := range watcher.Services {
-			if svc.Namespace == namespace && svc.Name == name {
-				svcCopy = svc.DeepCopy()
-				break
-			}
-		}
+func (kc *k8sCluster) findSvc(c context.Context, namespace, name string) (*kates.Service, error) {
+	rs := &kates.Service{
+		TypeMeta:   kates.TypeMeta{Kind: "Service"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	kc.accLock.Unlock()
-	return svcCopy
+	if err := kc.client.Get(c, rs, rs); err != nil {
+		return nil, err
+	}
+	return rs, nil
 }
 
 // findAllSvc finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
-func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service {
-	var svcCopies []*kates.Service
-	kc.accLock.Lock()
-	for _, watcher := range kc.watchers {
-		for _, svc := range watcher.Services {
-			if svc.Spec.Type == svcType {
-				svcCopies = append(svcCopies, svc.DeepCopy())
-				break
-			}
+func (kc *k8sCluster) findAllSvcByType(c context.Context, svcType v1.ServiceType) ([]*kates.Service, error) {
+	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
+	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
+	var svcs []*kates.Service
+	if err := kc.client.List(c, kates.Query{Kind: "Service"}, &svcs); err != nil {
+		return nil, err
+	}
+	var typedSvcs []*kates.Service
+	for _, svc := range svcs {
+		if svc.Spec.Type == svcType {
+			typedSvcs = append(typedSvcs, svc)
+			break
 		}
 	}
-	kc.accLock.Unlock()
-	return svcCopies
-}
-
-// This returns a map of kubernetes object types and the
-// number of them that are being watched
-func (kc *k8sCluster) findNumK8sObjects() map[string]int {
-	objectMap := make(map[string]int)
-	var numServices, numEndpoints, numPods int
-
-	kc.accLock.Lock()
-	objectMap["namespaces"] = len(kc.watchers)
-	for _, watcher := range kc.watchers {
-		numServices += len(watcher.Services)
-		numEndpoints += len(watcher.Endpoints)
-		numPods += len(watcher.Pods)
-	}
-	kc.accLock.Unlock()
-
-	objectMap["services"] = numServices
-	objectMap["endpoints"] = numEndpoints
-	objectMap["pods"] = numPods
-	return objectMap
+	return typedSvcs, nil
 }
 
 func (kc *k8sCluster) namespaceExists(namespace string) (exists bool) {

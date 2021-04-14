@@ -342,12 +342,19 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			sort.Strings(mns)
 			s.cluster.setMappedNamespaces(c, mns)
 		}
+		ingressInfo, err := s.cluster.detectIngressBehavior(c)
+		if err != nil {
+			return &rpc.ConnectInfo{
+				Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+				ErrorText: err.Error(),
+			}
+		}
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
-			IngressInfos:   s.cluster.detectIngressBehavior(),
+			IngressInfos:   ingressInfo,
 		}
 		s.trafficMgr.setStatus(c, ret)
 		return ret
@@ -357,7 +364,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
-			IngressInfos:   s.cluster.detectIngressBehavior(),
 		}
 		s.trafficMgr.setStatus(c, ret)
 		return ret
@@ -419,9 +425,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 				"cluster_id":        s.cluster.getClusterId(c),
 				"mapped_namespaces": len(cr.MappedNamespaces),
 			},
-		}
-		for objectType, num := range s.cluster.findNumK8sObjects() {
-			report.PersistentMetadata[objectType] = num
 		}
 		return report
 	}()
@@ -486,12 +489,21 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		},
 	}
 
+	ingressInfo, err := s.cluster.detectIngressBehavior(c)
+	if err != nil {
+		s.cancel()
+		return &rpc.ConnectInfo{
+			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText: err.Error(),
+		}
+	}
+
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
 		ClusterContext: s.cluster.k8sConfig.Context,
 		ClusterServer:  s.cluster.k8sConfig.Server,
 		ClusterId:      s.cluster.getClusterId(c),
-		IngressInfos:   s.cluster.detectIngressBehavior(),
+		IngressInfos:   ingressInfo,
 	}
 	s.trafficMgr.setStatus(c, ret)
 	return ret

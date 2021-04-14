@@ -17,11 +17,11 @@ rules:
 - apiGroups:
   - ""
   resources: ["pods"]
-  verbs: ["get", "list", "create", "watch", "delete"]
+  verbs: ["get", "list", "create", "delete"]
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "watch", "update"]
+  verbs: ["get", "list", "update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]
@@ -37,11 +37,15 @@ rules:
 - apiGroups:
   - ""
   resources: ["endpoints"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "list"]
 - apiGroups:
   - ""
   resources: ["namespaces"]
   verbs: ["get", "list", "watch"]
+- apiGroups:
+    - ""
+  resources: ["nodes"]
+  verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

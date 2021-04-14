@@ -18,7 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
-	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/icmp"
@@ -110,12 +110,6 @@ type tunRouter struct {
 
 	// rndSource is the source for the random number generator in the TCP handlers
 	rndSource rand.Source
-
-	// ips is the current set of IP addresses mapped by this router.
-	ips map[IPKey]struct{}
-
-	// subnets is the current set of subnets mapped by this router. It is derived from ips.
-	subnets map[string]*net.IPNet
 }
 
 func newTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
@@ -129,98 +123,8 @@ func newTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
 		toTunCh:       make(chan ip.Packet, 100),
 		mgrConfigured: managerConfigured,
 		fragmentMap:   make(map[uint16][]*buffer.Data),
-		ips:           make(map[IPKey]struct{}),
-		subnets:       make(map[string]*net.IPNet),
 		rndSource:     rand.NewSource(time.Now().UnixNano()),
 	}, nil
-}
-
-// snapshot returns a copy of the current IP table.
-func (t *tunRouter) snapshot() map[IPKey]struct{} {
-	ips := make(map[IPKey]struct{}, len(t.ips))
-	for k, v := range t.ips {
-		ips[k] = v
-	}
-	return ips
-}
-
-// clear the given ip. Returns true if the ip was cleared and false if not found.
-func (t *tunRouter) clear(_ context.Context, ip IPKey) (found bool) {
-	if _, found = t.ips[ip]; found {
-		delete(t.ips, ip)
-	}
-	return found
-}
-
-// add the given ip. Returns true if the io was added and false if it was already present.
-func (t *tunRouter) add(_ context.Context, ip IPKey) (found bool) {
-	if _, found = t.ips[ip]; !found {
-		t.ips[ip] = struct{}{}
-	}
-	return !found
-}
-
-// flush any pending changes that needs to be committed
-func (t *tunRouter) flush(c context.Context, dnsIP net.IP) error {
-	addedNets := make(map[string]*net.IPNet)
-	ips := make([]net.IP, len(t.ips))
-	i := 0
-	for tip := range t.ips {
-		ips[i] = net.IP(tip)
-		i++
-	}
-
-	droppedNets := make(map[string]*net.IPNet)
-	for _, sn := range subnet.AnalyzeIPs(ips) {
-		// TODO: Figure out how networks cover each other, merge and remove as needed.
-		// For now, we just have one 16-bit mask for the whole subnet
-		alreadyCovered := false
-		for _, esn := range t.subnets {
-			if subnet.Covers(esn, sn) {
-				alreadyCovered = true
-				break
-			}
-		}
-		if !alreadyCovered {
-			for k, esn := range t.subnets {
-				if subnet.Covers(sn, esn) {
-					droppedNets[k] = esn
-					break
-				}
-			}
-			addedNets[sn.String()] = sn
-		}
-	}
-
-	for k, dropped := range droppedNets {
-		if err := t.dev.RemoveSubnet(c, dropped); err != nil {
-			return err
-		}
-		delete(t.subnets, k)
-	}
-
-	if len(addedNets) == 0 {
-		return nil
-	}
-
-	subnets := make([]*net.IPNet, len(addedNets))
-	i = 0
-	for k, sn := range addedNets {
-		t.subnets[k] = sn
-		if i > 0 && dnsIP != nil && sn.Contains(dnsIP) {
-			// Ensure that the subnet for the DNS is placed first
-			subnets[0], sn = sn, subnets[0]
-		}
-		subnets[i] = sn
-		i++
-	}
-	for _, sn := range subnets {
-		dlog.Debugf(c, "Adding subnet %s", sn)
-		if err := t.dev.AddSubnet(c, sn); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
@@ -230,7 +134,7 @@ func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16
 	return nil
 }
 
-func (t *tunRouter) setManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) (err error) {
+func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
 	if t.managerClient == nil {
 		// First check. Establish connection
 		tos := &client.GetConfig(ctx).Timeouts
@@ -238,7 +142,7 @@ func (t *tunRouter) setManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) 
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.GrpcPort),
+		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.ManagerPort),
 			grpc.WithInsecure(),
 			grpc.WithNoProxy(),
 			grpc.WithBlock())
@@ -247,6 +151,20 @@ func (t *tunRouter) setManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) 
 		}
 		t.session = mi.Session
 		t.managerClient = manager.NewManagerClient(conn)
+
+		cidr := iputil.IPNetFromRPC(mi.ServiceSubnet)
+		dlog.Infof(ctx, "Adding service subnet %s", cidr)
+		if err = t.dev.AddSubnet(ctx, cidr); err != nil {
+			return err
+		}
+
+		for _, sn := range mi.PodSubnets {
+			cidr = iputil.IPNetFromRPC(sn)
+			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+			if err = t.dev.AddSubnet(ctx, cidr); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

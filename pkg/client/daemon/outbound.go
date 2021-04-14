@@ -41,8 +41,7 @@ type outbound struct {
 	// the dnsServer.
 	dnsConfigured chan struct{}
 
-	kubeDNS     chan net.IP
-	onceKubeDNS sync.Once
+	kubeDNS chan net.IP
 
 	// The domainsLock locks usage of namespaces, domains, and search
 	domainsLock sync.RWMutex
@@ -171,133 +170,19 @@ func (o *outbound) resolveInCluster(c context.Context, query string) []net.IP {
 	return ips
 }
 
-// Since headless and externalName services can have multiple IPs,
-// we return a shuffled list of the IPs if there are more than one.
-func shuffleIPs(ips iputil.IPs) iputil.IPs {
-	switch lenIPs := len(ips); lenIPs {
-	case 0:
-		return iputil.IPs{}
-	case 1:
-	default:
-		// If there are multiple elements in the slice, we shuffle the
-		// order so it's not the same each time
-		rand.Shuffle(lenIPs, func(i, j int) {
-			ips[i], ips[j] = ips[j], ips[i]
-		})
-	}
-	return ips
-}
-
-func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) error {
+func (o *outbound) setInfo(c context.Context, info *rpc.OutboundInfo) error {
 	defer o.closeManagerConfigured.Do(func() {
 		close(o.managerConfigured)
 	})
-	return o.router.setManagerInfo(c, info)
-}
-
-func (o *outbound) update(_ context.Context, table *rpc.Table) (err error) {
-	// o.proxy.SetSocksPort(table.SocksPort)
-	ips := make(map[IPKey]struct{}, len(table.Routes))
-	domains := make(map[string]iputil.IPs)
-	for _, route := range table.Routes {
-		dIps := make(iputil.IPs, 0, len(route.Ips))
-		for _, ipStr := range route.Ips {
-			if ip := iputil.Parse(ipStr); ip != nil {
-				dIps = append(dIps, ip)
-				ips[IPKey(ip)] = struct{}{}
-			}
-		}
-		if dn := route.Name; dn != "" {
-			dn = strings.ToLower(dn) + "."
-			domains[dn] = append(domains[dn], dIps...)
-		}
+	if err := o.router.setOutboundInfo(c, info); err != nil {
+		return err
 	}
-	o.work <- func(c context.Context) error {
-		return o.doUpdate(c, domains, ips)
-	}
+	o.kubeDNS <- info.KubeDnsIp
 	return nil
 }
 
 func (o *outbound) noMoreUpdates() {
 	close(o.work)
-}
-
-func (o *outbound) doUpdate(c context.Context, domains map[string]iputil.IPs, table map[IPKey]struct{}) error {
-	// We're updating routes. Make sure DNS waits until the new answer
-	// is ready, i.e. don't serve old answers.
-	o.domainsLock.Lock()
-	defer o.domainsLock.Unlock()
-
-	dnsChanged := false
-	for k, ips := range o.domains {
-		if _, ok := domains[k]; !ok {
-			dnsChanged = true
-			dlog.Debugf(c, "CLEAR %s -> %s", k, ips)
-			delete(o.domains, k)
-		}
-	}
-
-	var kubeDNS net.IP
-	for k, nIps := range domains {
-		// Ensure that all added entries contain unique, sorted, and non-empty IPs
-		nIps = nIps.UniqueSorted()
-		if len(nIps) == 0 {
-			delete(domains, k)
-			continue
-		}
-		domains[k] = nIps
-		if oIps, ok := o.domains[k]; ok {
-			if ok = len(nIps) == len(oIps); ok {
-				for i, ip := range nIps {
-					if ok = ip.Equal(oIps[i]); !ok {
-						break
-					}
-				}
-			}
-			if !ok {
-				dnsChanged = true
-				dlog.Debugf(c, "REPLACE %s -> %s with %s", oIps, k, nIps)
-			}
-		} else {
-			dnsChanged = true
-			if k == "kube-dns.kube-system.svc.cluster.local." && len(nIps) >= 1 {
-				kubeDNS = nIps[0]
-			}
-			dlog.Debugf(c, "STORE %s -> %s", k, nIps)
-		}
-	}
-
-	// Operate on the copy of the current table and the new table
-	ipsChanged := false
-	oldIPs := o.router.snapshot()
-	for ip := range table {
-		if o.router.add(c, ip) {
-			ipsChanged = true
-		}
-		delete(oldIPs, ip)
-	}
-
-	for ip := range oldIPs {
-		if o.router.clear(c, ip) {
-			ipsChanged = true
-		}
-	}
-
-	if ipsChanged {
-		if err := o.router.flush(c, kubeDNS); err != nil {
-			dlog.Errorf(c, "flush: %v", err)
-		}
-	}
-
-	if dnsChanged {
-		o.domains = domains
-		dns.Flush(c)
-	}
-
-	if kubeDNS != nil {
-		o.onceKubeDNS.Do(func() { o.kubeDNS <- kubeDNS })
-	}
-	return nil
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
