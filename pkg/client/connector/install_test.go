@@ -231,7 +231,7 @@ func TestE2E(t *testing.T) {
 func TestAddAgentToWorkload(t *testing.T) {
 	// Part 0: Helper functions ////////////////////////////////////////////
 
-	loadFile := func(filename string) (workload kates.Object, service *kates.Service, portname string, err error) {
+	loadFile := func(filename, inputVersion string) (workload kates.Object, service *kates.Service, portname string, err error) {
 		tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
 		if err != nil {
 			return nil, nil, "", fmt.Errorf("read template: %s: %w", filename, err)
@@ -239,7 +239,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 		var buff bytes.Buffer
 		err = tmpl.Execute(&buff, map[string]interface{}{
-			"Version": strings.TrimPrefix(version.Version, "v"),
+			"Version": strings.TrimPrefix(inputVersion, "v"),
 		})
 		if err != nil {
 			return nil, nil, "", fmt.Errorf("execute template: %s: %w", filename, err)
@@ -279,9 +279,8 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 	// Part 1: Build the testcases /////////////////////////////////////////
 
-	version.Version = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-
 	type testcase struct {
+		InputVersion  string
 		InputPortName string
 		InputWorkload kates.Object
 		InputService  *kates.Service
@@ -291,30 +290,45 @@ func TestAddAgentToWorkload(t *testing.T) {
 	}
 	testcases := map[string]testcase{}
 
-	fileinfos, err := ioutil.ReadDir("testdata/addAgentToWorkload")
+	dirinfos, err := ioutil.ReadDir("testdata/addAgentToWorkload")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, fi := range fileinfos {
-		if !strings.HasSuffix(fi.Name(), ".input.yaml") {
-			continue
-		}
-		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
-
-		var tc testcase
-		var err error
-
-		tc.InputWorkload, tc.InputService, tc.InputPortName, err = loadFile(tcName + ".input.yaml")
+	i := 0
+	for _, di := range dirinfos {
+		fileinfos, err := ioutil.ReadDir(filepath.Join("testdata/addAgentToWorkload", di.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
+		for _, fi := range fileinfos {
+			if !strings.HasSuffix(fi.Name(), ".input.yaml") {
+				continue
+			}
+			tcName := di.Name() + "/" + strings.TrimSuffix(fi.Name(), ".input.yaml")
 
-		tc.OutputWorkload, tc.OutputService, _, err = loadFile(tcName + ".output.yaml")
-		if err != nil {
-			t.Fatal(err)
+			var tc testcase
+			var err error
+
+			tc.InputVersion = di.Name()
+			if tc.InputVersion == "cur" {
+				// Must alway be higher than any actually released version, so pack
+				// a bunch of 9's in there.
+				tc.InputVersion = fmt.Sprintf("v2.999.999-gotest.%d.%d", os.Getpid(), i)
+				i++
+			}
+
+			tc.InputWorkload, tc.InputService, tc.InputPortName, err = loadFile(tcName+".input.yaml", tc.InputVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			tc.OutputWorkload, tc.OutputService, _, err = loadFile(tcName+".output.yaml", tc.InputVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			testcases[tcName] = tc
 		}
-
-		testcases[tcName] = tc
 	}
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
@@ -327,10 +341,15 @@ func TestAddAgentToWorkload(t *testing.T) {
 	}
 
 	for tcName, tc := range testcases {
-		tcName := tcName
+		tcName := tcName // "{version-dir}/{yaml-base-name}"
 		tc := tc
+		if !strings.HasPrefix(tcName, "cur/") {
+			// Don't check install for historical snapshots.
+			continue
+		}
 		t.Run(tcName+"/install", func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, true)
+			version.Version = tc.InputVersion
 
 			expectedWrk := deepCopyObject(tc.OutputWorkload)
 			sanitizeWorkload(expectedWrk)
@@ -385,6 +404,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 		tc := tc
 		t.Run(tcName+"/uninstall", func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, true)
+			version.Version = tc.InputVersion
 
 			expectedWrk := deepCopyObject(tc.InputWorkload)
 			sanitizeWorkload(expectedWrk)
