@@ -56,16 +56,8 @@ var labelMap = map[string]string{
 	"telepresence": telName,
 }
 
-var (
-	managerImage       string
-	resolveManagerName = sync.Once{}
-)
-
 func managerImageName(env client.Env) string {
-	resolveManagerName.Do(func() {
-		managerImage = fmt.Sprintf("%s/tel2:%s", env.Registry, strings.TrimPrefix(client.Version(), "v"))
-	})
-	return managerImage
+	return fmt.Sprintf("%s/tel2:%s", env.Registry, strings.TrimPrefix(client.Version(), "v"))
 }
 
 func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
