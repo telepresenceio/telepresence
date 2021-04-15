@@ -561,7 +561,17 @@ func (is *interceptState) runInDocker(cmd *cobra.Command, args []string) error {
 		"run",
 		"--dns-search", "tel2-search",
 		"--env-file", is.envFile,
-		"--name", fmt.Sprintf("intercept-%s-%d", is.name, is.localPort),
+	}
+	hasArg := func(s string) bool {
+		for _, arg := range args {
+			if s == arg {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasArg("--name") {
+		ourArgs = append(ourArgs, "--name", fmt.Sprintf("intercept-%s-%d", is.name, is.localPort))
 	}
 
 	if is.dockerPort != 0 {
