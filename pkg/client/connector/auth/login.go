@@ -74,7 +74,7 @@ type LoginExecutor interface {
 	Logout(ctx context.Context) error
 	GetToken(ctx context.Context) (string, error)
 	GetAPIKey(ctx context.Context, description string) (string, error)
-	GetLicense(ctx context.Context, id string) (string, error)
+	GetLicense(ctx context.Context, id string) (string, string, error)
 	GetUserInfo(ctx context.Context) (*authdata.UserInfo, error)
 }
 

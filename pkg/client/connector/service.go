@@ -301,25 +301,19 @@ func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc
 
 func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
 	ctx = s.callCtx(ctx, "GetCloudLicense")
-	license, err := s.getCloudLicense(ctx, req.GetId())
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.LicenseData{License: license}, nil
-}
-func (s *service) getCloudLicense(ctx context.Context, id string) (string, error) {
-	license, err := s.loginExecutor.GetLicense(ctx, id)
+
+	license, hostDomain, err := s.loginExecutor.GetLicense(ctx, req.GetId())
 	// login is required to get the license from system a so
 	// we try to login before retrying the request
 	if err != nil {
 		if _err := s.loginExecutor.Login(ctx); _err == nil {
-			license, err = s.loginExecutor.GetLicense(ctx, id)
+			license, hostDomain, err = s.loginExecutor.GetLicense(ctx, req.GetId())
 		}
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return license, nil
+	return &rpc.LicenseData{License: license, HostDomain: hostDomain}, nil
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {

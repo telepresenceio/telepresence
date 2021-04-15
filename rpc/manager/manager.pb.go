@@ -1282,6 +1282,7 @@ func (x *VersionInfo2) GetVersion() string {
 	return ""
 }
 
+// All of a license's fields come from the license secret
 type License struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

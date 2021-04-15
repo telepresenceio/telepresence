@@ -20,6 +20,8 @@ const _ = grpc.SupportPackageIsVersion7
 type ManagerClient interface {
 	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
+	// GetLicense returns the License information (the license itself and
+	// domain that granted it) known to the manager.
 	GetLicense(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*License, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
@@ -225,6 +227,8 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 type ManagerServer interface {
 	// Version returns the version information of the Manager.
 	Version(context.Context, *empty.Empty) (*VersionInfo2, error)
+	// GetLicense returns the License information (the license itself and
+	// domain that granted it) known to the manager.
 	GetLicense(context.Context, *empty.Empty) (*License, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)

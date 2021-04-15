@@ -1,40 +1,92 @@
 package cli
 
 import (
+	"context"
 	"fmt"
-	"strings"
+	"io"
+	"os"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-type licenseInfo struct {
-	outputFile string
-}
-
 func LicenseCommand() *cobra.Command {
-	li := &licenseInfo{}
+	var flags struct {
+		outputFile string
+	}
 	cmd := &cobra.Command{
-		Use:  "license",
-		Args: cobra.MinimumNArgs(1),
+		Use:  "license [flags] <license_id>",
+		Args: cobra.ExactArgs(1),
 
 		Short: "Get License from Ambassador Cloud",
-		Long:  "Get License from Ambasssador Cloud",
-		RunE:  li.getCloudLicense,
+		Long:  "Get License from Ambassador Cloud",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return getCloudLicense(cmd.Context(), cmd.OutOrStdout(),
+				args[0], flags.outputFile)
+		},
 	}
-	flags := cmd.Flags()
 
-	flags.StringVarP(&li.outputFile, "output-file", "f", "/tmp/license", "The file where you want the license secret to be output to")
+	cmd.Flags().StringVarP(&flags.outputFile, "output-file", "o", "", "The file where you want the license secret to be output to")
 	return cmd
 }
 
-func (li *licenseInfo) getCloudLicense(cmd *cobra.Command, args []string) error {
-	outputFile := strings.TrimSpace(li.outputFile)
-	id := strings.TrimSpace(args[0])
-	_, err := cliutil.GetCloudLicense(cmd.Context(), outputFile, id)
-	if err == nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "License added to secret and written to: %s", outputFile)
+// getCloudLicense communicates with system a, acquires the jwt formatted license
+// given by the id, places it in a secret, and outputs it to stdout or writes it
+// to a file given by the user
+func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile string) error {
+	license, hostDomain, err := cliutil.GetCloudLicense(ctx, outputFile, id)
+	if err != nil {
+		return err
 	}
-	return err
+
+	writer := stdout
+	// If a user gives a file, we write to the file instead of stdout
+	if outputFile != "" {
+		f, err := os.Create(outputFile)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		fmt.Fprintf(stdout, "Writing secret to %v", outputFile)
+		writer = f
+	}
+	if err := createSecretFromLicense(ctx, writer, license, hostDomain); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Creates the kubernetes secret that can be put in your cluster
+// to access licensed features if the cluster is airgapped and
+// writes it to the given writer
+func createSecretFromLicense(ctx context.Context, writer io.Writer, license, hostDomain string) error {
+	secret := &kates.Secret{
+		TypeMeta: kates.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: kates.ObjectMeta{
+			Namespace: "ambassador",
+			Name:      "systema-license",
+		},
+		Data: map[string][]byte{
+			"license":    []byte(license),
+			"hostDomain": []byte(hostDomain),
+		},
+	}
+	serializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, nil, nil,
+		json.SerializerOptions{
+			Yaml:   true,
+			Pretty: true,
+			Strict: true,
+		},
+	)
+	err := serializer.Encode(secret, writer)
+	if err != nil {
+		return err
+	}
+	return nil
 }
