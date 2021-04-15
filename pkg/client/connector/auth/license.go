@@ -76,9 +76,10 @@ func (l *loginExecutor) GetLicense(ctx context.Context, id string) (string, erro
 		return "", err
 	} else if license, err := getLicenseJWT(ctx, l.env, tokenInfo.AccessToken, id); err != nil {
 		return "", err
-	} else if license == "" {
-		return "", fmt.Errorf("No licenses found")
 	} else {
+		if license == "" {
+			return "", fmt.Errorf("No licenses found for %s", id)
+		}
 		return license, nil
 	}
 }

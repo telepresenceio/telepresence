@@ -183,7 +183,7 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = ti.createManagerDeployment(c, env)
+			err = ti.createManagerDeployment(c, env, false)
 			if err != nil {
 				t.Fatal(err)
 			}

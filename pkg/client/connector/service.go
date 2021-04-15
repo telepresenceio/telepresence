@@ -306,7 +306,6 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 		return nil, err
 	}
 	return &rpc.LicenseData{License: license}, nil
-
 }
 func (s *service) getCloudLicense(ctx context.Context, id string) (string, error) {
 	license, err := s.loginExecutor.GetLicense(ctx, id)
