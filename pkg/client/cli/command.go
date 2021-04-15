@@ -183,7 +183,7 @@ func Command(ctx context.Context) *cobra.Command {
 	AddCommandGroups(rootCmd, []CommandGroup{
 		{
 			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), statusCommand(), quitCommand()},
+			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
 		},
 		{
 			Name:     "Traffic Commands",
