@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -110,6 +112,22 @@ func leaveCommand() *cobra.Command {
 	}
 }
 
+// isAirGapped let's us know if the user is able to resolve a connection
+// to SystemA.
+func isAirGapped(ctx context.Context) (isAirGapped bool) {
+	env, err := client.LoadEnv(ctx)
+	if err == nil {
+		timeout := 2 * time.Second
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", env.SystemAHost, env.SystemAPort), timeout)
+		if err != nil {
+			isAirGapped = true
+			return
+		}
+		conn.Close()
+	}
+	return
+}
+
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	if ii.extErr != nil {
 		return ii.extErr
@@ -137,6 +155,11 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	extRequiresLogin, err := ii.extState.RequiresAPIKey()
 	if err != nil {
 		return err
+	}
+	// If in an air-gapped environment, then we override requiring
+	// a login since it can't communicate with System A.
+	if isAirGapped(cmd.Context()) {
+		extRequiresLogin = false
 	}
 	if ii.previewEnabled || extRequiresLogin {
 		if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
@@ -189,7 +212,7 @@ func interceptMessage(r *connector.InterceptResult) string {
 	case connector.InterceptError_NO_PREVIEW_HOST:
 		msg = `Your cluster is not configured for Preview URLs.
 (Could not find a Host resource that enables Path-type Preview URLs.)
-Please specify one or more header matches using --match.`
+Please specify one or more header matches using --http-match.`
 	case connector.InterceptError_NO_CONNECTION:
 		msg = errConnectorIsNotRunning.Error()
 	case connector.InterceptError_NO_TRAFFIC_MANAGER:
