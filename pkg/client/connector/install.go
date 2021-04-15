@@ -37,6 +37,7 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 const ManagerPortSSH = 8022
 const ManagerPortHTTP = 8081
 const managerAppName = "traffic-manager"
+const managerLicenseName = "systema-license"
 const telName = "manager"
 const domainPrefix = "telepresence.getambassador.io/"
 const annTelepresenceActions = domainPrefix + "actions"
@@ -123,8 +124,8 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 	return svc, nil
 }
 
-func (ki *installer) createManagerDeployment(c context.Context, env client.Env) error {
-	dep := ki.managerDeployment(env)
+func (ki *installer) createManagerDeployment(c context.Context, env client.Env, addLicense bool) error {
+	dep := ki.managerDeployment(env, addLicense)
 	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
 	return ki.client.Create(c, dep, dep)
 }
@@ -254,7 +255,12 @@ func (ki *installer) removeManagerDeployment(c context.Context) error {
 }
 
 func (ki *installer) updateDeployment(c context.Context, env client.Env, currentDep *kates.Deployment) (*kates.Deployment, error) {
-	dep := ki.managerDeployment(env)
+	// Check if there's a license before we add it to the traffic-manager deployment
+	addLicense := false
+	if _, err := ki.findSecret(c, managerNamespace, managerLicenseName); err == nil {
+		addLicense = true
+	}
+	dep := ki.managerDeployment(env, addLicense)
 	dep.ResourceVersion = currentDep.ResourceVersion
 	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
 	err := ki.client.Update(c, dep, dep)
@@ -1017,7 +1023,7 @@ func addAgentToWorkload(
 	return object, matchingService, nil
 }
 
-func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
+func (ki *installer) managerDeployment(env client.Env, addLicense bool) *kates.Deployment {
 	replicas := int32(1)
 
 	var containerEnv []corev1.EnvVar
@@ -1028,6 +1034,30 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 	}
 	if env.SystemAPort != "" {
 		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_PORT", Value: env.SystemAPort})
+	}
+	// If addLicense is true, we mount the secret as a volume into the traffic-manager
+	// and then we mount that volume to a path in the container that the traffic-manager
+	// knows about and can read from.
+	var licenseVolume []corev1.Volume
+	var licenseVolumeMount []corev1.VolumeMount
+	if addLicense {
+		licenseVolume = []corev1.Volume{
+			{
+				Name: "license",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: managerLicenseName,
+					},
+				},
+			},
+		}
+		licenseVolumeMount = []corev1.VolumeMount{
+			{
+				Name:      "license",
+				ReadOnly:  true,
+				MountPath: "/home/telepresence/",
+			},
+		}
 	}
 
 	return &kates.Deployment{
@@ -1063,7 +1093,10 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 									Name:          "api",
 									ContainerPort: ManagerPortHTTP,
 								},
-							}}},
+							},
+							VolumeMounts: licenseVolumeMount,
+						}},
+					Volumes:       licenseVolume,
 					RestartPolicy: corev1.RestartPolicyAlways,
 				},
 			},
@@ -1091,11 +1124,22 @@ func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 			return err
 		}
 	}
-
+	addLicense := false
+	// If a license is provided, we add it to the traffic-manager deployment
+	if _, err := ki.findSecret(c, managerNamespace, managerLicenseName); err != nil {
+		if errors2.IsNotFound(err) {
+			dlog.Infof(c, "License secret not found %s", err)
+		} else {
+			dlog.Errorf(c, "Error getting license secret %s", err)
+		}
+	} else {
+		dlog.Info(c, "License found and adding to traffic-manager")
+		addLicense = true
+	}
 	dep, err := ki.findDeployment(c, managerNamespace, managerAppName)
 	if err != nil {
 		if errors2.IsNotFound(err) {
-			err = ki.createManagerDeployment(c, env)
+			err = ki.createManagerDeployment(c, env, addLicense)
 			if err == nil {
 				err = ki.waitForApply(c, managerNamespace, managerAppName, nil)
 			}
