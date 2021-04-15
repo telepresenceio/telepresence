@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/blang/semver"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -25,7 +26,7 @@ type partialAction interface {
 	// external interface and which are internal.
 
 	Do(obj kates.Object) error
-	Undo(obj kates.Object) error
+	Undo(ver semver.Version, obj kates.Object) error
 
 	ExplainDo(obj kates.Object, out io.Writer)
 	ExplainUndo(obj kates.Object, out io.Writer)
@@ -35,7 +36,12 @@ type partialAction interface {
 
 // A completeAction is a set of smaller partialActions that may be applied to an object.
 type completeAction interface {
-	partialAction
+	// These five methods are the same as partialAction, except 'Undo' is different.
+	Do(obj kates.Object) error
+	Undo(obj kates.Object) error
+	ExplainDo(obj kates.Object, out io.Writer)
+	ExplainUndo(obj kates.Object, out io.Writer)
+	IsDone(obj kates.Object) bool
 
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
@@ -46,7 +52,7 @@ type completeAction interface {
 	// For actions-that-we-well-do, this is the currently running Telepresence version.  For
 	// actions that we've read from in-cluster annotations, this is the Telepresence version
 	// that originally performed the action.
-	TelVersion() string
+	TelVersion() (semver.Version, error)
 }
 
 func explainDo(c context.Context, a completeAction, obj kates.Object) {
@@ -76,8 +82,6 @@ func explainUndo(c context.Context, a completeAction, obj kates.Object) {
 // A multiAction combines zero-or-more partialActions together in to a single action.  This is
 // useful as an internal implementation detail for implementing completeActions.
 type multiAction []partialAction
-
-var _ partialAction = multiAction(nil)
 
 func (ma multiAction) explain(
 	obj kates.Object,
@@ -123,9 +127,9 @@ func (ma multiAction) IsDone(obj kates.Object) bool {
 	return true
 }
 
-func (ma multiAction) Undo(obj kates.Object) error {
+func (ma multiAction) Undo(ver semver.Version, obj kates.Object) error {
 	for i := len(ma) - 1; i >= 0; i-- {
-		if err := ma[i].Undo(obj); err != nil {
+		if err := ma[i].Undo(ver, obj); err != nil {
 			return err
 		}
 	}
@@ -146,7 +150,7 @@ func unmarshalString(in string, out completeAction) error {
 	return json.Unmarshal([]byte(in), out)
 }
 
-func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string, error) {
+func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) {
 	var tplSpec *kates.PodTemplateSpec
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
 	switch kind {
@@ -160,10 +164,10 @@ func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string,
 		statefulSet := obj.(*kates.StatefulSet)
 		tplSpec = &statefulSet.Spec.Template
 	default:
-		return nil, "", fmt.Errorf("Unsupported workload kind: %s", kind)
+		return nil, objErrorf(obj, "unsupported workload kind %q", kind)
 	}
 
-	return tplSpec, kind, nil
+	return tplSpec, nil
 }
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
@@ -192,8 +196,8 @@ func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.Int
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("unable to find target port %s in Service %s",
-		m.portName(targetPort.String()), svc.GetName())
+	return nil, objErrorf(svc, "unable to find target port %q",
+		m.portName(targetPort.String()))
 }
 
 func (m *makePortSymbolicAction) Do(svc kates.Object) error {
@@ -220,7 +224,7 @@ func (m *makePortSymbolicAction) IsDone(svc kates.Object) bool {
 	return err == nil
 }
 
-func (m *makePortSymbolicAction) Undo(svc kates.Object) error {
+func (m *makePortSymbolicAction) Undo(ver semver.Version, svc kates.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return err
@@ -249,7 +253,7 @@ func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*ka
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("unable to find port %d in Service %s", targetPort, svc.GetName())
+	return nil, objErrorf(svc, "unable to find port %d", targetPort)
 }
 
 func (m *addSymbolicPortAction) ExplainDo(_ kates.Object, out io.Writer) {
@@ -270,7 +274,7 @@ func (m *addSymbolicPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove symbolic service port %s", m.portName(m.SymbolicName))
 }
 
-func (m *addSymbolicPortAction) Undo(svc kates.Object) error {
+func (m *addSymbolicPortAction) Undo(ver semver.Version, svc kates.Object) error {
 	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return err
@@ -316,7 +320,11 @@ func (s *svcActions) IsDone(svc kates.Object) bool {
 }
 
 func (s *svcActions) Undo(svc kates.Object) (err error) {
-	return s.actions().Undo(svc)
+	ver, err := s.TelVersion()
+	if err != nil {
+		return err
+	}
+	return s.actions().Undo(ver, svc)
 }
 
 func (s *svcActions) MarshalAnnotation() (string, error) {
@@ -327,8 +335,8 @@ func (s *svcActions) UnmarshalAnnotation(str string) error {
 	return unmarshalString(str, s)
 }
 
-func (s *svcActions) TelVersion() string {
-	return s.Version
+func (s *svcActions) TelVersion() (semver.Version, error) {
+	return semver.Parse(s.Version)
 }
 
 // addTrafficAgentAction ///////////////////////////////////////////////////////
@@ -366,14 +374,14 @@ func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Con
 }
 
 func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
-	tplSpec, objKind, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
 	cns := tplSpec.Spec.Containers
 	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
-		return fmt.Errorf("unable to find app container %s in %s %s.%s", ata.containerName, objKind, obj.GetName(), obj.GetNamespace())
+		return objErrorf(obj, "unable to find app container %q in", ata.containerName)
 	}
 
 	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, corev1.Volume{
@@ -518,7 +526,7 @@ func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
 }
 
 func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
-	tplSpec, _, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return false
 	}
@@ -532,8 +540,8 @@ func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
 	return false
 }
 
-func (ata *addTrafficAgentAction) Undo(obj kates.Object) error {
-	tplSpec, _, err := GetPodTemplateFromObject(obj)
+func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) error {
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
@@ -546,24 +554,27 @@ func (ata *addTrafficAgentAction) Undo(obj kates.Object) error {
 		}
 	}
 	if containerIdx < 0 {
-		return fmt.Errorf("object does not contain a %q container", agentContainerName)
+		return objErrorf(obj, "does not contain a %q container", agentContainerName)
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
-	volumeIdx := -1
-	for i := range tplSpec.Spec.Volumes {
-		if tplSpec.Spec.Volumes[i].Name == agentAnnotationVolumeName {
-			volumeIdx = i
-			break
+	if ver.GE(semver.MustParse("2.1.5")) {
+		volumeIdx := -1
+		for i := range tplSpec.Spec.Volumes {
+			if tplSpec.Spec.Volumes[i].Name == agentAnnotationVolumeName {
+				volumeIdx = i
+				break
+			}
 		}
-	}
-	if volumeIdx < 0 {
-		return fmt.Errorf("object does not contain a %q volume", agentAnnotationVolumeName)
-	}
-	if len(tplSpec.Spec.Volumes) == 1 {
-		tplSpec.Spec.Volumes = nil
-	} else {
-		tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes[:volumeIdx], tplSpec.Spec.Volumes[volumeIdx+1:]...)
+
+		if volumeIdx < 0 {
+			return objErrorf(obj, "does not contain a %q volume", agentAnnotationVolumeName)
+		}
+		if len(tplSpec.Spec.Volumes) == 1 {
+			tplSpec.Spec.Volumes = nil
+		} else {
+			tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes[:volumeIdx], tplSpec.Spec.Volumes[volumeIdx+1:]...)
+		}
 	}
 
 	return nil
@@ -589,7 +600,7 @@ type hideContainerPortAction struct {
 var _ partialAction = (*hideContainerPortAction)(nil)
 
 func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	tplSpec, objKind, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := GetPodTemplateFromObject(obj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -607,7 +618,7 @@ func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kat
 			}
 		}
 	}
-	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in %s %s.%s", name, hcp.ContainerName, objKind, obj.GetName(), obj.GetNamespace())
+	return nil, nil, objErrorf(obj, "unable to locate port %q in container %q", name, hcp.ContainerName)
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {
@@ -665,7 +676,7 @@ func (hcp *hideContainerPortAction) IsDone(obj kates.Object) bool {
 	return err == nil
 }
 
-func (hcp *hideContainerPortAction) Undo(obj kates.Object) error {
+func (hcp *hideContainerPortAction) Undo(ver semver.Version, obj kates.Object) error {
 	return hcp.undo(obj)
 }
 
@@ -718,7 +729,11 @@ func (d *workloadActions) IsDone(dep kates.Object) bool {
 }
 
 func (d *workloadActions) Undo(dep kates.Object) (err error) {
-	return d.actions().Undo(dep)
+	ver, err := d.TelVersion()
+	if err != nil {
+		return err
+	}
+	return d.actions().Undo(ver, dep)
 }
 
 func (d *workloadActions) MarshalAnnotation() (string, error) {
@@ -729,6 +744,6 @@ func (d *workloadActions) UnmarshalAnnotation(str string) error {
 	return unmarshalString(str, d)
 }
 
-func (d *workloadActions) TelVersion() string {
-	return d.Version
+func (d *workloadActions) TelVersion() (semver.Version, error) {
+	return semver.Parse(d.Version)
 }
