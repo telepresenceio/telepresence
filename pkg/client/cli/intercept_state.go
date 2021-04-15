@@ -42,7 +42,10 @@ type interceptInfo struct {
 
 	envFile string
 	envJSON string
-	mount   string
+	mount   string // "true", "false", or desired mount point
+
+	dockerRun   bool
+	dockerMount string // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 
 	extState *extensions.ExtensionsState
 	extErr   error
@@ -50,9 +53,13 @@ type interceptInfo struct {
 
 type interceptState struct {
 	*interceptInfo
-	cs    *connectorState
-	Scout *client.Scout
-	env   map[string]string
+	cs         *connectorState
+	Scout      *client.Scout
+	env        map[string]string
+	mountPoint string // if non-empty, this the final mount point of a successful mount
+	localPort  uint16 // the parsed <local port>
+
+	dockerPort uint16
 }
 
 func interceptCommand(ctx context.Context) *cobra.Command {
@@ -70,7 +77,9 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags.StringVarP(&ii.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
 	flags.StringVarP(&ii.port, "port", "p", "8080", ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
-		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number`)
+		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
+		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
+	)
 
 	flags.StringVar(&ii.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
 
@@ -92,6 +101,13 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags.StringVarP(&ii.mount, "mount", "", "true", ``+
 		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
 		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
+
+	flags.BoolVarP(&ii.dockerRun, "docker-run", "", false, ``+
+		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
+		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
+
+	flags.StringVarP(&ii.dockerMount, "docker-mount", "", "", ``+
+		`The volume mount point in docker. Defaults to same as "--mount"`)
 
 	flags.StringVarP(&ii.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
@@ -153,7 +169,8 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		}
 	}
 	ii.cmd = cmd
-	if len(args) == 0 {
+
+	if len(args) == 0 && !ii.dockerRun {
 		// start and retain the intercept
 		return ii.withConnector(true, func(cs *connectorState) (err error) {
 			is := ii.newInterceptState(cs)
@@ -162,9 +179,18 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	}
 
 	// start intercept, run command, then stop the intercept
+	if ii.dockerRun {
+		if err = validateDockerArgs(args); err != nil {
+			return err
+		}
+	}
+
 	return ii.withConnector(false, func(cs *connectorState) error {
 		is := ii.newInterceptState(cs)
 		return client.WithEnsuredState(is, false, func() error {
+			if ii.dockerRun {
+				return is.runInDocker(cmd, args)
+			}
 			return start(cmd.Context(), args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), envPairs(is.env)...)
 		})
 	})
@@ -275,30 +301,61 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 
 	spec.Agent = is.agentName
 	spec.TargetHost = "127.0.0.1"
+
 	// Parse port into spec based on how it's formatted
 	portMapping := strings.Split(is.port, ":")
-	switch len(portMapping) {
-	case 1:
-		port, err := strconv.ParseUint(is.port, 10, 16)
-		if err != nil {
-			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", is.port)
+	portError := func() error {
+		if is.dockerRun {
+			return errors.New("ports must be of the format --ports <local-port>:<container-port>[:<svcPortIdentifier>]")
 		}
-		spec.TargetPort = int32(port)
-	case 2:
-		port, err := strconv.ParseUint(portMapping[0], 10, 16)
-		if err != nil {
-			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", portMapping[0])
-		}
-		spec.TargetPort = int32(port)
-		spec.ServicePortIdentifier = portMapping[1]
-	default:
-		return nil, errors.New("Ports must be of the format --ports local[:svcPortIdentifier]")
+		return errors.New("ports must be of the format --ports <local-port>[:<svcPortIdentifier>]")
 	}
 
-	err := checkMountCapability(is.cmd.Context())
+	parsePort := func(portStr string) (uint16, error) {
+		port, err := strconv.ParseUint(portStr, 10, 16)
+		if err != nil {
+			return 0, fmt.Errorf("port numbers must be a valid, positive int, you gave: %q", is.port)
+		}
+		return uint16(port), nil
+	}
+
+	port, err := parsePort(portMapping[0])
+	if err != nil {
+		return nil, err
+	}
+	is.localPort = port
+	spec.TargetPort = int32(port)
+
+	switch len(portMapping) {
+	case 1:
+	case 2:
+		if port, err = parsePort(portMapping[1]); err == nil && is.dockerRun {
+			is.dockerPort = port
+		} else {
+			spec.ServicePortIdentifier = portMapping[1]
+		}
+	case 3:
+		if !is.dockerRun {
+			return nil, portError()
+		}
+		if port, err = parsePort(portMapping[1]); err != nil {
+			return nil, err
+		}
+		is.dockerPort = port
+		spec.ServicePortIdentifier = portMapping[2]
+	default:
+		return nil, portError()
+	}
+
+	if is.dockerRun && is.dockerPort == 0 {
+		is.dockerPort = is.localPort
+	}
+
+	doMount := false
+	err = checkMountCapability(is.cmd.Context())
 	if err == nil {
 		mountPoint := ""
-		doMount, err := strconv.ParseBool(is.mount)
+		doMount, err = strconv.ParseBool(is.mount)
 		if err != nil {
 			mountPoint = is.mount
 			doMount = len(mountPoint) > 0
@@ -317,10 +374,20 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 			ir.MountPoint = mountPoint
 		}
 	} else if is.cmd.Flag("mount").Changed {
-		doMount, boolErr := strconv.ParseBool(is.mount)
+		var boolErr error
+		doMount, boolErr = strconv.ParseBool(is.mount)
 		if boolErr != nil || doMount {
 			// not --mount=false, so refuse.
-			return nil, fmt.Errorf("Remote volume mounts are disabled: %s", err.Error())
+			return nil, fmt.Errorf("remote volume mounts are disabled: %s", err.Error())
+		}
+	}
+
+	if is.dockerMount != "" {
+		if !is.dockerRun {
+			return nil, errors.New("--docker-mount must be used together with --docker-run")
+		}
+		if !doMount {
+			return nil, errors.New("--docker-mount cannot be used with --mount=false")
 		}
 	}
 
@@ -367,6 +434,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 				_ = os.Remove(ir.MountPoint)
 			}
 		}()
+		is.mountPoint = ir.MountPoint
 	}
 
 	// Submit the request
@@ -466,11 +534,61 @@ func (is *interceptState) DeactivateState() error {
 	return nil
 }
 
+func validateDockerArgs(args []string) error {
+	for _, arg := range args {
+		if arg == "-d" || arg == "--detach" {
+			return errors.New("running docker container in background using -d or --detach is not supported")
+		}
+	}
+	return nil
+}
+
+func (is *interceptState) runInDocker(cmd *cobra.Command, args []string) error {
+	if is.envFile == "" {
+		file, err := ioutil.TempFile("", "tel-*.env")
+		if err != nil {
+			return fmt.Errorf("failed to create temporary environment file. %v", err)
+		}
+		defer os.Remove(file.Name())
+
+		if err = is.writeEnvToFileAndClose(file); err != nil {
+			return err
+		}
+		is.envFile = file.Name()
+	}
+
+	ourArgs := []string{
+		"run",
+		"--dns-search", "tel2-search",
+		"--env-file", is.envFile,
+		"--name", fmt.Sprintf("intercept-%s-%d", is.name, is.localPort),
+	}
+
+	if is.dockerPort != 0 {
+		ourArgs = append(ourArgs, "-p", fmt.Sprintf("%d:%d", is.localPort, is.dockerPort))
+	}
+
+	dockerMount := ""
+	if is.mountPoint != "" { // do we have a mount point at all?
+		if dockerMount = is.dockerMount; dockerMount == "" {
+			dockerMount = is.mountPoint
+		}
+	}
+	if dockerMount != "" {
+		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
+	}
+	return start(cmd.Context(), "docker", append(ourArgs, args...), true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+}
+
 func (is *interceptState) writeEnvFile() error {
 	file, err := os.Create(is.envFile)
 	if err != nil {
 		return fmt.Errorf("failed to create environment file %q: %v", is.envFile, err)
 	}
+	return is.writeEnvToFileAndClose(file)
+}
+
+func (is *interceptState) writeEnvToFileAndClose(file *os.File) (err error) {
 	defer file.Close()
 	w := bufio.NewWriter(file)
 
