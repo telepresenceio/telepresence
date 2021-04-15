@@ -1,21 +1,50 @@
----
-description: "Inner and outer dev loops describe the processes developers repeat to iterate on code. As these loops get more complex, productivity decreases."
----
+# The developer experience and the inner dev loop 
 
-# Inner and Outer Dev Loops
+## How is the developer experience changing?
 
-Cloud native technologies also fundamentally altered the developer experience. Not only are engineers now expected to design and build distributed service-based applications, but their entire development loop has been disrupted. No longer can developers rely on monolithic application development best practices, such as checking out the entire codebase and coding locally with a rapid “live-reload” inner developer loop. They now have to manage external dependencies, build containers, and implement orchestration configuration (e.g. Kubernetes YAML). This may appear trivial at first glance, but this has a large impact on development time.
+The developer experience is the workflow a developer uses to develop, test, deploy, and release software. 
 
-If a typical developer codes for 360 minutes (6 hours) a day, with a traditional local iterative development loop of 5 minutes -- 3 coding, 1 building i.e. compiling/deploying/reloading, 1 testing inspecting, and 10-20 seconds for committing code -- they can expect to make ~70 iterations of their code per day. Any one of these iterations could be a release candidate. The only “developer tax” being paid here is for the commit process, which is negligible.
+Typically this experience has consisted of both an inner dev loop and an outer dev loop. The inner dev loop is where the individual developer codes and tests, and once the developer pushes their code to version control, the outer dev loop is triggered. 
 
-![Traditional inner dev loop](../../images/trad-inner-dev-loop.png)
+The outer dev loop is _everything else _that happens leading up to release. This includes code merge, automated code review, test execution, deployment, [controlled (canary) release](../../../../argo/latest/concepts/canary/), and observation of results. The modern outer dev loop might include, for example, an automated CI/CD pipeline as part of a [GitOps workflow](../../../../argo/latest/concepts/gitops/#what-is-gitops) and a progressive delivery strategy relying on automated canaries, i.e. to make the outer loop as fast, efficient and automated as possible.
 
-If the build time is incremented to 5 minutes -- not atypical with a standard container build, registry upload, and deploy -- then the number of possible development iterations per day drops to ~40. At the extreme that’s a 40% decrease in potential new features being released. This new container build step is a hidden tax, which is quite expensive.
+Cloud-native technologies have fundamentally altered the developer experience in two ways: one, developers now have to take extra steps in the inner dev loop; two, developers need to be concerned with the outer dev loop as part of their workflow, even if most of their time is spent in the inner dev loop. 
 
-![Container inner dev loop](../../images/container-inner-dev-loop.png)
+Engineers now must design and build distributed service-based applications _and_ also assume responsibility for the full development life cycle. The new developer experience means that developers can no longer rely on monolithic application developer best practices, such as checking out the entire codebase and coding locally with a rapid “live-reload” inner development loop. Now developers have to manage external dependencies, build containers, and implement orchestration configuration (e.g. Kubernetes YAML). This may appear trivial at first glance, but this adds development time to the equation. 
 
-Many development teams began using custom proxies to either automatically and continually sync their local development code base with a remote surrogate (enabling “live reload” in a remote cluster), or route all remote service traffic to their local services for testing. The former approach had limited value for compiled languages, and the latter often did not support collaboration within teams where multiple users want to work on the same services.
+## What is the inner dev loop? 
 
-In addition to the challenges with the inner development loop, the changing outer development loop also caused issues. Over the past 20 years, end users and customers have become more demanding, but also less sure of their requirements. Pioneered by disruptive organizations like Netflix, Spotify, and Google, this has resulted in software delivery teams needing to be capable of rapidly delivering experiments into production. Unit, integration, and component testing is still vitally important, but modern application platforms must also support the incremental release of functionality and applications to end users in order to allow testing in production.
+The inner dev loop is the single developer workflow. A single developer should be able to set up and use an inner dev loop to code and test changes quickly. 
 
-The traditional outer development loop for software engineers of code merge, code review, build artifact, test execution, and deploy has now evolved. A typical modern outer loop now consists of code merge, automated code review, build artifact and container, test execution, deployment, controlled (canary) release, and observation of results. If a developer doesn’t have access to self-service configuration of the release then the time taken for this outer loop increases by at least an order of magnitude e.g. 1 minute to deploy an updated canary release routing configuration versus 10 minutes to raise a ticket for a route to be modified via the platform team.
+Even within the Kubernetes space, developers will find much of the inner dev loop familiar. That is, code can still be written locally at a level that a developer controls and committed to version control. 
+
+In a traditional inner dev loop, if a typical developer codes for 360 minutes (6 hours) a day, with a traditional local iterative development loop of 5 minutes — 3 coding, 1 building, i.e. compiling/deploying/reloading, 1 testing inspecting, and 10-20 seconds for committing code -- they can expect to make ~70 iterations of their code per day. Any one of these iterations could be a release candidate. The only “developer tax” being paid here is for the commit process, which is negligible.
+
+![traditional inner dev loop](../../images/trad-inner-dev-loop.png)
+
+## In search of lost time: How does containerization change the inner dev loop?
+
+The inner dev loop is where writing and testing code happens, and time is critical for maximum developer productivity and getting features in front of end users. The faster the feedback loop, the faster developers can refactor and test again. 
+
+Changes to the inner dev loop process, i.e., containerization, threaten to slow this development workflow down. Coding stays the same in the new inner dev loop, but code has to be containerized. The _containerized_ inner dev loop requires a number of new steps:
+
+* packaging code in containers
+* writing a manifest to specify how Kubernetes should run the application (e.g., YAML-based configuration information, such as how much memory should be given to a container)
+* pushing the container to the registry
+* deploying containers in Kubernetes 
+
+Each new step within the container inner dev loop adds to overall development time, and developers are repeating this process frequently. If the build time is incremented to 5 minutes — not atypical with a standard container build, registry upload, and deploy — then the number of possible development iterations per day drops to ~40. At the extreme that’s a 40% decrease in potential new features being released. This new container build step is a hidden tax, which is quite expensive.
+
+
+![container inner dev loop](../../images/container-inner-dev-loop.png)
+
+## Tackling the slow inner dev loop
+
+A slow inner dev loop can negatively impact frontend and backend teams, delaying work on individual and team levels and slowing releases into production overall. 
+
+For example: 
+
+* Frontend developers have to wait for previews of backend changes on a shared dev/staging environment (for example, until CI/CD deploys a new version) and/or rely on mocks/stubs/virtual services when coding their application locally. These changes are only verifiable by going through the CI/CD process to build and deploy within a target environment. 
+* Backend developers have to wait for CI/CD to build and deploy their app to a target environment to verify that their code works correctly with cluster or cloud-based dependencies as well as to share their work to get feedback. 
+
+New technologies and tools can facilitate cloud-native, containerized development. And in the case of a sluggish inner dev loop, developers can accelerate productivity with tools that help speed the loop up again.
