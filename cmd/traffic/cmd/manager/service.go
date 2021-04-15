@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"io/ioutil"
 	"sort"
 	"time"
 
@@ -55,6 +56,18 @@ func NewManager(ctx context.Context, env Env) *Manager {
 // Version returns the version information of the Manager.
 func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Version: version.Version}, nil
+}
+
+// GetLicense returns the license for the cluster. This directory is mounted
+// via the connector if it detects the presence of a systema license secret
+// when installing the traffic-manager
+func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
+	dat, err := ioutil.ReadFile("/home/telepresence/license")
+	if err != nil {
+		return &rpc.License{}, err
+	}
+	license := string(dat)
+	return &rpc.License{License: license, Host: m.env.SystemAHost}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.

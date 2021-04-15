@@ -255,10 +255,16 @@ message VersionInfo2 {
   string version = 2;
 }
 
+message License {
+  string license = 1;
+  string host = 2;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
 
+  rpc GetLicense(google.protobuf.Empty) returns (License);
   // Presence
 
   // ArriveAsClient establishes a session between a client and the Manager.
