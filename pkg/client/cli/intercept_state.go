@@ -165,7 +165,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	return ii.withConnector(false, func(cs *connectorState) error {
 		is := ii.newInterceptState(cs)
 		return client.WithEnsuredState(is, false, func() error {
-			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), envPairs(is.env)...)
+			return start(cmd.Context(), args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), envPairs(is.env)...)
 		})
 	})
 }
