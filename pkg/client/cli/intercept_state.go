@@ -140,30 +140,6 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Determine if the cluster is air-gapped (can't communicate
-	// with Ambassador Cloud
-	var canConnectCloud bool
-	ii.cmd = cmd
-
-	// We don't particularly care about errors here because if we do
-	// error then we'll assume they aren't in an air-gapped environment
-	// and if there are issues with the connector, it will fail later
-	_ = ii.withConnector(false, func(cs *connectorState) error {
-		resp, err := cs.managerClient.CanConnectAmbassadorCloud(cmd.Context(), &empty.Empty{})
-		canConnectCloud = resp.CanConnect
-		return err
-	})
-
-	if ii.previewEnabled || extRequiresLogin {
-		// If the cluster cannot connect to the cloud, then we don't require
-		// a login.
-		if canConnectCloud {
-			if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
-				return err
-			}
-		}
-	}
-
 	ii.name = args[0]
 	args = args[1:]
 	if ii.agentName == "" && !ii.localOnly {
@@ -172,9 +148,35 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 			ii.name += "-" + ii.namespace
 		}
 	}
+
+	// Checks if login is necessary and then takes the necessary actions
+	// depending if the cluster can connect to Ambassador Cloud
+	loginIfNeeded := func(cs *connectorState) error {
+		if ii.previewEnabled || extRequiresLogin {
+			// We default to assuming they can connect to Ambassador Cloud
+			// unless the cluster tells us they can't
+			canConnect := true
+			resp, err := cs.managerClient.CanConnectAmbassadorCloud(cmd.Context(), &empty.Empty{})
+			if err != nil {
+				canConnect = resp.CanConnect
+			}
+			if canConnect {
+				if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	ii.cmd = cmd
 	if len(args) == 0 {
 		// start and retain the intercept
 		return ii.withConnector(true, func(cs *connectorState) (err error) {
+			err = loginIfNeeded(cs)
+			if err != nil {
+				return err
+			}
 			is := ii.newInterceptState(cs)
 			return client.WithEnsuredState(is, true, func() error { return nil })
 		})
@@ -182,6 +184,10 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 
 	// start intercept, run command, then stop the intercept
 	return ii.withConnector(false, func(cs *connectorState) error {
+		err = loginIfNeeded(cs)
+		if err != nil {
+			return err
+		}
 		is := ii.newInterceptState(cs)
 		return client.WithEnsuredState(is, false, func() error {
 			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), envPairs(is.env)...)
