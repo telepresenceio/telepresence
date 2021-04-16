@@ -32,6 +32,24 @@ func GetLicenseFromManager(ctx context.Context, address string) (*rpc.License, e
 	return license, nil
 }
 
+func CheckIfAirGapped(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		return &rpc.AmbassadorCloudConnection{}, err
+	}
+	defer conn.Close()
+
+	manager := rpc.NewManagerClient(conn)
+	cloudConnectInfo, err := manager.IsAirGapped(ctx, &empty.Empty{})
+	if err != nil {
+		return &rpc.AmbassadorCloudConnection{}, err
+	}
+	return cloudConnectInfo, nil
+}
+
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
