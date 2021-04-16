@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -27,10 +28,14 @@ import (
 
 type installer struct {
 	*k8sCluster
+	stdout io.Writer
 }
 
-func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
-	return &installer{k8sCluster: kc}, nil
+func newTrafficManagerInstaller(kc *k8sCluster, stdout io.Writer) (*installer, error) {
+	return &installer{
+		k8sCluster: kc,
+		stdout:     stdout,
+	}, nil
 }
 
 const ManagerPortSSH = 8022
@@ -174,7 +179,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 				addError(fmt.Errorf("agent %q associated with unsupported workload kind %q, cannot be removed", ai.Name, kind))
 				return
 			}
-			if err = ki.undoObjectMods(c, agent); err != nil {
+			if err = ki.undoAgentMods(c, agent); err != nil {
 				addError(err)
 				return
 			}
@@ -780,20 +785,31 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	return true, nil
 }
 
-func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
-	referencedService, err := undoObjectMods(c, obj)
+func (ki *installer) undoAgentMods(c context.Context, workloadObj kates.Object) error {
+	// Do everything in-memory.
+	referencedService, err := undoWorkloadMods(c, ki.stdout, workloadObj)
 	if err != nil {
 		return err
 	}
-	if svc := ki.findSvc(obj.GetNamespace(), referencedService); svc != nil {
-		if err = ki.undoServiceMods(c, svc); err != nil {
+	var svcObj *kates.Service
+	if svcObj = ki.findSvc(workloadObj.GetNamespace(), referencedService); svcObj != nil {
+		if err := undoServiceMods(c, ki.stdout, svcObj); err != nil {
 			return err
 		}
 	}
-	return ki.client.Update(c, obj, obj)
+
+	// Then apply it to the cluster.
+	if err := ki.client.Update(c, svcObj, svcObj); err != nil {
+		return err
+	}
+	if err := ki.client.Update(c, workloadObj, workloadObj); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
+func undoWorkloadMods(c context.Context, stdout io.Writer, obj kates.Object) (string, error) {
 	var actions workloadActions
 	ok, err := getAnnotation(obj, &actions)
 	if !ok {
@@ -803,7 +819,7 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 		return "", objErrorf(obj, "agent is not installed")
 	}
 
-	if err = actions.Undo(obj); err != nil {
+	if err = actions.Undo(stdout, obj); err != nil {
 		return "", err
 	}
 	annotations := obj.GetAnnotations()
@@ -815,20 +831,13 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 	return actions.ReferencedService, nil
 }
 
-func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) error {
-	if err := undoServiceMods(c, svc); err != nil {
-		return err
-	}
-	return ki.client.Update(c, svc, svc)
-}
-
-func undoServiceMods(c context.Context, svc *kates.Service) error {
+func undoServiceMods(c context.Context, stdout io.Writer, svc *kates.Service) error {
 	var actions svcActions
 	ok, err := getAnnotation(svc, &actions)
 	if !ok {
 		return err
 	}
-	if err = actions.Undo(svc); err != nil {
+	if err = actions.Undo(stdout, svc); err != nil {
 		return err
 	}
 	delete(svc.Annotations, annTelepresenceActions)

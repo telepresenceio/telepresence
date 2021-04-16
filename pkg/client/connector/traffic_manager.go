@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/user"
@@ -63,6 +64,7 @@ type trafficManager struct {
 func newTrafficManager(
 	_ context.Context,
 	env client.Env,
+	stdout io.Writer,
 	cluster *k8sCluster,
 	installID string,
 	getAPIKey func(context.Context, string, bool) (string, error),
@@ -77,7 +79,7 @@ func newTrafficManager(
 	}
 
 	// Ensure that we have a traffic-manager to talk to.
-	ti, err := newTrafficManagerInstaller(cluster)
+	ti, err := newTrafficManagerInstaller(cluster, stdout)
 	if err != nil {
 		return nil, errors.Wrap(err, "new installer")
 	}

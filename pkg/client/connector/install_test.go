@@ -122,7 +122,7 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ti, err := newTrafficManagerInstaller(kc)
+			ti, err := newTrafficManagerInstaller(kc, dlog.StdLogger(ctx, dlog.LogLevelError).Writer())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -141,11 +141,11 @@ func TestE2E(t *testing.T) {
 			}()
 			managerNamespace = managerTestNamespace
 
-			c := dlog.NewTestContext(t, false)
+			ctx := dlog.NewTestContext(t, false)
 			publishManager(t)
 			defer removeManager(t, kubeconfig, managerNamespace)
 
-			env, err := client.LoadEnv(c)
+			env, err := client.LoadEnv(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,12 +154,12 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+			kc, err := newKCluster(ctx, cfgAndFlags, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			watcherErr := make(chan error)
-			watchCtx, watchCancel := context.WithCancel(c)
+			watchCtx, watchCancel := context.WithCancel(ctx)
 			defer func() {
 				watchCancel()
 				if err := <-watcherErr; err != nil {
@@ -169,26 +169,26 @@ func TestE2E(t *testing.T) {
 			go func() {
 				watcherErr <- kc.runWatchers(watchCtx)
 			}()
-			waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
+			waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
 			defer waitCancel()
 			if err := kc.waitUntilReady(waitCtx); err != nil {
 				t.Fatal(err)
 			}
 
-			ti, err := newTrafficManagerInstaller(kc)
+			ti, err := newTrafficManagerInstaller(kc, dlog.StdLogger(ctx, dlog.LogLevelError).Writer())
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = ti.createManagerSvc(c)
+			_, err = ti.createManagerSvc(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = ti.createManagerDeployment(c, env)
+			err = ti.createManagerDeployment(ctx, env)
 			if err != nil {
 				t.Fatal(err)
 			}
 			for i := 0; i < 50; i++ {
-				if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
+				if _, err := ti.findDeployment(ctx, managerNamespace, managerAppName); err == nil {
 					return
 				}
 				time.Sleep(100 * time.Millisecond)
@@ -202,10 +202,10 @@ func TestE2E(t *testing.T) {
 				managerNamespace = saveManagerNamespace
 			}()
 			managerNamespace = managerTestNamespace
-			c := dlog.NewTestContext(t, false)
+			ctx := dlog.NewTestContext(t, false)
 			publishManager(t)
 			defer removeManager(t, kubeconfig, managerNamespace)
-			env, err := client.LoadEnv(c)
+			env, err := client.LoadEnv(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -213,15 +213,15 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+			kc, err := newKCluster(ctx, cfgAndFlags, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ti, err := newTrafficManagerInstaller(kc)
+			ti, err := newTrafficManagerInstaller(kc, dlog.StdLogger(ctx, dlog.LogLevelError).Writer())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := ti.ensureManager(c, env); err != nil {
+			if err := ti.ensureManager(ctx, env); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -404,6 +404,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 		tc := tc
 		t.Run(tcName+"/uninstall", func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, true)
+			notifications := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
 			version.Version = tc.InputVersion
 
 			expectedWrk := deepCopyObject(tc.InputWorkload)
@@ -413,14 +414,14 @@ func TestAddAgentToWorkload(t *testing.T) {
 			sanitizeService(expectedSvc)
 
 			actualWrk := deepCopyObject(tc.OutputWorkload)
-			_, actualErr := undoObjectMods(ctx, actualWrk)
+			_, actualErr := undoWorkloadMods(ctx, notifications, actualWrk)
 			if !assert.NoError(t, actualErr) {
 				return
 			}
 			sanitizeWorkload(actualWrk)
 
 			actualSvc := tc.OutputService.DeepCopy()
-			actualErr = undoServiceMods(ctx, actualSvc)
+			actualErr = undoServiceMods(ctx, notifications, actualSvc)
 			if !assert.NoError(t, actualErr) {
 				return
 			}

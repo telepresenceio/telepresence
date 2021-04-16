@@ -38,10 +38,10 @@ type partialAction interface {
 type completeAction interface {
 	// These five methods are the same as partialAction, except 'Undo' is different.
 	Do(obj kates.Object) error
-	Undo(obj kates.Object) error
+	Undo(stdout io.Writer, obj kates.Object) error
 	ExplainDo(obj kates.Object, out io.Writer)
 	ExplainUndo(obj kates.Object, out io.Writer)
-	IsDone(obj kates.Object) bool
+	IsDone(stdout io.Writer, obj kates.Object) bool
 
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
@@ -118,7 +118,10 @@ func (ma multiAction) Do(obj kates.Object) error {
 	return nil
 }
 
-func (ma multiAction) IsDone(obj kates.Object) bool {
+func (ma multiAction) IsDone(stdout io.Writer, ver semver.Version, gen int64, obj kates.Object) bool {
+	if ver.GT(semver.MustParse("2.1.5")) && obj.GetGeneration() > gen+1 {
+		fmt.Fprintf(stdout, "  warning: %v\n", objErrorf(obj, "looks like it has been modified since the Telepresnece agent was installed; the agent may not function correctly"))
+	}
 	for _, partialAction := range ma {
 		if !partialAction.IsDone(obj) {
 			return false
@@ -127,7 +130,10 @@ func (ma multiAction) IsDone(obj kates.Object) bool {
 	return true
 }
 
-func (ma multiAction) Undo(ver semver.Version, obj kates.Object) error {
+func (ma multiAction) Undo(stdout io.Writer, ver semver.Version, gen int64, obj kates.Object) error {
+	if ver.GT(semver.MustParse("2.1.5")) && obj.GetGeneration() > gen+1 {
+		fmt.Fprintf(stdout, "  warning: %v\n", objErrorf(obj, "looks like it has been modified since the Telepresnece agent was installed; uninstall may not work"))
+	}
 	for i := len(ma) - 1; i >= 0; i-- {
 		if err := ma[i].Undo(ver, obj); err != nil {
 			return err
@@ -286,7 +292,12 @@ func (m *addSymbolicPortAction) Undo(ver semver.Version, svc kates.Object) error
 // svcActions //////////////////////////////////////////////////////////////////
 
 type svcActions struct {
-	Version          string                  `json:"version"`
+	Version string `json:"version"`
+
+	// Generation is the .metadata.generation of the Service before we modified it; this is set
+	// by Do(), and read by Undo().
+	Generation int64 `json:"generation"`
+
 	MakePortSymbolic *makePortSymbolicAction `json:"make_port_symbolic,omitempty"`
 	AddSymbolicPort  *addSymbolicPortAction  `json:"add_symbolic_port,omitempty"`
 }
@@ -304,6 +315,7 @@ func (s *svcActions) actions() (actions multiAction) {
 }
 
 func (s *svcActions) Do(svc kates.Object) (err error) {
+	s.Generation = svc.GetGeneration()
 	return s.actions().Do(svc)
 }
 
@@ -315,16 +327,20 @@ func (s *svcActions) ExplainUndo(svc kates.Object, out io.Writer) {
 	s.actions().ExplainUndo(svc, out)
 }
 
-func (s *svcActions) IsDone(svc kates.Object) bool {
-	return s.actions().IsDone(svc)
+func (s *svcActions) IsDone(stdout io.Writer, svc kates.Object) bool {
+	ver, err := s.TelVersion()
+	if err != nil {
+		return false
+	}
+	return s.actions().IsDone(stdout, ver, s.Generation, svc)
 }
 
-func (s *svcActions) Undo(svc kates.Object) (err error) {
+func (s *svcActions) Undo(stdout io.Writer, svc kates.Object) (err error) {
 	ver, err := s.TelVersion()
 	if err != nil {
 		return err
 	}
-	return s.actions().Undo(ver, svc)
+	return s.actions().Undo(stdout, ver, s.Generation, svc)
 }
 
 func (s *svcActions) MarshalAnnotation() (string, error) {
@@ -692,7 +708,12 @@ func (hcp *hideContainerPortAction) undo(obj kates.Object) error {
 // workloadActions ///////////////////////////////////////////////////////////
 
 type workloadActions struct {
-	Version                   string `json:"version"`
+	Version string `json:"version"`
+
+	// Generation is the .metadata.generation of the workload before we modified it; this is set
+	// by Do(), and read by Undo().
+	Generation int64 `json:"generation"`
+
 	ReferencedService         string
 	ReferencedServicePort     string                   `json:"referenced_service_port,omitempty"`
 	ReferencedServicePortName string                   `json:"referenced_service_port_name,omitempty"`
@@ -717,6 +738,7 @@ func (d *workloadActions) ExplainDo(dep kates.Object, out io.Writer) {
 }
 
 func (d *workloadActions) Do(dep kates.Object) (err error) {
+	d.Generation = dep.GetGeneration()
 	return d.actions().Do(dep)
 }
 
@@ -724,16 +746,20 @@ func (d *workloadActions) ExplainUndo(dep kates.Object, out io.Writer) {
 	d.actions().ExplainUndo(dep, out)
 }
 
-func (d *workloadActions) IsDone(dep kates.Object) bool {
-	return d.actions().IsDone(dep)
+func (d *workloadActions) IsDone(stdout io.Writer, dep kates.Object) bool {
+	ver, err := d.TelVersion()
+	if err != nil {
+		return false
+	}
+	return d.actions().IsDone(stdout, ver, d.Generation, dep)
 }
 
-func (d *workloadActions) Undo(dep kates.Object) (err error) {
+func (d *workloadActions) Undo(stdout io.Writer, dep kates.Object) (err error) {
 	ver, err := d.TelVersion()
 	if err != nil {
 		return err
 	}
-	return d.actions().Undo(ver, dep)
+	return d.actions().Undo(stdout, ver, d.Generation, dep)
 }
 
 func (d *workloadActions) MarshalAnnotation() (string, error) {
