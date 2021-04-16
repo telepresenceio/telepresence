@@ -49,6 +49,21 @@ func (p *mgrProxy) Version(ctx context.Context, arg *empty.Empty) (*managerrpc.V
 	}
 	return client.Version(ctx, arg, callOptions...)
 }
+func (p *mgrProxy) GetLicense(ctx context.Context, arg *empty.Empty) (*managerrpc.License, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetLicense(ctx, arg, callOptions...)
+}
+
+func (p *mgrProxy) CanConnectAmbassadorCloud(ctx context.Context, arg *empty.Empty) (*managerrpc.AmbassadorCloudConnection, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.CanConnectAmbassadorCloud(ctx, arg, callOptions...)
+}
 func (p *mgrProxy) ArriveAsClient(ctx context.Context, arg *managerrpc.ClientInfo) (*managerrpc.SessionInfo, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

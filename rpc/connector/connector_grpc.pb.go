@@ -52,6 +52,7 @@ type ConnectorClient interface {
 	Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error)
 	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
+	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -195,6 +196,15 @@ func (c *connectorClient) GetCloudAPIKey(ctx context.Context, in *KeyRequest, op
 	return out, nil
 }
 
+func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error) {
+	out := new(LicenseData)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetCloudLicense", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Quit", in, out, opts...)
@@ -240,6 +250,7 @@ type ConnectorServer interface {
 	Logout(context.Context, *empty.Empty) (*empty.Empty, error)
 	GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error)
 	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
+	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -284,6 +295,9 @@ func (UnimplementedConnectorServer) GetCloudAccessToken(context.Context, *TokenR
 }
 func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAPIKey not implemented")
+}
+func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -520,6 +534,24 @@ func _Connector_GetCloudAPIKey_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_GetCloudLicense_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LicenseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetCloudLicense(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GetCloudLicense",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetCloudLicense(ctx, req.(*LicenseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
@@ -585,6 +617,10 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCloudAPIKey",
 			Handler:    _Connector_GetCloudAPIKey_Handler,
+		},
+		{
+			MethodName: "GetCloudLicense",
+			Handler:    _Connector_GetCloudLicense_Handler,
 		},
 		{
 			MethodName: "Quit",

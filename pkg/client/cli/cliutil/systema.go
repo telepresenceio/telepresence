@@ -93,3 +93,21 @@ func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (st
 	}
 	return keyData.GetApiKey(), nil
 }
+
+// GetCloudLicense communicates with system a to get the jwt version of the
+// license, puts it in a kubernetes secret, and then writes that secret to the
+// output file for the user to apply to their cluster
+func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string, error) {
+	var licenseData *connector.LicenseData
+	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		var err error
+		licenseData, err = connectorClient.GetCloudLicense(ctx, &connector.LicenseRequest{
+			Id: id,
+		})
+		return err
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return licenseData.GetLicense(), licenseData.GetHostDomain(), nil
+}

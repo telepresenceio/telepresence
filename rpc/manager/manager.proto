@@ -255,9 +255,28 @@ message VersionInfo2 {
   string version = 2;
 }
 
+// All of a license's fields come from the license secret
+message License {
+  string license = 1;
+  string host = 2;
+}
+
+// 
+message AmbassadorCloudConnection {
+  bool can_connect = 1;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
+
+  // GetLicense returns the License information (the license itself and
+  // domain that granted it) known to the manager.
+  rpc GetLicense(google.protobuf.Empty) returns (License);
+  
+  // canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
+  // Ambassador Cloud
+  rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
 
   // Presence
 

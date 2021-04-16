@@ -17,6 +17,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -134,14 +135,9 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	extRequiresLogin, err := ii.extState.RequiresAPIKey()
+	extRequiresLogin, err := ii.extState.RequiresAPIKeyOrLicense()
 	if err != nil {
 		return err
-	}
-	if ii.previewEnabled || extRequiresLogin {
-		if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
-			return err
-		}
 	}
 
 	ii.name = args[0]
@@ -152,10 +148,35 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 			ii.name += "-" + ii.namespace
 		}
 	}
+
+	// Checks if login is necessary and then takes the necessary actions
+	// depending if the cluster can connect to Ambassador Cloud
+	loginIfNeeded := func(cs *connectorState) error {
+		if ii.previewEnabled || extRequiresLogin {
+			// We default to assuming they can connect to Ambassador Cloud
+			// unless the cluster tells us they can't
+			canConnect := true
+			resp, err := cs.managerClient.CanConnectAmbassadorCloud(cmd.Context(), &empty.Empty{})
+			if err != nil {
+				canConnect = resp.CanConnect
+			}
+			if canConnect {
+				if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
 	ii.cmd = cmd
 	if len(args) == 0 {
 		// start and retain the intercept
 		return ii.withConnector(true, func(cs *connectorState) (err error) {
+			err = loginIfNeeded(cs)
+			if err != nil {
+				return err
+			}
 			is := ii.newInterceptState(cs)
 			return client.WithEnsuredState(is, true, func() error { return nil })
 		})
@@ -163,6 +184,10 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 
 	// start intercept, run command, then stop the intercept
 	return ii.withConnector(false, func(cs *connectorState) error {
+		err = loginIfNeeded(cs)
+		if err != nil {
+			return err
+		}
 		is := ii.newInterceptState(cs)
 		return client.WithEnsuredState(is, false, func() error {
 			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), envPairs(is.env)...)
@@ -189,7 +214,7 @@ func interceptMessage(r *connector.InterceptResult) string {
 	case connector.InterceptError_NO_PREVIEW_HOST:
 		msg = `Your cluster is not configured for Preview URLs.
 (Could not find a Host resource that enables Path-type Preview URLs.)
-Please specify one or more header matches using --match.`
+Please specify one or more header matches using --http-match.`
 	case connector.InterceptError_NO_CONNECTION:
 		msg = errConnectorIsNotRunning.Error()
 	case connector.InterceptError_NO_TRAFFIC_MANAGER:

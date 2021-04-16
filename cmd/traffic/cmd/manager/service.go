@@ -2,6 +2,9 @@ package manager
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"net"
 	"sort"
 	"time"
 
@@ -55,6 +58,37 @@ func NewManager(ctx context.Context, env Env) *Manager {
 // Version returns the version information of the Manager.
 func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Version: version.Version}, nil
+}
+
+// GetLicense returns the license for the cluster. This directory is mounted
+// via the connector if it detects the presence of a systema license secret
+// when installing the traffic-manager
+func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
+	licenseData, err := ioutil.ReadFile("/home/telepresence/license")
+	if err != nil {
+		return &rpc.License{}, err
+	}
+	license := string(licenseData)
+
+	hostDomainData, err := ioutil.ReadFile("/home/telepresence/hostDomain")
+	if err != nil {
+		return &rpc.License{}, err
+	}
+	hostDomain := string(hostDomainData)
+	return &rpc.License{License: license, Host: hostDomain}, nil
+}
+
+// CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
+// from within a cluster
+func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
+	timeout := 2 * time.Second
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", m.env.SystemAHost, m.env.SystemAPort), timeout)
+	if err != nil {
+		dlog.Debugf(ctx, "Failed to connect so assuming in air-gapped environment %s", err)
+		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
+	}
+	conn.Close()
+	return &rpc.AmbassadorCloudConnection{CanConnect: true}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.

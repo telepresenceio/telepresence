@@ -299,6 +299,23 @@ func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc
 	return &rpc.KeyData{ApiKey: key}, nil
 }
 
+func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
+	ctx = s.callCtx(ctx, "GetCloudLicense")
+
+	license, hostDomain, err := s.loginExecutor.GetLicense(ctx, req.GetId())
+	// login is required to get the license from system a so
+	// we try to login before retrying the request
+	if err != nil {
+		if _err := s.loginExecutor.Login(ctx); _err == nil {
+			license, hostDomain, err = s.loginExecutor.GetLicense(ctx, req.GetId())
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.LicenseData{License: license, HostDomain: hostDomain}, nil
+}
+
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.cancel()
 	return &empty.Empty{}, nil

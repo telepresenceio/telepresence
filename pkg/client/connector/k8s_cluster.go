@@ -250,17 +250,30 @@ func (kc *k8sCluster) findReplicaSet(c context.Context, namespace, name string) 
 	return rs, nil
 }
 
-// findPod returns a replica set with the given name in the given namespace or nil
+// findPod returns a pod with the given name in the given namespace or nil
 // if no such replica set could be found.
 func (kc *k8sCluster) findPod(c context.Context, namespace, name string) (*kates.Pod, error) {
-	rs := &kates.Pod{
+	pod := &kates.Pod{
 		TypeMeta:   kates.TypeMeta{Kind: "Pod"},
 		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	if err := kc.client.Get(c, rs, rs); err != nil {
+	if err := kc.client.Get(c, pod, pod); err != nil {
 		return nil, err
 	}
-	return rs, nil
+	return pod, nil
+}
+
+// findSecret returns a secret with the given name in the given namespace or nil
+// if no suchs secret could be found.
+func (kc *k8sCluster) findSecret(c context.Context, namespace, name string) (*kates.Secret, error) {
+	sec := &kates.Secret{
+		TypeMeta:   kates.TypeMeta{Kind: "Secret"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	if err := kc.client.Get(c, sec, sec); err != nil {
+		return nil, err
+	}
+	return sec, nil
 }
 
 // findObjectKind returns a workload for the given name and namespace. We

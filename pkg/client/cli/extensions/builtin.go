@@ -24,8 +24,8 @@ func builtinExtensions(_ context.Context) map[string]ExtensionInfo {
 		// extension, but we don't yet have an installer to install the extension file; so this
 		// metadata here is fine in the mean-time.
 		"/builtin/ambassador": {
-			Image:          "grpc+https://${SYSTEMA_HOST}:${SYSTEMA_PORT}", // XXX: not using net.JoinHostPort means that setting SYSTEMA_HOST to an IPv6 address won't work
-			RequiresAPIKey: true,
+			Image:                   "grpc+https://${SYSTEMA_HOST}:${SYSTEMA_PORT}", // XXX: not using net.JoinHostPort means that setting SYSTEMA_HOST to an IPv6 address won't work
+			RequiresAPIKeyOrLicense: true,
 			Mechanisms: map[string]MechanismInfo{
 				"http": {
 					Preference: 100,
@@ -35,8 +35,8 @@ func builtinExtensions(_ context.Context) map[string]ExtensionInfo {
 							Default: json.RawMessage(`["auto"]`),
 							Usage: `` +
 								`Rather than intercepting all traffic service, only intercept traffic that matches this "HTTP2_HEADER=REGEXP" specifier. ` +
-								`Instead of a "--match=HTTP2_HEADER=REGEXP" pair, you may say "--match=auto", which will automatically select a unique matcher for your intercept. ` +
-								`Alternatively, you may say "--match=all", which is a no-op, but will inhibit the default "--match=auto" when you are logged in. ` +
+								`Instead of a "--http-match=HTTP2_HEADER=REGEXP" pair, you may say "--http-match=auto", which will automatically select a unique matcher for your intercept. ` +
+								`Alternatively, you may say "--http-match=all", which is a no-op, but will inhibit the default "--http-match=auto" when you are logged in. ` +
 								`If this flag is given multiple times, then it will only intercept traffic that matches *all* of the specifiers. ` +
 								`(default "auto" if you are logged in with 'telepresence login', default "all" otherwise)`,
 						},

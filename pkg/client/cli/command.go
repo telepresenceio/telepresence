@@ -183,7 +183,7 @@ func Command(ctx context.Context) *cobra.Command {
 	AddCommandGroups(rootCmd, []CommandGroup{
 		{
 			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), statusCommand(), quitCommand()},
+			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
 		},
 		{
 			Name:     "Traffic Commands",
@@ -191,7 +191,7 @@ func Command(ctx context.Context) *cobra.Command {
 		},
 		{
 			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand()},
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand()},
 		},
 	})
 	for _, group := range globalFlagGroups {
