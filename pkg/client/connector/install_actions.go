@@ -15,6 +15,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // Public interface-y pieces ///////////////////////////////////////////////////
@@ -131,6 +132,10 @@ func (ma multiAction) IsDone(stdout io.Writer, ver semver.Version, gen int64, ob
 }
 
 func (ma multiAction) Undo(stdout io.Writer, ver semver.Version, gen int64, obj kates.Object) error {
+	if ver.GT(client.Semver()) {
+		return objErrorf(obj, "refusing to install agent installed by a newer version of Telepresence (%v) than what you're running (%v); upgrade your Telepresence CLI",
+			ver, client.Semver())
+	}
 	if ver.GT(semver.MustParse("2.1.5")) && obj.GetGeneration() > gen+1 {
 		fmt.Fprintf(stdout, "  warning: %v\n", objErrorf(obj, "looks like it has been modified since the Telepresnece agent was installed; uninstall may not work"))
 	}
