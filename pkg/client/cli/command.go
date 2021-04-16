@@ -191,7 +191,7 @@ func Command(ctx context.Context) *cobra.Command {
 		},
 		{
 			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand()},
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand()},
 		},
 	})
 	for _, group := range globalFlagGroups {
