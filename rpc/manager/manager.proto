@@ -286,6 +286,28 @@ message ConnMessage {
   bytes payload = 5;
 }
 
+// LookupHost request sent from a client
+message LookupHostRequest {
+  // Client session
+  SessionInfo session = 1;
+  string host = 2;
+}
+
+message LookupHostResponse {
+  repeated bytes ips = 1;
+}
+
+message LookupHostAgentResponse {
+  // Agent session
+  SessionInfo session = 1;
+
+  // LookupHostRequest is the request that this is a response to
+  LookupHostRequest request = 2;
+
+  // The response, which might be nil in case no address was found
+  LookupHostResponse response = 3;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -356,4 +378,14 @@ service Manager {
   // net.Conn instances in the traffic-manager. Responses from tracked instances
   // are sent back on the returned message stream
   rpc ConnTunnel(stream ConnMessage) returns (stream ConnMessage);
+
+  // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  rpc LookupHost(LookupHostRequest) returns (LookupHostResponse);
+
+  // AgentLookupHostResponse lets an agent respond for lookup requests
+  rpc AgentLookupHostResponse(LookupHostAgentResponse) returns (google.protobuf.Empty);
+
+  // WatchLookupHost lets an agent receive lookup requests
+  rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
 }

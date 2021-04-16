@@ -165,8 +165,8 @@ func (t *tunRouter) flush(c context.Context, dnsIP net.IP) error {
 	addedNets := make(map[string]*net.IPNet)
 	ips := make([]net.IP, len(t.ips))
 	i := 0
-	for ip := range t.ips {
-		ips[i] = net.IP(ip)
+	for tip := range t.ips {
+		ips[i] = net.IP(tip)
 		i++
 	}
 

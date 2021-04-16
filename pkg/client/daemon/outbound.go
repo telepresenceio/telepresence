@@ -1,11 +1,9 @@
 package daemon
 
 import (
-	"bytes"
 	"context"
 	"math/rand"
 	"net"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -49,7 +47,7 @@ type outbound struct {
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
-	domains    map[string]IPs
+	domains    map[string]iputil.IPs
 	search     []string
 
 	// managerConfigured is closed when the traffic manager has performed
@@ -99,18 +97,12 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
-	var dnsIP net.IP
-	if dnsIP = net.ParseIP(dnsIPStr); dnsIP != nil {
-		if ip4 := dnsIP.To4(); ip4 != nil {
-			dnsIP = ip4
-		}
-	}
 	ret := &outbound{
 		dnsListener:       listener,
-		dnsIP:             dnsIP,
+		dnsIP:             iputil.Parse(dnsIPStr),
 		noSearch:          noSearch,
 		namespaces:        make(map[string]struct{}),
-		domains:           make(map[string]IPs),
+		domains:           make(map[string]iputil.IPs),
 		search:            []string{""},
 		work:              make(chan func(context.Context) error),
 		dnsConfigured:     make(chan struct{}),
@@ -184,10 +176,10 @@ func (o *outbound) resolveWithSearchLocked(n string) []net.IP {
 
 // Since headless and externalName services can have multiple IPs,
 // we return a shuffled list of the IPs if there are more than one.
-func shuffleIPs(ips IPs) IPs {
+func shuffleIPs(ips iputil.IPs) iputil.IPs {
 	switch lenIPs := len(ips); lenIPs {
 	case 0:
-		return IPs{}
+		return iputil.IPs{}
 	case 1:
 	default:
 		// If there are multiple elements in the slice, we shuffle the
@@ -209,15 +201,11 @@ func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) erro
 func (o *outbound) update(_ context.Context, table *rpc.Table) (err error) {
 	// o.proxy.SetSocksPort(table.SocksPort)
 	ips := make(map[IPKey]struct{}, len(table.Routes))
-	domains := make(map[string]IPs)
+	domains := make(map[string]iputil.IPs)
 	for _, route := range table.Routes {
-		dIps := make(IPs, 0, len(route.Ips))
+		dIps := make(iputil.IPs, 0, len(route.Ips))
 		for _, ipStr := range route.Ips {
-			if ip := net.ParseIP(ipStr); ip != nil {
-				// ParseIP returns ipv4 that are 16 bytes long. Normalize them into 4 bytes
-				if ip4 := ip.To4(); ip4 != nil {
-					ip = ip4
-				}
+			if ip := iputil.Parse(ipStr); ip != nil {
 				dIps = append(dIps, ip)
 				ips[IPKey(ip)] = struct{}{}
 			}
@@ -237,26 +225,7 @@ func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
-func (ips IPs) uniqueSorted() IPs {
-	sort.Slice(ips, func(i, j int) bool {
-		return bytes.Compare(ips[i], ips[j]) < 0
-	})
-	var prev net.IP
-	last := len(ips) - 1
-	for i := 0; i <= last; i++ {
-		s := ips[i]
-		if s.Equal(prev) {
-			copy(ips[i:], ips[i+1:])
-			last--
-			i--
-		} else {
-			prev = s
-		}
-	}
-	return ips[:last+1]
-}
-
-func (o *outbound) doUpdate(c context.Context, domains map[string]IPs, table map[IPKey]struct{}) error {
+func (o *outbound) doUpdate(c context.Context, domains map[string]iputil.IPs, table map[IPKey]struct{}) error {
 	// We're updating routes. Make sure DNS waits until the new answer
 	// is ready, i.e. don't serve old answers.
 	o.domainsLock.Lock()
@@ -274,7 +243,7 @@ func (o *outbound) doUpdate(c context.Context, domains map[string]IPs, table map
 	var kubeDNS net.IP
 	for k, nIps := range domains {
 		// Ensure that all added entries contain unique, sorted, and non-empty IPs
-		nIps = nIps.uniqueSorted()
+		nIps = nIps.UniqueSorted()
 		if len(nIps) == 0 {
 			delete(domains, k)
 			continue

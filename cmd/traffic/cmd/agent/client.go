@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"net"
 	"os"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
@@ -100,6 +102,46 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		// - clear out any intercepts
 		// - set forwarding to the app
 		state.HandleIntercepts(ctx, nil)
+	}()
+
+	// Deal with host lookups dispatched to this agent during intercepts
+	lrStream, err := manager.WatchLookupHost(ctx, session)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for ctx.Err() == nil {
+			lr, err := lrStream.Recv()
+			if err != nil {
+				if ctx.Err() == nil {
+					dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
+				}
+				return
+			}
+			dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
+			addrs, err := net.LookupHost(lr.Host)
+			r := rpc.LookupHostResponse{}
+			if err == nil {
+				ips := make(iputil.IPs, len(addrs))
+				for i, addr := range addrs {
+					ips[i] = iputil.Parse(addr)
+				}
+				dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
+				r.Ips = ips.BytesSlice()
+			}
+			response := rpc.LookupHostAgentResponse{
+				Session:  session,
+				Request:  lr,
+				Response: &r,
+			}
+			if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
+				if ctx.Err() == nil {
+					dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
+				}
+				return
+			}
+		}
 	}()
 
 	// Loop calling Remain

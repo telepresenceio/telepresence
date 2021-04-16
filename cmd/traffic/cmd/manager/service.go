@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -37,6 +38,8 @@ type Manager struct {
 
 	rpc.UnsafeManagerServer
 }
+
+var _ rpc.ManagerServer = &Manager{}
 
 type wall struct{}
 
@@ -477,6 +480,62 @@ func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error)
 		}
 	}
 	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
+}
+
+func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {
+	ctx = WithSessionInfo(ctx, request.GetSession())
+	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
+	sessionID := request.GetSession().GetSessionId()
+	response := &rpc.LookupHostResponse{}
+	ips, err := m.state.AgentsLookup(ctx, sessionID, request)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) > 0 {
+		dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
+		response.Ips = ips.BytesSlice()
+		return response, nil
+	}
+
+	// Either we aren't intercepting any agents, or none of them was able to find the given host. Let's
+	// try from the manager too.
+	addrs, err := net.LookupHost(request.Host)
+	if err != nil {
+		response.Ips = [][]byte{}
+		dlog.Debugf(ctx, "LookupHost response %s -> NOT FOUND", request.Host)
+		return response, nil
+	}
+	ips = make(iputil.IPs, len(addrs))
+	for i, addr := range addrs {
+		ips[i] = iputil.Parse(addr)
+	}
+	dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
+	response.Ips = ips.BytesSlice()
+	return response, nil
+}
+
+func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.LookupHostAgentResponse) (*empty.Empty, error) {
+	ctx = WithSessionInfo(ctx, response.GetSession())
+	dlog.Debugf(ctx, "AgentLookupHostResponse called %s -> %s", response.Request.Host, iputil.IPsFromBytesSlice(response.Response.Ips))
+	m.state.PostLookupResponse(response)
+	return &empty.Empty{}, nil
+}
+
+func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupHostServer) error {
+	ctx := WithSessionInfo(stream.Context(), session)
+	dlog.Debugf(ctx, "WatchLookupHost called")
+	lrCh := m.state.WatchLookupHost(session.SessionId)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return nil
+		case lr := <-lrCh:
+			if err := stream.Send(lr); err != nil {
+				dlog.Error(ctx, err)
+				return nil
+			}
+		}
+	}
 }
 
 // expire removes stale sessions.
