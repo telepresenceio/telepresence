@@ -60,7 +60,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 		break
 	}
 
-	err := start(client.GetExe(), []string{"connector-foreground"}, false, nil, nil, nil)
+	err := start(cs.cmd.Context(), client.GetExe(), []string{"connector-foreground"}, false, nil, nil, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the connector service")
 	}

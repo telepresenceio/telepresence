@@ -451,7 +451,59 @@ func (cs *connectedSuite) TestJ_ListOnlyMapped() {
 	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 }
 
-func (cs *connectedSuite) TestK_Uninstall() {
+func (cs *connectedSuite) TestK_DockerRun() {
+	require := cs.Require()
+	ctx := dlog.NewTestContext(cs.T(), false)
+
+	svc := "hello-0"
+	tag := "telepresence/hello-test"
+	testDir := "pkg/client/cli/testdata/hello"
+	_, err := output(ctx, "docker", "build", "-t", tag, testDir)
+	require.NoError(err)
+	abs, err := filepath.Abs(testDir)
+	require.NoError(err)
+	// Kill container on exit
+	defer func() {
+		_ = dexec.CommandContext(ctx, "docker", "kill", fmt.Sprintf("intercept-%s-%s-8000", svc, cs.ns())).Run()
+	}()
+
+	ccx, cancel := context.WithCancel(ctx)
+	stdoutCh := make(chan string)
+	go func() {
+		stdout, _ := telepresenceContext(ccx, "intercept", "--namespace", cs.ns(), svc,
+			"--docker-run", "--port", "8000", "--", "--rm", "-v", abs+":/usr/src/app", tag)
+		stdoutCh <- stdout
+	}()
+
+	expectedOutput := "Hello from intercepted echo-server!"
+	cs.Eventually(
+		// condition
+		func() bool {
+			hc := &http.Client{Timeout: time.Second}
+			resp, err := hc.Get("http://" + svc)
+			if err != nil {
+				dlog.Error(ctx, err)
+				return false
+			}
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				dlog.Error(ctx, err)
+				return false
+			}
+			s := strings.TrimSpace(string(body))
+			dlog.Info(ctx, s)
+			return s == expectedOutput
+		},
+		15*time.Second, // waitFor
+		3*time.Second,  // polling interval
+		`body of %q equals %q`, "http://"+svc, expectedOutput,
+	)
+	cancel()
+	cs.Contains(<-stdoutCh, "Using Deployment "+svc)
+}
+
+func (cs *connectedSuite) TestZ_Uninstall() {
 	cs.Run("Uninstalls agent on given deployment", func() {
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
@@ -739,7 +791,11 @@ func output(ctx context.Context, args ...string) (string, error) {
 
 // telepresence executes the CLI command in-process
 func telepresence(t testing.TB, args ...string) (string, string) {
-	ctx := dlog.NewTestContext(t, false)
+	return telepresenceContext(dlog.NewTestContext(t, false), args...)
+}
+
+// telepresence executes the CLI command in-process
+func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 	dlog.Infof(ctx, "running command: %q", append([]string{"telepresence"}, args...))
 
 	cmd := cli.Command(ctx)
