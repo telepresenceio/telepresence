@@ -390,13 +390,15 @@ func (s *State) GetAllAgents() map[string]*rpc.AgentInfo {
 	return s.agents.LoadAll()
 }
 
-func (s *State) GetAgentsByName(name string) map[string]*rpc.AgentInfo {
+func (s *State) GetAgentsByName(name, namespace string) map[string]*rpc.AgentInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	ret := make(map[string]*rpc.AgentInfo, len(s.agentsByName[name]))
 	for k, v := range s.agentsByName[name] {
-		ret[k] = proto.Clone(v).(*rpc.AgentInfo)
+		if v.Namespace == namespace {
+			ret[k] = proto.Clone(v).(*rpc.AgentInfo)
+		}
 	}
 
 	return ret
