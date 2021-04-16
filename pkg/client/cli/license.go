@@ -28,7 +28,9 @@ func LicenseCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 
 		Short: "Get License from Ambassador Cloud",
-		Long:  "Get License from Ambassador Cloud",
+		Long: `Get License from Ambassador Cloud. For more information on what
+licenses are used for, head to:
+https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return getCloudLicense(cmd.Context(), cmd.OutOrStdout(),
 				flags.id, flags.outputFile, flags.licenseFile, flags.hostDomain)
