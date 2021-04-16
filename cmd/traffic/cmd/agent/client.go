@@ -32,7 +32,7 @@ func GetLicenseFromManager(ctx context.Context, address string) (*rpc.License, e
 	return license, nil
 }
 
-func CheckIfAirGapped(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
+func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -43,7 +43,7 @@ func CheckIfAirGapped(ctx context.Context, address string) (*rpc.AmbassadorCloud
 	defer conn.Close()
 
 	manager := rpc.NewManagerClient(conn)
-	cloudConnectInfo, err := manager.IsAirGapped(ctx, &empty.Empty{})
+	cloudConnectInfo, err := manager.CanConnectAmbassadorCloud(ctx, &empty.Empty{})
 	if err != nil {
 		return &rpc.AmbassadorCloudConnection{}, err
 	}

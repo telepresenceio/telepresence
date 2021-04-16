@@ -23,9 +23,9 @@ type ManagerClient interface {
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*License, error)
-	// IsAirGapped returns whether or not the cluster is able to talk to
+	// canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
 	// Ambassador Cloud
-	IsAirGapped(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error)
+	CanConnectAmbassadorCloud(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
@@ -88,9 +88,9 @@ func (c *managerClient) GetLicense(ctx context.Context, in *empty.Empty, opts ..
 	return out, nil
 }
 
-func (c *managerClient) IsAirGapped(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error) {
+func (c *managerClient) CanConnectAmbassadorCloud(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error) {
 	out := new(AmbassadorCloudConnection)
-	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/IsAirGapped", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/CanConnectAmbassadorCloud", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -242,9 +242,9 @@ type ManagerServer interface {
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(context.Context, *empty.Empty) (*License, error)
-	// IsAirGapped returns whether or not the cluster is able to talk to
+	// canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
 	// Ambassador Cloud
-	IsAirGapped(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error)
+	CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
@@ -292,8 +292,8 @@ func (UnimplementedManagerServer) Version(context.Context, *empty.Empty) (*Versi
 func (UnimplementedManagerServer) GetLicense(context.Context, *empty.Empty) (*License, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
 }
-func (UnimplementedManagerServer) IsAirGapped(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method IsAirGapped not implemented")
+func (UnimplementedManagerServer) CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CanConnectAmbassadorCloud not implemented")
 }
 func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsClient not implemented")
@@ -374,20 +374,20 @@ func _Manager_GetLicense_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_IsAirGapped_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Manager_CanConnectAmbassadorCloud_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ManagerServer).IsAirGapped(ctx, in)
+		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.manager.Manager/IsAirGapped",
+		FullMethod: "/telepresence.manager.Manager/CanConnectAmbassadorCloud",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).IsAirGapped(ctx, req.(*empty.Empty))
+		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -591,8 +591,8 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Manager_GetLicense_Handler,
 		},
 		{
-			MethodName: "IsAirGapped",
-			Handler:    _Manager_IsAirGapped_Handler,
+			MethodName: "CanConnectAmbassadorCloud",
+			Handler:    _Manager_CanConnectAmbassadorCloud_Handler,
 		},
 		{
 			MethodName: "ArriveAsClient",

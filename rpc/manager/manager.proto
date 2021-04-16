@@ -274,9 +274,9 @@ service Manager {
   // domain that granted it) known to the manager.
   rpc GetLicense(google.protobuf.Empty) returns (License);
   
-  // IsAirGapped returns whether or not the cluster is able to talk to
+  // canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
   // Ambassador Cloud
-  rpc IsAirGapped(google.protobuf.Empty) returns (AmbassadorCloudConnection);
+  rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
 
   // Presence
 

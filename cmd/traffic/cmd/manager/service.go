@@ -78,8 +78,9 @@ func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error
 	return &rpc.License{License: license, Host: hostDomain}, nil
 }
 
-// IsAirGapped does this
-func (m *Manager) IsAirGapped(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
+// CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
+// from within a cluster
+func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
 	timeout := 2 * time.Second
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", m.env.SystemAHost, m.env.SystemAPort), timeout)
 	if err != nil {

@@ -149,7 +149,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	// error then we'll assume they aren't in an air-gapped environment
 	// and if there are issues with the connector, it will fail later
 	_ = ii.withConnector(true, func(cs *connectorState) error {
-		resp, err := cs.managerClient.IsAirGapped(cmd.Context(), &empty.Empty{})
+		resp, err := cs.managerClient.CanConnectAmbassadorCloud(cmd.Context(), &empty.Empty{})
 		canConnectCloud = resp.CanConnect
 		return err
 	})
