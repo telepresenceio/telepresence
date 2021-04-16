@@ -135,7 +135,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	extRequiresLogin, err := ii.extState.RequiresAPIKey()
+	extRequiresLogin, err := ii.extState.RequiresAPIKeyOrLicense()
 	if err != nil {
 		return err
 	}

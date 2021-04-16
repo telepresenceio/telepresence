@@ -211,7 +211,7 @@ func (es *ExtensionsState) defaultMechanism(ctx context.Context) string {
 	canAPIKey := cliutil.HasLoggedIn(ctx)
 	var preferences []prefData
 	for _, extdata := range es.exts {
-		if extdata.RequiresAPIKey && !canAPIKey {
+		if extdata.RequiresAPIKeyOrLicense && !canAPIKey {
 			continue
 		}
 		for mechname, mechdata := range extdata.Mechanisms {
@@ -277,12 +277,12 @@ func (es *ExtensionsState) Mechanism() (string, error) {
 	return es.cachedMechanism.Mech, es.cachedMechanism.Err
 }
 
-func (es *ExtensionsState) RequiresAPIKey() (bool, error) {
+func (es *ExtensionsState) RequiresAPIKeyOrLicense() (bool, error) {
 	mechname, err := es.Mechanism()
 	if err != nil {
 		return false, err
 	}
-	return es.exts[es.mech2ext[mechname]].RequiresAPIKey, nil
+	return es.exts[es.mech2ext[mechname]].RequiresAPIKeyOrLicense, nil
 }
 
 func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
@@ -375,9 +375,9 @@ type ExtensionInfo struct {
 	// The initial string has environment variables expanded via os.Expand.  Strings returned
 	// from HTTP or gRPC requests do not have environment variables expanded.
 	Image string `json:"image"`
-	// RequiresAPIKey identifies whether the agent sidecar image requires a SystemA API key (via
-	// `telepresence login`) in order to function.
-	RequiresAPIKey bool `json:"requiresAPIKey,omitempty"`
+	// RequiresAPIKeyOrLicense identifies whether the agent sidecar image requires a SystemA API key (via
+	// `telepresence login`) or a license in the cluster in order to function.
+	RequiresAPIKeyOrLicense bool `json:"requiresAPIKeyOrLicense,omitempty"`
 	// Mechanisms describes the mechanisms that the agent sidecar image supports.  The keys in
 	// the map are the mechanism names.
 	Mechanisms map[string]MechanismInfo `json:"mechanisms"`
@@ -387,8 +387,9 @@ type ExtensionInfo struct {
 type MechanismInfo struct {
 	// Preference identifies an ordering of preference for choosing the default mechanism if not
 	// told explicitly via a flag.  The highest preference mechanism will be used as the
-	// default; with the exception that the mechanism(s) of a requiresAPIKey extension will not
-	// be considered if not logged in.  Ties are decided by lexicographic ordering.
+	// default; with the exception that the mechanism(s) of a requiresAPIKeyOrLicense extension will not
+	// be considered if not logged in or if you cannot access the cloud and use a license.
+	// Ties are decided by lexicographic ordering.
 	Preference int `json:"preference,omitempty"`
 
 	// Flags describes which CLI flags this mechanism introduces to `telepresence intercept`.
