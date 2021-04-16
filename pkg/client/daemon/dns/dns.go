@@ -18,12 +18,12 @@ type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
 	listeners    []net.PacketConn
 	fallback     *dns.Conn
-	resolve      func(string) []net.IP
+	resolve      func(context.Context, string) []net.IP
 	requestCount int64
 }
 
 // NewServer returns a new dns.Server
-func NewServer(c context.Context, listeners []net.PacketConn, fallback *dns.Conn, resolve func(string) []net.IP) *Server {
+func NewServer(c context.Context, listeners []net.PacketConn, fallback *dns.Conn, resolve func(context.Context, string) []net.IP) *Server {
 	return &Server{
 		ctx:       c,
 		listeners: listeners,
@@ -62,7 +62,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			// root-cause this, because it's weird.
 			ips = []net.IP{{127, 0, 0, 1}}
 		} else {
-			ips = s.resolve(domain)
+			ips = s.resolve(s.ctx, domain)
 		}
 		if len(ips) > 0 {
 			msg := dns.Msg{}
@@ -87,7 +87,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	default:
-		ips := s.resolve(domain)
+		ips := s.resolve(s.ctx, domain)
 		if len(ips) > 0 {
 			dlog.Debugf(c, "QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
 			msg := dns.Msg{}

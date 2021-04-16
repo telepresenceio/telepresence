@@ -100,28 +100,12 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		}
 	}()
 	dns.Flush(c)
-	srv := dns.NewServer(c, listeners, conn, o.resolveWithSearch)
+	srv := dns.NewServer(c, listeners, conn, o.resolveInCluster)
 	close(o.dnsConfigured)
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
 	return err
-}
-
-// resolveWithSearch looks up the given query and returns the matching IPs.
-//
-// Queries using qualified names will be dispatched to the resolveNoSearch() function.
-// An unqualified name query will be tried with all the suffixes in the search path
-// and the IPs of the first match will be returned.
-func (o *outbound) resolveWithSearch(query string) []net.IP {
-	if strings.Count(query, ".") > 1 {
-		// More than just the ending dot, so don't use search-path
-		return o.resolveNoSearch(query)
-	}
-	o.domainsLock.RLock()
-	ips := o.resolveWithSearchLocked(strings.ToLower(query))
-	o.domainsLock.RUnlock()
-	return ips
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {

@@ -246,8 +246,16 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
+		select {
+		case <-c.Done():
+			return nil
+		case dnsIP := <-o.kubeDNS:
+			if err = o.router.configureDNS(c, dnsIP, uint16(53), o.dnsListener.LocalAddr().(*net.UDPAddr)); err != nil {
+				dlog.Error(c, err)
+			}
+		}
 		defer o.dnsListener.Close()
-		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, nil, o.resolveNoSearch)
+		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, nil, o.resolveInCluster)
 		return v.Run(c)
 	})
 	dns.Flush(c)
