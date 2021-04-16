@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 
@@ -15,33 +18,57 @@ import (
 
 func LicenseCommand() *cobra.Command {
 	var flags struct {
-		outputFile string
+		id          string
+		outputFile  string
+		licenseFile string
+		hostDomain  string
 	}
 	cmd := &cobra.Command{
-		Use:  "license [flags] <license_id>",
-		Args: cobra.ExactArgs(1),
+		Use:  "license [flags]",
+		Args: cobra.NoArgs,
 
 		Short: "Get License from Ambassador Cloud",
 		Long:  "Get License from Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return getCloudLicense(cmd.Context(), cmd.OutOrStdout(),
-				args[0], flags.outputFile)
+				flags.id, flags.outputFile, flags.licenseFile, flags.hostDomain)
 		},
 	}
 
+	cmd.Flags().StringVarP(&flags.id, "id", "i", "", "The id associated with your license.")
+
 	cmd.Flags().StringVarP(&flags.outputFile, "output-file", "o", "", "The file where you want the license secret to be output to")
+	cmd.Flags().StringVarP(&flags.licenseFile, "license-file", "f", "", "The file containing your license if you've downloaded it already")
+	cmd.Flags().StringVarP(&flags.hostDomain, "host-domain", "d", "auth.datawire.io", "The host domain providing your license")
 	return cmd
 }
 
 // getCloudLicense communicates with system a, acquires the jwt formatted license
 // given by the id, places it in a secret, and outputs it to stdout or writes it
 // to a file given by the user
-func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile string) error {
-	license, hostDomain, err := cliutil.GetCloudLicense(ctx, outputFile, id)
-	if err != nil {
-		return err
+func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, licenseFile, hostDomain string) error {
+	if licenseFile == "" && id == "" {
+		return errors.New("Must use either --id or --license-file flag")
 	}
-
+	var license string
+	var err error
+	if licenseFile == "" {
+		// If we are getting the license from the cloud, we override the hostDomain
+		// since the function will provide which host the license came from
+		license, hostDomain, err = cliutil.GetCloudLicense(ctx, outputFile, id)
+		if err != nil {
+			return err
+		}
+	} else {
+		contents, err := ioutil.ReadFile(licenseFile)
+		if err != nil {
+			return err
+		}
+		// We don't want a pesky trailing \n to mess up the jwt
+		// so we remove one if it exists
+		license = string(contents)
+		license = strings.TrimSuffix(license, "\n")
+	}
 	writer := stdout
 	// If a user gives a file, we write to the file instead of stdout
 	if outputFile != "" {
