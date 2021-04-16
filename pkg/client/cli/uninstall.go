@@ -56,41 +56,48 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
-	u.cmd = cmd
 	doQuit := false
-	err := u.withConnector(true, func(cs *connectorState) error {
-		ur := &connector.UninstallRequest{
-			UninstallType: 0,
-			Namespace:     u.namespace,
+	err := cliutil.WithConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		req := &connector.UninstallRequest{
+			Namespace: u.namespace,
 		}
 		switch {
 		case u.agent:
-			ur.UninstallType = connector.UninstallRequest_NAMED_AGENTS
-			ur.Agents = args
+			req.UninstallType = connector.UninstallRequest_NAMED_AGENTS
+			req.Agents = args
 		case u.allAgents:
-			ur.UninstallType = connector.UninstallRequest_ALL_AGENTS
+			req.UninstallType = connector.UninstallRequest_ALL_AGENTS
 		default:
-			ur.UninstallType = connector.UninstallRequest_EVERYTHING
+			req.UninstallType = connector.UninstallRequest_EVERYTHING
+			// No need to keep daemons once everything is uninstalled.
+			doQuit = true
 		}
-		r, err := cs.connectorClient.Uninstall(cmd.Context(), ur)
+		resp, err := connectorClient.Uninstall(ctx, req)
 		if err != nil {
 			return err
 		}
-		if r.ErrorText != "" {
-			return errors.New(r.ErrorText)
+		if resp.ErrorText != "" {
+			return errors.New(resp.ErrorText)
 		}
 
-		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
-			// No need to keep daemons once everything is uninstalled
-			doQuit = true
-			return cs.removeClusterFromUserCache(cmd.Context())
-		}
 		return nil
 	})
-	if err == nil && doQuit {
-		err = quit(cmd, nil)
+	if err != nil {
+		return err
 	}
-	return err
+	if doQuit {
+		u.cmd = cmd
+		err := u.withConnector(true, func(cs *connectorState) error {
+			return cs.removeClusterFromUserCache(cmd.Context())
+		})
+		if err != nil {
+			return err
+		}
+		if err := quit(cmd, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (cs *connectorState) removeClusterFromUserCache(ctx context.Context) (err error) {
