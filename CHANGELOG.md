@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.1.6 (TBD)
+### 2.2.0 (TBD)
 
 - Feature: `telepresence intercept` now has the option `--docker-run` which will start a docker container with intercepted environment and volume mounts.
 - Bugfix: `telepresence uninstall` can once again uninstall agents installed by older versions of Telepresence.
@@ -39,6 +39,7 @@
 - Bugfix: You can now specify a service when doing an intercept (--service), this is useful if you have two services that select on the same labels (e.g. If using Argo Rollouts do deployments)
 
 ### 2.1.2 (March 19, 2021)
+
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
 - Bugfix: IPv6 routes now work and don't prevent other pfctl rules being written in MacOS
