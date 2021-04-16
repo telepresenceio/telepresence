@@ -131,8 +131,10 @@ We'll use a sample app that is already installed in your demo cluster.  Let's ta
 1. Deploy the app to your cluster:  
 `kubectl apply -k emojivoto/kustomize/deployment`
 
+<!--
 1. Change the kubectl namespace:  
 `kubectl config set-context --current --namespace=emojivoto`
+-->
 
 1. List the Services:  
 `kubectl get svc`
@@ -199,10 +201,10 @@ Now start up the `web-app` backend service on your laptop. We'll then make a cod
 ## 6. Make a code change
 We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
 
-1. In your editor, open the file `emojivoto/emojivoto-web-app/js/components/Vote.jsx` and replace the render() function with the following:
+1. In your editor, open the file `emojivoto/emojivoto-web-app/js/components/Vote.jsx` and replace the render() function (lines 83 to the end) with the following highlighted code snippet:
 
   ```
-  https://github.com/BuoyantIO/emojivoto/blob/fbe3ecba84ea44dff771524b664bd25af25e8b51/emojivoto-web/webapp/js/components/Vote.jsx#L83-L149
+  https://github.com/datawire/emojivoto/blob/main/assets/Vote-fixed.jsx#L83-L149
   ```
 
 1. In a new terminal window, change to the `emojivoto-web-dir` directory and run webpack to fully recompile the code:
