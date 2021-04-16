@@ -56,6 +56,14 @@ func (p *mgrProxy) GetLicense(ctx context.Context, arg *empty.Empty) (*managerrp
 	}
 	return client.GetLicense(ctx, arg, callOptions...)
 }
+
+func (p *mgrProxy) IsAirGapped(ctx context.Context, arg *empty.Empty) (*managerrpc.AmbassadorCloudConnection, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.IsAirGapped(ctx, arg, callOptions...)
+}
 func (p *mgrProxy) ArriveAsClient(ctx context.Context, arg *managerrpc.ClientInfo) (*managerrpc.SessionInfo, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

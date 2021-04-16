@@ -8,17 +8,16 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -112,22 +111,6 @@ func leaveCommand() *cobra.Command {
 	}
 }
 
-// isAirGapped let's us know if the user is able to resolve a connection
-// to SystemA.
-func isAirGapped(ctx context.Context) (isAirGapped bool) {
-	env, err := client.LoadEnv(ctx)
-	if err == nil {
-		timeout := 2 * time.Second
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", env.SystemAHost, env.SystemAPort), timeout)
-		if err != nil {
-			isAirGapped = true
-			return
-		}
-		conn.Close()
-	}
-	return
-}
-
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	if ii.extErr != nil {
 		return ii.extErr
@@ -156,14 +139,28 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// If in an air-gapped environment, then we override requiring
-	// a login since it can't communicate with System A.
-	if isAirGapped(cmd.Context()) {
-		extRequiresLogin = false
-	}
+
+	// Determine if the cluster is air-gapped (can't communicate
+	// with Ambassador Cloud
+	var canConnectCloud bool
+	ii.cmd = cmd
+
+	// We don't particularly care about errors here because if we do
+	// error then we'll assume they aren't in an air-gapped environment
+	// and if there are issues with the connector, it will fail later
+	_ = ii.withConnector(true, func(cs *connectorState) error {
+		resp, err := cs.managerClient.IsAirGapped(cmd.Context(), &empty.Empty{})
+		canConnectCloud = resp.CanConnect
+		return err
+	})
+
 	if ii.previewEnabled || extRequiresLogin {
-		if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
-			return err
+		// If the cluster cannot connect to the cloud, then we don't require
+		// a login.
+		if canConnectCloud {
+			if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -175,7 +172,6 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 			ii.name += "-" + ii.namespace
 		}
 	}
-	ii.cmd = cmd
 	if len(args) == 0 {
 		// start and retain the intercept
 		return ii.withConnector(true, func(cs *connectorState) (err error) {

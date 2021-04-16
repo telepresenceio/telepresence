@@ -2,7 +2,9 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
+	"net"
 	"sort"
 	"time"
 
@@ -74,6 +76,18 @@ func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error
 	}
 	hostDomain := string(hostDomainData)
 	return &rpc.License{License: license, Host: hostDomain}, nil
+}
+
+// IsAirGapped does this
+func (m *Manager) IsAirGapped(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
+	timeout := 2 * time.Second
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", m.env.SystemAHost, m.env.SystemAPort), timeout)
+	if err != nil {
+		dlog.Debugf(ctx, "Failed to connect so assuming in air-gapped environment %s", err)
+		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
+	}
+	conn.Close()
+	return &rpc.AmbassadorCloudConnection{CanConnect: true}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.
