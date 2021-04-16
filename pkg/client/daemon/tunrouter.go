@@ -27,18 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/udp"
 )
 
-// IPKey is an immutable cast of a net.IP suitable to be used as a map key. It must be created using IPKey(ip)
-type IPKey string
-
-func (k IPKey) IP() net.IP {
-	return net.IP(k)
-}
-
-// String returns the human readable string form of the IP (as opposed to the binary junk displayed when using it directly).
-func (k IPKey) String() string {
-	return net.IP(k).String()
-}
-
 // tunRouter is a router for outbound traffic that is centered around a TUN device. It's similar to a
 // TUN-to-SOCKS5 but uses a bidirectional gRPC tunnel instead of SOCKS when communicating with the
 // traffic-manager. The addresses of the device are derived from IP addresses sent to it from the user

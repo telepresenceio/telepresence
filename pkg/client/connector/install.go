@@ -301,32 +301,26 @@ func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.Ser
 func (ki *installer) findMatchingServices(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*kates.Service, error) {
 	// TODO: Expensive on large clusters but the problem goes away once we move the installer to the traffic-manager
 	var svcs []*kates.Service
-	err := ki.client.List(c, kates.Query{
-		Name:      svcName,
-		Kind:      "Service",
-		Namespace: namespace,
-	}, &svcs)
-	if err != nil {
+	if err := ki.client.List(c, kates.Query{Name: svcName, Kind: "Service", Namespace: namespace}, &svcs); err != nil {
 		return nil, err
+	}
+
+	// Returns true if selector is completely included in labels
+	labelsMatch := func(selector map[string]string) bool {
+		if len(selector) == 0 || len(labels) < len(selector) {
+			return false
+		}
+		for k, v := range selector {
+			if labels[k] != v {
+				return false
+			}
+		}
+		return true
 	}
 
 	var matching []*kates.Service
 	for _, svc := range svcs {
-		selector := svc.Spec.Selector
-		if len(selector) == 0 {
-			continue
-		}
-
-		// Only check if the service names are equal when supplied by user
-		if svcName != "" && svc.Name != svcName {
-			continue
-		}
-		for k, v := range selector {
-			if labels[k] != v {
-				continue
-			}
-		}
-		if len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
+		if (svcName == "" || svc.Name == svcName) && labelsMatch(svc.Spec.Selector) && len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
 			matching = append(matching, svc)
 		}
 	}
@@ -544,8 +538,8 @@ already exist for this service`, kind, obj.GetName())
 				svcNames = append(svcNames, svc.Name)
 			}
 
-			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v, use --service and one of: %s",
-				podTemplate.Labels, strings.Join(svcNames, ","))
+			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v in namespace %s, use --service and one of: %s",
+				podTemplate.Labels, namespace, strings.Join(svcNames, ","))
 			if portNameOrNumber != "" {
 				errMsg += fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
 			}

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	dns2 "github.com/miekg/dns"
+
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -54,8 +56,9 @@ type outbound struct {
 	work chan func(context.Context) error
 
 	// dnsQueriesInProgress unique set of DNS queries currently in progress.
-	dnsQueriesInProgress map[string]struct{}
-	dnsQueriesLock       sync.Mutex
+	dnsAInProgress    map[string]struct{}
+	dnsAAAAInProgress map[string]struct{}
+	dnsQueriesLock    sync.Mutex
 }
 
 // splitToUDPAddr splits the given address into an UDPAddr. It's
@@ -82,17 +85,18 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 	rand.Seed(time.Now().UnixNano())
 
 	ret := &outbound{
-		dnsListener:          listener,
-		dnsIP:                iputil.Parse(dnsIPStr),
-		noSearch:             noSearch,
-		namespaces:           make(map[string]struct{}),
-		domains:              make(map[string]iputil.IPs),
-		dnsQueriesInProgress: make(map[string]struct{}),
-		search:               []string{""},
-		work:                 make(chan func(context.Context) error),
-		dnsConfigured:        make(chan struct{}),
-		managerConfigured:    make(chan struct{}),
-		kubeDNS:              make(chan net.IP, 1),
+		dnsListener:       listener,
+		dnsIP:             iputil.Parse(dnsIPStr),
+		noSearch:          noSearch,
+		namespaces:        make(map[string]struct{}),
+		domains:           make(map[string]iputil.IPs),
+		dnsAInProgress:    make(map[string]struct{}),
+		dnsAAAAInProgress: make(map[string]struct{}),
+		search:            []string{""},
+		work:              make(chan func(context.Context) error),
+		dnsConfigured:     make(chan struct{}),
+		managerConfigured: make(chan struct{}),
+		kubeDNS:           make(chan net.IP, 1),
 	}
 
 	if ret.router, err = newTunRouter(ret.managerConfigured); err != nil {
@@ -127,15 +131,48 @@ func (o *outbound) routerServerWorker(c context.Context) (err error) {
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
 const dotTel2SubDomain = "." + tel2SubDomain
+const dotKubernetesZone = "." + kubernetesZone
 
-func (o *outbound) resolveInCluster(c context.Context, query string) []net.IP {
+var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
+
+func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
+	var inProgress map[string]struct{}
+	switch qType {
+	case dns2.TypeA:
+		inProgress = o.dnsAInProgress
+	case dns2.TypeAAAA:
+		inProgress = o.dnsAAAAInProgress
+	default:
+		return nil
+	}
+
 	query = query[:len(query)-1]
 	query = strings.ToLower(query) // strip of trailing dot
 	query = strings.TrimSuffix(query, dotTel2SubDomain)
 
+	if query == "localhost" {
+		// BUG(lukeshu): I have no idea why a lookup
+		// for localhost even makes it to here on my
+		// home WiFi when connecting to a k3sctl
+		// cluster (but not a kubernaut.io cluster).
+		// But it does, so I need this in order to be
+		// productive at home.  We should really
+		// root-cause this, because it's weird.
+		if qType == dns2.TypeAAAA {
+			return localhostIPv6
+		}
+		return localhostIPv4
+	}
+
+	// We don't care about queries to the kubernetes zone unless they have at least two additional elements.
+	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 3 {
+		return nil
+	}
+
 	o.dnsQueriesLock.Lock()
-	for qip := range o.dnsQueriesInProgress {
-		if strings.HasPrefix(query, qip) && strings.Contains(query, "."+kubernetesZone) {
+	for qip := range inProgress {
+		if strings.HasPrefix(query, qip) {
 			// This is most likely a recursion caused by the query in progress. This happens when a cluster
 			// runs locally on the same host as Telepresence and falls back to use the DNS of that host when
 			// the query cannot be resolved in the cluster. Sending that query to the traffic-manager is
@@ -144,14 +181,15 @@ func (o *outbound) resolveInCluster(c context.Context, query string) []net.IP {
 			return nil
 		}
 	}
-	o.dnsQueriesInProgress[query] = struct{}{}
+	inProgress[query] = struct{}{}
 	o.dnsQueriesLock.Unlock()
 
 	defer func() {
 		o.dnsQueriesLock.Lock()
-		delete(o.dnsQueriesInProgress, query)
+		delete(inProgress, query)
 		o.dnsQueriesLock.Unlock()
 	}()
+	dlog.Debugf(c, "LookupHost %s", query)
 	response, err := o.router.managerClient.LookupHost(c, &manager.LookupHostRequest{
 		Session: o.router.session,
 		Host:    query,
@@ -163,9 +201,17 @@ func (o *outbound) resolveInCluster(c context.Context, query string) []net.IP {
 	if len(response.Ips) == 0 {
 		return nil
 	}
-	ips := make(iputil.IPs, len(response.Ips))
-	for i, ip := range response.Ips {
-		ips[i] = ip
+	ips := make(iputil.IPs, 0, len(response.Ips))
+	for _, ip := range response.Ips {
+		if qType == dns2.TypeA {
+			if ip4 := net.IP(ip).To4(); ip4 != nil {
+				ips = append(ips, ip4)
+			}
+		} else {
+			if len(ip) == 16 {
+				ips = append(ips, ip)
+			}
+		}
 	}
 	return ips
 }

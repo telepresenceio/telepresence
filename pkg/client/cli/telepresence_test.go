@@ -309,26 +309,27 @@ func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
 }
 
 func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
+	ctx := dlog.NewTestContext(cs.T(), false)
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d.%s", i, cs.ns())
 		expectedOutput := fmt.Sprintf("Request served by hello-%d", i)
 		cs.Require().Eventually(
 			// condition
 			func() bool {
-				cs.T().Logf("trying %q...", "http://"+svc)
-				resp, err := http.Get("http://" + svc)
+				dlog.Infof(ctx, "trying %q...", "http://"+svc)
+				hc := http.Client{Timeout: time.Second}
+				resp, err := hc.Get("http://" + svc)
 				if err != nil {
-					cs.T().Log(err)
+					dlog.Error(ctx, err)
 					return false
 				}
 				defer resp.Body.Close()
-				cs.T().Logf("status code: %v", resp.StatusCode)
 				body, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					cs.T().Log(err)
+					dlog.Error(ctx, err)
 					return false
 				}
-				cs.T().Logf("body: %q", body)
+				dlog.Infof(ctx, "body: %q", body)
 				return strings.Contains(string(body), expectedOutput)
 			},
 			15*time.Second, // waitfor
@@ -682,7 +683,8 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 			// condition
 			func() bool {
 				is.T().Logf("trying %q...", "http://"+svc)
-				resp, err := http.Get("http://" + svc)
+				hc := http.Client{Timeout: time.Second}
+				resp, err := hc.Get("http://" + svc)
 				if err != nil {
 					is.T().Log(err)
 					return false

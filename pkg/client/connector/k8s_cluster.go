@@ -48,9 +48,6 @@ type k8sCluster struct {
 	accWait         chan struct{}
 	localIntercepts map[string]string
 
-	// watcherChanged is a channel that accumulates the channels of all watchers.
-	watcherChanged chan struct{}
-
 	// Current Namespace snapshot, get set by acc.Update().
 	Namespaces []*objName
 }
@@ -385,7 +382,6 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []str
 		client:           kc,
 		daemon:           daemon,
 		localIntercepts:  map[string]string{},
-		watcherChanged:   make(chan struct{}),
 		accWait:          make(chan struct{}),
 	}
 
