@@ -1,10 +1,10 @@
 # Making the remote local: Faster feedback, collaboration and debugging
 
-With the goal of achieving [fast, efficient development](https://www.getambassador.io/use-case/local-kubernetes-development/), developers need a set of approaches to bridge the gap between remote Kubernetes clusters and local development, and reduce time to feedback and debugging.
+With the goal of achieving [fast, efficient development](/use-case/local-kubernetes-development/), developers need a set of approaches to bridge the gap between remote Kubernetes clusters and local development, and reduce time to feedback and debugging.
 
 ## How should I set up a Kubernetes development environment?
 
-[Setting up a development environment](https://www.getambassador.io/resources/development-environments-microservices/) for Kubernetes can be much more complex than the set up for traditional web applications. Creating and maintaining a Kubernetes development environment relies on a number of external dependencies, such as databases or authentication. 
+[Setting up a development environment](/resources/development-environments-microservices/) for Kubernetes can be much more complex than the set up for traditional web applications. Creating and maintaining a Kubernetes development environment relies on a number of external dependencies, such as databases or authentication. 
 
 While there are several ways to set up a Kubernetes development environment, most introduce complexities and impediments to speed. The dev environment should be set up to easily code and test in conditions where a service can access the resources it depends on. 
 
