@@ -66,3 +66,44 @@ those Secrets.
 Telepresence understands `type: kubernetes.io/tls` Secrets and
 `type: istio.io/key-and-cert` Secrets; as well as `type: Opaque`
 Secrets that it detects to be formatted as one of those types.
+
+# Air Gapped Cluster
+
+If your cluster is air-gapped (e.g. it does not have access to the
+internet and therefore cannot connect to Ambassador Cloud), but you'd like
+to use selective intercepts, this is possible but requires some minimal
+configuration.
+
+## Create a License
+First go to [Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
+select `Licenses` for the team you want to create the license for. From this page you
+can generate a new license if one doesn't already exist.
+
+To get the Cluster ID of your cluster, ensure your kubeconfig context is using
+the cluster you want to create a license for, then run the following command:
+  ```
+  $ telepresence current-cluster-id
+    Cluster ID: <some UID>
+  ```
+
+## Add License to Cluster
+The page above shows all licenses that have been generated, select the one
+that is associated with your cluster and download that license.
+Then use the following command to generate the license secret:
+  ```
+  $ telepresence license -f <downloadedLicenseFile>
+
+    apiVersion: v1
+    data:
+      hostDomain: <base64 encoded value>
+      license: <other base64 encoded value>
+    kind: Secret
+    metadata:
+      creationTimestamp: null
+      name: systema-license
+      namespace: ambassador
+  ```
+
+From there, you can apply that secret to your cluster (it will go in the ambassador
+namespace).  Once applied, you will be able to use selective intercepts with the
+`--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).
