@@ -102,7 +102,7 @@ commands:
       "packages":
         type: string
     steps:
-      - run: brew install << parameters.packages >>
+      - run: brew update && brew install << parameters.packages >>
 
   "with-docker-machine":
     parameters:
