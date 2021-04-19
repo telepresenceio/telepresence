@@ -97,9 +97,48 @@ commands:
           path: /tmp/test-logs
           destination: test-logs
 
+  "with-docker-machine":
+    parameters:
+      "steps":
+        type: steps
+    steps:
+      - run:
+          name: "Launch docker-machine"
+          command: |
+            docker-machine create default --xhyve-boot2docker-url https://github.com/boot2docker/boot2docker/releases/download/v19.03.2/boot2docker.iso --driver xhyve
+            # docker-machine backgrounded itself, but because Circle
+            # CI will kill the process group if the 'command' returns,
+            # so we now sleep forever.
+            while true; do sleep 7200; done
+          background: true
+      - run:
+          name: Wait for docker-machine to become ready
+          command: until docker-machine env; do sleep 3; done && docker-machine env >> ${BASH_ENV}
+      - run: docker system info
+
+      - steps: << parameters.steps >>
+
+  "docker-machine-port-forward":
+    parameters:
+      "port-name":
+        type: string
+        default: "UNDEFINED"
+      "port-number":
+        type: integer
+        default: 1
+    steps:
+      - run:
+          name: "docker-machine port-forward: << parameters.port-name >> (IPv4)"
+          command: "socat tcp4-listen:<< parameters.port-number >>,reuseaddr,fork tcp:$(docker-machine ip):<< parameters.port-number >>"
+          background: true
+      - run:
+          name: "docker-machine port-forward: << parameters.port-name >> (IPv6)"
+          command: "socat tcp6-listen:<< parameters.port-number >>,reuseaddr,fork tcp:$(docker-machine ip):<< parameters.port-number >>"
+          background: true
+
 jobs:
 
-  "build-and-test":
+  "build-and-test-linux":
     executor: vm-linux
     steps:
       - checkout
@@ -114,6 +153,35 @@ jobs:
           # just a bit, so `go test`'s timeout output isn't hidden.
           no_output_timeout: 12m
       - save-logs
+
+  "build-and-test-macos":
+    executor: vm-macos
+    steps:
+      - brew-install:
+          packages: socat docker-machine-driver-xhyve docker jq
+      - run: |
+          sudo chown root:wheel /usr/local/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve &&
+          sudo chmod u+s /usr/local/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve
+      - checkout
+      - install-go
+      - run: make build
+      - install-kubectl
+      - with-docker-machine:
+          steps:
+            - docker-machine-port-forward:
+                port-name: "Docker Registry"
+                port-number: 5000
+            - docker-machine-port-forward:
+                port-name: "k3s"
+                port-number: 6443
+            - run:
+                command: make test
+                # Both CircleCI and `go test` itself time out after 10m by
+                # default.  `go test` gives us helpful output when that
+                # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
+                # just a bit, so `go test`'s timeout output isn't hidden.
+                no_output_timeout: 12m
+            - save-logs
 
   "lint":
     executor: vm-linux
@@ -171,7 +239,8 @@ workflows:
 
   'Dev':
     jobs:
-      - build-and-test
+      - build-and-test-linux
+      - build-and-test-macos
       - lint
       - generate
 
