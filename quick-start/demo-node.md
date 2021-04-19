@@ -11,7 +11,6 @@ import QSCards from './qs-cards'
 <div class="docs-article-toc">
 <h3>Contents</h3>
 
-* [Prerequisites](#prerequisites)
 * [1. Download the demo cluster archive](#1-download-the-demo-cluster-archive)
 * [2. Test Telepresence](#2-test-telepresence)
 * [3. Check out the sample application](#3-check-out-the-sample-application)
@@ -24,6 +23,10 @@ import QSCards from './qs-cards'
 </div>
 
 In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally. 
+
+<Alert severity="info">
+    While Telepresence works with any language, this guide uses a sample app written in Node.js. We have a version in <a href="../demo-react/">React</a> if you prefer.
+</Alert>
 
 <Alert severity="info">
     <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
@@ -59,7 +62,7 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
     verylargedatastore      ClusterIP   10.43.203.19    <none>        8080/TCP   14h
   ```
 
-4. Confirm that the Telepresence CLI is now installed, we expect to see that the daemons are not yet running:  
+4. Confirm that the Telepresence CLI is now installed (we expect to see the daemons are not running yet):  
 `telepresence status`
 
   ```
@@ -104,10 +107,6 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
     ...
 
   ```
-
-  <Alert severity="info">
-    <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../install/upgrade/">here</a> if needed.
-  </Alert>
 
   <Alert severity="info">
     The 401 response is expected.  What's important is that you were able to contact the API.
