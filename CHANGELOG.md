@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.2.0 (TBD)
+### 2.2.0 (April 19, 2021)
 
 - Feature: `telepresence intercept` now has the option `--docker-run` which will start a docker container with intercepted environment and volume mounts.
 - Bugfix: `telepresence uninstall` can once again uninstall agents installed by older versions of Telepresence.
