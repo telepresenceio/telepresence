@@ -16,8 +16,12 @@
               link: /install/upgrade/
         - title: Core Concepts
           items:
-            - title: Inner and Outer Dev Loop
+            - title: The changing development workflow
+              link: /concepts/devworkflow
+            - title: The developer experience and the inner dev loop 
               link: /concepts/devloop
+            - title: "Making the remote local: Faster feedback, collaboration and debugging"
+              link: /concepts/faster
             - title: Context Propagation
               link: /concepts/context-prop
         - title: How Do I...
