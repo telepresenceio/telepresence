@@ -97,6 +97,13 @@ commands:
           path: /tmp/test-logs
           destination: test-logs
 
+  "brew-install":
+    parameters:
+      "packages":
+        type: string
+    steps:
+      - run: brew install << parameters.packages >>
+
   "with-docker-machine":
     parameters:
       "steps":
