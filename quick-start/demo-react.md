@@ -232,7 +232,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
     
     Using deployment web-app
     intercepted
-        Intercept name: web-app
+        Intercept name: web-app-emojivoto
         State         : ACTIVE
     ...
   ```
