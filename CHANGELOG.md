@@ -4,6 +4,7 @@
 
 - Feature: `telepresence intercept` now has the option `--docker-run` which will start a docker container with intercepted environment and volume mounts.
 - Bugfix: `telepresence uninstall` can once again uninstall agents installed by older versions of Telepresence.
+- Feature: Addition of `telepresence current-cluster-id` and `telepresence license` commands for using licenses with the Ambassador extension, primarily in air-gapped environments.
 
 ### 2.1.5 (April 12, 2021)
 
