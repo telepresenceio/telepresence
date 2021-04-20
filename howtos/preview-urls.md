@@ -25,9 +25,12 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 ## Creating a Preview URL
 
 1. List the services that you can intercept with `telepresence list` and make sure the one you want is listed. 
-If it isn't:
-* Only Deployments with labels matching a Service are listed.
-* If the service is in a different namespace specify the name space with the `--namespace` flag.
+
+    If it isn't:
+
+    * Only Deployments, ReplicaSets, or StatefulSets are supported, and each of those requires a label matching a Service
+
+    * If the service is in a different namespace, specify it with the `--namespace` flag
 
 2. Login to Ambassador Cloud where you can manage and share preview URLs:  
 `telepresence login`
