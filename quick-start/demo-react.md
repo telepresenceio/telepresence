@@ -220,7 +220,7 @@ We’ve now set up a local development environment for the app.  Next we'll make
 ## 7. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the app to the version running locally instead.
 
-  <Alert severity="warn">
+  <Alert severity="warning">
     This command <strong>must</strong> be run in the terminal window where you ran the script because the script set environment variables to access the demo cluster.  Those variables will only will apply to that terminal session.
   </Alert>
 
