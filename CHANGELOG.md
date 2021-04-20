@@ -1,5 +1,8 @@
 # Changelog
 
+### 2.2.1 (TBD)
+- Bugfix: Improve ambassador namespace detection that was trying to create the namespace even when the namespace existed, which was an undesired rbac escalation for operators.
+
 ### 2.2.0 (April 19, 2021)
 
 - Feature: `telepresence intercept` now has the option `--docker-run` which will start a docker container with intercepted environment and volume mounts.
