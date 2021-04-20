@@ -218,3 +218,27 @@ command to `cat` to trigger the usual logfile setup:
 ```console
 $ telepresence connector-foreground | cat
 ```
+
+### Debugging rbac issues
+
+If you are debugging or working on rbac-related feature work with telepresence,
+it can be helpful to have a user with limited rbac rules / roles.  There are many
+ways you can do this, but the way we do it in our tests is like so:
+```console
+$ kubectl apply -f k8s/client_rbac.yaml
+serviceaccount/telepresence-test-developer created
+clusterrole.rbac.authorization.k8s.io/telepresence-role created
+clusterrolebinding.rbac.authorization.k8s.io/telepresence-clusterrolebinding created
+
+$ kubectl get sa telepresence-test-developer -o "jsonpath={.secrets[0].name}"
+telepresence-test-developer-token-<hash>
+
+$ kubectl get secret telepresence-test-developer-token-<hash> -o "jsonpath={.data.token}" > b64_token
+$ cat b64_token | base64 --decode
+<plaintext token>
+
+$ kubectl config set-credentials telepresence-test-developer --token <plaintext token>
+```
+This creates a service account, clusterrole, and clusterrolebinding which can be used
+with kubectl (`kubectl config use-context telepresence-test-developer`) to work in
+a rbac-restricted environment.
