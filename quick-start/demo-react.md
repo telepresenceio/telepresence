@@ -13,11 +13,11 @@ import QSCards from './qs-cards'
 
 * [1. Download the demo cluster archive](#1-download-the-demo-cluster-archive)
 * [2. Test Telepresence](#2-test-telepresence)
-* [3. Check out the sample application](#3-check-out-the-sample-application)
-* [4. Run a service on your laptop](#4-run-a-service-on-your-laptop)
-* [5. Intercept all traffic to the service](#5-intercept-all-traffic-to-the-service)
+* [3. Set up the sample application](#3-set-up-the-sample-application)
+* [4. Test app](#4-test-app)
+* [5. Run a service on your laptop](#5-run-a-service-on-your-laptop)
 * [6. Make a code change](#6-make-a-code-change)
-* [7. Create a preview URL](#7-create-a-preview-url)
+* [7. Intercept all traffic to the service](#7-intercept-all-traffic-to-the-service)
 * [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
 
 </div>
@@ -84,7 +84,7 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
 
 Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-1. Connect to the cluster (this requires root privileges and will ask for your password):  
+1. Connect to the cluster (this requires **root** privileges and will ask for your password):  
 `telepresence connect`
 
   ```
@@ -166,9 +166,9 @@ We'll use a sample app that is already installed in your demo cluster.  Let's ta
 
 The error is on a backend service, so **we can add an error page to notify the user** while the bug is fixed.
 
-## 5. Run the backend service on your laptop
+## 5. Run a service on your laptop
 
-Now start up the `web-app` backend service on your laptop. We'll then make a code change and intercept this service so that we can see the immediate results of a code change to the backend.
+Now start up the `web-app` service on your laptop. We'll then make a code change and intercept this service so that we can see the immediate results of a code change to the service.
 
 1. **In a <u>new</u> terminal window**, change into the repo directory and build the application:
 
@@ -183,7 +183,7 @@ Now start up the `web-app` backend service on your laptop. We'll then make a cod
     ✨  Done in 5.38s.
   ```
 
-2. Change into the code directory and start the server:
+2. Change into the service's code directory and start the server:
 
   `cd emojivoto-web-app`  
   `yarn webpack serve`
@@ -220,7 +220,7 @@ We’ve now set up a local development environment for the app.  Next we'll make
 ## 7. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the app to the version running locally instead.
 
-  <Alert severity="info">
+  <Alert severity="warn">
     This command <strong>must</strong> be run in the terminal window where you ran the script because the script set environment variables to access the demo cluster.  Those variables will only will apply to that terminal session.
   </Alert>
 
@@ -251,6 +251,6 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
   With Telepresence, these changes happen instantly.
 </Alert>
 
-## <img class="os-logo" src="../../images/logo.png"/> What's Next?
+## <img class="os-logo" src="../../../../images/logo.png"/> What's Next?
 
 <QSCards/>
