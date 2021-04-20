@@ -94,14 +94,18 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 	}
 
 	// Ensure that the managerNamespace exists
-	if !ki.namespaceExists(managerNamespace) {
+	_, err := ki.findNamespace(c, managerNamespace)
+	if err != nil {
 		ns := &kates.Namespace{
 			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
 			ObjectMeta: kates.ObjectMeta{Name: managerNamespace},
 		}
 		dlog.Infof(c, "Creating namespace %q", managerNamespace)
 		if err := ki.client.Create(c, ns, ns); err != nil {
-			// trap race condition. If it's there, then all is good.
+			// We should never get IsAlreadyExists because we query the
+			// the kube api to see if the namespace is present. If for
+			// some reason we do get this error, the namespace exists
+			// and we shouldn't return.
 			if !errors2.IsAlreadyExists(err) {
 				return nil, err
 			}
