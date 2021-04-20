@@ -112,7 +112,17 @@ commands:
       - run:
           name: "Launch docker-machine"
           command: |
-            docker-machine create default --xhyve-boot2docker-url https://github.com/boot2docker/boot2docker/releases/download/v19.03.2/boot2docker.iso --driver xhyve
+            retry=0
+            until [ "$retry" -ge 3 ]
+            do
+                docker-machine create default --xhyve-boot2docker-url https://github.com/boot2docker/boot2docker/releases/download/v19.03.2/boot2docker.iso --driver xhyve && break
+                retry=$((retry+1))
+                docker-machine rm default
+                sleep 5
+            done
+            if [ $? != 0 ]; then
+                exit 1
+            fi 
             # docker-machine backgrounded itself, but because Circle
             # CI will kill the process group if the 'command' returns,
             # so we now sleep forever.
