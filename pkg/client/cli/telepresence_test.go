@@ -355,10 +355,10 @@ func (cs *connectedSuite) TestE_PodWithSubdomain() {
 	defer cancel()
 	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns())
 	cs.NoError(err)
-	cs.True(len(ip) == 1)
+	cs.Equal(1, len(ip))
 	ip, err = net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns()+".svc.cluster.local")
 	cs.NoError(err)
-	cs.True(len(ip) == 1)
+	cs.Equal(1, len(ip))
 }
 
 func (cs *connectedSuite) TestF_SuccessfullyInterceptsDeploymentWithProbes() {
