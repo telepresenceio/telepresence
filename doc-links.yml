@@ -42,7 +42,7 @@
               link: /reference/config
             - title: Cluster-side configuration
               link: /reference/cluster-config
-            - title: Using docker for intercepts
+            - title: Using Docker for intercepts
               link: /reference/docker-run
             - title: Environment Variables
               link: /reference/environment

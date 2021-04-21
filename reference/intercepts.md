@@ -20,8 +20,8 @@ The namespace of the intercepted workload is specified using the `--namespace` o
 telepresence intercept hello --namespace myns --port 9000
 ```
 
-This will intercept a workload named "hello" and name the intercept
-"hello-myns".  In order to remove the intercept, you will need to run
+This will intercept a workload named `hello` and name the intercept
+`hello-myns`.  In order to remove the intercept, you will need to run
 `telepresence leave hello-mydns` instead of just `telepresence leave
 hello`.
 
@@ -31,7 +31,7 @@ The name of the intercept will be left unchanged if the workload is specified.
 telepresence intercept myhello --namespace myns --workload hello --port 9000
 ```
 
-This will intercept a workload named "hello" and name the intercept "myhello".
+This will intercept a workload named `hello` and name the intercept `myhello`.
 
 ## Importing Environment Variables
 
@@ -88,7 +88,7 @@ Finally, run `telepresence leave <name of intercept>` to stop the intercept.
 
 ## Creating an Intercept When a Service has Multiple Ports
 
-If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. To specify, you can either use the name of the service port or the port number itself. To see which options might be available to you and your service, use kubectl to describe your service or look in the object's yaml. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
+If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. To specify, you can either use the name of the service port or the port number itself. To see which options might be available to you and your service, use kubectl to describe your service or look in the object's YAML. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
 
 ```
 $ telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortIdentifier>

@@ -1,22 +1,24 @@
 # Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special
-configuration in the cluster, and can be used right away in any
-cluster, as long as the user has adequate [permission](../rbac).
+configuration in the cluster and can be used right away in any
+cluster (as long as the user has adequate [permissions](../rbac)).
 
 However, some advanced features do require some configuration in the
 cluster.
 
-# TLS
+## TLS
 
-If other applications in the cluster expect to speak TLS to your
+In this example, other applications in the cluster expect to speak TLS to your
 intercepted application (perhaps you're using a service-mesh that does
-mTLS), in order to use `--mechanism=http` (or any features that imply
+mTLS).
+
+In order to use `--mechanism=http` (or any features that imply
 `--mechanism=http`) you need to tell Telepresence about the TLS
 certificates in use.
 
 Tell Telepresence about the certificates in use by adjusting your
-workload's (eg. Deployment's) Pod template to set a couple of
+[workload's](../intercepts/#supported-workloads) Pod template to set a couple of
 annotations on the intercepted Pods:
 
 ```diff
@@ -38,22 +40,23 @@ annotations on the intercepted Pods:
   certificate to use for decrypting and responding to incoming
   requests.
 
-  When Telepresence modifies the Service's and workload's port
+  When Telepresence modifies the Service and workload port
   definitions to point at the Telepresence Agent sidecar's port
   instead of your application's actual port, the sidecar will use this
   certificate to terminate TLS.
 
 - The `getambassador.io/inject-originating-tls-secret` annotation
-  (optional) and names the Kubernetes Secret that contains the TLS
+  (optional) names the Kubernetes Secret that contains the TLS
   client certificate to use for communicating with your application.
 
-  If your application expects incoming requests to speak TLS (eg. your
+  You will need to set this if your application expects incoming 
+  requests to speak TLS (for example, your
   code expects to handle mTLS itself instead of letting a service-mesh
-  sidecar handle mTLS for it; or the port definition that Telepresence
+  sidecar handle mTLS for it, or the port definition that Telepresence
   modified pointed at the service-mesh sidecar instead of at your
-  application), then you will need to set this.
+  application).
 
-  If you do set this, it is usually the correct thing to set it to the
+  If you do set this, you should to set it to the
   same client certificate Secret that you configure the Ambassador
   Edge Stack to use for mTLS.
 
@@ -67,29 +70,32 @@ Telepresence understands `type: kubernetes.io/tls` Secrets and
 `type: istio.io/key-and-cert` Secrets; as well as `type: Opaque`
 Secrets that it detects to be formatted as one of those types.
 
-# Air Gapped Cluster
+## Air Gapped Cluster
 
-If your cluster is air-gapped (e.g. it does not have access to the
-internet and therefore cannot connect to Ambassador Cloud), but you'd like
-to use selective intercepts, this is possible but requires some minimal
-configuration.
+If your cluster is air gapped (it does not have access to the
+internet and therefore cannot connect to Ambassador Cloud), some manual
+license configuration is required to use selective intercepts.
 
-## Create a License
-First go to [Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
-select `Licenses` for the team you want to create the license for. From this page you
-can generate a new license if one doesn't already exist.
+### Create a License
 
-To get the Cluster ID of your cluster, ensure your kubeconfig context is using
-the cluster you want to create a license for, then run the following command:
+First, go to [Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
+select *Licenses* for the team you want to create the license for. You
+can generate a new license if one doesn't already exist by clicking *Generate New License*.
+
+You will be prompted for the Cluster ID of your cluster.  To find it, ensure your
+kubeconfig context is using the cluster you want to create a license for, then
+run this command:
+
   ```
   $ telepresence current-cluster-id
     Cluster ID: <some UID>
   ```
 
-## Add License to Cluster
-The page above shows all licenses that have been generated, select the one
-that is associated with your cluster and download that license.
-Then use the following command to generate the license secret:
+### Add License to Cluster
+
+On the licenses page, download the license file associated with your cluster.
+Then, use the following command to generate the license secret:
+
   ```
   $ telepresence license -f <downloadedLicenseFile>
 
@@ -104,6 +110,6 @@ Then use the following command to generate the license secret:
       namespace: ambassador
   ```
 
-From there, you can apply that secret to your cluster (it will go in the ambassador
-namespace).  Once applied, you will be able to use selective intercepts with the
+Save the output as a YAML file and apply the Secret to your 
+cluster with `kubectl`.  Once applied, you will be able to use selective intercepts with the
 `--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).

@@ -1,7 +1,5 @@
 # RBAC
 
-## Necessary RBAC for Users
-
 To use telepresence, users will need to have at least the following permissions:
 ```
 - apiGroups:
