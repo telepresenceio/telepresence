@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dgroup"
@@ -73,33 +72,36 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
 	// DNS resolver
-	initDone := &sync.WaitGroup{}
-	initDone.Add(1)
+	initDone := make(chan struct{})
 
 	var dnsServer *dns.Server
 	g.Go("Server", func(c context.Context) error {
 		select {
 		case <-c.Done():
+			initDone <- struct{}{}
 			return nil
 		case dnsIP := <-o.kubeDNS:
 			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
 			if err = dConn.SetLinkDNS(int(dev.Index()), dnsIP); err != nil {
 				dlog.Error(c, err)
-				initDone.Done()
+				initDone <- struct{}{}
 				return errResolveDNotConfigured
 			}
 			dnsServer = dns.NewServer(c, []net.PacketConn{dnsResolverListener}, nil, o.resolveNoSearch)
 			if err = o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr); err != nil {
 				dlog.Error(c, err)
-				initDone.Done()
+				initDone <- struct{}{}
 				return err
 			}
-			initDone.Done()
+			close(initDone)
 			return dnsServer.Run(c)
 		}
 	})
 	g.Go("SanityCheck", func(c context.Context) error {
-		initDone.Wait()
+		if _, ok := <-initDone; ok {
+			// initDonw was not closed, bail out.
+			return errResolveDNotConfigured
+		}
 
 		// Check if an attempt to resolve a DNS address reaches our DNS resolver, 300ms should be plenty
 
