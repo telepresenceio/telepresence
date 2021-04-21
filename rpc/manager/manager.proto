@@ -259,6 +259,7 @@ message VersionInfo2 {
 message License {
   string license = 1;
   string host = 2;
+  string cluster_id = 3;
 }
 
 // 
