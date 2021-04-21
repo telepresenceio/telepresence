@@ -117,7 +117,7 @@ commands:
             do
                 docker-machine create default --xhyve-boot2docker-url https://github.com/boot2docker/boot2docker/releases/download/v19.03.2/boot2docker.iso --driver xhyve && break
                 retry=$((retry+1))
-                docker-machine rm default -y 
+                docker-machine kill default && rm default -y 
                 sleep 5
             done
             if [ $? != 0 ]; then
@@ -163,7 +163,7 @@ jobs:
       - run: make build
       - install-kubectl
       - run:
-          command: make test
+          command: eval $(docker-machine env) && make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
