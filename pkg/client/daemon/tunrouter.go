@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -99,6 +100,9 @@ type tunRouter struct {
 	//   1 = closing
 	//   2 = closed
 	closing int32
+
+	// session contains the manager session
+	session *manager.SessionInfo
 
 	// mgrConfigured will be closed as soon as the connector has sent over the correct port to
 	// the traffic manager and the managerClient has been connected.
@@ -237,6 +241,7 @@ func (t *tunRouter) setManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) 
 		if err != nil {
 			return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
 		}
+		t.session = mi.Session
 		t.managerClient = manager.NewManagerClient(conn)
 	}
 	return nil
@@ -293,9 +298,15 @@ func (t *tunRouter) run(c context.Context) error {
 		case <-t.mgrConfigured:
 		}
 
-		// TODO: ConnTunnel should probably provide a sessionID
+		jsonSessionID, err := json.Marshal(t.session)
+		if err != nil {
+			return err
+		}
 		tunnel, err := t.managerClient.ConnTunnel(c)
 		if err != nil {
+			return err
+		}
+		if err = tunnel.Send(connpool.ConnControl("", connpool.SessionID, jsonSessionID)); err != nil {
 			return err
 		}
 		t.connStream = connpool.NewStream(tunnel, t.handlers)

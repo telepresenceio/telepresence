@@ -106,7 +106,7 @@ func (h *Handler) Close(ctx context.Context) {
 }
 
 func (h *Handler) sendTCD(ctx context.Context, code connpool.ControlCode) {
-	err := h.server.Send(connpool.ConnControl(h.id, code))
+	err := h.server.Send(connpool.ConnControl(h.id, code, nil))
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}

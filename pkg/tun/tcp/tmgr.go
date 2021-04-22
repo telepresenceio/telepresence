@@ -114,7 +114,7 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 }
 
 func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode) error {
-	pkt := connpool.ConnControl(h.id, code)
+	pkt := connpool.ConnControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
 	if err := h.SendMsg(pkt); err != nil {
 		return fmt.Errorf("failed to send control package: %w", err)

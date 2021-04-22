@@ -10,7 +10,8 @@ import (
 type ControlCode byte
 
 const (
-	Connect = ControlCode(iota)
+	SessionID = ControlCode(iota)
+	Connect
 	ConnectOK
 	ConnectReject
 	Disconnect
@@ -21,6 +22,8 @@ const (
 
 func (c ControlCode) String() string {
 	switch c {
+	case SessionID:
+		return "SESSION_ID"
 	case Connect:
 		return "CONNECT"
 	case ConnectOK:
@@ -41,38 +44,34 @@ func (c ControlCode) String() string {
 }
 
 type ControlMessage struct {
-	ID   ConnID
-	Code ControlCode
+	Code    ControlCode
+	ID      ConnID
+	Payload []byte
 }
 
 func (c *ControlMessage) String() string {
-	return fmt.Sprintf("%s, code %s", c.ID, c.Code)
+	return fmt.Sprintf("%s, code %s, len %d", c.ID, c.Code, len(c.Payload))
 }
 
 func IsControlMessage(cm *manager.ConnMessage) bool {
 	return len(cm.ConnId) == 2
 }
 
-func ConnControl(id ConnID, code ControlCode) *manager.ConnMessage {
-	// Propagate the error in a "close" message using a datagram where the destination port is set to zero
-	// and instead propagated as the first two bytes of the payload followed by an error code.
-	ctrl := make([]byte, 2)
-	ctrl[0] = byte(code)
-	ctrl[1] = byte(len(id))
-	return &manager.ConnMessage{
-		ConnId:  ctrl,
-		Payload: []byte(id),
-	}
+func ConnControl(id ConnID, code ControlCode, payload []byte) *manager.ConnMessage {
+	idLen := len(id)
+	cmPl := make([]byte, idLen+len(payload))
+	copy(cmPl, id)
+	copy(cmPl[idLen:], payload)
+	return &manager.ConnMessage{ConnId: []byte{byte(code), byte(idLen)}, Payload: cmPl}
 }
 
 func NewControlMessage(cm *manager.ConnMessage) (*ControlMessage, error) {
 	ctrl := cm.ConnId
-	if len(ctrl) != 2 || len(cm.Payload) < int(ctrl[1]) {
-		return nil, errors.New("invalid tunnel control message")
+	if len(ctrl) == 2 {
+		idLen := int(ctrl[1])
+		if len(cm.Payload) >= idLen {
+			return &ControlMessage{Code: ControlCode(ctrl[0]), ID: ConnID(cm.Payload[:idLen]), Payload: cm.Payload[idLen:]}, nil
+		}
 	}
-
-	return &ControlMessage{
-		ID:   ConnID(cm.Payload[:ctrl[1]]),
-		Code: ControlCode(ctrl[0]),
-	}, nil
+	return nil, errors.New("invalid tunnel control message")
 }

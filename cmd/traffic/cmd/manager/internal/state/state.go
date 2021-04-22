@@ -7,13 +7,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sys/unix"
+	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/conntunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 )
 
 const (
@@ -21,10 +27,38 @@ const (
 	hiPort = 8000
 )
 
-type SessionState struct {
-	Done       <-chan struct{}
-	Cancel     context.CancelFunc
-	LastMarked time.Time
+type SessionState interface {
+	Cancel()
+	Done() <-chan struct{}
+	LastMarked() time.Time
+	SetLastMarked(lastMarked time.Time)
+}
+
+type sessionState struct {
+	done       <-chan struct{}
+	cancel     context.CancelFunc
+	lastMarked time.Time
+}
+
+type clientSessionState struct {
+	sessionState
+	pool *connpool.Pool
+}
+
+func (ss *sessionState) Cancel() {
+	ss.cancel()
+}
+
+func (ss *sessionState) Done() <-chan struct{} {
+	return ss.done
+}
+
+func (ss *sessionState) LastMarked() time.Time {
+	return ss.lastMarked
+}
+
+func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
+	ss.lastMarked = lastMarked
 }
 
 // State is the total state of the Traffic Manager.  A zero State is invalid; you must call
@@ -49,7 +83,7 @@ type State struct {
 	intercepts   watchable.InterceptMap
 	agents       watchable.AgentMap                   // info for agent sessions
 	clients      watchable.ClientMap                  // info for client sessions
-	sessions     map[string]*SessionState             // info for all sessions
+	sessions     map[string]SessionState              // info for all sessions
 	agentsByName map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 }
 
@@ -57,7 +91,7 @@ func NewState(ctx context.Context) *State {
 	return &State{
 		ctx:          ctx,
 		port:         loPort - 1,
-		sessions:     make(map[string]*SessionState),
+		sessions:     make(map[string]SessionState),
 		agentsByName: make(map[string]map[string]*rpc.AgentInfo),
 	}
 }
@@ -166,7 +200,7 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	sessionID := req.Session.SessionId
 
 	if sess, ok := s.sessions[sessionID]; ok {
-		sess.LastMarked = now
+		sess.SetLastMarked(now)
 		if req.ApiKey != "" {
 			if client, ok := s.clients.Load(sessionID); ok {
 				client.ApiKey = req.ApiKey
@@ -231,7 +265,7 @@ func (s *State) ExpireSessions(moment time.Time) {
 	defer s.mu.Unlock()
 
 	for id, sess := range s.sessions {
-		if sess.LastMarked.Before(moment) {
+		if sess.LastMarked().Before(moment) {
 			s.unlockedRemoveSession(id)
 		}
 	}
@@ -249,7 +283,7 @@ func (s *State) SessionDone(id string) <-chan struct{} {
 		close(ret)
 		return ret
 	}
-	return sess.Done
+	return sess.Done()
 }
 
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
@@ -272,10 +306,13 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.sessions[sessionID] = &SessionState{
-		Done:       ctx.Done(),
-		Cancel:     cancel,
-		LastMarked: now,
+	s.sessions[sessionID] = &clientSessionState{
+		sessionState: sessionState{
+			done:       ctx.Done(),
+			cancel:     cancel,
+			lastMarked: now,
+		},
+		pool: connpool.NewPool(),
 	}
 	return sessionID
 }
@@ -331,10 +368,10 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.sessions[sessionID] = &SessionState{
-		Done:       ctx.Done(),
-		Cancel:     cancel,
-		LastMarked: now,
+	s.sessions[sessionID] = &sessionState{
+		done:       ctx.Done(),
+		cancel:     cancel,
+		lastMarked: now,
 	}
 	return sessionID
 }
@@ -462,5 +499,61 @@ func (s *State) WatchIntercepts(
 		return s.intercepts.Subscribe(ctx)
 	} else {
 		return s.intercepts.SubscribeSubset(ctx, filter)
+	}
+}
+
+func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Manager_ConnTunnelServer) error {
+	s.mu.Lock()
+	ss := s.sessions[sessionID]
+	s.mu.Unlock()
+	cs, ok := ss.(*clientSessionState)
+	if !ok {
+		return status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	dlog.Debug(ctx, "Established TCP tunnel")
+	pool := cs.pool // must have one pool per tunnel (per client, really)
+	defer pool.CloseAll(ctx)
+	for {
+		dg, err := server.Recv()
+		if err != nil {
+			dlog.Errorf(ctx, "Recv failed: %v", err)
+			return nil
+		}
+		s.handleTunnelMessage(ctx, pool, server, dg)
+	}
+}
+
+func (s *State) handleTunnelMessage(ctx context.Context, pool *connpool.Pool, server rpc.Manager_ConnTunnelServer, cm *rpc.ConnMessage) {
+	var id connpool.ConnID
+	var ctrl *connpool.ControlMessage
+	var err error
+	if connpool.IsControlMessage(cm) {
+		ctrl, err = connpool.NewControlMessage(cm)
+		if err != nil {
+			dlog.Error(ctx, err)
+			return
+		}
+		id = ctrl.ID
+	} else {
+		id = connpool.ConnID(cm.ConnId)
+	}
+
+	// Retrieve the connection that is tracked for the given id. Create a new one if necessary
+	h, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+		switch id.Protocol() {
+		case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
+			return conntunnel.NewHandler(id, server, release), nil
+		default:
+			return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
+		}
+	})
+	if err != nil {
+		dlog.Errorf(ctx, "failed to get connection handler: %v", err)
+		return
+	}
+	if ctrl != nil {
+		h.HandleControl(ctx, ctrl)
+	} else {
+		h.HandleMessage(ctx, cm)
 	}
 }

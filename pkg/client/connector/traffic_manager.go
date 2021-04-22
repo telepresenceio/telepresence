@@ -193,7 +193,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	if _, err = tm.daemon.SetManagerInfo(c, &daemon.ManagerInfo{GrpcPort: int32(grpcPort)}); err != nil {
+	if _, err = tm.daemon.SetManagerInfo(c, &daemon.ManagerInfo{GrpcPort: int32(grpcPort), Session: tm.sessionInfo}); err != nil {
 		return err
 	}
 
