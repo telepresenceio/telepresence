@@ -96,6 +96,9 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 	// Ensure that the managerNamespace exists
 	_, err := ki.findNamespace(c, managerNamespace)
 	if err != nil {
+		if !errors2.IsNotFound(err) {
+			return nil, err
+		}
 		ns := &kates.Namespace{
 			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
 			ObjectMeta: kates.ObjectMeta{Name: managerNamespace},
