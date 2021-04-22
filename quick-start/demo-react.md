@@ -251,6 +251,6 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
   With Telepresence, these changes happen instantly.
 </Alert>
 
-## <img class="os-logo" src="../../../../images/logo.png"/> What's Next?
+## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
 <QSCards/>
