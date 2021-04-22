@@ -257,7 +257,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
-
+	apiKey := ciReq.GetApiKey()
 	dlog.Debugf(ctx, "CreateIntercept called")
 
 	if m.state.GetClient(sessionID) == nil {
@@ -268,7 +268,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	return m.state.AddIntercept(sessionID, spec)
+	return m.state.AddIntercept(sessionID, apiKey, spec)
 }
 
 func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {

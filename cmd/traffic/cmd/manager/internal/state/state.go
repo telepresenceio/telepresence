@@ -373,7 +373,7 @@ func (s *State) WatchAgents(
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
+func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -386,6 +386,7 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 		ClientSession: &rpc.SessionInfo{
 			SessionId: sessionID,
 		},
+		ApiKey: apiKey,
 	}
 
 	// Wrap each potential-state-change in a

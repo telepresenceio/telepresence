@@ -214,6 +214,10 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		}()
 	}
 
+	apiKey, err := tm.getAPIKey(c, "agent", false)
+	if err != nil {
+		dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := context.WithTimeout(c, tos.Intercept)
@@ -221,6 +225,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
+		ApiKey:        apiKey,
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)

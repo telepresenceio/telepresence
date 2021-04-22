@@ -166,6 +166,9 @@ message InterceptInfo {
   string id = 5;
   SessionInfo client_session = 6;
 
+  // api_key # add real comment
+  string api_key = 13;
+
   // manager_port is the port on the manager that the agent should
   // send intercepted traffic to.  This gets set by the manager when
   // the intercept is first created.
@@ -210,8 +213,7 @@ message InterceptInfoSnapshot {
 message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
-  // TODO(lukeshu): Consider adding an `api_key` field here, in order
-  // to have an "agent" key that is separate from the "manager" key.
+  string api_key = 3;
 }
 
 message UpdateInterceptRequest {
