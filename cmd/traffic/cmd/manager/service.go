@@ -128,9 +128,9 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 // Remain indicates that the session is still valid.
-func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
-	ctx = WithSessionInfo(ctx, req.GetSession())
-	dlog.Debugf(ctx, "Remain called")
+func (m *Manager) Remain(_ context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
+	// ctx = WithSessionInfo(ctx, req.GetSession())
+	// dlog.Debug(ctx, "Remain called")
 
 	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
@@ -142,7 +142,7 @@ func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 // Depart terminates a session.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	ctx = WithSessionInfo(ctx, session)
-	dlog.Debugf(ctx, "Depart called")
+	dlog.Debug(ctx, "Depart called")
 
 	m.state.RemoveSession(session.GetSessionId())
 
@@ -153,7 +153,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := WithSessionInfo(stream.Context(), session)
 
-	dlog.Debugf(ctx, "WatchAgents called")
+	dlog.Debug(ctx, "WatchAgents called")
 
 	snapshotCh := m.state.WatchAgents(ctx, nil)
 	for {
@@ -186,7 +186,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	ctx := WithSessionInfo(stream.Context(), session)
 	sessionID := session.GetSessionId()
 
-	dlog.Debugf(ctx, "WatchIntercepts called")
+	dlog.Debug(ctx, "WatchIntercepts called")
 
 	var filter func(id string, info *rpc.InterceptInfo) bool
 	if sessionID == "" {
@@ -266,7 +266,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
 	apiKey := ciReq.GetApiKey()
-	dlog.Debugf(ctx, "CreateIntercept called")
+	dlog.Debug(ctx, "CreateIntercept called")
 
 	if m.state.GetClient(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)

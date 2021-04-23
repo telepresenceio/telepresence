@@ -124,8 +124,8 @@ func (f *Forwarder) ForwardConn(clientConn *net.TCPConn) {
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
 	ctx = dlog.WithField(ctx, "target", targetAddr.String())
 
-	dlog.Debugf(ctx, "Forwarding...")
-	defer dlog.Debugf(ctx, "Done forwarding")
+	dlog.Debug(ctx, "Forwarding...")
+	defer dlog.Debug(ctx, "Done forwarding")
 
 	defer clientConn.Close()
 
