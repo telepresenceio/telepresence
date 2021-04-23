@@ -15,15 +15,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 )
 
-// The idleDuration controls how long a handler for a specific proto+from-to address combination remains alive without
-// reading or writing any messages. The handler is normally closed by one of the peers.
+// The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
+// reading or writing any messages. The dialer is normally closed by one of the peers.
 //
 // TODO: Make this configurable
 const connTTL = 5 * time.Minute
 const dialTimeout = 30 * time.Second
 
-// The Handler takes care of dispatching messages between gRPC and UDP connections
-type Handler struct {
+// The dialer takes care of dispatching messages between gRPC and TCP/UDP connections
+type dialer struct {
 	id        connpool.ConnID
 	release   func()
 	server    rpc.Manager_ConnTunnelServer
@@ -34,13 +34,13 @@ type Handler struct {
 	connected int32 // != 0 == connected
 }
 
-// NewHandler creates a new handler that dispatches messages in both directions between the given gRPC server
+// NewDialer creates a new handler that dispatches messages in both directions between the given gRPC server
 // and the destination identified by the given connID.
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewHandler(connID connpool.ConnID, server rpc.Manager_ConnTunnelServer, release func()) connpool.Handler {
-	return &Handler{
+func NewDialer(connID connpool.ConnID, server rpc.Manager_ConnTunnelServer, release func()) connpool.Handler {
+	return &dialer{
 		id:       connID,
 		server:   server,
 		release:  release,
@@ -48,7 +48,7 @@ func NewHandler(connID connpool.ConnID, server rpc.Manager_ConnTunnelServer, rel
 	}
 }
 
-func (h *Handler) Start(ctx context.Context) {
+func (h *dialer) Start(ctx context.Context) {
 	// Set up the idle timer to close and release this handler when it's been idle for a while.
 	if h.id.Protocol() == unix.IPPROTO_UDP {
 		h.open(ctx)
@@ -56,7 +56,7 @@ func (h *Handler) Start(ctx context.Context) {
 	h.idleTimer = time.NewTimer(connTTL)
 }
 
-func (h *Handler) open(ctx context.Context) connpool.ControlCode {
+func (h *dialer) open(ctx context.Context) connpool.ControlCode {
 	if !atomic.CompareAndSwapInt32(&h.connected, 0, 1) {
 		// already connected
 		return connpool.ConnectOK
@@ -73,7 +73,7 @@ func (h *Handler) open(ctx context.Context) connpool.ControlCode {
 	return connpool.ConnectOK
 }
 
-func (h *Handler) HandleControl(ctx context.Context, cm *connpool.ControlMessage) {
+func (h *dialer) HandleControl(ctx context.Context, cm *connpool.ControlMessage) {
 	var reply connpool.ControlCode
 	switch cm.Code {
 	case connpool.Connect:
@@ -89,7 +89,7 @@ func (h *Handler) HandleControl(ctx context.Context, cm *connpool.ControlMessage
 }
 
 // HandleMessage sends a package to the underlying TCP/UDP connection
-func (h *Handler) HandleMessage(ctx context.Context, dg *rpc.ConnMessage) {
+func (h *dialer) HandleMessage(ctx context.Context, dg *rpc.ConnMessage) {
 	select {
 	case <-ctx.Done():
 		return
@@ -98,21 +98,21 @@ func (h *Handler) HandleMessage(ctx context.Context, dg *rpc.ConnMessage) {
 }
 
 // Close will close the underlying TCP/UDP connection
-func (h *Handler) Close(ctx context.Context) {
+func (h *dialer) Close(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&h.connected, 1, 0) {
 		h.release()
 		h.conn.Close()
 	}
 }
 
-func (h *Handler) sendTCD(ctx context.Context, code connpool.ControlCode) {
+func (h *dialer) sendTCD(ctx context.Context, code connpool.ControlCode) {
 	err := h.server.Send(connpool.ConnControl(h.id, code, nil))
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}
 }
 
-func (h *Handler) readLoop(ctx context.Context) {
+func (h *dialer) readLoop(ctx context.Context) {
 	defer func() {
 		if ctx.Err() != nil {
 			dlog.Errorf(ctx, "-> CLI %s, %v", h.id, ctx.Err())
@@ -149,7 +149,7 @@ func (h *Handler) readLoop(ctx context.Context) {
 	}
 }
 
-func (h *Handler) writeLoop(ctx context.Context) {
+func (h *dialer) writeLoop(ctx context.Context) {
 	defer h.Close(ctx)
 	for {
 		select {
@@ -179,7 +179,7 @@ func (h *Handler) writeLoop(ctx context.Context) {
 	}
 }
 
-func (h *Handler) resetIdle() bool {
+func (h *dialer) resetIdle() bool {
 	h.idleLock.Lock()
 	stopped := h.idleTimer.Stop()
 	if stopped {

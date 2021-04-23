@@ -542,7 +542,7 @@ func (s *State) handleTunnelMessage(ctx context.Context, pool *connpool.Pool, se
 	h, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 		switch id.Protocol() {
 		case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
-			return conntunnel.NewHandler(id, server, release), nil
+			return conntunnel.NewDialer(id, server, release), nil
 		default:
 			return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
 		}
