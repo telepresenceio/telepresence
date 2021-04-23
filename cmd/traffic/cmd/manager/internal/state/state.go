@@ -480,8 +480,8 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 	}
 }
 
-func (s *State) RemoveIntercept(sessionID string, name string) bool {
-	_, didDelete := s.intercepts.LoadAndDelete(sessionID + ":" + name)
+func (s *State) RemoveIntercept(interceptID string) bool {
+	_, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	return didDelete
 }
 

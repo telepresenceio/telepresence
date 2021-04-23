@@ -409,7 +409,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
-	if !m.state.RemoveIntercept(sessionID, name) {
+	if !m.state.RemoveIntercept(sessionID + ":" + name) {
 		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
 	}
 
