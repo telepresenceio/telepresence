@@ -1,4 +1,4 @@
-package conntunnel
+package connpool
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 )
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
@@ -24,7 +23,7 @@ const dialTimeout = 30 * time.Second
 
 // The dialer takes care of dispatching messages between gRPC and TCP/UDP connections
 type dialer struct {
-	id        connpool.ConnID
+	id        ConnID
 	release   func()
 	server    rpc.Manager_ConnTunnelServer
 	incoming  chan *rpc.ConnMessage
@@ -39,7 +38,7 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewDialer(connID connpool.ConnID, server rpc.Manager_ConnTunnelServer, release func()) connpool.Handler {
+func NewDialer(connID ConnID, server rpc.Manager_ConnTunnelServer, release func()) Handler {
 	return &dialer{
 		id:       connID,
 		server:   server,
@@ -56,31 +55,31 @@ func (h *dialer) Start(ctx context.Context) {
 	h.idleTimer = time.NewTimer(connTTL)
 }
 
-func (h *dialer) open(ctx context.Context) connpool.ControlCode {
+func (h *dialer) open(ctx context.Context) ControlCode {
 	if !atomic.CompareAndSwapInt32(&h.connected, 0, 1) {
 		// already connected
-		return connpool.ConnectOK
+		return ConnectOK
 	}
 	dialer := net.Dialer{Timeout: dialTimeout}
 	conn, err := dialer.DialContext(ctx, h.id.ProtocolString(), fmt.Sprintf("%s:%d", h.id.Destination(), h.id.DestinationPort()))
 	if err != nil {
 		dlog.Errorf(ctx, "%s: failed to establish connection: %v", h.id, err)
-		return connpool.ConnectReject
+		return ConnectReject
 	}
 	h.conn = conn
 	go h.writeLoop(ctx)
 	go h.readLoop(ctx)
-	return connpool.ConnectOK
+	return ConnectOK
 }
 
-func (h *dialer) HandleControl(ctx context.Context, cm *connpool.ControlMessage) {
-	var reply connpool.ControlCode
+func (h *dialer) HandleControl(ctx context.Context, cm *ControlMessage) {
+	var reply ControlCode
 	switch cm.Code {
-	case connpool.Connect:
+	case Connect:
 		reply = h.open(ctx)
-	case connpool.Disconnect:
+	case Disconnect:
 		h.Close(ctx)
-		reply = connpool.DisconnectOK
+		reply = DisconnectOK
 	default:
 		dlog.Errorf(ctx, "%s: unhandled connection control message: %s", h.id, cm)
 		return
@@ -105,8 +104,8 @@ func (h *dialer) Close(ctx context.Context) {
 	}
 }
 
-func (h *dialer) sendTCD(ctx context.Context, code connpool.ControlCode) {
-	err := h.server.Send(connpool.ConnControl(h.id, code, nil))
+func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
+	err := h.server.Send(ConnControl(h.id, code, nil))
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}
@@ -129,7 +128,7 @@ func (h *dialer) readLoop(ctx context.Context) {
 		if err != nil {
 			if atomic.LoadInt32(&h.connected) > 0 && ctx.Err() == nil {
 				if h.id.Protocol() == unix.IPPROTO_TCP {
-					h.sendTCD(ctx, connpool.ReadClosed)
+					h.sendTCD(ctx, ReadClosed)
 				}
 				dlog.Errorf(ctx, "-> CLI %s, conn read: %v", h.id, err)
 			}
@@ -167,7 +166,7 @@ func (h *dialer) writeLoop(ctx context.Context) {
 				if err != nil {
 					if atomic.LoadInt32(&h.connected) > 0 && ctx.Err() == nil {
 						if h.id.Protocol() == unix.IPPROTO_TCP {
-							h.sendTCD(ctx, connpool.WriteClosed)
+							h.sendTCD(ctx, WriteClosed)
 						}
 						dlog.Errorf(ctx, "<- CLI %s, conn write: %v", h.id, err)
 					}
