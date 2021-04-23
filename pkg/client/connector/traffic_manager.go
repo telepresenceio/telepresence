@@ -4,12 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"os/user"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,10 +16,8 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -46,14 +42,6 @@ type trafficManager struct {
 	startup       chan bool // gets closed when managerClient is fully initialized (or managerErr is set)
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
-
-	// sshPort is a local TCP port number that the userd uses internally that gets forwarded to
-	// the SSH port on the manager Pod.
-	//
-	// FIXME(lukeshu): sshPort is exposed to the rest of the machine because we use separate
-	// `kubectl port-forward` and `ssh -D` processes; it should go away by way of moving the
-	// port-forwarding to happen in the userd process.
-	sshPort int32
 
 	// Map of desired mount points for intercepts
 	mountPoints sync.Map
@@ -115,25 +103,18 @@ func (tm *trafficManager) run(c context.Context) error {
 		"--namespace",
 		managerNamespace,
 		"svc/traffic-manager",
-		fmt.Sprintf(":%d", ManagerPortSSH),
 		fmt.Sprintf(":%d", ManagerPortHTTP)}
 
 	// Scan port-forward output and grab the dynamically allocated ports
 	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
 	outputScanner := func(sc *bufio.Scanner) interface{} {
-		var sshPort, apiPort string
 		for sc.Scan() {
 			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
 				toPort, _ := strconv.Atoi(rxr[2])
-				if toPort == ManagerPortSSH {
-					sshPort = rxr[1]
-					dlog.Debugf(c, "traffic-manager ssh-port %s", sshPort)
-				} else if toPort == ManagerPortHTTP {
-					apiPort = rxr[1]
+				if toPort == ManagerPortHTTP {
+					apiPort := rxr[1]
 					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
-				}
-				if sshPort != "" && apiPort != "" {
-					return []string{sshPort, apiPort}
+					return apiPort
 				}
 			}
 		}
@@ -145,11 +126,8 @@ func (tm *trafficManager) run(c context.Context) error {
 	}, 2*time.Second, 6*time.Second)
 }
 
-func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
-	ports := portsIf.([]string)
-	sshPort, _ := strconv.Atoi(ports[0])
-	grpcPort, _ := strconv.Atoi(ports[1])
-	tm.sshPort = int32(sshPort)
+func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err error) {
+	grpcPort, _ := strconv.Atoi(portIf.(string))
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
@@ -438,8 +416,8 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
-	r.BridgeOk = tm.check(ctx)
 	if tm.managerClient == nil {
+		r.BridgeOk = false
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
 		r.Agents = &manager.AgentInfoSnapshot{}
 		if err := tm.managerErr; err != nil {
@@ -451,6 +429,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
 		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: intercepts}
 		r.SessionInfo = tm.session()
+		r.BridgeOk = true
 	}
 }
 
@@ -519,86 +498,4 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		}
 	}
 	return result, nil
-}
-
-// check checks the status of teleproxy bridge by doing the equivalent of
-//  curl http://traffic-manager.svc:8022.
-// Note there is no namespace specified, as we are checking for bridge status in the
-// current namespace.
-func (br *trafficManager) check(c context.Context) bool {
-	if br == nil {
-		return false
-	}
-	address := fmt.Sprintf("localhost:%d", br.sshPort)
-	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
-	if err != nil {
-		dlog.Errorf(c, "fail to establish tcp connection to %s: %v", address, err)
-		return false
-	}
-	defer conn.Close()
-
-	msg, _, err := bufio.NewReader(conn).ReadLine()
-	if err != nil {
-		dlog.Errorf(c, "tcp read: %v", err)
-		return false
-	}
-	if !strings.Contains(string(msg), "SSH") {
-		dlog.Errorf(c, "expected SSH prompt, got: %v", string(msg))
-		return false
-	}
-	return true
-}
-
-// sshPortForward synchronously runs an `ssh` process with the given port-forward args.  It retries
-// for all errors; it only returns when the context is canceled.  For that reason, it doesn't return
-// an error; it just always retries.
-func (tm *trafficManager) sshPortForward(ctx context.Context, pfArgs ...string) {
-	// XXX: probably need some kind of keepalive check for ssh, first
-	// curl after wakeup seems to trigger detection of death
-	sshArgs := append(append([]string{"ssh"}, pfArgs...), []string{
-		"-F", "none", // don't load the user's config file
-
-		// connection settings
-		"-C", // compression
-		"-oConnectTimeout=10",
-		"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-		"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-
-		// port-forward settings
-		"-N", // no remote command; just connect and forward ports
-		"-oExitOnForwardFailure=yes",
-
-		// where to connect to
-		"-p", strconv.Itoa(int(tm.sshPort)),
-		"telepresence@localhost",
-	}...)
-
-	// Do NOT use client.Retry; this has slightly more domain-specific knowledge regarding the
-	// backoff: We don't backoff if the process was "long-lived".  SSH connections just
-	// sometimes die; we should retry those immediately; we only want to back off when it looks
-	// like there's a problem *establishing* the connection.  So we use process-lifetime as a
-	// proxy for whether a connection was established or not.
-	backoff := 100 * time.Millisecond
-	for ctx.Err() == nil {
-		start := time.Now()
-		err := dexec.CommandContext(ctx, sshArgs[0], sshArgs[1:]...).Run()
-		lifetime := time.Since(start)
-
-		if ctx.Err() == nil {
-			if err == nil {
-				err = errors.New("ssh process terminated successfully, but unexpectedly")
-			}
-			dlog.Errorf(ctx, "communicating with manager: %v", err)
-			if lifetime >= 20*time.Second {
-				backoff = 100 * time.Millisecond
-				dtime.SleepWithContext(ctx, backoff)
-			} else {
-				dtime.SleepWithContext(ctx, backoff)
-				backoff *= 2
-				if backoff > 3*time.Second {
-					backoff = 3 * time.Second
-				}
-			}
-		}
-	}
 }
