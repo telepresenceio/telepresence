@@ -75,7 +75,7 @@ func (t *Device) routeAdd(routeSocket, seq int, r *net.IPNet, gw net.IP) error {
 	}
 	_, err = unix.Write(routeSocket, wb)
 	if err == unix.EEXIST {
-		// addrMessage exists, that's OK
+		// route exists, that's OK
 		err = nil
 	}
 	return err

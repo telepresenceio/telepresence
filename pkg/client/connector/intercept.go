@@ -94,8 +94,8 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 						fmt.Sprintf("/%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort))
 					livePortForwards[pf] = pfCancel
 
-					wg.Add(1)
-					go tm.workerPortForwardIntercept(pfCtx, pf, &wg)
+					// wg.Add(1)
+					// go tm.workerPortForwardIntercept(pfCtx, pf, &wg)
 
 					// There's nothing to mount if the SshPort is zero
 					if intercept.SshPort != 0 {

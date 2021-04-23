@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
@@ -62,7 +61,7 @@ func (h *dnsInterceptor) readLoop(ctx context.Context) {
 		}
 		if n > 0 {
 			dlog.Debugf(ctx, "<- DNS %s, len %d", h.id.ReplyString(), n)
-			h.HandleMessage(ctx, &manager.ConnMessage{ConnId: []byte(h.id), Payload: b[:n]})
+			h.HandleMessage(ctx, connpool.NewMessage(h.id, b[:n]))
 		}
 	}
 }

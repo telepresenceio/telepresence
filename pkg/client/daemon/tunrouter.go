@@ -2,8 +2,8 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
@@ -108,6 +108,9 @@ type tunRouter struct {
 	// the traffic manager and the managerClient has been connected.
 	mgrConfigured <-chan struct{}
 
+	// rndSource is the source for the random number generator in the TCP handlers
+	rndSource rand.Source
+
 	// ips is the current set of IP addresses mapped by this router.
 	ips map[IPKey]struct{}
 
@@ -128,6 +131,7 @@ func newTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
 		fragmentMap:   make(map[uint16][]*buffer.Data),
 		ips:           make(map[IPKey]struct{}),
 		subnets:       make(map[string]*net.IPNet),
+		rndSource:     rand.NewSource(time.Now().UnixNano()),
 	}, nil
 }
 
@@ -298,20 +302,16 @@ func (t *tunRouter) run(c context.Context) error {
 		case <-t.mgrConfigured:
 		}
 
-		jsonSessionID, err := json.Marshal(t.session)
-		if err != nil {
-			return err
-		}
 		tunnel, err := t.managerClient.ConnTunnel(c)
 		if err != nil {
 			return err
 		}
-		if err = tunnel.Send(connpool.ConnControl("", connpool.SessionID, jsonSessionID)); err != nil {
+		if err = tunnel.Send(connpool.SessionInfoControl(t.session).TunnelMessage()); err != nil {
 			return err
 		}
-		t.connStream = connpool.NewStream(tunnel, t.handlers)
+		t.connStream = connpool.NewStream(tunnel)
 		dlog.Debug(c, "MGR read loop starting")
-		return t.connStream.ReadLoop(c, &t.closing)
+		return t.connStream.DialLoop(c, &t.closing, t.handlers)
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {
@@ -413,8 +413,8 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
 	connID := connpool.NewConnID(unix.IPPROTO_TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
-	wf, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
-		return tcp.NewHandler(t.connStream, &t.closing, t.toTunCh, connID, remove), nil
+	wf, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
+		return tcp.NewHandler(t.connStream, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
@@ -427,7 +427,7 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	ipHdr := dg.IPHeader()
 	udpHdr := dg.Header()
 	connID := connpool.NewConnID(unix.IPPROTO_UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
-	uh, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
+	uh, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
 		if udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
 			return udp.NewDnsInterceptor(t.connStream, t.toTunCh, connID, remove, t.dnsLocalAddr)
 		}

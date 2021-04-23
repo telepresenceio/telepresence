@@ -3,7 +3,9 @@ package state
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 const (
@@ -41,7 +44,8 @@ type sessionState struct {
 
 type clientSessionState struct {
 	sessionState
-	pool *connpool.Pool
+	pool             *connpool.Pool
+	connTunnelServer rpc.Manager_ConnTunnelServer
 }
 
 func (ss *sessionState) Cancel() {
@@ -83,6 +87,7 @@ type State struct {
 	agents       watchable.AgentMap                   // info for agent sessions
 	clients      watchable.ClientMap                  // info for client sessions
 	sessions     map[string]SessionState              // info for all sessions
+	listeners    map[string]connpool.Handler          // listeners for all intercepts
 	agentsByName map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 }
 
@@ -92,6 +97,7 @@ func NewState(ctx context.Context) *State {
 		port:         loPort - 1,
 		sessions:     make(map[string]SessionState),
 		agentsByName: make(map[string]map[string]*rpc.AgentInfo),
+		listeners:    make(map[string]connpool.Handler),
 	}
 }
 
@@ -482,6 +488,17 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 
 func (s *State) RemoveIntercept(interceptID string) bool {
 	_, didDelete := s.intercepts.LoadAndDelete(interceptID)
+	if didDelete {
+		s.mu.Lock()
+		l, ok := s.listeners[interceptID]
+		if ok {
+			delete(s.listeners, interceptID)
+		}
+		s.mu.Unlock()
+		if ok {
+			l.Close(s.ctx)
+		}
+	}
 	return didDelete
 }
 
@@ -501,6 +518,37 @@ func (s *State) WatchIntercepts(
 	}
 }
 
+func (s *State) StartInterceptListener(ctx context.Context, intercept *rpc.InterceptInfo) {
+	clientSessionID := intercept.ClientSession.GetSessionId()
+	s.mu.Lock()
+	ss := s.sessions[clientSessionID]
+	s.mu.Unlock()
+	cs, ok := ss.(*clientSessionState)
+	if !ok {
+		dlog.Errorf(ctx, "Client session %q not found", clientSessionID)
+		return
+	}
+	spec := intercept.Spec
+	srcIP := iputil.Parse(spec.TargetHost)
+	if srcIP == nil {
+		dlog.Errorf(ctx, "TargetHost %q is not a valid IP", spec.TargetHost)
+		return
+	}
+	id := connpool.NewConnID(unix.IPPROTO_TCP, srcIP, net.IP{127, 0, 0, 1}, uint16(spec.TargetPort), uint16(intercept.ManagerPort))
+
+	ctx = connpool.WithPool(ctx, cs.pool)
+	_, _, err := cs.pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+		lh := connpool.NewListener(id, cs.connTunnelServer, release)
+		s.mu.Lock()
+		s.listeners[intercept.GetId()] = lh
+		s.mu.Unlock()
+		return lh, nil
+	})
+	if err != nil {
+		dlog.Errorf(ctx, "failed to create intercept listener: %v", err)
+	}
+}
+
 func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Manager_ConnTunnelServer) error {
 	s.mu.Lock()
 	ss := s.sessions[sessionID]
@@ -510,49 +558,37 @@ func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Man
 		return status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 	dlog.Debug(ctx, "Established TCP tunnel")
-	pool := cs.pool // must have one pool per tunnel (per client, really)
+	pool := cs.pool // must have one pool per client
+	cs.connTunnelServer = server
 	defer pool.CloseAll(ctx)
+	closing := int32(0)
+	msgCh, errCh := connpool.NewStream(server).ReadLoop(ctx, &closing)
 	for {
-		dg, err := server.Recv()
-		if err != nil {
-			dlog.Errorf(ctx, "Recv failed: %v", err)
+		select {
+		case <-ctx.Done():
+			atomic.StoreInt32(&closing, 2)
 			return nil
-		}
-		s.handleTunnelMessage(ctx, pool, server, dg)
-	}
-}
+		case err := <-errCh:
+			return err
+		case msg := <-msgCh:
+			if msg == nil {
+				return nil
+			}
 
-func (s *State) handleTunnelMessage(ctx context.Context, pool *connpool.Pool, server rpc.Manager_ConnTunnelServer, cm *rpc.ConnMessage) {
-	var id connpool.ConnID
-	var ctrl *connpool.ControlMessage
-	var err error
-	if connpool.IsControlMessage(cm) {
-		ctrl, err = connpool.NewControlMessage(cm)
-		if err != nil {
-			dlog.Error(ctx, err)
-			return
+			id := msg.ID()
+			// Retrieve the connection that is tracked for the given id. Create a new one if necessary
+			h, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+				switch id.Protocol() {
+				case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
+					return connpool.NewDialer(id, cs.connTunnelServer, release), nil
+				default:
+					return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
+				}
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get connection handler: %w", err)
+			}
+			h.HandleMessage(ctx, msg)
 		}
-		id = ctrl.ID
-	} else {
-		id = connpool.ConnID(cm.ConnId)
-	}
-
-	// Retrieve the connection that is tracked for the given id. Create a new one if necessary
-	h, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-		switch id.Protocol() {
-		case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
-			return connpool.NewDialer(id, server, release), nil
-		default:
-			return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
-		}
-	})
-	if err != nil {
-		dlog.Errorf(ctx, "failed to get connection handler: %v", err)
-		return
-	}
-	if ctrl != nil {
-		h.HandleControl(ctx, ctrl)
-	} else {
-		h.HandleMessage(ctx, cm)
 	}
 }

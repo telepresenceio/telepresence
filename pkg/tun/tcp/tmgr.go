@@ -8,18 +8,24 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 )
 
-func (h *handler) HandleControl(ctx context.Context, ctrl *connpool.ControlMessage) {
-	switch ctrl.Code {
+func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
+	switch ctrl.Code() {
+	case connpool.Connect:
+		// Peer wants to initialize a new connection
+		h.setState(ctx, stateSynSent)
+		h.setSequence(uint32(h.RandomSequence()))
+		h.setReceiveWindow(maxReceiveWindow)
+		h.windowScale = 6
+		h.sendSyn(ctx, 0, false)
 	case connpool.ConnectOK:
 		synPacket := h.synPacket
 		h.synPacket = nil
 		if synPacket != nil {
 			defer synPacket.Release()
-			h.sendSyn(ctx, synPacket)
+			h.sendSynReply(ctx, synPacket)
 		}
 	case connpool.ConnectReject:
 		synPacket := h.synPacket
@@ -39,10 +45,14 @@ func (h *handler) HandleControl(ctx context.Context, ctrl *connpool.ControlMessa
 	}
 }
 
-func (h *handler) HandleMessage(ctx context.Context, cm *manager.ConnMessage) {
+func (h *handler) HandleMessage(ctx context.Context, msg connpool.Message) {
+	if ctrl, ok := msg.(connpool.Control); ok {
+		h.handleControl(ctx, ctrl)
+		return
+	}
 	select {
 	case <-ctx.Done():
-	case h.fromMgr <- cm:
+	case h.fromMgr <- msg:
 	}
 }
 
@@ -63,7 +73,7 @@ const flushDelay = 10 * time.Millisecond
 func (h *handler) writeToMgrLoop(ctx context.Context) {
 	mgrWrite := func(payload []byte) bool {
 		dlog.Debugf(ctx, "-> MGR %s, len %d", h.id, len(payload))
-		if err := h.SendMsg(&manager.ConnMessage{ConnId: []byte(h.id), Payload: payload}); err != nil {
+		if err := h.Send(connpool.NewMessage(h.id, payload).TunnelMessage()); err != nil {
 			if ctx.Err() == nil && atomic.LoadInt32(h.dispatcherClosing) == 0 && h.state() < stateFinWait2 {
 				dlog.Errorf(ctx, "   CON %s failed to write to dispatcher's remote endpoint: %v", h.id, err)
 			}
@@ -114,9 +124,9 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 }
 
 func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode) error {
-	pkt := connpool.ConnControl(h.id, code, nil)
+	pkt := connpool.NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
-	if err := h.SendMsg(pkt); err != nil {
+	if err := h.Send(pkt.TunnelMessage()); err != nil {
 		return fmt.Errorf("failed to send control package: %w", err)
 	}
 	return nil

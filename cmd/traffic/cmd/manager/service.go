@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -443,6 +442,10 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.PodName = rIReq.PodName
 			intercept.SshPort = rIReq.SshPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
+
+			if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
+				m.state.StartInterceptListener(ctx, intercept)
+			}
 		}
 	})
 
@@ -454,25 +457,26 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 }
 
 func (m *Manager) ConnTunnel(server rpc.Manager_ConnTunnelServer) error {
-	ctx := server.Context()
+	sessionInfo, err := readTunnelSessionID(server)
+	if err != nil {
+		return err
+	}
+	return m.state.ConnTunnel(WithSessionInfo(server.Context(), sessionInfo), sessionInfo.GetSessionId(), server)
+}
 
+func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {
 	// Initial message must be the session info that this bidi stream should be attached to
 	cm, err := server.Recv()
 	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to read session info message: %v", err)
+		return nil, status.Errorf(codes.FailedPrecondition, "failed to read session info message: %v", err)
 	}
 	var sessionInfo *rpc.SessionInfo
-	if ctrl, err := connpool.NewControlMessage(cm); err == nil && ctrl.Code == connpool.SessionID {
-		if err = json.Unmarshal(ctrl.Payload, &sessionInfo); err != nil {
-			return status.Errorf(codes.FailedPrecondition, "failed to unmarshal session info: %v", err)
+	if ctrl, ok := connpool.FromConnMessage(cm).(connpool.Control); ok {
+		if sessionInfo = ctrl.SessionInfo(); sessionInfo != nil {
+			return sessionInfo, nil
 		}
 	}
-	if sessionInfo == nil {
-		return status.Error(codes.FailedPrecondition, "first message was not session info")
-	}
-	ctx = WithSessionInfo(ctx, sessionInfo)
-	sessionID := sessionInfo.GetSessionId()
-	return m.state.ConnTunnel(ctx, sessionID, server)
+	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
 // expire removes stale sessions.

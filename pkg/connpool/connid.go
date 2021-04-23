@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A ConnID is a compact and immutable representation of source IP, source port, destination IP and destination port which
+// A ConnID is a compact and immutable representation of protocol, source IP, source port, destination IP and destination port which
 // is suitable as a map key.
 type ConnID string
 
@@ -39,7 +39,7 @@ func NewConnID(proto int, src, dst net.IP, srcPort, dstPort uint16) ConnID {
 	return ConnID(bs)
 }
 
-// ISIPv4 returns true if the source and destination of this ConnID are IPv4
+// IsIPv4 returns true if the source and destination of this ConnID are IPv4
 func (id ConnID) IsIPv4() bool {
 	return len(id) == 13
 }
@@ -50,6 +50,15 @@ func (id ConnID) Source() net.IP {
 		return net.IP(id[0:4])
 	}
 	return net.IP(id[0:16])
+}
+
+// SourceAddr returns the *net.TCPAddr or *net.UDPAddr that corresponds to the
+// source IP and port of this instance.
+func (id ConnID) SourceAddr() net.Addr {
+	if id.Protocol() == unix.IPPROTO_TCP {
+		return &net.TCPAddr{IP: id.Source(), Port: int(id.SourcePort())}
+	}
+	return &net.UDPAddr{IP: id.Source(), Port: int(id.SourcePort())}
 }
 
 // SourcePort returns the source port
@@ -66,6 +75,15 @@ func (id ConnID) Destination() net.IP {
 		return net.IP(id[6:10])
 	}
 	return net.IP(id[18:34])
+}
+
+// DestinationAddr returns the *net.TCPAddr or *net.UDPAddr that corresponds to the
+// destination IP and port of this instance.
+func (id ConnID) DestinationAddr() net.Addr {
+	if id.Protocol() == unix.IPPROTO_TCP {
+		return &net.TCPAddr{IP: id.Destination(), Port: int(id.DestinationPort())}
+	}
+	return &net.UDPAddr{IP: id.Destination(), Port: int(id.DestinationPort())}
 }
 
 // DestinationPort returns the destination port
