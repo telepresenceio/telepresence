@@ -33,7 +33,6 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 	return &installer{k8sCluster: kc}, nil
 }
 
-const ManagerPortSSH = 8022
 const ManagerPortHTTP = 8081
 const managerAppName = "traffic-manager"
 const managerLicenseName = "systema-license"
@@ -73,14 +72,6 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 			ClusterIP: "None",
 			Selector:  labelMap,
 			Ports: []kates.ServicePort{
-				{
-					Name: "sshd",
-					Port: ManagerPortSSH,
-					TargetPort: kates.IntOrString{
-						Type:   intstr.String,
-						StrVal: "sshd",
-					},
-				},
 				{
 					Name: "api",
 					Port: ManagerPortHTTP,
@@ -1089,10 +1080,6 @@ func (ki *installer) managerDeployment(c context.Context, env client.Env, addLic
 							Image: managerImageName(env),
 							Env:   containerEnv,
 							Ports: []corev1.ContainerPort{
-								{
-									Name:          "sshd",
-									ContainerPort: ManagerPortSSH,
-								},
 								{
 									Name:          "api",
 									ContainerPort: ManagerPortHTTP,

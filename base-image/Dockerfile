@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Set up sshd. All this can go away once we stop using sshd.
 FROM alpine:3.13 as tel2-base
 RUN \
   apk add --no-cache openssh-sftp-server && \
   mkdir /home/telepresence && \
   mkdir /tel_app_mounts && \
-  chmod 0770 /tel_app_mounts && \
-  chmod g+w /run && \
-  echo "telepresence::1000:0:Telepresence User:/home/telepresence:/bin/ash" >> /etc/passwd
+  chmod 0770 /tel_app_mounts
 
 # Make symlinks so we can use these commands directly in k8s.
 RUN \
@@ -29,6 +26,3 @@ RUN \
 
 # Clear the default command to avoid passing bogus arguments to traffic
 CMD []
-
-# Launch as the Telepresence user. This can be relaxed/randomized once we stop using sshd.
-USER 1000:0
