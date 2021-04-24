@@ -15,18 +15,7 @@
 # Set up sshd. All this can go away once we stop using sshd.
 FROM alpine:3.13 as tel2-base
 RUN \
-  apk add --no-cache openssh ca-certificates && \
-  ssh-keygen -A && \
-  sed -i \
-    -e 's/^AllowTcpForwarding no/AllowTcpForwarding yes/' \
-    -e 's/^GatewayPorts no/GatewayPorts yes/' \
-    -e '$aClientAliveInterval 1' \
-    -e '$aPermitEmptyPasswords yes' \
-    -e '$aPort 8022' \
-    -e '$aClientAliveCountMax 10' \
-    -e '$aPermitRootLogin yes' \
-    /etc/ssh/sshd_config && \
-  chmod -R g+r /etc/ssh && \
+  apk add --no-cache openssh-sftp-server && \
   mkdir /home/telepresence && \
   mkdir /tel_app_mounts && \
   chmod 0770 /tel_app_mounts && \

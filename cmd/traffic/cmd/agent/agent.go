@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +15,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -162,19 +163,35 @@ func Main(ctx context.Context, args ...string) error {
 		dlog.Errorf(ctx, "Unable to determine if agent has mounts: %v", err)
 	}
 
-	sshPort := 0
+	sftpPort := uint16(0)
 	if hasMounts && user == "" {
-		// start an ssh daemon to server remote sshfs mounts
-		l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		// start an sftp-server for remote sshfs mounts
+		l, err := net.Listen("tcp4", ":0")
 		if err != nil {
 			return err
 		}
-		sshPort = l.Addr().(*net.TCPAddr).Port
-		_ = l.Close()
+		if _, sftpPort, err = iputil.SplitToIPPort(l.Addr()); err != nil {
+			return err
+		}
+		defer l.Close()
 
-		// Run sshd
-		g.Go("sshd", func(ctx context.Context) error {
-			return dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", strconv.Itoa(sshPort)).Run()
+		g.Go("sftp-server", func(ctx context.Context) error {
+			for {
+				conn, err := l.Accept()
+				if err != nil {
+					if ctx.Err() == nil {
+						return fmt.Errorf("listener on sftp-server connection failed: %v", err)
+					}
+					return nil
+				}
+				go func() {
+					dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
+					err := dpipe.DPipe(ctx, dexec.CommandContext(ctx, "/usr/lib/ssh/sftp-server"), conn)
+					if err != nil {
+						dlog.Error(ctx, err)
+					}
+				}()
+			}
 		})
 	} else {
 		dlog.Info(ctx, "Not starting sshd ($APP_MOUNTS is empty or $USER is set)")
@@ -209,7 +226,7 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodName, int32(sshPort))
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodName, int32(sftpPort))
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

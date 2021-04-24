@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"sync"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 
 	"github.com/pkg/errors"
 
@@ -439,6 +442,12 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	err := client.Retry(ctx, "kubectl port-forward to pod", func(ctx context.Context) error {
 		return tm.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
 			localPort := rg.(string)
+			dl := &net.Dialer{Timeout: 3 * time.Second}
+			conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%s", localPort))
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
 			sshArgs := []string{
 				"-F", "none", // don't load the user's config file
 				"-f", // foreground operation
@@ -448,19 +457,14 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 				"-oConnectTimeout=10",
 				"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
 				"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-				"-p", localPort,                  // port to connect to
+				"-o", "slave",                    // Unencrypted via stdin/stdout
 
 				// mount directives
 				"-o", "follow_symlinks",
 				"telepresence@localhost:" + telAppMountPoint, // remote user and what to mount
 				mountPoint, // where to mount it
 			}
-
-			err := dexec.CommandContext(ctx, "sshfs", sshArgs...).Run()
-			if err != nil && ctx.Err() != nil {
-				err = nil
-			}
-			return err
+			return dpipe.DPipe(ctx, dexec.CommandContext(ctx, "sshfs", sshArgs...), conn)
 		})
 	}, 3*time.Second, 6*time.Second)
 
