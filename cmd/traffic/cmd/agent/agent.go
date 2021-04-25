@@ -157,19 +157,31 @@ func Main(ctx context.Context, args ...string) error {
 		dlog.Errorf(ctx, "Unable to determine if agent has mounts: %v", err)
 	}
 
-	sftpPort := uint16(0)
+	sftpPortCh := make(chan int32)
 	if hasMounts && user == "" {
-		// start an sftp-server for remote sshfs mounts
-		l, err := net.Listen("tcp4", ":0")
-		if err != nil {
-			return err
-		}
-		if _, sftpPort, err = iputil.SplitToIPPort(l.Addr()); err != nil {
-			return err
-		}
-		defer l.Close()
-
 		g.Go("sftp-server", func(ctx context.Context) error {
+			defer close(sftpPortCh)
+
+			// start an sftp-server for remote sshfs mounts
+			lc := net.ListenConfig{}
+			l, err := lc.Listen(ctx, "tcp4", ":0")
+			if err != nil {
+				return err
+			}
+
+			// Accept doesn't actually return when the context is cancelled so
+			// it's explicitly closed here.
+			go func() {
+				<-ctx.Done()
+				_ = l.Close()
+			}()
+
+			_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
+			if err != nil {
+				return err
+			}
+			sftpPortCh <- int32(sftpPort)
+
 			for {
 				conn, err := l.Accept()
 				if err != nil {
@@ -188,6 +200,7 @@ func Main(ctx context.Context, args ...string) error {
 			}
 		})
 	} else {
+		close(sftpPortCh)
 		dlog.Info(ctx, "Not starting sshd ($APP_MOUNTS is empty or $USER is set)")
 	}
 
@@ -220,7 +233,8 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, int32(sftpPort))
+		sftpPort := <-sftpPortCh
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {
