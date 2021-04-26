@@ -104,9 +104,9 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 			return errResolveDNotConfigured
 		}
 
-		// Check if an attempt to resolve a DNS address reaches our DNS resolver, 300ms should be plenty
+		// Check if an attempt to resolve a DNS address reaches our DNS resolver, One second should be plenty
 
-		cmdC, cmdCancel := context.WithTimeout(c, 300*time.Millisecond)
+		cmdC, cmdCancel := context.WithTimeout(c, time.Second)
 		defer cmdCancel()
 		for cmdC.Err() == nil {
 			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
@@ -114,7 +114,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				close(o.dnsConfigured)
 				return nil
 			}
-			dtime.SleepWithContext(cmdC, 30*time.Millisecond)
+			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 		}
 		dlog.Error(c, "resolver did not receive requests from systemd.resolved")
 		return errResolveDNotConfigured

@@ -416,9 +416,10 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		ctx := dlog.NewTestContext(cs.T(), false)
 
 		// service can be resolve with unqualified name
-		ip, err := net.DefaultResolver.LookupHost(ctx, "hello-0")
-		cs.NoError(err)
-		cs.True(len(ip) == 1)
+		cs.Eventually(func() bool {
+			ip, err := net.DefaultResolver.LookupHost(ctx, "hello-0")
+			return err == nil && len(ip) == 1
+		}, 5*time.Second, 200*time.Millisecond)
 	})
 
 	cs.Run("leaving renders services unavailable using unqualified name", func() {
@@ -736,7 +737,7 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 }
 
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
-	c, cancel := context.WithTimeout(c, 60*time.Second)
+	c, cancel := context.WithTimeout(c, 90*time.Second)
 	defer cancel()
 
 	// Since this function can be called multiple times in parallel
