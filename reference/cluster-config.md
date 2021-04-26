@@ -73,8 +73,8 @@ Secrets that it detects to be formatted as one of those types.
 ## Air Gapped Cluster
 
 If your cluster is air gapped (it does not have access to the
-internet and therefore cannot connect to Ambassador Cloud), some manual
-license configuration is required to use selective intercepts.
+internet and therefore cannot connect to Ambassador Cloud), some additional
+configuration is required to acquire a license use selective intercepts.
 
 ### Create a License
 
