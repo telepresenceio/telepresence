@@ -6,7 +6,7 @@
   items:
     - title: Telepresence
       items:
-        - title: Quick Start
+        - title: Quick start
           link: /quick-start
         - title: Install Telepresence
           items:
@@ -22,21 +22,21 @@
               link: /concepts/devloop
             - title: "Making the remote local: Faster feedback, collaboration and debugging"
               link: /concepts/faster
-            - title: Context Propagation
+            - title: Context propagation
               link: /concepts/context-prop
         - title: How Do I...
           items:
-            - title: Intercept a Service
+            - title: Intercept a service in your own environment
               link: /howtos/intercepts
-            - title: Share Dev Environments with Preview URLs
+            - title: Share dev environments with preview URLs
               link: /howtos/preview-urls
-            - title: Proxy Outbound Traffic to My Cluster
+            - title: Proxy outbound traffic to my cluster
               link: /howtos/outbound
         - title: Technical Reference
           items:
             - title: Architecture
               link: /reference/architecture
-            - title: Client Reference
+            - title: Client reference
               link: /reference/client
             - title: Laptop-side configuration
               link: /reference/config
@@ -44,13 +44,13 @@
               link: /reference/cluster-config
             - title: Using Docker for intercepts
               link: /reference/docker-run
-            - title: Environment Variables
+            - title: Environment variables
               link: /reference/environment
             - title: Intercepts
               link: /reference/intercepts
-            - title: Volume Mounts
+            - title: Volume mounts
               link: /reference/volume
-            - title: DNS Resolution
+            - title: DNS resolution
               link: /reference/dns
             - title: RBAC
               link: /reference/rbac

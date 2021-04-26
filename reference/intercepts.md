@@ -1,6 +1,6 @@
 # Intercepts 
 
-## Intercept Behavior When Logged into Ambassador Cloud
+## Intercept behvaior when logged into Ambassador CLoud
 
 After logging into Ambassador Cloud (with `telepresence login`), Telepresence will default to `--preview-url=true`, which will use Ambassador Cloud to create a sharable preview URL for this intercept. (Creating an intercept without logging in will default to `--preview-url=false`).
 
@@ -8,7 +8,8 @@ In order to do this, it will prompt you for four options.  For the first, `Ingre
 
 Also because you're logged in, Telepresence will default to `--mechanism=http --http-match=auto` (or just `--http-match=auto`; `--http-match` implies `--mechanism=http`). If you hadn't been logged in it would have defaulted to `--mechanism=tcp`.  This tells it to do smart intercepts and only intercept a subset of HTTP requests, rather than just intercepting the entirety of all TCP connections.  This is important for working in a shared cluster with teammates, and is important for the preview URL functionality.  See `telepresence intercept --help` for information on using `--http-match` to customize which requests it intercepts.
 
-## Supported Workloads
+## Supported workloads
+
 Kubernetes has various [workloads](https://kubernetes.io/docs/concepts/workloads/). Currently, telepresence supports intercepting Deployments, ReplicaSets, and StatefulSets.
 <Alert severity="info"> While many of our examples may use Deployments, they would also work on ReplicaSets and StatefulSets </Alert>
 
@@ -33,11 +34,11 @@ telepresence intercept myhello --namespace myns --workload hello --port 9000
 
 This will intercept a workload named `hello` and name the intercept `myhello`.
 
-## Importing Environment Variables
+## Importing environment variables
 
 Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../environment/) for more details.
 
-## Creating an Intercept Without a Preview URL
+## Creating an intercept Without a preview URL
 
 If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your ingress controller, so use this option carefully as to not disrupt production environments.
 
@@ -86,7 +87,7 @@ User Daemon: Running
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
 
-## Creating an Intercept When a Service has Multiple Ports
+## Creating an intercept when a service has multiple ports
 
 If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. To specify, you can either use the name of the service port or the port number itself. To see which options might be available to you and your service, use kubectl to describe your service or look in the object's YAML. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
 
@@ -106,7 +107,7 @@ When intercepting a service that has multiple ports, the name of the service por
 
 If you want to change which port has been intercepted, you can create a new intercept the same way you did above and it will change which service port is being intercepted.
 
-## Creating an Intercept When Multiple Services Match your Workload
+## Creating an intercept When multiple services match your workload
 
 Oftentimes, there's a 1-to-1 relationship between a service and a workload, so telepresence is able to auto-detect which service it should intercept based on the workload you are trying to intercept.  But if you use something like [Argo](../../../../argo/latest/), it uses two services (that use the same labels) to manage traffic between a canary and a stable service.
 
