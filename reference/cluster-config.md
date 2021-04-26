@@ -70,13 +70,13 @@ Telepresence understands `type: kubernetes.io/tls` Secrets and
 `type: istio.io/key-and-cert` Secrets; as well as `type: Opaque`
 Secrets that it detects to be formatted as one of those types.
 
-## Air Gapped Cluster
+## Air gapped cluster
 
 If your cluster is air gapped (it does not have access to the
 internet and therefore cannot connect to Ambassador Cloud), some additional
 configuration is required to acquire a license use selective intercepts.
 
-### Create a License
+### Create a license
 
 1. Go to [the teams setting page in Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
 select *Licenses* for the team you want to create the license for. 
@@ -95,7 +95,7 @@ run this command to generate the Cluster ID:
 
 4. Click *Generate API Key* to finish generating the license.
 
-### Add License to Cluster
+### Add license to cluster
 
 1. On the licenses page, download the license file associated with your cluster.
 

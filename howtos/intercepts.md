@@ -6,7 +6,7 @@ import Alert from '@material-ui/lab/Alert';
 import QSTabs from '../quick-start/qs-tabs'
 import QSCards from '../quick-start/qs-cards'
 
-# Intercept a Service in Your Own Environment
+# Intercept a service in your own environment
 
 <div class="docs-article-toc">
 <h3>Contents</h3>
@@ -156,11 +156,11 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-## 4. Create a Preview URL to only intercept certain requests to your service
+## 4. Create a preview URL to only intercept certain requests to your service
 
 When working on a development environment with multiple engineers, you don't want your intercepts to impact your 
-teammates. Ambassador Cloud automatically generates a Preview URL when creating an intercept if you are logged in. By 
-doing so, Telepresence can route only the requests coming from that Preview URL to your local environment; the rest will
+teammates. Ambassador Cloud automatically generates a preview URL when creating an intercept if you are logged in. By 
+doing so, Telepresence can route only the requests coming from that preview URL to your local environment; the rest will
 be routed to your cluster as usual.
 
 1. Clean up your previous intercept by removing it:  
@@ -243,7 +243,7 @@ be routed to your cluster as usual.
    Normal traffic coming into the cluster through the Ingress (i.e. not coming from the preview URL) will route to services in the cluster like normal.
 
 <Alert severity="success">
-    <strong>Congratulations!</strong> You have now only intercepted traffic coming from your Preview URL, without impacting your teammates.
+    <strong>Congratulations!</strong> You have now only intercepted traffic coming from your preview URL, without impacting your teammates.
 </Alert>
 
 You can now:

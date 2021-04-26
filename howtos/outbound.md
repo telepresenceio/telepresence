@@ -4,13 +4,13 @@ description: "Telepresence can connect to your Kubernetes cluster, letting you a
 
 import Alert from '@material-ui/lab/Alert';
 
-# Proxy Outbound Traffic to My Cluster
+# Proxy outbound traffic to my cluster
 
 While preview URLs are a powerful feature, there are other options to use Telepresence for proxying traffic between your laptop and the cluster.
 
 <Alert severity="info"> We'll assume below that you have the <a href="../../quick-start/qs-node/">quick start</a> sample web app running in your cluster so that we can test accessing the <code>verylargejavaservice</code> service. That service can be substituted however for any service you are running.</Alert>
 
-## Proxying Outbound Traffic
+## Proxying outbound traffic
 
 Connecting to the cluster instead of running an intercept will allow you to access cluster workloads as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services using `<service name>.<namespace>`, for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
 
@@ -65,7 +65,7 @@ Connecting to the cluster starts the background daemon on your machine and insta
 
 <Alert severity="info">When using Telepresence in this way, services must be accessed with the namespace qualified DNS name (<code>&lt;service name&gt;.&lt;namespace&gt;</code>) before starting an intercept.  After starting an intercept, only <code>&lt;service name&gt;</code> is required. Read more about these differences in DNS resolution <a href="../../reference/dns/">here</a>.</Alert>
 
-## Controlling Outbound Connectivity
+## Controlling outbound connectivity
 
 By default, Telepresence will provide access to all Services found in all namespaces in the connected cluster. This might lead to problems if the user does not have access permissions to all namespaces via RBAC. The `--mapped-namespaces <comma separated list of namespaces>` flag was added to give the user control over exactly which namespaces will be accessible.
 
@@ -87,7 +87,8 @@ The resources in the given namespace can now be accessed using unqualified names
   ```
 The unqualified name access is now removed provided that no other intercept is active and using the same namespace.
 
-### External dependencies (formerly --also-proxy)
+### External dependencies (formerly `--also-proxy`)
+
 If you have a resource outside of the cluster that you need access to, you can leverage Headless Services to provide access. This will give you a kubernetes service formatted like all other services (`my-service.prod.svc.cluster.local`), that resolves to your resource.
 
 If the outside service has a DNS name, you can use the [ExternalName](https://kubernetes.io/docs/concepts/services-networking/service/#externalname) service type, which will create a service that can be used from within your cluster and from your local machine when connected with telepresence.

@@ -4,7 +4,7 @@ description: "Telepresence uses Preview URLs to help you collaborate on developi
 
 import Alert from '@material-ui/lab/Alert';
 
-# Share Dev Environments with Preview URLs
+# Share dev environments with preview URLs
 
 Telepresence can generate sharable preview URLs, allowing you to work on a copy of your service locally and share that environment directly with a teammate for pair programming. While using preview URLs Telepresence will route only the requests coming from that preview URL to your local environment; requests to the ingress will be routed to your cluster as usual.
 
@@ -22,7 +22,7 @@ Preview URLs are protected behind authentication via Ambassador Cloud, ensuring 
 Need a sample app to try with preview URLs?  Check out the <a href="../../quick-start/qs-node/">quick start</a>. It has a multi-service app to install in your cluster with instructions to create a preview URL for that app.
 </Alert>
 
-## Creating a Preview URL
+## Creating a preview URL
 
 1. List the services that you can intercept with `telepresence list` and make sure the one you want is listed. 
 
@@ -124,7 +124,7 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
   <strong>Congratulations!</strong> You have now created a dev environment and shared it with a teammate!  While you and your partner work together to debug your service, the production version remains unchanged to the rest of your team until you commit your changes.
 </Alert>
 
-## Sharing a Preview URL with People Outside Your Team
+## Sharing a preview URL with people outside Your team
 
 To collaborate with someone outside of your identity provider's organization, you must go to [Ambassador Cloud](https://app.getambassador.io/cloud/preview/), select the preview URL, and click **Make Publicly Accessible**.  Now anyone with the link will have access to the preview URL. When they visit the preview URL, they will see the intercepted service running on your laptop. 
 

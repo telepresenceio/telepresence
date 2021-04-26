@@ -2,7 +2,7 @@
 Description: "CLI options for Telepresence to intercept traffic from your Kubernetes cluster to code running on your laptop."
 ---
 
-# Client Reference
+# Client reference
 
 The [Telepresence CLI client](../../quick-start) is used to connect Telepresence to your cluster, start and stop intercepts, and create preview URLs. All commands are run in the form of `telepresence <command>`.
 
