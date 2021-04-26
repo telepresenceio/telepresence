@@ -264,6 +264,14 @@ message License {
   string cluster_id = 3;
 }
 
+// The host and port used to connect to Ambassador Cloud.
+// Used by the agents to communicate over gRPC to have
+// Ambassador Cloud review intercepts
+message AmbassadorCloudConfig {
+  string host = 1;
+  string port = 2;
+}
+
 // 
 message AmbassadorCloudConnection {
   bool can_connect = 1;
@@ -277,9 +285,13 @@ service Manager {
   // domain that granted it) known to the manager.
   rpc GetLicense(google.protobuf.Empty) returns (License);
   
-  // canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
+  // CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
   // Ambassador Cloud
   rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
+
+  // GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
+  // by the agents.
+  rpc GetCloudConfig(google.protobuf.Empty) returns (AmbassadorCloudConfig);
 
   // Presence
 

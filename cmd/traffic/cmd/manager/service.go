@@ -91,6 +91,12 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 	return &rpc.AmbassadorCloudConnection{CanConnect: true}, nil
 }
 
+// GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
+// the agents)
+func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
+	return &rpc.AmbassadorCloudConfig{Host: m.env.SystemAHost, Port: m.env.SystemAPort}, nil
+}
+
 // ArriveAsClient establishes a session between a client and the Manager.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
