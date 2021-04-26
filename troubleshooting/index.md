@@ -3,19 +3,19 @@ description: "Troubleshooting issues related to Telepresence."
 ---
 # Troubleshooting
 
-## Creating an Intercept Did Not Generate a Preview URL
+## Creating an intercept did not generate a preview URL
 
 Preview URLs are only generated when you are logged into Ambassador Cloud, so that you can use it to manage all your preview URLs. When not logged in, the intercept will not generate a preview URL and will proxy all traffic.  Remove the intercept with `telepresence leave [deployment name]`, run `telepresence login` to login to Ambassador Cloud, then recreate the intercept. See the [intercepts how-to doc](../howtos/intercepts) for more details.
 
-## Error on Accessing Preview URL: `First record does not look like a TLS handshake`
+## Error on accessing preview URL: `First record does not look like a TLS handshake`
 
 The service you are intercepting is likely not using TLS, however when configuring the intercept you indicated that it does use TLS. Remove the intercept with `telepresence leave [deployment name]` and recreate it, setting `TLS` to `n`. Telepresence tries to intelligently determine these settings for you when creating an intercept and offer them as defaults, but odd service configurations might cause it to suggest the wrong settings.
 
-## Error on Accessing Preview URL: Detected a 301 Redirect Loop
+## Error on accessing preview URL: Detected a 301 Redirect Loop
 
 If your ingress is set to redirect HTTP requests to HTTPS and your web app uses HTTPS, but you configure the intercept to not use TLS, you will get this error when opening the preview URL.  Remove the intercept with `telepresence leave [deployment name]` and recreate it, selecting the correct port and setting `TLS` to `y` when prompted.
 
-## Your GitHub Organization Isn't Listed
+## Your GitHub organization isn't listed
 
 Ambassador Cloud needs access granted to your GitHub organization as a third-party OAuth app. If an org isn't listed during login then the correct access has not been granted.
 
@@ -27,7 +27,7 @@ The org owner can go to the **GitHub menu** → **Your organizations** → **[or
 
 GitHub's documentation provides more detail about [managing access granted to third-party applications](https://docs.github.com/en/github/authenticating-to-github/connecting-with-third-party-applications) and [approving access to apps](https://docs.github.com/en/github/setting-up-and-managing-organizations-and-teams/approving-oauth-apps-for-your-organization).
 
-### Granting or Requesting Access on Initial Login
+### Granting or requesting access on initial login
 
 When using GitHub as your identity provider, the first time you login to Ambassador Cloud GitHub will ask to authorize Ambassador Labs to access your orgs and certain user data.
 
