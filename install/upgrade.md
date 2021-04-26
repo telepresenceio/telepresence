@@ -5,7 +5,7 @@ description: "How to upgrade your installation of Telepresence and install previ
 import QSTabs from '../quick-start/qs-tabs'
 import OldVersionTabs from './old-version-tabs'
 
-# Upgrade Telepresence
+# Upgrade
 
 <div class="docs-article-toc">
 <h3>Contents</h3>
