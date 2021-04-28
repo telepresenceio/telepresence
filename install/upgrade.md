@@ -11,7 +11,7 @@ import OldVersionTabs from './old-version-tabs'
 <h3>Contents</h3>
 
 * [Upgrade Process](#upgrade-process)
-* [Installing older versions of Telepresence](#installing-older-versions-of-telepresence)
+* [Installing Older Versions of Telepresence](#installing-older-versions-of-telepresence)
 * [Migrating from Telepresence 1 to Telepresence 2](#migrating-from-telepresence-1-to-telepresence-2)
 
 </div>
