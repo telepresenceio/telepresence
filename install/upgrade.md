@@ -11,7 +11,7 @@ import OldVersionTabs from './old-version-tabs'
 <h3>Contents</h3>
 
 * [Upgrade Process](#upgrade-process)
-* [Installing Older Versions of Telepresence](#installing-older-versions-of-telepresence)
+* [Installing older versions of Telepresence](#installing-older-versions-of-telepresence)
 * [Migrating from Telepresence 1 to Telepresence 2](#migrating-from-telepresence-1-to-telepresence-2)
 
 </div>
@@ -21,7 +21,7 @@ The Telepresence CLI will periodically check for new versions and notify you whe
 
 <QSTabs/>
 
-After upgrading your CLI, the Traffic Manager **must be uninstalled** from your cluster. This can be done using `telepresence uninstall --everything` or by `kubectl delete svc,deploy traffic-manager`. The next time you run a `telepresence` command it will deploy an upgraded Traffic Manager.
+After upgrading your CLI, the Traffic Manager **must be uninstalled** from your cluster. This can be done using `telepresence uninstall --everything` or by `kubectl delete svc,deploy -n ambassador traffic-manager`. The next time you run a `telepresence` command it will deploy an upgraded Traffic Manager.
 
 ## Installing older versions of Telepresence
 
