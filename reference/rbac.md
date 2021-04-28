@@ -1,10 +1,10 @@
 import Alert from '@material-ui/lab/Alert';
 
 # Telepresence RBAC
-The intention of this document is to provide a template for securing and limiting the permissions of Telepresence Two.
-This documentation will not cover the full extent of permissions necessary to administrate Telepresence Two components in a cluster.  [Telepresence administration](/products/telepresence/) requires permissions for creating Service Accounts, ClusterRoles and ClusterRoleBindings, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator.
+The intention of this document is to provide a template for securing and limiting the permissions of Telepresence 2.
+This documentation will not cover the full extent of permissions necessary to administrate Telepresence 2 components in a cluster.  [Telepresence administration](/products/telepresence/) requires permissions for creating Service Accounts, ClusterRoles and ClusterRoleBindings, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator.
 
-There are 2 general categories for cluster permissions with respect to Telepresence Two.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
+There are two general categories for cluster permissions with respect to Telepresence 2.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
 
 In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside of the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
 
