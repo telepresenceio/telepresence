@@ -132,6 +132,17 @@ func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- sco
 	)
 }
 
+func (l *loginExecutor) tokenErrCB(ctx context.Context, err error) error {
+	if retErr, isRetErr := err.(*oauth2.RetrieveError); isRetErr && retErr.Response.StatusCode/100 == 4 {
+		// Treat an HTTP 4XX response from the IDP as "this token is invalid", and forget
+		// about the token, at least for this run.  Don't forget about it for all runs,
+		// because we'll use its validity to check whether we're logged-out or just have an
+		// expired login.
+		l.tokenSource = nil
+	}
+	return err
+}
+
 func (l *loginExecutor) tokenCB(ctx context.Context, tokenInfo *oauth2.Token) error {
 	if err := l.SaveTokenFunc(ctx, tokenInfo); err != nil {
 		return fmt.Errorf("could not save access token to user cache: %w", err)
@@ -193,7 +204,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			return nil, err
 		}
 		l.resetRefreshTimerUnlocked(time.Until(tokenInfo.Expiry))
-		return newTokenSource(ctx, l.oauth2Config, tokenInfo, l.tokenCB), nil
+		return newTokenSource(ctx, l.oauth2Config, l.tokenCB, l.tokenErrCB, tokenInfo), nil
 	}()
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -332,7 +343,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return fmt.Errorf("error while exchanging code for token: %w", err)
 		}
 
-		l.tokenSource = newTokenSource(ctx, l.oauth2Config, token, l.tokenCB)
+		l.tokenSource = newTokenSource(ctx, l.oauth2Config, l.tokenCB, l.tokenErrCB, token)
 		if err := l.tokenCB(ctx, token); err != nil {
 			return err
 		}

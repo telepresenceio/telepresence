@@ -1,7 +1,9 @@
 # Changelog
 
 ### 2.2.1 (TBD)
-- Bugfix: Improve ambassador namespace detection that was trying to create the namespace even when the namespace existed, which was an undesired rbac escalation for operators.
+
+- Bugfix: Improve `ambassador` namespace detection that was trying to create the namespace even when the namespace existed, which was an undesired RBAC escalation for operators.
+- Bugfix: Telepresence will now no longer generate excessive traffic trying repeatedly to exchange auth tokens with Ambassador Cloud.  This could happen when upgrading from <2.1.4 if you had an expired `telepresence login` from before upgrading.
 
 ### 2.2.0 (April 19, 2021)
 
