@@ -22,7 +22,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
@@ -106,19 +105,6 @@ func NewLoginExecutor(
 	ret.loginMu.Lock()
 	ret.resetRefreshTimerUnlocked(0)
 	return ret
-}
-
-// EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
-func EnsureLoggedIn(ctx context.Context, executor LoginExecutor) (connector.LoginResult_Code, error) {
-	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
-		return connector.LoginResult_OLD_LOGIN_REUSED, nil
-	}
-
-	if err := executor.Login(ctx); err != nil {
-		return connector.LoginResult_UNSPECIFIED, err
-	}
-
-	return connector.LoginResult_NEW_LOGIN_SUCCEEDED, nil
 }
 
 func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
