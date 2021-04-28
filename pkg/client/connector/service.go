@@ -237,11 +237,13 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 
 func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
 	ctx = s.callCtx(ctx, "Login")
-	resultCode, err := auth.EnsureLoggedIn(ctx, s.loginExecutor)
-	if err != nil {
+	if _, err := s.loginExecutor.GetToken(ctx); err == nil {
+		return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
+	}
+	if err := s.loginExecutor.Login(ctx); err != nil {
 		return nil, err
 	}
-	return &rpc.LoginResult{Code: resultCode}, nil
+	return &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}, nil
 }
 
 func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
