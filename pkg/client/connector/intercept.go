@@ -289,7 +289,8 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcN
 	}
 
 	dlog.Infof(c, "waiting for agent for %s %q.%s", kind, agentName, namespace)
-	agent, err := tm.waitForAgent(c, agentName)
+	agent, err := tm.waitForAgent(c, agentName, namespace)
+	dlog.Infof(c, "agent found for %s %q %s", kind, agent.Name, agent.Namespace)
 	if err != nil {
 		dlog.Error(c, err)
 		return &rpc.InterceptResult{
@@ -345,7 +346,7 @@ func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string)
 	}
 }
 
-func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manager.AgentInfo, error) {
+func (tm *trafficManager) waitForAgent(ctx context.Context, name string, namespace string) (*manager.AgentInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, client.GetConfig(ctx).Timeouts.AgentInstall) // installing a new agent can take some time
 	defer cancel()
 
@@ -365,7 +366,7 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manag
 
 		var agentList []*manager.AgentInfo
 		for _, agent := range snapshot.Agents {
-			if agent.Name == name {
+			if agent.Name == name && agent.Namespace == namespace {
 				agentList = append(agentList, agent)
 			}
 		}
