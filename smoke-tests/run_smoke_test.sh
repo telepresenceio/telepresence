@@ -100,7 +100,7 @@ get_preview_url() {
 get_intercept_id() {
     local header=`grep 'x-telepresence-intercept-id' <<<"$output"`
     #local header=`echo $output | grep 'x-telepresence-intercept-id'`
-    local regex="regexp\(\"([a-zA-z0-9-]+:dataprocessingnodeservice)\""
+    local regex="regexp\(\"([a-zA-z0-9-]+:dataprocessingservice)\""
     if [[ $header =~ $regex ]]; then
         interceptid="${BASH_REMATCH[1]}"
     else
@@ -112,7 +112,7 @@ get_intercept_id() {
 # Checks to see if traffic agent is present + proprietary or dummy based on inputs
 is_prop_traffic_agent() {
     local present=${1}
-    local image=`kubectl get deployment dataprocessingnodeservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}"`
+    local image=`kubectl get deployment dataprocessingservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}"`
     if [[ -z $image ]]; then
         echo "There is no traffic-agent sidecar and there should be"
         exit 1
@@ -136,37 +136,18 @@ is_prop_traffic_agent() {
     fi
 }
 
-# Waits for ambassador to be up + serving traffic to our dataprocessingnodeservice app
-wait_for_ambassador() {
-    echo 'Get external ip for ambassador'
-    for run in {1..30}; do
-        AMBASSADOR_SERVICE_IP=`kubectl get service -n ambassador ambassador -o jsonpath='{.status.loadBalancer.ingress[0].ip}'`
-        local output=`curl "${curl_opts[@]}" --connect-timeout 5 $AMBASSADOR_SERVICE_IP | grep 'green'`
-        if [[ -n $output ]]; then
-            return 0
-        fi
-        sleep 10
-    done
-}
-
 # Clones amb-code-quickstart-app and applies k8s manifests
 setup_demo_app() {
-    echo "Cloning amb-code-quickstart-app to /tmp/amb-code-quickstart-app"
-    git clone git@github.com:datawire/amb-code-quickstart-app.git /tmp/amb-code-quickstart-app > $output_location 2>&1
-    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/1-aes-crds.yml > $output_location
-    kubectl wait --for condition=established --timeout=90s crd -lproduct=aes > $output_location
-    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location
-    kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s > $output_location
-    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/edgy-corp-web-app.yaml > $output_location
-    kubectl wait -n default deploy dataprocessingnodeservice --for condition=available --timeout=90s > $output_location
+    echo "Applying quick start apps to the cluster"
+    kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
+    kubectl wait -n default deploy dataprocessingservice --for condition=available --timeout=90s > $output_location
+    kubectl wait -n default deploy verylargejavaservice --for condition=available --timeout=90s > $output_location
+    kubectl wait -n default deploy verylargedatastore --for condition=available --timeout=90s > $output_location
 }
 
 # Deletes amb-code-quickstart-app *only* if it was created by this script
 cleanup_demo_app() {
-    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/edgy-corp-web-app.yaml > $output_location
-    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location
-    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/1-aes-crds.yml > $output_location
-    rm -rf /tmp/amb-code-quickstart-app
+    kubectl delete -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
 }
 
 
@@ -223,11 +204,11 @@ echo "Using context: "
 kubectl config current-context
 echo
 
-kubectl get svc -n ambassador ambassador > $output_location 2>&1
+kubectl get svc -n default verylargejavaservice > $output_location 2>&1
 if [[ "$?" == 0 ]]; then
-    echo "Ambassador is installed, so assuming demo apps are already present"
+    echo "verylargejavaservice is present, so assuming rest of demo apps are already present"
 else
-    echo "Will setup Ambassador + demo app"
+    echo "Will setup demo app"
     INSTALL_DEMO=true
     read -p "Would you like it to be cleaned up if all tests pass? (y/n)?" choice
     case "$choice" in
@@ -254,10 +235,24 @@ if [[ -n "$INSTALL_DEMO" ]]; then
     setup_demo_app
 fi
 
-wait_for_ambassador
-echo $AMBASSADOR_SERVICE_IP
-# Verify that service is running in the cluster
-output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'green'`
+VERYLARGEJAVASERVICE=verylargejavaservice.default:8080
+$TELEPRESENCE connect > $output_location
+
+# When the sevice is initially deployed, it can take a few seconds (~7)
+# before the service is actually running, so we build in a few retries
+# instead of jumping straight to verify_output_empty which exits upon
+# failure
+for i in {1..20}
+do
+    output=`curl -m 1 "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'green'`
+    if [ -n "$output" ]; then
+        break
+    else
+        echo "output from verylargejavaservice not found so sleeping" > $output_location
+        sleep 1
+    fi
+done
+output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'green'`
 verify_output_empty "${output}" false
 
 STEP=1
@@ -276,28 +271,28 @@ finish_step
 
 curl "${curl_opts[@]}" localhost:3000 > $output_location
 if [[ "$?" != 0 ]]; then
-    echo "Ensure you have a local version of dataprocessingnodeservice running on port 3000"
+    echo "Ensure you have a local version of dataprocessingservice running on port 3000"
     exit
 fi
 
 # General note about intercepts, I've found sleeping for 1 second gives time for the
 # commands to run and things to propagate. Could probably be optimized to add automatic
 # retries but was trying to keep it simple
-$TELEPRESENCE intercept dataprocessingnodeservice -p 3000 > $output_location
+$TELEPRESENCE intercept dataprocessingservice -p 3000 > $output_location
 sleep 1
 
 is_prop_traffic_agent false
 
-output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
-$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false --mechanism=tcp > $output_location
+$TELEPRESENCE leave dataprocessingservice > $output_location
+$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --mechanism=tcp > $output_location
 sleep 1
 
 is_prop_traffic_agent false
 
-output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" false
 verify_logout
 
@@ -307,7 +302,7 @@ finish_step
 #### Step 3 - Verify intercept can be seen ####
 ###############################################
 
-output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
+output=`$TELEPRESENCE list | grep 'dataprocessingservice: intercepted'`
 verify_output_empty "${output}" false
 
 finish_step
@@ -316,8 +311,8 @@ finish_step
 #### Step 4 - Verify intercept can be left ####
 ###############################################
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
-output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
+$TELEPRESENCE leave dataprocessingservice > $output_location
+output=`$TELEPRESENCE list | grep 'dataprocessingservice: intercepted'`
 verify_output_empty "${output}" true
 
 finish_step
@@ -326,7 +321,7 @@ finish_step
 #### Step 5 - Verify can access svc        ####
 ###############################################
 
-curl "${curl_opts[@]}" dataprocessingnodeservice.default:3000 > $output_location
+curl "${curl_opts[@]}" dataprocessingservice.default:3000 > $output_location
 if [[ "$?" != 0 ]]; then
     echo "Unable to access service after leaving intercept"
     exit
@@ -345,15 +340,15 @@ if [[ ! -z $TELEPRESENCE_AGENT_OVERRIDE ]]; then
     $TELEPRESENCE connect > $output_location
 fi
 
-$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=true --http-match=all <<<$'ambassador.ambassador\n80\nN\n' > $output_location
+$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n' > $output_location
 sleep 1
 is_prop_traffic_agent true
 
 # Verify intercept works
-output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
+output=`$TELEPRESENCE list | grep 'dataprocessingservice: intercepted'`
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
+$TELEPRESENCE leave dataprocessingservice > $output_location
 # Verify user can logout without error
 # Find a better way to determine if a user is logged in
 output=`$TELEPRESENCE logout`
@@ -366,7 +361,7 @@ finish_step
 ###############################################
 
 login
-output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 <<<$'ambassador.ambassador\n80\nN\n'`
+output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 <<<$'verylargejavaservice.default\n8080\nN\n'`
 sleep 1
 has_preview_url true
 is_prop_traffic_agent true
@@ -380,58 +375,58 @@ finish_step
 has_intercept_id true
 has_preview_url true
 get_intercept_id
-output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" true
 
 # Gotta figure out how to get a cookie for this to work
 #output=`curl $previewurl | grep 'blue'`
 #verify_output_empty "${output}" false
-output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
+$TELEPRESENCE leave dataprocessingservice > $output_location
 finish_step
 
 ###############################################################
 #### Step 9 - licensed selective intercept w/o preview url ####
 ###############################################################
 
-output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false`
+output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false`
 sleep 1
 has_intercept_id true
 has_preview_url false
-output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
+$TELEPRESENCE leave dataprocessingservice > $output_location
 finish_step
 
 ###############################################
 #### Step 10 - licensed intercept all      ####
 ###############################################
 
-output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all <<<$'ambassador.ambassador\n80\nN\n'`
+output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n'`
 sleep 1
 has_intercept_id false
 has_preview_url true
-output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
+$TELEPRESENCE leave dataprocessingservice > $output_location
 finish_step
 
 ##########################################################
 #### Step 11 - licensed intercept all w/o preview url ####
 ##########################################################
 
-output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all --preview-url=false`
+output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all --preview-url=false`
 sleep 1
 has_intercept_id false
 has_preview_url false
-output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
+output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingnodeservice > $output_location
+$TELEPRESENCE leave dataprocessingservice > $output_location
 finish_step
 
 
