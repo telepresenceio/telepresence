@@ -18,7 +18,7 @@
     "type": "git",
     "url": "git+https://github.com/telepresenceio/telepresence.git"
   },
-  "author": "Datawire",
+  "author": "Ambassador Labs",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/telepresenceio/telepresence/issues"

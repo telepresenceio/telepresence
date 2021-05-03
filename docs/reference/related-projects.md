@@ -1,6 +1,6 @@
 # Related Projects
 
-Datawire has a number of open source projects that are designed to improve the developer workflow on Kubernetes.
+Ambassador Labs has a number of open source projects that are designed to improve the developer workflow on Kubernetes.
 
 * [Forge](https://forge.sh) allows developers to define and deploy multi-container applications into Kubernetes, from source, incredibly fast.
 

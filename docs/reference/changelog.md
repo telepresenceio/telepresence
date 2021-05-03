@@ -118,7 +118,7 @@ Backwards incompatible changes:
 * Telepresence uses a new strategy to detect an OpenShift cluster.
   If `openshift.io` is present in the output of `kubectl api-versions`, Telepresence treats the cluster as OpenShift.
   It prefers `oc` over `kubectl` and uses the OpenShift-specific image as above.
-  Thanks to Bartosz Majsak for the original patch; blame to the Datawire team for errors in the ultimate implementation.
+  Thanks to Bartosz Majsak for the original patch; blame to the Ambassador Labs team for errors in the ultimate implementation.
   ([#1139](https://github.com/telepresenceio/telepresence/issues/1139))
 
 Features:

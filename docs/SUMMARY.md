@@ -49,4 +49,4 @@
 
 * [Ask on Slack](https://d6e.co/slack)
 * [File a GitHub Issue](https://github.com/telepresenceio/telepresence/issues/new)
-* [Visit Datawire.io](https://www.datawire.io)
+* [Visit Ambassador Labs](https://www.getambassador.io)
