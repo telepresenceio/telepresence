@@ -25,7 +25,7 @@ case "${OS}" in
         else
             brew update > /dev/null
             brew install python3 || brew upgrade python || brew link --overwrite python
-            brew cask install osxfuse
+            brew install --cask osxfuse
             brew install sshfs torsocks
             pip3 install virtualenv
         fi

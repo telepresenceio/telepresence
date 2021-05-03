@@ -77,5 +77,5 @@ gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 # enables that.
 if type -p docker; then
     # Only do this if Docker is installed, though, otherwise it's an error.
-    gcloud --quiet docker --authorize-only
+    gcloud auth configure-docker
 fi
