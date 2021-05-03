@@ -22,7 +22,7 @@ This method does have some limitations of its own, however:
 
 * Fully qualified Kubernetes domains like `yourservice.default.svc.cluster.local` won't resolve correctly on Linux.
   `yourservice` and `yourservice.default` will resolve correctly, however.
-  See [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.
+  See [the relevant ticket](https://github.com/telepresenceio/telepresence/issues/161) for details.
 * Only one instance of `telepresence` using `vpn-tcp` should be running at a time on any given developer machine. Running other
   instances with other proxying methods concurrently is possible.
 * VPNs may interfere with `telepresence`, and vice-versa: don't use both at once.
@@ -78,4 +78,4 @@ What _does not_ work is using the full path to `/bin/sh` or `/usr/bin/env` or si
 
 Carefully avoiding protected binaries is the only reliable workaround. One hackish approach would be to create a directory tree containing copies of the binaries in the protected directories in a stable location (e.g., `~/bin_copy`). That would allow changing all tools and scripts to use those unprotected copies; this would have to be done in production as well as on your development machine. It would be much easier to use `--method vpn-tcp` instead.
 
-See [issue 268](https://github.com/datawire/telepresence/issues/268) for one user's experience.
+See [issue 268](https://github.com/telepresenceio/telepresence/issues/268) for one user's experience.

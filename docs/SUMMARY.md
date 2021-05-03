@@ -48,5 +48,5 @@
 ## Need Help?
 
 * [Ask on Slack](https://d6e.co/slack)
-* [File a GitHub Issue](https://github.com/datawire/telepresence/issues/new)
+* [File a GitHub Issue](https://github.com/telepresenceio/telepresence/issues/new)
 * [Visit Datawire.io](https://www.datawire.io)

@@ -2,7 +2,7 @@
 
 ### Ensuring Telepresence works well for everyone
 
-We're always looking to collect more feedback and learn more about your use case for Telepresence. If you have questions, ask them in our [Slack chatroom](https://d6e.co/slack) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).
+We're always looking to collect more feedback and learn more about your use case for Telepresence. If you have questions, ask them in our [Slack chatroom](https://d6e.co/slack) or [file an issue on GitHub](https://github.com/telepresenceio/telepresence/issues/new).
 
 ### What other people are saying about Telepresence
 
@@ -36,4 +36,4 @@ This repo is a template to get started writing golang applications designed to r
 ##### [Towards a better service development story](https://blog.ironcladapp.com/towards-a-better-service-development-story-bae19a9b3c5a) - Dylan Scott
 The team at Ironclad is using Telepresnece to develop individual Kubernetes services and improve their development workflow on Kubernetes. 
 
-###### If you're interested in sharing your use case for Telepresence, we'd love to hear it! You can reach out to us in the [Slack chatroom](https://d6e.co/slack) or [submit a pull request](https://github.com/datawire/telepresence/pulls).
+###### If you're interested in sharing your use case for Telepresence, we'd love to hear it! You can reach out to us in the [Slack chatroom](https://d6e.co/slack) or [submit a pull request](https://github.com/telepresenceio/telepresence/pulls).

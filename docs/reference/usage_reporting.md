@@ -23,7 +23,7 @@ The following information is collected and sent during version checks:
 
 The reporting code can be found in [`telepresence/usage_tracking.py`][1].
 
-[1]: https://github.com/datawire/telepresence/blob/master/telepresence/usage_tracking.py
+[1]: https://github.com/telepresenceio/telepresence/blob/master/telepresence/usage_tracking.py
 
 ## When is it reported?
 

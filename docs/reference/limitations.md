@@ -51,4 +51,4 @@ sudo firewall-cmd --permanent --zone=trusted --add-source=172.17.0.0/16
 sudo firewall-cmd --reload
 ```
 
-For more details see [issue # 464](https://github.com/datawire/telepresence/issues/464).
+For more details see [issue # 464](https://github.com/telepresenceio/telepresence/issues/464).
