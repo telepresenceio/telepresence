@@ -27,9 +27,6 @@ Abhishek Tiwari, head of engineering at Isentia, reviews 10 open source Kubernet
 ##### [Productive Dev Environments for Kubernetes](https://youtu.be/4cct9JgItYQ) - Philip Lombardi
 This talk from the NYC Kubernetes meetup covers strategies and trade-offs for setting up productive and realistic development environments for microservices and includes a demo of Telepresence.
 
-##### [Running Spark Drivers with Telepresence](https://www.datawire.io/running-spark-drivers-with-telepresence/) - Nate Buesgens
-The team at [vizual.ai](https://www.vizual.ai) uses Spark for analyzing and modeling clickstream data, Kubernetes for orchestrating their Spark cluster, and Telepresence to make the Spark application development workflow more efficient.
-
 ##### [Writing golang applications designed to run in Kubernetes](https://github.com/number101010/go-kubernetes-vscode-dev) - number101010
 This repo is a template to get started writing golang applications designed to run in Kubernetes and uses Telepresence to mimic the in-cluster environment.
 
