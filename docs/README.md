@@ -1,6 +1,27 @@
 # Telepresence GitBook
 
-Just cloned? Set up GitBook to get started.
+Just cloned?
+
+First, make sure you have `node` 10.x or older; the GitBook CLI is
+abandonware and uses old versions libraries that don't work on Node 12
+or newer (see https://github.com/GitbookIO/gitbook-cli/issues/110).
+If you do have too new of a `node`, you'll get errors like:
+
+    /home/…/docs/node_modules/npm/node_modules/graceful-fs/polyfills.js:287
+          if (cb) cb.apply(this, arguments)
+                     ^
+
+    TypeError: cb.apply is not a function
+        at /home/…/docs/node_modules/npm/node_modules/graceful-fs/polyfills.js:287:18
+
+Fortunately, Node 10.x is an LTS release code-named "Dubnium", and you
+can quite-likely get it from your package manager; for example, on
+Arch Linux and derivatives:
+
+    sudo pacman -S nodejs-lts-dubnium
+
+Once you have a suitably ancient `node` installed, set up GitBook to
+get started.
 
     npm install
 
