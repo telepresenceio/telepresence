@@ -2,6 +2,7 @@
 
 {% block head %}
     {{ super() }}
+    <link rel="canonical" href="https://www.telepresence.io/{{ file.path | replace('.md', '.html') | replace('/index.html', '/') }}"/>
     <link rel="stylesheet" href="/styles/home.css">
 {% endblock %}
 
