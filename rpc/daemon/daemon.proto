@@ -57,7 +57,7 @@ message OutboundInfo {
   // same client as the user daemon.
   manager.SessionInfo session = 2;
 
-  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  // kube_dns_ip is the IP address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
   bytes kube_dns_ip = 3;
 
   // service_subnet is the Kubernetes service subnet

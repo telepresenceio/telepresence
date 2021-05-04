@@ -247,7 +247,7 @@ type OutboundInfo struct {
 	// session makes it possible for the root daemon to identify itself as the
 	// same client as the user daemon.
 	Session *manager.SessionInfo `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
-	// kube_dns_ip is the IP address of the kube-dns.kube-system service,
+	// kube_dns_ip is the IP address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
 	KubeDnsIp []byte `protobuf:"bytes,3,opt,name=kube_dns_ip,json=kubeDnsIp,proto3" json:"kube_dns_ip,omitempty"`
 	// service_subnet is the Kubernetes service subnet
 	ServiceSubnet *IPNet `protobuf:"bytes,4,opt,name=service_subnet,json=serviceSubnet,proto3" json:"service_subnet,omitempty"`

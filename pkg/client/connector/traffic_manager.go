@@ -520,26 +520,34 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 	var nodes []kates.Node
 	var cidr *net.IPNet
 
-	svc := kates.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
+	dnsServices := []metav1.ObjectMeta{
+		{
 			Name:      "kube-dns",
 			Namespace: "kube-system",
 		},
+		{
+			Name:      "dns-default",
+			Namespace: "openshift-dns",
+		},
 	}
-	err := tm.client.Get(c, &svc, &svc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kube-dns.kube-system service")
+	var kubeDNS net.IP
+	for _, dnsService := range dnsServices {
+		svc := kates.Service{TypeMeta: metav1.TypeMeta{Kind: "Service"}, ObjectMeta: dnsService}
+		if err := tm.client.Get(c, &svc, &svc); err == nil {
+			kubeDNS = iputil.Parse(svc.Spec.ClusterIP)
+			break
+		}
 	}
-	kubeDNS := iputil.Parse(svc.Spec.ClusterIP)
+
+	if kubeDNS == nil {
+		return nil, fmt.Errorf("failed to get IP of cluster's DNS service")
+	}
 
 	// make an attempt to create a service with ClusterIP that is out of range and then
 	// check the error message for the correct range as suggested tin the second answer here:
 	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
 	// This requires an additional permission to create a service, which we might not have
-	svc = kates.Service{
+	svc := kates.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
 		},
@@ -553,7 +561,7 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 	}
 
 	var serviceSubnet *daemon.IPNet
-	if err = tm.client.Create(c, &svc, &svc); err != nil {
+	if err := tm.client.Create(c, &svc, &svc); err != nil {
 		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
 			_, cidr, err = net.ParseCIDR(match[1])
 			if err != nil {
@@ -578,14 +586,14 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 		serviceSubnet = &daemon.IPNet{Ip: kubeDNS.Mask(mask), Mask: int32(ones)}
 	}
 
-	if err = tm.client.List(c, kates.Query{Kind: "Node"}, &nodes); err != nil {
+	if err := tm.client.List(c, kates.Query{Kind: "Node"}, &nodes); err != nil {
 		return nil, fmt.Errorf("failed to get nodes: %v", err)
 	}
 	podCIDRs := make([]*daemon.IPNet, 0, len(nodes)+1)
 	for i := range nodes {
 		node := &nodes[i]
 		for _, podCIDR := range node.Spec.PodCIDRs {
-			_, cidr, err = net.ParseCIDR(podCIDR)
+			_, cidr, err := net.ParseCIDR(podCIDR)
 			if err != nil {
 				dlog.Errorf(c, "unable to parse podCIDR %q in %s.%s", podCIDR, node.Name, node.Namespace)
 				continue
