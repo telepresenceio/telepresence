@@ -192,7 +192,7 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
             "Telepresence: local development proxied to a remote Kubernetes "
             "cluster.\n\n"
             "Documentation: https://telepresence.io\n"
-            "Real-time help: https://d6e.co/slack\n"
+            "Real-time help: https://a8r.io/slack\n"
             "Issue tracker: https://github.com/datawire/telepresence/issues\n"
             "\n" + HELP_EXAMPLES + "\n\n"
         )

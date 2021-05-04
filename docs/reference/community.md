@@ -2,7 +2,7 @@
 
 ### Ensuring Telepresence works well for everyone
 
-We're always looking to collect more feedback and learn more about your use case for Telepresence. If you have questions, ask them in our [Slack chatroom](https://d6e.co/slack) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).
+We're always looking to collect more feedback and learn more about your use case for Telepresence. If you have questions, ask them in our [Slack chatroom](https://a8r.io/slack) or [file an issue on GitHub](https://github.com/telepresenceio/telepresence/issues/new).
 
 ### What other people are saying about Telepresence
 
@@ -27,13 +27,10 @@ Abhishek Tiwari, head of engineering at Isentia, reviews 10 open source Kubernet
 ##### [Productive Dev Environments for Kubernetes](https://youtu.be/4cct9JgItYQ) - Philip Lombardi
 This talk from the NYC Kubernetes meetup covers strategies and trade-offs for setting up productive and realistic development environments for microservices and includes a demo of Telepresence.
 
-##### [Running Spark Drivers with Telepresence](https://www.datawire.io/running-spark-drivers-with-telepresence/) - Nate Buesgens
-The team at [vizual.ai](https://www.vizual.ai) uses Spark for analyzing and modeling clickstream data, Kubernetes for orchestrating their Spark cluster, and Telepresence to make the Spark application development workflow more efficient.
-
 ##### [Writing golang applications designed to run in Kubernetes](https://github.com/number101010/go-kubernetes-vscode-dev) - number101010
 This repo is a template to get started writing golang applications designed to run in Kubernetes and uses Telepresence to mimic the in-cluster environment.
 
 ##### [Towards a better service development story](https://blog.ironcladapp.com/towards-a-better-service-development-story-bae19a9b3c5a) - Dylan Scott
 The team at Ironclad is using Telepresnece to develop individual Kubernetes services and improve their development workflow on Kubernetes. 
 
-###### If you're interested in sharing your use case for Telepresence, we'd love to hear it! You can reach out to us in the [Slack chatroom](https://d6e.co/slack) or [submit a pull request](https://github.com/datawire/telepresence/pulls).
+###### If you're interested in sharing your use case for Telepresence, we'd love to hear it! You can reach out to us in the [Slack chatroom](https://a8r.io/slack) or [submit a pull request](https://github.com/telepresenceio/telepresence/pulls).

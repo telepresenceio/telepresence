@@ -23,7 +23,7 @@ sudo dnf upgrade telepresence
 ```
 
 ### Telepresence 2 for Teams 
-Telepresence 2 is open source and available to [preview now](https://www.getambassador.io/docs/latest/telepresence/quick-start/). Rewritten in Go to be faster and more resilient, Telepresence 2 has a [new architecture](https://www.getambassador.io/docs/latest/telepresence/reference/architecture/) to better serve Kubernetes development teams with multiple users. [Preview it today](https://www.getambassador.io/docs/latest/telepresence/quick-start/) and [share your feedback](https://d6e.co/slack) with the team. 
+Telepresence 2 is open source and available to [preview now](https://www.getambassador.io/docs/latest/telepresence/quick-start/). Rewritten in Go to be faster and more resilient, Telepresence 2 has a [new architecture](https://www.getambassador.io/docs/latest/telepresence/reference/architecture/) to better serve Kubernetes development teams with multiple users. [Preview it today](https://www.getambassador.io/docs/latest/telepresence/quick-start/) and [share your feedback](https://a8r.io/slack) with the team. 
 
 ### More
 
@@ -31,4 +31,4 @@ Take a look at the [changelog](changelog) to see what's new.
 
 See what others are up to, including tools for scaling Telepresence to your teams, on the [community page](community).
 
-Get involved! Find us in the [Slack chatroom](https://d6e.co/slack) or [submit a pull request](https://github.com/datawire/telepresence/pulls).
+Get involved! Find us in the [Slack chatroom](https://a8r.io/slack) or [submit a pull request](https://github.com/telepresenceio/telepresence/pulls).

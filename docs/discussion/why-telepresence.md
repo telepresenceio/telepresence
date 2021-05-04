@@ -69,4 +69,4 @@ Many web frameworks also do automatic code reload, in which case you won't even 
 
 ### Other options
 
-For more discussion of the solution space for local development see the article [Development Environments for Microservices](https://www.datawire.io/guide/deployment/development-environments-microservices/).
+For more discussion of the solution space for local development see the article [Development Environments for Microservices](https://dzone.com/articles/development-environments-for-microservices).

@@ -12,7 +12,7 @@ To run Telepresence inside WSL:
 
 Caveats:
 
-* At the moment volumes are not supported on Windows, but [we plan on fixing this](https://github.com/datawire/telepresence/issues/115).
+* At the moment volumes are not supported on Windows, but [we plan on fixing this](https://github.com/telepresenceio/telepresence/issues/115).
 * Only the `inject-tcp` method is supported.
 * Network proxying won't affect Windows binaries.
   You can however edit your files in a Windows program (and compile Java or .NET packages), and then run them with the Linux interpreters or VMs.

@@ -16,13 +16,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/datawire/telepresence.git"
+    "url": "git+https://github.com/telepresenceio/telepresence.git"
   },
-  "author": "Datawire",
+  "author": "Ambassador Labs",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/datawire/telepresence/issues"
+    "url": "https://github.com/telepresenceio/telepresence/issues"
   },
-  "homepage": "https://github.com/datawire/telepresence#readme",
+  "homepage": "https://telepresence.io/",
   "devDependencies": {}
 }

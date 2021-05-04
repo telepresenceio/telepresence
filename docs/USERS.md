@@ -5,7 +5,7 @@ Please include your name, company, # of developers using Telepresence, and any o
 For example:
 
 * Name: Richard Li
-* Company: Datawire
+* Company: Ambassador Labs
 * Devs using Telepresence: 10
 * "We use Telepresence daily in our development workflow for Kubernetes. Without, we'd suffer from very slow development loops."
 

@@ -1,7 +1,7 @@
 # [Documentation](https://telepresence.io) - start here!
 
 [![Build Status](https://circleci.com/gh/telepresenceio/telepresence.svg?style=shield)](https://circleci.com/gh/telepresenceio/workflows)
-[![Join the chat at https://d6e.co/slack](https://img.shields.io/badge/chat-on%20Slack-blue.svg)](https://d6e.co/slack)
+[![Join the chat at https://a8r.io/slack](https://img.shields.io/badge/chat-on%20Slack-blue.svg)](https://a8r.io/slack)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/1863/badge)](https://bestpractices.coreinfrastructure.org/projects/1863)
 
 ** Note: Telepresence 1 is being replaced by our even better [Telepresence 2](https://github.com/telepresenceio/telepresence/tree/release/v2). Please try Telepresence 2 first and report any issues as we expect this will be the default by Q2 2021. **
@@ -44,7 +44,7 @@ To know more, check the [documentation](https://www.telepresence.io/reference/us
 ## Get Involved
 
 * Follow [@telepresenceio](https://twitter.com/telepresenceio) on Twitter
-* Join the [Telepresence Slack](https://d6e.co/slack)
+* Join the [Telepresence Slack](https://a8r.io/slack)
 
 ## About Telepresence
 

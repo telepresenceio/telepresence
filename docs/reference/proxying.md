@@ -35,7 +35,7 @@ The resulting `Service` will have three DNS records you can use:
 1. `helloworld`, from a pod in the `default` namespace.
 2. `helloworld.default` anywhere in the Kubernetes cluster.
 3. `helloworld.default.svc.cluster.local` anywhere in the Kubernetes cluster.
-   This last form will not work when using `telepresence` with `--method=vpn-tcp` on Linux (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
+   This last form will not work when using `telepresence` with `--method=vpn-tcp` on Linux (see [the relevant ticket](https://github.com/telepresenceio/telepresence/issues/161) for details.)
 
 We'll check the current Kubernetes context and then start a new pod:
 
@@ -62,7 +62,7 @@ $ telepresence --run curl http://helloworld.default
 ...
 ```
 
-> **Having trouble?** Ask us a question in our [Slack chatroom](https://d6e.co/slack).
+> **Having trouble?** Ask us a question in our [Slack chatroom](https://a8r.io/slack).
 
 ### Networking access to cloud resources
 
@@ -142,5 +142,5 @@ When using `--method vpn-tcp`, Telepresence currently proxies the following:
 
 Currently unsupported:
 
-* Fully qualified Kubernetes DNS names that end with `.local`, e.g. `redis-master.default.svc.cluster.local`, won't work on Linux (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
+* Fully qualified Kubernetes DNS names that end with `.local`, e.g. `redis-master.default.svc.cluster.local`, won't work on Linux (see [the relevant ticket](https://github.com/telepresenceio/telepresence/issues/161) for details.)
 * UDP messages in any direction.
