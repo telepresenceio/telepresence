@@ -1,24 +1,24 @@
 {% extends template.self %}
 
-{% block book_sidebar %}
-<a href="/" class="logo__link">
-    <img class="logo" src="/images/telepresence-logo.png" alt="logo">
-</a>
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="/styles/home.css">
+{% endblock %}
 
-{{ super() }}
+{% block book_sidebar %}
+    <a href="/" class="logo__link">
+        <img class="logo" src="/images/telepresence-logo.png" alt="logo">
+    </a>
+    {{ super() }}
 {% endblock %}
 
 {% block page %}
-
-<link rel="stylesheet" href="/styles/home.css">
-
-<section class="banner">
-    <div class="banner__text banner__text--docs">
-        Telepresence 2 is open source and available to preview now! 
-        <a href="https://www.getambassador.io/docs/latest/telepresence/quick-start" target="_blank" class="banner__link banner__link--docs">Learn more</a> 
-        <img alt="" class="banner__icon" src="/images/arrow.inline.svg">
-    </div>
-</section>
-
-{{ super() }}
+    <section class="banner">
+        <div class="banner__text banner__text--docs">
+            Telepresence 2 is open source and available to preview now!
+            <a href="https://www.getambassador.io/docs/latest/telepresence/quick-start" target="_blank" class="banner__link banner__link--docs">Learn more</a> 
+            <img alt="" class="banner__icon" src="/images/arrow.inline.svg">
+        </div>
+    </section>
+    {{ super() }}
 {% endblock %}
