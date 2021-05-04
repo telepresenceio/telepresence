@@ -47,6 +47,6 @@
 
 ## Need Help?
 
-* [Ask on Slack](https://d6e.co/slack)
+* [Ask on Slack](https://a8r.io/slack)
 * [File a GitHub Issue](https://github.com/telepresenceio/telepresence/issues/new)
 * [Visit Ambassador Labs](https://www.getambassador.io)

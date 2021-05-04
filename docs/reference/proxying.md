@@ -62,7 +62,7 @@ $ telepresence --run curl http://helloworld.default
 ...
 ```
 
-> **Having trouble?** Ask us a question in our [Slack chatroom](https://d6e.co/slack).
+> **Having trouble?** Ask us a question in our [Slack chatroom](https://a8r.io/slack).
 
 ### Networking access to cloud resources
 
