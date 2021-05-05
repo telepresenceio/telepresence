@@ -65,6 +65,15 @@ var kubeFlags *pflag.FlagSet
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
 func OnlySubcommands(cmd *cobra.Command, args []string) error {
+	// If a user is using the `swap-deployment` flag, then that means they
+	// are coming from telepresence 1.  We try to construct the tp2 command
+	// based on their input, which oftentimes has a command as the argument
+	// so we don't want to error out here
+	for _, v := range args {
+		if v == "--swap-deployment" || v == "-s" {
+			return nil
+		}
+	}
 	if len(args) != 0 {
 		err := fmt.Errorf("invalid subcommand %q", args[0])
 
@@ -80,7 +89,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// RunSubCommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
+// RunSubcommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
 // but have subcommands.  In such cases, it is important to set RunE even though there's nothing to
 // run, because otherwise cobra will treat that as "success", and it shouldn't be "success" if the
 // user typos a command and types something invalid.
@@ -96,18 +105,18 @@ func Command(ctx context.Context) *cobra.Command {
 	if !IsServerRunning() {
 		myName = "Telepresence (daemon unavailable)"
 	}
-
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
 		Args: OnlySubcommands,
 
-		Short:         myName,
-		Long:          help,
-		RunE:          RunSubcommands,
-		SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
-		SilenceUsage:  true, // our FlagErrorFunc will handle it
+		Short:              myName,
+		Long:               help,
+		RunE:               RunSubcommands,
+		PostRunE:           checkLegacyCmd,
+		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns
+		SilenceUsage:       true, // our FlagErrorFunc will handle it
+		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
-
 	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		if err == nil {
 			return nil
