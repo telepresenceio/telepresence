@@ -13,9 +13,9 @@ In addition to the above, there is also a consideration of how to manage Users a
 - Kubernetes version 1.16+
 - Cluster admin privileges to apply RBAC
 
-## Editing your Kubeconfig
+## Editing your kubeconfig
 
-This guide also assumes that you are utilizing a Kubeconfig file that is specified by the `KUBECONFIG` environment variable.  This is a `yaml` file that contains the cluster's API endpoint information as well as the user data being supplied for authentication.  The Service Account name used in the example below is called tp2-user.  This can be replaced by any value (i.e. John or Jane) as long as references to the Service Account are consistent throughout the `yaml`.  After an administrator has applied the RBAC configuration, a user should create a `config.yaml` in your current directory that looks like the following:​
+This guide also assumes that you are utilizing a kubeconfig file that is specified by the `KUBECONFIG` environment variable.  This is a `yaml` file that contains the cluster's API endpoint information as well as the user data being supplied for authentication.  The Service Account name used in the example below is called tp2-user.  This can be replaced by any value (i.e. John or Jane) as long as references to the Service Account are consistent throughout the `yaml`.  After an administrator has applied the RBAC configuration, a user should create a `config.yaml` in your current directory that looks like the following:​
 
 ```yaml
 apiVersion: v1
