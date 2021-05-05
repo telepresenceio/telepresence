@@ -1,6 +1,6 @@
 # Community
 
-## Contributor's Guide
+## Contributor's guide
 Please review our [contributor's guide](https://github.com/telepresenceio/telepresence/blob/release/v2/DEVELOPING.md)
 on GitHub to learn how you can help make Telepresence better.
 

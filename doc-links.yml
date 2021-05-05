@@ -14,7 +14,7 @@
               link: /install/
             - title: Upgrade
               link: /install/upgrade/
-        - title: Core Concepts
+        - title: Core concepts
           items:
             - title: The changing development workflow
               link: /concepts/devworkflow
@@ -24,7 +24,7 @@
               link: /concepts/faster
             - title: Context propagation
               link: /concepts/context-prop
-        - title: How Do I...
+        - title: How do I...
           items:
             - title: Intercept a service in your own environment
               link: /howtos/intercepts
@@ -32,7 +32,7 @@
               link: /howtos/preview-urls
             - title: Proxy outbound traffic to my cluster
               link: /howtos/outbound
-        - title: Technical Reference
+        - title: Technical reference
           items:
             - title: Architecture
               link: /reference/architecture
