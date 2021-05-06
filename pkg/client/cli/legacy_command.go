@@ -15,10 +15,12 @@ import (
 
 type legacyCommand struct {
 	swapDeployment string
+	newDeployment  bool
 	method         bool
 	expose         string
 	run            bool
 	dockerRun      bool
+	runShell       bool
 	processCmd     string
 	mount          string
 	dockerMount    string
@@ -59,6 +61,8 @@ Parsing:
 		switch {
 		case v == "--swap-deployment" || v == "-s":
 			lc.swapDeployment = getArg(i + 1)
+		case v == "--new-deployment" || v == "-n":
+			lc.newDeployment = true
 		case v == "--method" || v == "-m":
 			lc.method = true
 		case v == "--expose":
@@ -73,6 +77,12 @@ Parsing:
 			lc.envFile = getArg(i + 1)
 		case v == "--namespace":
 			lc.namespace = getArg(i + 1)
+		// The three run commands are terminal so we break
+		// out of the loop after encountering them.
+		// This also means if somebody uses --run and --docker-run
+		// in the same command, whichever is first will be used. I don't
+		// think this is terrible because I'm not sure how much we need to
+		// correct *incorrect* tp1 commands here, but it could be improved
 		case v == "--run":
 			lc.run = true
 			if nxtArg := getArg(i + 1); nxtArg != "" {
@@ -85,6 +95,9 @@ Parsing:
 				lc.processCmd = strings.Join(args[i+1:], " ")
 			}
 			break Parsing
+		case v == "--run-shell":
+			lc.runShell = true
+			break Parsing
 		case strings.Contains(v, "--"):
 			lc.unknownFlags = append(lc.unknownFlags, v)
 		}
@@ -95,49 +108,66 @@ Parsing:
 // genTP2Command constructs a telepresence 2 command based on
 // the values that are set in the legacyCommand struct
 func (lc *legacyCommand) genTP2Command() (string, error) {
-	cmdSlice := []string{"intercept"}
-	if lc.swapDeployment != "" {
-		cmdSlice = append(cmdSlice, lc.swapDeployment)
-	}
-	if lc.expose != "" {
-		cmdSlice = append(cmdSlice, "--port", lc.expose)
-	}
-
-	if lc.envFile != "" {
-		cmdSlice = append(cmdSlice, "--env-file", lc.envFile)
-	}
-
-	if lc.envJSON != "" {
-		cmdSlice = append(cmdSlice, "--env-json", lc.envJSON)
-	}
-
-	if lc.context != "" {
-		cmdSlice = append(cmdSlice, "--context", lc.context)
-	}
-
-	if lc.namespace != "" {
-		cmdSlice = append(cmdSlice, "--namespace", lc.namespace)
-	}
-
-	if lc.run && lc.dockerRun {
-		return "", errors.New("--run and --docker-run are mutually exclusive")
-	}
-
-	if lc.run {
-		if lc.mount != "" {
-			cmdSlice = append(cmdSlice, "--mount", lc.mount)
+	var cmdSlice []string
+	switch {
+	// if swapDeployment isn't empty, then our translation is
+	// an intercept subcommand
+	case lc.swapDeployment != "":
+		cmdSlice = append(cmdSlice, "intercept", lc.swapDeployment)
+		if lc.expose != "" {
+			cmdSlice = append(cmdSlice, "--port", lc.expose)
 		}
-	}
 
-	if lc.dockerRun {
-		if lc.dockerMount != "" {
-			cmdSlice = append(cmdSlice, "--docker-mount", lc.dockerMount)
+		if lc.envFile != "" {
+			cmdSlice = append(cmdSlice, "--env-file", lc.envFile)
 		}
-		cmdSlice = append(cmdSlice, "--docker-run")
-	}
 
-	if lc.processCmd != "" {
-		cmdSlice = append(cmdSlice, "--", lc.processCmd)
+		if lc.envJSON != "" {
+			cmdSlice = append(cmdSlice, "--env-json", lc.envJSON)
+		}
+
+		if lc.context != "" {
+			cmdSlice = append(cmdSlice, "--context", lc.context)
+		}
+
+		if lc.namespace != "" {
+			cmdSlice = append(cmdSlice, "--namespace", lc.namespace)
+		}
+
+		// This should be impossible based on how we currently parse commands.
+		// Just putting it here just in case the impossible happens.
+		if lc.run && lc.dockerRun {
+			return "", errors.New("--run and --docker-run are mutually exclusive")
+		}
+
+		if lc.run {
+			if lc.mount != "" {
+				cmdSlice = append(cmdSlice, "--mount", lc.mount)
+			}
+		}
+
+		if lc.dockerRun {
+			if lc.dockerMount != "" {
+				cmdSlice = append(cmdSlice, "--docker-mount", lc.dockerMount)
+			}
+			cmdSlice = append(cmdSlice, "--docker-run")
+		}
+		if lc.processCmd != "" {
+			cmdSlice = append(cmdSlice, "--", lc.processCmd)
+		}
+
+		if lc.runShell {
+			cmdSlice = append(cmdSlice, "--", "bash")
+		}
+	// If we have a run of some kind without a swapDeployment, then
+	// we translate to a connect
+	case lc.runShell:
+		cmdSlice = append(cmdSlice, "connect", "--", "bash")
+	case lc.run:
+		cmdSlice = append(cmdSlice, "connect", "--", lc.processCmd)
+	// Either not a legacyCommand or we don't know how to translate it to tp2
+	default:
+		return "", nil
 	}
 
 	return strings.Join(cmdSlice, " "), nil
@@ -147,9 +177,6 @@ func (lc *legacyCommand) genTP2Command() (string, error) {
 // and constructs a telepresence 2 command from that.
 func translateLegacyCmd(args []string) (string, string, error) {
 	lc := parseLegacyCommand(args)
-	if lc.swapDeployment == "" {
-		return "", "", nil
-	}
 	tp2Cmd, err := lc.genTP2Command()
 	if err != nil {
 		return "", "", err
@@ -165,6 +192,10 @@ func translateLegacyCmd(args []string) (string, string, error) {
 	}
 	if lc.method {
 		msg = msg + "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise tp2 works similarly to vpn-tcp"
+	}
+
+	if lc.newDeployment {
+		msg = msg + "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace."
 	}
 	return tp2Cmd, msg, nil
 }
@@ -184,6 +215,8 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(cmd.OutOrStdout(), msg)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "\nYou used a telepresence 1 command that roughly translates to the following:\ntelepresence %s\n", tp2Cmd)
+	if tp2Cmd != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "\nYou used a telepresence 1 command that roughly translates to the following:\ntelepresence %s\n", tp2Cmd)
+	}
 	return nil
 }

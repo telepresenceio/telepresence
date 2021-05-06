@@ -65,13 +65,16 @@ var kubeFlags *pflag.FlagSet
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
 func OnlySubcommands(cmd *cobra.Command, args []string) error {
-	// If a user is using the `swap-deployment` flag, then that means they
-	// are coming from telepresence 1.  We try to construct the tp2 command
-	// based on their input, which oftentimes has a command as the argument
-	// so we don't want to error out here
+	// If a user is using a flag that is coming from telepresence 1, we try to
+	// construct the tp2 command based on their input. If the args passed to
+	// telepresence are one of the flags we recognize, we don't want to error
+	// out here.
+	tp1Flags := []string{"--swap-deployment", "-s", "--run", "--run-shell", "--docker-run"}
 	for _, v := range args {
-		if v == "--swap-deployment" || v == "-s" {
-			return nil
+		for _, flag := range tp1Flags {
+			if v == flag {
+				return nil
+			}
 		}
 	}
 	if len(args) != 0 {

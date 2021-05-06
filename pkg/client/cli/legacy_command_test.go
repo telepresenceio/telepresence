@@ -46,9 +46,35 @@ func Test_legacyCommands(t *testing.T) {
 			outputTP2Command:   "intercept myserver --port 9090:80 -- python3 -m http.server 9090",
 		},
 		{
+			name:               "swapDeploymentRunShell",
+			inputLegacyCommand: "telepresence --swap-deployment myserver --run-shell",
+			outputTP2Command:   "intercept myserver -- bash",
+		},
+		{
 			name:               "swapDeploymentBasicDockerRun",
 			inputLegacyCommand: "telepresence --swap-deployment myserver --expose 80 --docker-run -i -t nginx:latest",
 			outputTP2Command:   "intercept myserver --port 80 --docker-run -- -i -t nginx:latest",
+		},
+		{
+			name:               "runCommand",
+			inputLegacyCommand: "telepresence --run curl http://myservice:8080/",
+			outputTP2Command:   "connect -- curl http://myservice:8080/",
+		},
+		{
+			name:               "runShell",
+			inputLegacyCommand: "telepresence --run-shell",
+			outputTP2Command:   "connect -- bash",
+		},
+		{
+			name:               "runShellNewDeployment",
+			inputLegacyCommand: "telepresence --new-deployment myserver --run-shell",
+			outputTP2Command:   "connect -- bash",
+			msg:                "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace.",
+		},
+		{
+			name:               "runShellIgnoreExtraArgs",
+			inputLegacyCommand: "telepresence --expose 8080 --run-shell",
+			outputTP2Command:   "connect -- bash",
 		},
 	}
 
