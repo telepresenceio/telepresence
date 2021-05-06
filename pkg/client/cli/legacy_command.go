@@ -98,6 +98,8 @@ Parsing:
 		case v == "--run-shell":
 			lc.runShell = true
 			break Parsing
+		// this is so telepresence --help returns the help command
+		case v == "--help":
 		case strings.Contains(v, "--"):
 			lc.unknownFlags = append(lc.unknownFlags, v)
 		}
@@ -187,15 +189,15 @@ func translateLegacyCmd(args []string) (string, string, error) {
 	// about changed behavior.
 	msg := ""
 	if len(lc.unknownFlags) > 0 {
-		msg = msg + fmt.Sprintf("The following flags used don't have a direct translation to tp2: %s",
+		msg += fmt.Sprintf("The following flags used don't have a direct translation to tp2: %s",
 			strings.Join(lc.unknownFlags, " "))
 	}
 	if lc.method {
-		msg = msg + "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise tp2 works similarly to vpn-tcp"
+		msg += "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise tp2 works similarly to vpn-tcp"
 	}
 
 	if lc.newDeployment {
-		msg = msg + "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace."
+		msg += "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace."
 	}
 	return tp2Cmd, msg, nil
 }

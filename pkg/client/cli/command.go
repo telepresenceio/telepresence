@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
@@ -69,7 +68,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	// construct the tp2 command based on their input. If the args passed to
 	// telepresence are one of the flags we recognize, we don't want to error
 	// out here.
-	tp1Flags := []string{"--swap-deployment", "-s", "--run", "--run-shell", "--docker-run"}
+	tp1Flags := []string{"--swap-deployment", "-s", "--run", "--run-shell", "--docker-run", "--help"}
 	for _, v := range args {
 		for _, flag := range tp1Flags {
 			if v == flag {
@@ -120,22 +119,29 @@ func Command(ctx context.Context) *cobra.Command {
 		SilenceUsage:       true, // our FlagErrorFunc will handle it
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
-	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-		if err == nil {
+
+	// Since we had to DisableFlagParsing so we can parse legacy commands, this
+	// doesn't do anything. Leaving this commented because I don't know if we'll
+	// leave legacy command parsing forever, in which case we'd want to uncomment
+	// this
+	/*
+		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+			if err == nil {
+				return nil
+			}
+
+			// If the error is multiple lines, include an extra blank line before the "See
+			// --help" line.
+			errStr := strings.TrimRight(err.Error(), "\n")
+			if strings.Contains(errStr, "\n") {
+				errStr += "\n"
+			}
+
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\nSee '%s --help'.\n", cmd.CommandPath(), errStr, cmd.CommandPath())
+			os.Exit(2)
 			return nil
-		}
-
-		// If the error is multiple lines, include an extra blank line before the "See
-		// --help" line.
-		errStr := strings.TrimRight(err.Error(), "\n")
-		if strings.Contains(errStr, "\n") {
-			errStr += "\n"
-		}
-
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\nSee '%s --help'.\n", cmd.CommandPath(), errStr, cmd.CommandPath())
-		os.Exit(2)
-		return nil
-	})
+		})
+	*/
 
 	// Hidden/internal commands. These are called by Telepresence itself from
 	// the correct context and execute in-place immediately.
