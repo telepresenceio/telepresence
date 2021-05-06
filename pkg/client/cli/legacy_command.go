@@ -15,6 +15,7 @@ import (
 
 type legacyCommand struct {
 	swapDeployment string
+	method         bool
 	expose         string
 	run            bool
 	dockerRun      bool
@@ -58,6 +59,8 @@ Parsing:
 		switch {
 		case v == "--swap-deployment" || v == "-s":
 			lc.swapDeployment = getArg(i + 1)
+		case v == "--method" || v == "-m":
+			lc.method = true
 		case v == "--expose":
 			lc.expose = getArg(i + 1)
 		case v == "--mount":
@@ -142,16 +145,28 @@ func (lc *legacyCommand) genTP2Command() (string, error) {
 
 // translateLegacyCmd tries to detect if a telepresence 1 command was used
 // and constructs a telepresence 2 command from that.
-func translateLegacyCmd(args []string) (string, []string, error) {
+func translateLegacyCmd(args []string) (string, string, error) {
 	lc := parseLegacyCommand(args)
 	if lc.swapDeployment == "" {
-		return "", nil, nil
+		return "", "", nil
 	}
 	tp2Cmd, err := lc.genTP2Command()
 	if err != nil {
-		return "", nil, nil
+		return "", "", err
 	}
-	return tp2Cmd, lc.unknownFlags, nil
+
+	// There are certain elements of the telepresence 1 cli that we either
+	// don't have a perfect mapping for or want to explicitly let users know
+	// about changed behavior.
+	msg := ""
+	if len(lc.unknownFlags) > 0 {
+		msg = msg + fmt.Sprintf("The following flags used don't have a direct translation to tp2: %s",
+			strings.Join(lc.unknownFlags, " "))
+	}
+	if lc.method {
+		msg = msg + "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise tp2 works similarly to vpn-tcp"
+	}
+	return tp2Cmd, msg, nil
 }
 
 // checkLegacyCmd is mostly a wrapper around translateLegacyCmd. The latter
@@ -160,13 +175,15 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	tp2Cmd, unknownFlags, err := translateLegacyCmd(args)
+	tp2Cmd, msg, err := translateLegacyCmd(args)
 	if err != nil {
 		return err
 	}
-	if len(unknownFlags) > 0 {
-		fmt.Fprintf(cmd.ErrOrStderr(), "The following flags used don't have a direct translation to tp2 and haven't been translated: %#v", unknownFlags)
+
+	if msg != "" {
+		fmt.Fprintln(cmd.OutOrStdout(), msg)
 	}
+
 	fmt.Fprintf(cmd.OutOrStdout(), "\nYou used a telepresence 1 command that roughly translates to the following:\ntelepresence %s\n", tp2Cmd)
 	return nil
 }

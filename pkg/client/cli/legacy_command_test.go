@@ -12,19 +12,25 @@ func Test_legacyCommands(t *testing.T) {
 		name               string
 		inputLegacyCommand string
 		outputTP2Command   string
-		unknownFlags       []string
+		msg                string
 	}
 	testCases := []testcase{
 		{
-			name:               "basicSwapDeployment",
+			name:               "swapDeploymentBasic",
 			inputLegacyCommand: "telepresence --swap-deployment myserver --expose 9090 --run python3 -m http.server 9090",
 			outputTP2Command:   "intercept myserver --port 9090 -- python3 -m http.server 9090",
+		},
+		{
+			name:               "swapDeploymentMethod",
+			inputLegacyCommand: "telepresence --swap-deployment myserver --method inject-tcp --expose 9090 --run python3 -m http.server 9090",
+			outputTP2Command:   "intercept myserver --port 9090 -- python3 -m http.server 9090",
+			msg:                "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise tp2 works similarly to vpn-tcp",
 		},
 		{
 			name:               "swapDeploymentUnknownParam",
 			inputLegacyCommand: "telepresence --swap-deployment myserver --expose 9090 --not-real-param --run python3 -m http.server 9090",
 			outputTP2Command:   "intercept myserver --port 9090 -- python3 -m http.server 9090",
-			unknownFlags:       []string{"--not-real-param"},
+			msg:                "The following flags used don't have a direct translation to tp2: --not-real-param",
 		},
 		{
 			// This name isn't the greatest but basically, if we have an unknown
@@ -51,11 +57,11 @@ func Test_legacyCommands(t *testing.T) {
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
 			inputArgs := strings.Split(tc.inputLegacyCommand, " ")
-			genTP2Cmd, unknownFlags, err := translateLegacyCmd(inputArgs)
+			genTP2Cmd, msg, err := translateLegacyCmd(inputArgs)
 			if err != nil {
 				t.Fatal(err)
 			}
-			assert.Equal(t, tc.unknownFlags, unknownFlags)
+			assert.Equal(t, tc.msg, msg)
 			assert.Equal(t, tc.outputTP2Command, genTP2Cmd)
 		})
 	}
