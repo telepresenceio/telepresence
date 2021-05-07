@@ -191,15 +191,15 @@ func translateLegacyCmd(args []string) (string, string, error) {
 	// about changed behavior.
 	msg := ""
 	if len(lc.unknownFlags) > 0 {
-		msg += fmt.Sprintf("The following flags used don't have a direct translation to tp2: %s",
+		msg += fmt.Sprintf("The following flags used don't have a direct translation to tp2: %s\n",
 			strings.Join(lc.unknownFlags, " "))
 	}
 	if lc.method {
-		msg += "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise tp2 works similarly to vpn-tcp"
+		msg += "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise it works similarly to vpn-tcp\n"
 	}
 
 	if lc.newDeployment {
-		msg += "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace."
+		msg += "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace.\n"
 	}
 	return tp2Cmd, msg, nil
 }
@@ -218,12 +218,15 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	scout := client.NewScout(cmd.Context(), "cli")
 	_ = scout.Report(cmd.Context(), "Used legacy syntax")
 
-	if msg != "" {
-		fmt.Fprintln(cmd.OutOrStderr(), msg)
-	}
-
+	// Separate the help output from the tp1 -> tp2 translation
 	if tp2Cmd != "" {
-		fmt.Fprintf(cmd.OutOrStderr(), "\nYou used a telepresence 1 command that roughly translates to the following:\ntelepresence %s\n", tp2Cmd)
+		fmt.Fprintf(cmd.OutOrStderr(), "\nLegacy telepresence command used\n")
+
+		if msg != "" {
+			fmt.Fprintln(cmd.OutOrStderr(), msg)
+		}
+
+		fmt.Fprintf(cmd.OutOrStderr(), "Command roughly translates to the following in Telepresence 2:\ntelepresence %s\n", tp2Cmd)
 		ctx := cmd.Context()
 		fmt.Fprintln(cmd.OutOrStderr(), "running...")
 		newCmd := Command(ctx)

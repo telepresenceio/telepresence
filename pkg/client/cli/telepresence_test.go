@@ -509,7 +509,7 @@ func (cs *connectedSuite) TestL_LegacySwapDeploymentDoesIntercept() {
 	// We don't need to defer leaving the intercept because the
 	// intercept is automatically left once the command is finished
 	_, stderr := telepresence(cs.T(), "--swap-deployment", "with-probes", "--expose", "9090", "--namespace", cs.ns(), "--mount", "false", "--run", "sleep", "1")
-	require.Contains(stderr, "You used a telepresence 1 command")
+	require.Contains(stderr, "Legacy telepresence command used")
 	require.Contains(stderr, "Using Deployment with-probes")
 
 	// Verify that the intercept no longer exists
