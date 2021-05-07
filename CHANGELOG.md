@@ -1,5 +1,8 @@
 # Changelog
 
+### 2.2.2 (TBD)
+- Feature: Telepresence attempts to translate legacy Telepresence 1 commands into viable Telepresence 2 commands.
+
 ### 2.2.1 (April 29, 2021)
 
 - Bugfix: Improve `ambassador` namespace detection that was trying to create the namespace even when the namespace existed, which was an undesired RBAC escalation for operators.
