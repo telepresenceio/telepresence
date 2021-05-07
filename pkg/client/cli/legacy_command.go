@@ -6,6 +6,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // Here we handle parsing legacy commands, as well as generating telepresence 2
@@ -212,6 +214,9 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	scout := client.NewScout(cmd.Context(), "cli")
+	_ = scout.Report(cmd.Context(), "Used legacy syntax")
 
 	if msg != "" {
 		fmt.Fprintln(cmd.OutOrStderr(), msg)
