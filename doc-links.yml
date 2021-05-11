@@ -54,6 +54,8 @@
               link: /reference/dns
             - title: RBAC
               link: /reference/rbac
+            - title: Using Telepresence with Linkerd
+              link: /reference/linkerd
         - title: FAQs
           link: /faqs
         - title: Troubleshooting
