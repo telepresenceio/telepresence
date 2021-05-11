@@ -14,6 +14,6 @@ Follow one of our [quick start guides](../quick-start/) to start using Teleprese
 
 ## Installing older version of Telepresence
 
-Use these URLs to download an older version for your OS, replacing `x.x.x` with the versions you want.
+Use these URLs to download an older version for your OS, replacing `x.y.z` with the versions you want.
 
 <OldVersionTabs/>
