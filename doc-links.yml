@@ -14,7 +14,7 @@
               link: /install/
             - title: Upgrade
               link: /install/upgrade/
-            - title: Migrate from legacy Telepresence
+            - title: Migrate from Legacy Telepresence
               link: /install/migrate-from-legacy/
         - title: Core concepts
           items:

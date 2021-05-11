@@ -40,11 +40,32 @@ intercepted
     Intercepting      : all TCP connections
 Serving HTTP on :: port 9090 (http://[::]:9090/) ...
 ```
+
 Telepresence will let you know what the legacy Telepresence command has mapped to and automatically
 runs it.  So you can get started with Telepresence today, using the commands you are used to
 and it will help you learn the Telepresence syntax.
 
+### Legacy Command Mapping
+
+Below is the mapping of legacy Telepresence to Telepresence commands (where they exist and
+are supported).
+
+| Legacy Telepresence Command                      | Telepresence Command                       |
+|--------------------------------------------------|--------------------------------------------|
+| --swap-deployment $workload                      | intercept $workload                        |
+| --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
+| --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
+| --swap-deployment $workload --run-shell          | intercept $workload -- bash                |
+| --swap-deployment $workload --run $cmd           | intercept $workload -- $cmd                |
+| --swap-deployment $workload --docker-run $cmd    | intercept $workload --docker-run -- $cmd   |
+| --run-shell                                      | connect -- bash                            |
+| --run $cmd                                       | connect -- $cmd                            |
+| --env-file,--env-json                            | --env-file, --env-json (haven't changed)   |
+| --context,--namespace                            | --context, --namespace (haven't changed)   |
+| --mount,--docker-mount                           | --context, --namespace (haven't changed)   |
+
 ### Legacy Telepresence Command Limitations
+
 Some of the commands and flags from legacy Telepresence either didn't apply to Telepresence or
 aren't yet supported in Telepresence.  For some known popular commands, such as --method,
 Telepresence will include output letting you know that the flag has went away. For flags that
@@ -54,6 +75,7 @@ If Telepresence is missing any flags or functionality that is integral to your u
 by [creating an issue](https://github.com/telepresenceio/telepresence/issues) and/or talking to us on our [Slack channel](https://a8r.io/Slack)!
 
 ## Telepresence Changes
+
 Telepresence installs a Traffic Manager in the cluster and Traffic Agents alongside workloads when performing intercepts (including
 with `--swap-deployment`) and leaves them.  If you use `--swap-deployment`, the intercept will be left once the process
 dies, but the agent will remain. There's no harm in leaving the agent running alongside your service, but when you
