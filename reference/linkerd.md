@@ -1,20 +1,31 @@
 ---
-Description: "How to get LinkerD meshed services working with Telepresence 2"
+Description: "How to get Linkerd meshed services working with Telepresence"
 ---
 
-# Using Telepresence on LinkerD meshed services
+# Using Telepresence with Linkerd
 
 ## Introduction
-Getting started with Telepresence 2 on LinkerD services is as simple as adding an annotation: `config.linkerd.io/skip-outbound-ports: "8081,8022,6001"`.  The traffic-agent uses port 8081 for its API, uses 8022 for sshfs, and 6001 for the actual tunnel between traffic-manager and the local system.  Telling LinkerD to skip these ports allows the traffic-agent sidecar to fully communicate with the traffic-manager, and therefore the rest of the telepresence system.
+Getting started with Telepresence on Linkerd services is as simple as adding an annotation to your Deployment: 
+
+```yaml
+spec:
+  template:
+    metadata:
+      annotations:
+        config.linkerd.io/skip-outbound-ports: "8081,8022,6001"
+```
+
+The Traffic Agent uses port 8081 for its API, 8022 for SSHFS, and 6001 for the actual tunnel between the Traffic Manager and the local system.  Telling Linkerd to skip these ports allows the Traffic Agent sidecar to fully communicate with the Traffic Manager, and therefore the rest of the Telepresence system.
 
 ## Prerequisites
-1. Telepresence 2 binary
-2. LinkerD Control Plane [installed to cluster](https://linkerd.io/2.10/tasks/install/)
+1. [Telepresence binary](../../install)
+2. Linkerd control plane [installed to cluster](https://linkerd.io/2.10/tasks/install/)
 3. Kubectl
-4. [Working Ingress controller](../../../edge-stack/latest/howtos/linkerd2.md)
+4. [Working ingress controller](../../../../edge-stack/latest/howtos/linkerd2)
 
 ## Deploy
-Save and deploy the following YAML, note the `config.linkerd.io/skip-outbound-ports` annotation in the metadata of the pod template.
+Save and deploy the following YAML. Note the `config.linkerd.io/skip-outbound-ports` annotation in the metadata of the pod template.
+
 ```yaml
 ---
 apiVersion: apps/v1
@@ -52,12 +63,13 @@ spec:
 ```
 
 ## Connect to Telepresence
-Run `telepresence connect` to connect to the cluster.  A followup `telepresence list` should show the `quote` deployment as `ready to intercept`.
+Run `telepresence connect` to connect to the cluster.  Then `telepresence list` should show the `quote` deployment as `ready to intercept`:
 
-```sh
-telepresence list
-quote: ready to intercept (traffic-agent not yet installed)
+```
+$ telepresence list
+
+  quote: ready to intercept (traffic-agent not yet installed)
 ```
 
-## Run the Intercept
-Run `telepresence intercept quote --port 8080:80` to direct traffic from the `quote` deployment to port 8080 on your local system.  Assuming you have somthing listening on 8080, you should now be able to see your local service whenever attempting to access the `quote` service.
+## Run the intercept
+Run `telepresence intercept quote --port 8080:80` to direct traffic from the `quote` deployment to port 8080 on your local system.  Assuming you have something listening on 8080, you should now be able to see your local service whenever attempting to access the `quote` service.
