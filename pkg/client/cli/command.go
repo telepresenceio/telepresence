@@ -97,7 +97,23 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 // user typos a command and types something invalid.
 func RunSubcommands(cmd *cobra.Command, args []string) error {
 	cmd.SetOut(cmd.ErrOrStderr())
-	cmd.HelpFunc()(cmd, args)
+
+	// determine if --help was explicitly asked for
+	var usedHelpFlag bool
+	for _, arg := range args {
+		if arg == "--help" {
+			usedHelpFlag = true
+		}
+	}
+	// If there are no args or --help was used, then it's not a legacy
+	// Telepresence command so we return the help text
+	if len(args) == 0 || usedHelpFlag {
+		cmd.HelpFunc()(cmd, args)
+		return nil
+	}
+	if err := checkLegacyCmd(cmd, args); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -114,7 +130,6 @@ func Command(ctx context.Context) *cobra.Command {
 		Short:              myName,
 		Long:               help,
 		RunE:               RunSubcommands,
-		PostRunE:           checkLegacyCmd,
 		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:       true, // our FlagErrorFunc will handle it
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go

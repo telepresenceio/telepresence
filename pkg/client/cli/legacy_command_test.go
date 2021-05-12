@@ -24,19 +24,19 @@ func Test_legacyCommands(t *testing.T) {
 			name:               "swapDeploymentMethod",
 			inputLegacyCommand: "telepresence --swap-deployment myserver --method inject-tcp --expose 9090 --run python3 -m http.server 9090",
 			outputTP2Command:   "intercept myserver --port 9090 -- python3 -m http.server 9090",
-			msg:                "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise it works similarly to vpn-tcp\n",
+			msg:                "Telepresence doesn't have proxying methods. You can use --docker-run for container, otherwise it works similarly to vpn-tcp\n",
 		},
 		{
-			name:               "swapDeploymentUnknownParam",
+			name:               "swapDeploymentUnsupportedParam",
 			inputLegacyCommand: "telepresence --swap-deployment myserver --expose 9090 --not-real-param --run python3 -m http.server 9090",
 			outputTP2Command:   "intercept myserver --port 9090 -- python3 -m http.server 9090",
-			msg:                "The following flags used don't have a direct translation to tp2: --not-real-param\n",
+			msg:                "The following flags used don't have a direct translation to Telepresence: --not-real-param\n",
 		},
 		{
-			// This name isn't the greatest but basically, if we have an unknown
+			// This name isn't the greatest but basically, if we have an unsupported
 			// parameter in the process, that's fine because telepresence doesn't
 			// care about parameters associated with a process a user is running.
-			name:               "swapDeploymentUnknownParamInProcess",
+			name:               "swapDeploymentUnsupportedParamInProcess",
 			inputLegacyCommand: "telepresence --swap-deployment myserver --expose 9090 --run python3 -m http.server 9090 --not-real-param",
 			outputTP2Command:   "intercept myserver --port 9090 -- python3 -m http.server 9090 --not-real-param",
 		},
@@ -69,7 +69,7 @@ func Test_legacyCommands(t *testing.T) {
 			name:               "runShellNewDeployment",
 			inputLegacyCommand: "telepresence --new-deployment myserver --run-shell",
 			outputTP2Command:   "connect -- bash",
-			msg:                "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace.\n",
+			msg:                "This flag is ignored since Telepresence uses one traffic-manager deployed in the ambassador namespace.\n",
 		},
 		{
 			name:               "runShellIgnoreExtraArgs",
@@ -83,12 +83,12 @@ func Test_legacyCommands(t *testing.T) {
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
 			inputArgs := strings.Split(tc.inputLegacyCommand, " ")
-			genTP2Cmd, msg, err := translateLegacyCmd(inputArgs)
+			genTPCmd, msg, _, err := translateLegacyCmd(inputArgs)
 			if err != nil {
 				t.Fatal(err)
 			}
 			assert.Equal(t, msg, tc.msg)
-			assert.Equal(t, genTP2Cmd, tc.outputTP2Command)
+			assert.Equal(t, genTPCmd, tc.outputTP2Command)
 		})
 	}
 }

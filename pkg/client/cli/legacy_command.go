@@ -10,10 +10,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-// Here we handle parsing legacy commands, as well as generating telepresence 2
-// commands from them.  This will make it easier for users to move to
-// telepresence 2.  Note: This isn't exhaustive, but should capture the major
-// flags that were used and have a correlated command in telepresence 2.
+// Here we handle parsing legacy commands, as well as generating Telepresence
+// commands from them.  This will make it easier for users to migrate from
+// legacy Telepresence.  Note: This isn't exhaustive, but should capture the major
+// flags that were used and have a correlated command in Telepresence.
 
 type legacyCommand struct {
 	swapDeployment string
@@ -33,7 +33,7 @@ type legacyCommand struct {
 	context   string
 	namespace string
 
-	unknownFlags []string
+	unsupportedFlags []string
 }
 
 // Unfortunately we have to do our own flag parsing if we see legacy telepresence
@@ -50,7 +50,7 @@ func parseLegacyCommand(args []string) *legacyCommand {
 	// We don't want to over-index in case somebody has a command that has a
 	// flag but doesn't put the value after it.  So we have this helper function
 	// to ensure we don't do that.  It may mean the telepresence command at the
-	// end fails, but then they'll see the telepresence 2 error messge and can
+	// end fails, but then they'll see the Telepresence error messge and can
 	// fix it from there.
 	getArg := func(i int) string {
 		if len(args) > i {
@@ -100,18 +100,16 @@ Parsing:
 		case v == "--run-shell":
 			lc.runShell = true
 			break Parsing
-		// this is so telepresence --help returns the help command
-		case v == "--help":
 		case strings.Contains(v, "--"):
-			lc.unknownFlags = append(lc.unknownFlags, v)
+			lc.unsupportedFlags = append(lc.unsupportedFlags, v)
 		}
 	}
 	return lc
 }
 
-// genTP2Command constructs a telepresence 2 command based on
+// genTPCommand constructs a Telepresence command based on
 // the values that are set in the legacyCommand struct
-func (lc *legacyCommand) genTP2Command() (string, error) {
+func (lc *legacyCommand) genTPCommand() (string, error) {
 	var cmdSlice []string
 	switch {
 	// if swapDeployment isn't empty, then our translation is
@@ -169,7 +167,7 @@ func (lc *legacyCommand) genTP2Command() (string, error) {
 		cmdSlice = append(cmdSlice, "connect", "--", "bash")
 	case lc.run:
 		cmdSlice = append(cmdSlice, "connect", "--", lc.processCmd)
-	// Either not a legacyCommand or we don't know how to translate it to tp2
+	// Either not a legacyCommand or we don't know how to translate it to Telepresence
 	default:
 		return "", nil
 	}
@@ -177,31 +175,31 @@ func (lc *legacyCommand) genTP2Command() (string, error) {
 	return strings.Join(cmdSlice, " "), nil
 }
 
-// translateLegacyCmd tries to detect if a telepresence 1 command was used
-// and constructs a telepresence 2 command from that.
-func translateLegacyCmd(args []string) (string, string, error) {
+// translateLegacyCmd tries to detect if a legacy Telepresence command was used
+// and constructs a Telepresence command from that.
+func translateLegacyCmd(args []string) (string, string, *legacyCommand, error) {
 	lc := parseLegacyCommand(args)
-	tp2Cmd, err := lc.genTP2Command()
+	tpCmd, err := lc.genTPCommand()
 	if err != nil {
-		return "", "", err
+		return "", "", lc, err
 	}
 
 	// There are certain elements of the telepresence 1 cli that we either
 	// don't have a perfect mapping for or want to explicitly let users know
 	// about changed behavior.
 	msg := ""
-	if len(lc.unknownFlags) > 0 {
-		msg += fmt.Sprintf("The following flags used don't have a direct translation to tp2: %s\n",
-			strings.Join(lc.unknownFlags, " "))
+	if len(lc.unsupportedFlags) > 0 {
+		msg += fmt.Sprintf("The following flags used don't have a direct translation to Telepresence: %s\n",
+			strings.Join(lc.unsupportedFlags, " "))
 	}
 	if lc.method {
-		msg += "Telepresence 2 doesn't have methods. You can use --docker-run for container, otherwise it works similarly to vpn-tcp\n"
+		msg += "Telepresence doesn't have proxying methods. You can use --docker-run for container, otherwise it works similarly to vpn-tcp\n"
 	}
 
 	if lc.newDeployment {
-		msg += "This flag is ignored since Telepresence 2 uses one traffic-manager deployed in the ambassador namespace.\n"
+		msg += "This flag is ignored since Telepresence uses one traffic-manager deployed in the ambassador namespace.\n"
 	}
-	return tp2Cmd, msg, nil
+	return tpCmd, msg, lc, nil
 }
 
 // checkLegacyCmd is mostly a wrapper around translateLegacyCmd. The latter
@@ -210,27 +208,46 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	tp2Cmd, msg, err := translateLegacyCmd(args)
+	tpCmd, msg, lc, err := translateLegacyCmd(args)
 	if err != nil {
 		return err
 	}
 
 	scout := client.NewScout(cmd.Context(), "cli")
+
+	// Add metadata for the main legacy Telepresence commands so we can
+	// track usage and see what legacy commands people are still using.
+	if lc.swapDeployment != "" {
+		scout.SetMetadatum("swap_deployment", true)
+	}
+	if lc.run {
+		scout.SetMetadatum("run", true)
+	}
+	if lc.dockerRun {
+		scout.SetMetadatum("docker_run", true)
+	}
+	if lc.runShell {
+		scout.SetMetadatum("run_shell", true)
+	}
+	if lc.unsupportedFlags != nil {
+		scout.SetMetadatum("unsupported_flags", lc.unsupportedFlags)
+	}
 	_ = scout.Report(cmd.Context(), "Used legacy syntax")
 
-	// Separate the help output from the tp1 -> tp2 translation
-	if tp2Cmd != "" {
-		fmt.Fprintf(cmd.OutOrStderr(), "\nLegacy telepresence command used\n")
+	// Generate output to user letting them know legacy Telepresence was used,
+	// what the Telepresence command is, and runs it.
+	if tpCmd != "" {
+		fmt.Fprintf(cmd.OutOrStderr(), "Legacy Telepresence command used\n")
 
 		if msg != "" {
 			fmt.Fprintln(cmd.OutOrStderr(), msg)
 		}
 
-		fmt.Fprintf(cmd.OutOrStderr(), "Command roughly translates to the following in Telepresence 2:\ntelepresence %s\n", tp2Cmd)
+		fmt.Fprintf(cmd.OutOrStderr(), "Command roughly translates to the following in Telepresence:\ntelepresence %s\n", tpCmd)
 		ctx := cmd.Context()
 		fmt.Fprintln(cmd.OutOrStderr(), "running...")
 		newCmd := Command(ctx)
-		newCmd.SetArgs(strings.Split(tp2Cmd, " "))
+		newCmd.SetArgs(strings.Split(tpCmd, " "))
 		newCmd.SetOut(cmd.OutOrStderr())
 		newCmd.SetErr(cmd.OutOrStderr())
 		if err := newCmd.ExecuteContext(ctx); err != nil {

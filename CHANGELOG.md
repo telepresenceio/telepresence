@@ -1,7 +1,7 @@
 # Changelog
 
 ### 2.2.2 (TBD)
-- Feature: Telepresence attempts to translate legacy Telepresence 1 commands into viable Telepresence 2 commands.
+- Feature: Telepresence attempts to translate legacy Telepresence commands into viable Telepresence commands.
 
 ### 2.2.1 (April 29, 2021)
 
