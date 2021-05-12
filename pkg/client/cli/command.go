@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
@@ -65,6 +64,18 @@ var kubeFlags *pflag.FlagSet
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
 func OnlySubcommands(cmd *cobra.Command, args []string) error {
+	// If a user is using a flag that is coming from telepresence 1, we try to
+	// construct the tp2 command based on their input. If the args passed to
+	// telepresence are one of the flags we recognize, we don't want to error
+	// out here.
+	tp1Flags := []string{"--swap-deployment", "-s", "--run", "--run-shell", "--docker-run", "--help"}
+	for _, v := range args {
+		for _, flag := range tp1Flags {
+			if v == flag {
+				return nil
+			}
+		}
+	}
 	if len(args) != 0 {
 		err := fmt.Errorf("invalid subcommand %q", args[0])
 
@@ -80,13 +91,29 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// RunSubCommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
+// RunSubcommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
 // but have subcommands.  In such cases, it is important to set RunE even though there's nothing to
 // run, because otherwise cobra will treat that as "success", and it shouldn't be "success" if the
 // user typos a command and types something invalid.
 func RunSubcommands(cmd *cobra.Command, args []string) error {
 	cmd.SetOut(cmd.ErrOrStderr())
-	cmd.HelpFunc()(cmd, args)
+
+	// determine if --help was explicitly asked for
+	var usedHelpFlag bool
+	for _, arg := range args {
+		if arg == "--help" {
+			usedHelpFlag = true
+		}
+	}
+	// If there are no args or --help was used, then it's not a legacy
+	// Telepresence command so we return the help text
+	if len(args) == 0 || usedHelpFlag {
+		cmd.HelpFunc()(cmd, args)
+		return nil
+	}
+	if err := checkLegacyCmd(cmd, args); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -96,34 +123,40 @@ func Command(ctx context.Context) *cobra.Command {
 	if !IsServerRunning() {
 		myName = "Telepresence (daemon unavailable)"
 	}
-
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
 		Args: OnlySubcommands,
 
-		Short:         myName,
-		Long:          help,
-		RunE:          RunSubcommands,
-		SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
-		SilenceUsage:  true, // our FlagErrorFunc will handle it
+		Short:              myName,
+		Long:               help,
+		RunE:               RunSubcommands,
+		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns
+		SilenceUsage:       true, // our FlagErrorFunc will handle it
+		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
 
-	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-		if err == nil {
+	// Since we had to DisableFlagParsing so we can parse legacy commands, this
+	// doesn't do anything. Leaving this commented because I don't know if we'll
+	// leave legacy command parsing forever, in which case we'd want to uncomment
+	// this
+	/*
+		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+			if err == nil {
+				return nil
+			}
+
+			// If the error is multiple lines, include an extra blank line before the "See
+			// --help" line.
+			errStr := strings.TrimRight(err.Error(), "\n")
+			if strings.Contains(errStr, "\n") {
+				errStr += "\n"
+			}
+
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\nSee '%s --help'.\n", cmd.CommandPath(), errStr, cmd.CommandPath())
+			os.Exit(2)
 			return nil
-		}
-
-		// If the error is multiple lines, include an extra blank line before the "See
-		// --help" line.
-		errStr := strings.TrimRight(err.Error(), "\n")
-		if strings.Contains(errStr, "\n") {
-			errStr += "\n"
-		}
-
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\nSee '%s --help'.\n", cmd.CommandPath(), errStr, cmd.CommandPath())
-		os.Exit(2)
-		return nil
-	})
+		})
+	*/
 
 	// Hidden/internal commands. These are called by Telepresence itself from
 	// the correct context and execute in-place immediately.
