@@ -160,6 +160,10 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 .PHONY: lint-deps
 lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything nescessary to lint
 
+.PHONY: build-tests
+build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
+	go list ./... | xargs -n1 go test -c -o /dev/null
+
 shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh

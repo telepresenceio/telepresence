@@ -132,11 +132,9 @@ jobs:
       # Split prep out to reduce noise in the output, and help with
       # timeouts.
       - run: make lint-deps
-      - run:
-          # Don't hold the Go compiler against golangci-lint's
-          # timeout.
-          name: "Pre-load Go build cache"
-          command: go list ./... | xargs -n1 go test -c -o /dev/null
+      # Don't hold the Go compiler against golangci-lint's timeout.
+      - run: make build-tests
+      # Run the linters.
       - run: make lint
 
   "generate":
