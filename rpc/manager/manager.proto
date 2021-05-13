@@ -166,7 +166,9 @@ message InterceptInfo {
   string id = 5;
   SessionInfo client_session = 6;
 
-  // api_key # add real comment
+  // api_key is the api_key provided by the user's machine
+  // if they are logged in.  This is used by extensions to
+  // authenticate with external APIs, such as SystemA.
   string api_key = 13;
 
   // manager_port is the port on the manager that the agent should

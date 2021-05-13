@@ -214,7 +214,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		}()
 	}
 
-	apiKey, err := tm.getAPIKey(c, "agent", false)
+	apiKey, err := tm.getAPIKey(c, "agent-"+spec.Mechanism, false)
 	if err != nil {
 		dlog.Errorf(c, "error getting apiKey for agent: %s", err)
 	}

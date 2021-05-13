@@ -599,7 +599,9 @@ type InterceptInfo struct {
 	Spec          *InterceptSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	Id            string         `protobuf:"bytes,5,opt,name=id,proto3" json:"id,omitempty"`
 	ClientSession *SessionInfo   `protobuf:"bytes,6,opt,name=client_session,json=clientSession,proto3" json:"client_session,omitempty"`
-	// api_key # add real comment
+	// api_key is the api_key provided by the user's machine
+	// if they are logged in.  This is used by extensions to
+	// authenticate with external APIs, such as SystemA.
 	ApiKey string `protobuf:"bytes,13,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
 	// manager_port is the port on the manager that the agent should
 	// send intercepted traffic to.  This gets set by the manager when
