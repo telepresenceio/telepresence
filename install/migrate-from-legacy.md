@@ -8,7 +8,7 @@ In practice, this mechanism, while simple in concept, had some challenges. Losin
 
 Telepresence introduces a [new architecture](../../reference/architecture/) built around "intercepts" that addresses these problems. With Telepresence, a sidecar proxy is injected onto the pod. The proxy then intercepts traffic intended for the pod and routes it to the workstation/laptop. The advantage of this approach is that the service is running at all times, and no swapping is used. By using the proxy approach, we can also do selective intercepts, where certain types of traffic get routed to the service while other traffic gets routed to your laptop/workstation.
 
-Please see [the Telepresence quick start](../../quick-start/) for an introduction to running intercepts and [the intercept reference doc](../../reference/intercepts/) for a deep dive into intercepts
+Please see [the Telepresence quick start](../../quick-start/) for an introduction to running intercepts and [the intercept reference doc](../../reference/intercepts/) for a deep dive into intercepts.
 
 ## Using legacy Telepresence Commands
 
@@ -68,7 +68,7 @@ are supported).
 
 Some of the commands and flags from legacy Telepresence either didn't apply to Telepresence or
 aren't yet supported in Telepresence.  For some known popular commands, such as --method,
-Telepresence will include output letting you know that the flag has went away. For flags that
+Telepresence will include output letting you know that the flag has gone away. For flags that
 Telepresence can't translate yet, it will let you know that that flag is "unsupported".
 
 If Telepresence is missing any flags or functionality that is integral to your usage, please let us know
