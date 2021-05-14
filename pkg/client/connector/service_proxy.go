@@ -70,6 +70,8 @@ func (p *mgrProxy) GetCloudConfig(ctx context.Context, arg *empty.Empty) (*manag
 	if err != nil {
 		return nil, err
 	}
+	// TODO (dyung): We might want to make this always return an error since the
+	// client should already have the config.
 	return client.GetCloudConfig(ctx, arg, callOptions...)
 }
 
