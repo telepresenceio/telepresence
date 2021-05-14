@@ -166,6 +166,11 @@ message InterceptInfo {
   string id = 5;
   SessionInfo client_session = 6;
 
+  // api_key is the api_key provided by the user's machine
+  // if they are logged in.  This is used by extensions to
+  // authenticate with external APIs, such as SystemA.
+  string api_key = 13;
+
   // manager_port is the port on the manager that the agent should
   // send intercepted traffic to.  This gets set by the manager when
   // the intercept is first created.
@@ -210,8 +215,7 @@ message InterceptInfoSnapshot {
 message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
-  // TODO(lukeshu): Consider adding an `api_key` field here, in order
-  // to have an "agent" key that is separate from the "manager" key.
+  string api_key = 3;
 }
 
 message UpdateInterceptRequest {
@@ -259,6 +263,15 @@ message VersionInfo2 {
 message License {
   string license = 1;
   string host = 2;
+  string cluster_id = 3;
+}
+
+// The host and port used to connect to Ambassador Cloud.
+// Used by the agents to communicate over gRPC to have
+// Ambassador Cloud review intercepts
+message AmbassadorCloudConfig {
+  string host = 1;
+  string port = 2;
 }
 
 // 
@@ -274,9 +287,13 @@ service Manager {
   // domain that granted it) known to the manager.
   rpc GetLicense(google.protobuf.Empty) returns (License);
   
-  // canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
+  // CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
   // Ambassador Cloud
   rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
+
+  // GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
+  // by the agents.
+  rpc GetCloudConfig(google.protobuf.Empty) returns (AmbassadorCloudConfig);
 
   // Presence
 

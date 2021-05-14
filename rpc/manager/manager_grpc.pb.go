@@ -23,9 +23,12 @@ type ManagerClient interface {
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*License, error)
-	// canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
+	// CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
 	// Ambassador Cloud
 	CanConnectAmbassadorCloud(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error)
+	// GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
+	// by the agents.
+	GetCloudConfig(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
@@ -91,6 +94,15 @@ func (c *managerClient) GetLicense(ctx context.Context, in *empty.Empty, opts ..
 func (c *managerClient) CanConnectAmbassadorCloud(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error) {
 	out := new(AmbassadorCloudConnection)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/CanConnectAmbassadorCloud", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) GetCloudConfig(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error) {
+	out := new(AmbassadorCloudConfig)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/GetCloudConfig", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -242,9 +254,12 @@ type ManagerServer interface {
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(context.Context, *empty.Empty) (*License, error)
-	// canConnectAmbassadorCloud returns whether or not the cluster is able to talk to
+	// CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
 	// Ambassador Cloud
 	CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error)
+	// GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
+	// by the agents.
+	GetCloudConfig(context.Context, *empty.Empty) (*AmbassadorCloudConfig, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
@@ -294,6 +309,9 @@ func (UnimplementedManagerServer) GetLicense(context.Context, *empty.Empty) (*Li
 }
 func (UnimplementedManagerServer) CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CanConnectAmbassadorCloud not implemented")
+}
+func (UnimplementedManagerServer) GetCloudConfig(context.Context, *empty.Empty) (*AmbassadorCloudConfig, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCloudConfig not implemented")
 }
 func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsClient not implemented")
@@ -388,6 +406,24 @@ func _Manager_CanConnectAmbassadorCloud_Handler(srv interface{}, ctx context.Con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_GetCloudConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetCloudConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/GetCloudConfig",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetCloudConfig(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -593,6 +629,10 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CanConnectAmbassadorCloud",
 			Handler:    _Manager_CanConnectAmbassadorCloud_Handler,
+		},
+		{
+			MethodName: "GetCloudConfig",
+			Handler:    _Manager_GetCloudConfig_Handler,
 		},
 		{
 			MethodName: "ArriveAsClient",

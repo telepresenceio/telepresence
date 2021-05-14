@@ -123,7 +123,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 }
 
 func (ki *installer) createManagerDeployment(c context.Context, env client.Env, addLicense bool) error {
-	dep := ki.managerDeployment(env, addLicense)
+	dep := ki.managerDeployment(c, env, addLicense)
 	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
 	return ki.client.Create(c, dep, dep)
 }
@@ -258,7 +258,7 @@ func (ki *installer) updateDeployment(c context.Context, env client.Env, current
 	if _, err := ki.findSecret(c, managerNamespace, managerLicenseName); err == nil {
 		addLicense = true
 	}
-	dep := ki.managerDeployment(env, addLicense)
+	dep := ki.managerDeployment(c, env, addLicense)
 	dep.ResourceVersion = currentDep.ResourceVersion
 	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
 	err := ki.client.Update(c, dep, dep)
@@ -1025,7 +1025,7 @@ func addAgentToWorkload(
 	return object, matchingService, nil
 }
 
-func (ki *installer) managerDeployment(env client.Env, addLicense bool) *kates.Deployment {
+func (ki *installer) managerDeployment(c context.Context, env client.Env, addLicense bool) *kates.Deployment {
 	replicas := int32(1)
 
 	var containerEnv []corev1.EnvVar
@@ -1037,6 +1037,8 @@ func (ki *installer) managerDeployment(env client.Env, addLicense bool) *kates.D
 	if env.SystemAPort != "" {
 		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_PORT", Value: env.SystemAPort})
 	}
+	clusterID := ki.getClusterId(c)
+	containerEnv = append(containerEnv, corev1.EnvVar{Name: "CLUSTER_ID", Value: clusterID})
 	// If addLicense is true, we mount the secret as a volume into the traffic-manager
 	// and then we mount that volume to a path in the container that the traffic-manager
 	// knows about and can read from.

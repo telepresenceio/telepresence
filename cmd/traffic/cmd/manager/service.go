@@ -75,7 +75,7 @@ func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error
 		return &rpc.License{}, err
 	}
 	hostDomain := string(hostDomainData)
-	return &rpc.License{License: license, Host: hostDomain}, nil
+	return &rpc.License{License: license, Host: hostDomain, ClusterId: m.env.ClusterID}, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
@@ -89,6 +89,12 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 	}
 	conn.Close()
 	return &rpc.AmbassadorCloudConnection{CanConnect: true}, nil
+}
+
+// GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
+// the agents)
+func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
+	return &rpc.AmbassadorCloudConfig{Host: m.env.SystemAHost, Port: m.env.SystemAPort}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.
@@ -257,7 +263,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
-
+	apiKey := ciReq.GetApiKey()
 	dlog.Debugf(ctx, "CreateIntercept called")
 
 	if m.state.GetClient(sessionID) == nil {
@@ -268,7 +274,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	return m.state.AddIntercept(sessionID, spec)
+	return m.state.AddIntercept(sessionID, apiKey, spec)
 }
 
 func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {

@@ -64,6 +64,17 @@ func (p *mgrProxy) CanConnectAmbassadorCloud(ctx context.Context, arg *empty.Emp
 	}
 	return client.CanConnectAmbassadorCloud(ctx, arg, callOptions...)
 }
+
+func (p *mgrProxy) GetCloudConfig(ctx context.Context, arg *empty.Empty) (*managerrpc.AmbassadorCloudConfig, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	// TODO (dyung): We might want to make this always return an error since the
+	// client should already have the config.
+	return client.GetCloudConfig(ctx, arg, callOptions...)
+}
+
 func (p *mgrProxy) ArriveAsClient(ctx context.Context, arg *managerrpc.ClientInfo) (*managerrpc.SessionInfo, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

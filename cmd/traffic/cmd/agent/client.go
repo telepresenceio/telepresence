@@ -12,26 +12,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-// GetLicenseFromManager gets the license + associated host via a
-// gRPC call to the manager
-func GetLicenseFromManager(ctx context.Context, address string) (*rpc.License, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		return &rpc.License{}, err
-	}
-	defer conn.Close()
-
-	manager := rpc.NewManagerClient(conn)
-	license, err := manager.GetLicense(ctx, &empty.Empty{})
-	if err != nil {
-		return &rpc.License{}, err
-	}
-	return license, nil
-}
-
 func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

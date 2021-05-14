@@ -12,6 +12,7 @@ type Env struct {
 	ServerPort  string `env:"SERVER_PORT,default=8081"`
 	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
 	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
+	ClusterID   string `env:"CLUSTER_ID,default="`
 }
 
 func LoadEnv(ctx context.Context) (Env, error) {
