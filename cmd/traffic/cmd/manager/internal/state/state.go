@@ -729,7 +729,15 @@ func (s *State) startHostLookup(agentSessionID string, request *rpc.LookupHostRe
 	}
 	s.mu.Unlock()
 	if as != nil {
-		as.lookups <- request
+		// the as.lookups channel may be closed at this point, so guard for panic
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					close(rch)
+				}
+			}()
+			as.lookups <- request
+		}()
 	}
 	return rch
 }
