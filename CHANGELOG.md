@@ -1,7 +1,7 @@
 # Changelog
 
 ### 2.2.2 (TBD)
-- Feature: Telepresence attempts to translate legacy Telepresence commands into viable Telepresence commands.
+- Feature: Telepresence translates legacy Telepresence commands into viable Telepresence commands.
 - Bugfix: Intercepts will only look for agents that are in the same namespace as the intercept.
 
 ### 2.2.1 (April 29, 2021)
