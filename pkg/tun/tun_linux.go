@@ -30,6 +30,12 @@ func OpenTun() (*Device, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open TUN device %s: %v", devicePath, err)
 	}
+	unix.CloseOnExec(fd)
+	defer func() {
+		if err != nil {
+			_ = unix.Close(fd)
+		}
+	}()
 
 	var flagsRequest struct {
 		name  [unix.IFNAMSIZ]byte
@@ -40,7 +46,6 @@ func OpenTun() (*Device, error) {
 
 	err = unix.IoctlSetInt(fd, unix.TUNSETIFF, int(uintptr(unsafe.Pointer(&flagsRequest))))
 	if err != nil {
-		_ = unix.Close(fd)
 		return nil, err
 	}
 

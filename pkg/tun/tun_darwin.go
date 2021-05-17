@@ -31,6 +31,7 @@ func OpenTun() (*Device, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DGRAM socket: %v", err)
 	}
+	unix.CloseOnExec(fd)
 	defer func() {
 		if err != nil {
 			_ = unix.Close(fd)
