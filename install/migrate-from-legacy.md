@@ -1,4 +1,4 @@
-# Migrate from Legacy Telepresence
+# Migrate from legacy Telepresence
 
 Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence](https://www.telepresence.io/) when working with local instances of your services.
 
@@ -10,7 +10,7 @@ Telepresence introduces a [new architecture](../../reference/architecture/) buil
 
 Please see [the Telepresence quick start](../../quick-start/) for an introduction to running intercepts and [the intercept reference doc](../../reference/intercepts/) for a deep dive into intercepts.
 
-## Using legacy Telepresence Commands
+## Using legacy Telepresence commands
 
 First please ensure you've [installed Telepresence](../).
 
@@ -45,7 +45,7 @@ Telepresence will let you know what the legacy Telepresence command has mapped t
 runs it.  So you can get started with Telepresence today, using the commands you are used to
 and it will help you learn the Telepresence syntax.
 
-### Legacy Command Mapping
+### Legacy command mapping
 
 Below is the mapping of legacy Telepresence to Telepresence commands (where they exist and
 are supported).
@@ -64,7 +64,7 @@ are supported).
 | --context,--namespace                            | --context, --namespace (haven't changed)   |
 | --mount,--docker-mount                           | --context, --namespace (haven't changed)   |
 
-### Legacy Telepresence Command Limitations
+### Legacy Telepresence command limitations
 
 Some of the commands and flags from legacy Telepresence either didn't apply to Telepresence or
 aren't yet supported in Telepresence.  For some known popular commands, such as --method,
@@ -74,7 +74,7 @@ Telepresence can't translate yet, it will let you know that that flag is "unsupp
 If Telepresence is missing any flags or functionality that is integral to your usage, please let us know
 by [creating an issue](https://github.com/telepresenceio/telepresence/issues) and/or talking to us on our [Slack channel](https://a8r.io/Slack)!
 
-## Telepresence Changes
+## Telepresence changes
 
 Telepresence installs a Traffic Manager in the cluster and Traffic Agents alongside workloads when performing intercepts (including
 with `--swap-deployment`) and leaves them.  If you use `--swap-deployment`, the intercept will be left once the process
