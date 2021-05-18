@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "telepresence.fullname" . }}-test-connection"
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "telepresence.fullname" . }}:8081']
+  restartPolicy: Never

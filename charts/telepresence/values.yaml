@@ -1,0 +1,45 @@
+# The Traffic Manager only support running with one replica at the moment.
+# Configuring the replicaCount will be added in future versions of Telepresence
+# replicaCount: 1
+
+image:
+  repository: docker.io/datawire/tel2
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+  imagePullSecrets: []
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  ports:
+  - name: sshd
+    port: 8022
+    targetPort: sshd
+  - name: api
+    port: 8081
+    targetPort: api
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
