@@ -74,6 +74,8 @@ func OpenTun() (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer unix.Close(provisioningSocket)
+
 	if err = unix.BindToDevice(provisioningSocket, name); err != nil {
 		return nil, err
 	}
