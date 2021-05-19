@@ -25,8 +25,7 @@ type Device struct {
 	name string
 }
 
-// OpenTun creates a new TUN device and ensures that it is up and running.
-func OpenTun() (*Device, error) {
+func openTun() (*Device, error) {
 	fd, err := unix.Socket(unix.AF_SYSTEM, unix.SOCK_DGRAM, sysProtoControl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DGRAM socket: %v", err)
@@ -59,9 +58,7 @@ func OpenTun() (*Device, error) {
 	return &Device{File: os.NewFile(uintptr(fd), ""), name: name}, nil
 }
 
-// AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
-// is associated with the device (removing the device will automatically remove the route).
-func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet) error {
+func (t *Device) addSubnet(_ context.Context, subnet *net.IPNet) error {
 	to := make(net.IP, len(subnet.IP))
 	copy(to, subnet.IP)
 	to[len(to)-1] = 1
@@ -73,9 +70,7 @@ func (t *Device) AddSubnet(_ context.Context, subnet *net.IPNet) error {
 	})
 }
 
-// RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
-// is associated with the device.
-func (t *Device) RemoveSubnet(_ context.Context, subnet *net.IPNet) error {
+func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
 	to := make(net.IP, len(subnet.IP))
 	copy(to, subnet.IP)
 	to[len(to)-1] = 1
@@ -87,7 +82,7 @@ func (t *Device) RemoveSubnet(_ context.Context, subnet *net.IPNet) error {
 	})
 }
 
-func (t *Device) SetMTU(mtu int) error {
+func (t *Device) setMTU(mtu int) error {
 	return withSocket(unix.AF_INET, func(fd int) error {
 		var ifr unix.IfreqMTU
 		copy(ifr.Name[:], t.name)
@@ -100,9 +95,7 @@ func (t *Device) SetMTU(mtu int) error {
 	})
 }
 
-// Read reads as many bytes as possible into the given buffer.Data and returns the
-// number of bytes actually read
-func (t *Device) Read(into *buffer.Data) (int, error) {
+func (t *Device) read(into *buffer.Data) (int, error) {
 	n, err := t.File.Read(into.Raw())
 	if n >= buffer.PrefixLen {
 		n -= buffer.PrefixLen
@@ -110,9 +103,7 @@ func (t *Device) Read(into *buffer.Data) (int, error) {
 	return n, err
 }
 
-// Write writes bytes from the given buffer.Data and returns the number of bytes
-// actually written.
-func (t *Device) Write(from *buffer.Data) (int, error) {
+func (t *Device) write(from *buffer.Data) (int, error) {
 	raw := from.Raw()
 	if len(raw) <= buffer.PrefixLen {
 		return 0, unix.EIO

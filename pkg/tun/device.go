@@ -1,14 +1,51 @@
 package tun
 
 import (
+	"context"
+	"net"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 )
+
+// OpenTun creates a new TUN device and ensures that it is up and running.
+func OpenTun() (*Device, error) {
+	return openTun()
+}
+
+// AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
+// is associated with the device (removing the device will automatically remove the route).
+func (t *Device) AddSubnet(ctx context.Context, subnet *net.IPNet) error {
+	return t.addSubnet(ctx, subnet)
+}
+
+// RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
+// is associated with the device.
+func (t *Device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) error {
+	return t.removeSubnet(ctx, subnet)
+}
 
 // Name returns the name of this device, e.g. "tun0"
 func (t *Device) Name() string {
 	return t.name
+}
+
+// Read reads as many bytes as possible into the given buffer.Data and returns the
+// number of bytes actually read
+func (t *Device) Read(into *buffer.Data) (int, error) {
+	return t.read(into)
+}
+
+// Write writes bytes from the given buffer.Data and returns the number of bytes
+// actually written.
+func (t *Device) Write(from *buffer.Data) (int, error) {
+	return t.write(from)
+}
+
+func (t *Device) SetMTU(mtu int) error {
+	return t.setMTU(mtu)
 }
 
 func withSocket(domain int, f func(fd int) error) error {

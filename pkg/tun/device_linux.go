@@ -1,4 +1,3 @@
-// tun_linux.go: Open a Tunnel (L3 virtual interface) using the Universal TUN/TAP device driver.
 package tun
 
 import (
@@ -22,9 +21,8 @@ type Device struct {
 	index uint32
 }
 
-// OpenTun creates a new TUN device and ensures that it is up and running.
-func OpenTun() (*Device, error) {
-	// https://www.kernel.org/doc/Documentation/networking/tuntap.txt
+func openTun() (*Device, error) {
+	// https://www.kernel.org/doc/html/latest/networking/tuntap.html
 
 	fd, err := unix.Open(devicePath, unix.O_RDWR, 0)
 	if err != nil {
@@ -97,22 +95,20 @@ func OpenTun() (*Device, error) {
 	return &Device{File: os.NewFile(uintptr(fd), devicePath), name: name, index: index}, nil
 }
 
-func (t *Device) AddSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (t *Device) addSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return dexec.CommandContext(ctx, "ip", "a", "add", subnet.String(), "dev", t.name).Run()
 }
 
-// RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
-// is associated with the device.
-func (t *Device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (t *Device) removeSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return dexec.CommandContext(ctx, "ip", "a", "del", subnet.String(), "dev", t.name).Run()
 }
 
 // Index returns the index of this device
-func (t *Device) Index() uint32 {
+func (t *Device) Index() int32 {
 	return t.index
 }
 
-func (t *Device) SetMTU(mtu int) error {
+func (t *Device) setMTU(mtu int) error {
 	return withSocket(unix.AF_INET, func(fd int) error {
 		var mtuRequest struct {
 			name [unix.IFNAMSIZ]byte
@@ -128,15 +124,11 @@ func (t *Device) SetMTU(mtu int) error {
 	})
 }
 
-// Read reads as many bytes as possible into the given buffer.Data and returns the
-// number of bytes actually read
-func (t *Device) Read(into *buffer.Data) (int, error) {
+func (t *Device) read(into *buffer.Data) (int, error) {
 	return t.File.Read(into.Raw())
 }
 
-// Write writes bytes from the given buffer.Data and returns the number of bytes
-// actually written.
-func (t *Device) Write(from *buffer.Data) (int, error) {
+func (t *Device) write(from *buffer.Data) (int, error) {
 	return t.File.Write(from.Raw())
 }
 
