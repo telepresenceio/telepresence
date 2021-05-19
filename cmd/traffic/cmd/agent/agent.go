@@ -23,7 +23,7 @@ import (
 type Config struct {
 	Name        string `env:"AGENT_NAME,required"`
 	Namespace   string `env:"AGENT_NAMESPACE,default="`
-	PodName     string `env:"AGENT_POD_NAME,default="`
+	PodIP       string `env:"AGENT_POD_IP,default="`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
 	AppMounts   string `env:"APP_MOUNTS,default=/tel_app_mounts"`
 	AppPort     int32  `env:"APP_PORT,required"`
@@ -35,7 +35,7 @@ var skipKeys = map[string]bool{
 	// Keys found in the Config
 	"AGENT_NAME":      true,
 	"AGENT_NAMESPACE": true,
-	"AGENT_POD_NAME":  true,
+	"AGENT_POD_IP":    true,
 	"AGENT_PORT":      true,
 	"APP_MOUNTS":      true,
 	"APP_PORT":        true,
@@ -129,15 +129,9 @@ func Main(ctx context.Context, args ...string) error {
 	}
 	dlog.Infof(ctx, "%+v", config)
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		dlog.Infof(ctx, "hostname: %+v", err)
-		hostname = fmt.Sprintf("unknown: %+v", err)
-	}
-
 	info := &rpc.AgentInfo{
 		Name:        config.Name,
-		Hostname:    hostname,
+		PodIp:       config.PodIP,
 		Product:     "telepresence",
 		Version:     version.Version,
 		Environment: AppEnvironment(),
@@ -226,7 +220,7 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodName, int32(sftpPort))
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, int32(sftpPort))
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

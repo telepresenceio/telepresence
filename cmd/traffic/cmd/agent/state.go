@@ -20,11 +20,11 @@ type state struct {
 	appPort     int32
 	chosenID    string
 	namespace   string
-	podName     string
-	sshPort     int32
+	podIP       string
+	sftpPort    int32
 }
 
-func NewState(forwarder *Forwarder, managerHost, namespace, podName string, sshPort int32) State {
+func NewState(forwarder *Forwarder, managerHost, namespace, podIP string, sftpPort int32) State {
 	host, port := forwarder.Target()
 	return &state{
 		forwarder:   forwarder,
@@ -32,8 +32,8 @@ func NewState(forwarder *Forwarder, managerHost, namespace, podName string, sshP
 		appHost:     host,
 		appPort:     port,
 		namespace:   namespace,
-		podName:     podName,
-		sshPort:     sshPort,
+		podIP:       podIP,
+		sftpPort:    sftpPort,
 	}
 }
 
@@ -88,8 +88,8 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:                cept.Id,
 					Disposition:       manager.InterceptDispositionType_ACTIVE,
-					PodName:           s.podName,
-					SshPort:           s.sshPort,
+					PodIp:             s.podIP,
+					SftpPort:          s.sftpPort,
 					MechanismArgsDesc: "all TCP connections",
 				})
 			case chosenIntercept == nil:
@@ -104,8 +104,8 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:                cept.Id,
 					Disposition:       manager.InterceptDispositionType_ACTIVE,
-					PodName:           s.podName,
-					SshPort:           s.sshPort,
+					PodIp:             s.podIP,
+					SftpPort:          s.sftpPort,
 					MechanismArgsDesc: "all TCP connections",
 				})
 			default:

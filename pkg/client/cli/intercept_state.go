@@ -268,7 +268,7 @@ Please specify one or more header matches using --http-match.`
 		fmt.Fprintf(st, "Found more than one possible match:")
 		for idx := range matches {
 			match := &matches[idx]
-			fmt.Fprintf(st, "\n%4d: %s on host %s", idx+1, match.Name, match.Hostname)
+			fmt.Fprintf(st, "\n%4d: %s.%s", idx+1, match.Name, match.Namespace)
 		}
 		msg = st.String()
 	case connector.InterceptError_FAILED_TO_ESTABLISH:

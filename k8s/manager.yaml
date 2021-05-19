@@ -10,9 +10,6 @@ spec:
     app: traffic-manager
     telepresence: manager
   ports:
-  - name: sshd
-    port: 8022
-    targetPort: sshd
   - name: api
     port: 8081
     targetPort: api
@@ -40,8 +37,6 @@ spec:
       - name: traffic-manager
         image: ko://github.com/telepresenceio/telepresence/v2/cmd/traffic
         ports:
-        - name: sshd
-          containerPort: 8022
         - name: api
           containerPort: 8081
       restartPolicy: Always
