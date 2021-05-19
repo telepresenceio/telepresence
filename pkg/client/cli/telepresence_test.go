@@ -430,7 +430,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		cs.Eventually(func() bool {
 			_, err := net.DefaultResolver.LookupHost(ctx, "hello-0")
 			return err != nil
-		}, 3*time.Second, 300*time.Millisecond)
+		}, 3*time.Second, time.Second)
 	})
 }
 
