@@ -14,7 +14,7 @@ import (
 const HeaderLen = 20
 const HeaderMaxLen = 60
 
-// Header represents a TCP header. The header is obtained by simply casting the IP headers payload.
+// Header represents a TCP header. The header is obtained by simply casting the IP header's payload.
 type Header []byte
 
 type optionKind byte

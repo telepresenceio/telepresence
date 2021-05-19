@@ -55,7 +55,10 @@ func openTun() (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Device{File: os.NewFile(uintptr(fd), ""), name: name}, nil
+	return &Device{
+		File: os.NewFile(uintptr(fd), ""),
+		name: name,
+	}, nil
 }
 
 func (t *Device) addSubnet(_ context.Context, subnet *net.IPNet) error {

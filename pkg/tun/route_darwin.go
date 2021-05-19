@@ -81,7 +81,6 @@ func (t *Device) routeAdd(routeSocket, seq int, r *net.IPNet, gw net.IP) error {
 	return err
 }
 
-// nolint:unused
 func (t *Device) routeClear(routeSocket, seq int, r *net.IPNet, gw net.IP) error {
 	m := t.newRouteMessage(unix.RTM_DELETE, seq, r, gw)
 	wb, err := m.Marshal()
