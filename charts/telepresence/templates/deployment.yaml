@@ -39,6 +39,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if .Values.licenseKey.create }}
+          volumeMounts:
+          - name: license
+            mountPath: /home/telepresence
+            readOnly: true
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -50,4 +56,11 @@ spec:
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.licenseKey.create }}
+      volumes:
+      - name: license
+        secret: 
+          defaultMode: 420
+          secretName: {{ .Values.licenseKey.secret.name }}
       {{- end }}
