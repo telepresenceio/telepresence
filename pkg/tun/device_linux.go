@@ -48,6 +48,8 @@ func openTun() (*Device, error) {
 		return nil, err
 	}
 
+	// Retrieve the name that was generated based on the "tel%d" template. The
+	// name is zero terminated.
 	var name string
 	for i := 0; i < unix.IFNAMSIZ; i++ {
 		if flagsRequest.name[i] == 0 {
@@ -59,25 +61,24 @@ func openTun() (*Device, error) {
 		name = string(flagsRequest.name[:])
 	}
 
-	htons := func(value uint16) uint16 {
-		test := uint16(1)
-		if (*[2]byte)(unsafe.Pointer(&test))[0] == 1 {
-			// this machine is little endian, swap bytes
-			value = value&0xff<<8 | value&0xff00>>8
-		}
-		return value
-	}
+	// Set non-blocking so that ReadPacket() doesn't hang for several seconds when the
+	// fd is Closed. ReadPacket() will still wait for data to arrive.
+	//
+	// See: https://github.com/golang/go/issues/30426#issuecomment-470044803
+	_ = unix.SetNonblock(fd, true)
 
-	// Passing a network ordered short here is required.
-	provisioningSocket, err := unix.Socket(unix.AF_PACKET, unix.SOCK_RAW, int(htons(unix.ETH_P_ALL)))
+	// Bring the device up. This is how it's done in ifconfig.
+	provisioningSocket, err := unix.Socket(unix.AF_PACKET, unix.SOCK_DGRAM, unix.IPPROTO_IP)
 	if err != nil {
 		return nil, err
 	}
 	defer unix.Close(provisioningSocket)
 
-	if err = unix.BindToDevice(provisioningSocket, name); err != nil {
+	flagsRequest.flags = 0
+	if err = ioctl(provisioningSocket, unix.SIOCGIFFLAGS, unsafe.Pointer(&flagsRequest)); err != nil {
 		return nil, err
 	}
+
 	flagsRequest.flags |= unix.IFF_UP | unix.IFF_RUNNING
 	if err = ioctl(provisioningSocket, unix.SIOCSIFFLAGS, unsafe.Pointer(&flagsRequest)); err != nil {
 		return nil, err
@@ -87,12 +88,6 @@ func openTun() (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Set non-blocking so that Read() doesn't hang for several seconds when the
-	// fd is Closed. Read() will still wait for data to arrive.
-	//
-	// See: https://github.com/golang/go/issues/30426#issuecomment-470044803
-	_ = unix.SetNonblock(fd, true)
 	return &Device{File: os.NewFile(uintptr(fd), devicePath), name: name, index: index}, nil
 }
 
