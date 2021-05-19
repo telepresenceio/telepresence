@@ -288,7 +288,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		data = nil
 	case unix.IPPROTO_UDP:
 		dst := ipHdr.Destination()
-		if dst.IsLinkLocalUnicast() || dst.IsLinkLocalMulticast() {
+		if !dst.IsGlobalUnicast() {
 			// Just ignore at this point.
 			return
 		}
@@ -318,6 +318,12 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
+	if tcpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
+		// Ignore TCP packages intended for the DNS resolver for now
+		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
+		return
+	}
+
 	connID := connpool.NewConnID(unix.IPPROTO_TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
 	wf, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
 		return tcp.NewHandler(t.connStream, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
