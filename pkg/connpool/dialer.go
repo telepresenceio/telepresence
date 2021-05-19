@@ -15,9 +15,7 @@ import (
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
 // reading or writing any messages. The dialer is normally closed by one of the peers.
-//
-// TODO: Make this configurable
-const connTTL = 5 * time.Minute
+const connTTL = time.Minute
 const dialTimeout = 30 * time.Second
 
 const (
@@ -117,6 +115,8 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	case Disconnect:
 		h.Close(ctx)
 		h.sendTCD(ctx, DisconnectOK)
+	case KeepAlive:
+		h.resetIdle()
 	default:
 		dlog.Errorf(ctx, "%s: unhandled connection control message: %s", h.id, cm)
 	}
@@ -161,10 +161,6 @@ func (h *dialer) readLoop(ctx context.Context) {
 	}()
 	b := make([]byte, 0x8000)
 	for ctx.Err() == nil {
-		if err := h.conn.SetReadDeadline(time.Now().Add(connTTL)); err != nil {
-			dlog.Errorf(ctx, "!! CONN %s: failed to set read deadline on connection: %v", h.id, err)
-			return
-		}
 		n, err := h.conn.Read(b)
 		if err != nil {
 			if atomic.LoadInt32(&h.connected) > 0 && ctx.Err() == nil {

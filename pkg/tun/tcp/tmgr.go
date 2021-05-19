@@ -42,6 +42,7 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 		h.sendFin(ctx, true)
 	case connpool.ReadClosed, connpool.WriteClosed:
 		h.Close(ctx)
+	case connpool.KeepAlive:
 	}
 }
 
