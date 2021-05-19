@@ -1,0 +1,19 @@
+--------------------------------------------------------------------------------
+Congratulations!
+
+
+You have successfully installed the Traffic Manager component of Telepresence!
+Now your users will be able to `telepresence connect` to this Cluster and create
+intercepts for their services!
+
+--------------------------------------------------------------------------------
+Next Steps
+--------------------------------------------------------------------------------
+
+- Take a look at our RBAC documentation for setting up the minimal required RBAC
+roles for your users at
+https://www.getambassador.io/docs/telepresence/latest/reference/rbac/
+
+- Ensure that you are keeping up to date with Telepresence releases 
+https://github.com/telepresenceio/telepresence/releases so that your Traffic
+Manager is the same version as the telepresence client your users are running!
