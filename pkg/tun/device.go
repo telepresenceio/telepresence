@@ -32,16 +32,16 @@ func (t *Device) Name() string {
 	return t.name
 }
 
-// Read reads as many bytes as possible into the given buffer.Data and returns the
+// ReadPacket reads as many bytes as possible into the given buffer.Data and returns the
 // number of bytes actually read
-func (t *Device) Read(into *buffer.Data) (int, error) {
-	return t.read(into)
+func (t *Device) ReadPacket(into *buffer.Data) (int, error) {
+	return t.readPacket(into)
 }
 
-// Write writes bytes from the given buffer.Data and returns the number of bytes
+// WritePacket writes bytes from the given buffer.Data and returns the number of bytes
 // actually written.
-func (t *Device) Write(from *buffer.Data) (int, error) {
-	return t.write(from)
+func (t *Device) WritePacket(from *buffer.Data) (int, error) {
+	return t.writePacket(from)
 }
 
 func (t *Device) SetMTU(mtu int) error {

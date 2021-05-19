@@ -124,11 +124,11 @@ func (t *Device) setMTU(mtu int) error {
 	})
 }
 
-func (t *Device) read(into *buffer.Data) (int, error) {
+func (t *Device) readPacket(into *buffer.Data) (int, error) {
 	return t.File.Read(into.Raw())
 }
 
-func (t *Device) write(from *buffer.Data) (int, error) {
+func (t *Device) writePacket(from *buffer.Data) (int, error) {
 	return t.File.Write(from.Raw())
 }
 

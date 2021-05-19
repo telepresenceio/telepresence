@@ -272,7 +272,7 @@ func (t *tunRouter) run(c context.Context) error {
 				return nil
 			case pkt := <-t.toTunCh:
 				dlog.Debugf(c, "-> TUN %s", pkt)
-				_, err := t.dev.Write(pkt.Data())
+				_, err := t.dev.WritePacket(pkt.Data())
 				pkt.SoftRelease()
 				if err != nil {
 					if atomic.LoadInt32(&t.closing) == 2 || c.Err() != nil {
@@ -315,7 +315,7 @@ func (t *tunRouter) run(c context.Context) error {
 		for atomic.LoadInt32(&t.closing) < 2 {
 			data := buffer.DataPool.Get(buffer.DataPool.MTU)
 			for {
-				n, err := t.dev.Read(data)
+				n, err := t.dev.ReadPacket(data)
 				if err != nil {
 					buffer.DataPool.Put(data)
 					if c.Err() != nil || atomic.LoadInt32(&t.closing) == 2 {

@@ -95,7 +95,7 @@ func (t *Device) setMTU(mtu int) error {
 	})
 }
 
-func (t *Device) read(into *buffer.Data) (int, error) {
+func (t *Device) readPacket(into *buffer.Data) (int, error) {
 	n, err := t.File.Read(into.Raw())
 	if n >= buffer.PrefixLen {
 		n -= buffer.PrefixLen
@@ -103,7 +103,7 @@ func (t *Device) read(into *buffer.Data) (int, error) {
 	return n, err
 }
 
-func (t *Device) write(from *buffer.Data) (int, error) {
+func (t *Device) writePacket(from *buffer.Data) (int, error) {
 	raw := from.Raw()
 	if len(raw) <= buffer.PrefixLen {
 		return 0, unix.EIO
