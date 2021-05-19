@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -18,7 +19,7 @@ const devicePath = "/dev/net/tun"
 type Device struct {
 	*os.File
 	name  string
-	index uint32
+	index int32
 }
 
 func openTun() (*Device, error) {
@@ -112,11 +113,12 @@ func (t *Device) setMTU(mtu int) error {
 	return withSocket(unix.AF_INET, func(fd int) error {
 		var mtuRequest struct {
 			name [unix.IFNAMSIZ]byte
-			mtu  uint32
+			mtu  int32
 		}
 		copy(mtuRequest.name[:], t.name)
-		mtuRequest.mtu = uint32(mtu)
+		mtuRequest.mtu = int32(mtu)
 		err := ioctl(fd, unix.SIOCSIFMTU, unsafe.Pointer(&mtuRequest))
+		runtime.KeepAlive(&mtuRequest)
 		if err != nil {
 			err = fmt.Errorf("set MTU on %s failed: %w", t.name, err)
 		}
@@ -132,10 +134,10 @@ func (t *Device) writePacket(from *buffer.Data) (int, error) {
 	return t.File.Write(from.Raw())
 }
 
-func getInterfaceIndex(fd int, name string) (uint32, error) {
+func getInterfaceIndex(fd int, name string) (int32, error) {
 	var indexRequest struct {
 		name  [unix.IFNAMSIZ]byte
-		index uint32
+		index int32
 	}
 	copy(indexRequest.name[:], name)
 	if err := ioctl(fd, unix.SIOCGIFINDEX, unsafe.Pointer(&indexRequest)); err != nil {
