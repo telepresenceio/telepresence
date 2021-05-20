@@ -77,7 +77,11 @@ export default function SimpleTabs() {
           '\n \n' +
           '# 2. Make the binary executable:' +
           '\n' +
-          'sudo chmod a+x /usr/local/bin/telepresence'
+          'sudo chmod a+x /usr/local/bin/telepresence' +
+          '\n \n' +
+          '# OR via brew:' +
+          '\n' +
+          'brew install datawire/blackbird/telepresence2'
         }
         </CodeBlock>
       </TabPanel>
