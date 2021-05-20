@@ -159,6 +159,8 @@ jobs:
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make publish-homebrew-formula
 
 #  "release-finalize":
 #    executor: vm-linux

@@ -85,6 +85,10 @@ promote-to-stable:
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 
+.PHONY: publish-homebrew-formula
+publish-homebrew-formula:
+	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION))
+
 .PHONY: install
 install:  ## (Install) installs the telepresence binary under ~/go/bin
 	go install -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) ./cmd/telepresence
