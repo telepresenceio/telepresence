@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 
+	"golang.org/x/sys/unix"
+
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -123,7 +125,7 @@ func L4Checksum(ipHdr Header, checksumPosition, l4Proto int) {
 	}
 	c := ^uint16(s)
 
-	if c == 0 {
+	if c == 0 && l4Proto == unix.IPPROTO_UDP {
 		// From RFC 768: If the computed checksum is zero, it is transmitted as all ones.
 		c = 0xffff
 	}

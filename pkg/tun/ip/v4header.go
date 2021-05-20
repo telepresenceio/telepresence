@@ -196,10 +196,6 @@ func (h V4Header) SetChecksum() {
 		s = (s >> 16) + (s & 0xffff)
 	}
 	c := ^uint16(s)
-	if c == 0 {
-		// From RFC 768: If the computed checksum is zero, it is transmitted as all ones.
-		c = 0xffff
-	}
 	binary.BigEndian.PutUint16(h[10:], c)
 }
 
