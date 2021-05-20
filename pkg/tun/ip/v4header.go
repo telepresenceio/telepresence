@@ -240,14 +240,15 @@ func (h V4Header) ConcatFragments(data *buffer.Data, fragsMap map[uint16][]*buff
 	expectedOffset := 0
 	for _, data := range fragments {
 		eh := V4Header(data.Buf())
-		if eh.FragmentOffset()*8 != expectedOffset {
+		offset := eh.FragmentOffset() * 8
+		if offset > expectedOffset {
 			// There's a gap. Await more fragments
 			return nil
 		}
 		lastPayload = eh.PayloadLen()
-		expectedOffset += lastPayload
+		expectedOffset = offset + lastPayload
 	}
-	totalPayload := expectedOffset + lastPayload
+	totalPayload := expectedOffset
 	firstHeader := V4Header(fragments[0].Buf())
 
 	final := buffer.DataPool.Get(firstHeader.HeaderLen() + totalPayload)
