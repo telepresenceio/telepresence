@@ -25,20 +25,28 @@ If release name contains chart name it will be used as a full name.
 
 {{- define "telepresence.fullname" -}}
 {{- $name := default "traffic-manager" }}
+{{- if .Values.isCI }}
+{{- print "traffic-agent" }}
+{{- else }}
 {{- if ne $name .Release.Name }}
 {{- fail "The name of the release MUST BE traffic-manager" }}
 {{- end }}
 {{- printf "%s" .Release.Name }}
+{{- end -}}
 {{- end -}}
 
 {{/*
 Traffic Manager Namespace
 */}}
 {{- define "telepresence.namespace" -}}
+{{- if .Values.isCI }}
+{{- print "ambassador" }}
+{{- else }}
 {{- if ne "ambassador" .Release.Namespace}}
 {{- fail "The Traffic Manager MUST BE deployed to the namespace named Ambassador" }}
 {{- end }}
 {{- printf "%s" .Release.Namespace }}
+{{- end }}
 {{- end -}}
 
 {{/*
