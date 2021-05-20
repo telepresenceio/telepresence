@@ -1,0 +1,112 @@
+################################################################################
+## Deployment Configuration
+################################################################################
+
+# The Traffic Manager only support running with one replica at the moment.
+# Configuring the replicaCount will be added in future versions of Telepresence
+
+# replicaCount: 1
+
+# The Telepresence client will try to ensure that the Traffic Manager image is
+# up to date and from the right registry. If you are changing the value below,
+# ensure that the tag is the same as the client version and that the 
+# TELEPRESENCE_REGISTRY environment variable is equal to image.repository.
+# 
+# The client will default to docker.io/datawire/tel2:{{CLIENT_VERSION}}
+
+image:
+  repository: docker.io/datawire/tel2
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+  imagePullSecrets: []
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+################################################################################
+## Service Configuration
+################################################################################
+
+service:
+  type: ClusterIP
+  ports:
+  - name: sshd
+    port: 8022
+    targetPort: sshd
+  - name: api
+    port: 8081
+    targetPort: api
+
+################################################################################
+## Traffic Manager Configuration
+################################################################################
+
+# The log level of the Traffic Manager.
+#
+# Default: debug
+logLevel: debug
+
+# Telepresence requires a clusterID for identifying itself.
+# This cluster ID is just the UID of the default namespace. You can get this by
+# running `kubectl get ns default -o jsonpath='{.metadata.uid}'`
+# Telepresence will not be able to request a license without this.
+#
+# Default: ""
+clusterID: ""
+
+# Telepresence requires a license key for creating selective intercepts. In
+# normal clusters with access to the public internet, this license is managed
+# automatically by the Ambassador Cloud. In air-gapped environments however, 
+# you need to get a license and add it to your cluster manually.
+# https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/#air-gapped-cluster
+#
+# Leave this unset unless you are running in an air-gapped environment.
+licenseKey:
+
+  # Creates the Volume and VolumeMounts for reading and managing the license key.
+  # 
+  # Default: false
+  create: false
+
+  # Value of the licence you get from the Ambassador cloud
+  #
+  # Default: ""
+  value: ""
+  
+  # Configure the Helm Chart to manage the Secret the Traffic Manager will use 
+  # to read the license key. 
+  secret:
+
+    # Create the Secret with the Helm release create
+    #
+    # Default: true
+    create: true
+
+    # Name of the Secret created (if create is true) and the Secret that will be
+    # mounted as a Volume for the Traffic Manager to read
+    #
+    # Default: systema-license
+    name: systema-license

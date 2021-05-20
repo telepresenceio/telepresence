@@ -31,3 +31,6 @@ traffic
 tst-manager
 tst-systema
 !/cmd/*/
+
+# The Chart directory
+!/charts/telepresence

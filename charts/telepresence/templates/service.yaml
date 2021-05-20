@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telepresence.fullname" . }}
+  namespace: {{ include "telepresence.namespace" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  clusterIP: None
+  {{- with .Values.service.ports }}
+  ports:
+  {{- toYaml . | nindent 2}}
+  {{- end }}
+  selector:
+    {{- include "telepresence.selectorLabels" . | nindent 4 }}
