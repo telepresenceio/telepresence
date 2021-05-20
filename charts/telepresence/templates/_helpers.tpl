@@ -32,6 +32,16 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
+Traffic Manager Namespace
+*/}}
+{{- define "telepresence.namespace" -}}
+{{- if ne "ambassador" .Release.Namespace}}
+{{- fail "The Traffic Manager MUST BE deployed to the namespace named Ambassador" }}
+{{- end }}
+{{- printf "%s" .Release.Namespace }}
+{{- end -}}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "telepresence.chart" -}}
