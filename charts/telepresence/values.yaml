@@ -69,7 +69,7 @@ licenseKey:
   # Value of the licence you get from the Ambassador cloud
   #
   # Default: ""
-  value: 
+  value: ""
   
   # Configure the Helm Chart to manage the Secret the Traffic Manager will use 
   # to read the license key. 
