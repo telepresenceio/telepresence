@@ -100,7 +100,7 @@ func AnalyzeIPs(ips []net.IP) []*net.IPNet {
 func FindAvailableClassC() (*net.IPNet, error) {
 	addrs, err := interfaceAddrs()
 	if err != nil {
-		return nil, fmt.Errorf("failed to obtain interface addresses: %v", err)
+		return nil, fmt.Errorf("failed to obtain interface addresses: %w", err)
 	}
 
 	cidrs := make([]*ipAndNetwork, 0, len(addrs))
@@ -128,13 +128,13 @@ func FindAvailableClassC() (*net.IPNet, error) {
 func Available(subnet *net.IPNet) (bool, error) {
 	addrs, err := interfaceAddrs()
 	if err != nil {
-		return false, fmt.Errorf("failed to obtain interface addresses: %v", err)
+		return false, fmt.Errorf("failed to obtain interface addresses: %w", err)
 	}
 
 	for _, a := range addrs {
 		_, network, err := net.ParseCIDR(a.String())
 		if err != nil {
-			return false, fmt.Errorf("failed to parse interface address: %v", err)
+			return false, fmt.Errorf("failed to parse interface address: %w", err)
 		}
 		if Covers(network, subnet) {
 			return false, nil

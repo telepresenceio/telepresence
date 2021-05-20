@@ -35,7 +35,7 @@ type (
 func NewResolveD() (*ResolveD, error) {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to system bus: %v", err)
+		return nil, fmt.Errorf("failed to connect to system bus: %w", err)
 	}
 	return &ResolveD{conn}, nil
 }

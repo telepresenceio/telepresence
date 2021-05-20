@@ -27,7 +27,7 @@ func openTun() (*Device, error) {
 
 	fd, err := unix.Open(devicePath, unix.O_RDWR, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open TUN device %s: %v", devicePath, err)
+		return nil, fmt.Errorf("failed to open TUN device %s: %w", devicePath, err)
 	}
 	unix.CloseOnExec(fd)
 	defer func() {

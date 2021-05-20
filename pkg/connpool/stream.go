@@ -28,7 +28,7 @@ func (s *Stream) ReadLoop(ctx context.Context, closing *int32) error {
 		err := s.RecvMsg(cm)
 		if err != nil {
 			if atomic.LoadInt32(closing) == 0 && ctx.Err() == nil {
-				return fmt.Errorf("read from grpc.ClientStream failed: %s", err)
+				return fmt.Errorf("read from grpc.ClientStream failed: %w", err)
 			}
 			return nil
 		}

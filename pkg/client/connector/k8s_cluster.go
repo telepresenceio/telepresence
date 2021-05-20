@@ -400,7 +400,7 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []str
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
-		return nil, client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, fmt.Errorf("k8s client create failed: %v", err))
+		return nil, client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, fmt.Errorf("k8s client create failed: %w", err))
 	}
 
 	ret := &k8sCluster{

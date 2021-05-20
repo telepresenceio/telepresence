@@ -117,7 +117,7 @@ func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode
 	pkt := connpool.ConnControl(h.id, code)
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
 	if err := h.SendMsg(pkt); err != nil {
-		return fmt.Errorf("failed to send control package: %v", err)
+		return fmt.Errorf("failed to send control package: %w", err)
 	}
 	return nil
 }

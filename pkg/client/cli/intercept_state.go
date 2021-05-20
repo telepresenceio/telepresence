@@ -403,7 +403,7 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 		doMount, boolErr = strconv.ParseBool(is.mount)
 		if boolErr != nil || doMount {
 			// not --mount=false, so refuse.
-			return nil, fmt.Errorf("remote volume mounts are disabled: %s", err.Error())
+			return nil, fmt.Errorf("remote volume mounts are disabled: %w", err)
 		}
 	}
 
@@ -572,7 +572,7 @@ func (is *interceptState) runInDocker(cmd *cobra.Command, args []string) error {
 	if is.envFile == "" {
 		file, err := ioutil.TempFile("", "tel-*.env")
 		if err != nil {
-			return fmt.Errorf("failed to create temporary environment file. %v", err)
+			return fmt.Errorf("failed to create temporary environment file. %w", err)
 		}
 		defer os.Remove(file.Name())
 
@@ -618,7 +618,7 @@ func (is *interceptState) runInDocker(cmd *cobra.Command, args []string) error {
 func (is *interceptState) writeEnvFile() error {
 	file, err := os.Create(is.envFile)
 	if err != nil {
-		return fmt.Errorf("failed to create environment file %q: %v", is.envFile, err)
+		return fmt.Errorf("failed to create environment file %q: %w", is.envFile, err)
 	}
 	return is.writeEnvToFileAndClose(file)
 }

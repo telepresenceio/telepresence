@@ -321,7 +321,7 @@ func (t *tunRouter) run(c context.Context) error {
 					if c.Err() != nil || atomic.LoadInt32(&t.closing) == 2 {
 						return nil
 					}
-					return fmt.Errorf("read packet error: %v", err)
+					return fmt.Errorf("read packet error: %w", err)
 				}
 				if n > 0 {
 					data.SetLength(n)

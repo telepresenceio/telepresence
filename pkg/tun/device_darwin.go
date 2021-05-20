@@ -28,7 +28,7 @@ type Device struct {
 func openTun() (*Device, error) {
 	fd, err := unix.Socket(unix.AF_SYSTEM, unix.SOCK_DGRAM, sysProtoControl)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open DGRAM socket: %v", err)
+		return nil, fmt.Errorf("failed to open DGRAM socket: %w", err)
 	}
 	unix.CloseOnExec(fd)
 	defer func() {

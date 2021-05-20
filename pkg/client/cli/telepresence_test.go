@@ -716,7 +716,7 @@ func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
 func (ts *telepresenceSuite) applyApp(c context.Context, name, svcName string, port int) error {
 	err := ts.kubectl(c, "apply", "-f", fmt.Sprintf("k8s/%s.yaml", name), "--context", "default")
 	if err != nil {
-		return fmt.Errorf("failed to deploy %s: %v", name, err)
+		return fmt.Errorf("failed to deploy %s: %w", name, err)
 	}
 	return ts.waitForService(c, svcName, port)
 }
@@ -724,11 +724,11 @@ func (ts *telepresenceSuite) applyApp(c context.Context, name, svcName string, p
 func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) error {
 	err := ts.kubectl(c, "create", "deploy", name, "--image", "jmalloc/echo-server:0.1.0")
 	if err != nil {
-		return fmt.Errorf("failed to create deployment %s: %v", name, err)
+		return fmt.Errorf("failed to create deployment %s: %w", name, err)
 	}
 	err = ts.kubectl(c, "expose", "deploy", name, "--port", "80", "--target-port", "8080")
 	if err != nil {
-		return fmt.Errorf("failed to expose deployment %s: %v", name, err)
+		return fmt.Errorf("failed to expose deployment %s: %w", name, err)
 	}
 	return ts.waitForService(c, name, 80)
 }

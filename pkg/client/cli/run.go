@@ -69,7 +69,7 @@ func start(ctx context.Context, exe string, args []string, wait bool, stdin io.R
 
 	var err error
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %v", logging.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", logging.ShellString(exe, args), err)
 	}
 	if !wait {
 		_ = cmd.Process.Release()
@@ -88,7 +88,7 @@ func start(ctx context.Context, exe string, args []string, wait bool, stdin io.R
 	}()
 	s, err := cmd.Process.Wait()
 	if err != nil {
-		return fmt.Errorf("%s: %v", logging.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", logging.ShellString(exe, args), err)
 	}
 
 	sigCh <- nil

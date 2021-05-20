@@ -33,7 +33,7 @@ func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 	for k, v := range flagMap {
 		flagArgs = append(flagArgs, "--"+k+"="+v)
 		if err := flags.Set(k, v); err != nil {
-			return nil, fmt.Errorf("error processing kubectl flag --%s=%s: %v", k, v, err)
+			return nil, fmt.Errorf("error processing kubectl flag --%s=%s: %w", k, v, err)
 		}
 	}
 
