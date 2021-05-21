@@ -153,6 +153,8 @@ func (kc *k8sCluster) refreshNamespaces(c context.Context, accWait chan<- struct
 }
 
 func (kc *k8sCluster) shouldBeWatched(namespace string) bool {
+	// The "kube-system" namespace must be mapped when hijacking the IP of the
+	// kube-dns service in the daemon.
 	if len(kc.mappedNamespaces) == 0 || namespace == "kube-system" {
 		return true
 	}
@@ -305,9 +307,9 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	for _, ns := range namespaces {
 		paths = append(paths, ns+clusterServerSuffix+".")
 	}
-	dlog.Debugf(c, "posting search paths [%s]", strings.Join(paths, " "))
+	dlog.Debugf(c, "posting search paths %v", paths)
 	if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
-		dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
+		dlog.Errorf(c, "error posting search paths to %v: %v", paths, err)
 	}
 }
 
