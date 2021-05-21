@@ -59,6 +59,21 @@ commands:
             curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
             sudo install /tmp/kubectl /usr/local/bin/kubectl
 
+  "install-helm":
+    parameters:
+      version:
+        type: string
+        default: "v3.5.4"
+    steps:
+      - run:
+          name: "Install Helm << parameters.version >>"
+          command: |
+            set -x
+            curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+            chmod 700 get_helm.sh
+            ./get_helm.sh --version << parameters.version >>
+            rm ./get_helm.sh
+
   "dirty-check":
     steps:
       - run:
@@ -129,6 +144,15 @@ jobs:
           command: go list ./... | xargs -n1 go test -c -o /dev/null
       - run: make lint
 
+  "chart-lint":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-helm
+      - run:
+          name: "Lint the chart"
+          command: helm lint charts/telepresence --set isCI=true
+
   "generate":
     executor: vm-linux
     steps:
@@ -174,6 +198,7 @@ workflows:
       - build-and-test
       - lint
       - generate
+      - chart-lint
 
   'Release':
     jobs:
