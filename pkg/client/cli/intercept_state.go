@@ -177,7 +177,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 				canConnect = resp.CanConnect
 			}
 			if canConnect {
-				if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
+				if _, err = cs.connectorClient.Login(cmd.Context(), &empty.Empty{}); err != nil {
 					return err
 				}
 			}
@@ -189,9 +189,8 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 
 	if len(args) == 0 && !ii.dockerRun {
 		// start and retain the intercept
-		return ii.withConnector(true, func(cs *connectorState) (err error) {
-			err = loginIfNeeded(cs)
-			if err != nil {
+		return ii.withConnector(true, func(cs *connectorState) error {
+			if err := loginIfNeeded(cs); err != nil {
 				return err
 			}
 			is := ii.newInterceptState(cs)
@@ -207,8 +206,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	}
 
 	return ii.withConnector(false, func(cs *connectorState) error {
-		err = loginIfNeeded(cs)
-		if err != nil {
+		if err := loginIfNeeded(cs); err != nil {
 			return err
 		}
 		is := ii.newInterceptState(cs)
