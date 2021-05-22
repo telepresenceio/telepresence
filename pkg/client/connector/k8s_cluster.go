@@ -44,9 +44,6 @@ type k8sCluster struct {
 	// Currently intercepted namespaces by local intercepts
 	localInterceptedNamespaces map[string]struct{}
 
-	// The local port that is forwarded to the traffic-managers dynamic (SOCKS) ssh port.
-	socksPort int32
-
 	accLock         sync.Mutex
 	accWait         chan struct{}
 	watchers        map[string]*k8sWatcher
@@ -403,7 +400,7 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []str
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
-		return nil, client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, fmt.Errorf("k8s client create failed: %v", err))
+		return nil, client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, fmt.Errorf("k8s client create failed: %w", err))
 	}
 
 	ret := &k8sCluster{

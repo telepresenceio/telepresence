@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -11,47 +12,67 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/proxy"
 )
+
+const kubernetesZone = "cluster.local"
+
+type IPs []net.IP
+
+func (ips IPs) String() string {
+	nips := len(ips)
+	switch nips {
+	case 0:
+		return ""
+	case 1:
+		return ips[0].String()
+	default:
+		sb := strings.Builder{}
+		sb.WriteString(ips[0].String())
+		for i := 1; i < nips; i++ {
+			sb.WriteByte(',')
+			sb.WriteString(ips[i].String())
+		}
+		return sb.String()
+	}
+}
 
 // outbound does stuff, idk, I didn't write it.
 //
 // A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
 	dnsListener net.PacketConn
-	dnsIP       string
-	fallbackIP  string
+	dnsIP       net.IP
 	noSearch    bool
-	translator  nat.FirewallRouter
-	tables      map[string]*nat.Table
-	tablesLock  sync.Mutex
+	router      *tunRouter
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
-	domains    map[string][]string
+	domains    map[string]IPs
 	search     []string
+
+	// managerConfigured is closed when the traffic manager has performed
+	// its first update. The DNS resolver awaits this close and so does
+	// the TUN device readers and writers
+	managerConfigured      chan struct{}
+	closeManagerConfigured sync.Once
+
+	// dnsConfigured is closed when the dnsWorker has configured
+	// the dnsServer.
+	dnsConfigured chan struct{}
+
+	kubeDNS     chan net.IP
+	onceKubeDNS sync.Once
 
 	// The domainsLock locks usage of namespaces, domains, and search
 	domainsLock sync.RWMutex
 
+	// Lock preventing concurrent calls to setSearchPath
+	searchPathLock sync.Mutex
+
 	setSearchPathFunc func(c context.Context, paths []string)
-
-	overridePrimaryDNS bool
-
-	proxy *proxy.Proxy
-
-	// proxyRedirPort is the port to which we redirect translated IP requests intended for the cluster
-	proxyRedirPort int
-
-	// dnsRedirPort is the port to which we redirect dns requests.
-	dnsRedirPort int
 
 	work chan func(context.Context) error
 }
@@ -78,9 +99,7 @@ func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-//
-// If fallbackIP is empty, it will default to Google DNS.
-func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
+func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, error) {
 	lc := &net.ListenConfig{}
 	listener, err := lc.ListenPacket(c, "udp", "127.0.0.1:0")
 	if err != nil {
@@ -90,103 +109,48 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
-	ret := &outbound{
-		dnsListener: listener,
-		dnsIP:       dnsIP,
-		fallbackIP:  fallbackIP,
-		noSearch:    noSearch,
-		tables:      make(map[string]*nat.Table),
-		translator:  nat.NewRouter(name, net.IP{127, 0, 0, 1}, net.IPv6loopback),
-		namespaces:  make(map[string]struct{}),
-		domains:     make(map[string][]string),
-		search:      []string{""},
-		work:        make(chan func(context.Context) error),
+	var dnsIP net.IP
+	if dnsIP = net.ParseIP(dnsIPStr); dnsIP != nil {
+		if ip4 := dnsIP.To4(); ip4 != nil {
+			dnsIP = ip4
+		}
 	}
-	ret.tablesLock.Lock() // leave it locked until firewallConfiguratorWorker unlocks it
+	ret := &outbound{
+		dnsListener:       listener,
+		dnsIP:             dnsIP,
+		noSearch:          noSearch,
+		namespaces:        make(map[string]struct{}),
+		domains:           make(map[string]IPs),
+		search:            []string{""},
+		work:              make(chan func(context.Context) error),
+		dnsConfigured:     make(chan struct{}),
+		managerConfigured: make(chan struct{}),
+		kubeDNS:           make(chan net.IP, 1),
+	}
+
+	if ret.router, err = newTunRouter(ret.managerConfigured); err != nil {
+		return nil, err
+	}
 	return ret, nil
 }
 
-// firewall2socksWorker listens on localhost:<proxyRedirPort> and forwards those connections to the connector's
-// SOCKS server, for them to be forwarded to the cluster.  We count on firewallConfiguratorWorker
-// having configured the host firewall to send all cluster-bound TCP connections to this port, and
-// we make special syscalls/ioctls to determine where each connection was originally bound for, so
-// that we know what to tell SOCKS.
-func (o *outbound) firewall2socksWorker(c context.Context, onReady func()) error {
-	// hmm, we may not actually need to get the original
-	// destination, we could just forward each ip to a unique port
-	// and either listen on that port or run port-forward
-	pr, err := proxy.NewProxy(c, o.destination)
-	if err != nil {
-		return errors.Wrap(err, "Proxy")
-	}
-	o.proxy = pr
-	o.proxyRedirPort, err = pr.ListenerPort()
-	if err != nil {
-		return errors.Wrap(err, "Proxy")
-	}
-	dlog.Debug(c, "Starting server")
-	onReady()
-	pr.Run(c, 10000)
-	dlog.Debug(c, "Server done")
-	return nil
-}
-
-// firewallConfiguratorWorker reads from the work queue of firewall config changes that is written
-// to by the 'Update' gRPC call.
-func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
-	defer func() {
-		o.tablesLock.Lock()
-		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
-			if err == nil {
-				err = err2
-			} else {
-				dlog.Error(c, err2)
+// routerServerWorker starts the TUN router and reads from the work queue of firewall config
+// changes that is written to by the 'Update' gRPC call.
+func (o *outbound) routerServerWorker(c context.Context) (err error) {
+	go func() {
+		// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
+		// shutting down.
+		for f := range o.work {
+			if c.Err() == nil {
+				// As long as we're not shutting down, keep doing work.  (If we are shutting
+				// down, do nothing but don't 'break'; keep draining the queue.)
+				if err = f(c); err != nil {
+					dlog.Error(c, err)
+				}
 			}
 		}
-		if err != nil {
-			dlog.Errorf(c, "Server exited with error %v", err)
-		} else {
-			dlog.Debug(c, "Server done")
-		}
-		// leave it locked
 	}()
-
-	dlog.Debug(c, "Enabling")
-	err = o.translator.Enable(c)
-	if err != nil {
-		return err
-	}
-	o.tablesLock.Unlock()
-
-	if o.overridePrimaryDNS {
-		dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-		route, err := nat.NewRoute("udp", net.ParseIP(o.dnsIP), nil, o.dnsRedirPort)
-		if err != nil {
-			return err
-		}
-		err = o.doUpdate(c, nil, &nat.Table{
-			Name:   "bootstrap",
-			Routes: []*nat.Route{route},
-		})
-		if err != nil {
-			dlog.Error(c, err)
-		}
-		dns.Flush(c)
-	}
-
-	dlog.Debug(c, "Starting server")
-	// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
-	// shutting down.
-	for f := range o.work {
-		if c.Err() == nil {
-			// As long as we're not shutting down, keep doing work.  (If we are shutting
-			// down, do nothing but don't 'break'; keep draining the queue.)
-			if err = f(c); err != nil {
-				dlog.Error(c, err)
-			}
-		}
-	}
-	return nil
+	return o.router.run(c)
 }
 
 // On a MacOS, Docker uses its own search-path for single label names. This means that the search path that is declared
@@ -196,7 +160,7 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
 
-func (o *outbound) resolveNoSearch(query string) []string {
+func (o *outbound) resolveNoSearch(query string) []net.IP {
 	query = strings.ToLower(query)
 	ds := strings.Split(query, ".")
 	dl := len(ds) - 1 // -1 to encounter for ending dot.
@@ -219,7 +183,7 @@ func (o *outbound) resolveNoSearch(query string) []string {
 	return shuffleIPs(ips)
 }
 
-func (o *outbound) resolveWithSearchLocked(n string) []string {
+func (o *outbound) resolveWithSearchLocked(n string) []net.IP {
 	for _, p := range o.search {
 		if ips, ok := o.domains[n+p]; ok {
 			return shuffleIPs(ips)
@@ -230,10 +194,10 @@ func (o *outbound) resolveWithSearchLocked(n string) []string {
 
 // Since headless and externalName services can have multiple IPs,
 // we return a shuffled list of the IPs if there are more than one.
-func shuffleIPs(ips []string) []string {
+func shuffleIPs(ips IPs) IPs {
 	switch lenIPs := len(ips); lenIPs {
 	case 0:
-		return []string{}
+		return IPs{}
 	case 1:
 	default:
 		// If there are multiple elements in the slice, we shuffle the
@@ -245,37 +209,36 @@ func shuffleIPs(ips []string) []string {
 	return ips
 }
 
-func (o *outbound) destination(conn *net.TCPConn) (string, error) {
-	return o.translator.GetOriginalDst(conn)
+func (o *outbound) setManagerInfo(c context.Context, info *rpc.ManagerInfo) error {
+	defer o.closeManagerConfigured.Do(func() {
+		close(o.managerConfigured)
+	})
+	return o.router.setManagerInfo(c, info)
 }
 
-func (o *outbound) update(table *rpc.Table) (err error) {
-	// Update stems from the connector so the destination target must be set on all routes
-	o.proxy.SetSocksPort(table.SocksPort)
-	routes := make([]*nat.Route, 0, len(table.Routes))
-	domains := make(map[string][]string)
+func (o *outbound) update(_ context.Context, table *rpc.Table) (err error) {
+	// o.proxy.SetSocksPort(table.SocksPort)
+	ips := make(map[IPKey]struct{}, len(table.Routes))
+	domains := make(map[string]IPs)
 	for _, route := range table.Routes {
-		ports, err := nat.ParsePorts(route.Port)
-		if err != nil {
-			return err
-		}
-		for _, ip := range uniqueSortedAndNotEmpty(route.Ips) {
-			r, err := nat.NewRoute(route.Proto, net.ParseIP(ip), ports, o.proxyRedirPort)
-			if err != nil {
-				return err
+		dIps := make(IPs, 0, len(route.Ips))
+		for _, ipStr := range route.Ips {
+			if ip := net.ParseIP(ipStr); ip != nil {
+				// ParseIP returns ipv4 that are 16 bytes long. Normalize them into 4 bytes
+				if ip4 := ip.To4(); ip4 != nil {
+					ip = ip4
+				}
+				dIps = append(dIps, ip)
+				ips[IPKey(ip)] = struct{}{}
 			}
-			routes = append(routes, r)
 		}
 		if dn := route.Name; dn != "" {
 			dn = strings.ToLower(dn) + "."
-			domains[dn] = append(domains[dn], route.Ips...)
+			domains[dn] = append(domains[dn], dIps...)
 		}
 	}
 	o.work <- func(c context.Context) error {
-		return o.doUpdate(c, domains, &nat.Table{
-			Name:   table.Name,
-			Routes: routes,
-		})
+		return o.doUpdate(c, domains, ips)
 	}
 	return nil
 }
@@ -284,35 +247,26 @@ func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
-func uniqueSortedAndNotEmpty(ss []string) []string {
-	sort.Strings(ss)
-	prev := ""
-	last := len(ss) - 1
+func (ips IPs) uniqueSorted() IPs {
+	sort.Slice(ips, func(i, j int) bool {
+		return bytes.Compare(ips[i], ips[j]) < 0
+	})
+	var prev net.IP
+	last := len(ips) - 1
 	for i := 0; i <= last; i++ {
-		s := ss[i]
-		if s == prev {
-			copy(ss[i:], ss[i+1:])
+		s := ips[i]
+		if s.Equal(prev) {
+			copy(ips[i:], ips[i+1:])
 			last--
 			i--
 		} else {
 			prev = s
 		}
 	}
-	return ss[:last+1]
+	return ips[:last+1]
 }
 
-func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table *nat.Table) error {
-	// Make a copy of the current table
-	o.tablesLock.Lock()
-	defer o.tablesLock.Unlock()
-	oldTable, ok := o.tables[table.Name]
-	oldRoutes := make(map[nat.Destination]*nat.Route)
-	if ok {
-		for _, route := range oldTable.Routes {
-			oldRoutes[route.Destination] = route
-		}
-	}
-
+func (o *outbound) doUpdate(c context.Context, domains map[string]IPs, table map[IPKey]struct{}) error {
 	// We're updating routes. Make sure DNS waits until the new answer
 	// is ready, i.e. don't serve old answers.
 	o.domainsLock.Lock()
@@ -322,14 +276,15 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 	for k, ips := range o.domains {
 		if _, ok := domains[k]; !ok {
 			dnsChanged = true
-			dlog.Debugf(c, "CLEAR %s -> %s", k, strings.Join(ips, ","))
+			dlog.Debugf(c, "CLEAR %s -> %s", k, ips)
 			delete(o.domains, k)
 		}
 	}
 
+	var kubeDNS net.IP
 	for k, nIps := range domains {
 		// Ensure that all added entries contain unique, sorted, and non-empty IPs
-		nIps = uniqueSortedAndNotEmpty(nIps)
+		nIps = nIps.uniqueSorted()
 		if len(nIps) == 0 {
 			delete(domains, k)
 			continue
@@ -338,48 +293,42 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 		if oIps, ok := o.domains[k]; ok {
 			if ok = len(nIps) == len(oIps); ok {
 				for i, ip := range nIps {
-					if ok = ip == oIps[i]; !ok {
+					if ok = ip.Equal(oIps[i]); !ok {
 						break
 					}
 				}
 			}
 			if !ok {
 				dnsChanged = true
-				dlog.Debugf(c, "REPLACE %s -> %s with %s", strings.Join(oIps, ","), k, strings.Join(nIps, ","))
+				dlog.Debugf(c, "REPLACE %s -> %s with %s", oIps, k, nIps)
 			}
 		} else {
 			dnsChanged = true
-			dlog.Debugf(c, "STORE %s -> %s", k, strings.Join(nIps, ","))
+			if k == "kube-dns.kube-system.svc.cluster.local." && len(nIps) >= 1 {
+				kubeDNS = nIps[0]
+			}
+			dlog.Debugf(c, "STORE %s -> %s", k, nIps)
 		}
 	}
 
 	// Operate on the copy of the current table and the new table
-	routesChanged := false
-	for _, newRoute := range table.Routes {
-		// Add the new version. This will clear out the old one if it exists
-		changed, err := o.translator.Add(c, newRoute)
-		if err != nil {
-			dlog.Errorf(c, "forward %s: %v", newRoute, err)
-		} else if changed {
-			routesChanged = true
+	ipsChanged := false
+	oldIPs := o.router.snapshot()
+	for ip := range table {
+		if o.router.add(c, ip) {
+			ipsChanged = true
 		}
-
-		// remove the route from our map of old routes so we
-		// don't end up deleting it below
-		delete(oldRoutes, newRoute.Destination)
+		delete(oldIPs, ip)
 	}
 
-	for _, route := range oldRoutes {
-		changed, err := o.translator.Clear(c, route)
-		if err != nil {
-			dlog.Errorf(c, "clear %s: %v", route, err)
-		} else if changed {
-			routesChanged = true
+	for ip := range oldIPs {
+		if o.router.clear(c, ip) {
+			ipsChanged = true
 		}
 	}
 
-	if routesChanged {
-		if err := o.translator.Flush(c); err != nil {
+	if ipsChanged {
+		if err := o.router.flush(c, kubeDNS); err != nil {
 			dlog.Errorf(c, "flush: %v", err)
 		}
 	}
@@ -389,16 +338,20 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 		dns.Flush(c)
 	}
 
-	if table.Routes == nil || len(table.Routes) == 0 {
-		delete(o.tables, table.Name)
-	} else {
-		o.tables[table.Name] = table
+	if kubeDNS != nil {
+		o.onceKubeDNS.Do(func() { o.kubeDNS <- kubeDNS })
 	}
 	return nil
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (o *outbound) setSearchPath(c context.Context, paths []string) {
-	o.setSearchPathFunc(c, paths)
-	dns.Flush(c)
+	select {
+	case <-c.Done():
+	case <-o.dnsConfigured:
+		o.searchPathLock.Lock()
+		defer o.searchPathLock.Unlock()
+		o.setSearchPathFunc(c, paths)
+		dns.Flush(c)
+	}
 }

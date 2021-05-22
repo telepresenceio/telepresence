@@ -24,7 +24,7 @@ func WithEnsuredState(r EnsuredState, retain bool, f func() error) (err error) {
 				if err == nil {
 					err = cerr
 				} else {
-					err = fmt.Errorf("%v\n%v", err, cerr)
+					err = fmt.Errorf("%w\n%v", err, cerr)
 				}
 			}
 		}

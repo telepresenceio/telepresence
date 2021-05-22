@@ -63,6 +63,10 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// ConnTunnel receives messages from the client and dispatches them to tracked
+	// net.Conn instances in the traffic-manager. Responses from tracked instances
+	// are sent back on the returned message stream
+	ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error)
 }
 
 type managerClient struct {
@@ -245,6 +249,37 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
+func (c *managerClient) ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/ConnTunnel", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerConnTunnelClient{stream}
+	return x, nil
+}
+
+type Manager_ConnTunnelClient interface {
+	Send(*ConnMessage) error
+	Recv() (*ConnMessage, error)
+	grpc.ClientStream
+}
+
+type managerConnTunnelClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerConnTunnelClient) Send(m *ConnMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *managerConnTunnelClient) Recv() (*ConnMessage, error) {
+	m := new(ConnMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ManagerServer is the server API for Manager service.
 // All implementations must embed UnimplementedManagerServer
 // for forward compatibility
@@ -294,6 +329,10 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
+	// ConnTunnel receives messages from the client and dispatches them to tracked
+	// net.Conn instances in the traffic-manager. Responses from tracked instances
+	// are sent back on the returned message stream
+	ConnTunnel(Manager_ConnTunnelServer) error
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -342,6 +381,9 @@ func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterc
 }
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
+}
+func (UnimplementedManagerServer) ConnTunnel(Manager_ConnTunnelServer) error {
+	return status.Errorf(codes.Unimplemented, "method ConnTunnel not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
 
@@ -614,6 +656,32 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_ConnTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerServer).ConnTunnel(&managerConnTunnelServer{stream})
+}
+
+type Manager_ConnTunnelServer interface {
+	Send(*ConnMessage) error
+	Recv() (*ConnMessage, error)
+	grpc.ServerStream
+}
+
+type managerConnTunnelServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerConnTunnelServer) Send(m *ConnMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *managerConnTunnelServer) Recv() (*ConnMessage, error) {
+	m := new(ConnMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var _Manager_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
@@ -677,6 +745,12 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchIntercepts",
 			Handler:       _Manager_WatchIntercepts_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ConnTunnel",
+			Handler:       _Manager_ConnTunnel_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "rpc/manager/manager.proto",

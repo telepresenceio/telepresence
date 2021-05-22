@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -45,7 +44,6 @@ to troubleshoot problems.
 type service struct {
 	rpc.UnsafeDaemonServer
 	dns      string
-	fallback string
 	hClient  *http.Client
 	outbound *outbound
 	cancel   context.CancelFunc
@@ -61,11 +59,11 @@ func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    processName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(3),
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), args[0], args[1], args[2])
+			return run(cmd.Context(), args[0], args[1])
 		},
 	}
 }
@@ -80,7 +78,6 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	r := &rpc.DaemonStatus{}
 	r.Dns = d.dns
-	r.Fallback = d.fallback
 	return r, nil
 }
 
@@ -90,8 +87,8 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) Update(c context.Context, table *rpc.Table) (*empty.Empty, error) {
-	err := d.outbound.update(table)
+func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, error) {
+	err := d.outbound.update(d.callCtx, table)
 	return &empty.Empty{}, err
 }
 
@@ -100,8 +97,12 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 	return &empty.Empty{}, nil
 }
 
+func (d *service) SetManagerInfo(_ context.Context, info *rpc.ManagerInfo) (*empty.Empty, error) {
+	return &empty.Empty{}, d.outbound.setManagerInfo(d.callCtx, info)
+}
+
 // run is the main function when executing as the daemon
-func run(c context.Context, loggingDir, dns, fallback string) error {
+func run(c context.Context, loggingDir, dns string) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
@@ -116,8 +117,7 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 	}
 
 	d := &service{
-		dns:      dns,
-		fallback: fallback,
+		dns: dns,
 		hClient: &http.Client{
 			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
@@ -132,7 +132,8 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 			},
 		},
 	}
-	d.outbound, err = newOutbound(c, "traffic-manager", dns, fallback, false)
+
+	d.outbound, err = newOutbound(c, dns, false)
 	if err != nil {
 		return err
 	}
@@ -146,49 +147,29 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 	})
 
 	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
-	d.cancel = func() { g.Go(processName+"-quit", d.quitConnector) }
+	d.cancel = func() { g.Go(processName+"-quit", d.quitAll) }
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", processName, client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	// Don't configure the firewall before firewall-to-socks is running so that the place we
-	// tell the firewall to send the packets exists, and don't configure the firewall before DNS
-	// is working so that... hrmph, I (LukeShu) am not actually sure why, but it seems to be
-	// important on ResolveD systems.
-	var readyForFirewall sync.WaitGroup
-	readyForFirewall.Add(2)
-	readyForFirewallCh := make(chan struct{})
-	go func() {
-		readyForFirewall.Wait()
-		close(readyForFirewallCh)
-	}()
-
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
 	g.Go("server-dns", func(ctx context.Context) error {
-		return d.outbound.dnsServerWorker(ctx, readyForFirewall.Done)
-	})
-
-	// tunnel-firewall-to-socks listens on TCP localhost:<proxyRedirPort> and forwards those connections to
-	// the connector's SOCKS server, which then forwards them to the cluster.  It counts on
-	// tunnel-firewall-configurator (below) having configured the host firewall to send all
-	// cluster-bound TCP connections to this port, and we make special syscalls/ioctls to
-	// determine where each connection was originally bound for, so that we know what to tell
-	// SOCKS.
-	g.Go("firewall-to-socks", func(ctx context.Context) error {
-		return d.outbound.firewall2socksWorker(ctx, readyForFirewall.Done)
-	})
-
-	// The 'Update' gRPC (below) call puts firewall updates in to a work queue;
-	// tunnel-firewall-configurator is the worker process that reads that work queue.
-	g.Go("firewall-configurator", func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
-		case <-readyForFirewallCh:
+			return nil
+		case <-d.outbound.managerConfigured:
+			return d.outbound.dnsServerWorker(ctx)
 		}
-		return d.outbound.firewallConfiguratorWorker(ctx)
+	})
+
+	// The 'Update' gRPC (below) call puts updates in to a work queue;
+	// server-router is the worker process starts the router and continuously configures
+	// it based on what is read from that work queue.
+	g.Go("server-router", func(ctx context.Context) error {
+		return d.outbound.routerServerWorker(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
@@ -242,6 +223,12 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 		dlog.Error(c, err)
 	}
 	return err
+}
+
+// quitAll shuts down the router and calls quitConnector
+func (d *service) quitAll(c context.Context) error {
+	d.outbound.router.stop(c)
+	return d.quitConnector(c)
 }
 
 // quitConnector ensures that the connector quits gracefully.

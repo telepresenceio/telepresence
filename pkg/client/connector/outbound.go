@@ -153,7 +153,9 @@ func (kc *k8sCluster) refreshNamespaces(c context.Context, accWait chan<- struct
 }
 
 func (kc *k8sCluster) shouldBeWatched(namespace string) bool {
-	if len(kc.mappedNamespaces) == 0 {
+	// The "kube-system" namespace must be mapped when hijacking the IP of the
+	// kube-dns service in the daemon.
+	if len(kc.mappedNamespaces) == 0 || namespace == "kube-system" {
 		return true
 	}
 	for _, n := range kc.mappedNamespaces {
@@ -277,6 +279,11 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	}
 
 	kc.accLock.Lock()
+	if len(kc.Namespaces) == 0 {
+		// daemon must not be updated until the namespace watcher has made its first delivery
+		kc.accLock.Unlock()
+		return
+	}
 	namespaces := make([]string, 0, len(kc.interceptedNamespaces)+len(kc.localIntercepts))
 	for ns := range kc.interceptedNamespaces {
 		namespaces = append(namespaces, ns)
@@ -300,9 +307,9 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	for _, ns := range namespaces {
 		paths = append(paths, ns+clusterServerSuffix+".")
 	}
-	dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
+	dlog.Debugf(c, "posting search paths %v", paths)
 	if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
-		dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
+		dlog.Errorf(c, "error posting search paths to %v: %v", paths, err)
 	}
 }
 
@@ -313,7 +320,7 @@ func (kc *k8sCluster) updateDaemonTable(c context.Context) {
 		// NOTE! Some tests dont't set the daemon
 		return
 	}
-	table := &daemon.Table{SocksPort: kc.socksPort, Name: "kubernetes"}
+	table := &daemon.Table{Name: "kubernetes"}
 	kc.accLock.Lock()
 	for _, watcher := range kc.watchers {
 		for _, svc := range watcher.Services {

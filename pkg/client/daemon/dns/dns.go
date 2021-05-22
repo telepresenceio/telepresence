@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync/atomic"
 
 	"github.com/miekg/dns"
 
@@ -14,20 +15,26 @@ import (
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
-	ctx       context.Context // necessary to make logging work in ServeDNS function
-	listeners []net.PacketConn
-	fallback  string
-	resolve   func(string) []string
+	ctx          context.Context // necessary to make logging work in ServeDNS function
+	listeners    []net.PacketConn
+	fallback     *dns.Conn
+	resolve      func(string) []net.IP
+	requestCount int64
 }
 
 // NewServer returns a new dns.Server
-func NewServer(c context.Context, listeners []net.PacketConn, fallback string, resolve func(string) []string) *Server {
+func NewServer(c context.Context, listeners []net.PacketConn, fallback *dns.Conn, resolve func(string) []net.IP) *Server {
 	return &Server{
 		ctx:       c,
 		listeners: listeners,
 		fallback:  fallback,
 		resolve:   resolve,
 	}
+}
+
+// RequestCount returns the number of requests that this server has received.
+func (s *Server) RequestCount() int {
+	return int(atomic.LoadInt64(&s.requestCount))
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
@@ -40,10 +47,11 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	}()
 
+	atomic.AddInt64(&s.requestCount, 1)
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		var ips []string
+		var ips []net.IP
 		if domain == "localhost." {
 			// BUG(lukeshu): I have no idea why a lookup
 			// for localhost even makes it to here on my
@@ -52,7 +60,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			// But it does, so I need this in order to be
 			// productive at home.  We should really
 			// root-cause this, because it's weird.
-			ips = []string{"127.0.0.1"}
+			ips = []net.IP{{127, 0, 0, 1}}
 		} else {
 			ips = s.resolve(domain)
 		}
@@ -71,8 +79,8 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				// requested, then mac dns seems to return an
 				// nxdomain
 				msg.Answer = append(msg.Answer, &dns.A{
-					Hdr: dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
-					A:   net.ParseIP(ip),
+					Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+					A:   ip,
 				})
 			}
 			_ = w.WriteMsg(&msg)
@@ -90,9 +98,10 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	}
-	if s.fallback != "" {
+	if s.fallback != nil {
 		dlog.Debugf(c, "QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
-		in, err := dns.Exchange(r, s.fallback)
+		client := dns.Client{Net: "udp"}
+		in, _, err := client.ExchangeWithConn(r, s.fallback)
 		if err != nil {
 			dlog.Error(c, err)
 			return

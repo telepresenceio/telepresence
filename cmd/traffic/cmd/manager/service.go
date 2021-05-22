@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -17,7 +18,9 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/conntunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -449,6 +452,56 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	}
 
 	return &empty.Empty{}, nil
+}
+
+func (m *Manager) ConnTunnel(server rpc.Manager_ConnTunnelServer) error {
+	ctx := server.Context()
+	dlog.Debug(ctx, "Established TCP tunnel")
+	pool := connpool.NewPool() // must have one pool per tunnel (per client, really)
+	defer pool.CloseAll(ctx)
+	for {
+		dg, err := server.Recv()
+		if err != nil {
+			dlog.Errorf(ctx, "Recv failed: %v", err)
+			return nil
+		}
+		m.handleTunnelMessage(ctx, pool, server, dg)
+	}
+}
+
+func (m *Manager) handleTunnelMessage(ctx context.Context, pool *connpool.Pool, server rpc.Manager_ConnTunnelServer, cm *rpc.ConnMessage) {
+	var id connpool.ConnID
+	var ctrl *connpool.ControlMessage
+	var err error
+	if connpool.IsControlMessage(cm) {
+		ctrl, err = connpool.NewControlMessage(cm)
+		if err != nil {
+			dlog.Error(m.ctx, err)
+			return
+		}
+		id = ctrl.ID
+	} else {
+		id = connpool.ConnID(cm.ConnId)
+	}
+
+	// Retrieve the connection that is tracked for the given id. Create a new one if necessary
+	h, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+		switch id.Protocol() {
+		case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
+			return conntunnel.NewHandler(id, server, release), nil
+		default:
+			return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
+		}
+	})
+	if err != nil {
+		dlog.Errorf(ctx, "failed to get connection handler: %v", err)
+		return
+	}
+	if ctrl != nil {
+		h.HandleControl(ctx, ctrl)
+	} else {
+		h.HandleMessage(ctx, cm)
+	}
 }
 
 // expire removes stale sessions.

@@ -12,12 +12,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
-
-const kubernetesZone = "cluster.local"
 
 type resolveFile struct {
 	port        int
@@ -132,7 +131,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //   man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
+func (o *outbound) dnsServerWorker(c context.Context) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -231,6 +230,9 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	}
 
 	defer func() {
+		o.searchPathLock.Lock()
+		defer o.searchPathLock.Unlock()
+
 		// Remove the main resolver file
 		_ = os.Remove(resolverFileName)
 
@@ -238,18 +240,17 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 		for namespace := range o.namespaces {
 			_ = os.Remove(namespaceResolverFile(namespace))
 		}
-		dns.Flush(c)
+		dns.Flush(dcontext.HardContext(c))
 	}()
 
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		defer o.dnsListener.Close()
-		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, "", o.resolveNoSearch)
+		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, nil, o.resolveNoSearch)
 		return v.Run(c)
 	})
 	dns.Flush(c)
-
-	onReady()
+	close(o.dnsConfigured)
 	return g.Wait()
 }

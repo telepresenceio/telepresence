@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -81,7 +80,6 @@ type service struct {
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
 	managerRequest  chan *trafficManager      // connectWorker -> background-manager
-	bridgeRequest   chan *trafficManager      // connectWorker -> server-socks
 
 	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
 	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
@@ -480,8 +478,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		}
 	}
 
-	s.bridgeRequest <- tmgr
-
 	// Collect data on how long connection time took
 	s.scout <- ScoutReport{
 		Action: "finished_connecting_traffic_manager",
@@ -531,7 +527,6 @@ func run(c context.Context) error {
 		connectResponse: make(chan *rpc.ConnectInfo),
 		clusterRequest:  make(chan *k8sCluster),
 		managerRequest:  make(chan *trafficManager),
-		bridgeRequest:   make(chan *trafficManager),
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -612,26 +607,11 @@ func run(c context.Context) error {
 		return subg.Wait()
 	})
 
-	g.Go("server-socks", func(c context.Context) error {
-		tm, ok := <-s.bridgeRequest
-		if !ok {
-			return nil
-		}
-		addr, port, err := nextFreePort()
-		if err != nil {
-			return err
-		}
-		tm.socksPort = int32(port)
-		tm.sshPortForward(c, "-D", addr)
-		return nil
-	})
-
 	g.Go("background-init", func(c context.Context) error {
 		defer func() {
 			close(s.connectResponse) // -> server-grpc.connect()
 			close(s.clusterRequest)  // -> background-k8swatch
 			close(s.managerRequest)  // -> background-manager
-			close(s.bridgeRequest)   // -> server-socks
 			<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
 			scoutUsers.Done()
 		}()
@@ -689,23 +669,4 @@ func run(c context.Context) error {
 		dlog.Error(c, err)
 	}
 	return err
-}
-
-// nextFreePort uses net.Listen to choose a free port for the localhost. It then immediately closes that
-// connection and returns the port that was allocated. The local address string and port number is returned.
-//
-// NOTE: Since the connection is closed, there's chance that someone else might allocate this port before
-// it is actually used. The chances are slim though since tests show that in most cases (at least on
-// MacOS and Linux), the same port isn't allocated for a while even if the allocation is made from different
-// processes.
-func nextFreePort() (string, int, error) {
-	ln, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		return "", 0, err
-	}
-	addr := ln.Addr().String()
-	_ = ln.Close()
-	_, portStr, _ := net.SplitHostPort(addr)
-	port, _ := strconv.Atoi(portStr)
-	return addr, port, nil
 }

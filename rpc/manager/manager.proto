@@ -274,9 +274,16 @@ message AmbassadorCloudConfig {
   string port = 2;
 }
 
-// 
+//
 message AmbassadorCloudConnection {
   bool can_connect = 1;
+}
+
+// ConnMessage is a payload intended for a connection with a given id.
+message ConnMessage {
+  // conn_id is composed of L4 protocol, source IP, source port, destination IP and destination port
+  bytes conn_id = 1;
+  bytes payload = 5;
 }
 
 service Manager {
@@ -286,7 +293,7 @@ service Manager {
   // GetLicense returns the License information (the license itself and
   // domain that granted it) known to the manager.
   rpc GetLicense(google.protobuf.Empty) returns (License);
-  
+
   // CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
   // Ambassador Cloud
   rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
@@ -344,4 +351,9 @@ service Manager {
   // changing the disposition from "WATING" to "ACTIVE" or to an
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
+
+  // ConnTunnel receives messages from the client and dispatches them to tracked
+  // net.Conn instances in the traffic-manager. Responses from tracked instances
+  // are sent back on the returned message stream
+  rpc ConnTunnel(stream ConnMessage) returns (stream ConnMessage);
 }

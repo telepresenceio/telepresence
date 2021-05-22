@@ -23,6 +23,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
@@ -147,6 +148,7 @@ func (tm *trafficManager) run(c context.Context) error {
 func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
 	ports := portsIf.([]string)
 	sshPort, _ := strconv.Atoi(ports[0])
+	grpcPort, _ := strconv.Atoi(ports[1])
 	tm.sshPort = int32(sshPort)
 
 	// First check. Establish connection
@@ -155,15 +157,25 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err = grpc.DialContext(tc, "127.0.0.1:"+ports[1],
+	defer func() {
+		if err != nil {
+			dlog.Error(c, err)
+			tm.managerErr = err
+			if conn != nil {
+				conn.Close()
+			}
+			if tm.startup != nil {
+				close(tm.startup)
+			}
+		}
+	}()
+
+	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", grpcPort),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		err = client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
-		tm.managerErr = err
-		close(tm.startup)
-		return err
+		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
 	}
 
 	mClient := manager.NewManagerClient(conn)
@@ -176,20 +188,20 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	})
 
 	if err != nil {
-		err = client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("ArriveAsClient: %w", err))
-		dlog.Error(c, err)
-		conn.Close()
-		tm.managerErr = err
-		close(tm.startup)
-		return err
+		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("ArriveAsClient: %w", err))
 	}
 	tm.managerClient = mClient
 	tm.sessionInfo = si
+
+	if _, err = tm.daemon.SetManagerInfo(c, &daemon.ManagerInfo{GrpcPort: int32(grpcPort)}); err != nil {
+		return err
+	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	close(tm.startup)
+	tm.startup = nil
 	return g.Wait()
 }
 

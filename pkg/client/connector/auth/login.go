@@ -316,7 +316,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return errors.New("connector shutting down")
 		}
 		if callback.Error != "" {
-			return fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
+			return fmt.Errorf("%s error returned on OAuth2 callback: %s", callback.Error, callback.ErrorDescription)
 		}
 
 		// retrieve access token from callback code

@@ -167,3 +167,7 @@ func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewIn
 	}
 	return client.ReviewIntercept(ctx, arg, callOptions...)
 }
+
+func (p *mgrProxy) ConnTunnel(_ managerrpc.Manager_ConnTunnelServer) error {
+	return errors.New("ConnTunnel is not implemented by the mgrProxy")
+}

@@ -27,6 +27,7 @@ type DaemonClient interface {
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
 	Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error)
+	SetManagerInfo(ctx context.Context, in *ManagerInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -75,6 +76,15 @@ func (c *daemonClient) Update(ctx context.Context, in *Table, opts ...grpc.CallO
 	return out, nil
 }
 
+func (c *daemonClient) SetManagerInfo(ctx context.Context, in *ManagerInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetManagerInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetDnsSearchPath", in, out, opts...)
@@ -96,6 +106,7 @@ type DaemonServer interface {
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
 	Update(context.Context, *Table) (*empty.Empty, error)
+	SetManagerInfo(context.Context, *ManagerInfo) (*empty.Empty, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
@@ -116,6 +127,9 @@ func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Emp
 }
 func (UnimplementedDaemonServer) Update(context.Context, *Table) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
+}
+func (UnimplementedDaemonServer) SetManagerInfo(context.Context, *ManagerInfo) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetManagerInfo not implemented")
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
@@ -205,6 +219,24 @@ func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_SetManagerInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManagerInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetManagerInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.daemon.Daemon/SetManagerInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetManagerInfo(ctx, req.(*ManagerInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Paths)
 	if err := dec(in); err != nil {
@@ -242,6 +274,10 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Update",
 			Handler:    _Daemon_Update_Handler,
+		},
+		{
+			MethodName: "SetManagerInfo",
+			Handler:    _Daemon_SetManagerInfo_Handler,
 		},
 		{
 			MethodName: "SetDnsSearchPath",
