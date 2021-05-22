@@ -1,5 +1,8 @@
 # Changelog
 
+### 2.3.0 TBD
+- Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root
+
 ### 2.2.2 (May 17, 2021)
 - Feature: Telepresence translates legacy Telepresence commands into viable Telepresence commands.
 - Bugfix: Intercepts will only look for agents that are in the same namespace as the intercept.
