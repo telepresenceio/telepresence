@@ -14,7 +14,7 @@
 
 FROM alpine:3.13 as tel2-base
 RUN \
-  apk add --no-cache openssh-sftp-server && \
+  apk add --no-cache openssh-sftp-server ca-certificates && \
   mkdir /home/telepresence && \
   mkdir /tel_app_mounts && \
   chmod 0770 /tel_app_mounts
