@@ -350,7 +350,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 
 	if ipHdr.PayloadLen() > buffer.DataPool.MTU-ipHdr.HeaderLen() {
 		// Package is too large for us.
-		t.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), ipHdr, icmp.MustFragment)
+		t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.MustFragment)
 		return
 	}
 
@@ -378,12 +378,12 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		if ip4 := dst.To4(); ip4 != nil && ip4[2] == 0 && ip4[3] == 0 {
 			// Write to the a subnet's zero address. Not sure why this is happening but there's no point in
 			// passing them on.
-			t.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), ipHdr, icmp.HostUnreachable)
+			t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.HostUnreachable)
 			return
 		}
 		dg := udp.DatagramFromData(ipHdr, data)
 		if blockedUDPPorts[dg.Header().SourcePort()] || blockedUDPPorts[dg.Header().DestinationPort()] {
-			t.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), ipHdr, icmp.PortUnreachable)
+			t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.PortUnreachable)
 			return
 		}
 		data = nil
@@ -394,7 +394,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		dlog.Debugf(c, "<- TUN %s", pkt)
 	default:
 		// An L4 protocol that we don't handle.
-		t.toTunCh <- icmp.DestinationUnreachablePacket(uint16(buffer.DataPool.MTU), ipHdr, icmp.ProtocolUnreachable)
+		t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.ProtocolUnreachable)
 	}
 }
 

@@ -1,7 +1,6 @@
 package icmp
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 
@@ -104,21 +103,32 @@ const (
 	PrecedenceCutoffInEffect
 )
 
-func DestinationUnreachablePacket(mtu uint16, origHdr ip.Header, code UnreachableCode) Packet {
-	pkt := NewPacket(HeaderLen+origHdr.HeaderLen()+8, origHdr.Source(), origHdr.Destination())
-	iph := pkt.IPHeader()
+const IPv6MinMTU = 1280 // From RFC 2460, section 5
+
+func DestinationUnreachablePacket(origHdr ip.Header, code UnreachableCode) Packet {
 	var msgType int
-	if iph.Version() == ipv4.Version {
+	var origSz int
+	if origHdr.Version() == ipv4.Version {
 		msgType = int(ipv4.ICMPTypeDestinationUnreachable)
+
+		// include header + 64 bits of original payload
+		origSz = origHdr.HeaderLen() + 8
 	} else {
 		msgType = int(ipv6.ICMPTypeDestinationUnreachable)
+
+		// include as much of invoking packet as possible without the ICMPv6 packet
+		// exceeding the minimum IPv6 MTU
+		origSz = origHdr.HeaderLen() + origHdr.PayloadLen()
+		if HeaderLen+origSz > IPv6MinMTU {
+			origSz = IPv6MinMTU - HeaderLen
+		}
 	}
+	pkt := NewPacket(HeaderLen+origSz, origHdr.Source(), origHdr.Destination())
+	iph := pkt.IPHeader()
 	icmpHdr := Header(iph.Payload())
 	icmpHdr.SetMessageType(msgType)
 	icmpHdr.SetCode(int(code))
-	roh := icmpHdr.RestOfHeader()
-	binary.BigEndian.PutUint16(roh[2:], mtu)
-	copy(icmpHdr.Payload(), origHdr.Packet()[:origHdr.HeaderLen()+8])
+	copy(icmpHdr.Payload(), origHdr.Packet()[:origSz])
 	icmpHdr.SetChecksum(iph)
 	return pkt
 }

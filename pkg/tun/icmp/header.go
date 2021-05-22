@@ -9,9 +9,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
-const HeaderLen = 8
+const HeaderLen = 8 // Same for IPv4 and IPv6
 
-// Header represents a TCP Header. The Header is obtained by simply casting the IP headers payload.
+// Header represents an ICMP Header. The Header is obtained by simply casting the IP headers payload.
 type Header []byte
 
 func (h Header) MessageType() int {
