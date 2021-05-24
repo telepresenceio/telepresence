@@ -134,6 +134,7 @@ jobs:
     executor: vm-linux
     steps:
       - checkout
+      - install-helm
       # Split prep out to reduce noise in the output, and help with
       # timeouts.
       - run: make lint-deps
@@ -143,15 +144,7 @@ jobs:
           name: "Pre-load Go build cache"
           command: go list ./... | xargs -n1 go test -c -o /dev/null
       - run: make lint
-
-  "chart-lint":
-    executor: vm-linux
-    steps:
-      - checkout
-      - install-helm
-      - run:
-          name: "Lint the chart"
-          command: helm lint charts/telepresence --set isCI=true
+      - run: make lint-chart
 
   "generate":
     executor: vm-linux
@@ -189,12 +182,7 @@ jobs:
     steps:
     - checkout
     - install-helm
-    # We lint the helm chart on all PRs so this should always be true but
-    # since we're about to release the chart, let's do it again just to be
-    # sure.
-    - run:
-        name: "Lint the chart"
-        command: helm lint charts/telepresence --set isCI=true
+    - run: make lint-chart
     # For now, I don't think we need to build rc charts (nor do I think
     # we have a need for rc charts), but explicitly calling them out here
     # in case we change our mind
@@ -215,7 +203,6 @@ workflows:
       - build-and-test
       - lint
       - generate
-      - chart-lint
 
   'Release':
     jobs:
