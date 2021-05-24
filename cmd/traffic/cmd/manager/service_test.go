@@ -222,14 +222,12 @@ func TestConnect(t *testing.T) {
 	a.NoError(err)
 	a.Len(aSnapI.Intercepts, 1)
 	a.Equal(rpc.InterceptDispositionType_ACTIVE, aSnapI.Intercepts[0].Disposition)
-	a.NotEqual(0, aSnapI.Intercepts[0].ManagerPort)
 	t.Logf("=> client[alice] intercept snapshot = %s", dumps(aSnapI))
 
 	hSnapI, err = helloWI.Recv()
 	a.NoError(err)
 	a.Len(hSnapI.Intercepts, 1)
 	a.Equal(rpc.InterceptDispositionType_ACTIVE, hSnapI.Intercepts[0].Disposition)
-	a.NotEqual(0, hSnapI.Intercepts[0].ManagerPort)
 	t.Logf("=> agent[hello] intercept snapshot = %s", dumps(hSnapI))
 
 	// Creating a duplicate intercept yields an error

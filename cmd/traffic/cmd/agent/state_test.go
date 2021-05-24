@@ -62,9 +62,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	host, port = f.Target()
-	a.Equal(appHost, host)
-	a.Equal(appPort, port)
+	a.False(f.Intercepting())
 
 	// Prepare some intercepts..
 
@@ -98,9 +96,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	host, port = f.Target()
-	a.Equal(appHost, host)
-	a.Equal(appPort, port)
+	a.False(f.Intercepting())
 
 	// Handle reviews waiting intercepts
 
@@ -109,9 +105,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 2)
-	host, port = f.Target()
-	a.Equal(appHost, host)
-	a.Equal(appPort, port)
+	a.False(f.Intercepting())
 
 	// Reviews are in the correct order
 
@@ -127,14 +121,11 @@ func TestState_HandleIntercepts(t *testing.T) {
 	// Handle updates forwarding
 
 	cepts[0].Disposition = rpc.InterceptDispositionType_ACTIVE
-	cepts[0].ManagerPort = 1138
 	cepts[1].Disposition = rpc.InterceptDispositionType_WAITING
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 1)
-	host, port = f.Target()
-	a.Equal(mgrHost, host)
-	a.Equal(int32(1138), port)
+	a.True(f.Intercepting())
 
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[0].Disposition)
 	a.Equal("Conflicts with the currently-served intercept \"intercept-01\"", reviews[0].Message)
@@ -143,7 +134,5 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, nil)
 	a.Len(reviews, 0)
-	host, port = f.Target()
-	a.Equal(appHost, host)
-	a.Equal(appPort, port)
+	a.False(f.Intercepting())
 }

@@ -171,10 +171,7 @@ message InterceptInfo {
   // authenticate with external APIs, such as SystemA.
   string api_key = 13;
 
-  // manager_port is the port on the manager that the agent should
-  // send intercepted traffic to.  This gets set by the manager when
-  // the intercept is first created.
-  int32 manager_port = 2;
+  reserved 2;
 
   // preview_domain is the SystemA domain that will proxy in traffic
   // to this intercept, and preview_ingress is where it will get

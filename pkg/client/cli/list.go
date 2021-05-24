@@ -131,7 +131,6 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 
 	if debug {
 		fields = append(fields, kv{"ID", ii.Id})
-		fields = append(fields, kv{"Manager Port", fmt.Sprintf("%d", ii.ManagerPort)})
 	}
 
 	fields = append(fields, kv{"Destination",

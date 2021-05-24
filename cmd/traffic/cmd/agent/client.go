@@ -56,6 +56,8 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 
+	state.SetManager(session, manager)
+
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'
 	// The presence of this file is used in the readiness check.

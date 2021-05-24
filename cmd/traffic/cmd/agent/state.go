@@ -10,6 +10,7 @@ import (
 
 type State interface {
 	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
+	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient)
 }
 
 // State of the Traffic Agent.
@@ -35,6 +36,10 @@ func NewState(forwarder *Forwarder, managerHost, namespace, podIP string, sftpPo
 		podIP:       podIP,
 		sftpPort:    sftpPort,
 	}
+}
+
+func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient) {
+	s.forwarder.SetManager(sessionInfo, manager)
 }
 
 func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
@@ -65,11 +70,7 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 	}
 
 	// Update forwarding
-	if activeIntercept != nil {
-		s.forwarder.SetTarget(s.managerHost, activeIntercept.ManagerPort)
-	} else {
-		s.forwarder.SetTarget(s.appHost, s.appPort)
-	}
+	s.forwarder.SetIntercepting(activeIntercept)
 
 	// Review waiting intercepts
 	reviews := []*manager.ReviewInterceptRequest{}
@@ -128,4 +129,8 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 	}
 
 	return reviews
+}
+
+func (s *state) Intercepting() bool {
+	return s.forwarder.Intercepting()
 }

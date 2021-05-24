@@ -446,10 +446,6 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.PodIp = rIReq.PodIp
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
-
-			if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
-				m.state.StartInterceptListener(ctx, intercept)
-			}
 		}
 	})
 
@@ -465,11 +461,19 @@ func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
 	if err != nil {
 		return err
 	}
-	return m.state.ClientTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), sessionInfo.SessionId, server)
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), server)
 }
 
 func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
-	return nil // TODO: Move traffic-manager <-> traffic-agent conns to tunnel
+	agentSessionInfo, err := readTunnelSessionID(server)
+	if err != nil {
+		return err
+	}
+	clientSessionInfo, err := readTunnelSessionID(server)
+	if err != nil {
+		return err
+	}
+	return m.state.AgentTunnel(managerutil.WithSessionInfo(server.Context(), agentSessionInfo), clientSessionInfo, server)
 }
 
 func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {
