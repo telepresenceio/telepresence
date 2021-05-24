@@ -104,6 +104,10 @@ lint: lint-deps ## (Lint) Run the linters (golangci-lint and protolint)
 	$(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
 
+.PHONY: lint-chart
+lint-chart:
+	helm lint charts/telepresence --set isCI=true
+
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix linter complaints
 	$(tools/golangci-lint) run --fix --timeout 2m ./... || true

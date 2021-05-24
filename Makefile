@@ -38,6 +38,8 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 	git add CHANGELOG.md go.mod
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/testdata/addAgentToWorkload/cur pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	# Bump the appVersion in the chart for non-rc tags
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,sed -i.bak "s/^appVersion:.*$$/appVersion: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml && rm -f charts/telepresence/Chart.yaml.bak)
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
