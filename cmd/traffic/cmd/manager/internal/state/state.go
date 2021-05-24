@@ -61,7 +61,7 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 type clientSessionState struct {
 	sessionState
 	pool             *connpool.Pool
-	connTunnelServer rpc.Manager_ConnTunnelServer
+	connTunnelServer rpc.Manager_ClientTunnelServer
 }
 
 type agentSessionState struct {
@@ -629,7 +629,7 @@ func (s *State) StartInterceptListener(ctx context.Context, intercept *rpc.Inter
 	}
 }
 
-func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Manager_ConnTunnelServer) error {
+func (s *State) ClientTunnel(ctx context.Context, sessionID string, server rpc.Manager_ClientTunnelServer) error {
 	s.mu.Lock()
 	ss := s.sessions[sessionID]
 	s.mu.Unlock()

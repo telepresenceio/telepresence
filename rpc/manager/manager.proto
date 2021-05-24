@@ -374,10 +374,15 @@ service Manager {
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
 
-  // ConnTunnel receives messages from the client and dispatches them to tracked
+  // ClientTunnel receives messages from the client and dispatches them to tracked
   // net.Conn instances in the traffic-manager. Responses from tracked instances
   // are sent back on the returned message stream
-  rpc ConnTunnel(stream ConnMessage) returns (stream ConnMessage);
+  rpc ClientTunnel(stream ConnMessage) returns (stream ConnMessage);
+
+  // AgentTunnel receives messages from the agent and dispatches them to tracked
+  // net.Conn instances in the traffic-manager. Responses from tracked instances
+  // are sent back on the returned message stream
+  rpc AgentTunnel(stream ConnMessage) returns (stream ConnMessage);
 
   // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.

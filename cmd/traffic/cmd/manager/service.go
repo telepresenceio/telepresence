@@ -460,12 +460,16 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	return &empty.Empty{}, nil
 }
 
-func (m *Manager) ConnTunnel(server rpc.Manager_ConnTunnelServer) error {
+func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
 	sessionInfo, err := readTunnelSessionID(server)
 	if err != nil {
 		return err
 	}
-	return m.state.ConnTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), sessionInfo.SessionId, server)
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), sessionInfo.SessionId, server)
+}
+
+func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
+	return nil // TODO: Move traffic-manager <-> traffic-agent conns to tunnel
 }
 
 func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {

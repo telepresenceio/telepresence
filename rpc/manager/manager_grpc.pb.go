@@ -63,10 +63,14 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
-	// ConnTunnel receives messages from the client and dispatches them to tracked
+	// ClientTunnel receives messages from the client and dispatches them to tracked
 	// net.Conn instances in the traffic-manager. Responses from tracked instances
 	// are sent back on the returned message stream
-	ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error)
+	ClientTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ClientTunnelClient, error)
+	// AgentTunnel receives messages from the agent and dispatches them to tracked
+	// net.Conn instances in the traffic-manager. Responses from tracked instances
+	// are sent back on the returned message stream
+	AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error)
 	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error)
@@ -256,30 +260,61 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
-func (c *managerClient) ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/ConnTunnel", opts...)
+func (c *managerClient) ClientTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ClientTunnelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/ClientTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &managerConnTunnelClient{stream}
+	x := &managerClientTunnelClient{stream}
 	return x, nil
 }
 
-type Manager_ConnTunnelClient interface {
+type Manager_ClientTunnelClient interface {
 	Send(*ConnMessage) error
 	Recv() (*ConnMessage, error)
 	grpc.ClientStream
 }
 
-type managerConnTunnelClient struct {
+type managerClientTunnelClient struct {
 	grpc.ClientStream
 }
 
-func (x *managerConnTunnelClient) Send(m *ConnMessage) error {
+func (x *managerClientTunnelClient) Send(m *ConnMessage) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *managerConnTunnelClient) Recv() (*ConnMessage, error) {
+func (x *managerClientTunnelClient) Recv() (*ConnMessage, error) {
+	m := new(ConnMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *managerClient) AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[3], "/telepresence.manager.Manager/AgentTunnel", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerAgentTunnelClient{stream}
+	return x, nil
+}
+
+type Manager_AgentTunnelClient interface {
+	Send(*ConnMessage) error
+	Recv() (*ConnMessage, error)
+	grpc.ClientStream
+}
+
+type managerAgentTunnelClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerAgentTunnelClient) Send(m *ConnMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *managerAgentTunnelClient) Recv() (*ConnMessage, error) {
 	m := new(ConnMessage)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -306,7 +341,7 @@ func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupH
 }
 
 func (c *managerClient) WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[3], "/telepresence.manager.Manager/WatchLookupHost", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[4], "/telepresence.manager.Manager/WatchLookupHost", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -386,10 +421,14 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
-	// ConnTunnel receives messages from the client and dispatches them to tracked
+	// ClientTunnel receives messages from the client and dispatches them to tracked
 	// net.Conn instances in the traffic-manager. Responses from tracked instances
 	// are sent back on the returned message stream
-	ConnTunnel(Manager_ConnTunnelServer) error
+	ClientTunnel(Manager_ClientTunnelServer) error
+	// AgentTunnel receives messages from the agent and dispatches them to tracked
+	// net.Conn instances in the traffic-manager. Responses from tracked instances
+	// are sent back on the returned message stream
+	AgentTunnel(Manager_AgentTunnelServer) error
 	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error)
@@ -446,8 +485,11 @@ func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterc
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
-func (UnimplementedManagerServer) ConnTunnel(Manager_ConnTunnelServer) error {
-	return status.Errorf(codes.Unimplemented, "method ConnTunnel not implemented")
+func (UnimplementedManagerServer) ClientTunnel(Manager_ClientTunnelServer) error {
+	return status.Errorf(codes.Unimplemented, "method ClientTunnel not implemented")
+}
+func (UnimplementedManagerServer) AgentTunnel(Manager_AgentTunnelServer) error {
+	return status.Errorf(codes.Unimplemented, "method AgentTunnel not implemented")
 }
 func (UnimplementedManagerServer) LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
@@ -729,25 +771,51 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_ConnTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ManagerServer).ConnTunnel(&managerConnTunnelServer{stream})
+func _Manager_ClientTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerServer).ClientTunnel(&managerClientTunnelServer{stream})
 }
 
-type Manager_ConnTunnelServer interface {
+type Manager_ClientTunnelServer interface {
 	Send(*ConnMessage) error
 	Recv() (*ConnMessage, error)
 	grpc.ServerStream
 }
 
-type managerConnTunnelServer struct {
+type managerClientTunnelServer struct {
 	grpc.ServerStream
 }
 
-func (x *managerConnTunnelServer) Send(m *ConnMessage) error {
+func (x *managerClientTunnelServer) Send(m *ConnMessage) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *managerConnTunnelServer) Recv() (*ConnMessage, error) {
+func (x *managerClientTunnelServer) Recv() (*ConnMessage, error) {
+	m := new(ConnMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Manager_AgentTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerServer).AgentTunnel(&managerAgentTunnelServer{stream})
+}
+
+type Manager_AgentTunnelServer interface {
+	Send(*ConnMessage) error
+	Recv() (*ConnMessage, error)
+	grpc.ServerStream
+}
+
+type managerAgentTunnelServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerAgentTunnelServer) Send(m *ConnMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *managerAgentTunnelServer) Recv() (*ConnMessage, error) {
 	m := new(ConnMessage)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -885,8 +953,14 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "ConnTunnel",
-			Handler:       _Manager_ConnTunnel_Handler,
+			StreamName:    "ClientTunnel",
+			Handler:       _Manager_ClientTunnel_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "AgentTunnel",
+			Handler:       _Manager_AgentTunnel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
