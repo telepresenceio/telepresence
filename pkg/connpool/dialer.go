@@ -115,6 +115,8 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	case Disconnect:
 		h.Close(ctx)
 		h.sendTCD(ctx, DisconnectOK)
+	case ReadClosed, WriteClosed:
+		h.Close(ctx)
 	case KeepAlive:
 		h.resetIdle()
 	default:
