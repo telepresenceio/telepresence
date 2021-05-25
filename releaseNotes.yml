@@ -12,10 +12,18 @@
 #     - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
 
 items:
+  - version: 2.3.0
+    date: '2021-05-26'
+    notes:
+      - title: Brew install Telepresence
+        body: Telepresence can now be installed via brew on Mac OS by using the following command: brew install datawire/blackbird/telepresence2  
+        image: public/telepresence-2.3.0-brew 
+        docs: install/index/
+        type: feature
   - version: 2.2.2
     date: '2021-05-17'
     notes:
-      - title: Legacy Telepresence subcommands
+      - title: Telepresence legacy subcommands
         body: Telepresence is now able to translate common legacy Telepresence commands into native Telepresence commands. So if you want to get started quickly, you can just use the same legacy Telepresence commands you are used to with the new Telepresence binary.
         image: ./telepresence-2.2.png
         docs: install/migrate-from-legacy/
