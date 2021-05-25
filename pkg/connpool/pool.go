@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type Pool struct {
@@ -18,9 +17,7 @@ type Handler interface {
 	// Close closes the handle
 	Close(context.Context)
 
-	HandleControl(ctx context.Context, ctrl *ControlMessage)
-
-	HandleMessage(ctx context.Context, message *manager.ConnMessage)
+	HandleMessage(ctx context.Context, message Message)
 
 	Start(ctx context.Context)
 }
@@ -31,18 +28,23 @@ func NewPool() *Pool {
 
 func (p *Pool) release(id ConnID) {
 	p.lock.Lock()
-	// TODO: Consider moving to freelist for reuse
 	delete(p.handlers, id)
 	p.lock.Unlock()
 }
 
-func (p *Pool) Get(ctx context.Context, id ConnID, createHandler func(ctx context.Context, release func()) (Handler, error)) (Handler, error) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+// HandlerCreator describes the function signature for the function that creates a handler
+type HandlerCreator func(ctx context.Context, release func()) (Handler, error)
 
+// Get finds a handler for the given id from the pool, or creates a new handler using the given createHandler func
+// when no handler was found. The handler is returned together with a boolean flag which is set to true if
+// the handler was found or false if it was created.
+func (p *Pool) Get(ctx context.Context, id ConnID, createHandler HandlerCreator) (Handler, bool, error) {
+	p.lock.Lock()
 	handler, ok := p.handlers[id]
+	p.lock.Unlock()
+
 	if ok || createHandler == nil {
-		return handler, nil
+		return handler, true, nil
 	}
 
 	var err error
@@ -50,22 +52,38 @@ func (p *Pool) Get(ctx context.Context, id ConnID, createHandler func(ctx contex
 	handler, err = createHandler(handlerCtx, func() {
 		p.release(id)
 		cancel()
-		dlog.Debugf(ctx, "-- CPL %s (count now is %d)", id, len(p.handlers))
+		dlog.Debugf(ctx, "-- POOL %s, count now is %d", id, len(p.handlers))
 	})
-	if err != nil {
-		return nil, err
+	if err != nil || handler == nil {
+		return nil, false, err
+	}
+
+	p.lock.Lock()
+	var old Handler
+	if old, ok = p.handlers[id]; !ok {
+		p.handlers[id] = handler
+	}
+	p.lock.Unlock()
+	if ok {
+		// Toss newly created handler. It's not started anyway.
+		return old, true, nil
 	}
 	handler.Start(handlerCtx)
-	p.handlers[id] = handler
-	dlog.Debugf(ctx, "++ CPL %s (count now is %d)", id, len(p.handlers))
-	return handler, nil
+	dlog.Debugf(ctx, "++ POOL %s, count now is %d", id, len(p.handlers))
+	return handler, false, nil
 }
 
 func (p *Pool) CloseAll(ctx context.Context) {
 	p.lock.Lock()
-	defer p.lock.Unlock()
-	for id, handler := range p.handlers {
-		dlog.Debugf(ctx, "Closing handler %s", id)
+	handlers := make([]Handler, len(p.handlers))
+	i := 0
+	for _, handler := range p.handlers {
+		handlers[i] = handler
+		i++
+	}
+	p.lock.Unlock()
+
+	for _, handler := range handlers {
 		handler.Close(ctx)
 	}
 }

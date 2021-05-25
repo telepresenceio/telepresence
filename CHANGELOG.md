@@ -2,6 +2,10 @@
 
 ### 2.3.0 TBD
 - Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root
+- Change: A TUN-device is used instead of firewall rules for routing outbound connections.
+- Change: Outbound connections now use gRPC instead of ssh, and the traffic-manager no longer has a sshd running.
+- Change: The traffic-agent no longer has a sshd running. Remote volume mounts use sshfs in slave mode, talking directly to sftp.
+- Change: The local DNS now routes the name lookups to intercepted agents or traffic-manager.
 
 ### 2.2.2 (May 17, 2021)
 - Feature: Telepresence translates legacy Telepresence commands into viable Telepresence commands.

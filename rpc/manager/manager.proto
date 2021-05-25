@@ -26,8 +26,8 @@ message ClientInfo {
 message AgentInfo {
   string name = 1;      // name of the Workload
   string namespace = 7; // namespace of the Workload
-  string hostname = 2;
-  string product = 3; // distinguish open source, our closed source, someone else's thing
+  string pod_ip = 2;    // Pod IP (from status.podIP)
+  string product = 3;   // distinguish open source, our closed source, someone else's thing
   string version = 4;
 
   // "Mechanisms" are the ways that an Agent can decide handle
@@ -190,10 +190,10 @@ message InterceptInfo {
   InterceptDispositionType disposition = 3;
   string message = 4;
 
-  // The Pod name and SSH port to use when doing sshfs mounts.  These
+  // The Pod name and sftp port to use when doing sshfs mounts.  These
   // are set by the agent's call to ReviewIntercept.
-  string pod_name = 10;
-  int32 ssh_port = 11;
+  string pod_ip = 10;
+  int32 sftp_port = 11;
 
   // A human-friendly description of what the spec.mechanism_args say.
   // This is set by the agent's call to ReviewIntercept.
@@ -239,9 +239,9 @@ message ReviewInterceptRequest {
   InterceptDispositionType disposition = 3;
   string message = 4;
 
-  // pod name and ssh port to use when doing sshfs mounts
-  string pod_name = 5;
-  int32 ssh_port = 6;
+  // pod IP and sftp port to use when doing sshfs mounts
+  string pod_ip = 5;
+  int32 sftp_port = 6;
 
   // A human-friendly description of what the
   // InterceptSpec.mechanism_args say.
@@ -284,6 +284,28 @@ message ConnMessage {
   // conn_id is composed of L4 protocol, source IP, source port, destination IP and destination port
   bytes conn_id = 1;
   bytes payload = 5;
+}
+
+// LookupHost request sent from a client
+message LookupHostRequest {
+  // Client session
+  SessionInfo session = 1;
+  string host = 2;
+}
+
+message LookupHostResponse {
+  repeated bytes ips = 1;
+}
+
+message LookupHostAgentResponse {
+  // Agent session
+  SessionInfo session = 1;
+
+  // LookupHostRequest is the request that this is a response to
+  LookupHostRequest request = 2;
+
+  // The response, which might be nil in case no address was found
+  LookupHostResponse response = 3;
 }
 
 service Manager {
@@ -356,4 +378,14 @@ service Manager {
   // net.Conn instances in the traffic-manager. Responses from tracked instances
   // are sent back on the returned message stream
   rpc ConnTunnel(stream ConnMessage) returns (stream ConnMessage);
+
+  // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  rpc LookupHost(LookupHostRequest) returns (LookupHostResponse);
+
+  // AgentLookupHostResponse lets an agent respond for lookup requests
+  rpc AgentLookupHostResponse(LookupHostAgentResponse) returns (google.protobuf.Empty);
+
+  // WatchLookupHost lets an agent receive lookup requests
+  rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
 }

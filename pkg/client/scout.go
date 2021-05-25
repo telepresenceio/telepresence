@@ -190,7 +190,7 @@ func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) er
 	}
 
 	_, err = s.Reporter.Report(ctx, metadata)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		return errors.Wrap(err, "scout report")
 	}
 	// TODO: Do something useful (alert the user if there's an available

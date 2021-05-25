@@ -1,13 +1,20 @@
 package connector
 
 import (
+	"context"
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-func (kc *k8sCluster) detectIngressBehavior() []*manager.IngressInfo {
-	loadBalancers := kc.findAllSvcByType(v1.ServiceTypeLoadBalancer)
+// TOOO: Move this to traffic-manager
+func (kc *k8sCluster) detectIngressBehavior(c context.Context) ([]*manager.IngressInfo, error) {
+	loadBalancers, err := kc.findAllSvcByType(c, v1.ServiceTypeLoadBalancer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain all services of type LoadBalancer: %v", err)
+	}
 
 	type portFilter func(p *v1.ServicePort) bool
 	findTCPPort := func(ports []v1.ServicePort, filter portFilter) *v1.ServicePort {
@@ -49,5 +56,5 @@ func (kc *k8sCluster) detectIngressBehavior() []*manager.IngressInfo {
 			Port:   port.Port,
 		})
 	}
-	return iis
+	return iis, nil
 }

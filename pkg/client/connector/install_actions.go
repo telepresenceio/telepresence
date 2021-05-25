@@ -448,18 +448,18 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 			Value: agentName,
 		},
 		corev1.EnvVar{
-			Name: "AGENT_POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-		corev1.EnvVar{
 			Name: "AGENT_NAMESPACE",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "AGENT_POD_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "status.podIP",
 				},
 			},
 		},

@@ -50,19 +50,17 @@ func NewHandler(stream *connpool.Stream, toTun chan<- ip.Packet, id connpool.Con
 	}
 }
 
-func (h *handler) HandleControl(_ context.Context, _ *connpool.ControlMessage) {
-}
-
-func (h *handler) HandleMessage(ctx context.Context, mdg *manager.ConnMessage) {
-	pkt := NewDatagram(HeaderLen+len(mdg.Payload), h.id.Destination(), h.id.Source())
+func (h *handler) HandleMessage(ctx context.Context, mdg connpool.Message) {
+	payload := mdg.Payload()
+	pkt := NewDatagram(HeaderLen+len(payload), h.id.Destination(), h.id.Source())
 	ipHdr := pkt.IPHeader()
 	ipHdr.SetChecksum()
 
 	udpHdr := Header(ipHdr.Payload())
 	udpHdr.SetSourcePort(h.id.DestinationPort())
 	udpHdr.SetDestinationPort(h.id.SourcePort())
-	udpHdr.SetPayloadLen(uint16(len(mdg.Payload)))
-	copy(udpHdr.Payload(), mdg.Payload)
+	udpHdr.SetPayloadLen(uint16(len(payload)))
+	copy(udpHdr.Payload(), payload)
 	udpHdr.SetChecksum(ipHdr)
 
 	select {
@@ -92,7 +90,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			dlog.Debugf(ctx, "<- TUN %s", dg)
 			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			err := h.SendMsg(&manager.ConnMessage{ConnId: []byte(h.id), Payload: udpHdr.Payload()})
+			err := h.Send(&manager.ConnMessage{ConnId: []byte(h.id), Payload: udpHdr.Payload()})
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {

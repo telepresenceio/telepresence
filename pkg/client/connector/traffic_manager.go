@@ -9,24 +9,24 @@ import (
 	"os/user"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	v1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -46,14 +46,6 @@ type trafficManager struct {
 	startup       chan bool // gets closed when managerClient is fully initialized (or managerErr is set)
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
-
-	// sshPort is a local TCP port number that the userd uses internally that gets forwarded to
-	// the SSH port on the manager Pod.
-	//
-	// FIXME(lukeshu): sshPort is exposed to the rest of the machine because we use separate
-	// `kubectl port-forward` and `ssh -D` processes; it should go away by way of moving the
-	// port-forwarding to happen in the userd process.
-	sshPort int32
 
 	// Map of desired mount points for intercepts
 	mountPoints sync.Map
@@ -115,25 +107,18 @@ func (tm *trafficManager) run(c context.Context) error {
 		"--namespace",
 		managerNamespace,
 		"svc/traffic-manager",
-		fmt.Sprintf(":%d", ManagerPortSSH),
 		fmt.Sprintf(":%d", ManagerPortHTTP)}
 
 	// Scan port-forward output and grab the dynamically allocated ports
 	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
 	outputScanner := func(sc *bufio.Scanner) interface{} {
-		var sshPort, apiPort string
 		for sc.Scan() {
 			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
 				toPort, _ := strconv.Atoi(rxr[2])
-				if toPort == ManagerPortSSH {
-					sshPort = rxr[1]
-					dlog.Debugf(c, "traffic-manager ssh-port %s", sshPort)
-				} else if toPort == ManagerPortHTTP {
-					apiPort = rxr[1]
+				if toPort == ManagerPortHTTP {
+					apiPort := rxr[1]
 					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
-				}
-				if sshPort != "" && apiPort != "" {
-					return []string{sshPort, apiPort}
+					return apiPort
 				}
 			}
 		}
@@ -145,11 +130,8 @@ func (tm *trafficManager) run(c context.Context) error {
 	}, 2*time.Second, 6*time.Second)
 }
 
-func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
-	ports := portsIf.([]string)
-	sshPort, _ := strconv.Atoi(ports[0])
-	grpcPort, _ := strconv.Atoi(ports[1])
-	tm.sshPort = int32(sshPort)
+func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err error) {
+	grpcPort, _ := strconv.Atoi(portIf.(string))
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
@@ -193,7 +175,12 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	if _, err = tm.daemon.SetManagerInfo(c, &daemon.ManagerInfo{GrpcPort: int32(grpcPort)}); err != nil {
+	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
+	outboundInfo, err := tm.getOutboundInfo(c, int32(grpcPort))
+	if err != nil {
+		return err
+	}
+	if _, err = tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
 		return err
 	}
 
@@ -319,7 +306,10 @@ func (tm *trafficManager) getInfosForWorkload(
 					continue
 				}
 
-				matchingSvcs := tm.findMatchingServices("", "", namespace, labels)
+				matchingSvcs, err := tm.findMatchingServices(ctx, "", "", namespace, labels)
+				if err != nil {
+					continue
+				}
 				if len(matchingSvcs) == 0 {
 					reason = "No service with matching selector"
 				}
@@ -438,8 +428,8 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
-	r.BridgeOk = tm.check(ctx)
 	if tm.managerClient == nil {
+		r.BridgeOk = false
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
 		r.Agents = &manager.AgentInfoSnapshot{}
 		if err := tm.managerErr; err != nil {
@@ -451,6 +441,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
 		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: intercepts}
 		r.SessionInfo = tm.session()
+		r.BridgeOk = true
 	}
 }
 
@@ -521,84 +512,101 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 	return result, nil
 }
 
-// check checks the status of teleproxy bridge by doing the equivalent of
-//  curl http://traffic-manager.svc:8022.
-// Note there is no namespace specified, as we are checking for bridge status in the
-// current namespace.
-func (br *trafficManager) check(c context.Context) bool {
-	if br == nil {
-		return false
+var svcCIDRrx = regexp.MustCompile(`range of valid IPs is (.*)$`)
+
+// getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
+func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*daemon.OutboundInfo, error) {
+	// Get all nodes
+	var nodes []kates.Node
+	var cidr *net.IPNet
+
+	dnsServices := []metav1.ObjectMeta{
+		{
+			Name:      "kube-dns",
+			Namespace: "kube-system",
+		},
+		{
+			Name:      "dns-default",
+			Namespace: "openshift-dns",
+		},
 	}
-	address := fmt.Sprintf("localhost:%d", br.sshPort)
-	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
-	if err != nil {
-		dlog.Errorf(c, "fail to establish tcp connection to %s: %v", address, err)
-		return false
-	}
-	defer conn.Close()
-
-	msg, _, err := bufio.NewReader(conn).ReadLine()
-	if err != nil {
-		dlog.Errorf(c, "tcp read: %v", err)
-		return false
-	}
-	if !strings.Contains(string(msg), "SSH") {
-		dlog.Errorf(c, "expected SSH prompt, got: %v", string(msg))
-		return false
-	}
-	return true
-}
-
-// sshPortForward synchronously runs an `ssh` process with the given port-forward args.  It retries
-// for all errors; it only returns when the context is canceled.  For that reason, it doesn't return
-// an error; it just always retries.
-func (tm *trafficManager) sshPortForward(ctx context.Context, pfArgs ...string) {
-	// XXX: probably need some kind of keepalive check for ssh, first
-	// curl after wakeup seems to trigger detection of death
-	sshArgs := append(append([]string{"ssh"}, pfArgs...), []string{
-		"-F", "none", // don't load the user's config file
-
-		// connection settings
-		"-C", // compression
-		"-oConnectTimeout=10",
-		"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-		"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-
-		// port-forward settings
-		"-N", // no remote command; just connect and forward ports
-		"-oExitOnForwardFailure=yes",
-
-		// where to connect to
-		"-p", strconv.Itoa(int(tm.sshPort)),
-		"telepresence@localhost",
-	}...)
-
-	// Do NOT use client.Retry; this has slightly more domain-specific knowledge regarding the
-	// backoff: We don't backoff if the process was "long-lived".  SSH connections just
-	// sometimes die; we should retry those immediately; we only want to back off when it looks
-	// like there's a problem *establishing* the connection.  So we use process-lifetime as a
-	// proxy for whether a connection was established or not.
-	backoff := 100 * time.Millisecond
-	for ctx.Err() == nil {
-		start := time.Now()
-		err := dexec.CommandContext(ctx, sshArgs[0], sshArgs[1:]...).Run()
-		lifetime := time.Since(start)
-
-		if ctx.Err() == nil {
-			if err == nil {
-				err = errors.New("ssh process terminated successfully, but unexpectedly")
-			}
-			dlog.Errorf(ctx, "communicating with manager: %v", err)
-			if lifetime >= 20*time.Second {
-				backoff = 100 * time.Millisecond
-				dtime.SleepWithContext(ctx, backoff)
-			} else {
-				dtime.SleepWithContext(ctx, backoff)
-				backoff *= 2
-				if backoff > 3*time.Second {
-					backoff = 3 * time.Second
-				}
-			}
+	var kubeDNS net.IP
+	for _, dnsService := range dnsServices {
+		svc := kates.Service{TypeMeta: metav1.TypeMeta{Kind: "Service"}, ObjectMeta: dnsService}
+		if err := tm.client.Get(c, &svc, &svc); err == nil {
+			kubeDNS = iputil.Parse(svc.Spec.ClusterIP)
+			break
 		}
 	}
+
+	if kubeDNS == nil {
+		return nil, fmt.Errorf("failed to get IP of cluster's DNS service")
+	}
+
+	// make an attempt to create a service with ClusterIP that is out of range and then
+	// check the error message for the correct range as suggested tin the second answer here:
+	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
+	// This requires an additional permission to create a service, which we might not have
+	svc := kates.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "t2-tst-dummy",
+		},
+		Spec: v1.ServiceSpec{
+			Ports:     []kates.ServicePort{{Port: 443}},
+			ClusterIP: "1.1.1.1",
+		},
+	}
+
+	var serviceSubnet *daemon.IPNet
+	if err := tm.client.Create(c, &svc, &svc); err != nil {
+		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
+			_, cidr, err = net.ParseCIDR(match[1])
+			if err != nil {
+				dlog.Errorf(c, "unable to parse service CIDR %q", match[1])
+			} else {
+				serviceSubnet = iputil.IPNetToRPC(cidr)
+			}
+		} else {
+			dlog.Debugf(c, "Probably insufficient permissions to attempt dummy service creation in order to find service subnet: %v", err)
+		}
+	}
+
+	if serviceSubnet == nil {
+		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
+		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
+		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
+		// unlikely to cover less than half the bits.
+		dlog.Debugf(c, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", kubeDNS)
+		bits := len(kubeDNS) * 8
+		ones := bits / 2
+		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
+		serviceSubnet = &daemon.IPNet{Ip: kubeDNS.Mask(mask), Mask: int32(ones)}
+	}
+
+	if err := tm.client.List(c, kates.Query{Kind: "Node"}, &nodes); err != nil {
+		return nil, fmt.Errorf("failed to get nodes: %v", err)
+	}
+	podCIDRs := make([]*daemon.IPNet, 0, len(nodes)+1)
+	for i := range nodes {
+		node := &nodes[i]
+		for _, podCIDR := range node.Spec.PodCIDRs {
+			_, cidr, err := net.ParseCIDR(podCIDR)
+			if err != nil {
+				dlog.Errorf(c, "unable to parse podCIDR %q in %s.%s", podCIDR, node.Name, node.Namespace)
+				continue
+			}
+			podCIDRs = append(podCIDRs, iputil.IPNetToRPC(cidr))
+		}
+	}
+
+	return &daemon.OutboundInfo{
+		Session:       tm.sessionInfo,
+		ManagerPort:   mgrPort,
+		KubeDnsIp:     kubeDNS,
+		ServiceSubnet: serviceSubnet,
+		PodSubnets:    podCIDRs,
+	}, nil
 }

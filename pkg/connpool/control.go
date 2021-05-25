@@ -1,7 +1,7 @@
 package connpool
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -10,17 +10,21 @@ import (
 type ControlCode byte
 
 const (
-	Connect = ControlCode(iota)
+	SessionInfo = ControlCode(iota)
+	Connect
 	ConnectOK
 	ConnectReject
 	Disconnect
 	DisconnectOK
 	ReadClosed
 	WriteClosed
+	KeepAlive
 )
 
 func (c ControlCode) String() string {
 	switch c {
+	case SessionInfo:
+		return "SESSION_ID"
 	case Connect:
 		return "CONNECT"
 	case ConnectOK:
@@ -35,44 +39,70 @@ func (c ControlCode) String() string {
 		return "READ_CLOSED"
 	case WriteClosed:
 		return "WRITE_CLOSED"
+	case KeepAlive:
+		return "KEEP_ALIVE"
 	default:
 		return fmt.Sprintf("** unknown control code: %d **", c)
 	}
 }
 
-type ControlMessage struct {
-	ID   ConnID
-	Code ControlCode
+type Control interface {
+	Message
+	Code() ControlCode
+	SessionInfo() *manager.SessionInfo
 }
 
-func (c *ControlMessage) String() string {
-	return fmt.Sprintf("%s, code %s", c.ID, c.Code)
+type control struct {
+	code    ControlCode
+	id      ConnID
+	payload []byte
 }
 
-func IsControlMessage(cm *manager.ConnMessage) bool {
-	return len(cm.ConnId) == 2
+func (c *control) Code() ControlCode {
+	return c.code
 }
 
-func ConnControl(id ConnID, code ControlCode) *manager.ConnMessage {
-	// Propagate the error in a "close" message using a datagram where the destination port is set to zero
-	// and instead propagated as the first two bytes of the payload followed by an error code.
-	ctrl := make([]byte, 2)
-	ctrl[0] = byte(code)
-	ctrl[1] = byte(len(id))
-	return &manager.ConnMessage{
-		ConnId:  ctrl,
-		Payload: []byte(id),
+func (c *control) ID() ConnID {
+	return c.id
+}
+
+func (c *control) Payload() []byte {
+	return c.payload
+}
+
+// SessionInfo returns the SessionInfo that this Control represents or nil if
+// this isn't a SessionInfo Control.
+func (c *control) SessionInfo() *manager.SessionInfo {
+	if c.code == SessionInfo {
+		var sessionInfo *manager.SessionInfo
+		if err := json.Unmarshal(c.payload, &sessionInfo); err == nil {
+			return sessionInfo
+		}
 	}
+	return nil
 }
 
-func NewControlMessage(cm *manager.ConnMessage) (*ControlMessage, error) {
-	ctrl := cm.ConnId
-	if len(ctrl) != 2 || len(cm.Payload) < int(ctrl[1]) {
-		return nil, errors.New("invalid tunnel control message")
-	}
+func (c *control) String() string {
+	return fmt.Sprintf("%s, code %s, len %d", c.id, c.code, len(c.payload))
+}
 
-	return &ControlMessage{
-		ID:   ConnID(cm.Payload[:ctrl[1]]),
-		Code: ControlCode(ctrl[0]),
-	}, nil
+func (c *control) TunnelMessage() *manager.ConnMessage {
+	idLen := len(c.id)
+	cmPl := make([]byte, idLen+len(c.payload))
+	copy(cmPl, c.id)
+	copy(cmPl[idLen:], c.payload)
+	return &manager.ConnMessage{ConnId: []byte{byte(c.code), byte(idLen)}, Payload: cmPl}
+}
+
+func NewControl(id ConnID, code ControlCode, payload []byte) Control {
+	return &control{id: id, code: code, payload: payload}
+}
+
+func SessionInfoControl(sessionInfo *manager.SessionInfo) Control {
+	jsonInfo, err := json.Marshal(sessionInfo)
+	if err != nil {
+		// The SessionInfo must be json Marshable
+		panic(err)
+	}
+	return &control{id: "", code: SessionInfo, payload: jsonInfo}
 }

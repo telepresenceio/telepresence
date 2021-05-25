@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
@@ -17,7 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
-	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/icmp"
@@ -25,18 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/tcp"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/udp"
 )
-
-// IPKey is an immutable cast of a net.IP suitable to be used as a map key. It must be created using IPKey(ip)
-type IPKey string
-
-func (k IPKey) IP() net.IP {
-	return net.IP(k)
-}
-
-// String returns the human readable string form of the IP (as opposed to the binary junk displayed when using it directly).
-func (k IPKey) String() string {
-	return net.IP(k).String()
-}
 
 // tunRouter is a router for outbound traffic that is centered around a TUN device. It's similar to a
 // TUN-to-SOCKS5 but uses a bidirectional gRPC tunnel instead of SOCKS when communicating with the
@@ -100,15 +89,15 @@ type tunRouter struct {
 	//   2 = closed
 	closing int32
 
+	// session contains the manager session
+	session *manager.SessionInfo
+
 	// mgrConfigured will be closed as soon as the connector has sent over the correct port to
 	// the traffic manager and the managerClient has been connected.
 	mgrConfigured <-chan struct{}
 
-	// ips is the current set of IP addresses mapped by this router.
-	ips map[IPKey]struct{}
-
-	// subnets is the current set of subnets mapped by this router. It is derived from ips.
-	subnets map[string]*net.IPNet
+	// rndSource is the source for the random number generator in the TCP handlers
+	rndSource rand.Source
 }
 
 func newTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
@@ -122,97 +111,8 @@ func newTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
 		toTunCh:       make(chan ip.Packet, 100),
 		mgrConfigured: managerConfigured,
 		fragmentMap:   make(map[uint16][]*buffer.Data),
-		ips:           make(map[IPKey]struct{}),
-		subnets:       make(map[string]*net.IPNet),
+		rndSource:     rand.NewSource(time.Now().UnixNano()),
 	}, nil
-}
-
-// snapshot returns a copy of the current IP table.
-func (t *tunRouter) snapshot() map[IPKey]struct{} {
-	ips := make(map[IPKey]struct{}, len(t.ips))
-	for k, v := range t.ips {
-		ips[k] = v
-	}
-	return ips
-}
-
-// clear the given ip. Returns true if the ip was cleared and false if not found.
-func (t *tunRouter) clear(_ context.Context, ip IPKey) (found bool) {
-	if _, found = t.ips[ip]; found {
-		delete(t.ips, ip)
-	}
-	return found
-}
-
-// add the given ip. Returns true if the io was added and false if it was already present.
-func (t *tunRouter) add(_ context.Context, ip IPKey) (found bool) {
-	if _, found = t.ips[ip]; !found {
-		t.ips[ip] = struct{}{}
-	}
-	return !found
-}
-
-// flush any pending changes that needs to be committed
-func (t *tunRouter) flush(c context.Context, dnsIP net.IP) error {
-	addedNets := make(map[string]*net.IPNet)
-	ips := make([]net.IP, len(t.ips))
-	i := 0
-	for ip := range t.ips {
-		ips[i] = net.IP(ip)
-		i++
-	}
-
-	droppedNets := make(map[string]*net.IPNet)
-	for _, sn := range subnet.AnalyzeIPs(ips) {
-		// TODO: Figure out how networks cover each other, merge and remove as needed.
-		// For now, we just have one 16-bit mask for the whole subnet
-		alreadyCovered := false
-		for _, esn := range t.subnets {
-			if subnet.Covers(esn, sn) {
-				alreadyCovered = true
-				break
-			}
-		}
-		if !alreadyCovered {
-			for k, esn := range t.subnets {
-				if subnet.Covers(sn, esn) {
-					droppedNets[k] = esn
-					break
-				}
-			}
-			addedNets[sn.String()] = sn
-		}
-	}
-
-	for k, dropped := range droppedNets {
-		if err := t.dev.RemoveSubnet(c, dropped); err != nil {
-			return err
-		}
-		delete(t.subnets, k)
-	}
-
-	if len(addedNets) == 0 {
-		return nil
-	}
-
-	subnets := make([]*net.IPNet, len(addedNets))
-	i = 0
-	for k, sn := range addedNets {
-		t.subnets[k] = sn
-		if i > 0 && dnsIP != nil && sn.Contains(dnsIP) {
-			// Ensure that the subnet for the DNS is placed first
-			subnets[0], sn = sn, subnets[0]
-		}
-		subnets[i] = sn
-		i++
-	}
-	for _, sn := range subnets {
-		dlog.Debugf(c, "Adding subnet %s", sn)
-		if err := t.dev.AddSubnet(c, sn); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
@@ -222,7 +122,7 @@ func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16
 	return nil
 }
 
-func (t *tunRouter) setManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) (err error) {
+func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
 	if t.managerClient == nil {
 		// First check. Establish connection
 		tos := &client.GetConfig(ctx).Timeouts
@@ -230,14 +130,29 @@ func (t *tunRouter) setManagerInfo(ctx context.Context, mi *daemon.ManagerInfo) 
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.GrpcPort),
+		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.ManagerPort),
 			grpc.WithInsecure(),
 			grpc.WithNoProxy(),
 			grpc.WithBlock())
 		if err != nil {
 			return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
 		}
+		t.session = mi.Session
 		t.managerClient = manager.NewManagerClient(conn)
+
+		cidr := iputil.IPNetFromRPC(mi.ServiceSubnet)
+		dlog.Infof(ctx, "Adding service subnet %s", cidr)
+		if err = t.dev.AddSubnet(ctx, cidr); err != nil {
+			return err
+		}
+
+		for _, sn := range mi.PodSubnets {
+			cidr = iputil.IPNetFromRPC(sn)
+			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+			if err = t.dev.AddSubnet(ctx, cidr); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -293,14 +208,16 @@ func (t *tunRouter) run(c context.Context) error {
 		case <-t.mgrConfigured:
 		}
 
-		// TODO: ConnTunnel should probably provide a sessionID
 		tunnel, err := t.managerClient.ConnTunnel(c)
 		if err != nil {
 			return err
 		}
-		t.connStream = connpool.NewStream(tunnel, t.handlers)
+		if err = tunnel.Send(connpool.SessionInfoControl(t.session).TunnelMessage()); err != nil {
+			return err
+		}
+		t.connStream = connpool.NewStream(tunnel)
 		dlog.Debug(c, "MGR read loop starting")
-		return t.connStream.ReadLoop(c, &t.closing)
+		return t.connStream.DialLoop(c, &t.closing, t.handlers)
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {
@@ -371,7 +288,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		data = nil
 	case unix.IPPROTO_UDP:
 		dst := ipHdr.Destination()
-		if dst.IsLinkLocalUnicast() || dst.IsLinkLocalMulticast() {
+		if !dst.IsGlobalUnicast() {
 			// Just ignore at this point.
 			return
 		}
@@ -401,9 +318,15 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
+	if tcpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
+		// Ignore TCP packages intended for the DNS resolver for now
+		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
+		return
+	}
+
 	connID := connpool.NewConnID(unix.IPPROTO_TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
-	wf, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
-		return tcp.NewHandler(t.connStream, &t.closing, t.toTunCh, connID, remove), nil
+	wf, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
+		return tcp.NewHandler(t.connStream, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
@@ -416,7 +339,7 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	ipHdr := dg.IPHeader()
 	udpHdr := dg.Header()
 	connID := connpool.NewConnID(unix.IPPROTO_UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
-	uh, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
+	uh, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
 		if udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
 			return udp.NewDnsInterceptor(t.connStream, t.toTunCh, connID, remove, t.dnsLocalAddr)
 		}

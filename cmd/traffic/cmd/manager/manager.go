@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
@@ -33,21 +32,6 @@ func Main(ctx context.Context, args ...string) error {
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 	})
-
-	// Run sshd
-	g.Go("sshd", func(ctx context.Context) error {
-		cmd := dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", "8022")
-
-		// Avoid starting sshd while running locally for debugging. Launch sleep
-		// instead so that the launch and kill code is tested in development.
-		if env.User != "" {
-			dlog.Info(ctx, "Not starting sshd ($USER is set)")
-			cmd = dexec.CommandContext(ctx, "sleep", "1000000")
-		}
-
-		return cmd.Run()
-	})
-
 	mgr := NewManager(ctx, env)
 
 	// Serve HTTP (including gRPC)

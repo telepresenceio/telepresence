@@ -33,7 +33,6 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 	return &installer{k8sCluster: kc}, nil
 }
 
-const ManagerPortSSH = 8022
 const ManagerPortHTTP = 8081
 const managerAppName = "traffic-manager"
 const managerLicenseName = "systema-license"
@@ -73,14 +72,6 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 			ClusterIP: "None",
 			Selector:  labelMap,
 			Ports: []kates.ServicePort{
-				{
-					Name: "sshd",
-					Port: ManagerPortSSH,
-					TargetPort: kates.IntOrString{
-						Type:   intstr.String,
-						StrVal: "sshd",
-					},
-				},
 				{
 					Name: "api",
 					Port: ManagerPortHTTP,
@@ -307,38 +298,33 @@ func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.Ser
 	return svcPorts
 }
 
-func (ki *installer) findMatchingServices(portNameOrNumber, svcName, namespace string, labels map[string]string) []*kates.Service {
-	matching := make([]*kates.Service, 0)
+func (ki *installer) findMatchingServices(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*kates.Service, error) {
+	// TODO: Expensive on large clusters but the problem goes away once we move the installer to the traffic-manager
+	var svcs []*kates.Service
+	if err := ki.client.List(c, kates.Query{Name: svcName, Kind: "Service", Namespace: namespace}, &svcs); err != nil {
+		return nil, err
+	}
 
-	ki.accLock.Lock()
-	for _, watch := range ki.watchers {
-	nextSvc:
-		for _, svc := range watch.Services {
-			selector := svc.Spec.Selector
-			if len(selector) == 0 {
-				continue nextSvc
-			}
-
-			// Only check services in the given namespace
-			if svc.Namespace != namespace {
-				continue nextSvc
-			}
-			// Only check if the service names are equal when supplied by user
-			if svcName != "" && svc.Name != svcName {
-				continue nextSvc
-			}
-			for k, v := range selector {
-				if labels[k] != v {
-					continue nextSvc
-				}
-			}
-			if len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
-				matching = append(matching, svc)
+	// Returns true if selector is completely included in labels
+	labelsMatch := func(selector map[string]string) bool {
+		if len(selector) == 0 || len(labels) < len(selector) {
+			return false
+		}
+		for k, v := range selector {
+			if labels[k] != v {
+				return false
 			}
 		}
+		return true
 	}
-	ki.accLock.Unlock()
-	return matching
+
+	var matching []*kates.Service
+	for _, svc := range svcs {
+		if (svcName == "" || svc.Name == svcName) && labelsMatch(svc.Spec.Selector) && len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
+			matching = append(matching, svc)
+		}
+	}
+	return matching, nil
 }
 
 // findMatchingPort finds the matching container associated with portNameOrNumber
@@ -433,7 +419,10 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
-	svc := ki.findSvc(namespace, svcName)
+	svc, err := ki.findSvc(c, namespace, svcName)
+	if err != nil && !kates.IsNotFound(err) {
+		return nil, err
+	}
 	if svc == nil {
 		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
 	}
@@ -531,7 +520,10 @@ already exist for this service`, kind, obj.GetName())
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
-		matchingSvcs := ki.findMatchingServices(portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvcs, err := ki.findMatchingServices(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		if err != nil {
+			return "", "", err
+		}
 
 		switch numSvcs := len(matchingSvcs); {
 		case numSvcs == 0:
@@ -546,8 +538,8 @@ already exist for this service`, kind, obj.GetName())
 				svcNames = append(svcNames, svc.Name)
 			}
 
-			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v, use --service and one of: %s",
-				podTemplate.Labels, strings.Join(svcNames, ","))
+			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v in namespace %s, use --service and one of: %s",
+				podTemplate.Labels, namespace, strings.Join(svcNames, ","))
 			if portNameOrNumber != "" {
 				errMsg += fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
 			}
@@ -555,7 +547,6 @@ already exist for this service`, kind, obj.GetName())
 		default:
 		}
 
-		var err error
 		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, obj, matchingSvcs[0])
 		if err != nil {
 			return "", "", err
@@ -798,7 +789,11 @@ func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
 	if err != nil {
 		return err
 	}
-	if svc := ki.findSvc(obj.GetNamespace(), referencedService); svc != nil {
+	svc, err := ki.findSvc(c, obj.GetNamespace(), referencedService)
+	if err != nil && !kates.IsNotFound(err) {
+		return err
+	}
+	if svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}
@@ -1089,10 +1084,6 @@ func (ki *installer) managerDeployment(c context.Context, env client.Env, addLic
 							Image: managerImageName(env),
 							Env:   containerEnv,
 							Ports: []corev1.ContainerPort{
-								{
-									Name:          "sshd",
-									ContainerPort: ManagerPortSSH,
-								},
 								{
 									Name:          "api",
 									ContainerPort: ManagerPortHTTP,

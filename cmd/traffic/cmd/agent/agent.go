@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,13 +15,15 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 type Config struct {
 	Name        string `env:"AGENT_NAME,required"`
 	Namespace   string `env:"AGENT_NAMESPACE,default="`
-	PodName     string `env:"AGENT_POD_NAME,default="`
+	PodIP       string `env:"AGENT_POD_IP,default="`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
 	AppMounts   string `env:"APP_MOUNTS,default=/tel_app_mounts"`
 	AppPort     int32  `env:"APP_PORT,required"`
@@ -34,7 +35,7 @@ var skipKeys = map[string]bool{
 	// Keys found in the Config
 	"AGENT_NAME":      true,
 	"AGENT_NAMESPACE": true,
-	"AGENT_POD_NAME":  true,
+	"AGENT_POD_IP":    true,
 	"AGENT_PORT":      true,
 	"APP_MOUNTS":      true,
 	"APP_PORT":        true,
@@ -128,15 +129,9 @@ func Main(ctx context.Context, args ...string) error {
 	}
 	dlog.Infof(ctx, "%+v", config)
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		dlog.Infof(ctx, "hostname: %+v", err)
-		hostname = fmt.Sprintf("unknown: %+v", err)
-	}
-
 	info := &rpc.AgentInfo{
 		Name:        config.Name,
-		Hostname:    hostname,
+		PodIp:       config.PodIP,
 		Product:     "telepresence",
 		Version:     version.Version,
 		Environment: AppEnvironment(),
@@ -162,21 +157,50 @@ func Main(ctx context.Context, args ...string) error {
 		dlog.Errorf(ctx, "Unable to determine if agent has mounts: %v", err)
 	}
 
-	sshPort := 0
+	sftpPortCh := make(chan int32)
 	if hasMounts && user == "" {
-		// start an ssh daemon to server remote sshfs mounts
-		l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-		if err != nil {
-			return err
-		}
-		sshPort = l.Addr().(*net.TCPAddr).Port
-		_ = l.Close()
+		g.Go("sftp-server", func(ctx context.Context) error {
+			defer close(sftpPortCh)
 
-		// Run sshd
-		g.Go("sshd", func(ctx context.Context) error {
-			return dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", strconv.Itoa(sshPort)).Run()
+			// start an sftp-server for remote sshfs mounts
+			lc := net.ListenConfig{}
+			l, err := lc.Listen(ctx, "tcp4", ":0")
+			if err != nil {
+				return err
+			}
+
+			// Accept doesn't actually return when the context is cancelled so
+			// it's explicitly closed here.
+			go func() {
+				<-ctx.Done()
+				_ = l.Close()
+			}()
+
+			_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
+			if err != nil {
+				return err
+			}
+			sftpPortCh <- int32(sftpPort)
+
+			for {
+				conn, err := l.Accept()
+				if err != nil {
+					if ctx.Err() == nil {
+						return fmt.Errorf("listener on sftp-server connection failed: %v", err)
+					}
+					return nil
+				}
+				go func() {
+					dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
+					err := dpipe.DPipe(ctx, dexec.CommandContext(ctx, "/usr/lib/ssh/sftp-server"), conn)
+					if err != nil {
+						dlog.Error(ctx, err)
+					}
+				}()
+			}
 		})
 	} else {
+		close(sftpPortCh)
 		dlog.Info(ctx, "Not starting sshd ($APP_MOUNTS is empty or $USER is set)")
 	}
 
@@ -209,7 +233,8 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodName, int32(sshPort))
+		sftpPort := <-sftpPortCh
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

@@ -5,54 +5,88 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"google.golang.org/grpc"
-
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type Stream struct {
-	grpc.ClientStream
-	pool *Pool
+	TunnelStream
 }
 
-func NewStream(bidiStream grpc.ClientStream, pool *Pool) *Stream {
-	return &Stream{ClientStream: bidiStream, pool: pool}
+func NewStream(bidiStream TunnelStream) *Stream {
+	return &Stream{TunnelStream: bidiStream}
 }
 
-// ReadLoop reads replies from the stream and dispatches them to the correct connection
-// based on the message id.
-func (s *Stream) ReadLoop(ctx context.Context, closing *int32) error {
-	for atomic.LoadInt32(closing) == 0 {
-		cm := new(manager.ConnMessage)
-		err := s.RecvMsg(cm)
-		if err != nil {
-			if atomic.LoadInt32(closing) == 0 && ctx.Err() == nil {
-				return fmt.Errorf("read from grpc.ClientStream failed: %w", err)
-			}
-			return nil
-		}
+// ReadLoop reads from the stream and dispatches control messages and messages to the give channels
+func (s *Stream) ReadLoop(ctx context.Context, closing *int32) (<-chan Message, <-chan error) {
+	msgCh := make(chan Message)
+	errCh := make(chan error)
+	go func() {
+		defer func() {
+			close(errCh)
+			close(msgCh)
+		}()
 
-		if IsControlMessage(cm) {
-			ctrl, err := NewControlMessage(cm)
+		for atomic.LoadInt32(closing) == 0 {
+			cm, err := s.Recv()
 			if err != nil {
-				dlog.Error(ctx, err)
+				if atomic.LoadInt32(closing) == 0 && ctx.Err() == nil {
+					errCh <- fmt.Errorf("read from grpc.ClientStream failed: %w", err)
+				}
+				return
+			}
+			msgCh <- FromConnMessage(cm)
+		}
+	}()
+	return msgCh, errCh
+}
+
+// DialLoop reads replies from the stream and dispatches them to the correct connection
+// based on the message id.
+func (s *Stream) DialLoop(ctx context.Context, closing *int32, pool *Pool) error {
+	msgCh, errCh := s.ReadLoop(ctx, closing)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case err := <-errCh:
+			return err
+		case msg := <-msgCh:
+			if msg == nil {
+				return nil
+			}
+			if ctrl, ok := msg.(Control); ok {
+				s.handleControl(ctx, ctrl, pool)
 				continue
 			}
-
-			dlog.Debugf(ctx, "<- MGR %s, code %s", ctrl.ID.ReplyString(), ctrl.Code)
-			if conn, _ := s.pool.Get(ctx, ctrl.ID, nil); conn != nil {
-				conn.HandleControl(ctx, ctrl)
-			} else if ctrl.Code != ReadClosed && ctrl.Code != DisconnectOK {
-				dlog.Error(ctx, "control packet lost because no connection was active")
+			id := msg.ID()
+			dlog.Debugf(ctx, "<- MGR %s, len %d", id.ReplyString(), len(msg.Payload()))
+			if conn, _, _ := pool.Get(ctx, id, nil); conn != nil {
+				conn.HandleMessage(ctx, msg)
 			}
-			continue
-		}
-		id := ConnID(cm.ConnId)
-		dlog.Debugf(ctx, "<- MGR %s, len %d", id.ReplyString(), len(cm.Payload))
-		if conn, _ := s.pool.Get(ctx, id, nil); conn != nil {
-			conn.HandleMessage(ctx, cm)
 		}
 	}
-	return nil
+}
+
+func (s *Stream) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
+	id := ctrl.ID()
+
+	dlog.Debugf(ctx, "<- MGR %s, code %s", id.ReplyString(), ctrl.Code())
+	conn, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
+		if ctrl.Code() != Connect {
+			// Only Connect requested from peer may create a new instance at this point
+			return nil, nil
+		}
+		return NewDialer(id, s.TunnelStream, release), nil
+	})
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
+	if conn != nil {
+		conn.HandleMessage(ctx, ctrl)
+		return
+	}
+	if ctrl.Code() != ReadClosed && ctrl.Code() != DisconnectOK {
+		dlog.Error(ctx, "control packet lost because no connection was active")
+	}
 }
