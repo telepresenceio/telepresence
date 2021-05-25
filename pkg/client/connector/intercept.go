@@ -415,6 +415,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 			// mount directives
 			"-o", "follow_symlinks",
+			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
 			"localhost:" + telAppMountPoint, // what to mount
 			mountPoint,                      // where to mount it
 		}
