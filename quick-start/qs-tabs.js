@@ -71,6 +71,12 @@ export default function SimpleTabs() {
       <TabPanel value={value} index={0}>
         <CodeBlock>
         {
+          '# Install via brew:' +
+          '\n' +
+          'brew install datawire/blackbird/telepresence2' +
+          '\n \n' +
+          'OR install manually" +
+          '\n' +
           '# 1. Download the latest binary (~60 MB):' +
           '\n' +
           'sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence -o /usr/local/bin/telepresence' +
@@ -79,9 +85,6 @@ export default function SimpleTabs() {
           '\n' +
           'sudo chmod a+x /usr/local/bin/telepresence' +
           '\n \n' +
-          '# OR via brew:' +
-          '\n' +
-          'brew install datawire/blackbird/telepresence2'
         }
         </CodeBlock>
       </TabPanel>
