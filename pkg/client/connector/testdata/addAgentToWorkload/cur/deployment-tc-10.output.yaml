@@ -47,14 +47,14 @@ deployment:
             value: debug
           - name: AGENT_NAME
             value: hello-10
-          - name: AGENT_POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
           - name: AGENT_NAMESPACE
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+          - name: AGENT_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
           - name: APP_PORT
             value: "8080"
           - name: MANAGER_HOST

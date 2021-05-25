@@ -1,13 +1,14 @@
 package connector
 
 import (
-	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"os"
-	"regexp"
 	"sync"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 
 	"github.com/pkg/errors"
 
@@ -41,17 +42,10 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 	return ie, msg
 }
 
-type portForward struct {
-	ManagerPort int32
-	TargetHost  string
-	TargetPort  int32
-}
-
 type mountForward struct {
-	Name      string
-	Namespace string
-	PodName   string
-	SshPort   int32
+	Name     string
+	PodIP    string
+	SftpPort int32
 }
 
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
@@ -64,7 +58,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
 	var wg sync.WaitGroup
 
-	livePortForwards := make(map[portForward]context.CancelFunc)
+	livePortForwards := make(map[mountForward]context.CancelFunc)
 
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
@@ -75,43 +69,36 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			if err != nil {
 				break
 			}
-			snapshotPortForwards := make(map[portForward]struct{})
+			snapshotPortForwards := make(map[mountForward]struct{})
 			namespaces := make(map[string]struct{})
 			for _, intercept := range snapshot.Intercepts {
 				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
 					continue
 				}
 				namespaces[intercept.Spec.Namespace] = struct{}{}
-				pf := portForward{
-					ManagerPort: intercept.ManagerPort,
-					TargetHost:  intercept.Spec.TargetHost,
-					TargetPort:  intercept.Spec.TargetPort,
+				if intercept.SftpPort == 0 {
+					// There's nothing to mount if the SftpPort is zero
+					continue
 				}
-				snapshotPortForwards[pf] = struct{}{}
-				if _, isLive := livePortForwards[pf]; !isLive {
+				mf := mountForward{
+					Name:     intercept.Spec.Name,
+					PodIP:    intercept.PodIp,
+					SftpPort: intercept.SftpPort,
+				}
+				snapshotPortForwards[mf] = struct{}{}
+				if _, isLive := livePortForwards[mf]; !isLive {
 					pfCtx, pfCancel := context.WithCancel(ctx)
-					pfCtx = dgroup.WithGoroutineName(pfCtx,
-						fmt.Sprintf("/%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort))
-					livePortForwards[pf] = pfCancel
-
-					// There's nothing to mount if the SshPort is zero
-					if intercept.SshPort != 0 {
-						mf := mountForward{
-							Name:      intercept.Spec.Name,
-							Namespace: intercept.Spec.Namespace,
-							PodName:   intercept.PodName,
-							SshPort:   intercept.SshPort,
-						}
-						wg.Add(1)
-						go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
-					}
+					pfCtx = dgroup.WithGoroutineName(pfCtx, fmt.Sprintf("/%s:%d", mf.PodIP, mf.SftpPort))
+					livePortForwards[mf] = pfCancel
+					wg.Add(1)
+					go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
 				}
 			}
-			for pf, cancel := range livePortForwards {
-				if _, isWanted := snapshotPortForwards[pf]; !isWanted {
-					dlog.Infof(ctx, "Terminating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
+			for mf, cancel := range livePortForwards {
+				if _, isWanted := snapshotPortForwards[mf]; !isWanted {
+					dlog.Infof(ctx, "Terminating sshfs %s:%d", mf.PodIP, mf.SftpPort)
 					cancel()
-					delete(livePortForwards, pf)
+					delete(livePortForwards, mf)
 				}
 			}
 			tm.setInterceptedNamespaces(ctx, namespaces)
@@ -241,7 +228,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		}, nil
 	}
 	result.InterceptInfo = ii
-	if ir.MountPoint != "" && ii.SshPort > 0 {
+	if ir.MountPoint != "" && ii.SftpPort > 0 {
 		result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
 		deleteMount = false // Mount-point is busy until intercept ends
 		ii.Spec.MountPoint = ir.MountPoint
@@ -407,61 +394,31 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
 
-	// kubectl port-forward arguments
-	pfArgs := []string{
-		// Port forward to pod
-		"--namespace",
-		mf.Namespace,
-		mf.PodName,
-
-		// from dynamically allocated local port to the pods sshPort
-		fmt.Sprintf(":%d", mf.SshPort),
-	}
-
-	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) `)
-
-	// kubectl port-forward output scanner that captures the dynamically assigned local port
-	outputScanner := func(sc *bufio.Scanner) interface{} {
-		for sc.Scan() {
-			text := sc.Text()
-			dlog.Debug(ctx, text)
-			if rgs := rxPortForward.FindStringSubmatch(text); rgs != nil {
-				return rgs[1]
-			}
-		}
-		if err := sc.Err(); err != nil {
-			dlog.Error(ctx, err)
-		}
-		return nil
-	}
-
 	// Retry mount in case it gets disconnected
-	err := client.Retry(ctx, "kubectl port-forward to pod", func(ctx context.Context) error {
-		return tm.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
-			localPort := rg.(string)
-			sshArgs := []string{
-				"-F", "none", // don't load the user's config file
-				"-f", // foreground operation
-
-				// connection settings
-				"-C", // compression
-				"-oConnectTimeout=10",
-				"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-				"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-				"-p", localPort,                  // port to connect to
-
-				// mount directives
-				"-o", "follow_symlinks",
-				"telepresence@localhost:" + telAppMountPoint, // remote user and what to mount
-				mountPoint, // where to mount it
-			}
-
-			err := dexec.CommandContext(ctx, "sshfs", sshArgs...).Run()
-			if err != nil && ctx.Err() != nil {
-				err = nil
-			}
+	err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
+		dl := &net.Dialer{Timeout: 3 * time.Second}
+		conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", mf.PodIP, mf.SftpPort))
+		if err != nil {
 			return err
-		})
+		}
+		defer conn.Close()
+		sshfsArgs := []string{
+			"-F", "none", // don't load the user's config file
+			"-f", // foreground operation
+
+			// connection settings
+			"-C", // compression
+			"-oConnectTimeout=10",
+			"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
+			"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
+			"-o", "slave",                    // Unencrypted via stdin/stdout
+
+			// mount directives
+			"-o", "follow_symlinks",
+			"localhost:" + telAppMountPoint, // what to mount
+			mountPoint,                      // where to mount it
+		}
+		return dpipe.DPipe(ctx, dexec.CommandContext(ctx, "sshfs", sshfsArgs...), conn)
 	}, 3*time.Second, 6*time.Second)
 
 	if err != nil {

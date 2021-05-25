@@ -40,8 +40,6 @@ func validateAgent(agent *rpc.AgentInfo) string {
 		return "name must not be empty"
 	case agent.Namespace == "":
 		return "namespace must not be empty"
-	case agent.Hostname == "":
-		return "hostname must not be empty"
 	case agent.Product == "":
 		return "product must not be empty"
 	case agent.Version == "":

@@ -26,8 +26,8 @@ message ClientInfo {
 message AgentInfo {
   string name = 1;      // name of the Workload
   string namespace = 7; // namespace of the Workload
-  string hostname = 2;
-  string product = 3; // distinguish open source, our closed source, someone else's thing
+  string pod_ip = 2;    // Pod IP (from status.podIP)
+  string product = 3;   // distinguish open source, our closed source, someone else's thing
   string version = 4;
 
   // "Mechanisms" are the ways that an Agent can decide handle
@@ -190,10 +190,10 @@ message InterceptInfo {
   InterceptDispositionType disposition = 3;
   string message = 4;
 
-  // The Pod name and SSH port to use when doing sshfs mounts.  These
+  // The Pod name and sftp port to use when doing sshfs mounts.  These
   // are set by the agent's call to ReviewIntercept.
-  string pod_name = 10;
-  int32 ssh_port = 11;
+  string pod_ip = 10;
+  int32 sftp_port = 11;
 
   // A human-friendly description of what the spec.mechanism_args say.
   // This is set by the agent's call to ReviewIntercept.
@@ -239,9 +239,9 @@ message ReviewInterceptRequest {
   InterceptDispositionType disposition = 3;
   string message = 4;
 
-  // pod name and ssh port to use when doing sshfs mounts
-  string pod_name = 5;
-  int32 ssh_port = 6;
+  // pod IP and sftp port to use when doing sshfs mounts
+  string pod_ip = 5;
+  int32 sftp_port = 6;
 
   // A human-friendly description of what the
   // InterceptSpec.mechanism_args say.
