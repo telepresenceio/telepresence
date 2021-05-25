@@ -94,9 +94,6 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 						fmt.Sprintf("/%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort))
 					livePortForwards[pf] = pfCancel
 
-					wg.Add(1)
-					go tm.workerPortForwardIntercept(pfCtx, pf, &wg)
-
 					// There's nothing to mount if the SshPort is zero
 					if intercept.SshPort != 0 {
 						mf := mountForward{
@@ -379,18 +376,6 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string, namespa
 			return agentList[0], nil
 		}
 	}
-}
-
-func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	dlog.Infof(ctx, "Initiating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
-
-	tm.sshPortForward(ctx,
-		"-R", fmt.Sprintf("%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort), // port to forward
-	)
-
-	dlog.Infof(ctx, "Terminated port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 }
 
 func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {

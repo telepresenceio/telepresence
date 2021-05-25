@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
@@ -22,6 +22,7 @@ type state int32
 const (
 	// simplified server-side tcp states
 	stateSynReceived = state(iota)
+	stateSynSent
 	stateEstablished
 	stateFinWait1
 	stateFinWait2
@@ -33,6 +34,8 @@ func (s state) String() (txt string) {
 	switch s {
 	case stateIdle:
 		txt = "IDLE"
+	case stateSynSent:
+		txt = "SYN SENT"
 	case stateSynReceived:
 		txt = "SYN RECEIVED"
 	case stateEstablished:
@@ -91,7 +94,7 @@ type handler struct {
 	// TUN channels
 	ToTun   chan<- ip.Packet
 	fromTun chan Packet
-	fromMgr chan *manager.ConnMessage
+	fromMgr chan connpool.Message
 
 	// the dispatcher signals its intent to close in dispatcherClosing. 0 == running, 1 == closing, 2 == closed
 	dispatcherClosing *int32
@@ -135,23 +138,38 @@ type handler struct {
 	// sendLock and sendCondition are used when throttling writes to the TUN device
 	sendLock      sync.Mutex
 	sendCondition *sync.Cond
+
+	// random generator for initial sequence number
+	rnd *rand.Rand
 }
 
-func NewHandler(tcpStream *connpool.Stream, dispatcherClosing *int32, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) PacketHandler {
+func NewHandler(
+	tcpStream *connpool.Stream,
+	dispatcherClosing *int32,
+	toTun chan<- ip.Packet,
+	id connpool.ConnID,
+	remove func(),
+	rndSource rand.Source,
+) PacketHandler {
 	h := &handler{
 		Stream:            tcpStream,
 		id:                id,
 		remove:            remove,
 		ToTun:             toTun,
-		fromMgr:           make(chan *manager.ConnMessage, ioChannelSize),
+		fromMgr:           make(chan connpool.Message, ioChannelSize),
 		dispatcherClosing: dispatcherClosing,
 		fromTun:           make(chan Packet, ioChannelSize),
 		toMgr:             make(chan Packet, ioChannelSize),
 		rcvWnd:            maxReceiveWindow,
 		wfState:           stateIdle,
+		rnd:               rand.New(rndSource),
 	}
 	h.sendCondition = sync.NewCond(&h.sendLock)
 	return h
+}
+
+func (h *handler) RandomSequence() int32 {
+	return h.rnd.Int31()
 }
 
 func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
@@ -238,11 +256,15 @@ func (h *handler) sendFin(ctx context.Context, expectAck bool) {
 	h.sendToTun(ctx, pkt)
 }
 
-func (h *handler) sendSyn(ctx context.Context, syn Packet) {
+func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
 	synHdr := syn.Header()
 	if !synHdr.SYN() {
 		return
 	}
+	h.sendSyn(ctx, synHdr.Sequence()+1, true)
+}
+
+func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 	hl := HeaderLen
 	hl += 4 // for the Maximum Segment Size option
 
@@ -253,9 +275,9 @@ func (h *handler) sendSyn(ctx context.Context, syn Packet) {
 	pkt := h.newResponse(hl, true)
 	tcpHdr := pkt.Header()
 	tcpHdr.SetSYN(true)
-	tcpHdr.SetACK(true)
+	tcpHdr.SetACK(ack)
 	tcpHdr.SetSequence(h.sequence())
-	tcpHdr.SetAckNumber(synHdr.Sequence() + 1)
+	tcpHdr.SetAckNumber(ackNumber)
 
 	// adjust data offset to account for options
 	tcpHdr.SetDataOffset(hl / 4)
@@ -282,13 +304,13 @@ func (h *handler) sendSyn(ctx context.Context, syn Packet) {
 // writeToTunLoop sends the packages read from the fromMgr channel to the TUN device
 func (h *handler) writeToTunLoop(ctx context.Context) {
 	for {
-		var cm *manager.ConnMessage
+		var cm connpool.Message
 		select {
 		case <-ctx.Done():
 			return
 		case cm = <-h.fromMgr:
 		}
-		data := cm.Payload
+		data := cm.Payload()
 		start := 0
 		n := len(data)
 		for n > start {
@@ -358,11 +380,9 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		return quitByUs
 	}
 
-	h.synPacket = syn
 	synOpts, err := options(tcpHdr)
 	if err != nil {
 		dlog.Error(ctx, err)
-		h.synPacket = nil
 		h.sendToTun(ctx, syn.Reset())
 		return quitByUs
 	}
@@ -385,13 +405,16 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		}
 	}
 
-	if err := h.sendConnControl(ctx, connpool.Connect); err != nil {
-		dlog.Error(ctx, err)
-		h.synPacket = nil
-		h.sendToTun(ctx, syn.Reset())
-		return quitByUs
+	if h.state() == stateIdle {
+		h.synPacket = syn
+		if err := h.sendConnControl(ctx, connpool.Connect); err != nil {
+			dlog.Error(ctx, err)
+			h.synPacket = nil
+			h.sendToTun(ctx, syn.Reset())
+			return quitByUs
+		}
 	}
-	h.setSequence(1)
+	h.setSequence(uint32(h.RandomSequence()))
 	h.setState(ctx, stateSynReceived)
 	return pleaseContinue
 }
@@ -459,6 +482,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	sq := tcpHdr.Sequence()
 	lastAck := h.sequenceLastAcked()
+	payloadLen := len(tcpHdr.Payload())
 	switch {
 	case sq == lastAck:
 		if state == stateFinWait1 && ackNbr == h.finalSeq && !tcpHdr.FIN() {
@@ -472,8 +496,14 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 		h.addOutOfOrderPackage(ctx, pkt)
 		release = false
 		return pleaseContinue
+	case sq == lastAck-1 && payloadLen == 0:
+		// keep alive
+		h.sendAck(ctx)
+		_ = h.sendConnControl(ctx, connpool.KeepAlive)
+		return pleaseContinue
 	default:
 		// resend of already acknowledged package. Just ignore
+		dlog.Debug(ctx, "client resends already acked package")
 		return pleaseContinue
 	}
 	if tcpHdr.RST() {
@@ -481,8 +511,8 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	}
 
 	switch {
-	case len(tcpHdr.Payload()) > 0:
-		h.setSequenceLastAcked(lastAck + uint32(len(tcpHdr.Payload())))
+	case payloadLen > 0:
+		h.setSequenceLastAcked(lastAck + uint32(payloadLen))
 		if !h.sendToMgr(ctx, pkt) {
 			return quitByContext
 		}

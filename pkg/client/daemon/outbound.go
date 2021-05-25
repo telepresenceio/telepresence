@@ -3,11 +3,9 @@ package daemon
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math/rand"
 	"net"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 const kubernetesZone = "cluster.local"
@@ -80,20 +79,11 @@ type outbound struct {
 // splitToUDPAddr splits the given address into an UDPAddr. It's
 // an  error if the address is based on a hostname rather than an IP.
 func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
-	addr := netAddr.String()
-	host, portStr, err := net.SplitHostPort(addr)
+	ip, port, err := iputil.SplitToIPPort(netAddr)
 	if err != nil {
 		return nil, err
 	}
-	nsIP := net.ParseIP(host)
-	if nsIP == nil {
-		return nil, fmt.Errorf("host of address %q is not an IP address", addr)
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil, fmt.Errorf("port of address %s is not an integer", addr)
-	}
-	return &net.UDPAddr{IP: nsIP, Port: port}, nil
+	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
 }
 
 // newOutbound returns a new properly initialized outbound object.

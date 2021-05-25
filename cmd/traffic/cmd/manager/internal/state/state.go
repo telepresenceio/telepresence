@@ -3,17 +3,25 @@ package state
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sys/unix"
+	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 const (
@@ -21,10 +29,39 @@ const (
 	hiPort = 8000
 )
 
-type SessionState struct {
-	Done       <-chan struct{}
-	Cancel     context.CancelFunc
-	LastMarked time.Time
+type SessionState interface {
+	Cancel()
+	Done() <-chan struct{}
+	LastMarked() time.Time
+	SetLastMarked(lastMarked time.Time)
+}
+
+type sessionState struct {
+	done       <-chan struct{}
+	cancel     context.CancelFunc
+	lastMarked time.Time
+}
+
+type clientSessionState struct {
+	sessionState
+	pool             *connpool.Pool
+	connTunnelServer rpc.Manager_ConnTunnelServer
+}
+
+func (ss *sessionState) Cancel() {
+	ss.cancel()
+}
+
+func (ss *sessionState) Done() <-chan struct{} {
+	return ss.done
+}
+
+func (ss *sessionState) LastMarked() time.Time {
+	return ss.lastMarked
+}
+
+func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
+	ss.lastMarked = lastMarked
 }
 
 // State is the total state of the Traffic Manager.  A zero State is invalid; you must call
@@ -49,7 +86,8 @@ type State struct {
 	intercepts   watchable.InterceptMap
 	agents       watchable.AgentMap                   // info for agent sessions
 	clients      watchable.ClientMap                  // info for client sessions
-	sessions     map[string]*SessionState             // info for all sessions
+	sessions     map[string]SessionState              // info for all sessions
+	listeners    map[string]connpool.Handler          // listeners for all intercepts
 	agentsByName map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 }
 
@@ -57,8 +95,9 @@ func NewState(ctx context.Context) *State {
 	return &State{
 		ctx:          ctx,
 		port:         loPort - 1,
-		sessions:     make(map[string]*SessionState),
+		sessions:     make(map[string]SessionState),
 		agentsByName: make(map[string]map[string]*rpc.AgentInfo),
+		listeners:    make(map[string]connpool.Handler),
 	}
 }
 
@@ -166,7 +205,7 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	sessionID := req.Session.SessionId
 
 	if sess, ok := s.sessions[sessionID]; ok {
-		sess.LastMarked = now
+		sess.SetLastMarked(now)
 		if req.ApiKey != "" {
 			if client, ok := s.clients.Load(sessionID); ok {
 				client.ApiKey = req.ApiKey
@@ -231,7 +270,7 @@ func (s *State) ExpireSessions(moment time.Time) {
 	defer s.mu.Unlock()
 
 	for id, sess := range s.sessions {
-		if sess.LastMarked.Before(moment) {
+		if sess.LastMarked().Before(moment) {
 			s.unlockedRemoveSession(id)
 		}
 	}
@@ -249,7 +288,7 @@ func (s *State) SessionDone(id string) <-chan struct{} {
 		close(ret)
 		return ret
 	}
-	return sess.Done
+	return sess.Done()
 }
 
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
@@ -272,10 +311,13 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.sessions[sessionID] = &SessionState{
-		Done:       ctx.Done(),
-		Cancel:     cancel,
-		LastMarked: now,
+	s.sessions[sessionID] = &clientSessionState{
+		sessionState: sessionState{
+			done:       ctx.Done(),
+			cancel:     cancel,
+			lastMarked: now,
+		},
+		pool: connpool.NewPool(),
 	}
 	return sessionID
 }
@@ -331,10 +373,10 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.sessions[sessionID] = &SessionState{
-		Done:       ctx.Done(),
-		Cancel:     cancel,
-		LastMarked: now,
+	s.sessions[sessionID] = &sessionState{
+		done:       ctx.Done(),
+		cancel:     cancel,
+		lastMarked: now,
 	}
 	return sessionID
 }
@@ -444,8 +486,19 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 	}
 }
 
-func (s *State) RemoveIntercept(sessionID string, name string) bool {
-	_, didDelete := s.intercepts.LoadAndDelete(sessionID + ":" + name)
+func (s *State) RemoveIntercept(interceptID string) bool {
+	_, didDelete := s.intercepts.LoadAndDelete(interceptID)
+	if didDelete {
+		s.mu.Lock()
+		l, ok := s.listeners[interceptID]
+		if ok {
+			delete(s.listeners, interceptID)
+		}
+		s.mu.Unlock()
+		if ok {
+			l.Close(s.ctx)
+		}
+	}
 	return didDelete
 }
 
@@ -462,5 +515,80 @@ func (s *State) WatchIntercepts(
 		return s.intercepts.Subscribe(ctx)
 	} else {
 		return s.intercepts.SubscribeSubset(ctx, filter)
+	}
+}
+
+func (s *State) StartInterceptListener(ctx context.Context, intercept *rpc.InterceptInfo) {
+	clientSessionID := intercept.ClientSession.GetSessionId()
+	s.mu.Lock()
+	ss := s.sessions[clientSessionID]
+	s.mu.Unlock()
+	cs, ok := ss.(*clientSessionState)
+	if !ok {
+		dlog.Errorf(ctx, "Client session %q not found", clientSessionID)
+		return
+	}
+	spec := intercept.Spec
+	srcIP := iputil.Parse(spec.TargetHost)
+	if srcIP == nil {
+		dlog.Errorf(ctx, "TargetHost %q is not a valid IP", spec.TargetHost)
+		return
+	}
+	id := connpool.NewConnID(unix.IPPROTO_TCP, srcIP, net.IP{127, 0, 0, 1}, uint16(spec.TargetPort), uint16(intercept.ManagerPort))
+
+	ctx = connpool.WithPool(ctx, cs.pool)
+	_, _, err := cs.pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+		lh := connpool.NewListener(id, cs.connTunnelServer, release)
+		s.mu.Lock()
+		s.listeners[intercept.GetId()] = lh
+		s.mu.Unlock()
+		return lh, nil
+	})
+	if err != nil {
+		dlog.Errorf(ctx, "failed to create intercept listener: %v", err)
+	}
+}
+
+func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Manager_ConnTunnelServer) error {
+	s.mu.Lock()
+	ss := s.sessions[sessionID]
+	s.mu.Unlock()
+	cs, ok := ss.(*clientSessionState)
+	if !ok {
+		return status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	dlog.Debug(ctx, "Established TCP tunnel")
+	pool := cs.pool // must have one pool per client
+	cs.connTunnelServer = server
+	defer pool.CloseAll(ctx)
+	closing := int32(0)
+	msgCh, errCh := connpool.NewStream(server).ReadLoop(ctx, &closing)
+	for {
+		select {
+		case <-ctx.Done():
+			atomic.StoreInt32(&closing, 2)
+			return nil
+		case err := <-errCh:
+			return err
+		case msg := <-msgCh:
+			if msg == nil {
+				return nil
+			}
+
+			id := msg.ID()
+			// Retrieve the connection that is tracked for the given id. Create a new one if necessary
+			h, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+				switch id.Protocol() {
+				case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
+					return connpool.NewDialer(id, cs.connTunnelServer, release), nil
+				default:
+					return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
+				}
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get connection handler: %w", err)
+			}
+			h.HandleMessage(ctx, msg)
+		}
 	}
 }

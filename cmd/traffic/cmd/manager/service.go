@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -18,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/conntunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -129,9 +127,9 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 // Remain indicates that the session is still valid.
-func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
-	ctx = WithSessionInfo(ctx, req.GetSession())
-	dlog.Debugf(ctx, "Remain called")
+func (m *Manager) Remain(_ context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
+	// ctx = WithSessionInfo(ctx, req.GetSession())
+	// dlog.Debug(ctx, "Remain called")
 
 	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
@@ -143,7 +141,7 @@ func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 // Depart terminates a session.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	ctx = WithSessionInfo(ctx, session)
-	dlog.Debugf(ctx, "Depart called")
+	dlog.Debug(ctx, "Depart called")
 
 	m.state.RemoveSession(session.GetSessionId())
 
@@ -154,7 +152,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := WithSessionInfo(stream.Context(), session)
 
-	dlog.Debugf(ctx, "WatchAgents called")
+	dlog.Debug(ctx, "WatchAgents called")
 
 	snapshotCh := m.state.WatchAgents(ctx, nil)
 	for {
@@ -187,7 +185,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	ctx := WithSessionInfo(stream.Context(), session)
 	sessionID := session.GetSessionId()
 
-	dlog.Debugf(ctx, "WatchIntercepts called")
+	dlog.Debug(ctx, "WatchIntercepts called")
 
 	var filter func(id string, info *rpc.InterceptInfo) bool
 	if sessionID == "" {
@@ -267,7 +265,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
 	apiKey := ciReq.GetApiKey()
-	dlog.Debugf(ctx, "CreateIntercept called")
+	dlog.Debug(ctx, "CreateIntercept called")
 
 	if m.state.GetClient(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
@@ -410,7 +408,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
-	if !m.state.RemoveIntercept(sessionID, name) {
+	if !m.state.RemoveIntercept(sessionID + ":" + name) {
 		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
 	}
 
@@ -444,6 +442,10 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.PodName = rIReq.PodName
 			intercept.SshPort = rIReq.SshPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
+
+			if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
+				m.state.StartInterceptListener(ctx, intercept)
+			}
 		}
 	})
 
@@ -455,53 +457,26 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 }
 
 func (m *Manager) ConnTunnel(server rpc.Manager_ConnTunnelServer) error {
-	ctx := server.Context()
-	dlog.Debug(ctx, "Established TCP tunnel")
-	pool := connpool.NewPool() // must have one pool per tunnel (per client, really)
-	defer pool.CloseAll(ctx)
-	for {
-		dg, err := server.Recv()
-		if err != nil {
-			dlog.Errorf(ctx, "Recv failed: %v", err)
-			return nil
-		}
-		m.handleTunnelMessage(ctx, pool, server, dg)
+	sessionInfo, err := readTunnelSessionID(server)
+	if err != nil {
+		return err
 	}
+	return m.state.ConnTunnel(WithSessionInfo(server.Context(), sessionInfo), sessionInfo.GetSessionId(), server)
 }
 
-func (m *Manager) handleTunnelMessage(ctx context.Context, pool *connpool.Pool, server rpc.Manager_ConnTunnelServer, cm *rpc.ConnMessage) {
-	var id connpool.ConnID
-	var ctrl *connpool.ControlMessage
-	var err error
-	if connpool.IsControlMessage(cm) {
-		ctrl, err = connpool.NewControlMessage(cm)
-		if err != nil {
-			dlog.Error(m.ctx, err)
-			return
-		}
-		id = ctrl.ID
-	} else {
-		id = connpool.ConnID(cm.ConnId)
-	}
-
-	// Retrieve the connection that is tracked for the given id. Create a new one if necessary
-	h, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-		switch id.Protocol() {
-		case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
-			return conntunnel.NewHandler(id, server, release), nil
-		default:
-			return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
-		}
-	})
+func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {
+	// Initial message must be the session info that this bidi stream should be attached to
+	cm, err := server.Recv()
 	if err != nil {
-		dlog.Errorf(ctx, "failed to get connection handler: %v", err)
-		return
+		return nil, status.Errorf(codes.FailedPrecondition, "failed to read session info message: %v", err)
 	}
-	if ctrl != nil {
-		h.HandleControl(ctx, ctrl)
-	} else {
-		h.HandleMessage(ctx, cm)
+	var sessionInfo *rpc.SessionInfo
+	if ctrl, ok := connpool.FromConnMessage(cm).(connpool.Control); ok {
+		if sessionInfo = ctrl.SessionInfo(); sessionInfo != nil {
+			return sessionInfo, nil
+		}
 	}
+	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
 // expire removes stale sessions.
