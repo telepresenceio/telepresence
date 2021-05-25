@@ -42,12 +42,6 @@ type sessionState struct {
 	lastMarked time.Time
 }
 
-type clientSessionState struct {
-	sessionState
-	pool             *connpool.Pool
-	connTunnelServer rpc.Manager_ConnTunnelServer
-}
-
 func (ss *sessionState) Cancel() {
 	ss.cancel()
 }
@@ -62,6 +56,27 @@ func (ss *sessionState) LastMarked() time.Time {
 
 func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 	ss.lastMarked = lastMarked
+}
+
+type clientSessionState struct {
+	sessionState
+	pool             *connpool.Pool
+	connTunnelServer rpc.Manager_ConnTunnelServer
+}
+
+type agentSessionState struct {
+	sessionState
+	agent           *rpc.AgentInfo
+	lookups         chan *rpc.LookupHostRequest
+	lookupResponses map[string]chan *rpc.LookupHostResponse
+}
+
+func (ss *agentSessionState) Cancel() {
+	close(ss.lookups)
+	for _, lr := range ss.lookupResponses {
+		close(lr)
+	}
+	ss.sessionState.Cancel()
 }
 
 // State is the total state of the Traffic Manager.  A zero State is invalid; you must call
@@ -373,10 +388,15 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.sessions[sessionID] = &sessionState{
-		done:       ctx.Done(),
-		cancel:     cancel,
-		lastMarked: now,
+	s.sessions[sessionID] = &agentSessionState{
+		sessionState: sessionState{
+			done:       ctx.Done(),
+			cancel:     cancel,
+			lastMarked: now,
+		},
+		lookups:         make(chan *rpc.LookupHostRequest),
+		lookupResponses: make(map[string]chan *rpc.LookupHostResponse),
+		agent:           agent,
 	}
 	return sessionID
 }
@@ -390,13 +410,15 @@ func (s *State) GetAllAgents() map[string]*rpc.AgentInfo {
 	return s.agents.LoadAll()
 }
 
-func (s *State) GetAgentsByName(name string) map[string]*rpc.AgentInfo {
+func (s *State) GetAgentsByName(name, namespace string) map[string]*rpc.AgentInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	ret := make(map[string]*rpc.AgentInfo, len(s.agentsByName[name]))
 	for k, v := range s.agentsByName[name] {
-		ret[k] = proto.Clone(v).(*rpc.AgentInfo)
+		if v.Namespace == namespace {
+			ret[k] = proto.Clone(v).(*rpc.AgentInfo)
+		}
 	}
 
 	return ret
@@ -458,6 +480,30 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	}
 
 	return cept, nil
+}
+
+func (s *State) getAgentsInterceptedByClient(clientSessionID string) (agentSessionIDs []string, err error) {
+	client := s.GetClient(clientSessionID)
+	if client == nil {
+		return nil, status.Errorf(codes.NotFound, "Client session %q not found", clientSessionID)
+	}
+	for _, intercept := range s.intercepts.LoadAll() {
+		if intercept.Disposition != rpc.InterceptDispositionType_ACTIVE {
+			continue
+		}
+		spec := intercept.Spec
+		if spec.Client != client.Name {
+			continue
+		}
+		s.mu.Lock()
+		for asi, agent := range s.sessions {
+			if as, ok := agent.(*agentSessionState); ok && as.agent.Name == spec.Agent && as.agent.Namespace == spec.Namespace {
+				agentSessionIDs = append(agentSessionIDs, asi)
+			}
+		}
+		s.mu.Unlock()
+	}
+	return agentSessionIDs, nil
 }
 
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
@@ -591,4 +637,129 @@ func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Man
 			h.HandleMessage(ctx, msg)
 		}
 	}
+}
+
+// AgentsLookup will send the given request to all agents currently intercepted by the client identified with
+// the clientSessionID, it will then wait for results to arrive, collect those results, and return them as a
+// unique and sorted slice.
+func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, request *rpc.LookupHostRequest) (iputil.IPs, error) {
+	iceptAgentIDs, err := s.getAgentsInterceptedByClient(clientSessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	ips := iputil.IPs{}
+	iceptCount := len(iceptAgentIDs)
+	if iceptCount == 0 {
+		return ips, nil
+	}
+
+	rsMu := sync.Mutex{} // prevent concurrent updates of the ips slice
+	agentTimeout, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	responseCount := 0
+	defer cancel()
+
+	wg := sync.WaitGroup{}
+	wg.Add(iceptCount)
+	for _, agentSessionID := range iceptAgentIDs {
+		go func(agentSessionID string) {
+			defer func() {
+				s.endHostLookup(agentSessionID, request)
+				wg.Done()
+			}()
+
+			rsCh := s.startHostLookup(agentSessionID, request)
+			if rsCh == nil {
+				return
+			}
+			select {
+			case <-agentTimeout.Done():
+				return
+			case rs := <-rsCh:
+				if rs == nil {
+					// Channel closed
+					return
+				}
+				rsMu.Lock()
+				responseCount++
+				rc := responseCount
+				for _, ip := range rs.Ips {
+					ips = append(ips, ip)
+				}
+				rsMu.Unlock()
+				if rc == iceptCount {
+					// all agents have responded
+					return
+				}
+			}
+		}(agentSessionID)
+	}
+	wg.Wait() // wait for timeout or that all agents have responded
+	return ips.UniqueSorted(), nil
+}
+
+// PostLookupResponse receives lookup responses from an agent and places them in the channel
+// that corresponds to the lookup request
+func (s *State) PostLookupResponse(response *rpc.LookupHostAgentResponse) {
+	responseID := response.Request.Session.SessionId + ":" + response.Request.Host
+	var rch chan<- *rpc.LookupHostResponse
+	s.mu.Lock()
+	if as, ok := s.sessions[response.Session.SessionId].(*agentSessionState); ok {
+		rch = as.lookupResponses[responseID]
+	}
+	s.mu.Unlock()
+	if rch != nil {
+		rch <- response.Response
+	}
+}
+
+func (s *State) startHostLookup(agentSessionID string, request *rpc.LookupHostRequest) <-chan *rpc.LookupHostResponse {
+	responseID := request.Session.SessionId + ":" + request.Host
+	var (
+		rch chan *rpc.LookupHostResponse
+		as  *agentSessionState
+		ok  bool
+	)
+	s.mu.Lock()
+	if as, ok = s.sessions[agentSessionID].(*agentSessionState); ok {
+		if rch, ok = as.lookupResponses[responseID]; !ok {
+			rch = make(chan *rpc.LookupHostResponse)
+			as.lookupResponses[responseID] = rch
+		}
+	}
+	s.mu.Unlock()
+	if as != nil {
+		// the as.lookups channel may be closed at this point, so guard for panic
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					close(rch)
+				}
+			}()
+			as.lookups <- request
+		}()
+	}
+	return rch
+}
+
+func (s *State) endHostLookup(agentSessionID string, request *rpc.LookupHostRequest) {
+	responseID := request.Session.SessionId + ":" + request.Host
+	s.mu.Lock()
+	if as, ok := s.sessions[agentSessionID].(*agentSessionState); ok {
+		if rch, ok := as.lookupResponses[responseID]; ok {
+			delete(as.lookupResponses, responseID)
+			close(rch)
+		}
+	}
+	s.mu.Unlock()
+}
+
+func (s *State) WatchLookupHost(agentSessionID string) <-chan *rpc.LookupHostRequest {
+	s.mu.Lock()
+	ss, ok := s.sessions[agentSessionID]
+	s.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return ss.(*agentSessionState).lookups
 }

@@ -67,6 +67,13 @@ type ManagerClient interface {
 	// net.Conn instances in the traffic-manager. Responses from tracked instances
 	// are sent back on the returned message stream
 	ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error)
+	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
+	// active, the lookup will be performed from the intercepted pods.
+	LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error)
+	// AgentLookupHostResponse lets an agent respond for lookup requests
+	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*empty.Empty, error)
+	// WatchLookupHost lets an agent receive lookup requests
+	WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error)
 }
 
 type managerClient struct {
@@ -280,6 +287,56 @@ func (x *managerConnTunnelClient) Recv() (*ConnMessage, error) {
 	return m, nil
 }
 
+func (c *managerClient) LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error) {
+	out := new(LookupHostResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/LookupHost", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/AgentLookupHostResponse", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[3], "/telepresence.manager.Manager/WatchLookupHost", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchLookupHostClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchLookupHostClient interface {
+	Recv() (*LookupHostRequest, error)
+	grpc.ClientStream
+}
+
+type managerWatchLookupHostClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchLookupHostClient) Recv() (*LookupHostRequest, error) {
+	m := new(LookupHostRequest)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ManagerServer is the server API for Manager service.
 // All implementations must embed UnimplementedManagerServer
 // for forward compatibility
@@ -333,6 +390,13 @@ type ManagerServer interface {
 	// net.Conn instances in the traffic-manager. Responses from tracked instances
 	// are sent back on the returned message stream
 	ConnTunnel(Manager_ConnTunnelServer) error
+	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
+	// active, the lookup will be performed from the intercepted pods.
+	LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error)
+	// AgentLookupHostResponse lets an agent respond for lookup requests
+	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*empty.Empty, error)
+	// WatchLookupHost lets an agent receive lookup requests
+	WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -384,6 +448,15 @@ func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterc
 }
 func (UnimplementedManagerServer) ConnTunnel(Manager_ConnTunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method ConnTunnel not implemented")
+}
+func (UnimplementedManagerServer) LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
+}
+func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupHostResponse not implemented")
+}
+func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchLookupHost not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
 
@@ -682,6 +755,63 @@ func (x *managerConnTunnelServer) Recv() (*ConnMessage, error) {
 	return m, nil
 }
 
+func _Manager_LookupHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupHostRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).LookupHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/LookupHost",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).LookupHost(ctx, req.(*LookupHostRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_AgentLookupHostResponse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupHostAgentResponse)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).AgentLookupHostResponse(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/AgentLookupHostResponse",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).AgentLookupHostResponse(ctx, req.(*LookupHostAgentResponse))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_WatchLookupHost_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchLookupHost(m, &managerWatchLookupHostServer{stream})
+}
+
+type Manager_WatchLookupHostServer interface {
+	Send(*LookupHostRequest) error
+	grpc.ServerStream
+}
+
+type managerWatchLookupHostServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchLookupHostServer) Send(m *LookupHostRequest) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _Manager_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
@@ -734,6 +864,14 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			MethodName: "ReviewIntercept",
 			Handler:    _Manager_ReviewIntercept_Handler,
 		},
+		{
+			MethodName: "LookupHost",
+			Handler:    _Manager_LookupHost_Handler,
+		},
+		{
+			MethodName: "AgentLookupHostResponse",
+			Handler:    _Manager_AgentLookupHostResponse_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -751,6 +889,11 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 			Handler:       _Manager_ConnTunnel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchLookupHost",
+			Handler:       _Manager_WatchLookupHost_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "rpc/manager/manager.proto",

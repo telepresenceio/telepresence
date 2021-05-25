@@ -95,33 +95,15 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	}
 	defer func() {
 		_ = conn.Close()
-		if err = unrouteDNS(ncc); err != nil {
-			dlog.Error(c, err)
-		}
+		unrouteDNS(ncc)
 	}()
 	dns.Flush(c)
-	srv := dns.NewServer(c, listeners, conn, o.resolveWithSearch)
+	srv := dns.NewServer(c, listeners, conn, o.resolveInCluster)
 	close(o.dnsConfigured)
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
 	return err
-}
-
-// resolveWithSearch looks up the given query and returns the matching IPs.
-//
-// Queries using qualified names will be dispatched to the resolveNoSearch() function.
-// An unqualified name query will be tried with all the suffixes in the search path
-// and the IPs of the first match will be returned.
-func (o *outbound) resolveWithSearch(query string) []net.IP {
-	if strings.Count(query, ".") > 1 {
-		// More than just the ending dot, so don't use search-path
-		return o.resolveNoSearch(query)
-	}
-	o.domainsLock.RLock()
-	ips := o.resolveWithSearchLocked(strings.ToLower(query))
-	o.domainsLock.RUnlock()
-	return ips
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
@@ -230,7 +212,7 @@ const tpDNSChain = "telepresence-dns"
 // uses a fallback, that fallback reaches the original DNS service.
 func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr) (err error) {
 	// create the chain
-	_ = unrouteDNS(c)
+	unrouteDNS(c)
 	if err = runNatTableCmd(c, "-N", tpDNSChain); err != nil {
 		return err
 	}
@@ -261,12 +243,10 @@ func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr
 }
 
 // unrouteDNS removes the chain installed by routeDNS.
-func unrouteDNS(c context.Context) (err error) {
-	if err = runNatTableCmd(c, "-D", "OUTPUT", "-j", tpDNSChain); err != nil {
-		return err
-	}
-	if err = runNatTableCmd(c, "-F", tpDNSChain); err != nil {
-		return err
-	}
-	return runNatTableCmd(c, "-X", tpDNSChain)
+func unrouteDNS(c context.Context) {
+	// The errors returned by these commands aren't of any interest besides logging. And they
+	// are already logged since dexec is used.
+	_ = runNatTableCmd(c, "-D", "OUTPUT", "-j", tpDNSChain)
+	_ = runNatTableCmd(c, "-F", tpDNSChain)
+	_ = runNatTableCmd(c, "-X", tpDNSChain)
 }

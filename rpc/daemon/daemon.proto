@@ -3,7 +3,6 @@ package telepresence.daemon;
 
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
-import "rpc/daemon/iptables.proto";
 import "rpc/manager/manager.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/daemon";
@@ -11,21 +10,19 @@ option go_package = "github.com/telepresenceio/telepresence/rpc/v2/daemon";
 // The Daemon service is responsible for managing network overrides and also
 // acts as the central point for logging.
 service Daemon {
-  // Returns version information from the Daemon
+  // Version returns version information from the Daemon
   rpc Version(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
-  // Returns the current connectivity status
+  // Status returns the current connectivity status
   rpc Status(google.protobuf.Empty) returns (DaemonStatus);
 
-  // Quits (terminates) the service.
+  // Quit quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  // Update assigns adds or updates an IP-table.
-  rpc Update(telepresence.daemon.Table) returns (google.protobuf.Empty);
+  // SetOutboundInfo provides the information needed to set up outbound connectivity
+  rpc SetOutboundInfo(OutboundInfo) returns (google.protobuf.Empty);
 
-  rpc SetManagerInfo(ManagerInfo) returns (google.protobuf.Empty);
-
-  // SetSearch sets a new search path.
+  // SetDnsSearchPath sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
 }
 
@@ -44,15 +41,28 @@ message Paths {
   repeated string paths = 1;
 }
 
-message Tables {
-  repeated telepresence.daemon.Table tables = 1;
+// IPNet is a subnet. I.e. 10.43.0.0/16
+message IPNet {
+  bytes ip = 1;
+  int32 mask = 2;
 }
 
-message TableName {
-  string name = 1;
-}
+// OutboundInfo contains all information that the root daemon needs in order to
+// establish outbound traffic to the cluster.
+message OutboundInfo {
+  // manager_port is the port for the traffic-manager gRPC API.
+  int32 manager_port = 1;
 
-message ManagerInfo {
-  int32 grpc_port = 1;
+  // session makes it possible for the root daemon to identify itself as the
+  // same client as the user daemon.
   manager.SessionInfo session = 2;
+
+  // kube_dns_ip is the IP address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
+  bytes kube_dns_ip = 3;
+
+  // service_subnet is the Kubernetes service subnet
+  IPNet service_subnet = 4;
+
+  // pod_subnets are the subnets used for Kubenetes pods.
+  repeated IPNet pod_subnets = 5;
 }

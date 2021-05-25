@@ -19,16 +19,15 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DaemonClient interface {
-	// Returns version information from the Daemon
+	// Version returns version information from the Daemon
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
-	// Returns the current connectivity status
+	// Status returns the current connectivity status
 	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error)
-	// Quits (terminates) the service.
+	// Quit quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
-	// Update assigns adds or updates an IP-table.
-	Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error)
-	SetManagerInfo(ctx context.Context, in *ManagerInfo, opts ...grpc.CallOption) (*empty.Empty, error)
-	// SetSearch sets a new search path.
+	// SetOutboundInfo provides the information needed to set up outbound connectivity
+	SetOutboundInfo(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
@@ -67,18 +66,9 @@ func (c *daemonClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.C
 	return out, nil
 }
 
-func (c *daemonClient) Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *daemonClient) SetOutboundInfo(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Update", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonClient) SetManagerInfo(ctx context.Context, in *ManagerInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetManagerInfo", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetOutboundInfo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,16 +88,15 @@ func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility
 type DaemonServer interface {
-	// Returns version information from the Daemon
+	// Version returns version information from the Daemon
 	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
-	// Returns the current connectivity status
+	// Status returns the current connectivity status
 	Status(context.Context, *empty.Empty) (*DaemonStatus, error)
-	// Quits (terminates) the service.
+	// Quit quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
-	// Update assigns adds or updates an IP-table.
-	Update(context.Context, *Table) (*empty.Empty, error)
-	SetManagerInfo(context.Context, *ManagerInfo) (*empty.Empty, error)
-	// SetSearch sets a new search path.
+	// SetOutboundInfo provides the information needed to set up outbound connectivity
+	SetOutboundInfo(context.Context, *OutboundInfo) (*empty.Empty, error)
+	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
 }
@@ -125,11 +114,8 @@ func (UnimplementedDaemonServer) Status(context.Context, *empty.Empty) (*DaemonS
 func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) Update(context.Context, *Table) (*empty.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
-}
-func (UnimplementedDaemonServer) SetManagerInfo(context.Context, *ManagerInfo) (*empty.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetManagerInfo not implemented")
+func (UnimplementedDaemonServer) SetOutboundInfo(context.Context, *OutboundInfo) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetOutboundInfo not implemented")
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
@@ -201,38 +187,20 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Table)
+func _Daemon_SetOutboundInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OutboundInfo)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaemonServer).Update(ctx, in)
+		return srv.(DaemonServer).SetOutboundInfo(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.daemon.Daemon/Update",
+		FullMethod: "/telepresence.daemon.Daemon/SetOutboundInfo",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Update(ctx, req.(*Table))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Daemon_SetManagerInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ManagerInfo)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).SetManagerInfo(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.daemon.Daemon/SetManagerInfo",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).SetManagerInfo(ctx, req.(*ManagerInfo))
+		return srv.(DaemonServer).SetOutboundInfo(ctx, req.(*OutboundInfo))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -272,12 +240,8 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Daemon_Quit_Handler,
 		},
 		{
-			MethodName: "Update",
-			Handler:    _Daemon_Update_Handler,
-		},
-		{
-			MethodName: "SetManagerInfo",
-			Handler:    _Daemon_SetManagerInfo_Handler,
+			MethodName: "SetOutboundInfo",
+			Handler:    _Daemon_SetOutboundInfo_Handler,
 		},
 		{
 			MethodName: "SetDnsSearchPath",

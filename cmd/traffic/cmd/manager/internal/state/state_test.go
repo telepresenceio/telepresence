@@ -53,20 +53,20 @@ func TestStateInternal(topT *testing.T) {
 		a.Contains(agents, demoAgent1)
 		a.Contains(agents, demoAgent2)
 
-		agents = state.GetAgentsByName("hello")
+		agents = state.GetAgentsByName("hello", "default")
 		a.Len(agents, 1)
 		a.Contains(agents, helloAgent)
 
-		agents = state.GetAgentsByName("hello-pro")
+		agents = state.GetAgentsByName("hello-pro", "default")
 		a.Len(agents, 1)
 		a.Contains(agents, helloProAgent)
 
-		agents = state.GetAgentsByName("demo")
+		agents = state.GetAgentsByName("demo", "default")
 		a.Len(agents, 2)
 		a.Contains(agents, demoAgent1)
 		a.Contains(agents, demoAgent2)
 
-		agents = state.GetAgentsByName("does-not-exist")
+		agents = state.GetAgentsByName("does-not-exist", "default")
 		a.Len(agents, 0)
 	})
 

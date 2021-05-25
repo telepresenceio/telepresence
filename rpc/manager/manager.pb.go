@@ -1528,6 +1528,176 @@ func (x *ConnMessage) GetPayload() []byte {
 	return nil
 }
 
+// LookupHost request sent from a client
+type LookupHostRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Client session
+	Session *SessionInfo `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Host    string       `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+}
+
+func (x *LookupHostRequest) Reset() {
+	*x = LookupHostRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_manager_manager_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LookupHostRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupHostRequest) ProtoMessage() {}
+
+func (x *LookupHostRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_manager_manager_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupHostRequest.ProtoReflect.Descriptor instead.
+func (*LookupHostRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *LookupHostRequest) GetSession() *SessionInfo {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *LookupHostRequest) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+type LookupHostResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Ips [][]byte `protobuf:"bytes,1,rep,name=ips,proto3" json:"ips,omitempty"`
+}
+
+func (x *LookupHostResponse) Reset() {
+	*x = LookupHostResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_manager_manager_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LookupHostResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupHostResponse) ProtoMessage() {}
+
+func (x *LookupHostResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_manager_manager_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupHostResponse.ProtoReflect.Descriptor instead.
+func (*LookupHostResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *LookupHostResponse) GetIps() [][]byte {
+	if x != nil {
+		return x.Ips
+	}
+	return nil
+}
+
+type LookupHostAgentResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Agent session
+	Session *SessionInfo `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	// LookupHostRequest is the request that this is a response to
+	Request *LookupHostRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	// The response, which might be nil in case no address was found
+	Response *LookupHostResponse `protobuf:"bytes,3,opt,name=response,proto3" json:"response,omitempty"`
+}
+
+func (x *LookupHostAgentResponse) Reset() {
+	*x = LookupHostAgentResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_manager_manager_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LookupHostAgentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupHostAgentResponse) ProtoMessage() {}
+
+func (x *LookupHostAgentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_manager_manager_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupHostAgentResponse.ProtoReflect.Descriptor instead.
+func (*LookupHostAgentResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *LookupHostAgentResponse) GetSession() *SessionInfo {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *LookupHostAgentResponse) GetRequest() *LookupHostRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *LookupHostAgentResponse) GetResponse() *LookupHostResponse {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
 // "Mechanisms" are the ways that an Agent can decide handle
 // incoming requests, and decide whether to send them to the
 // in-cluster service, or whether to intercept them.  The "tcp"
@@ -1552,7 +1722,7 @@ type AgentInfo_Mechanism struct {
 func (x *AgentInfo_Mechanism) Reset() {
 	*x = AgentInfo_Mechanism{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_manager_manager_proto_msgTypes[19]
+		mi := &file_rpc_manager_manager_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1565,7 +1735,7 @@ func (x *AgentInfo_Mechanism) String() string {
 func (*AgentInfo_Mechanism) ProtoMessage() {}
 
 func (x *AgentInfo_Mechanism) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_manager_manager_proto_msgTypes[19]
+	mi := &file_rpc_manager_manager_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1817,7 +1987,30 @@ var file_rpc_manager_manager_proto_rawDesc = []byte{
 	0x12, 0x17, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
 	0x0c, 0x52, 0x06, 0x63, 0x6f, 0x6e, 0x6e, 0x49, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x70, 0x61, 0x79,
 	0x6c, 0x6f, 0x61, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x70, 0x61, 0x79, 0x6c,
-	0x6f, 0x61, 0x64, 0x2a, 0xa0, 0x01, 0x0a, 0x18, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x63, 0x65, 0x70,
+	0x6f, 0x61, 0x64, 0x22, 0x64, 0x0a, 0x11, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73,
+	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3b, 0x0a, 0x07, 0x73, 0x65, 0x73, 0x73,
+	0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x74, 0x65, 0x6c, 0x65,
+	0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72,
+	0x2e, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x07, 0x73, 0x65,
+	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x68, 0x6f, 0x73, 0x74, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x04, 0x68, 0x6f, 0x73, 0x74, 0x22, 0x26, 0x0a, 0x12, 0x4c, 0x6f, 0x6f,
+	0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x10, 0x0a, 0x03, 0x69, 0x70, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x03, 0x69, 0x70,
+	0x73, 0x22, 0xdf, 0x01, 0x0a, 0x17, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74,
+	0x41, 0x67, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3b, 0x0a,
+	0x07, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21,
+	0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61,
+	0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x49, 0x6e, 0x66,
+	0x6f, 0x52, 0x07, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x41, 0x0a, 0x07, 0x72, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x27, 0x2e, 0x74, 0x65,
+	0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67,
+	0x65, 0x72, 0x2e, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x52, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x44, 0x0a,
+	0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x28, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d,
+	0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73,
+	0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x2a, 0xa0, 0x01, 0x0a, 0x18, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x63, 0x65, 0x70,
 	0x74, 0x44, 0x69, 0x73, 0x70, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x54, 0x79, 0x70, 0x65,
 	0x12, 0x0f, 0x0a, 0x0b, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10,
 	0x00, 0x12, 0x0a, 0x0a, 0x06, 0x41, 0x43, 0x54, 0x49, 0x56, 0x45, 0x10, 0x01, 0x12, 0x0b, 0x0a,
@@ -1827,7 +2020,7 @@ var file_rpc_manager_manager_proto_rawDesc = []byte{
 	0x43, 0x48, 0x41, 0x4e, 0x49, 0x53, 0x4d, 0x10, 0x05, 0x12, 0x0c, 0x0a, 0x08, 0x4e, 0x4f, 0x5f,
 	0x50, 0x4f, 0x52, 0x54, 0x53, 0x10, 0x06, 0x12, 0x0f, 0x0a, 0x0b, 0x41, 0x47, 0x45, 0x4e, 0x54,
 	0x5f, 0x45, 0x52, 0x52, 0x4f, 0x52, 0x10, 0x07, 0x12, 0x0c, 0x0a, 0x08, 0x42, 0x41, 0x44, 0x5f,
-	0x41, 0x52, 0x47, 0x53, 0x10, 0x08, 0x32, 0xa3, 0x0a, 0x0a, 0x07, 0x4d, 0x61, 0x6e, 0x61, 0x67,
+	0x41, 0x52, 0x47, 0x53, 0x10, 0x08, 0x32, 0xc7, 0x0c, 0x0a, 0x07, 0x4d, 0x61, 0x6e, 0x61, 0x67,
 	0x65, 0x72, 0x12, 0x45, 0x0a, 0x07, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x16, 0x2e,
 	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e,
 	0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x22, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73,
@@ -1909,11 +2102,30 @@ var file_rpc_manager_manager_proto_rawDesc = []byte{
 	0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x43, 0x6f, 0x6e, 0x6e, 0x4d, 0x65,
 	0x73, 0x73, 0x61, 0x67, 0x65, 0x1a, 0x21, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73,
 	0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x43, 0x6f, 0x6e,
-	0x6e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x28, 0x01, 0x30, 0x01, 0x42, 0x37, 0x5a, 0x35,
-	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70,
-	0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x69, 0x6f, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72,
-	0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x72, 0x70, 0x63, 0x2f, 0x76, 0x32, 0x2f, 0x6d, 0x61,
-	0x6e, 0x61, 0x67, 0x65, 0x72, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x28, 0x01, 0x30, 0x01, 0x12, 0x5f, 0x0a, 0x0a,
+	0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x12, 0x27, 0x2e, 0x74, 0x65, 0x6c,
+	0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65,
+	0x72, 0x2e, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e,
+	0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x4c, 0x6f, 0x6f, 0x6b, 0x75,
+	0x70, 0x48, 0x6f, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60, 0x0a,
+	0x17, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2d, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70,
+	0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e,
+	0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x12,
+	0x5f, 0x0a, 0x0f, 0x57, 0x61, 0x74, 0x63, 0x68, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f,
+	0x73, 0x74, 0x12, 0x21, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63,
+	0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f,
+	0x6e, 0x49, 0x6e, 0x66, 0x6f, 0x1a, 0x27, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73,
+	0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x4c, 0x6f, 0x6f,
+	0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x30, 0x01,
+	0x42, 0x37, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x74,
+	0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x69, 0x6f, 0x2f, 0x74, 0x65,
+	0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x72, 0x70, 0x63, 0x2f, 0x76,
+	0x32, 0x2f, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x33,
 }
 
 var (
@@ -1929,7 +2141,7 @@ func file_rpc_manager_manager_proto_rawDescGZIP() []byte {
 }
 
 var file_rpc_manager_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_rpc_manager_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_rpc_manager_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_rpc_manager_manager_proto_goTypes = []interface{}{
 	(InterceptDispositionType)(0),     // 0: telepresence.manager.InterceptDispositionType
 	(*ClientInfo)(nil),                // 1: telepresence.manager.ClientInfo
@@ -1951,13 +2163,16 @@ var file_rpc_manager_manager_proto_goTypes = []interface{}{
 	(*AmbassadorCloudConfig)(nil),     // 17: telepresence.manager.AmbassadorCloudConfig
 	(*AmbassadorCloudConnection)(nil), // 18: telepresence.manager.AmbassadorCloudConnection
 	(*ConnMessage)(nil),               // 19: telepresence.manager.ConnMessage
-	(*AgentInfo_Mechanism)(nil),       // 20: telepresence.manager.AgentInfo.Mechanism
-	nil,                               // 21: telepresence.manager.AgentInfo.EnvironmentEntry
-	(*empty.Empty)(nil),               // 22: google.protobuf.Empty
+	(*LookupHostRequest)(nil),         // 20: telepresence.manager.LookupHostRequest
+	(*LookupHostResponse)(nil),        // 21: telepresence.manager.LookupHostResponse
+	(*LookupHostAgentResponse)(nil),   // 22: telepresence.manager.LookupHostAgentResponse
+	(*AgentInfo_Mechanism)(nil),       // 23: telepresence.manager.AgentInfo.Mechanism
+	nil,                               // 24: telepresence.manager.AgentInfo.EnvironmentEntry
+	(*empty.Empty)(nil),               // 25: google.protobuf.Empty
 }
 var file_rpc_manager_manager_proto_depIdxs = []int32{
-	20, // 0: telepresence.manager.AgentInfo.mechanisms:type_name -> telepresence.manager.AgentInfo.Mechanism
-	21, // 1: telepresence.manager.AgentInfo.environment:type_name -> telepresence.manager.AgentInfo.EnvironmentEntry
+	23, // 0: telepresence.manager.AgentInfo.mechanisms:type_name -> telepresence.manager.AgentInfo.Mechanism
+	24, // 1: telepresence.manager.AgentInfo.environment:type_name -> telepresence.manager.AgentInfo.EnvironmentEntry
 	4,  // 2: telepresence.manager.PreviewSpec.ingress:type_name -> telepresence.manager.IngressInfo
 	3,  // 3: telepresence.manager.InterceptInfo.spec:type_name -> telepresence.manager.InterceptSpec
 	7,  // 4: telepresence.manager.InterceptInfo.client_session:type_name -> telepresence.manager.SessionInfo
@@ -1973,41 +2188,51 @@ var file_rpc_manager_manager_proto_depIdxs = []int32{
 	7,  // 14: telepresence.manager.ReviewInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
 	0,  // 15: telepresence.manager.ReviewInterceptRequest.disposition:type_name -> telepresence.manager.InterceptDispositionType
 	7,  // 16: telepresence.manager.RemainRequest.session:type_name -> telepresence.manager.SessionInfo
-	22, // 17: telepresence.manager.Manager.Version:input_type -> google.protobuf.Empty
-	22, // 18: telepresence.manager.Manager.GetLicense:input_type -> google.protobuf.Empty
-	22, // 19: telepresence.manager.Manager.CanConnectAmbassadorCloud:input_type -> google.protobuf.Empty
-	22, // 20: telepresence.manager.Manager.GetCloudConfig:input_type -> google.protobuf.Empty
-	1,  // 21: telepresence.manager.Manager.ArriveAsClient:input_type -> telepresence.manager.ClientInfo
-	2,  // 22: telepresence.manager.Manager.ArriveAsAgent:input_type -> telepresence.manager.AgentInfo
-	14, // 23: telepresence.manager.Manager.Remain:input_type -> telepresence.manager.RemainRequest
-	7,  // 24: telepresence.manager.Manager.Depart:input_type -> telepresence.manager.SessionInfo
-	7,  // 25: telepresence.manager.Manager.WatchAgents:input_type -> telepresence.manager.SessionInfo
-	7,  // 26: telepresence.manager.Manager.WatchIntercepts:input_type -> telepresence.manager.SessionInfo
-	10, // 27: telepresence.manager.Manager.CreateIntercept:input_type -> telepresence.manager.CreateInterceptRequest
-	12, // 28: telepresence.manager.Manager.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
-	11, // 29: telepresence.manager.Manager.UpdateIntercept:input_type -> telepresence.manager.UpdateInterceptRequest
-	13, // 30: telepresence.manager.Manager.ReviewIntercept:input_type -> telepresence.manager.ReviewInterceptRequest
-	19, // 31: telepresence.manager.Manager.ConnTunnel:input_type -> telepresence.manager.ConnMessage
-	15, // 32: telepresence.manager.Manager.Version:output_type -> telepresence.manager.VersionInfo2
-	16, // 33: telepresence.manager.Manager.GetLicense:output_type -> telepresence.manager.License
-	18, // 34: telepresence.manager.Manager.CanConnectAmbassadorCloud:output_type -> telepresence.manager.AmbassadorCloudConnection
-	17, // 35: telepresence.manager.Manager.GetCloudConfig:output_type -> telepresence.manager.AmbassadorCloudConfig
-	7,  // 36: telepresence.manager.Manager.ArriveAsClient:output_type -> telepresence.manager.SessionInfo
-	7,  // 37: telepresence.manager.Manager.ArriveAsAgent:output_type -> telepresence.manager.SessionInfo
-	22, // 38: telepresence.manager.Manager.Remain:output_type -> google.protobuf.Empty
-	22, // 39: telepresence.manager.Manager.Depart:output_type -> google.protobuf.Empty
-	8,  // 40: telepresence.manager.Manager.WatchAgents:output_type -> telepresence.manager.AgentInfoSnapshot
-	9,  // 41: telepresence.manager.Manager.WatchIntercepts:output_type -> telepresence.manager.InterceptInfoSnapshot
-	6,  // 42: telepresence.manager.Manager.CreateIntercept:output_type -> telepresence.manager.InterceptInfo
-	22, // 43: telepresence.manager.Manager.RemoveIntercept:output_type -> google.protobuf.Empty
-	6,  // 44: telepresence.manager.Manager.UpdateIntercept:output_type -> telepresence.manager.InterceptInfo
-	22, // 45: telepresence.manager.Manager.ReviewIntercept:output_type -> google.protobuf.Empty
-	19, // 46: telepresence.manager.Manager.ConnTunnel:output_type -> telepresence.manager.ConnMessage
-	32, // [32:47] is the sub-list for method output_type
-	17, // [17:32] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	7,  // 17: telepresence.manager.LookupHostRequest.session:type_name -> telepresence.manager.SessionInfo
+	7,  // 18: telepresence.manager.LookupHostAgentResponse.session:type_name -> telepresence.manager.SessionInfo
+	20, // 19: telepresence.manager.LookupHostAgentResponse.request:type_name -> telepresence.manager.LookupHostRequest
+	21, // 20: telepresence.manager.LookupHostAgentResponse.response:type_name -> telepresence.manager.LookupHostResponse
+	25, // 21: telepresence.manager.Manager.Version:input_type -> google.protobuf.Empty
+	25, // 22: telepresence.manager.Manager.GetLicense:input_type -> google.protobuf.Empty
+	25, // 23: telepresence.manager.Manager.CanConnectAmbassadorCloud:input_type -> google.protobuf.Empty
+	25, // 24: telepresence.manager.Manager.GetCloudConfig:input_type -> google.protobuf.Empty
+	1,  // 25: telepresence.manager.Manager.ArriveAsClient:input_type -> telepresence.manager.ClientInfo
+	2,  // 26: telepresence.manager.Manager.ArriveAsAgent:input_type -> telepresence.manager.AgentInfo
+	14, // 27: telepresence.manager.Manager.Remain:input_type -> telepresence.manager.RemainRequest
+	7,  // 28: telepresence.manager.Manager.Depart:input_type -> telepresence.manager.SessionInfo
+	7,  // 29: telepresence.manager.Manager.WatchAgents:input_type -> telepresence.manager.SessionInfo
+	7,  // 30: telepresence.manager.Manager.WatchIntercepts:input_type -> telepresence.manager.SessionInfo
+	10, // 31: telepresence.manager.Manager.CreateIntercept:input_type -> telepresence.manager.CreateInterceptRequest
+	12, // 32: telepresence.manager.Manager.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
+	11, // 33: telepresence.manager.Manager.UpdateIntercept:input_type -> telepresence.manager.UpdateInterceptRequest
+	13, // 34: telepresence.manager.Manager.ReviewIntercept:input_type -> telepresence.manager.ReviewInterceptRequest
+	19, // 35: telepresence.manager.Manager.ConnTunnel:input_type -> telepresence.manager.ConnMessage
+	20, // 36: telepresence.manager.Manager.LookupHost:input_type -> telepresence.manager.LookupHostRequest
+	22, // 37: telepresence.manager.Manager.AgentLookupHostResponse:input_type -> telepresence.manager.LookupHostAgentResponse
+	7,  // 38: telepresence.manager.Manager.WatchLookupHost:input_type -> telepresence.manager.SessionInfo
+	15, // 39: telepresence.manager.Manager.Version:output_type -> telepresence.manager.VersionInfo2
+	16, // 40: telepresence.manager.Manager.GetLicense:output_type -> telepresence.manager.License
+	18, // 41: telepresence.manager.Manager.CanConnectAmbassadorCloud:output_type -> telepresence.manager.AmbassadorCloudConnection
+	17, // 42: telepresence.manager.Manager.GetCloudConfig:output_type -> telepresence.manager.AmbassadorCloudConfig
+	7,  // 43: telepresence.manager.Manager.ArriveAsClient:output_type -> telepresence.manager.SessionInfo
+	7,  // 44: telepresence.manager.Manager.ArriveAsAgent:output_type -> telepresence.manager.SessionInfo
+	25, // 45: telepresence.manager.Manager.Remain:output_type -> google.protobuf.Empty
+	25, // 46: telepresence.manager.Manager.Depart:output_type -> google.protobuf.Empty
+	8,  // 47: telepresence.manager.Manager.WatchAgents:output_type -> telepresence.manager.AgentInfoSnapshot
+	9,  // 48: telepresence.manager.Manager.WatchIntercepts:output_type -> telepresence.manager.InterceptInfoSnapshot
+	6,  // 49: telepresence.manager.Manager.CreateIntercept:output_type -> telepresence.manager.InterceptInfo
+	25, // 50: telepresence.manager.Manager.RemoveIntercept:output_type -> google.protobuf.Empty
+	6,  // 51: telepresence.manager.Manager.UpdateIntercept:output_type -> telepresence.manager.InterceptInfo
+	25, // 52: telepresence.manager.Manager.ReviewIntercept:output_type -> google.protobuf.Empty
+	19, // 53: telepresence.manager.Manager.ConnTunnel:output_type -> telepresence.manager.ConnMessage
+	21, // 54: telepresence.manager.Manager.LookupHost:output_type -> telepresence.manager.LookupHostResponse
+	25, // 55: telepresence.manager.Manager.AgentLookupHostResponse:output_type -> google.protobuf.Empty
+	20, // 56: telepresence.manager.Manager.WatchLookupHost:output_type -> telepresence.manager.LookupHostRequest
+	39, // [39:57] is the sub-list for method output_type
+	21, // [21:39] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_rpc_manager_manager_proto_init() }
@@ -2245,6 +2470,42 @@ func file_rpc_manager_manager_proto_init() {
 			}
 		}
 		file_rpc_manager_manager_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LookupHostRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_manager_manager_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LookupHostResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_manager_manager_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LookupHostAgentResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_manager_manager_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AgentInfo_Mechanism); i {
 			case 0:
 				return &v.state
@@ -2267,7 +2528,7 @@ func file_rpc_manager_manager_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_rpc_manager_manager_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

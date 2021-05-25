@@ -87,18 +87,13 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, error) {
-	err := d.outbound.update(d.callCtx, table)
-	return &empty.Empty{}, err
-}
-
 func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
 	d.outbound.setSearchPath(d.callCtx, paths.Paths)
 	return &empty.Empty{}, nil
 }
 
-func (d *service) SetManagerInfo(_ context.Context, info *rpc.ManagerInfo) (*empty.Empty, error) {
-	return &empty.Empty{}, d.outbound.setManagerInfo(d.callCtx, info)
+func (d *service) SetOutboundInfo(_ context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
+	return &empty.Empty{}, d.outbound.setInfo(d.callCtx, info)
 }
 
 // run is the main function when executing as the daemon

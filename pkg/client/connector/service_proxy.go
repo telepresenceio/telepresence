@@ -171,3 +171,23 @@ func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewIn
 func (p *mgrProxy) ConnTunnel(_ managerrpc.Manager_ConnTunnelServer) error {
 	return errors.New("ConnTunnel is not implemented by the mgrProxy")
 }
+
+func (p *mgrProxy) LookupHost(ctx context.Context, arg *managerrpc.LookupHostRequest) (*managerrpc.LookupHostResponse, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.LookupHost(ctx, arg, callOptions...)
+}
+
+func (p *mgrProxy) AgentLookupHostResponse(ctx context.Context, arg *managerrpc.LookupHostAgentResponse) (*empty.Empty, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.AgentLookupHostResponse(ctx, arg, callOptions...)
+}
+
+func (p *mgrProxy) WatchLookupHost(info *managerrpc.SessionInfo, server managerrpc.Manager_WatchLookupHostServer) error {
+	return errors.New("WatchLookupHost is not implemented by the mgrProxy")
+}
