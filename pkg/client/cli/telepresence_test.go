@@ -481,24 +481,18 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	cs.Eventually(
 		// condition
 		func() bool {
-			hc := &http.Client{Timeout: time.Second}
-			resp, err := hc.Get("http://" + svc)
+			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+			out, err := output(ctx, "curl", "--silent", svc)
 			if err != nil {
 				dlog.Error(ctx, err)
 				return false
 			}
-			defer resp.Body.Close()
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				dlog.Error(ctx, err)
-				return false
-			}
-			s := strings.TrimSpace(string(body))
-			dlog.Info(ctx, s)
-			return s == expectedOutput
+			dlog.Info(ctx, out)
+			return strings.Contains(out, expectedOutput)
 		},
-		15*time.Second, // waitFor
-		3*time.Second,  // polling interval
+		30*time.Second, // waitFor
+		1*time.Second,  // polling interval
 		`body of %q equals %q`, "http://"+svc, expectedOutput,
 	)
 	cancel()
