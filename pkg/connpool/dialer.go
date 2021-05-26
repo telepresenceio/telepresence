@@ -2,6 +2,7 @@ package connpool
 
 import (
 	"context"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -157,10 +158,7 @@ func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 }
 
 func (h *dialer) readLoop(ctx context.Context) {
-	defer func() {
-		// dlog.Debugf(ctx, "<- CONN %s, closing", h.id)
-		h.Close(ctx)
-	}()
+	defer close(h.incoming) // allow write to drain and perform the close of the connection
 	b := make([]byte, 0x8000)
 	for ctx.Err() == nil {
 		n, err := h.conn.Read(b)
@@ -169,7 +167,9 @@ func (h *dialer) readLoop(ctx context.Context) {
 				if h.id.Protocol() == unix.IPPROTO_TCP {
 					h.sendTCD(ctx, ReadClosed)
 				}
-				dlog.Errorf(ctx, "!! CONN %s, conn read: %v", h.id, err)
+				if err != io.EOF {
+					dlog.Errorf(ctx, "!! CONN %s, conn read: %v", h.id, err)
+				}
 			}
 			return
 		}
@@ -198,6 +198,9 @@ func (h *dialer) writeLoop(ctx context.Context) {
 		case <-h.idleTimer.C:
 			return
 		case dg := <-h.incoming:
+			if dg == nil {
+				return
+			}
 			if !h.resetIdle() {
 				return
 			}
