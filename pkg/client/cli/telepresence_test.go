@@ -417,8 +417,8 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 
 		// service can be resolve with unqualified name
 		cs.Eventually(func() bool {
-			return run(ctx, "curl", "hello-0") == nil
-		}, 5*time.Second, 200*time.Millisecond)
+			return run(ctx, "curl", "--silent", "ss-echo") == nil
+		}, 3*time.Second, 1*time.Second)
 	})
 
 	cs.Run("leaving renders services unavailable using unqualified name", func() {
@@ -427,7 +427,9 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		cs.Empty(stderr)
 		ctx := dlog.NewTestContext(cs.T(), false)
 		cs.Eventually(func() bool {
-			return run(ctx, "curl", "hello-0") != nil
+			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+			return run(ctx, "curl", "--silent", "ss-echo") != nil
 		}, 3*time.Second, time.Second)
 	})
 }
@@ -479,24 +481,18 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	cs.Eventually(
 		// condition
 		func() bool {
-			hc := &http.Client{Timeout: time.Second}
-			resp, err := hc.Get("http://" + svc)
+			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+			out, err := output(ctx, "curl", "--silent", svc)
 			if err != nil {
 				dlog.Error(ctx, err)
 				return false
 			}
-			defer resp.Body.Close()
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				dlog.Error(ctx, err)
-				return false
-			}
-			s := strings.TrimSpace(string(body))
-			dlog.Info(ctx, s)
-			return s == expectedOutput
+			dlog.Info(ctx, out)
+			return strings.Contains(out, expectedOutput)
 		},
-		15*time.Second, // waitFor
-		3*time.Second,  // polling interval
+		30*time.Second, // waitFor
+		1*time.Second,  // polling interval
 		`body of %q equals %q`, "http://"+svc, expectedOutput,
 	)
 	cancel()

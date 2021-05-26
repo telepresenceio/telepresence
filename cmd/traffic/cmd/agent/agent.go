@@ -201,7 +201,7 @@ func Main(ctx context.Context, args ...string) error {
 		})
 	} else {
 		close(sftpPortCh)
-		dlog.Info(ctx, "Not starting sshd ($APP_MOUNTS is empty or $USER is set)")
+		dlog.Info(ctx, "Not starting sftp-server ($APP_MOUNTS is empty or $USER is set)")
 	}
 
 	forwarderChan := make(chan *Forwarder)

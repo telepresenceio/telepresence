@@ -94,7 +94,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {
-					dlog.Error(ctx, err)
+					dlog.Errorf(ctx, "failed to send ConnMessage: %v", err)
 				}
 				return
 			}

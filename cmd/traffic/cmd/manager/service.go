@@ -530,8 +530,11 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 		case <-m.ctx.Done():
 			return nil
 		case lr := <-lrCh:
+			if lr == nil {
+				return nil
+			}
 			if err := stream.Send(lr); err != nil {
-				dlog.Error(ctx, err)
+				dlog.Errorf(ctx, "WatchLookupHost.Send() failed: %v", err)
 				return nil
 			}
 		}
