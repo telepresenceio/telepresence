@@ -84,6 +84,9 @@ promote-to-stable:
 		--bucket datawire-static-files \
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
+ifeq ($(GOHOSTOS), darwin)
+	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION))
+endif
 
 .PHONY: install
 install:  ## (Install) installs the telepresence binary under ~/go/bin
