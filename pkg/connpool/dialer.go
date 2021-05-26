@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -150,7 +151,7 @@ func (h *dialer) Close(_ context.Context) {
 
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
-	// dlog.Debugf(ctx, "<- GRPC %s", ctrl)
+	dlog.Debugf(ctx, "<- GRPC %s", ctrl)
 	err := h.bidiStream.Send(ctrl.TunnelMessage())
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
@@ -158,7 +159,11 @@ func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 }
 
 func (h *dialer) readLoop(ctx context.Context) {
-	defer close(h.incoming) // allow write to drain and perform the close of the connection
+	defer func() {
+		// allow write to drain and perform the close of the connection
+		dtime.SleepWithContext(ctx, 100*time.Millisecond)
+		close(h.incoming)
+	}()
 	b := make([]byte, 0x8000)
 	for ctx.Err() == nil {
 		n, err := h.conn.Read(b)
@@ -174,14 +179,14 @@ func (h *dialer) readLoop(ctx context.Context) {
 			return
 		}
 		if n > 0 {
-			// dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
+			dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
 			if err = h.bidiStream.Send(NewMessage(h.id, b[:n]).TunnelMessage()); err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "!! GRPC %s, send: %v", h.id, err)
 				}
 				return
 			}
-			// dlog.Debugf(ctx, "-> GRPC %s, len %d", h.id, n)
+			dlog.Debugf(ctx, "-> GRPC %s, len %d", h.id, n)
 		}
 	}
 }
