@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -106,7 +107,7 @@ func (h *dialer) open(ctx context.Context) ControlCode {
 }
 
 func (h *dialer) handleControl(ctx context.Context, cm Control) {
-	dlog.Debugf(ctx, "-> GRPC %s", cm)
+	dlog.Debugf(ctx, "<- GRPC %s", cm)
 	switch cm.Code() {
 	case Connect:
 		h.sendTCD(ctx, h.open(ctx))
@@ -150,7 +151,7 @@ func (h *dialer) Close(_ context.Context) {
 
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
-	// dlog.Debugf(ctx, "<- GRPC %s", ctrl)
+	dlog.Debugf(ctx, "<- GRPC %s", ctrl)
 	err := h.bidiStream.Send(ctrl.TunnelMessage())
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
@@ -158,15 +159,16 @@ func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 }
 
 func (h *dialer) readLoop(ctx context.Context) {
-	defer close(h.incoming) // allow write to drain and perform the close of the connection
+	defer func() {
+		// allow write to drain and perform the close of the connection
+		dtime.SleepWithContext(ctx, 100*time.Millisecond)
+		close(h.incoming)
+	}()
 	b := make([]byte, 0x8000)
 	for ctx.Err() == nil {
 		n, err := h.conn.Read(b)
 		if err != nil {
 			if atomic.LoadInt32(&h.connected) > 0 && ctx.Err() == nil {
-				if h.id.Protocol() == unix.IPPROTO_TCP {
-					h.sendTCD(ctx, ReadClosed)
-				}
 				if err != io.EOF {
 					dlog.Errorf(ctx, "!! CONN %s, conn read: %v", h.id, err)
 				}
@@ -177,14 +179,14 @@ func (h *dialer) readLoop(ctx context.Context) {
 			return
 		}
 		if n > 0 {
-			// dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
+			dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
 			if err = h.bidiStream.Send(NewMessage(h.id, b[:n]).TunnelMessage()); err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "!! GRPC %s, send: %v", h.id, err)
 				}
 				return
 			}
-			// dlog.Debugf(ctx, "-> GRPC %s, len %d", h.id, n)
+			dlog.Debugf(ctx, "-> GRPC %s, len %d", h.id, n)
 		}
 	}
 }
@@ -199,6 +201,10 @@ func (h *dialer) writeLoop(ctx context.Context) {
 			return
 		case dg := <-h.incoming:
 			if dg == nil {
+				// h.incoming was closed by the reader and is now drained.
+				if h.id.Protocol() == unix.IPPROTO_TCP {
+					h.sendTCD(ctx, ReadClosed)
+				}
 				return
 			}
 			if !h.resetIdle() {

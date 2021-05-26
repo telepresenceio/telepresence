@@ -73,7 +73,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 
 	defer func() {
 		if _, err := manager.Depart(ctx, session); err != nil {
-			dlog.Debugf(ctx, "depart session: %+v", err)
+			dlog.Errorf(ctx, "depart session: %+v", err)
 		}
 	}()
 
@@ -90,7 +90,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		for {
 			snapshot, err := stream.Recv()
 			if err != nil {
-				dlog.Debugf(ctx, "stream recv: %+v", err) // May be io.EOF
+				dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
 				return
 			}
 			snapshots <- snapshot
