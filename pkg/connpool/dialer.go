@@ -106,7 +106,7 @@ func (h *dialer) open(ctx context.Context) ControlCode {
 }
 
 func (h *dialer) handleControl(ctx context.Context, cm Control) {
-	dlog.Debugf(ctx, "-> GRPC %s", cm)
+	dlog.Debugf(ctx, "<- GRPC %s", cm)
 	switch cm.Code() {
 	case Connect:
 		h.sendTCD(ctx, h.open(ctx))
@@ -164,9 +164,6 @@ func (h *dialer) readLoop(ctx context.Context) {
 		n, err := h.conn.Read(b)
 		if err != nil {
 			if atomic.LoadInt32(&h.connected) > 0 && ctx.Err() == nil {
-				if h.id.Protocol() == unix.IPPROTO_TCP {
-					h.sendTCD(ctx, ReadClosed)
-				}
 				if err != io.EOF {
 					dlog.Errorf(ctx, "!! CONN %s, conn read: %v", h.id, err)
 				}
@@ -199,6 +196,10 @@ func (h *dialer) writeLoop(ctx context.Context) {
 			return
 		case dg := <-h.incoming:
 			if dg == nil {
+				// h.incoming was closed by the reader and is now drained.
+				if h.id.Protocol() == unix.IPPROTO_TCP {
+					h.sendTCD(ctx, ReadClosed)
+				}
 				return
 			}
 			if !h.resetIdle() {
