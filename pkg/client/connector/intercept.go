@@ -279,7 +279,6 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcN
 
 	dlog.Infof(c, "waiting for agent for %s %q.%s", kind, agentName, namespace)
 	agent, err := tm.waitForAgent(c, agentName, namespace)
-	dlog.Infof(c, "agent found for %s %q %s", kind, agent.Name, agent.Namespace)
 	if err != nil {
 		dlog.Error(c, err)
 		return &rpc.InterceptResult{
