@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 // IsTerminal returns whether the given file descriptor is a terminal
-var IsTerminal = terminal.IsTerminal
+var IsTerminal = term.IsTerminal
 
 // InitContext sets up standard Telepresence logging for a background process
 func InitContext(ctx context.Context, name string) (context.Context, error) {

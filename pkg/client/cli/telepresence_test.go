@@ -33,7 +33,8 @@ import (
 const serviceCount = 3
 
 func TestTelepresence(t *testing.T) {
-	dtest.WithMachineLock(func() {
+	ctx := dlog.NewTestContext(t, false)
+	dtest.WithMachineLock(ctx, func(ctx context.Context) {
 		suite.Run(t, new(telepresenceSuite))
 	})
 }
@@ -81,7 +82,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	err = run(ctx, "sudo", "true")
 	require.NoError(err, "acquire privileges")
 
-	registry := dtest.DockerRegistry()
+	registry := dtest.DockerRegistry(ctx)
 	os.Setenv("KO_DOCKER_REPO", registry)
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
@@ -97,7 +98,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	go func() {
 		defer wg.Done()
 
-		kubeconfig := dtest.Kubeconfig()
+		kubeconfig := dtest.Kubeconfig(ctx)
 		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
 		os.Setenv("KUBECONFIG", kubeconfig)
 		err = run(ctx, "kubectl", "create", "namespace", ts.namespace)
@@ -771,7 +772,7 @@ func (ts *telepresenceSuite) publishManager() error {
 	// then it builds for the platform indicated by those variables.
 	cmd.Env = []string{
 		"TELEPRESENCE_VERSION=" + ts.testVersion,
-		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(),
+		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(ctx),
 	}
 	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
 	for _, env := range os.Environ() {
