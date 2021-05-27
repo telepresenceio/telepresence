@@ -23,12 +23,12 @@ items:
       - title: TCP and UDP routing via Virtual Network Interface
         body: "Telepresence will now perform routing of outbound TCP and UDP traffic via a Virtual Network Interface (VIF). The VIF is a layer 3 TUN-device that exists while Telepresence is connected. It makes the subnets in the cluster available to the workstation and will also route DNS requests to the cluster and forward them to intercepted pods. This means that pods with custom DNS configuration will work as expected. Prior versions of Telepresence would use firewall rules and was only capable of routing TCP."
         image: ./tunnel.jpg
-        docs: reference/tun-device.md
+        docs: reference/tun-device.md#both-tcp-and-udp
         type: feature
       - title: SSH is no longer used
         body: "All traffic between the client and the cluster is now tunneled via the traffic manager gRPC API. This means that Telepresence no longer uses ssh tunnels and that the manager no longer have an `sshd` installed. Volume mounts are still established using `sshfs` but it is now configured to communicate using the sftp-protocol directly, which means that the traffic agent also runs without `sshd`. A desired side effect of this is that the manager and agent containers no longer need a special user configuration."
         image: ./no-ssh.png
-        docs: reference/tun-device.md
+        docs: reference/tun-device.md#no-ssh-required
         type: change
   - version: 2.2.2
     date: '2021-05-17'
