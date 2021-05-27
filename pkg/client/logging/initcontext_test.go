@@ -34,10 +34,6 @@ func TestInitContext(t *testing.T) {
 
 	ft := dtime.NewFakeTime()
 
-	// Ensure that logger timestamps using dtime.Now()
-	lrLogger := logrus.StandardLogger()
-	lrLogger.AddHook(&dtimeHook{})
-
 	testSetup := func(t *testing.T) (ctx context.Context, logDir, logFile string) {
 		t.Helper()
 		ctx = dlog.NewTestContext(t, false)
@@ -76,8 +72,8 @@ func TestInitContext(t *testing.T) {
 	closeLog := func(t *testing.T) {
 		t.Helper()
 		check := require.New(t)
-		check.IsType(&RotatingFile{}, lrLogger.Out)
-		check.NoError(lrLogger.Out.(*RotatingFile).Close())
+		check.IsType(&RotatingFile{}, loggerForTest.Out)
+		check.NoError(loggerForTest.Out.(*RotatingFile).Close())
 	}
 
 	t.Run("stdout and stderr", func(t *testing.T) {
@@ -85,6 +81,7 @@ func TestInitContext(t *testing.T) {
 		check := require.New(t)
 
 		c, err := InitContext(ctx, logName)
+		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
 		defer closeLog(t)
@@ -109,6 +106,7 @@ func TestInitContext(t *testing.T) {
 		check := require.New(t)
 
 		c, err := InitContext(ctx, logName)
+		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
 		defer closeLog(t)
@@ -127,6 +125,7 @@ func TestInitContext(t *testing.T) {
 		check := require.New(t)
 
 		c, err := InitContext(ctx, logName)
+		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
 		infoMsg := "info message"
@@ -134,6 +133,7 @@ func TestInitContext(t *testing.T) {
 		closeLog(t)
 
 		c, err = InitContext(ctx, logName)
+		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
 		defer closeLog(t)
@@ -162,6 +162,7 @@ func TestInitContext(t *testing.T) {
 		for i := 0; i < 7; i++ {
 			ft.Step(24 * time.Hour)
 			c, err := InitContext(ctx, logName)
+			loggerForTest.AddHook(&dtimeHook{})
 			check.NoError(err)
 			check.NotNil(c)
 			infoMsg := "info message"

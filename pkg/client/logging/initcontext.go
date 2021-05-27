@@ -15,9 +15,13 @@ import (
 // IsTerminal returns whether the given file descriptor is a terminal
 var IsTerminal = term.IsTerminal
 
+// loggerForTest exposes internals to initcontext_test.go
+var loggerForTest *logrus.Logger
+
 // InitContext sets up standard Telepresence logging for a background process
 func InitContext(ctx context.Context, name string) (context.Context, error) {
-	logger := logrus.StandardLogger()
+	logger := logrus.New()
+	loggerForTest = logger
 	logger.SetLevel(logrus.DebugLevel)
 
 	if IsTerminal(int(os.Stdout.Fd())) {
