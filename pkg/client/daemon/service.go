@@ -186,14 +186,14 @@ func run(c context.Context, loggingDir, dns string) error {
 				_ = os.Remove(client.DaemonSocketName)
 			}
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %v", err)
+				dlog.Errorf(c, "gRPC server ended with: %v", err)
 			} else {
-				dlog.Debug(c, "Server ended")
+				dlog.Debug(c, "gRPC server ended")
 			}
 		}()
 
 		// Listen on unix domain socket
-		dlog.Debug(c, "Server starting")
+		dlog.Debug(c, "gRPC server starting")
 		d.callCtx = c
 		origUmask := unix.Umask(0)
 		listener, err = net.Listen("unix", client.DaemonSocketName)
@@ -201,12 +201,13 @@ func run(c context.Context, loggingDir, dns string) error {
 		if err != nil {
 			return errors.Wrap(err, "listen")
 		}
+		dlog.Info(c, "gRPC server started")
 
 		svc := grpc.NewServer()
 		rpc.RegisterDaemonServer(svc, d)
 		go func() {
 			<-c.Done()
-			dlog.Debug(c, "Server stopping")
+			dlog.Debug(c, "gRPC server stopping")
 			svc.GracefulStop()
 		}()
 		return svc.Serve(listener)
