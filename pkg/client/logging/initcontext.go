@@ -25,9 +25,9 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 	logger.SetLevel(logrus.DebugLevel)
 
 	if IsTerminal(int(os.Stdout.Fd())) {
-		logger.Formatter = NewFormatter("15:04:05")
+		logger.Formatter = NewFormatter("15:04:05.0000")
 	} else {
-		logger.Formatter = NewFormatter("2006/01/02 15:04:05")
+		logger.Formatter = NewFormatter("2006/01/02 15:04:05.0000")
 		dir, err := filelocation.AppUserLogDir(ctx)
 		if err != nil {
 			return ctx, err

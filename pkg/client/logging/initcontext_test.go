@@ -145,7 +145,7 @@ func TestInitContext(t *testing.T) {
 		check.NoFileExists(backupFile)
 
 		ft.Step(time.Second)
-		infoTs := dtime.Now().Format("2006/01/02 15:04:05")
+		infoTs := dtime.Now().Format("2006/01/02 15:04:05.0000")
 		dlog.Info(c, infoMsg)
 		backupFile = filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
 		check.FileExists(backupFile)
