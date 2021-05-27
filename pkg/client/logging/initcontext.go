@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/term"
 
@@ -22,7 +24,12 @@ var loggerForTest *logrus.Logger
 func InitContext(ctx context.Context, name string) (context.Context, error) {
 	logger := logrus.New()
 	loggerForTest = logger
-	logger.SetLevel(logrus.DebugLevel)
+	logLevels := client.GetConfig(ctx).LogLevels
+	if name == "daemon" {
+		logger.SetLevel(logLevels.RootDaemon)
+	} else if name == "connector" {
+		logger.SetLevel(logLevels.UserDaemon)
+	}
 
 	if IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = NewFormatter("15:04:05.0000")

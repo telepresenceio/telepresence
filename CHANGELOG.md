@@ -7,6 +7,7 @@
 - Change: Outbound connections now use gRPC instead of ssh, and the traffic-manager no longer has a sshd running.
 - Change: The traffic-agent no longer has a sshd running. Remote volume mounts use sshfs in slave mode, talking directly to sftp.
 - Change: The local DNS now routes the name lookups to intercepted agents or traffic-manager.
+- Change: The default log-level for the traffic-manager and the root-daemon was changed from "debug" to "info".
 - Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root.
 - Bugfix: Fixed a number of race conditions.
 
