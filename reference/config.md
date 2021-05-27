@@ -16,10 +16,11 @@ timeouts:
   agentInstall: 1m
   intercept: 10s
 logLevels:
-  UserDaemon: debug
+  userDaemon: debug
 ```
 
-Values for timeouts are all durations either as a number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings can be fractional (`1.5h`) or combined (`2h45m`).
+### Timeouts
+Values for `timeouts` are all durations either as a number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings can be fractional (`1.5h`) or combined (`2h45m`).
 
 These are the valid fields for the `timeouts` key:
 
@@ -33,7 +34,8 @@ These are the valid fields for the `timeouts` key:
 |`trafficManagerConnect`|Waiting for the Traffic Manager API to connect for port fowards|20 seconds|
 |`trafficManagerAPI`|Waiting for connection to the gPRC API after `trafficManagerConnect` is successful|5 seconds|
 
-Values for logLevels are one of the following strings: `trace`, `debug`, `info`, `warning`, `error`, `fatal` and `panic`.
+### Log Levels
+Values for `logLevels` are one of the following strings: `trace`, `debug`, `info`, `warning`, `error`, `fatal` and `panic`.
 These are the valid fields for the `logLevels` key:
 
 |Field|Description|Default|
