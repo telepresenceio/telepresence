@@ -10,6 +10,7 @@
 - Change: The default log-level for the traffic-manager and the root-daemon was changed from "debug" to "info".
 - Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root.
 - Bugfix: Fixed a number of race conditions.
+- Bugfix: Fix a crash when there is an error communicating with the traffic-manager about Ambassador Cloud.
 
 ### 2.2.2 (May 17, 2021)
 
