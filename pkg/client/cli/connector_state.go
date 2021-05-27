@@ -101,7 +101,7 @@ func (cs *connectorState) setConnectInfo() error {
 	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED:
 		msg = r.ErrorText
 	}
-	return errors.New(msg) // Return true to ensure disconnect
+	return fmt.Errorf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
 }
 
 func (cs *connectorState) DeactivateState() error {

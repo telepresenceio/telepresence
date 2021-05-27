@@ -98,7 +98,7 @@ func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 func (tm *trafficManager) run(c context.Context) error {
 	err := tm.ensureManager(c, tm.env)
 	if err != nil {
-		tm.managerErr = err
+		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
 		close(tm.startup)
 		return err
 	}
@@ -157,7 +157,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
+		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("dial manager: %w", err))
 	}
 
 	mClient := manager.NewManagerClient(conn)
@@ -170,7 +170,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 	})
 
 	if err != nil {
-		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("ArriveAsClient: %w", err))
+		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("manager.ArriveAsClient: %w", err))
 	}
 	tm.managerClient = mClient
 	tm.sessionInfo = si
@@ -178,10 +178,10 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	outboundInfo, err := tm.getOutboundInfo(c, int32(grpcPort))
 	if err != nil {
-		return err
+		return fmt.Errorf("getOutboundInfo: %w", err)
 	}
-	if _, err = tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
-		return err
+	if _, err := tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
+		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})

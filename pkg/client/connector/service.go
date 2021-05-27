@@ -461,7 +461,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	tc, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.TrafficManagerConnect)
 	defer cancel()
 	if err := tmgr.waitUntilStarted(tc); err != nil {
-		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
+		dlog.Errorf(c, "Failed to initialize session with traffic-manager: %v", err)
 		// No point in continuing without a traffic manager
 		s.cancel()
 		return &rpc.ConnectInfo{
