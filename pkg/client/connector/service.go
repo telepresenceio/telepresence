@@ -209,9 +209,17 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 }
 
 func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
-	if s.trafficMgr.managerClient == nil {
+	noManager := false
+	select {
+	case <-s.trafficMgr.startup:
+		noManager = (s.trafficMgr.managerClient == nil)
+	default:
+		noManager = true
+	}
+	if noManager {
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
+
 	return s.trafficMgr.workloadInfoSnapshot(ctx, lr), nil
 }
 
