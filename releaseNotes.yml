@@ -30,6 +30,11 @@ items:
         image: ./no-ssh.png
         docs: reference/tun-device/#no-ssh-required
         type: change
+      - title: Client Log Levels are Configurable.
+        body: "Telepresence now supports configuring logs for the Root Daemon and the User Daemon. Controlling how much logging Telepresence generates in the daemon.log and connector.log will make it easier for users to have enhanced introspection, either for debugging or just satiating their curiosity around what's happening."
+        image: ./telepresence-2.3.0-loglevels.png
+        docs: reference/config/
+        type: feature
   - version: 2.2.2
     date: '2021-05-17'
     notes:
