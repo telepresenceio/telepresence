@@ -9,15 +9,17 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ## Values
 
-The config file currently only supports values for the `timeouts` key, here is an example file:
+The config file currently supports values for the `timeouts` and `logLevels` keys, here is an example file:
 
 ```yaml
 timeouts:
   agentInstall: 1m
   intercept: 10s
+logLevels:
+  UserDaemon: debug
 ```
 
-Values are all durations either as a number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings can be fractional (`1.5h`) or combined (`2h45m`).
+Values for timeouts are all durations either as a number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings can be fractional (`1.5h`) or combined (`2h45m`).
 
 These are the valid fields for the `timeouts` key:
 
@@ -30,3 +32,11 @@ These are the valid fields for the `timeouts` key:
 |`proxyDial`|Waiting for an outbound connection to be established|5 seconds|
 |`trafficManagerConnect`|Waiting for the Traffic Manager API to connect for port fowards|20 seconds|
 |`trafficManagerAPI`|Waiting for connection to the gPRC API after `trafficManagerConnect` is successful|5 seconds|
+
+Values for logLevels are one of the following strings: `trace`, `debug`, `info`, `warning`, `error`, `fatal` and `panic`.
+These are the valid fields for the `logLevels` key:
+
+|Field|Description|Default|
+|---|---|---|
+|`userDaemon`|Logging level to be used by the User Daemon (logs to connector.log)|debug|
+|`rootDaemon`|Logging level to be used for the Root Daemon (logs to daemon.log)|info|
