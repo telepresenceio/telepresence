@@ -7,6 +7,7 @@
 - Change: The traffic-agent no longer has a sshd running. Remote volume mounts use sshfs in slave mode, talking directly to sftp.
 - Change: The local DNS now routes the name lookups to intercepted agents or traffic-manager.
 - Feature: Telepresence is now installable via brew
+- Change: The default log-level for the traffic-manager and the root-daemon was changed from "debug' to "info".
 
 ### 2.2.2 (May 17, 2021)
 - Feature: Telepresence translates legacy Telepresence commands into viable Telepresence commands.

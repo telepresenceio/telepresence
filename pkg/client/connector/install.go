@@ -1025,7 +1025,7 @@ func (ki *installer) managerDeployment(c context.Context, env client.Env, addLic
 
 	var containerEnv []corev1.EnvVar
 
-	containerEnv = append(containerEnv, corev1.EnvVar{Name: "LOG_LEVEL", Value: "debug"})
+	containerEnv = append(containerEnv, corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"})
 	if env.SystemAHost != "" {
 		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_HOST", Value: env.SystemAHost})
 	}
