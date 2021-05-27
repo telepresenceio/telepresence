@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 
@@ -18,7 +20,12 @@ var IsTerminal = terminal.IsTerminal
 // InitContext sets up standard Telepresence logging for a background process
 func InitContext(ctx context.Context, name string) (context.Context, error) {
 	logger := logrus.StandardLogger()
-	logger.SetLevel(logrus.DebugLevel)
+	logLevels := client.GetConfig(ctx).LogLevels
+	if name == "daemon" {
+		logger.SetLevel(logLevels.RootDaemon)
+	} else if name == "connector" {
+		logger.SetLevel(logLevels.UserDaemon)
+	}
 
 	if IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = NewFormatter("15:04:05")

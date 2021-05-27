@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/datawire/dlib/dlog"
@@ -19,12 +21,14 @@ import (
 const configFile = "config.yml"
 
 type Config struct {
-	Timeouts Timeouts `json:"timeouts,omitempty"`
+	Timeouts  Timeouts  `json:"timeouts,omitempty"`
+	LogLevels LogLevels `json:"logLevels,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
+	c.LogLevels.merge(&o.LogLevels)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -48,6 +52,13 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 		if kv == "timeouts" {
 			err := ms[i+1].Decode(&c.Timeouts)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if kv == "logLevels" {
+			err := ms[i+1].Decode(&c.LogLevels)
 			if err != nil {
 				return err
 			}
@@ -197,15 +208,66 @@ func (d *Timeouts) merge(o *Timeouts) {
 	}
 }
 
-var defaultConfig = Config{Timeouts: Timeouts{
-	AgentInstall:          120 * time.Second,
-	Apply:                 1 * time.Minute,
-	ClusterConnect:        20 * time.Second,
-	Intercept:             5 * time.Second,
-	ProxyDial:             5 * time.Second,
-	TrafficManagerAPI:     5 * time.Second,
-	TrafficManagerConnect: 20 * time.Second,
-}}
+type LogLevels struct {
+	UserDaemon logrus.Level `json:"userDaemon,omitempty"`
+	RootDaemon logrus.Level `json:"rootDaemon,omitempty"`
+}
+
+// UnmarshalYAML parses the logrus log-levels
+func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("timeouts must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		level, err := logrus.ParseLevel(v.Value)
+		if err != nil {
+			return errors.New(withLoc("invalid log-level", v))
+		}
+		switch kv {
+		case "userDaemon":
+			ll.UserDaemon = level
+		case "rootDaemon":
+			ll.RootDaemon = level
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
+func (ll *LogLevels) merge(o *LogLevels) {
+	if o.UserDaemon != 0 {
+		ll.UserDaemon = o.UserDaemon
+	}
+	if o.RootDaemon != 0 {
+		ll.RootDaemon = o.RootDaemon
+	}
+}
+
+var defaultConfig = Config{
+	Timeouts: Timeouts{
+		AgentInstall:          120 * time.Second,
+		Apply:                 1 * time.Minute,
+		ClusterConnect:        20 * time.Second,
+		Intercept:             5 * time.Second,
+		ProxyDial:             5 * time.Second,
+		TrafficManagerAPI:     5 * time.Second,
+		TrafficManagerConnect: 20 * time.Second,
+	},
+	LogLevels: LogLevels{
+		UserDaemon: logrus.DebugLevel,
+		RootDaemon: logrus.InfoLevel,
+	}}
 
 var config *Config
 

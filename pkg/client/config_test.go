@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,15 +21,22 @@ func TestGetConfig(t *testing.T) {
 		/* sys1 */ `
 timeouts:
   agentInstall: 2m10s
+logLevels:
+  userDaemon: info
+  rootDaemon: debug
 `,
 		/* sys2 */ `
 timeouts:
   apply: 33s
+logLevels:
+  userDaemon: debug
 `,
 		/* user */ `
 timeouts:
   clusterConnect: 25
   proxyDial: 17.0
+logLevels:
+  rootDaemon: trace
 `,
 	}
 
@@ -52,4 +61,7 @@ timeouts:
 	assert.Equal(t, 17*time.Second, to.ProxyDial)                  // from user
 	assert.Equal(t, defaultConfig.Timeouts.Intercept, to.Intercept)
 	assert.Equal(t, defaultConfig.Timeouts.TrafficManagerConnect, to.TrafficManagerConnect)
+
+	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels.UserDaemon) // from sys2
+	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels.RootDaemon) // from user
 }
