@@ -1,9 +1,9 @@
 # Networking through Virtual Network Interface
 
-The Telepresence daemon process creates a Virtual Network Interface (VIF) when Telepresence connects to the cluster. The VIF ensures that the cluster's subnets available to the workstation. It also intercepts DNS requests and forwards them to the traffic-manager which in turn forwards them to intercepted agents, if any, or performs a host lookup by itself.
+The Telepresence daemon process creates a Virtual Network Interface (VIF) when Telepresence connects to the cluster. The VIF ensures that the cluster's subnets are available to the workstation. It also intercepts DNS requests and forwards them to the traffic-manager which in turn forwards them to intercepted agents, if any, or performs a host lookup by itself.
 
 ### TUN-Device
-The VIF is a TUN-device, which means that it communicates with the workstation in terms of L3 IP-packets. The router will recognize UDP and TCP packets and tunnel their payload to the traffic-manager via its encrypted gRPC API. The traffic manager will then establish corresponding connections in the cluster. All protocol negotiation takes place in the client because the VIF takes care of the L3 to L4 translation (i.e. the tunnel is L4, not L3).
+The VIF is a TUN-device, which means that it communicates with the workstation in terms of L3 IP-packets. The router will recognize UDP and TCP packets and tunnel their payload to the traffic-manager via its encrypted gRPC API. The traffic-manager will then establish corresponding connections in the cluster. All protocol negotiation takes place in the client because the VIF takes care of the L3 to L4 translation (i.e. the tunnel is L4, not L3).
 
 ## Gains when using the VIF
 
