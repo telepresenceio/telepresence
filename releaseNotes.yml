@@ -16,7 +16,7 @@ items:
     date: '2021-05-27'
     notes:
       - title: Brew install Telepresence
-        body: "Telepresence can now be installed via brew on macOS, which makes it easier for users to stay up-to-date with the latest telepresence version. To install via brew, you can use the following command: <code>brew install datawire/blackbird/telepresence2</code>"
+        body: "Telepresence can now be installed via brew on macOS, which makes it easier for users to stay up-to-date with the latest telepresence version. To install via brew, you can use the following command: <code>brew install datawire/blackbird/telepresence2</code>."
         image: ./telepresence-2.3.0-homebrew.png
         docs: install/index/
         type: feature
