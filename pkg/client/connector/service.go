@@ -59,7 +59,6 @@ type service struct {
 	rpc.UnsafeConnectorServer
 
 	env         client.Env
-	daemon      daemon.DaemonClient
 	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
 
 	managerProxy mgrProxy
@@ -404,11 +403,26 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		Action: "connect",
 	}
 
+	// establish a connection to the daemon gRPC service
+	dlog.Info(c, "Connecting to daemon...")
+	conn, err := client.DialSocket(c, client.DaemonSocketName)
+	if err != nil {
+		dlog.Errorf(c, "unable to connect to daemon: %+v", err)
+		s.cancel()
+		return &rpc.ConnectInfo{
+			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText: err.Error(),
+		}
+	}
+	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
+	// prefer to let the OS close it when we exit.
+	daemonClient := daemon.NewDaemonClient(conn)
+
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := func() (*k8sCluster, error) {
 		c, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.ClusterConnect)
 		defer cancel()
-		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
+		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, daemonClient)
 		if err != nil {
 			return nil, err
 		}
@@ -530,16 +544,8 @@ func run(c context.Context) error {
 		return err
 	}
 
-	// establish a connection to the daemon gRPC service
-	conn, err := client.DialSocket(c, client.DaemonSocketName)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
 	s := &service{
 		env:         env,
-		daemon:      daemon.NewDaemonClient(conn),
 		scoutClient: client.NewScout(c, "connector"),
 
 		scout:           make(chan ScoutReport, 10),
