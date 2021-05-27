@@ -12,6 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -194,13 +195,11 @@ func run(c context.Context, loggingDir, dns string) error {
 		// Listen on unix domain socket
 		dlog.Debug(c, "Server starting")
 		d.callCtx = c
+		origUmask := unix.Umask(0)
 		listener, err = net.Listen("unix", client.DaemonSocketName)
+		unix.Umask(origUmask)
 		if err != nil {
 			return errors.Wrap(err, "listen")
-		}
-		err = os.Chmod(client.DaemonSocketName, 0777)
-		if err != nil {
-			return errors.Wrap(err, "chmod")
 		}
 
 		svc := grpc.NewServer()
