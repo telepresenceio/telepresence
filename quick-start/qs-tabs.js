@@ -75,7 +75,7 @@ export default function SimpleTabs() {
           '\n' +
           'brew install datawire/blackbird/telepresence2' +
           '\n \n' +
-          'OR install manually" +
+          'OR install manually' +
           '\n' +
           '# 1. Download the latest binary (~60 MB):' +
           '\n' +
@@ -83,8 +83,7 @@ export default function SimpleTabs() {
           '\n \n' +
           '# 2. Make the binary executable:' +
           '\n' +
-          'sudo chmod a+x /usr/local/bin/telepresence' +
-          '\n \n' +
+          'sudo chmod a+x /usr/local/bin/telepresence'
         }
         </CodeBlock>
       </TabPanel>
