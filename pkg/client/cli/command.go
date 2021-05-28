@@ -34,17 +34,6 @@ recommended) which in turn may result in a password prompt.`
 
 // TODO: Provide a link in the help text to more info about telepresence
 
-func versionCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "version",
-		Args: cobra.NoArgs,
-
-		Short:   "Show version",
-		PreRunE: forcedUpdateCheck,
-		RunE:    printVersion,
-	}
-}
-
 func quitCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:  "quit",
