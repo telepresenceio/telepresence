@@ -420,7 +420,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := func() (*k8sCluster, error) {
-		c, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.ClusterConnect)
+		c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
 		defer cancel()
 		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, daemonClient)
 		if err != nil {
@@ -480,7 +480,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
-	tc, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.TrafficManagerConnect)
+	tc, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 	if err := tmgr.waitUntilStarted(tc); err != nil {
 		dlog.Errorf(c, "Failed to initialize session with traffic-manager: %v", err)

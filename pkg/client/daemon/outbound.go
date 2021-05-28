@@ -186,7 +186,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 
 	// Give the cluster lookup a reasonable timeout
 	tos := client.GetConfig(c).Timeouts
-	c, cancel := context.WithTimeout(c, tos.TrafficManagerAPI)
+	c, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer func() {
 		cancel()
 		o.dnsQueriesLock.Lock()
@@ -201,7 +201,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		Host:    query,
 	})
 	if err != nil {
-		dlog.Error(c, client.CheckTimeout(c, &tos.TrafficManagerAPI, err))
+		dlog.Error(c, client.CheckTimeout(c, err))
 		return nil
 	}
 	if len(response.Ips) == 0 {

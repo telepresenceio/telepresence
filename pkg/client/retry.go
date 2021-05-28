@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -16,16 +15,11 @@ const defaultMaxDelay = 3 * time.Second
 // The function takes 0 to 3 durations with the following meaning
 //  Delay - initial delay, i.e. the delay between the first and the second call.
 //  MaxDelay - maximum delay between calling the functions (delay will never grow beyond this value)
-//  MaxTime - maximum time before giving up.
 func Retry(c context.Context, text string, f func(context.Context) error, durations ...time.Duration) error {
 	delay := defaultRetryDelay
 	maxDelay := defaultMaxDelay
-	maxTime := time.Duration(0)
 
 	switch len(durations) {
-	case 3:
-		maxTime = durations[2]
-		fallthrough
 	case 2:
 		maxDelay = durations[1]
 		if maxDelay == 0 {
@@ -43,12 +37,6 @@ func Retry(c context.Context, text string, f func(context.Context) error, durati
 		maxDelay = delay
 	}
 
-	if maxTime > 0 {
-		var cancel context.CancelFunc
-		c, cancel = context.WithTimeout(c, maxTime)
-		defer cancel()
-	}
-
 	for {
 		err := f(c)
 		if err == nil {
@@ -61,9 +49,6 @@ func Retry(c context.Context, text string, f func(context.Context) error, durati
 
 		select {
 		case <-c.Done():
-			if c.Err() == context.DeadlineExceeded {
-				err = fmt.Errorf("retry timed out after: %s", maxTime.String())
-			}
 			return err
 		case <-time.After(delay):
 		}

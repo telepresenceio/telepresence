@@ -100,7 +100,7 @@ func (kc *k8sCluster) portForwardAndThen(
 	sc := bufio.NewScanner(out)
 
 	// Give port-forward at least the port-forward timeout to produce the correct output and spawn the next process
-	timer := time.AfterFunc(client.GetConfig(c).Timeouts.TrafficManagerConnect, func() {
+	timer := time.AfterFunc(client.GetConfig(c).Timeouts.PrivateTrafficManagerConnect, func() {
 		cancel()
 	})
 
@@ -125,10 +125,10 @@ func (kc *k8sCluster) portForwardAndThen(
 	// let the port forward continue running. It will either be killed by the
 	// timer (if it didn't produce the expected output) or by a context cancel.
 	if err = pf.Wait(); err != nil {
-		switch c.Err() {
-		case context.Canceled:
+		switch {
+		case errors.Is(c.Err(), context.Canceled):
 			err = thenErr
-		case context.DeadlineExceeded:
+		case errors.Is(c.Err(), context.DeadlineExceeded):
 			err = errors.New("port-forward timed out")
 		default:
 			err = client.RunError(err)
@@ -168,7 +168,7 @@ func (kc *k8sCluster) check(c context.Context) error {
 			return fmt.Errorf("initial cluster check failed: %w", client.RunError(err))
 		}
 	}
-	return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, nil)
+	return c.Err()
 }
 
 // kindNames returns the names of all objects of a specified Kind in a given Namespace
@@ -373,7 +373,7 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []str
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
-		return nil, client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, fmt.Errorf("k8s client create failed: %w", err))
+		return nil, client.CheckTimeout(c, fmt.Errorf("k8s client create failed: %w", err))
 	}
 
 	ret := &k8sCluster{
@@ -400,7 +400,7 @@ func (kc *k8sCluster) waitUntilReady(ctx context.Context) error {
 	case <-kc.accWait:
 		return nil
 	case <-ctx.Done():
-		return client.CheckTimeout(ctx, &client.GetConfig(ctx).Timeouts.ClusterConnect, nil)
+		return ctx.Err()
 	}
 }
 
