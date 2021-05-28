@@ -480,11 +480,15 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		// Add metadata to scout from InterceptResult
 		is.Scout.SetMetadatum("service_uid", r.ServiceUid)
 		is.Scout.SetMetadatum("workload_kind", r.WorkloadKind)
+		// Since a user can create an intercept without specifying a namespace
+		// (thus using the default in their kubeconfig), we should be getting
+		// the namespace from the InterceptResult because that adds the namespace
+		// if it wasn't given on the cli by the user
+		is.Scout.SetMetadatum("service_namespace", r.InterceptInfo.Spec.Namespace)
 
 		// Add metadata to scout
 		is.Scout.SetMetadatum("service_name", is.agentName)
 		is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
-		is.Scout.SetMetadatum("service_namespace", is.namespace)
 
 		mechanism, _ := is.extState.Mechanism()
 		mechanismArgs, _ := is.extState.MechanismArgs()
