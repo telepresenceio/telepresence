@@ -30,6 +30,7 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 	} else if name == "connector" {
 		logger.SetLevel(logLevels.UserDaemon)
 	}
+	logger.ReportCaller = true
 
 	if IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = NewFormatter("15:04:05.0000")
