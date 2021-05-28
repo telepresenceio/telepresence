@@ -477,13 +477,13 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.agentName)
 		var intercept *manager.InterceptInfo
 
+		// Add metadata to scout from InterceptResult
+		is.Scout.SetMetadatum("service_uid", r.ServiceUid)
+		is.Scout.SetMetadatum("workload_kind", r.WorkloadKind)
+
 		// Add metadata to scout
 		is.Scout.SetMetadatum("service_name", is.agentName)
 		is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
-
-		// For now this will be using the namespace where the traffic manager
-		// is installed. Once we support intercepts in multiple namespaces,
-		// we should change this to use that information
 		is.Scout.SetMetadatum("service_namespace", is.namespace)
 
 		mechanism, _ := is.extState.Mechanism()
