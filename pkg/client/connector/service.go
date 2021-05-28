@@ -59,7 +59,6 @@ type service struct {
 	rpc.UnsafeConnectorServer
 
 	env         client.Env
-	daemon      daemon.DaemonClient
 	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
 
 	managerProxy mgrProxy
@@ -209,9 +208,17 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 }
 
 func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
-	if s.trafficMgr.managerClient == nil {
+	noManager := false
+	select {
+	case <-s.trafficMgr.startup:
+		noManager = (s.trafficMgr.managerClient == nil)
+	default:
+		noManager = true
+	}
+	if noManager {
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
+
 	return s.trafficMgr.workloadInfoSnapshot(ctx, lr), nil
 }
 
@@ -396,11 +403,26 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		Action: "connect",
 	}
 
+	// establish a connection to the daemon gRPC service
+	dlog.Info(c, "Connecting to daemon...")
+	conn, err := client.DialSocket(c, client.DaemonSocketName)
+	if err != nil {
+		dlog.Errorf(c, "unable to connect to daemon: %+v", err)
+		s.cancel()
+		return &rpc.ConnectInfo{
+			Error:     rpc.ConnectInfo_DAEMON_FAILED,
+			ErrorText: err.Error(),
+		}
+	}
+	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
+	// prefer to let the OS close it when we exit.
+	daemonClient := daemon.NewDaemonClient(conn)
+
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := func() (*k8sCluster, error) {
 		c, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.ClusterConnect)
 		defer cancel()
-		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
+		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, daemonClient)
 		if err != nil {
 			return nil, err
 		}
@@ -461,7 +483,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	tc, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.TrafficManagerConnect)
 	defer cancel()
 	if err := tmgr.waitUntilStarted(tc); err != nil {
-		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
+		dlog.Errorf(c, "Failed to initialize session with traffic-manager: %v", err)
 		// No point in continuing without a traffic manager
 		s.cancel()
 		return &rpc.ConnectInfo{
@@ -522,16 +544,8 @@ func run(c context.Context) error {
 		return err
 	}
 
-	// establish a connection to the daemon gRPC service
-	conn, err := client.DialSocket(c, client.DaemonSocketName)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
 	s := &service{
 		env:         env,
-		daemon:      daemon.NewDaemonClient(conn),
 		scoutClient: client.NewScout(c, "connector"),
 
 		scout:           make(chan ScoutReport, 10),

@@ -12,6 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -185,29 +186,28 @@ func run(c context.Context, loggingDir, dns string) error {
 				_ = os.Remove(client.DaemonSocketName)
 			}
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %v", err)
+				dlog.Errorf(c, "gRPC server ended with: %v", err)
 			} else {
-				dlog.Debug(c, "Server ended")
+				dlog.Debug(c, "gRPC server ended")
 			}
 		}()
 
 		// Listen on unix domain socket
-		dlog.Debug(c, "Server starting")
+		dlog.Debug(c, "gRPC server starting")
 		d.callCtx = c
+		origUmask := unix.Umask(0)
 		listener, err = net.Listen("unix", client.DaemonSocketName)
+		unix.Umask(origUmask)
 		if err != nil {
 			return errors.Wrap(err, "listen")
 		}
-		err = os.Chmod(client.DaemonSocketName, 0777)
-		if err != nil {
-			return errors.Wrap(err, "chmod")
-		}
+		dlog.Info(c, "gRPC server started")
 
 		svc := grpc.NewServer()
 		rpc.RegisterDaemonServer(svc, d)
 		go func() {
 			<-c.Done()
-			dlog.Debug(c, "Server stopping")
+			dlog.Debug(c, "gRPC server stopping")
 			svc.GracefulStop()
 		}()
 		return svc.Serve(listener)

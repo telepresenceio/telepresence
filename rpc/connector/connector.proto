@@ -53,7 +53,7 @@ service Connector {
   rpc GetCloudAccessToken(TokenReq) returns (TokenData);
 
   rpc GetCloudAPIKey(KeyRequest) returns (KeyData);
-  
+
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
   // Quits (terminates) the connector process.
@@ -75,6 +75,7 @@ message ConnectInfo {
     DISCONNECTED           = 3; // failure: Connect has not yet been called (only returned from Status)
     CLUSTER_FAILED         = 4; // failure: error parsing kubeconfig or talking to the cluster; error_text is set
     TRAFFIC_MANAGER_FAILED = 6; // failure: error talking to the in-cluster traffic-manager; error_text is set
+    DAEMON_FAILED          = 8; // failure: error talking to the on-laptop root daemon; error_text is set
 
     reserved 1;
     reserved 5;
