@@ -13,6 +13,7 @@
 - Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root.
 - Bugfix: Fixed a number of race conditions.
 - Bugfix: Fix a crash when there is an error communicating with the traffic-manager about Ambassador Cloud.
+- Bugfix: Fix a bug where sometimes when displaying or logging a timeout error it fails to determine which configurable timeout is responsible.
 
 ### 2.2.2 (May 17, 2021)
 

@@ -629,7 +629,7 @@ func statefulSetUpdated(statefulSet *kates.StatefulSet, origGeneration int64) bo
 
 func (ki *installer) waitForApply(c context.Context, namespace, name string, obj kates.Object) error {
 	tos := &client.GetConfig(c).Timeouts
-	c, cancel := context.WithTimeout(c, tos.Apply)
+	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
 
 	origGeneration := int64(0)
@@ -648,13 +648,13 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 		}
 		for {
 			dtime.SleepWithContext(c, time.Second)
-			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+			if err := c.Err(); err != nil {
 				return err
 			}
 
 			rs, err := ki.findReplicaSet(c, namespace, name)
 			if err != nil {
-				return client.CheckTimeout(c, &tos.Apply, err)
+				return client.CheckTimeout(c, err)
 			}
 
 			if replicaSetUpdated(rs, origGeneration) {
@@ -665,13 +665,13 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	case "Deployment":
 		for {
 			dtime.SleepWithContext(c, time.Second)
-			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+			if err := c.Err(); err != nil {
 				return err
 			}
 
 			dep, err := ki.findDeployment(c, namespace, name)
 			if err != nil {
-				return client.CheckTimeout(c, &tos.Apply, err)
+				return client.CheckTimeout(c, err)
 			}
 
 			if deploymentUpdated(dep, origGeneration) {
@@ -682,13 +682,13 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	case "StatefulSet":
 		for {
 			dtime.SleepWithContext(c, time.Second)
-			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+			if err := c.Err(); err != nil {
 				return err
 			}
 
 			statefulSet, err := ki.findStatefulSet(c, namespace, name)
 			if err != nil {
-				return client.CheckTimeout(c, &tos.Apply, err)
+				return client.CheckTimeout(c, err)
 			}
 
 			if statefulSetUpdated(statefulSet, origGeneration) {

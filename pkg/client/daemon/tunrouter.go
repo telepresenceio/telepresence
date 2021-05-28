@@ -126,7 +126,7 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 	if t.managerClient == nil {
 		// First check. Establish connection
 		tos := &client.GetConfig(ctx).Timeouts
-		tc, cancel := context.WithTimeout(ctx, tos.TrafficManagerAPI)
+		tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 		defer cancel()
 
 		var conn *grpc.ClientConn
@@ -135,7 +135,7 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 			grpc.WithNoProxy(),
 			grpc.WithBlock())
 		if err != nil {
-			return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
+			return client.CheckTimeout(tc, err)
 		}
 		t.session = mi.Session
 		t.managerClient = manager.NewManagerClient(conn)
