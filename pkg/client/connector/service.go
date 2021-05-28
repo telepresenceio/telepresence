@@ -410,7 +410,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		dlog.Errorf(c, "unable to connect to daemon: %+v", err)
 		s.cancel()
 		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+			Error:     rpc.ConnectInfo_DAEMON_FAILED,
 			ErrorText: err.Error(),
 		}
 	}
