@@ -37,7 +37,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 }
 
 func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
-	ips := o.resolveInCluster(c, qType, query);
+	ips := o.resolveInCluster(c, qType, query)
 	if len(ips) == 0 && len(o.search) > 0 {
 		// Apply search path
 		q := query[:len(query)-1]
@@ -53,7 +53,7 @@ func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string
 				// Don't append search domain if it's already there
 				continue
 			}
-			ips = o.resolveInCluster(c, qType, q + s)
+			ips = o.resolveInCluster(c, qType, q+s)
 			if len(ips) > 0 {
 				break
 			}
