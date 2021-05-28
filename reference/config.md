@@ -9,7 +9,9 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ## Values
 
-The config file currently supports values for the `timeouts` and `logLevels` keys, here is an example file:
+The config file currently supports values for the `timeouts` and `logLevels` keys.
+
+Here is an example configuration:
 
 ```yaml
 timeouts:
