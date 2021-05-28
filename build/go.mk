@@ -48,7 +48,7 @@ PKG_VERSION = $(shell go list ./pkg/version)
 .PHONY: build
 build: ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
+	CGO_ENABLED=0 go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
 .ko.yaml: .ko.yaml.in base-image
 	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
