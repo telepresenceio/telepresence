@@ -3,6 +3,7 @@
 ### 2.3.0 TBD
 
 - Feature: Telepresence is now installable via brew
+- Feature: `telepresence version` now also includes the version of the currently running user daemon.
 - Change: A TUN-device is used instead of firewall rules for routing outbound connections.
 - Change: Outbound connections now use gRPC instead of ssh, and the traffic-manager no longer has a sshd running.
 - Change: The traffic-agent no longer has a sshd running. Remote volume mounts use sshfs in slave mode, talking directly to sftp.
