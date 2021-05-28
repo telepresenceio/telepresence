@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	dns2 "github.com/miekg/dns"
 
 	"github.com/datawire/dlib/dlog"
@@ -18,6 +20,11 @@ import (
 )
 
 const kubernetesZone = "cluster.local"
+
+type awaitLookupResult struct {
+	done   chan struct{}
+	result iputil.IPs
+}
 
 // outbound does stuff, idk, I didn't write it.
 //
@@ -56,9 +63,8 @@ type outbound struct {
 	work chan func(context.Context) error
 
 	// dnsQueriesInProgress unique set of DNS queries currently in progress.
-	dnsAInProgress    map[string]struct{}
-	dnsAAAAInProgress map[string]struct{}
-	dnsQueriesLock    sync.Mutex
+	dnsInProgress  map[string]*awaitLookupResult
+	dnsQueriesLock sync.Mutex
 }
 
 // splitToUDPAddr splits the given address into an UDPAddr. It's
@@ -90,8 +96,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 		noSearch:          noSearch,
 		namespaces:        make(map[string]struct{}),
 		domains:           make(map[string]iputil.IPs),
-		dnsAInProgress:    make(map[string]struct{}),
-		dnsAAAAInProgress: make(map[string]struct{}),
+		dnsInProgress:     make(map[string]*awaitLookupResult),
 		search:            []string{""},
 		work:              make(chan func(context.Context) error),
 		dnsConfigured:     make(chan struct{}),
@@ -137,16 +142,6 @@ var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
-	var inProgress map[string]struct{}
-	switch qType {
-	case dns2.TypeA:
-		inProgress = o.dnsAInProgress
-	case dns2.TypeAAAA:
-		inProgress = o.dnsAAAAInProgress
-	default:
-		return nil
-	}
-
 	query = query[:len(query)-1]
 	query = strings.ToLower(query) // strip of trailing dot
 	query = strings.TrimSuffix(query, dotTel2SubDomain)
@@ -170,49 +165,53 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		return nil
 	}
 
+	var firstLookupResult *awaitLookupResult
 	o.dnsQueriesLock.Lock()
-	for qip := range inProgress {
-		if strings.HasPrefix(query, qip) {
-			// This is most likely a recursion caused by the query in progress. This happens when a cluster
-			// runs locally on the same host as Telepresence and falls back to use the DNS of that host when
-			// the query cannot be resolved in the cluster. Sending that query to the traffic-manager is
-			// pointless so we end the recursion here.
-			o.dnsQueriesLock.Unlock()
+	awaitResult := o.dnsInProgress[query]
+	if awaitResult == nil {
+		firstLookupResult = &awaitLookupResult{done: make(chan struct{})}
+		o.dnsInProgress[query] = firstLookupResult
+	}
+	o.dnsQueriesLock.Unlock()
+
+	if awaitResult != nil {
+		// Wait for this query to complete. Then return its value
+		select {
+		case <-awaitResult.done:
+			return awaitResult.result
+		case <-c.Done():
 			return nil
 		}
 	}
-	inProgress[query] = struct{}{}
-	o.dnsQueriesLock.Unlock()
 
+	// Give the cluster lookup a reasonable timeout
+	tos := client.GetConfig(c).Timeouts
+	c, cancel := context.WithTimeout(c, tos.TrafficManagerAPI)
 	defer func() {
+		cancel()
 		o.dnsQueriesLock.Lock()
-		delete(inProgress, query)
+		delete(o.dnsInProgress, query)
 		o.dnsQueriesLock.Unlock()
+		close(firstLookupResult.done)
 	}()
+
 	dlog.Debugf(c, "LookupHost %s", query)
 	response, err := o.router.managerClient.LookupHost(c, &manager.LookupHostRequest{
 		Session: o.router.session,
 		Host:    query,
 	})
 	if err != nil {
-		dlog.Error(c, err)
+		dlog.Error(c, client.CheckTimeout(c, &tos.TrafficManagerAPI, err))
 		return nil
 	}
 	if len(response.Ips) == 0 {
 		return nil
 	}
-	ips := make(iputil.IPs, 0, len(response.Ips))
-	for _, ip := range response.Ips {
-		if qType == dns2.TypeA {
-			if ip4 := net.IP(ip).To4(); ip4 != nil {
-				ips = append(ips, ip4)
-			}
-		} else {
-			if len(ip) == 16 {
-				ips = append(ips, ip)
-			}
-		}
+	ips := make(iputil.IPs, len(response.Ips))
+	for i, ip := range response.Ips {
+		ips[i] = ip
 	}
+	firstLookupResult.result = ips
 	return ips
 }
 

@@ -55,28 +55,42 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	switch qType {
 	case dns.TypeA, dns.TypeAAAA:
 		ips := s.resolve(s.ctx, qType, domain)
-		if len(ips) > 0 {
-			msg := dns.Msg{}
-			msg.SetReply(r)
-			msg.Authoritative = true
-			// mac dns seems to fallback if you don't
-			// support recursion, if you have more than a
-			// single dns server, this will prevent us
-			// from intercepting all queries
-			msg.RecursionAvailable = true
-			for _, ip := range ips {
-				dlog.Debugf(c, "QUERY[%v] %s -> %s", qType, domain, ip)
-				// if we don't give back the same domain
-				// requested, then mac dns seems to return an
-				// nxdomain
-				msg.Answer = append(msg.Answer, &dns.A{
-					Hdr: dns.RR_Header{Name: domain, Rrtype: qType, Class: dns.ClassINET, Ttl: 60},
-					A:   ip,
-				})
-			}
-			_ = w.WriteMsg(&msg)
-			return
+		if len(ips) == 0 {
+			break
 		}
+
+		// The host is known. Return a result for the correct query type. The result might be empty for the given
+		// query type and that is OK.
+		// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
+		msg := dns.Msg{}
+		msg.SetReply(r)
+		msg.Authoritative = true
+		// mac dns seems to fallback if you don't
+		// support recursion, if you have more than a
+		// single dns server, this will prevent us
+		// from intercepting all queries
+		msg.RecursionAvailable = true
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				if qType != dns.TypeA {
+					continue
+				}
+			} else {
+				if qType != dns.TypeAAAA {
+					continue
+				}
+			}
+			dlog.Debugf(c, "QUERY[%v] %s -> %s", qType, domain, ip)
+			// if we don't give back the same domain
+			// requested, then mac dns seems to return an
+			// nxdomain
+			msg.Answer = append(msg.Answer, &dns.A{
+				Hdr: dns.RR_Header{Name: domain, Rrtype: qType, Class: dns.ClassINET, Ttl: 60},
+				A:   ip,
+			})
+		}
+		_ = w.WriteMsg(&msg)
+		return
 	default:
 		ips := s.resolve(s.ctx, qType, domain)
 		if len(ips) > 0 {
