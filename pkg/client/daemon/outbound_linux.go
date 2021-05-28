@@ -36,6 +36,32 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	return err
 }
 
+func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
+	ips := o.resolveInCluster(c, qType, query)
+	if len(ips) == 0 && len(o.search) > 0 {
+		// Apply search path
+		q := query[:len(query)-1]
+		q = strings.ToLower(q)
+		q = strings.TrimSuffix(q, dotTel2SubDomain)
+		if strings.HasSuffix(q, ".local") {
+			return nil
+		}
+
+		q += "."
+		for _, s := range o.search {
+			if strings.HasSuffix(q, s) {
+				// Don't append search domain if it's already there
+				continue
+			}
+			ips = o.resolveInCluster(c, qType, q+s)
+			if len(ips) > 0 {
+				break
+			}
+		}
+	}
+	return ips
+}
+
 func (o *outbound) runOverridingServer(c context.Context) error {
 	if o.dnsIP == nil {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
@@ -69,6 +95,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		o.domainsLock.Lock()
 		o.namespaces = namespaces
 		o.search = search
+		dlog.Debugf(c, "search = %v, namespaces = %v", o.search, o.namespaces)
 		o.domainsLock.Unlock()
 	}
 
@@ -98,7 +125,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		unrouteDNS(ncc)
 	}()
 	dns.Flush(c)
-	srv := dns.NewServer(c, listeners, conn, o.resolveInCluster)
+	srv := dns.NewServer(c, listeners, conn, o.resolveInSearch)
 	close(o.dnsConfigured)
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)

@@ -172,8 +172,8 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 			// We default to assuming they can connect to Ambassador Cloud
 			// unless the cluster tells us they can't
 			canConnect := true
-			resp, err := cs.managerClient.CanConnectAmbassadorCloud(cmd.Context(), &empty.Empty{})
-			if err != nil {
+			if resp, err := cs.managerClient.CanConnectAmbassadorCloud(cmd.Context(), &empty.Empty{}); err == nil {
+				// We got a response from the manager; trust that response.
 				canConnect = resp.CanConnect
 			}
 			if canConnect {
