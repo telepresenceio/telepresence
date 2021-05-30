@@ -100,7 +100,7 @@ get_preview_url() {
 get_intercept_id() {
     local header=`grep 'x-telepresence-intercept-id' <<<"$output"`
     #local header=`echo $output | grep 'x-telepresence-intercept-id'`
-    local regex="regexp\(\"([a-zA-z0-9-]+:dataprocessingservice)\""
+    local regex="regexp\(\"([a-zA-Z0-9-]+:dataprocessingservice)\""
     if [[ $header =~ $regex ]]; then
         interceptid="${BASH_REMATCH[1]}"
     else
