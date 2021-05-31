@@ -36,30 +36,42 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	return err
 }
 
-func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
-	ips := o.resolveInCluster(c, qType, query)
-	if len(ips) == 0 && len(o.search) > 0 {
-		// Apply search path
-		q := query[:len(query)-1]
-		q = strings.ToLower(q)
-		q = strings.TrimSuffix(q, dotTel2SubDomain)
-		if strings.HasSuffix(q, ".local") {
-			return nil
-		}
-
-		q += "."
-		for _, s := range o.search {
-			if strings.HasSuffix(q, s) {
-				// Don't append search domain if it's already there
-				continue
-			}
-			ips = o.resolveInCluster(c, qType, q+s)
-			if len(ips) > 0 {
-				break
-			}
+// tldIsNamespace returns true if the top level domain of the query is a namespace
+func (o *outbound) tldIsNamespace(query string) bool {
+	query = query[:len(query)-1]
+	if lastDot := strings.LastIndexByte(query, '.'); lastDot >= 0 {
+		if _, ok := o.namespaces[query[lastDot+1:]]; ok {
+			return true
 		}
 	}
-	return ips
+	return false
+}
+
+func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
+	query = strings.ToLower(query)
+	query = strings.TrimSuffix(query, dotTel2SubDomain)
+
+	if !doClusterLookup(query) {
+		return nil
+	}
+
+	if o.tldIsNamespace(query) {
+		// Don't bother with search concatenation
+		return o.resolveInCluster(c, qType, query)
+	}
+
+	for _, s := range o.search {
+		if strings.HasSuffix(query, s) {
+			// Don't append search domain if it's already there
+			continue
+		}
+		if ips := o.resolveInCluster(c, qType, query+s); len(ips) > 0 {
+			return ips
+		}
+	}
+
+	// Use fallback for everything else
+	return nil
 }
 
 func (o *outbound) runOverridingServer(c context.Context) error {
@@ -91,11 +103,12 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 				namespaces[path] = struct{}{}
 			}
 		}
-		namespaces[tel2SubDomain] = struct{}{}
+		// Treat "local" and "svc" as namespaces so that they always trigger a cluster-side lookup
+		namespaces["local"] = struct{}{}
+		namespaces["svc"] = struct{}{}
 		o.domainsLock.Lock()
 		o.namespaces = namespaces
 		o.search = search
-		dlog.Debugf(c, "search = %v, namespaces = %v", o.search, o.namespaces)
 		o.domainsLock.Unlock()
 	}
 
