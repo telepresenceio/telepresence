@@ -38,7 +38,7 @@ items:
       - title: Running in a Docker container
         body: "Telepresence can now be run inside a Docker container. This can be useful for avoiding side effects on a workstation's network, establishing multiple sessions with the traffic manager, or working with different clusters simultaneously."
         image: ./run-tp-in-docker.png
-        docs: reference/inside_container
+        docs: reference/inside-container
         type: feature
       - title: Configurable Log Levels
         body: "Telepresence now supports configuring the log level for Root Daemon and User Daemon logs. This provides control over the nature and volume of information that Telepresence generates in <code>daemon.log</code> and <code>connector.log</code>."

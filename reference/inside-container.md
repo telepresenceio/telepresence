@@ -2,9 +2,9 @@
 
 It is sometimes desirable to run Telepresence inside a container. One reason can be to avoid any side effects on the workstation's network, another can be to establish multiple sessions with the traffic manager, or even work with different clusters simultaneously.
 
-Building a container with a ready-to-run Telepresence is easy because there are relatively few external dependencies. Add the following to a `Dockerfile`:
-
 ## Building the container
+
+Building a container with a ready-to-run Telepresence is easy because there are relatively few external dependencies. Add the following to a `Dockerfile`:
 
 ```Dockerfile
 # Dockerfile with telepresence and its prerequisites
