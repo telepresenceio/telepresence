@@ -1,10 +1,10 @@
-# Running Telepresence Inside a Container
+# Running Telepresence inside a container
 
 It is sometimes desirable to run Telepresence inside a container. One reason can be to avoid any side effects on the workstation's network, another can be to establish multiple sessions with the traffic manager, or even work with different clusters simultaneously.
 
-Building a container with a ready-to-run Telepresence is easy because there are relatively few external dependencies. Add the following to a `Dockerfile`
+Building a container with a ready-to-run Telepresence is easy because there are relatively few external dependencies. Add the following to a `Dockerfile`:
 
-## Building the Container
+## Building the container
 
 ```Dockerfile
 # Dockerfile with telepresence and its prerequisites
@@ -21,7 +21,7 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 RUN curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence -o telepresence && \
    install -o root -g root -m 0755 telepresence /usr/local/bin/telepresence
 
-# Add some conventient aliases to .bashrc
+# Add some convenient aliases to .bashrc
 RUN echo -e '\
 alias t=telepresence\n\
 alias k=kubectl\n\
@@ -33,9 +33,9 @@ In order to build the container, do this in the same directory as the `Dockerfil
 $ docker build -t tp-in-docker .
 ```
 
-## Running the Container
+## Running the container
 
-Telepresence will need access to the `/dev/net/tun` device on your Linux host (or, in case the host isn't a Linux, the Linux VM that Docker starts automatically), and a Kubernetes config that identifies the cluster. It will also need `--cap-add=NET_ADMIN` to create its Virtual Network Interface.
+Telepresence will need access to the `/dev/net/tun` device on your Linux host (or, in case the host isn't Linux, the Linux VM that Docker starts automatically), and a Kubernetes config that identifies the cluster. It will also need `--cap-add=NET_ADMIN` to create its Virtual Network Interface.
 
 The command to run the container can look like this:
 ```bash
