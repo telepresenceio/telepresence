@@ -35,6 +35,11 @@ items:
         image: ./no-ssh.png
         docs: reference/tun-device/#no-ssh-required
         type: change
+      - title: Running in a Docker Container
+        body: "Telepresence can run inside a Docker container."
+        image: ./run-tp-in-docker.png
+        docs: reference/inside_container
+        type: feature
       - title: Configurable Log Levels
         body: "Telepresence now supports configuring the log level for Root Daemon and User Daemon logs. This provides control over the nature and volume of information that Telepresence generates in <code>daemon.log</code> and <code>connector.log</code>."
         image: ./telepresence-2.3.0-loglevels.png
