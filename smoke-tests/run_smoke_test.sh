@@ -361,6 +361,7 @@ finish_step
 ###############################################
 
 login
+sleep 5 # avoid known agent mechanism-args race
 output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 <<<$'verylargejavaservice.default\n8080\nN\n'`
 sleep 1
 has_preview_url true
@@ -391,6 +392,7 @@ finish_step
 #### Step 9 - licensed selective intercept w/o preview url ####
 ###############################################################
 
+sleep 5 # avoid known agent mechanism-args race
 output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false`
 sleep 1
 has_intercept_id true
@@ -405,6 +407,7 @@ finish_step
 #### Step 10 - licensed intercept all      ####
 ###############################################
 
+sleep 5 # avoid known agent mechanism-args race
 output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n'`
 sleep 1
 has_intercept_id false
