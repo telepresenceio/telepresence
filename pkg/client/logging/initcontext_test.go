@@ -152,7 +152,7 @@ func TestInitContext(t *testing.T) {
 
 		bs, err := ioutil.ReadFile(logFile)
 		check.NoError(err)
-		check.Equal(fmt.Sprintf("%s %s\n", infoTs, infoMsg), string(bs))
+		check.Equal(fmt.Sprintf("%s info     : %s\n", infoTs, infoMsg), string(bs))
 	})
 
 	t.Run("old files are removed", func(t *testing.T) {

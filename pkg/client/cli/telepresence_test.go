@@ -181,7 +181,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	ts.Run("Version", func() {
 		stdout, stderr := telepresence(ts.T(), "version")
 		ts.Empty(stderr)
-		ts.Contains(stdout, fmt.Sprintf("Client %s", client.DisplayVersion()))
+		ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
 	})
 	ts.Run("Status", func() {
 		out, _ := telepresence(ts.T(), "status")
@@ -299,8 +299,9 @@ func (cs *connectedSuite) TestA_ReportsVersionFromDaemon() {
 	stdout, stderr := telepresence(cs.T(), "version")
 	cs.Empty(stderr)
 	vs := client.DisplayVersion()
-	cs.Contains(stdout, fmt.Sprintf("Client %s", vs))
-	cs.Contains(stdout, fmt.Sprintf("Daemon %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("Client: %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("Root Daemon: %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("User Daemon: %s", vs))
 }
 
 func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
