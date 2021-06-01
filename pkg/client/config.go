@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/datawire/dlib/dlog"
@@ -19,12 +21,14 @@ import (
 const configFile = "config.yml"
 
 type Config struct {
-	Timeouts Timeouts `json:"timeouts,omitempty"`
+	Timeouts  Timeouts  `json:"timeouts,omitempty"`
+	LogLevels LogLevels `json:"logLevels,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
+	c.LogLevels.merge(&o.LogLevels)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -53,6 +57,13 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 			}
 			continue
 		}
+		if kv == "logLevels" {
+			err := ms[i+1].Decode(&c.LogLevels)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if parseContext != nil {
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
@@ -61,61 +72,137 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 }
 
 type Timeouts struct {
-	// AgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
-	AgentInstall time.Duration `json:"agentInstall,omitempty"`
-	// Apply is how long to wait for a k8s manifest to be applied
-	Apply time.Duration `json:"apply,omitempty"`
-	// ClusterConnect is the maximum time to wait for a connection to the cluster to be established
-	ClusterConnect time.Duration `json:"clusterConnect,omitempty"`
-	// Intercept is the time to wait for an intercept after the agents has been installed
-	Intercept time.Duration `json:"intercept,omitempty"`
-	// ProxyDial is how long to wait for the proxy to establish an outbound connection
-	ProxyDial time.Duration `json:"proxyDial,omitempty"`
-	// TrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	TrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
-	// TrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
-	TrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
+	// These all nave names starting with "Private" because we "want" them to be unexported in
+	// order to force you to use .TimeoutContext(), but (1) we dont' want them to be hidden from
+	// the JSON/YAML engines, and (2) in the rare case, we do want to be able to reach in and
+	// grab it, but we want it to be clear that this is "bad".  We should probably (TODO) get
+	// rid of those later cases, but let's not spend time doing that right now; and instead just
+	// make them easy to grep for (`grep Private`) later.
+
+	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
+	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty"`
+	// PrivateApply is how long to wait for a k8s manifest to be applied
+	PrivateApply time.Duration `json:"apply,omitempty"`
+	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
+	PrivateClusterConnect time.Duration `json:"clusterConnect,omitempty"`
+	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
+	PrivateIntercept time.Duration `json:"intercept,omitempty"`
+	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
+	PrivateProxyDial time.Duration `json:"proxyDial,omitempty"`
+	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
+	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
+	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
+	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
 }
 
-func CheckTimeout(c context.Context, which *time.Duration, err error) error {
-	cErr := c.Err()
-	if cErr != context.DeadlineExceeded {
-		if cErr != nil {
-			return cErr
+type TimeoutID int
+
+const (
+	TimeoutAgentInstall TimeoutID = iota
+	TimeoutApply
+	TimeoutClusterConnect
+	TimeoutIntercept
+	TimeoutProxyDial
+	TimeoutTrafficManagerAPI
+	TimeoutTrafficManagerConnect
+)
+
+type timeoutContext struct {
+	context.Context
+	timeoutID  TimeoutID
+	timeoutVal time.Duration
+}
+
+func (ctx timeoutContext) Err() error {
+	err := ctx.Context.Err()
+	if errors.Is(err, context.DeadlineExceeded) {
+		dir, _ := filelocation.AppUserConfigDir(ctx)
+		err = timeoutErr{
+			timeoutID:  ctx.timeoutID,
+			timeoutVal: ctx.timeoutVal,
+			configFile: filepath.Join(dir, configFile),
+			err:        err,
 		}
-		return err
 	}
-	var name, text string
-	timeouts := &config.Timeouts
-	switch which {
-	case &timeouts.AgentInstall:
-		name = "agentInstall"
-		text = "agent install"
-	case &timeouts.Apply:
-		name = "apply"
-		text = "apply"
-	case &timeouts.ClusterConnect:
-		name = "clusterConnect"
-		text = "cluster connect"
-	case &timeouts.Intercept:
-		name = "intercept"
-		text = "intercept"
-	case &timeouts.ProxyDial:
-		name = "proxyDial"
-		text = "proxy dial"
-	case &timeouts.TrafficManagerAPI:
-		name = "trafficManagerAPI"
-		text = "traffic manager gRPC API"
-	case &timeouts.TrafficManagerConnect:
-		name = "trafficManagerConnect"
-		text = "port-forward connection to the traffic manager"
+	return err
+}
+
+func (cfg Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (context.Context, context.CancelFunc) {
+	var timeoutVal time.Duration
+	switch timeoutID {
+	case TimeoutAgentInstall:
+		timeoutVal = cfg.PrivateAgentInstall
+	case TimeoutApply:
+		timeoutVal = cfg.PrivateApply
+	case TimeoutClusterConnect:
+		timeoutVal = cfg.PrivateClusterConnect
+	case TimeoutIntercept:
+		timeoutVal = cfg.PrivateIntercept
+	case TimeoutProxyDial:
+		timeoutVal = cfg.PrivateProxyDial
+	case TimeoutTrafficManagerAPI:
+		timeoutVal = cfg.PrivateTrafficManagerAPI
+	case TimeoutTrafficManagerConnect:
+		timeoutVal = cfg.PrivateTrafficManagerConnect
 	default:
-		name = "unknown timer"
-		text = "unknown timer"
+		panic("should not happen")
 	}
-	dir, _ := filelocation.AppUserConfigDir(c)
-	return fmt.Errorf("the %s timed out. The current timeout %s can be configured as timeouts.%s in %s",
-		text, *which, name, filepath.Join(dir, configFile))
+	ctx, cancel := context.WithTimeout(ctx, timeoutVal)
+	ctx = timeoutContext{
+		Context:    ctx,
+		timeoutID:  timeoutID,
+		timeoutVal: timeoutVal,
+	}
+	return ctx, cancel
+}
+
+type timeoutErr struct {
+	timeoutID  TimeoutID
+	timeoutVal time.Duration
+	configFile string
+	err        error
+}
+
+func (e timeoutErr) Error() string {
+	var yamlName, humanName string
+	switch e.timeoutID {
+	case TimeoutAgentInstall:
+		yamlName = "agentInstall"
+		humanName = "agent install"
+	case TimeoutApply:
+		yamlName = "apply"
+		humanName = "apply"
+	case TimeoutClusterConnect:
+		yamlName = "clusterConnect"
+		humanName = "cluster connect"
+	case TimeoutIntercept:
+		yamlName = "intercept"
+		humanName = "intercept"
+	case TimeoutProxyDial:
+		yamlName = "proxyDial"
+		humanName = "proxy dial"
+	case TimeoutTrafficManagerAPI:
+		yamlName = "trafficManagerAPI"
+		humanName = "traffic manager gRPC API"
+	case TimeoutTrafficManagerConnect:
+		yamlName = "trafficManagerConnect"
+		humanName = "port-forward connection to the traffic manager"
+	default:
+		panic("should not happen")
+	}
+	return fmt.Sprintf("the %s timed out.  The current timeout %s can be configured as %q in %q",
+		humanName, e.timeoutVal, "timeouts."+yamlName, e.configFile)
+}
+
+func (e timeoutErr) Unwrap() error {
+	return e.err
+}
+
+func CheckTimeout(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil && (errors.Is(ctxErr, context.DeadlineExceeded) || err == nil) {
+		return ctxErr
+	}
+	return err
 }
 
 // UnmarshalYAML caters for the unfortunate fact that time.Duration doesn't do YAML or JSON at all.
@@ -133,19 +220,19 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		var dp *time.Duration
 		switch kv {
 		case "agentInstall":
-			dp = &d.AgentInstall
+			dp = &d.PrivateAgentInstall
 		case "apply":
-			dp = &d.Apply
+			dp = &d.PrivateApply
 		case "clusterConnect":
-			dp = &d.ClusterConnect
+			dp = &d.PrivateClusterConnect
 		case "intercept":
-			dp = &d.Intercept
+			dp = &d.PrivateIntercept
 		case "proxyDial":
-			dp = &d.ProxyDial
+			dp = &d.PrivateProxyDial
 		case "trafficManagerAPI":
-			dp = &d.TrafficManagerAPI
+			dp = &d.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
-			dp = &d.TrafficManagerConnect
+			dp = &d.PrivateTrafficManagerConnect
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -174,38 +261,89 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (d *Timeouts) merge(o *Timeouts) {
-	if o.AgentInstall != 0 {
-		d.AgentInstall = o.AgentInstall
+	if o.PrivateAgentInstall != 0 {
+		d.PrivateAgentInstall = o.PrivateAgentInstall
 	}
-	if o.Apply != 0 {
-		d.Apply = o.Apply
+	if o.PrivateApply != 0 {
+		d.PrivateApply = o.PrivateApply
 	}
-	if o.ClusterConnect != 0 {
-		d.ClusterConnect = o.ClusterConnect
+	if o.PrivateClusterConnect != 0 {
+		d.PrivateClusterConnect = o.PrivateClusterConnect
 	}
-	if o.Intercept != 0 {
-		d.Intercept = o.Intercept
+	if o.PrivateIntercept != 0 {
+		d.PrivateIntercept = o.PrivateIntercept
 	}
-	if o.ProxyDial != 0 {
-		d.ProxyDial = o.ProxyDial
+	if o.PrivateProxyDial != 0 {
+		d.PrivateProxyDial = o.PrivateProxyDial
 	}
-	if o.TrafficManagerAPI != 0 {
-		d.TrafficManagerAPI = o.TrafficManagerAPI
+	if o.PrivateTrafficManagerAPI != 0 {
+		d.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
 	}
-	if o.TrafficManagerConnect != 0 {
-		d.TrafficManagerConnect = o.TrafficManagerConnect
+	if o.PrivateTrafficManagerConnect != 0 {
+		d.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
 	}
 }
 
-var defaultConfig = Config{Timeouts: Timeouts{
-	AgentInstall:          120 * time.Second,
-	Apply:                 1 * time.Minute,
-	ClusterConnect:        20 * time.Second,
-	Intercept:             5 * time.Second,
-	ProxyDial:             5 * time.Second,
-	TrafficManagerAPI:     5 * time.Second,
-	TrafficManagerConnect: 20 * time.Second,
-}}
+type LogLevels struct {
+	UserDaemon logrus.Level `json:"userDaemon,omitempty"`
+	RootDaemon logrus.Level `json:"rootDaemon,omitempty"`
+}
+
+// UnmarshalYAML parses the logrus log-levels
+func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("timeouts must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		level, err := logrus.ParseLevel(v.Value)
+		if err != nil {
+			return errors.New(withLoc("invalid log-level", v))
+		}
+		switch kv {
+		case "userDaemon":
+			ll.UserDaemon = level
+		case "rootDaemon":
+			ll.RootDaemon = level
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
+func (ll *LogLevels) merge(o *LogLevels) {
+	if o.UserDaemon != 0 {
+		ll.UserDaemon = o.UserDaemon
+	}
+	if o.RootDaemon != 0 {
+		ll.RootDaemon = o.RootDaemon
+	}
+}
+
+var defaultConfig = Config{
+	Timeouts: Timeouts{
+		PrivateAgentInstall:          120 * time.Second,
+		PrivateApply:                 1 * time.Minute,
+		PrivateClusterConnect:        20 * time.Second,
+		PrivateIntercept:             5 * time.Second,
+		PrivateProxyDial:             5 * time.Second,
+		PrivateTrafficManagerAPI:     5 * time.Second,
+		PrivateTrafficManagerConnect: 20 * time.Second,
+	},
+	LogLevels: LogLevels{
+		UserDaemon: logrus.DebugLevel,
+		RootDaemon: logrus.InfoLevel,
+	}}
 
 var config *Config
 
@@ -232,7 +370,7 @@ func GetConfig(c context.Context) *Config {
 		var err error
 		config, err = loadConfig(c)
 		if err != nil {
-			dlog.Error(c, err)
+			dlog.Info(c, "No config found. Using default")
 			config = &defaultConfig
 		}
 	})

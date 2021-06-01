@@ -42,6 +42,11 @@ func (ds *daemonState) EnsureState() (bool, error) {
 
 	fmt.Fprintln(ds.cmd.OutOrStdout(), "Launching Telepresence Daemon", client.DisplayVersion())
 
+	configDir, err := filelocation.AppUserConfigDir(ds.cmd.Context())
+	if err != nil {
+		return false, err
+	}
+
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
 	logDir, err := filelocation.AppUserLogDir(ds.cmd.Context())
@@ -63,7 +68,7 @@ func (ds *daemonState) EnsureState() (bool, error) {
 		_ = lf.Close()
 	}
 
-	err = runAsRoot(ds.cmd.Context(), client.GetExe(), []string{"daemon-foreground", logDir, dnsIP})
+	err = runAsRoot(ds.cmd.Context(), client.GetExe(), []string{"daemon-foreground", logDir, configDir, dnsIP})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the server")
 	}

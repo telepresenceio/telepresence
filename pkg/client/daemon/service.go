@@ -12,6 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -59,11 +60,11 @@ func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    processName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(2),
+		Args:   cobra.ExactArgs(3),
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), args[0], args[1])
+			return run(cmd.Context(), args[0], args[1], args[2])
 		},
 	}
 }
@@ -97,14 +98,15 @@ func (d *service) SetOutboundInfo(_ context.Context, info *rpc.OutboundInfo) (*e
 }
 
 // run is the main function when executing as the daemon
-func run(c context.Context, loggingDir, dns string) error {
+func run(c context.Context, loggingDir, configDir, dns string) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
 
-	// Spoof the AppUserLogDir so that it returns the original user's logging dir rather than
-	// the logging dir for the root user.
+	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
+	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
+	c = filelocation.WithAppUserConfigDir(c, configDir)
 
 	c, err := logging.InitContext(c, processName)
 	if err != nil {
@@ -185,29 +187,28 @@ func run(c context.Context, loggingDir, dns string) error {
 				_ = os.Remove(client.DaemonSocketName)
 			}
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %v", err)
+				dlog.Errorf(c, "gRPC server ended with: %v", err)
 			} else {
-				dlog.Debug(c, "Server ended")
+				dlog.Debug(c, "gRPC server ended")
 			}
 		}()
 
 		// Listen on unix domain socket
-		dlog.Debug(c, "Server starting")
+		dlog.Debug(c, "gRPC server starting")
 		d.callCtx = c
+		origUmask := unix.Umask(0)
 		listener, err = net.Listen("unix", client.DaemonSocketName)
+		unix.Umask(origUmask)
 		if err != nil {
 			return errors.Wrap(err, "listen")
 		}
-		err = os.Chmod(client.DaemonSocketName, 0777)
-		if err != nil {
-			return errors.Wrap(err, "chmod")
-		}
+		dlog.Info(c, "gRPC server started")
 
 		svc := grpc.NewServer()
 		rpc.RegisterDaemonServer(svc, d)
 		go func() {
 			<-c.Done()
-			dlog.Debug(c, "Server stopping")
+			dlog.Debug(c, "gRPC server stopping")
 			svc.GracefulStop()
 		}()
 		return svc.Serve(listener)

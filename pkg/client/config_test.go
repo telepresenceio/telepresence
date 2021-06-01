@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,15 +21,22 @@ func TestGetConfig(t *testing.T) {
 		/* sys1 */ `
 timeouts:
   agentInstall: 2m10s
+logLevels:
+  userDaemon: info
+  rootDaemon: debug
 `,
 		/* sys2 */ `
 timeouts:
   apply: 33s
+logLevels:
+  userDaemon: debug
 `,
 		/* user */ `
 timeouts:
   clusterConnect: 25
   proxyDial: 17.0
+logLevels:
+  rootDaemon: trace
 `,
 	}
 
@@ -46,10 +55,13 @@ timeouts:
 
 	cfg := GetConfig(c)
 	to := &cfg.Timeouts
-	assert.Equal(t, 2*time.Minute+10*time.Second, to.AgentInstall) // from sys1
-	assert.Equal(t, 33*time.Second, to.Apply)                      // from sys2
-	assert.Equal(t, 25*time.Second, to.ClusterConnect)             // from user
-	assert.Equal(t, 17*time.Second, to.ProxyDial)                  // from user
-	assert.Equal(t, defaultConfig.Timeouts.Intercept, to.Intercept)
-	assert.Equal(t, defaultConfig.Timeouts.TrafficManagerConnect, to.TrafficManagerConnect)
+	assert.Equal(t, 2*time.Minute+10*time.Second, to.PrivateAgentInstall) // from sys1
+	assert.Equal(t, 33*time.Second, to.PrivateApply)                      // from sys2
+	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)             // from user
+	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)                  // from user
+	assert.Equal(t, defaultConfig.Timeouts.PrivateIntercept, to.PrivateIntercept)
+	assert.Equal(t, defaultConfig.Timeouts.PrivateTrafficManagerConnect, to.PrivateTrafficManagerConnect)
+
+	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels.UserDaemon) // from sys2
+	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels.RootDaemon) // from user
 }

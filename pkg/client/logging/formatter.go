@@ -9,6 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const thisModule = "github.com/telepresenceio/telepresence/v2"
+
 // Formatter formats log messages for Telepresence client
 type Formatter struct {
 	timestampFormat string
@@ -26,30 +28,38 @@ func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 	} else {
 		b = &bytes.Buffer{}
 	}
-	b.WriteString(entry.Time.Format(f.timestampFormat))
-	b.WriteByte(' ')
+	data := make(logrus.Fields, len(entry.Data))
+	for k, v := range entry.Data {
+		data[k] = v
+	}
+	goroutine, _ := data["THREAD"].(string)
+	delete(data, "THREAD")
 
-	var keys []string
-	if len(entry.Data) > 0 {
-		keys = make([]string, 0, len(entry.Data))
-		for k, v := range entry.Data {
-			if k == "THREAD" {
-				tn := v.(string)
-				tn = strings.TrimPrefix(tn, "/")
-				b.WriteString(tn)
-				b.WriteByte(' ')
-			} else {
-				keys = append(keys, k)
-			}
+	fmt.Fprintf(b, "%s %-*s %s : %s",
+		entry.Time.Format(f.timestampFormat),
+		len("warning"), entry.Level,
+		strings.TrimPrefix(goroutine, "/"),
+		entry.Message)
+
+	if len(data) > 0 {
+		b.WriteString(" :")
+		keys := make([]string, 0, len(data))
+		for key := range data {
+			keys = append(keys, key)
 		}
 		sort.Strings(keys)
+		for _, key := range keys {
+			val := data[key]
+			fmt.Fprintf(b, " %s=%+v", key, val)
+		}
+		b.WriteByte(')')
 	}
 
-	b.WriteString(entry.Message)
-	for _, k := range keys {
-		v := entry.Data[k]
-		fmt.Fprintf(b, " %s=%+v", k, v)
+	if entry.HasCaller() && strings.HasPrefix(entry.Caller.File, thisModule+"/") {
+		fmt.Fprintf(b, " (from %s:%d)", strings.TrimPrefix(entry.Caller.File, thisModule+"/"), entry.Caller.Line)
 	}
+
 	b.WriteByte('\n')
+
 	return b.Bytes(), nil
 }

@@ -44,6 +44,9 @@ type trafficManager struct {
 	managerClient manager.ManagerClient
 	managerErr    error     // if managerClient is nil, why it's nil
 	startup       chan bool // gets closed when managerClient is fully initialized (or managerErr is set)
+	//
+	// What you should read in to the above: It isn't safe to read .managerClient or .managerErr
+	// until .startup is closed, and it isn't safe to mutate them after .startup is closed.
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
@@ -89,7 +92,7 @@ func newTrafficManager(
 func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 	select {
 	case <-c.Done():
-		return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.TrafficManagerConnect, nil)
+		return c.Err()
 	case <-tm.startup:
 		return tm.managerErr
 	}
@@ -98,7 +101,7 @@ func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 func (tm *trafficManager) run(c context.Context) error {
 	err := tm.ensureManager(c, tm.env)
 	if err != nil {
-		tm.managerErr = err
+		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
 		close(tm.startup)
 		return err
 	}
@@ -126,27 +129,35 @@ func (tm *trafficManager) run(c context.Context) error {
 	}
 
 	return client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
-		return tm.portForwardAndThen(c, kpfArgs, outputScanner, tm.initGrpc)
+		return tm.portForwardAndThen(c, kpfArgs, outputScanner, func(ctx context.Context, portIf interface{}) error {
+			err := tm.initGrpc(ctx, portIf.(string))
+			if err != nil {
+				// Go ahead and log here, since `client.Retry()` will swallow most
+				// errors from being logged.
+				dlog.Errorf(ctx, "initGrpc: %v", err)
+				return err
+			}
+			return nil
+		})
 	}, 2*time.Second, 6*time.Second)
 }
 
-func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err error) {
-	grpcPort, _ := strconv.Atoi(portIf.(string))
+func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error) {
+	grpcPort, _ := strconv.Atoi(portStr)
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
-	tc, cancel := context.WithTimeout(c, tos.TrafficManagerAPI)
+	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 
 	var conn *grpc.ClientConn
 	defer func() {
 		if err != nil {
-			dlog.Error(c, err)
-			tm.managerErr = err
 			if conn != nil {
 				conn.Close()
 			}
-			if tm.startup != nil {
+			if tm.managerClient == nil {
+				tm.managerErr = err
 				close(tm.startup)
 			}
 		}
@@ -157,7 +168,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
+		return client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))
 	}
 
 	mClient := manager.NewManagerClient(conn)
@@ -168,9 +179,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 		Version:   client.Version(),
 		ApiKey:    func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
 	})
-
 	if err != nil {
-		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("ArriveAsClient: %w", err))
+		return client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
 	}
 	tm.managerClient = mClient
 	tm.sessionInfo = si
@@ -178,17 +188,19 @@ func (tm *trafficManager) initGrpc(c context.Context, portIf interface{}) (err e
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	outboundInfo, err := tm.getOutboundInfo(c, int32(grpcPort))
 	if err != nil {
-		return err
+		tm.managerClient = nil
+		return fmt.Errorf("getOutboundInfo: %w", err)
 	}
-	if _, err = tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
-		return err
+	if _, err := tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
+		tm.managerClient = nil
+		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
+
+	close(tm.startup)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
-	close(tm.startup)
-	tm.startup = nil
 	return g.Wait()
 }
 
@@ -343,6 +355,7 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 		return &rpc.WorkloadInfoSnapshot{}
 	}
 
+	<-tm.startup
 	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
 		iMap = make(map[string]*manager.InterceptInfo, len(is))
 		for _, i := range is {
@@ -401,6 +414,7 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 }
 
 func (tm *trafficManager) remain(c context.Context) error {
+	<-tm.startup
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -428,6 +442,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
+	<-tm.startup
 	if tm.managerClient == nil {
 		r.BridgeOk = false
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
@@ -465,6 +480,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 
 func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
+	<-tm.startup
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
 
 	// Since workloads can have more than one replica, we get a slice of agents

@@ -31,11 +31,14 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 		ie = rpc.InterceptError_NO_CONNECTION
 	case s.trafficMgr == nil:
 		ie = rpc.InterceptError_NO_TRAFFIC_MANAGER
-	case s.trafficMgr.managerClient == nil:
-		if s.trafficMgr.managerErr != nil {
-			ie = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
-			msg = s.trafficMgr.managerErr.Error()
-		} else {
+	default:
+		select {
+		case <-s.trafficMgr.startup:
+			if s.trafficMgr.managerClient == nil {
+				ie = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
+				msg = s.trafficMgr.managerErr.Error()
+			}
+		default:
 			ie = rpc.InterceptError_TRAFFIC_MANAGER_CONNECTING
 		}
 	}
@@ -62,11 +65,16 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
+		<-tm.startup
 		stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
+		if err != nil {
+			err = fmt.Errorf("manager.WatchIntercepts dial: %w", err)
+		}
 		for err == nil {
 			var snapshot *manager.InterceptInfoSnapshot
 			snapshot, err = stream.Recv()
 			if err != nil {
+				err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
 				break
 			}
 			snapshotPortForwards := make(map[mountForward]struct{})
@@ -105,7 +113,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 		}
 
 		if ctx.Err() == nil {
-			dlog.Errorf(ctx, "communicating with manager: %v", err)
+			dlog.Errorf(ctx, "reading port-forwards from manager: %v", err)
 			dtime.SleepWithContext(ctx, backoff)
 			backoff *= 2
 			if backoff > 3*time.Second {
@@ -138,6 +146,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		}, nil
 	}
 
+	<-tm.startup
 	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
 	if err != nil {
 		return nil, err
@@ -204,8 +213,9 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
-	c, cancel := context.WithTimeout(c, tos.Intercept)
+	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
 	defer cancel()
+	<-tm.startup
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
@@ -213,7 +223,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
-		err = client.CheckTimeout(c, &tos.Intercept, err)
+		err = client.CheckTimeout(c, err)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
@@ -279,7 +289,6 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcN
 
 	dlog.Infof(c, "waiting for agent for %s %q.%s", kind, agentName, namespace)
 	agent, err := tm.waitForAgent(c, agentName, namespace)
-	dlog.Infof(c, "agent found for %s %q %s", kind, agent.Name, agent.Namespace)
 	if err != nil {
 		dlog.Error(c, err)
 		return &rpc.InterceptResult{
@@ -299,9 +308,10 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcN
 func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
 	dlog.Debugf(ctx, "waiting for intercept id=%q to become active", id)
 	waitError := func(err error) error {
-		return client.CheckTimeout(ctx, &client.GetConfig(ctx).Timeouts.Intercept,
+		return client.CheckTimeout(ctx,
 			fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err))
 	}
+	<-tm.startup
 	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
 	if err != nil {
 		return nil, waitError(err)
@@ -336,13 +346,13 @@ func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string)
 }
 
 func (tm *trafficManager) waitForAgent(ctx context.Context, name string, namespace string) (*manager.AgentInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, client.GetConfig(ctx).Timeouts.AgentInstall) // installing a new agent can take some time
+	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutAgentInstall) // installing a new agent can take some time
 	defer cancel()
 
 	waitError := func(err error) error {
-		return client.CheckTimeout(ctx, &client.GetConfig(ctx).Timeouts.AgentInstall,
-			fmt.Errorf("waiting for agent %q to be present: %w", name, err))
+		return client.CheckTimeout(ctx, fmt.Errorf("waiting for agent %q to be present: %w", name, err))
 	}
+	<-tm.startup
 	stream, err := tm.managerClient.WatchAgents(ctx, tm.session())
 	if err != nil {
 		return nil, waitError(err)
@@ -433,6 +443,7 @@ func (tm *trafficManager) removeIntercept(c context.Context, name string) error 
 		return tm.removeLocalOnlyIntercept(c, name, ns)
 	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
+	<-tm.startup
 	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,
@@ -460,6 +471,7 @@ func (tm *trafficManager) removeLocalOnlyIntercept(c context.Context, name, name
 
 // clearIntercepts removes all intercepts
 func (tm *trafficManager) clearIntercepts(c context.Context) error {
+	<-tm.startup
 	intercepts, _ := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
 	for _, cept := range intercepts {
 		err := tm.removeIntercept(c, cept.Spec.Name)
