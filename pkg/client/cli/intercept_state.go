@@ -477,14 +477,18 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.agentName)
 		var intercept *manager.InterceptInfo
 
+		// Add metadata to scout from InterceptResult
+		is.Scout.SetMetadatum("service_uid", r.GetServiceUid())
+		is.Scout.SetMetadatum("workload_kind", r.GetWorkloadKind())
+		// Since a user can create an intercept without specifying a namespace
+		// (thus using the default in their kubeconfig), we should be getting
+		// the namespace from the InterceptResult because that adds the namespace
+		// if it wasn't given on the cli by the user
+		is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
+
 		// Add metadata to scout
 		is.Scout.SetMetadatum("service_name", is.agentName)
 		is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
-
-		// For now this will be using the namespace where the traffic manager
-		// is installed. Once we support intercepts in multiple namespaces,
-		// we should change this to use that information
-		is.Scout.SetMetadatum("service_namespace", is.namespace)
 
 		mechanism, _ := is.extState.Mechanism()
 		mechanismArgs, _ := is.extState.MechanismArgs()
