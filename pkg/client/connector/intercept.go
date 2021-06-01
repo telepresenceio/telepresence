@@ -67,10 +67,14 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	for ctx.Err() == nil {
 		<-tm.startup
 		stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
+		if err != nil {
+			err = fmt.Errorf("manager.WatchIntercepts dial: %w", err)
+		}
 		for err == nil {
 			var snapshot *manager.InterceptInfoSnapshot
 			snapshot, err = stream.Recv()
 			if err != nil {
+				err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
 				break
 			}
 			snapshotPortForwards := make(map[mountForward]struct{})
@@ -109,7 +113,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 		}
 
 		if ctx.Err() == nil {
-			dlog.Errorf(ctx, "communicating with manager: %v", err)
+			dlog.Errorf(ctx, "reading port-forwards from manager: %v", err)
 			dtime.SleepWithContext(ctx, backoff)
 			backoff *= 2
 			if backoff > 3*time.Second {

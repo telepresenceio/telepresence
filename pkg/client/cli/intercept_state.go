@@ -465,7 +465,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	// Submit the request
 	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), ir)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
 
 	switch r.Error {

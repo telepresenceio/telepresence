@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"fmt"
 
 	"google.golang.org/grpc"
 
@@ -13,11 +14,11 @@ func ListAllAgents(ctx context.Context, client rpc.ManagerClient, sessionID stri
 	defer cancel()
 	stream, err := client.WatchAgents(ctx, &rpc.SessionInfo{SessionId: sessionID}, opts...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("manager.WatchAgents dial: %w", err)
 	}
 	snapshot, err := stream.Recv()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("manager.WatchAgents recv: %w", err)
 	}
 	return snapshot.Agents, nil
 }
@@ -27,11 +28,11 @@ func listIntercepts(ctx context.Context, client rpc.ManagerClient, sessionID str
 	defer cancel()
 	stream, err := client.WatchIntercepts(ctx, &rpc.SessionInfo{SessionId: sessionID}, opts...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("manager.WatchIntercepts dial: %w", err)
 	}
 	snapshot, err := stream.Recv()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("manager.WatchIntercepts recv: %w", err)
 	}
 	return snapshot.Intercepts, nil
 }
