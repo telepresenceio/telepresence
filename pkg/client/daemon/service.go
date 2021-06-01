@@ -60,11 +60,11 @@ func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    processName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(2),
+		Args:   cobra.ExactArgs(3),
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), args[0], args[1])
+			return run(cmd.Context(), args[0], args[1], args[2])
 		},
 	}
 }
@@ -98,14 +98,15 @@ func (d *service) SetOutboundInfo(_ context.Context, info *rpc.OutboundInfo) (*e
 }
 
 // run is the main function when executing as the daemon
-func run(c context.Context, loggingDir, dns string) error {
+func run(c context.Context, loggingDir, configDir, dns string) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
 
-	// Spoof the AppUserLogDir so that it returns the original user's logging dir rather than
-	// the logging dir for the root user.
+	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
+	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
+	c = filelocation.WithAppUserConfigDir(c, configDir)
 
 	c, err := logging.InitContext(c, processName)
 	if err != nil {

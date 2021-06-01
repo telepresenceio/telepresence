@@ -98,7 +98,7 @@ func TestInitContext(t *testing.T) {
 
 		bs, err := ioutil.ReadFile(logFile)
 		check.NoError(err)
-		check.Equal(fmt.Sprintf("%s\n%s\n", infoMsg, errMsg), string(bs))
+		check.Contains(string(bs), fmt.Sprintf("%s\n%s\n", infoMsg, errMsg))
 	})
 
 	t.Run("captures output of builtin functions", func(t *testing.T) {
