@@ -100,7 +100,7 @@ get_preview_url() {
 get_intercept_id() {
     local header=`grep 'x-telepresence-intercept-id' <<<"$output"`
     #local header=`echo $output | grep 'x-telepresence-intercept-id'`
-    local regex="regexp\(\"([a-zA-z0-9-]+:dataprocessingservice)\""
+    local regex="regexp\(\"([a-zA-Z0-9-]+:dataprocessingservice)\""
     if [[ $header =~ $regex ]]; then
         interceptid="${BASH_REMATCH[1]}"
     else
@@ -361,6 +361,7 @@ finish_step
 ###############################################
 
 login
+sleep 5 # avoid known agent mechanism-args race
 output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 <<<$'verylargejavaservice.default\n8080\nN\n'`
 sleep 1
 has_preview_url true
@@ -391,6 +392,7 @@ finish_step
 #### Step 9 - licensed selective intercept w/o preview url ####
 ###############################################################
 
+sleep 5 # avoid known agent mechanism-args race
 output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false`
 sleep 1
 has_intercept_id true
@@ -405,6 +407,7 @@ finish_step
 #### Step 10 - licensed intercept all      ####
 ###############################################
 
+sleep 5 # avoid known agent mechanism-args race
 output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n'`
 sleep 1
 has_intercept_id false
@@ -440,7 +443,7 @@ verify_logout
 finish_step
 
 ##########################################################
-#### Step 13 - Verfiy version prompts new version     ####
+#### Step 13 - Verify version prompts new version     ####
 ##########################################################
 os=`uname -s | awk '{print tolower($0)}'`
 echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"

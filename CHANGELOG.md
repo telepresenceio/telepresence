@@ -3,6 +3,7 @@
 ### 2.3.0 TBD
 
 - Feature: Telepresence is now installable via brew
+- Feature: `telepresence version` now also includes the version of the currently running user daemon.
 - Change: A TUN-device is used instead of firewall rules for routing outbound connections.
 - Change: Outbound connections now use gRPC instead of ssh, and the traffic-manager no longer has a sshd running.
 - Change: The traffic-agent no longer has a sshd running. Remote volume mounts use sshfs in slave mode, talking directly to sftp.
@@ -12,6 +13,8 @@
 - Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root.
 - Bugfix: Fixed a number of race conditions.
 - Bugfix: Fix a crash when there is an error communicating with the traffic-manager about Ambassador Cloud.
+- Bugfix: Fix a bug where sometimes when displaying or logging a timeout error it fails to determine which configurable timeout is responsible.
+- Bugfix: The root-user daemon now respects the timeouts in the normal user's configuration file.
 
 ### 2.2.2 (May 17, 2021)
 

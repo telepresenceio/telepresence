@@ -24,12 +24,10 @@ var loggerForTest *logrus.Logger
 func InitContext(ctx context.Context, name string) (context.Context, error) {
 	logger := logrus.New()
 	loggerForTest = logger
-	logLevels := client.GetConfig(ctx).LogLevels
-	if name == "daemon" {
-		logger.SetLevel(logLevels.RootDaemon)
-	} else if name == "connector" {
-		logger.SetLevel(logLevels.UserDaemon)
-	}
+
+	// Start with DebugLevel so that the config is read using that level
+	logger.SetLevel(logrus.DebugLevel)
+	logger.ReportCaller = true
 
 	if IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = NewFormatter("15:04:05.0000")
@@ -45,5 +43,14 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 		}
 		logger.SetOutput(rf)
 	}
-	return dlog.WithLogger(ctx, dlog.WrapLogrus(logger)), nil
+	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
+
+	// Read the config and set the configured level.
+	logLevels := client.GetConfig(ctx).LogLevels
+	if name == "daemon" {
+		logger.SetLevel(logLevels.RootDaemon)
+	} else if name == "connector" {
+		logger.SetLevel(logLevels.UserDaemon)
+	}
+	return ctx, nil
 }

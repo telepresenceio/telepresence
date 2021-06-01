@@ -92,7 +92,7 @@ func newTrafficManager(
 func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 	select {
 	case <-c.Done():
-		return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.TrafficManagerConnect, nil)
+		return c.Err()
 	case <-tm.startup:
 		return tm.managerErr
 	}
@@ -147,7 +147,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
-	tc, cancel := context.WithTimeout(c, tos.TrafficManagerAPI)
+	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 
 	var conn *grpc.ClientConn
@@ -168,7 +168,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("dial manager: %w", err))
+		return client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))
 	}
 
 	mClient := manager.NewManagerClient(conn)
@@ -180,7 +180,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 		ApiKey:    func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
 	})
 	if err != nil {
-		return client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("manager.ArriveAsClient: %w", err))
+		return client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
 	}
 	tm.managerClient = mClient
 	tm.sessionInfo = si

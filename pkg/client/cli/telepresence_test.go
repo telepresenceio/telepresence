@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -181,7 +183,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	ts.Run("Version", func() {
 		stdout, stderr := telepresence(ts.T(), "version")
 		ts.Empty(stderr)
-		ts.Contains(stdout, fmt.Sprintf("Client %s", client.DisplayVersion()))
+		ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
 	})
 	ts.Run("Status", func() {
 		out, _ := telepresence(ts.T(), "status")
@@ -221,6 +223,39 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			require.Regexp(`Telepresence proxy:\s+ON`, stdout)
 			require.Contains(stdout, "Daemon quitting")
 		})
+	})
+
+	ts.Run("Root Daemon Log Level", func() {
+		t := ts.T()
+		require := ts.Require()
+
+		configDir := t.TempDir()
+		config, err := os.Create(filepath.Join(configDir, "config.yml"))
+		require.NoError(err)
+
+		_, err = config.WriteString("logLevels:\n  rootDaemon: debug\n")
+		require.NoError(err)
+		config.Close()
+
+		logDir := t.TempDir()
+		ctx := dlog.NewTestContext(t, false)
+		ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
+		_, stderr := telepresenceContext(ctx, "connect")
+		require.Empty(stderr)
+		_, stderr = telepresenceContext(ctx, "quit")
+		require.Empty(stderr)
+		rootLog, err := os.Open(filepath.Join(logDir, "daemon.log"))
+		require.NoError(err)
+		defer rootLog.Close()
+
+		hasDebug := false
+		scn := bufio.NewScanner(rootLog)
+		match := regexp.MustCompile(` debug +daemon/server`)
+		for scn.Scan() && !hasDebug {
+			hasDebug = match.MatchString(scn.Text())
+		}
+		ts.True(hasDebug, "daemon.log does not contain expected debug statements")
 	})
 }
 
@@ -299,8 +334,9 @@ func (cs *connectedSuite) TestA_ReportsVersionFromDaemon() {
 	stdout, stderr := telepresence(cs.T(), "version")
 	cs.Empty(stderr)
 	vs := client.DisplayVersion()
-	cs.Contains(stdout, fmt.Sprintf("Client %s", vs))
-	cs.Contains(stdout, fmt.Sprintf("Daemon %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("Client: %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("Root Daemon: %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("User Daemon: %s", vs))
 }
 
 func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {

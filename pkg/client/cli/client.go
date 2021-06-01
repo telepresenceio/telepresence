@@ -1,13 +1,9 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
@@ -18,20 +14,6 @@ func IsServerRunning() bool {
 
 var errDaemonIsNotRunning = errors.New("the telepresence daemon has not been started")
 var errConnectorIsNotRunning = errors.New("not connected")
-
-// printVersion requests version info from the daemon and prints both client and daemon version.
-func printVersion(cmd *cobra.Command, _ []string) error {
-	av, dv, err := daemonVersion(cmd)
-	if err == nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon %s (api v%d)\n", client.DisplayVersion(), dv, av)
-		return nil
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Client %s\n", client.DisplayVersion())
-	if err == errDaemonIsNotRunning {
-		err = nil
-	}
-	return err
-}
 
 // quit sends the quit message to the daemon and waits for it to exit.
 func quit(cmd *cobra.Command, _ []string) error {
@@ -49,16 +31,4 @@ func quit(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
-}
-
-func daemonVersion(cmd *cobra.Command) (apiVersion int, version string, err error) {
-	err = withStartedDaemon(cmd, func(d *daemonState) error {
-		vi, err := d.grpc.Version(cmd.Context(), &empty.Empty{})
-		if err == nil {
-			apiVersion = int(vi.ApiVersion)
-			version = vi.Version
-		}
-		return err
-	})
-	return
 }
