@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.0 TBD
+### 2.3.0 (June 1, 2021)
 
 - Feature: Telepresence is now installable via brew
 - Feature: `telepresence version` now also includes the version of the currently running user daemon.
