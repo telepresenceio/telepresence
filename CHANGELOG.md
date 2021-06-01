@@ -14,6 +14,7 @@
 - Bugfix: Fixed a number of race conditions.
 - Bugfix: Fix a crash when there is an error communicating with the traffic-manager about Ambassador Cloud.
 - Bugfix: Fix a bug where sometimes when displaying or logging a timeout error it fails to determine which configurable timeout is responsible.
+- Bugfix: The root-user daemon now respects the timeouts in the normal user's configuration file.
 
 ### 2.2.2 (May 17, 2021)
 
