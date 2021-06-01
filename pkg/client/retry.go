@@ -12,7 +12,7 @@ const defaultMaxDelay = 3 * time.Second
 
 // Retry will run the given function repeatedly with an increasing delay until it returns without error.
 //
-// The function takes 0 to 3 durations with the following meaning
+// The function takes 0 to 2 durations with the following meaning
 //  Delay - initial delay, i.e. the delay between the first and the second call.
 //  MaxDelay - maximum delay between calling the functions (delay will never grow beyond this value)
 func Retry(c context.Context, text string, f func(context.Context) error, durations ...time.Duration) error {

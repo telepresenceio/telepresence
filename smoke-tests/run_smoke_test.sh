@@ -443,7 +443,7 @@ verify_logout
 finish_step
 
 ##########################################################
-#### Step 13 - Verfiy version prompts new version     ####
+#### Step 13 - Verify version prompts new version     ####
 ##########################################################
 os=`uname -s | awk '{print tolower($0)}'`
 echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
