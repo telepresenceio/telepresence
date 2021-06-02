@@ -1,17 +1,47 @@
 package connector
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
+// The dns config part of the kubeconfigExtension that is read from the kubeconfig
+type dns struct {
+	// LocalIP is the address of the local DNS server. This entry is only
+	// used on Linux system that are not configured to use systemd.resolved and
+	// can be overridden by using the option --dns on the command line and defaults
+	// to the first line of /etc/resolv.conf
+	LocalIP iputil.IPKey `json:"local-ip,omitempty"`
+
+	// RemoteIP is the address of the cluster's DNS service. It will default
+	// to the IP of the kube-dns.kube-system or the dns-default.openshift-dns service.
+	RemoteIP iputil.IPKey `json:"remote-ip,omitempty"`
+
+	// ExcludeSuffixes are suffixes for which the DNS resolver will always fail (or fallback
+	// in case of the overriding resolver).
+	ExcludeSuffixes []string `json:"exclude-suffixes,omitempty"`
+
+	// IncludeSuffixes are suffixes for which the DNS resolver will always attempt to do
+	// a lookup. Includes have higher priority than excludes.
+	IncludeSuffixes []string `json:"include-suffixes,omitempty"`
+}
+
+// kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
+type kubeconfigExtension struct {
+	DNS *dns `json:"dns,omitempty"`
+}
+
 type k8sConfig struct {
+	kubeconfigExtension
 	Namespace   string // default cluster namespace.
 	Context     string
 	Server      string
@@ -20,6 +50,8 @@ type k8sConfig struct {
 	configFlags *kates.ConfigFlags
 	config      *rest.Config
 }
+
+const configExtension = "telepresence.getambassador.io"
 
 func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
@@ -75,7 +107,7 @@ func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 	// Sort for easy comparison
 	sort.Strings(flagArgs)
 
-	return &k8sConfig{
+	k := &k8sConfig{
 		Context:     ctxName,
 		Server:      cluster.Server,
 		Namespace:   namespace,
@@ -83,7 +115,15 @@ func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 		flagArgs:    flagArgs,
 		configFlags: configFlags,
 		config:      restConfig,
-	}, nil
+	}
+
+	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
+		if err = json.Unmarshal(ext.Raw, &k.kubeconfigExtension); err != nil {
+			return nil, fmt.Errorf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+		}
+	}
+
+	return k, nil
 }
 
 // equals determines if this instance is equal to the given instance with respect to everything but

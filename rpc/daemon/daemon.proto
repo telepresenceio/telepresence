@@ -47,6 +47,22 @@ message IPNet {
   int32 mask = 2;
 }
 
+// DNS configuration for the local DNS resolver
+message DNS {
+  // local_ip is the address of the local DNS server. Only used by Linux systems that have no
+  // systemd.resolved configured. Defaults to the first line of /etc/resolv.conf
+  bytes local_ip = 1;
+
+  // remote_ip is the address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
+  bytes remote_ip = 2;
+
+  // Suffixes to exclude
+  repeated string exclude_suffixes = 3;
+
+  // Suffixes to include. Has higher prio than the excludes
+  repeated string include_suffixes = 4;
+}
+
 // OutboundInfo contains all information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message OutboundInfo {
@@ -57,8 +73,8 @@ message OutboundInfo {
   // same client as the user daemon.
   manager.SessionInfo session = 2;
 
-  // kube_dns_ip is the IP address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
-  bytes kube_dns_ip = 3;
+  // DNS configuration
+  DNS dns = 3;
 
   // service_subnet is the Kubernetes service subnet
   IPNet service_subnet = 4;

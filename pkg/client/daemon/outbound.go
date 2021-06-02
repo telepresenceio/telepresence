@@ -37,7 +37,7 @@ type outbound struct {
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
-	domains    map[string]iputil.IPs
+	domains    map[string]struct{}
 	search     []string
 
 	// managerConfigured is closed when the traffic manager has performed
@@ -65,6 +65,8 @@ type outbound struct {
 	// dnsQueriesInProgress unique set of DNS queries currently in progress.
 	dnsInProgress  map[string]*awaitLookupResult
 	dnsQueriesLock sync.Mutex
+
+	dnsConfig *rpc.DNS
 }
 
 // splitToUDPAddr splits the given address into an UDPAddr. It's
@@ -95,7 +97,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 		dnsIP:             iputil.Parse(dnsIPStr),
 		noSearch:          noSearch,
 		namespaces:        make(map[string]struct{}),
-		domains:           make(map[string]iputil.IPs),
+		domains:           make(map[string]struct{}),
 		dnsInProgress:     make(map[string]*awaitLookupResult),
 		search:            []string{""},
 		work:              make(chan func(context.Context) error),
@@ -141,9 +143,27 @@ const dotKubernetesZone = "." + kubernetesZone + "."
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
-func doClusterLookup(query string) bool {
-	// We don't care about queries to the kubernetes zone unless they have at least two additional elements.
-	return !strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4
+func (o *outbound) doClusterLookup(query string) bool {
+	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4 {
+		return false
+	}
+
+	query = query[:len(query)-1] // skip last dot
+
+	// Always include configured includeSuffixes
+	for _, sfx := range o.dnsConfig.IncludeSuffixes {
+		if strings.HasSuffix(query, sfx) {
+			return true
+		}
+	}
+
+	// Skip configured excludeSuffixes
+	for _, sfx := range o.dnsConfig.ExcludeSuffixes {
+		if strings.HasSuffix(query, sfx) {
+			return false
+		}
+	}
+	return true
 }
 
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
@@ -164,7 +184,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		return localhostIPv4
 	}
 
-	if !doClusterLookup(query) {
+	if !o.doClusterLookup(query) {
 		return nil
 	}
 
@@ -187,9 +207,8 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		}
 	}
 
-	// Give the cluster lookup a reasonable timeout
-	tos := client.GetConfig(c).Timeouts
-	c, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
+	// Give the cluster lookup a reasonable timeout.
+	c, cancel := context.WithTimeout(c, 4*time.Second)
 	defer func() {
 		cancel()
 		o.dnsQueriesLock.Lock()
@@ -226,10 +245,28 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 	if err := o.router.setOutboundInfo(ctx, info); err != nil {
 		return err
 	}
+	if info.Dns == nil {
+		o.dnsConfig = &rpc.DNS{}
+	} else {
+		o.dnsConfig = info.Dns
+		if len(o.dnsIP) == 0 && len(info.Dns.LocalIp) > 0 {
+			o.dnsIP = info.Dns.LocalIp
+		}
+	}
+	if len(o.dnsConfig.ExcludeSuffixes) == 0 {
+		o.dnsConfig.ExcludeSuffixes = []string{
+			".arpa",
+			".com",
+			".io",
+			".net",
+			".org",
+			".ru",
+		}
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case o.kubeDNS <- info.KubeDnsIp:
+	case o.kubeDNS <- o.dnsConfig.RemoteIp:
 		return nil
 	}
 }

@@ -178,24 +178,34 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		}
 		namespaces[tel2SubDomain] = struct{}{}
 
+		domains := make(map[string]struct{}, len(namespaces)+len(o.dnsConfig.IncludeSuffixes))
+		for ns, v := range namespaces {
+			domains[ns] = v
+		}
+		for _, sfx := range o.dnsConfig.IncludeSuffixes {
+			domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
+		}
+
 		// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
 		// for each namespace in its own domain file under /etc/resolver. Each file
 		// is named "telepresence.<domain>.local"
 		var removals []string
 		var additions []string
 		o.domainsLock.Lock()
-		for ns := range o.namespaces {
-			if _, ok := namespaces[ns]; !ok {
+		for ns := range o.domains {
+			if _, ok := domains[ns]; !ok {
 				removals = append(removals, ns)
 			}
 		}
-		for ns := range namespaces {
-			if _, ok := o.namespaces[ns]; !ok {
+		for ns := range domains {
+			if _, ok := o.domains[ns]; !ok {
 				additions = append(additions, ns)
 			}
 		}
+
 		o.search = search
 		o.namespaces = namespaces
+		o.domains = domains
 		o.domainsLock.Unlock()
 
 		for _, namespace := range removals {

@@ -536,22 +536,28 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 	var nodes []kates.Node
 	var cidr *net.IPNet
 
-	dnsServices := []metav1.ObjectMeta{
-		{
-			Name:      "kube-dns",
-			Namespace: "kube-system",
-		},
-		{
-			Name:      "dns-default",
-			Namespace: "openshift-dns",
-		},
-	}
 	var kubeDNS net.IP
-	for _, dnsService := range dnsServices {
-		svc := kates.Service{TypeMeta: metav1.TypeMeta{Kind: "Service"}, ObjectMeta: dnsService}
-		if err := tm.client.Get(c, &svc, &svc); err == nil {
-			kubeDNS = iputil.Parse(svc.Spec.ClusterIP)
-			break
+	if tm.DNS != nil && len(tm.DNS.RemoteIP) > 0 {
+		kubeDNS = tm.DNS.RemoteIP.IP()
+	}
+
+	if kubeDNS == nil {
+		dnsServices := []metav1.ObjectMeta{
+			{
+				Name:      "kube-dns",
+				Namespace: "kube-system",
+			},
+			{
+				Name:      "dns-default",
+				Namespace: "openshift-dns",
+			},
+		}
+		for _, dnsService := range dnsServices {
+			svc := kates.Service{TypeMeta: metav1.TypeMeta{Kind: "Service"}, ObjectMeta: dnsService}
+			if err := tm.client.Get(c, &svc, &svc); err == nil {
+				kubeDNS = iputil.Parse(svc.Spec.ClusterIP)
+				break
+			}
 		}
 	}
 
@@ -618,11 +624,22 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 		}
 	}
 
-	return &daemon.OutboundInfo{
+	info := &daemon.OutboundInfo{
 		Session:       tm.sessionInfo,
 		ManagerPort:   mgrPort,
-		KubeDnsIp:     kubeDNS,
 		ServiceSubnet: serviceSubnet,
 		PodSubnets:    podCIDRs,
-	}, nil
+		Dns: &daemon.DNS{
+			RemoteIp: kubeDNS,
+		},
+	}
+
+	if tm.DNS != nil {
+		info.Dns.ExcludeSuffixes = tm.DNS.ExcludeSuffixes
+		info.Dns.IncludeSuffixes = tm.DNS.IncludeSuffixes
+		if len(tm.DNS.LocalIP) > 0 {
+			info.Dns.LocalIp = tm.DNS.LocalIP.IP()
+		}
+	}
+	return info, nil
 }

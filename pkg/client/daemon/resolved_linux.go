@@ -56,6 +56,9 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				paths[i] = "~" + path
 			}
 		}
+		for _, sfx := range o.dnsConfig.IncludeSuffixes {
+			paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
+		}
 		paths = append(paths, kubernetesZone+".")
 		namespaces[tel2SubDomain] = struct{}{}
 
