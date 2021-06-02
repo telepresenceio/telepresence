@@ -9,7 +9,6 @@ import HubspotForm from 'react-hubspot-form';
 import CodeBlock from '../../../../../src/components/CodeBlock';
 import LinuxIcon from '../../../../../src/assets/icons/linux.inline.svg';
 import AppleIcon from '../../../../../src/assets/icons/apple.inline.svg';
-import WindowsIcon from '../../../../../src/assets/icons/windows.inline.svg';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -65,7 +64,6 @@ export default function SimpleTabs() {
         <Tabs value={value} onChange={handleChange} aria-label="operating system tabs">
           <Tab icon={<AppleIcon />} label="macOS" {...a11yProps(0)} style={{ minWidth: "10%", textTransform: 'none' }} />
           <Tab icon={<LinuxIcon />} label="Linux" {...a11yProps(1)} style={{ minWidth: "10%", textTransform: 'none' }} />
-          <Tab icon={<WindowsIcon />} label="Windows" {...a11yProps(2)} style={{ minWidth: "10%", textTransform: 'none' }} />
         </Tabs>
       </AppBar>
       <TabPanel value={value} index={0}>
@@ -99,22 +97,6 @@ export default function SimpleTabs() {
           'sudo chmod a+x /usr/local/bin/telepresence'
         }
         </CodeBlock>
-      </TabPanel>
-      <TabPanel value={value} index={2}>
-        <div class="docs-hubspot-formwrapper">
-          <p>
-            Telepresence for Windows is coming soon! Sign up here to notified when it is available.
-          </p>
-          <div class="docs-hubspot-form">
-            <HubspotForm
-              portalId='485087'
-              formId='2f542f1b-3da8-4319-8057-96fed78e4c26'
-              onSubmit={() => console.log('Submit!')}
-              onReady={(form) => console.log('Form ready!')}
-              loading={<div>Loading...</div>}
-            />
-          </div>
-        </div>
       </TabPanel>
     </div >
   );
