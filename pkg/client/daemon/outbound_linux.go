@@ -36,30 +36,51 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	return err
 }
 
-func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
-	ips := o.resolveInCluster(c, qType, query)
-	if len(ips) == 0 && len(o.search) > 0 {
-		// Apply search path
-		q := query[:len(query)-1]
-		q = strings.ToLower(q)
-		q = strings.TrimSuffix(q, dotTel2SubDomain)
-		if strings.HasSuffix(q, ".local") {
-			return nil
-		}
+// applySearch returns true if search path should be applied
+func (o *outbound) applySearch(query string) bool {
+	if len(o.search) == 0 {
+		return false
+	}
 
-		q += "."
+	// Don't apply search paths to the kubernetes zone
+	if strings.HasSuffix(query, dotKubernetesZone) {
+		return false
+	}
+
+	// Don't apply search paths if one is already there
+	for _, s := range o.search {
+		if strings.HasSuffix(query, s) {
+			return false
+		}
+	}
+
+	// Don't apply search path to namespaces or "svc".
+	query = query[:len(query)-1]
+	if lastDot := strings.LastIndexByte(query, '.'); lastDot >= 0 {
+		tld := query[lastDot+1:]
+		if _, ok := o.namespaces[tld]; ok || tld == "svc" {
+			return false
+		}
+	}
+	return true
+}
+
+func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
+	query = strings.ToLower(query)
+	query = strings.TrimSuffix(query, dotTel2SubDomain)
+
+	if !doClusterLookup(query) {
+		return nil
+	}
+
+	if o.applySearch(query) {
 		for _, s := range o.search {
-			if strings.HasSuffix(q, s) {
-				// Don't append search domain if it's already there
-				continue
-			}
-			ips = o.resolveInCluster(c, qType, q+s)
-			if len(ips) > 0 {
-				break
+			if ips := o.resolveInCluster(c, qType, query+s); len(ips) > 0 {
+				return ips
 			}
 		}
 	}
-	return ips
+	return o.resolveInCluster(c, qType, query)
 }
 
 func (o *outbound) runOverridingServer(c context.Context) error {
@@ -91,11 +112,9 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 				namespaces[path] = struct{}{}
 			}
 		}
-		namespaces[tel2SubDomain] = struct{}{}
 		o.domainsLock.Lock()
 		o.namespaces = namespaces
 		o.search = search
-		dlog.Debugf(c, "search = %v, namespaces = %v", o.search, o.namespaces)
 		o.domainsLock.Unlock()
 	}
 

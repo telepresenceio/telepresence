@@ -135,18 +135,22 @@ func (o *outbound) routerServerWorker(c context.Context) (err error) {
 // in the search path declared in the Docker config. The "tel2-search" domain fills this purpose and a request for
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
-const dotTel2SubDomain = "." + tel2SubDomain
-const dotKubernetesZone = "." + kubernetesZone
+const dotTel2SubDomain = "." + tel2SubDomain + "."
+const dotKubernetesZone = "." + kubernetesZone + "."
 
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
+func doClusterLookup(query string) bool {
+	// We don't care about queries to the kubernetes zone unless they have at least two additional elements.
+	return !strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4
+}
+
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
-	query = query[:len(query)-1]
 	query = strings.ToLower(query) // strip of trailing dot
 	query = strings.TrimSuffix(query, dotTel2SubDomain)
 
-	if query == "localhost" {
+	if query == "localhost." {
 		// BUG(lukeshu): I have no idea why a lookup
 		// for localhost even makes it to here on my
 		// home WiFi when connecting to a k3sctl
@@ -160,8 +164,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		return localhostIPv4
 	}
 
-	// We don't care about queries to the kubernetes zone unless they have at least two additional elements.
-	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 3 {
+	if !doClusterLookup(query) {
 		return nil
 	}
 
@@ -195,10 +198,11 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		close(firstLookupResult.done)
 	}()
 
-	dlog.Debugf(c, "LookupHost %s", query)
+	queryWithNoTrailingDot := query[:len(query)-1]
+	dlog.Debugf(c, "LookupHost %q", queryWithNoTrailingDot)
 	response, err := o.router.managerClient.LookupHost(c, &manager.LookupHostRequest{
 		Session: o.router.session,
-		Host:    query,
+		Host:    queryWithNoTrailingDot,
 	})
 	if err != nil {
 		dlog.Error(c, client.CheckTimeout(c, err))
