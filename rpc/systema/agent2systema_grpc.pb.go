@@ -4,6 +4,7 @@ package systema
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -20,11 +21,12 @@ const _ = grpc.SupportPackageIsVersion7
 type SystemAAgentClient interface {
 	// ReviewIntercept gives SystemA an opportunity to review an
 	// intercept before the Ambassador Telepresence agent activates it.
-	//
-	// There is no "remove" call; SystemA should call
-	// telepresence.manager.Manager/WatchIntercepts to be informed of
-	// such things.
 	ReviewIntercept(ctx context.Context, in *manager.InterceptInfo, opts ...grpc.CallOption) (*ReviewInterceptResponse, error)
+	// RemoveIntercept informs SystemA that an intercept has been removed.
+	// We have a distinct call for this because not all intercepts have
+	// a preview url, so there isn't always an open connection between System A
+	// and the manager
+	RemoveIntercept(ctx context.Context, in *LeftIntercept, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type systemAAgentClient struct {
@@ -44,17 +46,27 @@ func (c *systemAAgentClient) ReviewIntercept(ctx context.Context, in *manager.In
 	return out, nil
 }
 
+func (c *systemAAgentClient) RemoveIntercept(ctx context.Context, in *LeftIntercept, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemAAgent/RemoveIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SystemAAgentServer is the server API for SystemAAgent service.
 // All implementations must embed UnimplementedSystemAAgentServer
 // for forward compatibility
 type SystemAAgentServer interface {
 	// ReviewIntercept gives SystemA an opportunity to review an
 	// intercept before the Ambassador Telepresence agent activates it.
-	//
-	// There is no "remove" call; SystemA should call
-	// telepresence.manager.Manager/WatchIntercepts to be informed of
-	// such things.
 	ReviewIntercept(context.Context, *manager.InterceptInfo) (*ReviewInterceptResponse, error)
+	// RemoveIntercept informs SystemA that an intercept has been removed.
+	// We have a distinct call for this because not all intercepts have
+	// a preview url, so there isn't always an open connection between System A
+	// and the manager
+	RemoveIntercept(context.Context, *LeftIntercept) (*empty.Empty, error)
 	mustEmbedUnimplementedSystemAAgentServer()
 }
 
@@ -64,6 +76,9 @@ type UnimplementedSystemAAgentServer struct {
 
 func (UnimplementedSystemAAgentServer) ReviewIntercept(context.Context, *manager.InterceptInfo) (*ReviewInterceptResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
+}
+func (UnimplementedSystemAAgentServer) RemoveIntercept(context.Context, *LeftIntercept) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedSystemAAgentServer) mustEmbedUnimplementedSystemAAgentServer() {}
 
@@ -96,6 +111,24 @@ func _SystemAAgent_ReviewIntercept_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemAAgent_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeftIntercept)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemAAgentServer).RemoveIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.systema.SystemAAgent/RemoveIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemAAgentServer).RemoveIntercept(ctx, req.(*LeftIntercept))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _SystemAAgent_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.systema.SystemAAgent",
 	HandlerType: (*SystemAAgentServer)(nil),
@@ -103,6 +136,10 @@ var _SystemAAgent_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReviewIntercept",
 			Handler:    _SystemAAgent_ReviewIntercept_Handler,
+		},
+		{
+			MethodName: "RemoveIntercept",
+			Handler:    _SystemAAgent_RemoveIntercept_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

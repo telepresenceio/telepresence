@@ -2,19 +2,22 @@ syntax = "proto3";
 
 package telepresence.systema;
 
+import "google/protobuf/empty.proto";
 import "rpc/manager/manager.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/systema";
 
-// How Calls from the agent to System A are authenticated is TBD.
+// How Calls from the agent to System A are authenticated is via apikey.
 service SystemAAgent {
   // ReviewIntercept gives SystemA an opportunity to review an
   // intercept before the Ambassador Telepresence agent activates it.
-  //
-  // There is no "remove" call; SystemA should call
-  // telepresence.manager.Manager/WatchIntercepts to be informed of
-  // such things.
   rpc ReviewIntercept(manager.InterceptInfo) returns (ReviewInterceptResponse);
+
+  // RemoveIntercept informs SystemA that an intercept has been removed.
+  // We have a distinct call for this because not all intercepts have
+  // a preview url, so there isn't always an open connection between System A
+  // and the manager
+  rpc RemoveIntercept(LeftIntercept) returns (google.protobuf.Empty);
 }
 
 message ReviewInterceptResponse {
@@ -29,4 +32,8 @@ message ReviewInterceptResponse {
   // Msg is a user-facing explanation of why the intercept is not
   // allowed to become active.
   string msg = 2;
+}
+
+message LeftIntercept {
+  string intercept_id = 1;
 }
