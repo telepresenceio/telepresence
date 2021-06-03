@@ -1,0 +1,111 @@
+{{- if .Values.rbac.create }}
+
+{{- if .Values.rbac.namespaced }}
+---
+# Required so the user is able to create intercepts across namespaces
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1 
+metadata:
+  name:  {{ include "telepresence.rbacName" . }}-namespace
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+rules: 
+- apiGroups:
+  - ""
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+{{- end }}
+
+---
+# Rest of the permissions needed to create intercepts.
+kind: ClusterRole
+metadata:
+  name: {{ include "telepresence.rbacName" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+rules: 
+- apiGroups:
+  - ""
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "watch", "delete"]
+- apiGroups:
+  - ""
+  resources: ["services"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups:
+  - ""
+  resources: ["pods/portforward"]
+  verbs: ["create"]
+- apiGroups:
+  - "apps"
+  resources: ["deployments", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "update"]
+- apiGroups:
+  - "getambassador.io"
+  resources: ["hosts", "mappings"]
+  verbs: ["*"]
+- apiGroups:
+  - ""
+  resources: ["endpoints"]
+  verbs: ["get", "list", "watch"]
+{{- if not .Values.rbac.namespaced }}
+- apiGroups:
+  - ""
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+{{- end }}
+
+{{- if .Values.rbac.namespaced }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "telepresence.rbacName" . }}-namespace
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+subjects:
+{{- toYaml .Values.rbac.subjects | nindent 0}}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "telepresence.rbacName" . }}-namespace
+  apiGroup: rbac.authorization.k8s.io
+
+{{/*
+# Loop through and create RBAC for all other namespaces for users to access
+*/}}
+{{- $namespaces := .Values.rbac.namespaces }}
+{{- $subjects := .Values.rbac.subjects }}
+{{- $chart := . }}
+{{- range $namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "telepresence.rbacName" $chart }}
+  namespace: {{ . }}
+  labels:
+    {{- include "telepresence.labels" $chart | nindent 4 }}
+subjects:
+{{- toYaml $subjects | nindent 0}}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "telepresence.rbacName" $chart }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+
+{{- else }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "telepresence.rbacName" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+subjects:
+{{- toYaml .Values.rbac.subjects | nindent 0}}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  name: {{ include "telepresence.rbacName" . }}
+  kind: ClusterRole
+{{- end }}
+{{- end }}

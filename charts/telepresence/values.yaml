@@ -110,3 +110,49 @@ licenseKey:
     #
     # Default: systema-license
     name: systema-license
+
+################################################################################
+## User Configuration
+################################################################################
+
+# Telepresence requires admin permissions for installation. Creating intercepts 
+# requires lower permissions. Use the following configurations to create roles 
+# so non-admin users can create intercepts.
+#
+# You do not need to create any extra RBAC if your users are cluster admins.
+rbac:
+  
+  # Create the extra RBAC for non-admin users.
+  #
+  # Default: false
+  create: false
+
+  # Configure this release to ONLY create the RBAC. This allows for RBAC and the
+  # installation to be managed separately.
+  #
+  # Default: false
+  only: false
+  
+  # Create namespaced RoleBindings so that users only have access to create 
+  # intercepts in certain namespaces.
+  #
+  # Default: false
+  namespaced: false
+
+  # The namespaces to create the RoleBindings in. No effect if namespaced: false
+  # Ambassador must always be one of the namespaces users have access to.
+  #
+  # Default: ambassador
+  namespaces:
+  - ambassador
+
+  # The user accounts to bind to the Roles created by this chart. This can be a
+  # ServiceAccount, user account, user group, etc. depending on how accounts are
+  # managed in your cluster.
+  # This MUST be set.
+  #
+  # Default: {}
+  subjects: {}
+  # - kind: User
+  #   name: jane
+  #   apiGroup: rbac.authorization.k8s.io

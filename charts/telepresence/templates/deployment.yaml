@@ -1,3 +1,4 @@
+{{- if not .Values.rbac.only }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -74,3 +75,4 @@ spec:
           defaultMode: 420
           secretName: {{ .Values.licenseKey.secret.name }}
       {{- end }}
+{{- end }}

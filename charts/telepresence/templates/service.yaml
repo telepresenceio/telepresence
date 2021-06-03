@@ -1,3 +1,4 @@
+{{- if not .Values.rbac.only }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,3 +15,4 @@ spec:
   {{- end }}
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
+{{- end }}
