@@ -46,6 +46,12 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | licenseKey.value         | The value of the license key.                                                                                           | `""`                                                                                              |
 | licenseKey.secret.create | Define whether you want the license key `Secret` to be managed by the release or not.                                   | `true`                                                                                            |
 | licenseKey.secret.name   | The name of the `Secret` that Traffic Manager will look for.                                                            | `systema-license`                                                                                 |
+| rbac.create              | Create RBAC resources for non-admin users with this release.                                                            | `false`                                                                                           |
+| rbac.only                | Only create the RBAC resources and omit the traffic-manger.                                                             | `false`                                                                                           |
+| rbac.subjects            | The user accounts to tie the created roles to.                                                                          | `{}`                                                                                              |
+| rbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `["ambassador"]`                                                                                  |
+| rbac.namespaces          | The namespaces to give users access to.                                                                                 | `false`                                                                                           |
+
 
 ## License Key 
 
@@ -75,3 +81,15 @@ mounted in the Traffic Manager, regardless of it it is created by the chart
    data:
      license: {{.licenseKey.value}}
    ```
+
+## RBAC
+
+Telepresence requires a cluster for installation but restricted RBAC roles can 
+be used to give users access to create intercepts if they are not cluster
+admins.
+
+The chart gives you the ability to create these RBAC roles for your users and
+give access to the entire cluster or restrict to certain namespaces.
+
+You can also create a separate release for managing RBAC by setting 
+`Values.rbac.only: true`.

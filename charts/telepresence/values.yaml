@@ -132,7 +132,18 @@ rbac:
   #
   # Default: false
   only: false
-  
+
+  # The user accounts to bind to the Roles created by this chart. This can be a
+  # ServiceAccount, user account, user group, etc. depending on how accounts are
+  # managed in your cluster.
+  # This MUST be set.
+  #
+  # Default: {}
+  subjects: {}
+    # - kind: User
+    #   name: jane
+    #   apiGroup: rbac.authorization.k8s.io
+
   # Create namespaced RoleBindings so that users only have access to create 
   # intercepts in certain namespaces.
   #
@@ -145,14 +156,3 @@ rbac:
   # Default: ambassador
   namespaces:
   - ambassador
-
-  # The user accounts to bind to the Roles created by this chart. This can be a
-  # ServiceAccount, user account, user group, etc. depending on how accounts are
-  # managed in your cluster.
-  # This MUST be set.
-  #
-  # Default: {}
-  subjects: {}
-  # - kind: User
-  #   name: jane
-  #   apiGroup: rbac.authorization.k8s.io
