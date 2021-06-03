@@ -20,14 +20,14 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SystemACRUDClient interface {
 	// CreateDomain requires that the manager authenticate using an
-	// end-user's access token, to perform the action on behalf of that
+	// end-user's access API key, to perform the action on behalf of that
 	// user.
 	CreateDomain(ctx context.Context, in *CreateDomainRequest, opts ...grpc.CallOption) (*CreateDomainResponse, error)
 	// RemoveDomain removes a domain that was previously created by the
 	// same manager using CreateDomain.  The manager can take this
 	// action itself, not on behalf of the user that created the domain,
 	// so this requires that the manager authenticate itself, but does
-	// not require an end-user's token.
+	// not require an end-user's API key.
 	RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// PreferredAgent returns the active account's perferred agent
 	// sidecar, for the given Telepresence version.
@@ -74,14 +74,14 @@ func (c *systemACRUDClient) PreferredAgent(ctx context.Context, in *common.Versi
 // for forward compatibility
 type SystemACRUDServer interface {
 	// CreateDomain requires that the manager authenticate using an
-	// end-user's access token, to perform the action on behalf of that
+	// end-user's access API key, to perform the action on behalf of that
 	// user.
 	CreateDomain(context.Context, *CreateDomainRequest) (*CreateDomainResponse, error)
 	// RemoveDomain removes a domain that was previously created by the
 	// same manager using CreateDomain.  The manager can take this
 	// action itself, not on behalf of the user that created the domain,
 	// so this requires that the manager authenticate itself, but does
-	// not require an end-user's token.
+	// not require an end-user's API key.
 	RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error)
 	// PreferredAgent returns the active account's perferred agent
 	// sidecar, for the given Telepresence version.

@@ -26,7 +26,7 @@ type SystemAAgentClient interface {
 	// We have a distinct call for this because not all intercepts have
 	// a preview url, so there isn't always an open connection between System A
 	// and the manager
-	RemoveIntercept(ctx context.Context, in *LeftIntercept, opts ...grpc.CallOption) (*empty.Empty, error)
+	RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type systemAAgentClient struct {
@@ -46,7 +46,7 @@ func (c *systemAAgentClient) ReviewIntercept(ctx context.Context, in *manager.In
 	return out, nil
 }
 
-func (c *systemAAgentClient) RemoveIntercept(ctx context.Context, in *LeftIntercept, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *systemAAgentClient) RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemAAgent/RemoveIntercept", in, out, opts...)
 	if err != nil {
@@ -66,7 +66,7 @@ type SystemAAgentServer interface {
 	// We have a distinct call for this because not all intercepts have
 	// a preview url, so there isn't always an open connection between System A
 	// and the manager
-	RemoveIntercept(context.Context, *LeftIntercept) (*empty.Empty, error)
+	RemoveIntercept(context.Context, *InterceptRemoval) (*empty.Empty, error)
 	mustEmbedUnimplementedSystemAAgentServer()
 }
 
@@ -77,7 +77,7 @@ type UnimplementedSystemAAgentServer struct {
 func (UnimplementedSystemAAgentServer) ReviewIntercept(context.Context, *manager.InterceptInfo) (*ReviewInterceptResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
-func (UnimplementedSystemAAgentServer) RemoveIntercept(context.Context, *LeftIntercept) (*empty.Empty, error) {
+func (UnimplementedSystemAAgentServer) RemoveIntercept(context.Context, *InterceptRemoval) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedSystemAAgentServer) mustEmbedUnimplementedSystemAAgentServer() {}
@@ -112,7 +112,7 @@ func _SystemAAgent_ReviewIntercept_Handler(srv interface{}, ctx context.Context,
 }
 
 func _SystemAAgent_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LeftIntercept)
+	in := new(InterceptRemoval)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func _SystemAAgent_RemoveIntercept_Handler(srv interface{}, ctx context.Context,
 		FullMethod: "/telepresence.systema.SystemAAgent/RemoveIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SystemAAgentServer).RemoveIntercept(ctx, req.(*LeftIntercept))
+		return srv.(SystemAAgentServer).RemoveIntercept(ctx, req.(*InterceptRemoval))
 	}
 	return interceptor(ctx, in, info, handler)
 }

@@ -7,7 +7,9 @@ import "rpc/manager/manager.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/systema";
 
-// How Calls from the agent to System A are authenticated is via apikey.
+// Calls from the agent to Ambassador Cloud (System A) are authenticated via API keys per
+// https://www.notion.so/datawire/Telepresence-System-A-API-Key-Integration-c13c4676e9944abfb02713b8517051e3
+// (see also: pkg/client/connector/auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
 service SystemAAgent {
   // ReviewIntercept gives SystemA an opportunity to review an
   // intercept before the Ambassador Telepresence agent activates it.
@@ -17,7 +19,7 @@ service SystemAAgent {
   // We have a distinct call for this because not all intercepts have
   // a preview url, so there isn't always an open connection between System A
   // and the manager
-  rpc RemoveIntercept(LeftIntercept) returns (google.protobuf.Empty);
+  rpc RemoveIntercept(InterceptRemoval) returns (google.protobuf.Empty);
 }
 
 message ReviewInterceptResponse {
@@ -34,6 +36,6 @@ message ReviewInterceptResponse {
   string msg = 2;
 }
 
-message LeftIntercept {
+message InterceptRemoval {
   string intercept_id = 1;
 }
