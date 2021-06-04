@@ -32,6 +32,10 @@ service SystemACRUD {
   // not require an end-user's API key.
   rpc RemoveDomain(RemoveDomainRequest) returns (google.protobuf.Empty);
 
+  // RemoveIntercept is used to inform AmbassadorCloud (SystemA) that an
+  // intercept has been removed.
+  rpc RemoveIntercept(InterceptRemoval) returns (google.protobuf.Empty);
+
   // PreferredAgent returns the active account's perferred agent
   // sidecar, for the given Telepresence version.
   rpc PreferredAgent(common.VersionInfo) returns (PreferredAgentResponse);
@@ -61,6 +65,10 @@ message CreateDomainResponse {
 
 message RemoveDomainRequest {
   string domain = 1;
+}
+
+message InterceptRemoval {
+  string intercept_id = 1;
 }
 
 message PreferredAgentResponse {
