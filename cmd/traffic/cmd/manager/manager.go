@@ -76,21 +76,38 @@ func Main(ctx context.Context, args ...string) error {
 		}
 	})
 
-	g.Go("domain-gc", func(ctx context.Context) error {
+	// This goroutine is responsible for informing System A of intercepts (and
+	// relevant metadata like domains) that have been garbage collected. This
+	// ensures System A doesn't list preview URLs + intercepts that no longer
+	// exist.
+	g.Go("systema-gc", func(ctx context.Context) error {
 		for snapshot := range mgr.state.WatchIntercepts(ctx, nil) {
 			for _, update := range snapshot.Updates {
-				if update.Delete && update.Value.PreviewDomain != "" {
-					dlog.Debugf(ctx, "systema: removing domain: %q", update.Value.PreviewDomain)
+				if update.Delete {
 					if sa, err := mgr.systema.Get(); err != nil {
 						dlog.Errorln(ctx, "systema: acquire connection:", err)
 					} else {
-						_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
-							Domain: update.Value.PreviewDomain,
+						// First we remove the PreviewDomain if it exists
+						if update.Value.PreviewDomain != "" {
+							dlog.Debugf(ctx, "systema: removing domain: %q", update.Value.PreviewDomain)
+							_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+								Domain: update.Value.PreviewDomain,
+							})
+							if err != nil {
+								dlog.Errorln(ctx, "systema: remove domain:", err)
+							}
+						}
+
+						// Now we inform SystemA of the intercepts removal
+						dlog.Debugf(ctx, "systema: remove intercept: %q", update.Value.Id)
+						_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
+							InterceptId: update.Value.Id,
 						})
 						if err != nil {
-							dlog.Errorln(ctx, "systema: remove domain:", err)
+							dlog.Errorln(ctx, "systema: remove intercept:", err)
 						}
-						// Release the connection we got to delete the domain
+
+						// Release the connection we got to delete the domain + intercept
 						if err := mgr.systema.Done(); err != nil {
 							dlog.Errorln(ctx, "systema: release management connection:", err)
 						}
