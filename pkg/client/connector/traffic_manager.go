@@ -628,7 +628,6 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 		Session:       tm.sessionInfo,
 		ManagerPort:   mgrPort,
 		ServiceSubnet: serviceSubnet,
-		PodSubnets:    podCIDRs,
 		Dns: &daemon.DNSConfig{
 			RemoteIp: kubeDNS,
 		},
@@ -642,5 +641,9 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 		}
 		info.Dns.LookupTimeout = int64(tm.DNS.LookupTimeout.Duration)
 	}
+	for _, subnet := range tm.AlsoProxy {
+		podCIDRs = append(podCIDRs, iputil.IPNetToRPC((*net.IPNet)(subnet)))
+	}
+	info.PodSubnets = podCIDRs
 	return info, nil
 }

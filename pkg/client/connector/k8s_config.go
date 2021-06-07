@@ -41,7 +41,8 @@ type dnsConfig struct {
 
 // kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
 type kubeconfigExtension struct {
-	DNS *dnsConfig `json:"dns,omitempty"`
+	DNS       *dnsConfig       `json:"dns,omitempty"`
+	AlsoProxy []*iputil.Subnet `json:"also-proxy,omitempty"`
 }
 
 type k8sConfig struct {
