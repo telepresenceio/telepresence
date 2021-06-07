@@ -67,3 +67,10 @@ Selector labels
 app: traffic-manager
 telepresence: manager
 {{- end }}
+
+{{/*
+RBAC name suffix
+*/}}
+{{- define "telepresence.rbacName" -}}
+{{ default (include "telepresence.name" .) .Values.rbac.nameOverride }}
+{{- end -}}
