@@ -120,6 +120,8 @@ licenseKey:
 # so non-admin users can create intercepts.
 #
 # You do not need to create any extra RBAC if your users are cluster admins.
+# For more on how telepresence uses rbac, check out:
+# https://www.getambassador.io/docs/telepresence/latest/reference/rbac/
 rbac:
   
   # Create the extra RBAC for non-admin users.
