@@ -31,7 +31,7 @@ bucket_dir=
 if [[ -n "${BUCKET_DIR}" ]]; then
     bucket_dir="${BUCKET_DIR}"
 else
-    bucket_dir="ambassador-dev/testcharts"
+    bucket_dir="charts-dev"
 fi
 
 if [ -z "$AWS_BUCKET"] ; then

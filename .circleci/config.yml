@@ -187,7 +187,7 @@ jobs:
     # we have a need for rc charts), but explicitly calling them out here
     # in case we change our mind
     - run: |
-        [[ $CIRCLE_TAG == "*rc*" ]] || BUCKET_DIR="ambassador-dev/testcharts" packaging/push_chart.sh
+        [[ $CIRCLE_TAG == "*rc*" ]] || BUCKET_DIR="charts" packaging/push_chart.sh
 
 #  "release-finalize":
 #    executor: vm-linux
