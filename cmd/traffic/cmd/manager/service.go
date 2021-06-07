@@ -405,13 +405,34 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	sessionID := riReq.GetSession().GetSessionId()
 	name := riReq.Name
 
+	interceptID := fmt.Sprintf("%s:%s", sessionID, name)
 	dlog.Debugf(ctx, "RemoveIntercept called: %s", name)
 
 	if m.state.GetClient(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
-
-	if !m.state.RemoveIntercept(sessionID + ":" + name) {
+	interceptAPIkey := m.state.GetInterceptAPIKey(interceptID)
+	if interceptAPIkey != "" {
+		var sa systema.SystemACRUDClient
+		var err error
+		if sa == nil {
+			sa, err = m.systema.Get()
+		}
+		if err != nil {
+			err = errors.Wrap(err, "systema: acquire connection")
+			dlog.Error(ctx, err)
+		} else {
+			ir := &systema.InterceptRemoval{InterceptId: interceptID}
+			dlog.Debugf(ctx, "Removing Intercept: %s", interceptID)
+			_, err = sa.RemoveIntercept(ctx, ir)
+			if err != nil {
+				dlog.Errorf(ctx, "Error removing intercept: %s", err)
+			}
+		}
+	} else {
+		dlog.Debugf(ctx, "Not removing intercept because no apikey associated with it")
+	}
+	if !m.state.RemoveIntercept(interceptID) {
 		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
 	}
 

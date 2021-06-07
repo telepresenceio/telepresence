@@ -97,22 +97,24 @@ type State struct {
 	//     `intercept.ClientSession.SessionId`)
 	//  6. `intercepts` needs to be pruned in-sync with `agents` (based on
 	//     `agent.Name == intercept.Spec.Agent`)
-	port         uint16
-	intercepts   watchable.InterceptMap
-	agents       watchable.AgentMap                   // info for agent sessions
-	clients      watchable.ClientMap                  // info for client sessions
-	sessions     map[string]SessionState              // info for all sessions
-	listeners    map[string]connpool.Handler          // listeners for all intercepts
-	agentsByName map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	port             uint16
+	intercepts       watchable.InterceptMap
+	agents           watchable.AgentMap                   // info for agent sessions
+	clients          watchable.ClientMap                  // info for client sessions
+	sessions         map[string]SessionState              // info for all sessions
+	interceptAPIkeys map[string]string                    // map of APIKeys to intercepts
+	listeners        map[string]connpool.Handler          // listeners for all intercepts
+	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 }
 
 func NewState(ctx context.Context) *State {
 	return &State{
-		ctx:          ctx,
-		port:         loPort - 1,
-		sessions:     make(map[string]SessionState),
-		agentsByName: make(map[string]map[string]*rpc.AgentInfo),
-		listeners:    make(map[string]connpool.Handler),
+		ctx:              ctx,
+		port:             loPort - 1,
+		sessions:         make(map[string]SessionState),
+		interceptAPIkeys: make(map[string]string),
+		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
+		listeners:        make(map[string]connpool.Handler),
 	}
 }
 
@@ -441,12 +443,14 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
+	s.interceptAPIkeys[interceptID] = apiKey
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		ManagerPort: 0,
 		Disposition: rpc.InterceptDispositionType_WAITING,
 		Message:     "Waiting for Agent approval",
-		Id:          sessionID + ":" + spec.Name,
+		Id:          interceptID,
 		ClientSession: &rpc.SessionInfo{
 			SessionId: sessionID,
 		},
@@ -540,6 +544,9 @@ func (s *State) RemoveIntercept(interceptID string) bool {
 		if ok {
 			delete(s.listeners, interceptID)
 		}
+
+		// Remove the interceptID from our tracking when it is removed
+		delete(s.interceptAPIkeys, interceptID)
 		s.mu.Unlock()
 		if ok {
 			l.Close(s.ctx)
@@ -551,6 +558,13 @@ func (s *State) RemoveIntercept(interceptID string) bool {
 func (s *State) GetIntercept(interceptID string) *rpc.InterceptInfo {
 	intercept, _ := s.intercepts.Load(interceptID)
 	return intercept
+}
+
+func (s *State) GetInterceptAPIKey(interceptID string) string {
+	if apiKey, ok := s.interceptAPIkeys[interceptID]; ok {
+		return apiKey
+	}
+	return ""
 }
 
 func (s *State) WatchIntercepts(
