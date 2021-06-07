@@ -17,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -83,26 +82,23 @@ func Main(ctx context.Context, args ...string) error {
 	g.Go("systema-gc", func(ctx context.Context) error {
 		for snapshot := range mgr.state.WatchIntercepts(ctx, nil) {
 			for _, update := range snapshot.Updates {
-				if update.Delete {
+				// Since all intercepts with a domain require a login, we can use
+				// presence of the ApiKey in the interceptInfo to determine all
+				// intercepts that we need to inform System A of their deletion
+				if update.Delete && update.Value.ApiKey != "" {
 					if sa, err := mgr.systema.Get(); err != nil {
 						dlog.Errorln(ctx, "systema: acquire connection:", err)
 					} else {
 						// First we remove the PreviewDomain if it exists
 						if update.Value.PreviewDomain != "" {
-							dlog.Debugf(ctx, "systema: removing domain: %q", update.Value.PreviewDomain)
-							_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
-								Domain: update.Value.PreviewDomain,
-							})
+							err = mgr.reapDomain(ctx, sa, update)
 							if err != nil {
 								dlog.Errorln(ctx, "systema: remove domain:", err)
 							}
 						}
-
 						// Now we inform SystemA of the intercepts removal
 						dlog.Debugf(ctx, "systema: remove intercept: %q", update.Value.Id)
-						_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
-							InterceptId: update.Value.Id,
-						})
+						err = mgr.reapIntercept(ctx, sa, update)
 						if err != nil {
 							dlog.Errorln(ctx, "systema: remove intercept:", err)
 						}
