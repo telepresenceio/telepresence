@@ -810,7 +810,7 @@ func (ts *telepresenceSuite) publishManager() error {
 		"TELEPRESENCE_VERSION=" + ts.testVersion,
 		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(ctx),
 	}
-	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL=", "GOROOT="}
 	for _, env := range os.Environ() {
 		for _, incl := range includeEnv {
 			if strings.HasPrefix(env, incl) {
