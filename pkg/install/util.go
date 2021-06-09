@@ -1,4 +1,4 @@
-package connector
+package install
 
 import (
 	"fmt"
@@ -20,13 +20,13 @@ func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) 
 		statefulSet := obj.(*kates.StatefulSet)
 		tplSpec = &statefulSet.Spec.Template
 	default:
-		return nil, objErrorf(obj, "unsupported workload kind %q", kind)
+		return nil, ObjErrorf(obj, "unsupported workload kind %q", kind)
 	}
 
 	return tplSpec, nil
 }
 
-func objErrorf(obj kates.Object, format string, args ...interface{}) error {
+func ObjErrorf(obj kates.Object, format string, args ...interface{}) error {
 	return fmt.Errorf("%s name=%q namespace=%q: %w",
 		obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), obj.GetNamespace(),
 		fmt.Errorf(format, args...))

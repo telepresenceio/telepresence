@@ -1,4 +1,4 @@
-package connector
+package install
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -6,7 +6,7 @@ import (
 
 func AgentVolume() corev1.Volume {
 	return corev1.Volume{
-		Name: agentAnnotationVolumeName,
+		Name: AgentAnnotationVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			DownwardAPI: &corev1.DownwardAPIVolumeSource{
 				Items: []corev1.DownwardAPIVolumeFile{

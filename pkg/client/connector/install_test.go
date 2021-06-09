@@ -22,6 +22,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -130,7 +131,7 @@ func TestE2E(t *testing.T) {
 			version.Version = "v0.0.0-bogus"
 			defer func() { version.Version = testVersion }()
 
-			if _, err := ti.findDeployment(ctx, managerNamespace, managerAppName); err == nil {
+			if _, err := ti.findDeployment(ctx, managerNamespace, install.ManagerAppName); err == nil {
 				t.Fatal("expected find to not find deployment")
 			}
 		})
@@ -189,7 +190,7 @@ func TestE2E(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := 0; i < 50; i++ {
-				if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
+				if _, err := ti.findDeployment(c, managerNamespace, install.ManagerAppName); err == nil {
 					return
 				}
 				time.Sleep(100 * time.Millisecond)
@@ -437,7 +438,7 @@ func sanitizeWorkload(obj kates.Object) {
 	obj.SetResourceVersion("")
 	obj.SetGeneration(int64(0))
 	obj.SetCreationTimestamp(metav1.Time{})
-	podTemplate, _ := GetPodTemplateFromObject(obj)
+	podTemplate, _ := install.GetPodTemplateFromObject(obj)
 	for i, c := range podTemplate.Spec.Containers {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""

@@ -22,6 +22,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 type installer struct {
@@ -34,7 +35,7 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 
 const managerLicenseName = "systema-license"
 const telName = "manager"
-const annTelepresenceActions = domainPrefix + "actions"
+const annTelepresenceActions = install.DomainPrefix + "actions"
 
 // this is modified in tests
 var managerNamespace = func() string {
@@ -45,7 +46,7 @@ var managerNamespace = func() string {
 }()
 
 var labelMap = map[string]string{
-	"app":          managerAppName,
+	"app":          install.ManagerAppName,
 	"telepresence": telName,
 }
 
@@ -60,7 +61,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 		},
 		ObjectMeta: kates.ObjectMeta{
 			Namespace: managerNamespace,
-			Name:      managerAppName},
+			Name:      install.ManagerAppName},
 		Spec: kates.ServiceSpec{
 			Type:      "ClusterIP",
 			ClusterIP: "None",
@@ -68,7 +69,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 			Ports: []kates.ServicePort{
 				{
 					Name: "api",
-					Port: ManagerPortHTTP,
+					Port: install.ManagerPortHTTP,
 					TargetPort: kates.IntOrString{
 						Type:   intstr.String,
 						StrVal: "api",
@@ -219,7 +220,7 @@ func (ki *installer) removeManagerService(c context.Context) error {
 		},
 		ObjectMeta: kates.ObjectMeta{
 			Namespace: managerNamespace,
-			Name:      managerAppName}}
+			Name:      install.ManagerAppName}}
 	dlog.Infof(c, "Deleting traffic-manager service from namespace %s", managerNamespace)
 	return ki.client.Delete(c, svc, svc)
 }
@@ -231,7 +232,7 @@ func (ki *installer) removeManagerDeployment(c context.Context) error {
 		},
 		ObjectMeta: kates.ObjectMeta{
 			Namespace: managerNamespace,
-			Name:      managerAppName,
+			Name:      install.ManagerAppName,
 		}}
 	dlog.Infof(c, "Deleting traffic-manager deployment from namespace %s", managerNamespace)
 	return ki.client.Delete(c, dep, dep)
@@ -262,11 +263,11 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 	}
 	namespace := obj.GetNamespace()
 	if !annotationsFound {
-		return nil, objErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
+		return nil, install.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 	}
 	svcName := actions.ReferencedService
 	if svcName == "" {
-		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
+		return nil, install.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
 	svc, err := ki.findSvc(c, namespace, svcName)
@@ -274,7 +275,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 		return nil, err
 	}
 	if svc == nil {
-		return nil, objErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
+		return nil, install.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
 	}
 	return svc, nil
 }
@@ -294,7 +295,7 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber
 		// then the service to be used with the intercept has changed
 		curSvc := actions.ReferencedService
 		if svcName != "" && curSvc != svcName {
-			return objErrorf(obj, "associated Service changed from %q to %q", curSvc, svcName)
+			return install.ObjErrorf(obj, "associated Service changed from %q to %q", curSvc, svcName)
 		}
 
 		// If the portNameOrNumber passed in doesn't match the referenced service
@@ -304,7 +305,7 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber
 			curSvcPortName := actions.ReferencedServicePortName
 			curSvcPort := actions.ReferencedServicePort
 			if curSvcPortName != portNameOrNumber && curSvcPort != portNameOrNumber {
-				return objErrorf(obj, "port changed from %q to %q", curSvcPort, portNameOrNumber)
+				return install.ObjErrorf(obj, "port changed from %q to %q", curSvcPort, portNameOrNumber)
 			}
 		}
 	}
@@ -343,14 +344,14 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 		return "", "", fmt.Errorf("unsupported workload kind %q, cannot ensure agent", kind)
 	}
 
-	podTemplate, err := GetPodTemplateFromObject(obj)
+	podTemplate, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return "", "", err
 	}
 	var agentContainer *kates.Container
 	for i := range podTemplate.Spec.Containers {
 		container := &podTemplate.Spec.Containers[i]
-		if container.Name == agentContainerName {
+		if container.Name == install.AgentContainerName {
 			agentContainer = container
 			break
 		}
@@ -370,7 +371,7 @@ already exist for this service`, kind, obj.GetName())
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
-		matchingSvcs, err := ki.findMatchingServices(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvcs, err := install.FindMatchingServices(c, ki.client, portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}
@@ -408,7 +409,7 @@ already exist for this service`, kind, obj.GetName())
 			return "", "", err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return "", "", objErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
+			return "", "", install.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 		}
 
 		dlog.Debugf(c, "Updating agent for %s %s.%s", kind, name, namespace)
@@ -608,20 +609,20 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 		return false, nil
 	}
 	if err := data.UnmarshalAnnotation(ajs); err != nil {
-		return false, objErrorf(obj, "annotations[%q]: unable to parse annotation: %q: %w",
+		return false, install.ObjErrorf(obj, "annotations[%q]: unable to parse annotation: %q: %w",
 			annTelepresenceActions, ajs, err)
 	}
 
 	annV, err := data.TelVersion()
 	if err != nil {
-		return false, objErrorf(obj, "annotations[%q]: unable to parse semantic version %q: %w",
+		return false, install.ObjErrorf(obj, "annotations[%q]: unable to parse semantic version %q: %w",
 			annTelepresenceActions, ajs, err)
 	}
 	ourV := client.Semver()
 
 	// Compare major and minor versions. 100% backward compatibility is assumed and greater patch versions are allowed
 	if ourV.Major < annV.Major || ourV.Major == annV.Major && ourV.Minor < annV.Minor {
-		return false, objErrorf(obj, "annotations[%q]: the version in the annotation (%v) is more recent than this binary's version (%v)",
+		return false, install.ObjErrorf(obj, "annotations[%q]: the version in the annotation (%v) is more recent than this binary's version (%v)",
 			annTelepresenceActions,
 			annV, ourV)
 	}
@@ -652,7 +653,7 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 		return "", err
 	}
 	if !ok {
-		return "", objErrorf(obj, "agent is not installed")
+		return "", install.ObjErrorf(obj, "agent is not installed")
 	}
 
 	if err = actions.Undo(obj); err != nil {
@@ -704,11 +705,11 @@ func addAgentToWorkload(
 	*kates.Service,
 	error,
 ) {
-	_, err := GetPodTemplateFromObject(object)
+	_, err := install.GetPodTemplateFromObject(object)
 	if err != nil {
 		return nil, nil, err
 	}
-	servicePort, container, containerPortIndex, err := findMatchingPort(object, portNameOrNumber, matchingService)
+	servicePort, container, containerPortIndex, err := install.FindMatchingPort(object, portNameOrNumber, matchingService)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -769,7 +770,7 @@ func addAgentToWorkload(
 		}
 	}
 	if containerPort.Number == 0 {
-		return nil, nil, objErrorf(object, "unable to add: the container port cannot be determined")
+		return nil, nil, install.ObjErrorf(object, "unable to add: the container port cannot be determined")
 	}
 	if containerPort.Name == "" {
 		containerPort.Name = fmt.Sprintf("tx-%d", containerPort.Number)
@@ -909,7 +910,7 @@ func (ki *installer) managerDeployment(c context.Context, env client.Env, addLic
 		},
 		ObjectMeta: kates.ObjectMeta{
 			Namespace: managerNamespace,
-			Name:      managerAppName,
+			Name:      install.ManagerAppName,
 			Labels:    labelMap,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -924,13 +925,13 @@ func (ki *installer) managerDeployment(c context.Context, env client.Env, addLic
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  managerAppName,
+							Name:  install.ManagerAppName,
 							Image: managerImageName(env),
 							Env:   containerEnv,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "api",
-									ContainerPort: ManagerPortHTTP,
+									ContainerPort: install.ManagerPortHTTP,
 								},
 							},
 							VolumeMounts: licenseVolumeMount,
@@ -946,7 +947,7 @@ func (ki *installer) managerDeployment(c context.Context, env client.Env, addLic
 func (ki *installer) findManagerSvc(c context.Context) (*kates.Service, error) {
 	svc := &kates.Service{
 		TypeMeta:   kates.TypeMeta{Kind: "Service"},
-		ObjectMeta: kates.ObjectMeta{Name: managerAppName, Namespace: managerNamespace},
+		ObjectMeta: kates.ObjectMeta{Name: install.ManagerAppName, Namespace: managerNamespace},
 	}
 	if err := ki.client.Get(c, svc, svc); err != nil {
 		return nil, err
@@ -975,12 +976,12 @@ func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 		dlog.Info(c, "License found and adding to traffic-manager")
 		addLicense = true
 	}
-	dep, err := ki.findDeployment(c, managerNamespace, managerAppName)
+	dep, err := ki.findDeployment(c, managerNamespace, install.ManagerAppName)
 	if err != nil {
 		if errors2.IsNotFound(err) {
 			err = ki.createManagerDeployment(c, env, addLicense)
 			if err == nil {
-				err = ki.waitForApply(c, managerNamespace, managerAppName, nil)
+				err = ki.waitForApply(c, managerNamespace, install.ManagerAppName, nil)
 			}
 		}
 		return err
@@ -997,11 +998,11 @@ func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 		}
 	}
 	if upToDate {
-		dlog.Infof(c, "%s.%s is up-to-date. Image: %s", managerAppName, managerNamespace, managerImageName(env))
+		dlog.Infof(c, "%s.%s is up-to-date. Image: %s", install.ManagerAppName, managerNamespace, managerImageName(env))
 	} else {
 		_, err = ki.updateDeployment(c, env, dep)
 		if err == nil {
-			err = ki.waitForApply(c, managerNamespace, managerAppName, dep)
+			err = ki.waitForApply(c, managerNamespace, install.ManagerAppName, dep)
 		}
 	}
 	return err

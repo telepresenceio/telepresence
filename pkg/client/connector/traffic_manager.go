@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -110,7 +111,7 @@ func (tm *trafficManager) run(c context.Context) error {
 		"--namespace",
 		managerNamespace,
 		"svc/traffic-manager",
-		fmt.Sprintf(":%d", ManagerPortHTTP)}
+		fmt.Sprintf(":%d", install.ManagerPortHTTP)}
 
 	// Scan port-forward output and grab the dynamically allocated ports
 	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
@@ -118,7 +119,7 @@ func (tm *trafficManager) run(c context.Context) error {
 		for sc.Scan() {
 			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
 				toPort, _ := strconv.Atoi(rxr[2])
-				if toPort == ManagerPortHTTP {
+				if toPort == install.ManagerPortHTTP {
 					apiPort := rxr[1]
 					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
 					return apiPort
@@ -318,7 +319,7 @@ func (tm *trafficManager) getInfosForWorkload(
 					continue
 				}
 
-				matchingSvcs, err := tm.findMatchingServices(ctx, "", "", namespace, labels)
+				matchingSvcs, err := install.FindMatchingServices(ctx, tm.client, "", "", namespace, labels)
 				if err != nil {
 					continue
 				}
