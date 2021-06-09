@@ -1,4 +1,4 @@
-# DNS Resolution
+# DNS resolution
 
 The Telepresence DNS resolver is dynamically configured to resolve names using the namespaces of currently active intercepts. Processes running locally on the desktop will have network access to all services in the such namespaces by service-name only.
 

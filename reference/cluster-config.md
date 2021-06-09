@@ -70,39 +70,44 @@ Telepresence understands `type: kubernetes.io/tls` Secrets and
 `type: istio.io/key-and-cert` Secrets; as well as `type: Opaque`
 Secrets that it detects to be formatted as one of those types.
 
-## Air Gapped Cluster
+## Air gapped cluster
 
 If your cluster is air gapped (it does not have access to the
-internet and therefore cannot connect to Ambassador Cloud), some manual
-license configuration is required to use selective intercepts.
+internet and therefore cannot connect to Ambassador Cloud), some additional
+configuration is required to acquire a license use selective intercepts.
 
-### Create a License
+### Create a license
 
-First, go to [Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
-select *Licenses* for the team you want to create the license for. You
-can generate a new license if one doesn't already exist by clicking *Generate New License*.
+1. Go to [the teams setting page in Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
+select *Licenses* for the team you want to create the license for. 
 
-You will be prompted for the Cluster ID of your cluster.  To find it, ensure your
-kubeconfig context is using the cluster you want to create a license for, then
-run this command:
+2. Generate a new license (if one doesn't already exist) by clicking *Generate New License*.
+
+3. You will be prompted for your Cluster ID. Ensure your
+kubeconfig context is using the cluster you want to create a license for then
+run this command to generate the Cluster ID:
 
   ```
   $ telepresence current-cluster-id
+    
     Cluster ID: <some UID>
   ```
 
-### Add License to Cluster
+4. Click *Generate API Key* to finish generating the license.
 
-On the licenses page, download the license file associated with your cluster.
-Then, use the following command to generate the license secret:
+### Add license to cluster
+
+1. On the licenses page, download the license file associated with your cluster.
+
+2. Use this command to generate a Kubernetes Secret config using the license file:
 
   ```
-  $ telepresence license -f <downloadedLicenseFile>
-
+  $ telepresence license -f <downloaded-license-file>
+    
     apiVersion: v1
     data:
-      hostDomain: <base64 encoded value>
-      license: <other base64 encoded value>
+      hostDomain: <long_string>
+      license: <longer_string>
     kind: Secret
     metadata:
       creationTimestamp: null
@@ -110,6 +115,6 @@ Then, use the following command to generate the license secret:
       namespace: ambassador
   ```
 
-Save the output as a YAML file and apply the Secret to your 
+3. Save the output as a YAML file and apply it to your 
 cluster with `kubectl`.  Once applied, you will be able to use selective intercepts with the
 `--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).

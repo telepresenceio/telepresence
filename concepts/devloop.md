@@ -6,7 +6,7 @@ The developer experience is the workflow a developer uses to develop, test, depl
 
 Typically this experience has consisted of both an inner dev loop and an outer dev loop. The inner dev loop is where the individual developer codes and tests, and once the developer pushes their code to version control, the outer dev loop is triggered. 
 
-The outer dev loop is _everything else _that happens leading up to release. This includes code merge, automated code review, test execution, deployment, [controlled (canary) release](../../../../argo/latest/concepts/canary/), and observation of results. The modern outer dev loop might include, for example, an automated CI/CD pipeline as part of a [GitOps workflow](../../../../argo/latest/concepts/gitops/#what-is-gitops) and a progressive delivery strategy relying on automated canaries, i.e. to make the outer loop as fast, efficient and automated as possible.
+The outer dev loop is _everything else_ that happens leading up to release. This includes code merge, automated code review, test execution, deployment, [controlled (canary) release](../../../../argo/latest/concepts/canary/), and observation of results. The modern outer dev loop might include, for example, an automated CI/CD pipeline as part of a [GitOps workflow](../../../../argo/latest/concepts/gitops/#what-is-gitops) and a progressive delivery strategy relying on automated canaries, i.e. to make the outer loop as fast, efficient and automated as possible.
 
 Cloud-native technologies have fundamentally altered the developer experience in two ways: one, developers now have to take extra steps in the inner dev loop; two, developers need to be concerned with the outer dev loop as part of their workflow, even if most of their time is spent in the inner dev loop. 
 
@@ -18,7 +18,7 @@ The inner dev loop is the single developer workflow. A single developer should b
 
 Even within the Kubernetes space, developers will find much of the inner dev loop familiar. That is, code can still be written locally at a level that a developer controls and committed to version control. 
 
-In a traditional inner dev loop, if a typical developer codes for 360 minutes (6 hours) a day, with a traditional local iterative development loop of 5 minutes — 3 coding, 1 building, i.e. compiling/deploying/reloading, 1 testing inspecting, and 10-20 seconds for committing code -- they can expect to make ~70 iterations of their code per day. Any one of these iterations could be a release candidate. The only “developer tax” being paid here is for the commit process, which is negligible.
+In a traditional inner dev loop, if a typical developer codes for 360 minutes (6 hours) a day, with a traditional local iterative development loop of 5 minutes — 3 coding, 1 building, i.e. compiling/deploying/reloading, 1 testing inspecting, and 10-20 seconds for committing code — they can expect to make ~70 iterations of their code per day. Any one of these iterations could be a release candidate. The only “developer tax” being paid here is for the commit process, which is negligible.
 
 ![traditional inner dev loop](../../images/trad-inner-dev-loop.png)
 
