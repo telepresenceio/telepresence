@@ -161,7 +161,7 @@ func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 func (h *dialer) readLoop(ctx context.Context) {
 	defer func() {
 		// allow write to drain and perform the close of the connection
-		dtime.SleepWithContext(ctx, 100*time.Millisecond)
+		dtime.SleepWithContext(ctx, 200*time.Millisecond)
 		close(h.incoming)
 	}()
 	b := make([]byte, 0x8000)

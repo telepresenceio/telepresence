@@ -139,6 +139,11 @@ type handler struct {
 	sendLock      sync.Mutex
 	sendCondition *sync.Cond
 
+	// isClosing indicates whether Close() has been called on the handler
+	isClosing int32
+	// readyToFin will be closed once it is safe for the handler to send a FIN packet and terminate the connection
+	readyToFin chan interface{}
+
 	// random generator for initial sequence number
 	rnd *rand.Rand
 }
@@ -163,6 +168,7 @@ func NewHandler(
 		rcvWnd:            maxReceiveWindow,
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
+		readyToFin:        make(chan interface{}),
 	}
 	h.sendCondition = sync.NewCond(&h.sendLock)
 	return h
@@ -181,6 +187,10 @@ func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
 
 func (h *handler) Close(ctx context.Context) {
 	if h.state() == stateEstablished || h.state() == stateSynReceived {
+		atomic.StoreInt32(&h.isClosing, 1)
+		// Wait for the fromMgr queue to drain before sending a FIN
+		<-h.readyToFin
+
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
 	}
@@ -303,12 +313,19 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 
 // writeToTunLoop sends the packages read from the fromMgr channel to the TUN device
 func (h *handler) writeToTunLoop(ctx context.Context) {
+	defer close(h.readyToFin)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		var cm connpool.Message
 		select {
 		case <-ctx.Done():
 			return
 		case cm = <-h.fromMgr:
+		case <-ticker.C:
+			if atomic.LoadInt32(&h.isClosing) > 0 {
+				return
+			}
+			continue
 		}
 		data := cm.Payload()
 		start := 0
@@ -664,7 +681,7 @@ func (h *handler) pushToAckWait(ctx context.Context, seqAdd uint32, pkt Packet) 
 
 func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 	h.sendLock.Lock()
-	// ack-queue is guaranteed to be sorted on sequence so we cut from the package with
+	// ack-queue is guaranteed to be sorted descending on sequence so we cut from the package with
 	// a sequence less than or equal to the received sequence.
 	el := h.ackWaitQueue
 	oldSz := h.ackWaitQueueSize

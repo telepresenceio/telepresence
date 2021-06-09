@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.3.1 (TBD)
+
+- Bugfix: Fix a bug where sometimes large transfers from services on the cluster would hang indefinitely
+
 ### 2.3.0 (June 1, 2021)
 
 - Feature: Telepresence is now installable via brew
