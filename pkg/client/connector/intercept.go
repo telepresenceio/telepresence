@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
-
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
@@ -21,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {
