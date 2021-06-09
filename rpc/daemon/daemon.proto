@@ -61,6 +61,9 @@ message DNS {
 
   // Suffixes to include. Has higher prio than the excludes
   repeated string include_suffixes = 4;
+
+  // The maximum number of seconds to wait for a cluster side host lookup.
+  int32 lookup_timeout = 5;
 }
 
 // OutboundInfo contains all information that the root daemon needs in order to

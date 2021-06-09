@@ -33,6 +33,9 @@ type dns struct {
 	// IncludeSuffixes are suffixes for which the DNS resolver will always attempt to do
 	// a lookup. Includes have higher priority than excludes.
 	IncludeSuffixes []string `json:"include-suffixes,omitempty"`
+
+	// The maximum number of seconds to wait for a cluster side host lookup.
+	LookupTimeout int32 `json:"lookup-timeout,omitempty"`
 }
 
 // kubeconfigExtension is an extension read from the selected kubeconfig Cluster.

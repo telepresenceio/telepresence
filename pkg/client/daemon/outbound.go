@@ -208,7 +208,11 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	c, cancel := context.WithTimeout(c, 4*time.Second)
+	maxWait := o.dnsConfig.LookupTimeout
+	if maxWait <= 0 {
+		maxWait = 4
+	}
+	c, cancel := context.WithTimeout(c, time.Duration(maxWait)*time.Second)
 	defer func() {
 		cancel()
 		o.dnsQueriesLock.Lock()
