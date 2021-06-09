@@ -1,52 +1,52 @@
  - title: Quick Start
-   link: /quick-start
+   link: quick-start
  - title: Install Telepresence
    items:
      - title: Install
-       link: /install/
+       link: install/
      - title: Upgrade
-       link: /install/upgrade/
+       link: install/upgrade/
  - title: Core Concepts
    items:
      - title: The changing development workflow
-       link: /concepts/devworkflow
+       link: concepts/devworkflow
      - title: The developer experience and the inner dev loop
-       link: /concepts/devloop
+       link: concepts/devloop
      - title: "Making the remote local: Faster feedback, collaboration and debugging"
-       link: /concepts/faster
+       link: concepts/faster
      - title: Context Propagation
-       link: /concepts/context-prop
+       link: concepts/context-prop
  - title: How Do I...
    items:
      - title: Intercept a Service
-       link: /howtos/intercepts
+       link: howtos/intercepts
      - title: Share Dev Environments with Preview URLs
-       link: /howtos/preview-urls
+       link: howtos/preview-urls
      - title: Proxy Outbound Traffic to My Cluster
-       link: /howtos/outbound
+       link: howtos/outbound
  - title: Technical Reference
    items:
      - title: Architecture
-       link: /reference/architecture
+       link: reference/architecture
      - title: Client Reference
-       link: /reference/client
+       link: reference/client
      - title: Laptop-side configuration
-       link: /reference/config
+       link: reference/config
      - title: Cluster-side configuration
-       link: /reference/cluster-config
+       link: reference/cluster-config
      - title: Environment Variables
-       link: /reference/environment
+       link: reference/environment
      - title: Intercepts
-       link: /reference/intercepts
+       link: reference/intercepts
      - title: Volume Mounts
-       link: /reference/volume
+       link: reference/volume
      - title: DNS Resolution
-       link: /reference/dns
+       link: reference/dns
      - title: RBAC
-       link: /reference/rbac
+       link: reference/rbac
  - title: FAQs
-   link: /faqs
+   link: faqs
  - title: Troubleshooting
-   link: /troubleshooting
+   link: troubleshooting
  - title: Community
-   link: /community
+   link: community
