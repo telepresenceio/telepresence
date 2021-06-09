@@ -5,10 +5,9 @@ import AppBar from '@material-ui/core/AppBar';
 import Tabs from '@material-ui/core/Tabs';
 import Tab from '@material-ui/core/Tab';
 import Box from '@material-ui/core/Box';
-import HubspotForm from 'react-hubspot-form';
-import CodeBlock from '../../../../../src/components/CodeBlock';
-import LinuxIcon from '../../../../../src/assets/icons/linux.inline.svg';
-import AppleIcon from '../../../../../src/assets/icons/apple.inline.svg';
+import CodeBlock from '@src/components/CodeBlock';
+import LinuxIcon from '@src/assets/icons/linux.inline.svg';
+import AppleIcon from '@src/assets/icons/apple.inline.svg';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;

@@ -1,72 +1,64 @@
-- title: Home
-  link: /docs/
-
-- title: Products
-  collapsable: false
-  items:
-    - title: Telepresence
-      items:
-        - title: Quick start
-          link: /quick-start
-        - title: Install Telepresence
-          items:
-            - title: Install
-              link: /install/
-            - title: Upgrade
-              link: /install/upgrade/
-            - title: Migrate from legacy Telepresence
-              link: /install/migrate-from-legacy/
-        - title: Core concepts
-          items:
-            - title: The changing development workflow
-              link: /concepts/devworkflow
-            - title: The developer experience and the inner dev loop
-              link: /concepts/devloop
-            - title: 'Making the remote local: Faster feedback, collaboration and debugging'
-              link: /concepts/faster
-            - title: Context propagation
-              link: /concepts/context-prop
-        - title: How do I...
-          items:
-            - title: Intercept a service in your own environment
-              link: /howtos/intercepts
-            - title: Share dev environments with preview URLs
-              link: /howtos/preview-urls
-            - title: Proxy outbound traffic to my cluster
-              link: /howtos/outbound
-        - title: Technical reference
-          items:
-            - title: Architecture
-              link: /reference/architecture
-            - title: Networking through Virtual Network Interface
-              link: /reference/tun-device
-            - title: Client reference
-              link: /reference/client
-            - title: Laptop-side configuration
-              link: /reference/config
-            - title: Cluster-side configuration
-              link: /reference/cluster-config
-            - title: Using Docker for intercepts
-              link: /reference/docker-run
-            - title: Running Telepresence in a Docker container
-              link: /reference/inside-container
-            - title: Environment variables
-              link: /reference/environment
-            - title: Intercepts
-              link: /reference/intercepts
-            - title: Volume mounts
-              link: /reference/volume
-            - title: DNS resolution
-              link: /reference/dns
-            - title: RBAC
-              link: /reference/rbac
-            - title: Using Telepresence with Linkerd
-              link: /reference/linkerd
-        - title: FAQs
-          link: /faqs
-        - title: Troubleshooting
-          link: /troubleshooting
-        - title: Community
-          link: /community
-        - title: Release Notes
-          link: /release-notes
+ - title: Quick start
+   link: quick-start
+ - title: Install Telepresence
+   items:
+     - title: Install
+       link: install/
+     - title: Upgrade
+       link: install/upgrade/
+     - title: Migrate from legacy Telepresence
+       link: install/migrate-from-legacy/
+ - title: Core concepts
+   items:
+     - title: The changing development workflow
+       link: concepts/devworkflow
+     - title: The developer experience and the inner dev loop
+       link: concepts/devloop
+     - title: 'Making the remote local: Faster feedback, collaboration and debugging'
+       link: concepts/faster
+     - title: Context propagation
+       link: concepts/context-prop
+ - title: How do I...
+   items:
+     - title: Intercept a service in your own environment
+       link: howtos/intercepts
+     - title: Share dev environments with preview URLs
+       link: howtos/preview-urls
+     - title: Proxy outbound traffic to my cluster
+       link: howtos/outbound
+ - title: Technical reference
+   items:
+     - title: Architecture
+       link: reference/architecture
+     - title: Networking through Virtual Network Interface
+       link: reference/tun-device
+     - title: Client reference
+       link: reference/client
+     - title: Laptop-side configuration
+       link: reference/config
+     - title: Cluster-side configuration
+       link: reference/cluster-config
+     - title: Using Docker for intercepts
+       link: reference/docker-run
+     - title: Running Telepresence in a Docker container
+       link: reference/inside-container
+     - title: Environment variables
+       link: reference/environment
+     - title: Intercepts
+       link: reference/intercepts
+     - title: Volume mounts
+       link: reference/volume
+     - title: DNS resolution
+       link: reference/dns
+     - title: RBAC
+       link: reference/rbac
+     - title: Using Telepresence with Linkerd
+       link: reference/linkerd
+ - title: FAQs
+   link: faqs
+ - title: Troubleshooting
+   link: troubleshooting
+ - title: Community
+   link: community
+ - title: Release Notes
+   link: release-notes
