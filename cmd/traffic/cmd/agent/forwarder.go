@@ -183,7 +183,7 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 
 	targetAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort))
 	if err != nil {
-		return fmt.Errorf("error on resolve(%s:%d): %+v", targetHost, targetPort, err)
+		return fmt.Errorf("error on resolve(%s:%d): %w", targetHost, targetPort, err)
 	}
 
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
@@ -196,7 +196,7 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 
 	targetConn, err := net.DialTCP("tcp", nil, targetAddr)
 	if err != nil {
-		return fmt.Errorf("error on dial: %+v", err)
+		return fmt.Errorf("error on dial: %w", err)
 	}
 	defer targetConn.Close()
 
@@ -218,10 +218,12 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 	}()
 
 	// Wait for both sides to close the connection
-	for i := 0; i < 2; i++ {
+	for numClosed := 0; numClosed < 2; {
 		select {
 		case <-ctx.Done():
+			return nil
 		case <-done:
+			numClosed++
 		}
 	}
 	return nil

@@ -8,7 +8,7 @@
 - Change: The `trafficManagerConnect` timout default has changed from 20 seconds to 60 seconds, in order to facilitate
   the extended time it takes to apply everything needed for the mutator webhook.
 - Change: Outbound connections are now routed to intercepted agents.
-- Change: Inbound connection from intercepted agent now uses existing gRPC instead of new connection to manager port between 6000-7999
+- Change: Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection.
 - Bugfix: Fix a bug where sometimes large transfers from services on the cluster would hang indefinitely
 
 ### 2.3.0 (June 1, 2021)
