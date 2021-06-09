@@ -18,7 +18,7 @@
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
   - version: 2.3.0
-    date: '2021-05-28'
+    date: '2021-06-01'
     notes:
       - title: Brew install Telepresence
         body: "Telepresence can now be installed via brew on macOS, which makes it easier for users to stay up-to-date with the latest telepresence version. To install via brew, you can use the following command: <code>brew install datawire/blackbird/telepresence2</code>."
@@ -26,15 +26,20 @@ items:
         docs: install/index/
         type: feature
       - title: TCP and UDP routing via Virtual Network Interface
-        body: "Telepresence will now perform routing of outbound TCP and UDP traffic via a Virtual Network Interface (VIF). The VIF is a layer 3 TUN-device that exists while Telepresence is connected. It makes the subnets in the cluster available to the workstation and will also route DNS requests to the cluster and forward them to intercepted pods. This means that pods with custom DNS configuration will work as expected. Prior versions of Telepresence would use firewall rules and was only capable of routing TCP."
+        body: "Telepresence will now perform routing of outbound TCP and UDP traffic via a Virtual Network Interface (VIF). The VIF is a layer 3 TUN-device that exists while Telepresence is connected. It makes the subnets in the cluster available to the workstation and will also route DNS requests to the cluster and forward them to intercepted pods. This means that pods with custom DNS configuration will work as expected. Prior versions of Telepresence would use firewall rules and were only capable of routing TCP."
         image: ./tunnel.jpg
-        docs: reference/tun-device/#both-tcp-and-udp
+        docs: reference/tun-device
         type: feature
       - title: SSH is no longer used
-        body: "All traffic between the client and the cluster is now tunneled via the traffic manager gRPC API. This means that Telepresence no longer uses ssh tunnels and that the manager no longer have an `sshd` installed. Volume mounts are still established using `sshfs` but it is now configured to communicate using the sftp-protocol directly, which means that the traffic agent also runs without `sshd`. A desired side effect of this is that the manager and agent containers no longer need a special user configuration."
+        body: "All traffic between the client and the cluster is now tunneled via the traffic manager gRPC API. This means that Telepresence no longer uses ssh tunnels and that the manager no longer have an <code>sshd</code> installed. Volume mounts are still established using <code>sshfs</code> but it is now configured to communicate using the sftp-protocol directly, which means that the traffic agent also runs without <code>sshd</code>. A desired side effect of this is that the manager and agent containers no longer need a special user configuration."
         image: ./no-ssh.png
         docs: reference/tun-device/#no-ssh-required
         type: change
+      - title: Running in a Docker container
+        body: "Telepresence can now be run inside a Docker container. This can be useful for avoiding side effects on a workstation's network, establishing multiple sessions with the traffic manager, or working with different clusters simultaneously."
+        image: ./run-tp-in-docker.png
+        docs: reference/inside-container
+        type: feature
       - title: Configurable Log Levels
         body: "Telepresence now supports configuring the log level for Root Daemon and User Daemon logs. This provides control over the nature and volume of information that Telepresence generates in <code>daemon.log</code> and <code>connector.log</code>."
         image: ./telepresence-2.3.0-loglevels.png

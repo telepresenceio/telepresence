@@ -40,6 +40,8 @@
        link: reference/cluster-config
      - title: Using Docker for intercepts
        link: reference/docker-run
+     - title: Running Telepresence in a Docker container
+       link: reference/inside-container
      - title: Environment variables
        link: reference/environment
      - title: Intercepts
