@@ -135,7 +135,7 @@ Agent sidecar container and update the port definitions.
 
 <Alert severity="info">
 A current limitation of the Mutating Webhook mechanism is that the `targetPort` of your intercepted
-Service needs to point to the **name** of a port on your container, not the port number itself.
+Service needs to point to the <strong>name</strong> of a port on your container, not the port number itself.
 </Alert>
 
 Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` annotation to your
