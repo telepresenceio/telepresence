@@ -553,10 +553,7 @@ func (m *Manager) reapDomain(ctx context.Context, sa systema.SystemACRUDClient, 
 	_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
 		Domain: interceptUpdate.Value.PreviewDomain,
 	})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // reapIntercept informs SystemA that an intercept has been garbage collected
@@ -571,8 +568,5 @@ func (m *Manager) reapIntercept(ctx context.Context, sa systema.SystemACRUDClien
 	if wasRemoved := m.state.RemoveInterceptAPIKey(interceptUpdate.Value.Id); !wasRemoved {
 		dlog.Debugf(ctx, "Intercept ID %s had no APIKey", interceptUpdate.Value.Id)
 	}
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
