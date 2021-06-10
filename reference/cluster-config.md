@@ -1,3 +1,5 @@
+import Alert from '@material-ui/lab/Alert';
+
 # Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special
@@ -130,6 +132,11 @@ your workload out of sync with that external desired state.
 To solve this issue, you can use Telepresence's Mutating Webhook alternative mechanism. Intercepted 
 workloads will then stay untouched and only the underlying pods will be modified to inject the Traffic
 Agent sidecar container and update the port definitions.
+
+<Alert severity="info">
+A current limitation of the Mutating Webhook mechanism is that the `targetPort` of your intercepted
+Service needs to point to the **name** of a port on your container, not the port number itself.
+</Alert>
 
 Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` annotation to your
 workload template's annotations:
