@@ -22,10 +22,12 @@ items:
     notes:
       - title: DNS Resolver Configuration
         body: "Telepresence now supports per-cluster configuration for custom dns behavior, which will enable users to determine which local + remote resolver to use and which suffixes should be ignored + included. These can be configured on a per-cluster basis."
+        image: ./telepresence-2.3.1-dns.png
         docs: reference/config
         type: feature
       - title: AlsoProxy Configuration
         body: "Telepresence now supports also proxying user-specified subnets so that they can access external services only accessible to the cluster while connected to Telepresence. These can be configured on a per-cluster basis and each subnet is added to the TUN device so that requests are routed to the cluster for IPs that fall within that subnet."
+        image: ./telepresence-2.3.1-alsoProxy.png
         docs: reference/config
         type: feature
   - version: 2.3.0
