@@ -58,17 +58,21 @@ apiVersion: v1
 clusters:
 - cluster:
     server: https://127.0.0.1
-    telepresence.getambassador.io:
+    extensions:
+    - name: telepresence.getambassador.io
+      extension:
+        dns:
+        also-proxy:
   name: example-cluster
 ```
 #### DNS
 The fields for `dns` are: LocalIP, RemoteIP, ExcludeSuffixes, and IncludeSuffixes.
 |Field|Description|Type|Default|
 |---|---|---|---|
-|`LocalIP`|The address of the local DNS server. This entry is only used on Linux system that are not configured to use systemd.resolved|ip|first line of /etc/resolv.conf|
-|`RemoteIP`|the address of the cluster's DNS service|ip|ip|IP of the kube-dns.kube-system or the dns-default.openshift-dns service|
-|`ExcludeSuffixes`|suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver)|list||
-|`IncludeSuffixes`|suffixes for which the DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes.|list||
+|`local-ip`|The address of the local DNS server. This entry is only used on Linux system that are not configured to use systemd.resolved|ip|first line of /etc/resolv.conf|
+|`remote-ip`|the address of the cluster's DNS service|ip|ip|IP of the kube-dns.kube-system or the dns-default.openshift-dns service|
+|`exclude-suffixes`|suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver)|list||
+|`include-suffixes`|suffixes for which the DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes.|list||
 
 Here is an example kubeconfig:
 ```
@@ -76,29 +80,31 @@ apiVersion: v1
 clusters:
 - cluster:
     server: https://127.0.0.1
-    telepresence.getambassador.io:
-      dns:
-        localIP:
-        RemoteIP: kube-dns.kube-system
-        ExcludeSuffixes:
-        - ".org"
-        IncludeSuffixes:
-        - ".com"
+    extensions:
+    - name: telepresence.getambassador.io
+      extension:
+        dns:
+          include-suffixes:
+          - .se
+          exclude-suffixes:
+          - .com
   name: example-cluster
 ```
 
 
 #### AlsoProxy
-When using alsoProxy, you provide a list of subnets after the key in your kubeconfig file to be added to the TUN device. All connections to addresses that the subnet spans will be dispatched to the cluster
+When using `also-proxy`, you provide a list of subnets after the key in your kubeconfig file to be added to the TUN device. All connections to addresses that the subnet spans will be dispatched to the cluster
 
-Here is an example kubeconfig:
+Here is an example kubeconfig for the subnet `1.2.3.4/32`:
 ```
 apiVersion: v1
 clusters:
 - cluster:
     server: https://127.0.0.1
-    telepresence.getambassador.io:
-      alsoProxy:
-      - 10.0.0.0/24
+    extensions:
+    - name: telepresence.getambassador.io
+      extension:
+        also-proxy:
+        - 1.2.3.4/32
   name: example-cluster
 ```
