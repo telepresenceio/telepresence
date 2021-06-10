@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traffic-manager
+  namespace: ambassador
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traffic-manager
+rules:
+- apiGroups:
+  - ""
+  resources: ["services"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traffic-manager
+subjects:
+- kind: ServiceAccount
+  name: traffic-manager
+  namespace: ambassador
+roleRef:
+  kind: ClusterRole
+  name: traffic-manager
+  apiGroup: rbac.authorization.k8s.io

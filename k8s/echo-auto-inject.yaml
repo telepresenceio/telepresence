@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-auto-inject
+spec:
+  type: ClusterIP
+  selector:
+    service: echo-auto-inject
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-auto-inject
+  labels:
+    service: echo-auto-inject
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: echo-auto-inject
+  template:
+    metadata:
+      annotations:
+        telepresence.getambassador.io/inject-traffic-agent: enabled
+      labels:
+        service: echo-auto-inject
+    spec:
+      containers:
+        - name: echo-auto-inject
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
