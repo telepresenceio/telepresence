@@ -18,7 +18,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -545,28 +544,4 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 // expire removes stale sessions.
 func (m *Manager) expire() {
 	m.state.ExpireSessions(m.clock.Now().Add(-15 * time.Second))
-}
-
-// reapDomain informs SystemA that an intercept with a domain has been garbage collected
-func (m *Manager) reapDomain(ctx context.Context, sa systema.SystemACRUDClient, interceptUpdate watchable.InterceptMapUpdate) error {
-	dlog.Debugf(ctx, "systema: removing domain: %q", interceptUpdate.Value.PreviewDomain)
-	_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
-		Domain: interceptUpdate.Value.PreviewDomain,
-	})
-	return err
-}
-
-// reapIntercept informs SystemA that an intercept has been garbage collected
-func (m *Manager) reapIntercept(ctx context.Context, sa systema.SystemACRUDClient, interceptUpdate watchable.InterceptMapUpdate) error {
-	dlog.Debugf(ctx, "systema: remove intercept: %q", interceptUpdate.Value.Id)
-	_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
-		InterceptId: interceptUpdate.Value.Id,
-	})
-
-	// We remove the APIKey whether or not the RemoveIntercept call was successful, so
-	// let's do that before we check the error.
-	if wasRemoved := m.state.RemoveInterceptAPIKey(interceptUpdate.Value.Id); !wasRemoved {
-		dlog.Debugf(ctx, "Intercept ID %s had no APIKey", interceptUpdate.Value.Id)
-	}
-	return err
 }

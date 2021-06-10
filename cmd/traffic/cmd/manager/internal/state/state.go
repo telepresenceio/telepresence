@@ -97,9 +97,8 @@ type State struct {
 	//     `intercept.ClientSession.SessionId`)
 	//  6. `intercepts` needs to be pruned in-sync with `agents` (based on
 	//     `agent.Name == intercept.Spec.Agent`)
-	//  7. `interceptAPIKeys` needs to persist past intercepts since they are used by the garbage
-	//      collector, after the intecept has been deleted from the map, if there are no active
-	//      sessions in the traffic-manager
+	//  7. `interceptAPIKeys` need to be created and updated in-sync with `intercepts` (but not deleted
+	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
 	port             uint16
 	intercepts       watchable.InterceptMap
 	agents           watchable.AgentMap                   // info for agent sessions
@@ -555,18 +554,18 @@ func (s *State) RemoveIntercept(interceptID string) bool {
 	return didDelete
 }
 
-// GetInterceptAPIKeys returns a slice of all the apiKeys associated with intercept IDs.
-// Since we use this fuction as a last resort if we need to garbage collect intercepts
-// when there are no active sessions, we just return the slice since we aren't picky about
-// which apiKey is used.
-func (s *State) GetInterceptAPIKeys() []string {
+// GetInterceptAPIKey returns the first non-empty apiKey associated with an intercept IDs.
+// We use this fuction as a last resort if we need to garbage collect intercepts when
+// there are no active sessions.
+func (s *State) GetInterceptAPIKey() string {
 	s.mu.Lock()
-	apiKeys := make([]string, 0, len(s.interceptAPIKeys))
+	defer s.mu.Unlock()
 	for _, key := range s.interceptAPIKeys {
-		apiKeys = append(apiKeys, key)
+		if key != "" {
+			return key
+		}
 	}
-	s.mu.Unlock()
-	return apiKeys
+	return ""
 }
 
 // RemoveInterceptAPIKey removes the associated APIKey for an Intercept ID

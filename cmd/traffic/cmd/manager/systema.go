@@ -44,12 +44,7 @@ func (c *systemaCredentials) GetRequestMetadata(ctx context.Context, _ ...string
 		// If there were no other clients using telepresence, we try to find an APIKey
 		// used for creating an intercept.
 		if apikey == "" {
-			for _, apiKey := range c.mgr.state.GetInterceptAPIKeys() {
-				if apiKey != "" {
-					apikey = apiKey
-					break
-				}
-			}
+			apikey = c.mgr.state.GetInterceptAPIKey()
 		}
 	}
 	if apikey == "" {

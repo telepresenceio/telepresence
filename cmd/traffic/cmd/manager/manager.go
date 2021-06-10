@@ -17,6 +17,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -120,4 +122,44 @@ func Main(ctx context.Context, args ...string) error {
 
 	// Wait for exit
 	return g.Wait()
+}
+
+// reapDomain informs SystemA that an intercept with a domain has been garbage collected
+func (m *Manager) reapDomain(ctx context.Context, sa systema.SystemACRUDClient, interceptUpdate watchable.InterceptMapUpdate) error {
+	// we only reapDomains for intercepts that have been deleted
+	if !interceptUpdate.Delete {
+		return fmt.Errorf("%s is not being deleted, so the domain was not reaped", interceptUpdate.Value.Id)
+	}
+	dlog.Debugf(ctx, "systema: removing domain: %q", interceptUpdate.Value.PreviewDomain)
+	_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+		Domain: interceptUpdate.Value.PreviewDomain,
+	})
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// reapIntercept informs SystemA that an intercept has been garbage collected
+func (m *Manager) reapIntercept(ctx context.Context, sa systema.SystemACRUDClient, interceptUpdate watchable.InterceptMapUpdate) error {
+	// we only reapIntercept for intercepts that have been deleted
+	if !interceptUpdate.Delete {
+		return fmt.Errorf("%s is not being deleted, so the intercept was not reaped", interceptUpdate.Value.Id)
+	}
+	dlog.Debugf(ctx, "systema: remove intercept: %q", interceptUpdate.Value.Id)
+	_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
+		InterceptId: interceptUpdate.Value.Id,
+	})
+
+	// We remove the APIKey whether or not the RemoveIntercept call was successful, so
+	// let's do that before we check the error.
+	if wasRemoved := m.state.RemoveInterceptAPIKey(interceptUpdate.Value.Id); !wasRemoved {
+		dlog.Debugf(ctx, "Intercept ID %s had no APIKey", interceptUpdate.Value.Id)
+	}
+
+	if err != nil {
+		return err
+	}
+	return nil
 }
