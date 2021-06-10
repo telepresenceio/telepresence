@@ -20,15 +20,18 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SystemACRUDClient interface {
 	// CreateDomain requires that the manager authenticate using an
-	// end-user's access token, to perform the action on behalf of that
+	// end-user's API key, to perform the action on behalf of that
 	// user.
 	CreateDomain(ctx context.Context, in *CreateDomainRequest, opts ...grpc.CallOption) (*CreateDomainResponse, error)
 	// RemoveDomain removes a domain that was previously created by the
 	// same manager using CreateDomain.  The manager can take this
 	// action itself, not on behalf of the user that created the domain,
 	// so this requires that the manager authenticate itself, but does
-	// not require an end-user's token.
+	// not require an end-user's API key.
 	RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// RemoveIntercept is used to inform AmbassadorCloud (SystemA) that an
+	// intercept has been removed.
+	RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*empty.Empty, error)
 	// PreferredAgent returns the active account's perferred agent
 	// sidecar, for the given Telepresence version.
 	PreferredAgent(ctx context.Context, in *common.VersionInfo, opts ...grpc.CallOption) (*PreferredAgentResponse, error)
@@ -60,6 +63,15 @@ func (c *systemACRUDClient) RemoveDomain(ctx context.Context, in *RemoveDomainRe
 	return out, nil
 }
 
+func (c *systemACRUDClient) RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACRUD/RemoveIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *systemACRUDClient) PreferredAgent(ctx context.Context, in *common.VersionInfo, opts ...grpc.CallOption) (*PreferredAgentResponse, error) {
 	out := new(PreferredAgentResponse)
 	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACRUD/PreferredAgent", in, out, opts...)
@@ -74,15 +86,18 @@ func (c *systemACRUDClient) PreferredAgent(ctx context.Context, in *common.Versi
 // for forward compatibility
 type SystemACRUDServer interface {
 	// CreateDomain requires that the manager authenticate using an
-	// end-user's access token, to perform the action on behalf of that
+	// end-user's API key, to perform the action on behalf of that
 	// user.
 	CreateDomain(context.Context, *CreateDomainRequest) (*CreateDomainResponse, error)
 	// RemoveDomain removes a domain that was previously created by the
 	// same manager using CreateDomain.  The manager can take this
 	// action itself, not on behalf of the user that created the domain,
 	// so this requires that the manager authenticate itself, but does
-	// not require an end-user's token.
+	// not require an end-user's API key.
 	RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error)
+	// RemoveIntercept is used to inform AmbassadorCloud (SystemA) that an
+	// intercept has been removed.
+	RemoveIntercept(context.Context, *InterceptRemoval) (*empty.Empty, error)
 	// PreferredAgent returns the active account's perferred agent
 	// sidecar, for the given Telepresence version.
 	PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error)
@@ -98,6 +113,9 @@ func (UnimplementedSystemACRUDServer) CreateDomain(context.Context, *CreateDomai
 }
 func (UnimplementedSystemACRUDServer) RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveDomain not implemented")
+}
+func (UnimplementedSystemACRUDServer) RemoveIntercept(context.Context, *InterceptRemoval) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedSystemACRUDServer) PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreferredAgent not implemented")
@@ -151,6 +169,24 @@ func _SystemACRUD_RemoveDomain_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemACRUD_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InterceptRemoval)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemACRUDServer).RemoveIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.systema.SystemACRUD/RemoveIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemACRUDServer).RemoveIntercept(ctx, req.(*InterceptRemoval))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SystemACRUD_PreferredAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(common.VersionInfo)
 	if err := dec(in); err != nil {
@@ -180,6 +216,10 @@ var _SystemACRUD_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveDomain",
 			Handler:    _SystemACRUD_RemoveDomain_Handler,
+		},
+		{
+			MethodName: "RemoveIntercept",
+			Handler:    _SystemACRUD_RemoveIntercept_Handler,
 		},
 		{
 			MethodName: "PreferredAgent",

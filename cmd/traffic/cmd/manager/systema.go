@@ -32,11 +32,19 @@ func (c *systemaCredentials) GetRequestMetadata(ctx context.Context, _ ...string
 	} else {
 		// Uhh... pick one arbitrarily.  This case should be limited to the
 		// ReverseConnection call, since that call doesn't belong to any one user action.
+		// This can also happen if RemoveIntercept + RemoveDomain is called when a user
+		// quits a session and the manager reaps intercepts + the domain itself.
 		for _, client := range c.mgr.state.GetAllClients() {
 			if client.ApiKey != "" {
 				apikey = client.ApiKey
 				break
 			}
+		}
+
+		// If there were no other clients using telepresence, we try to find an APIKey
+		// used for creating an intercept.
+		if apikey == "" {
+			apikey = c.mgr.state.GetInterceptAPIKey()
 		}
 	}
 	if apikey == "" {

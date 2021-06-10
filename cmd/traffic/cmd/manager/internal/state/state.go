@@ -97,22 +97,26 @@ type State struct {
 	//     `intercept.ClientSession.SessionId`)
 	//  6. `intercepts` needs to be pruned in-sync with `agents` (based on
 	//     `agent.Name == intercept.Spec.Agent`)
-	port         uint16
-	intercepts   watchable.InterceptMap
-	agents       watchable.AgentMap                   // info for agent sessions
-	clients      watchable.ClientMap                  // info for client sessions
-	sessions     map[string]SessionState              // info for all sessions
-	listeners    map[string]connpool.Handler          // listeners for all intercepts
-	agentsByName map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	//  7. `interceptAPIKeys` need to be created and updated in-sync with `intercepts` (but not deleted
+	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
+	port             uint16
+	intercepts       watchable.InterceptMap
+	agents           watchable.AgentMap                   // info for agent sessions
+	clients          watchable.ClientMap                  // info for client sessions
+	sessions         map[string]SessionState              // info for all sessions
+	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
+	listeners        map[string]connpool.Handler          // listeners for all intercepts
+	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 }
 
 func NewState(ctx context.Context) *State {
 	return &State{
-		ctx:          ctx,
-		port:         loPort - 1,
-		sessions:     make(map[string]SessionState),
-		agentsByName: make(map[string]map[string]*rpc.AgentInfo),
-		listeners:    make(map[string]connpool.Handler),
+		ctx:              ctx,
+		port:             loPort - 1,
+		sessions:         make(map[string]SessionState),
+		interceptAPIKeys: make(map[string]string),
+		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
+		listeners:        make(map[string]connpool.Handler),
 	}
 }
 
@@ -441,12 +445,14 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
+	s.interceptAPIKeys[interceptID] = apiKey
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		ManagerPort: 0,
 		Disposition: rpc.InterceptDispositionType_WAITING,
 		Message:     "Waiting for Agent approval",
-		Id:          sessionID + ":" + spec.Name,
+		Id:          interceptID,
 		ClientSession: &rpc.SessionInfo{
 			SessionId: sessionID,
 		},
@@ -546,6 +552,34 @@ func (s *State) RemoveIntercept(interceptID string) bool {
 		}
 	}
 	return didDelete
+}
+
+// GetInterceptAPIKey returns the first non-empty apiKey associated with an intercept IDs.
+// We use this fuction as a last resort if we need to garbage collect intercepts when
+// there are no active sessions.
+func (s *State) GetInterceptAPIKey() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range s.interceptAPIKeys {
+		if key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+// RemoveInterceptAPIKey removes the associated APIKey for an Intercept ID
+// Only call on an intercept that has been deleted.
+func (s *State) RemoveInterceptAPIKey(interceptID string) bool {
+	// If the APIKey isn't present, then we return false since we didn't remove
+	// anything since no APIKey was associated with that intercept.
+	s.mu.Lock()
+	if _, ok := s.interceptAPIKeys[interceptID]; !ok {
+		return false
+	}
+	delete(s.interceptAPIKeys, interceptID)
+	s.mu.Unlock()
+	return true
 }
 
 func (s *State) GetIntercept(interceptID string) *rpc.InterceptInfo {

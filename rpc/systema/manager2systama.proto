@@ -16,11 +16,12 @@ message Chunk {
   bytes content = 1;
 }
 
-// Calls from the manager to System A are authenticated via RFC 6750
-// Bearer tokens.
+// Calls from the manager to Ambassador Cloud (System A) are authenticated via API keys per
+// https://www.notion.so/datawire/Telepresence-System-A-API-Key-Integration-c13c4676e9944abfb02713b8517051e3
+// (see also: pkg/client/connector/auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
 service SystemACRUD {
   // CreateDomain requires that the manager authenticate using an
-  // end-user's access token, to perform the action on behalf of that
+  // end-user's API key, to perform the action on behalf of that
   // user.
   rpc CreateDomain(CreateDomainRequest) returns (CreateDomainResponse);
 
@@ -28,16 +29,21 @@ service SystemACRUD {
   // same manager using CreateDomain.  The manager can take this
   // action itself, not on behalf of the user that created the domain,
   // so this requires that the manager authenticate itself, but does
-  // not require an end-user's token.
+  // not require an end-user's API key.
   rpc RemoveDomain(RemoveDomainRequest) returns (google.protobuf.Empty);
+
+  // RemoveIntercept is used to inform AmbassadorCloud (SystemA) that an
+  // intercept has been removed.
+  rpc RemoveIntercept(InterceptRemoval) returns (google.protobuf.Empty);
 
   // PreferredAgent returns the active account's perferred agent
   // sidecar, for the given Telepresence version.
   rpc PreferredAgent(common.VersionInfo) returns (PreferredAgentResponse);
 }
 
-// Calls from the manager to System A are authenticated via RFC 6750
-// Bearer tokens.
+// Calls from the manager to Ambassador Cloud (System A) are authenticated via API keys per
+// https://www.notion.so/datawire/Telepresence-System-A-API-Key-Integration-c13c4676e9944abfb02713b8517051e3
+// (see also: pkg/client/connector/auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
 service SystemAProxy {
   // ReverseConnection establishes a stream that is used for System A
   // to send gRPC requests back to the manager.  This requires that
@@ -59,6 +65,10 @@ message CreateDomainResponse {
 
 message RemoveDomainRequest {
   string domain = 1;
+}
+
+message InterceptRemoval {
+  string intercept_id = 1;
 }
 
 message PreferredAgentResponse {
