@@ -624,9 +624,14 @@ func (cs *connectedSuite) TestM_AutoInjectedAgent() {
 	}()
 
 	cs.Run("shows up with agent installed in list output", func() {
-		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
-		cs.Empty(stderr)
-		cs.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+		cs.Eventually(func() bool {
+			stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+			cs.Empty(stderr)
+			return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+		},
+			10*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
 	})
 
 	cs.Run("can be intercepted", func() {
