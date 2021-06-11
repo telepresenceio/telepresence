@@ -334,6 +334,9 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := names()
 		require.NoError(err)
 		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
+
+		// The telepresence-test-developer will not be able to uninstall everything
+		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
 		require.Contains(stdout, "Daemon quitting")
