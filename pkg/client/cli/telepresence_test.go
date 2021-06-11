@@ -280,7 +280,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			break
 		}
 		require.NotNilf(cluster, "unable to get cluster from config")
-		cluster.Extensions = map[string]runtime.Object{"telepresence.getambassador.io": &runtime.Unknown{
+		cluster.Extensions = map[string]runtime.Object{"telepresence.io": &runtime.Unknown{
 			Raw: []byte(`{"dns":{"include-suffixes": [".org"]}}`),
 		}}
 

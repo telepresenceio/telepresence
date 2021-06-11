@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/spf13/pflag"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 
@@ -14,8 +15,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-// The dns config part of the kubeconfigExtension that is read from the kubeconfig
-type dns struct {
+// The dnsConfig is part of the kubeconfigExtension struct
+type dnsConfig struct {
 	// LocalIP is the address of the local DNS server. This entry is only
 	// used on Linux system that are not configured to use systemd.resolved and
 	// can be overridden by using the option --dns on the command line and defaults
@@ -26,21 +27,21 @@ type dns struct {
 	// to the IP of the kube-dns.kube-system or the dns-default.openshift-dns service.
 	RemoteIP iputil.IPKey `json:"remote-ip,omitempty"`
 
-	// ExcludeSuffixes are suffixes for which the DNS resolver will always fail (or fallback
-	// in case of the overriding resolver).
+	// ExcludeSuffixes are suffixes for which the DNS resolver will always return
+	// NXDOMAIN (or fallback in case of the overriding resolver).
 	ExcludeSuffixes []string `json:"exclude-suffixes,omitempty"`
 
 	// IncludeSuffixes are suffixes for which the DNS resolver will always attempt to do
 	// a lookup. Includes have higher priority than excludes.
 	IncludeSuffixes []string `json:"include-suffixes,omitempty"`
 
-	// The maximum number of seconds to wait for a cluster side host lookup.
-	LookupTimeout int32 `json:"lookup-timeout,omitempty"`
+	// The maximum time to wait for a cluster side host lookup.
+	LookupTimeout metav1.Duration `json:"lookup-timeout,omitempty"`
 }
 
 // kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
 type kubeconfigExtension struct {
-	DNS *dns `json:"dns,omitempty"`
+	DNS *dnsConfig `json:"dns,omitempty"`
 }
 
 type k8sConfig struct {
@@ -54,7 +55,7 @@ type k8sConfig struct {
 	config      *rest.Config
 }
 
-const configExtension = "telepresence.getambassador.io"
+const configExtension = "telepresence.io"
 
 func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with

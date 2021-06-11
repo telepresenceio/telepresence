@@ -66,7 +66,7 @@ type outbound struct {
 	dnsInProgress  map[string]*awaitLookupResult
 	dnsQueriesLock sync.Mutex
 
-	dnsConfig *rpc.DNS
+	dnsConfig *rpc.DNSConfig
 }
 
 // splitToUDPAddr splits the given address into an UDPAddr. It's
@@ -143,7 +143,7 @@ const dotKubernetesZone = "." + kubernetesZone + "."
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
-func (o *outbound) doClusterLookup(query string) bool {
+func (o *outbound) shouldDoClusterLookup(query string) bool {
 	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4 {
 		return false
 	}
@@ -167,7 +167,7 @@ func (o *outbound) doClusterLookup(query string) bool {
 }
 
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
-	query = strings.ToLower(query) // strip of trailing dot
+	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, dotTel2SubDomain)
 
 	if query == "localhost." {
@@ -184,7 +184,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		return localhostIPv4
 	}
 
-	if !o.doClusterLookup(query) {
+	if !o.shouldDoClusterLookup(query) {
 		return nil
 	}
 
@@ -208,11 +208,11 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	maxWait := o.dnsConfig.LookupTimeout
+	maxWait := time.Duration(o.dnsConfig.LookupTimeout)
 	if maxWait <= 0 {
-		maxWait = 4
+		maxWait = 4 * time.Second
 	}
-	c, cancel := context.WithTimeout(c, time.Duration(maxWait)*time.Second)
+	c, cancel := context.WithTimeout(c, maxWait)
 	defer func() {
 		cancel()
 		o.dnsQueriesLock.Lock()
@@ -250,7 +250,7 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 		return err
 	}
 	if info.Dns == nil {
-		o.dnsConfig = &rpc.DNS{}
+		o.dnsConfig = &rpc.DNSConfig{}
 	} else {
 		o.dnsConfig = info.Dns
 		if len(o.dnsIP) == 0 && len(info.Dns.LocalIp) > 0 {

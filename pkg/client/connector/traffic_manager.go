@@ -629,7 +629,7 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 		ManagerPort:   mgrPort,
 		ServiceSubnet: serviceSubnet,
 		PodSubnets:    podCIDRs,
-		Dns: &daemon.DNS{
+		Dns: &daemon.DNSConfig{
 			RemoteIp: kubeDNS,
 		},
 	}
@@ -640,7 +640,7 @@ func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*da
 		if len(tm.DNS.LocalIP) > 0 {
 			info.Dns.LocalIp = tm.DNS.LocalIP.IP()
 		}
-		info.Dns.LookupTimeout = tm.DNS.LookupTimeout
+		info.Dns.LookupTimeout = int64(tm.DNS.LookupTimeout.Duration)
 	}
 	return info, nil
 }

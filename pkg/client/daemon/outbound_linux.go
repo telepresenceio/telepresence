@@ -36,8 +36,8 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	return err
 }
 
-// applySearch returns true if search path should be applied
-func (o *outbound) applySearch(query string) bool {
+// shouldApplySearch returns true if search path should be applied
+func (o *outbound) shouldApplySearch(query string) bool {
 	if len(o.search) == 0 {
 		return false
 	}
@@ -65,15 +65,21 @@ func (o *outbound) applySearch(query string) bool {
 	return true
 }
 
+// resolveInSearch is only used by the overriding resolver. It is needed because unlike other resolvers, this
+// resolver does not hook into a DNS system that handles search paths prior to the arrival of the request.
+//
+// TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
+// and that's the local-only intercepts which means that using search-paths really should be limited to that
+// use-case.
 func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, dotTel2SubDomain)
 
-	if !o.doClusterLookup(query) {
+	if !o.shouldDoClusterLookup(query) {
 		return nil
 	}
 
-	if o.applySearch(query) {
+	if o.shouldApplySearch(query) {
 		for _, s := range o.search {
 			if ips := o.resolveInCluster(c, qType, query+s); len(ips) > 0 {
 				return ips
