@@ -23,8 +23,11 @@ type Instance interface {
 // scope contains everything that needs to be shared between resources
 // during an operation that spans several resources.
 type scope struct {
-	client *kates.Client
-	env    *client.Env
+	namespace  string
+	clusterID  string
+	tmSelector map[string]string
+	client     *kates.Client
+	env        *client.Env
 }
 
 // The scope is available through the context

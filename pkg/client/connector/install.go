@@ -11,10 +11,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -23,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/install/resource"
 )
 
 type installer struct {
@@ -33,8 +32,6 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 	return &installer{k8sCluster: kc}, nil
 }
 
-const managerLicenseName = "systema-license"
-const telName = "manager"
 const annTelepresenceActions = install.DomainPrefix + "actions"
 
 // this is modified in tests
@@ -45,78 +42,13 @@ var managerNamespace = func() string {
 	return "ambassador"
 }()
 
-var labelMap = map[string]string{
-	"app":          install.ManagerAppName,
-	"telepresence": telName,
-}
-
 func managerImageName(env client.Env) string {
 	return fmt.Sprintf("%s/tel2:%s", env.Registry, strings.TrimPrefix(client.Version(), "v"))
 }
 
-func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
-	svc := &kates.Service{
-		TypeMeta: kates.TypeMeta{
-			Kind: "Service",
-		},
-		ObjectMeta: kates.ObjectMeta{
-			Namespace: managerNamespace,
-			Name:      install.ManagerAppName},
-		Spec: kates.ServiceSpec{
-			Type:      "ClusterIP",
-			ClusterIP: "None",
-			Selector:  labelMap,
-			Ports: []kates.ServicePort{
-				{
-					Name: "api",
-					Port: install.ManagerPortHTTP,
-					TargetPort: kates.IntOrString{
-						Type:   intstr.String,
-						StrVal: "api",
-					},
-				},
-			},
-		},
-	}
-
-	// Ensure that the managerNamespace exists
-	_, err := ki.findNamespace(c, managerNamespace)
-	if err != nil {
-		if !errors2.IsNotFound(err) {
-			return nil, err
-		}
-		ns := &kates.Namespace{
-			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
-			ObjectMeta: kates.ObjectMeta{Name: managerNamespace},
-		}
-		dlog.Infof(c, "Creating namespace %q", managerNamespace)
-		if err := ki.client.Create(c, ns, ns); err != nil {
-			// We should never get IsAlreadyExists because we query the
-			// the kube api to see if the namespace is present. If for
-			// some reason we do get this error, the namespace exists
-			// and we shouldn't return.
-			if !errors2.IsAlreadyExists(err) {
-				return nil, err
-			}
-		}
-	}
-
-	dlog.Infof(c, "Installing traffic-manager service in namespace %s", managerNamespace)
-	if err := ki.client.Create(c, svc, svc); err != nil {
-		return nil, err
-	}
-	return svc, nil
-}
-
-func (ki *installer) createManagerDeployment(c context.Context, env client.Env, addLicense bool) error {
-	dep := ki.managerDeployment(c, env, addLicense)
-	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
-	return ki.client.Create(c, dep, dep)
-}
-
 // removeManager will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.
-func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
+func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo, env *client.Env) error {
 	// Removes the manager and all agents from the cluster
 	var errs []error
 	var errsLock sync.Mutex
@@ -181,21 +113,10 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 	wg.Wait()
 
 	if !agentsOnly && len(errs) == 0 {
-		// agent removal succeeded. Remove the manager service and deployment
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			if err := ki.removeManagerService(c); err != nil {
-				addError(err)
-			}
-		}()
-		go func() {
-			defer wg.Done()
-			if err := ki.removeManagerDeployment(c); err != nil {
-				addError(err)
-			}
-		}()
-		wg.Wait()
+		// agent removal succeeded. Remove the manager resources
+		if err := resource.DeleteTrafficManager(c, ki.client, managerNamespace, env); err != nil {
+			addError(err)
+		}
 	}
 
 	switch len(errs) {
@@ -211,47 +132,6 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		return errors.New(bld.String())
 	}
 	return nil
-}
-
-func (ki *installer) removeManagerService(c context.Context) error {
-	svc := &kates.Service{
-		TypeMeta: kates.TypeMeta{
-			Kind: "Service",
-		},
-		ObjectMeta: kates.ObjectMeta{
-			Namespace: managerNamespace,
-			Name:      install.ManagerAppName}}
-	dlog.Infof(c, "Deleting traffic-manager service from namespace %s", managerNamespace)
-	return ki.client.Delete(c, svc, svc)
-}
-
-func (ki *installer) removeManagerDeployment(c context.Context) error {
-	dep := &kates.Deployment{
-		TypeMeta: kates.TypeMeta{
-			Kind: "Deployment",
-		},
-		ObjectMeta: kates.ObjectMeta{
-			Namespace: managerNamespace,
-			Name:      install.ManagerAppName,
-		}}
-	dlog.Infof(c, "Deleting traffic-manager deployment from namespace %s", managerNamespace)
-	return ki.client.Delete(c, dep, dep)
-}
-
-func (ki *installer) updateDeployment(c context.Context, env client.Env, currentDep *kates.Deployment) (*kates.Deployment, error) {
-	// Check if there's a license before we add it to the traffic-manager deployment
-	addLicense := false
-	if _, err := ki.findSecret(c, managerNamespace, managerLicenseName); err == nil {
-		addLicense = true
-	}
-	dep := ki.managerDeployment(c, env, addLicense)
-	dep.ResourceVersion = currentDep.ResourceVersion
-	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
-	err := ki.client.Update(c, dep, dep)
-	if err != nil {
-		return nil, err
-	}
-	return dep, err
 }
 
 // Finds the Referenced Service in an objects' annotations
@@ -348,6 +228,8 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 	if err != nil {
 		return "", "", err
 	}
+
+	var svc *kates.Service
 	var agentContainer *kates.Container
 	for i := range podTemplate.Spec.Containers {
 		container := &podTemplate.Spec.Containers[i]
@@ -843,145 +725,6 @@ func addAgentToWorkload(
 	return object, matchingService, nil
 }
 
-func (ki *installer) managerDeployment(c context.Context, env client.Env, addLicense bool) *kates.Deployment {
-	replicas := int32(1)
-
-	var containerEnv []corev1.EnvVar
-
-	containerEnv = append(containerEnv, corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"})
-	if env.SystemAHost != "" {
-		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_HOST", Value: env.SystemAHost})
-	}
-	if env.SystemAPort != "" {
-		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_PORT", Value: env.SystemAPort})
-	}
-	clusterID := ki.getClusterId(c)
-	containerEnv = append(containerEnv, corev1.EnvVar{Name: "CLUSTER_ID", Value: clusterID})
-	// If addLicense is true, we mount the secret as a volume into the traffic-manager
-	// and then we mount that volume to a path in the container that the traffic-manager
-	// knows about and can read from.
-	var licenseVolume []corev1.Volume
-	var licenseVolumeMount []corev1.VolumeMount
-	if addLicense {
-		licenseVolume = []corev1.Volume{
-			{
-				Name: "license",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: managerLicenseName,
-					},
-				},
-			},
-		}
-		licenseVolumeMount = []corev1.VolumeMount{
-			{
-				Name:      "license",
-				ReadOnly:  true,
-				MountPath: "/home/telepresence/",
-			},
-		}
-	}
-
-	return &kates.Deployment{
-		TypeMeta: kates.TypeMeta{
-			Kind: "Deployment",
-		},
-		ObjectMeta: kates.ObjectMeta{
-			Namespace: managerNamespace,
-			Name:      install.ManagerAppName,
-			Labels:    labelMap,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labelMap,
-			},
-			Template: kates.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labelMap,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  install.ManagerAppName,
-							Image: managerImageName(env),
-							Env:   containerEnv,
-							Ports: []corev1.ContainerPort{
-								{
-									Name:          "api",
-									ContainerPort: install.ManagerPortHTTP,
-								},
-							},
-							VolumeMounts: licenseVolumeMount,
-						}},
-					Volumes:       licenseVolume,
-					RestartPolicy: corev1.RestartPolicyAlways,
-				},
-			},
-		},
-	}
-}
-
-func (ki *installer) findManagerSvc(c context.Context) (*kates.Service, error) {
-	svc := &kates.Service{
-		TypeMeta:   kates.TypeMeta{Kind: "Service"},
-		ObjectMeta: kates.ObjectMeta{Name: install.ManagerAppName, Namespace: managerNamespace},
-	}
-	if err := ki.client.Get(c, svc, svc); err != nil {
-		return nil, err
-	}
-	return svc, nil
-}
-
-func (ki *installer) ensureManager(c context.Context, env client.Env) error {
-	if _, err := ki.findManagerSvc(c); err != nil {
-		if errors2.IsNotFound(err) {
-			_, err = ki.createManagerSvc(c)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	addLicense := false
-	// If a license is provided, we add it to the traffic-manager deployment
-	if _, err := ki.findSecret(c, managerNamespace, managerLicenseName); err != nil {
-		if errors2.IsNotFound(err) {
-			dlog.Infof(c, "License secret not found %s", err)
-		} else {
-			dlog.Errorf(c, "Error getting license secret %s", err)
-		}
-	} else {
-		dlog.Info(c, "License found and adding to traffic-manager")
-		addLicense = true
-	}
-	dep, err := ki.findDeployment(c, managerNamespace, install.ManagerAppName)
-	if err != nil {
-		if errors2.IsNotFound(err) {
-			err = ki.createManagerDeployment(c, env, addLicense)
-			if err == nil {
-				err = ki.waitForApply(c, managerNamespace, install.ManagerAppName, nil)
-			}
-		}
-		return err
-	}
-
-	imageName := managerImageName(env)
-	cns := dep.Spec.Template.Spec.Containers
-	upToDate := false
-	for i := range cns {
-		cn := &cns[i]
-		if cn.Image == imageName {
-			upToDate = true
-			break
-		}
-	}
-	if upToDate {
-		dlog.Infof(c, "%s.%s is up-to-date. Image: %s", install.ManagerAppName, managerNamespace, managerImageName(env))
-	} else {
-		_, err = ki.updateDeployment(c, env, dep)
-		if err == nil {
-			err = ki.waitForApply(c, managerNamespace, install.ManagerAppName, dep)
-		}
-	}
-	return err
+func (ki *installer) ensureManager(c context.Context, env *client.Env) error {
+	return resource.EnsureTrafficManager(c, ki.client, managerNamespace, ki.getClusterId(c), env)
 }

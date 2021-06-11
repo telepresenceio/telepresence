@@ -181,11 +181,7 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = ti.createManagerSvc(c)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = ti.createManagerDeployment(c, env, false)
+			err = ti.ensureManager(c, &env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -223,7 +219,7 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := ti.ensureManager(c, env); err != nil {
+			if err := ti.ensureManager(c, &env); err != nil {
 				t.Fatal(err)
 			}
 		})

@@ -100,7 +100,7 @@ func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 }
 
 func (tm *trafficManager) run(c context.Context) error {
-	err := tm.ensureManager(c, tm.env)
+	err := tm.ensureManager(c, &tm.env)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
 		close(tm.startup)
@@ -516,13 +516,13 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		fallthrough
 	case rpc.UninstallRequest_ALL_AGENTS:
 		if len(agents) > 0 {
-			if err := tm.removeManagerAndAgents(c, true, agents); err != nil {
+			if err := tm.removeManagerAndAgents(c, true, agents, &tm.env); err != nil {
 				result.ErrorText = err.Error()
 			}
 		}
 	default:
 		// Cancel all communication with the manager
-		if err := tm.removeManagerAndAgents(c, false, agents); err != nil {
+		if err := tm.removeManagerAndAgents(c, false, agents, &tm.env); err != nil {
 			result.ErrorText = err.Error()
 		}
 	}
