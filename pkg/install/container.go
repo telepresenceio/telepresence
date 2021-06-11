@@ -132,3 +132,21 @@ func appEnvironment(appContainer *kates.Container) []corev1.EnvVar {
 	}
 	return envCopy
 }
+
+const maxPortNameLen = 15
+
+// HiddenPortName prefixes the given name with "tm-" and truncates it to 15 characters. If
+// the ordinal is greater than zero, the last two digits are reserved for the hexadecimal
+// representation of that ordinal.
+func HiddenPortName(name string, ordinal int) string {
+	// New name must be max 15 characters long
+	hiddenName := "tm-" + name
+	if len(hiddenName) > maxPortNameLen {
+		if ordinal > 0 {
+			hiddenName = hiddenName[:maxPortNameLen-2] + strconv.FormatInt(int64(ordinal), 16) // we don't expect more than 256 ports
+		} else {
+			hiddenName = hiddenName[:maxPortNameLen]
+		}
+	}
+	return hiddenName
+}

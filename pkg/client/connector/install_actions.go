@@ -468,15 +468,13 @@ func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kat
 		if cn.Name != hcp.ContainerName {
 			continue
 		}
-		ports := cn.Ports
-		for pn := range ports {
-			p := &ports[pn]
-			if p.Name == name {
-				return cn, p, nil
-			}
+		p, err := install.GetPort(cn, name)
+		if err != nil {
+			return nil, nil, install.ObjErrorf(obj, err.Error())
 		}
+		return cn, p, nil
 	}
-	return nil, nil, install.ObjErrorf(obj, "unable to locate port %q in container %q", name, hcp.ContainerName)
+	return nil, nil, install.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {
@@ -498,8 +496,6 @@ func (hcp *hideContainerPortAction) Do(obj kates.Object) error {
 	return hcp.do(obj)
 }
 
-const maxPortNameLen = 15
-
 func (hcp *hideContainerPortAction) do(obj kates.Object) error {
 	cn, p, err := hcp.getPort(obj, hcp.PortName)
 	if err != nil {
@@ -507,14 +503,7 @@ func (hcp *hideContainerPortAction) do(obj kates.Object) error {
 	}
 
 	// New name must be max 15 characters long
-	hcp.HiddenName = "tm-" + p.Name
-	if len(hcp.HiddenName) > maxPortNameLen {
-		if hcp.ordinal > 0 {
-			hcp.HiddenName = hcp.HiddenName[:maxPortNameLen-2] + strconv.FormatInt(int64(hcp.ordinal), 16) // we don't expect more than 256 ports
-		} else {
-			hcp.HiddenName = hcp.HiddenName[:maxPortNameLen]
-		}
-	}
+	hcp.HiddenName = install.HiddenPortName(p.Name, hcp.ordinal)
 	swapPortName(cn, p, hcp.PortName, hcp.HiddenName)
 	return nil
 }

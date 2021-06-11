@@ -365,40 +365,16 @@ telepresence uninstall --agent %s This will cancel any intercepts that
 already exist for this service`, kind, obj.GetName())
 		return "", "", errors.Wrap(err, msg)
 	}
-	var svc *kates.Service
 
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
-		matchingSvcs, err := install.FindMatchingServices(c, ki.client, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvc, err := install.FindMatchingService(c, ki.client, portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}
-
-		switch numSvcs := len(matchingSvcs); {
-		case numSvcs == 0:
-			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", podTemplate.Labels)
-			if portNameOrNumber != "" {
-				errMsg += fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
-			}
-			return "", "", errors.New(errMsg)
-		case numSvcs > 1:
-			svcNames := make([]string, 0, numSvcs)
-			for _, svc := range matchingSvcs {
-				svcNames = append(svcNames, svc.Name)
-			}
-
-			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v in namespace %s, use --service and one of: %s",
-				podTemplate.Labels, namespace, strings.Join(svcNames, ","))
-			if portNameOrNumber != "" {
-				errMsg += fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
-			}
-			return "", "", errors.New(errMsg)
-		default:
-		}
-
-		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, obj, matchingSvcs[0])
+		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, obj, matchingSvc)
 		if err != nil {
 			return "", "", err
 		}
@@ -705,13 +681,15 @@ func addAgentToWorkload(
 	*kates.Service,
 	error,
 ) {
-	_, err := install.GetPodTemplateFromObject(object)
+	podTemplate, err := install.GetPodTemplateFromObject(object)
 	if err != nil {
 		return nil, nil, err
 	}
-	servicePort, container, containerPortIndex, err := install.FindMatchingPort(object, portNameOrNumber, matchingService)
+
+	cns := podTemplate.Spec.Containers
+	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, matchingService)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, install.ObjErrorf(object, err.Error())
 	}
 	if matchingService.Spec.ClusterIP == "None" {
 		dlog.Debugf(c,

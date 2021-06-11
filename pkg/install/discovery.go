@@ -2,7 +2,10 @@ package install
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -79,30 +82,50 @@ func FindMatchingServices(c context.Context, client *kates.Client, portNameOrNum
 	return matching, nil
 }
 
+func FindMatchingService(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) (*kates.Service, error) {
+	matchingSvcs, err := FindMatchingServices(c, client, portNameOrNumber, svcName, namespace, labels)
+	if err != nil {
+		return nil, err
+	}
+	if len(matchingSvcs) == 1 {
+		return matchingSvcs[0], nil
+	}
+
+	count := "no"
+	suffix := ""
+	portRef := ""
+	if len(matchingSvcs) > 0 {
+		svcNames := make([]string, 0, len(matchingSvcs))
+		for i, svc := range matchingSvcs {
+			svcNames[i] = svc.Name
+		}
+		count = "multiple"
+		suffix = fmt.Sprintf(", use --service and one of: %s", strings.Join(svcNames, ","))
+	}
+	if portNameOrNumber != "" {
+		portRef = fmt.Sprintf(" and a port referenced by name or port number %s", portNameOrNumber)
+	}
+	return nil, fmt.Errorf("found %s services with a selector matching labels %v%s in namespace %s%s", count, labels, portRef, namespace, suffix)
+}
+
 // FindMatchingPort finds the matching container associated with portNameOrNumber
 // in the given service.
-func FindMatchingPort(obj kates.Object, portNameOrNumber string, svc *kates.Service) (
+func FindMatchingPort(cns []corev1.Container, portNameOrNumber string, svc *kates.Service) (
 	sPort *kates.ServicePort,
 	cn *kates.Container,
 	cPortIndex int,
 	err error,
 ) {
-	podTemplate, err := GetPodTemplateFromObject(obj)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	cns := podTemplate.Spec.Containers
 	// For now, we only support intercepting one port on a given service.
 	ports := svcPortByNameOrNumber(svc, portNameOrNumber)
 	switch numPorts := len(ports); {
 	case numPorts == 0:
 		// this may happen when portNameOrNumber is specified but none of the
 		// ports match
-		return nil, nil, 0, ObjErrorf(obj, "found no Service with a port that matches any container in this workload")
+		return nil, nil, 0, errors.New("found no Service with a port that matches any container in this workload")
 
 	case numPorts > 1:
-		return nil, nil, 0, ObjErrorf(obj, `found matching Service with multiple matching ports.
+		return nil, nil, 0, errors.New(`found matching Service with multiple matching ports.
 Please specify the Service port you want to intercept by passing the --port=local:svcPortName flag.`)
 	default:
 	}
@@ -150,7 +173,7 @@ Please specify the Service port you want to intercept by passing the --port=loca
 	}
 
 	if matchingServicePort == nil {
-		return nil, nil, 0, ObjErrorf(obj, "found no Service with a port that matches any container in this workload")
+		return nil, nil, 0, errors.New("found no Service with a port that matches any container in this workload")
 	}
 	return matchingServicePort, matchingContainer, containerPortIndex, nil
 }
