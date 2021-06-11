@@ -15,7 +15,7 @@ import (
 
 // GenerateKeys creates the crt.pem, key.pem, and ca.pem needed when
 // setting up the mutator webhook for agent auto injection
-func GenerateKeys() (crtPem, keyPem, caPem []byte, err error) {
+func GenerateKeys(mgrNamespace string) (crtPem, keyPem, caPem []byte, err error) {
 	caCert := &x509.Certificate{
 		SerialNumber: big.NewInt(0xefecab0),
 		Subject: pkix.Name{
@@ -41,8 +41,8 @@ func GenerateKeys() (crtPem, keyPem, caPem []byte, err error) {
 		return nil, nil, nil, err
 	}
 
-	dnsNames := []string{"agent-injector", "agent-injector.ambassador", "agent-injector.ambassador.svc"}
-	commonName := "agent-injector.ambassador.svc"
+	commonName := fmt.Sprintf("agent-injector.%s.svc", mgrNamespace)
+	dnsNames := []string{"agent-injector", "agent-injector." + mgrNamespace, commonName}
 
 	// server cert config
 	cert := &x509.Certificate{

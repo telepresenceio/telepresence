@@ -26,7 +26,7 @@ func (ri mwhSecret) secret(ctx context.Context) *kates.Secret {
 
 func (ri mwhSecret) Create(ctx context.Context) (err error) {
 	sc := getScope(ctx)
-	if sc.crtPem, sc.keyPem, sc.caPem, err = install.GenerateKeys(); err != nil {
+	if sc.crtPem, sc.keyPem, sc.caPem, err = install.GenerateKeys(sc.namespace); err != nil {
 		return err
 	}
 	sec := ri.secret(ctx)

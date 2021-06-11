@@ -12,22 +12,22 @@ import (
 // The program creates the crt.pem, key.pem, and ca.pem needed when
 // setting up the mutator webhook for agent auto injection
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s <directory>", os.Args[0])
+	if len(os.Args) != 3 {
+		fmt.Fprintf(os.Stderr, "usage: %s <manager-namespace> <directory>", os.Args[0])
 		os.Exit(1)
 	}
-	if err := generateKeys(os.Args[1]); err != nil {
+	if err := generateKeys(os.Args[1], os.Args[2]); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 }
 
-func generateKeys(dir string) error {
+func generateKeys(mgrNamespace, dir string) error {
 	err := os.MkdirAll(dir, 0777)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %q: %w", dir, err)
 	}
-	crtPem, keyPem, caPem, err := install.GenerateKeys()
+	crtPem, keyPem, caPem, err := install.GenerateKeys(mgrNamespace)
 	if err != nil {
 		return err
 	}

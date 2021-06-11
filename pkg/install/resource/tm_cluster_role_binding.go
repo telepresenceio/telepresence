@@ -31,7 +31,7 @@ func (ri tmClusterRoleBinding) Create(ctx context.Context) error {
 		{
 			Kind:      "ServiceAccount",
 			Name:      "traffic-manager",
-			Namespace: "ambassador",
+			Namespace: getScope(ctx).namespace,
 		},
 	}
 	clb.RoleRef = rbac.RoleRef{
