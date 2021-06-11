@@ -89,6 +89,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				A:   ip,
 			})
 		}
+		if len(msg.Answer) == 0 {
+			dlog.Debugf(c, "QUERY[%v] %s -> EMPTY", qType, domain)
+		}
 		_ = w.WriteMsg(&msg)
 		return
 	default:

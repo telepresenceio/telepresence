@@ -2,6 +2,7 @@
 
 ### 2.3.1 (TBD)
 
+- Feature: DNS resolver can now be configured with respect to what IP addresses that are used, and what lookups that gets sent to the cluster.
 - Bugfix: Fix a bug where sometimes large transfers from services on the cluster would hang indefinitely
 
 ### 2.3.0 (June 1, 2021)

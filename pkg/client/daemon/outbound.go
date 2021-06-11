@@ -37,7 +37,7 @@ type outbound struct {
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
-	domains    map[string]iputil.IPs
+	domains    map[string]struct{}
 	search     []string
 
 	// managerConfigured is closed when the traffic manager has performed
@@ -65,6 +65,8 @@ type outbound struct {
 	// dnsQueriesInProgress unique set of DNS queries currently in progress.
 	dnsInProgress  map[string]*awaitLookupResult
 	dnsQueriesLock sync.Mutex
+
+	dnsConfig *rpc.DNSConfig
 }
 
 // splitToUDPAddr splits the given address into an UDPAddr. It's
@@ -95,7 +97,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 		dnsIP:             iputil.Parse(dnsIPStr),
 		noSearch:          noSearch,
 		namespaces:        make(map[string]struct{}),
-		domains:           make(map[string]iputil.IPs),
+		domains:           make(map[string]struct{}),
 		dnsInProgress:     make(map[string]*awaitLookupResult),
 		search:            []string{""},
 		work:              make(chan func(context.Context) error),
@@ -135,18 +137,40 @@ func (o *outbound) routerServerWorker(c context.Context) (err error) {
 // in the search path declared in the Docker config. The "tel2-search" domain fills this purpose and a request for
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
-const dotTel2SubDomain = "." + tel2SubDomain
-const dotKubernetesZone = "." + kubernetesZone
+const dotTel2SubDomain = "." + tel2SubDomain + "."
+const dotKubernetesZone = "." + kubernetesZone + "."
 
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
+func (o *outbound) shouldDoClusterLookup(query string) bool {
+	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4 {
+		return false
+	}
+
+	query = query[:len(query)-1] // skip last dot
+
+	// Always include configured includeSuffixes
+	for _, sfx := range o.dnsConfig.IncludeSuffixes {
+		if strings.HasSuffix(query, sfx) {
+			return true
+		}
+	}
+
+	// Skip configured excludeSuffixes
+	for _, sfx := range o.dnsConfig.ExcludeSuffixes {
+		if strings.HasSuffix(query, sfx) {
+			return false
+		}
+	}
+	return true
+}
+
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
-	query = query[:len(query)-1]
-	query = strings.ToLower(query) // strip of trailing dot
+	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, dotTel2SubDomain)
 
-	if query == "localhost" {
+	if query == "localhost." {
 		// BUG(lukeshu): I have no idea why a lookup
 		// for localhost even makes it to here on my
 		// home WiFi when connecting to a k3sctl
@@ -160,8 +184,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		return localhostIPv4
 	}
 
-	// We don't care about queries to the kubernetes zone unless they have at least two additional elements.
-	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 3 {
+	if !o.shouldDoClusterLookup(query) {
 		return nil
 	}
 
@@ -184,9 +207,12 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		}
 	}
 
-	// Give the cluster lookup a reasonable timeout
-	tos := client.GetConfig(c).Timeouts
-	c, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
+	// Give the cluster lookup a reasonable timeout.
+	maxWait := time.Duration(o.dnsConfig.LookupTimeout)
+	if maxWait <= 0 {
+		maxWait = 4 * time.Second
+	}
+	c, cancel := context.WithTimeout(c, maxWait)
 	defer func() {
 		cancel()
 		o.dnsQueriesLock.Lock()
@@ -195,10 +221,11 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		close(firstLookupResult.done)
 	}()
 
-	dlog.Debugf(c, "LookupHost %s", query)
+	queryWithNoTrailingDot := query[:len(query)-1]
+	dlog.Debugf(c, "LookupHost %q", queryWithNoTrailingDot)
 	response, err := o.router.managerClient.LookupHost(c, &manager.LookupHostRequest{
 		Session: o.router.session,
-		Host:    query,
+		Host:    queryWithNoTrailingDot,
 	})
 	if err != nil {
 		dlog.Error(c, client.CheckTimeout(c, err))
@@ -222,10 +249,28 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 	if err := o.router.setOutboundInfo(ctx, info); err != nil {
 		return err
 	}
+	if info.Dns == nil {
+		o.dnsConfig = &rpc.DNSConfig{}
+	} else {
+		o.dnsConfig = info.Dns
+		if len(o.dnsIP) == 0 && len(info.Dns.LocalIp) > 0 {
+			o.dnsIP = info.Dns.LocalIp
+		}
+	}
+	if len(o.dnsConfig.ExcludeSuffixes) == 0 {
+		o.dnsConfig.ExcludeSuffixes = []string{
+			".arpa",
+			".com",
+			".io",
+			".net",
+			".org",
+			".ru",
+		}
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case o.kubeDNS <- info.KubeDnsIp:
+	case o.kubeDNS <- o.dnsConfig.RemoteIp:
 		return nil
 	}
 }
