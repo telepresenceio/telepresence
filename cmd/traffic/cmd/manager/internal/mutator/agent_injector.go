@@ -48,6 +48,11 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		podNamespace = req.Namespace
 	}
 	podName := pod.Name
+	if podName == "" {
+		// It is very probable the pod was not yet assigned a name,
+		// in which case we should use the metadata generated name.
+		podName = pod.ObjectMeta.GenerateName
+	}
 
 	// Validate traffic-agent injection preconditions.
 	refPodName := fmt.Sprintf("%s.%s", podName, podNamespace)
