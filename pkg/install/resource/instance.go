@@ -16,8 +16,8 @@ import (
 type Instance interface {
 	Create(context.Context) error
 	Exists(context.Context) (bool, error)
-	Delete(context.Context) error
 	Update(context.Context) error
+	Delete(context.Context) error
 }
 
 // scope contains everything that needs to be shared between resources
@@ -37,11 +37,11 @@ type scope struct {
 type scopeKey struct{}
 
 func withScope(ctx context.Context, scope *scope) context.Context {
-	return context.WithValue(ctx, &scopeKey{}, scope)
+	return context.WithValue(ctx, scopeKey{}, scope)
 }
 
 func getScope(ctx context.Context) *scope {
-	if sc, ok := ctx.Value(&scopeKey{}).(*scope); ok {
+	if sc, ok := ctx.Value(scopeKey{}).(*scope); ok {
 		return sc
 	}
 	return nil

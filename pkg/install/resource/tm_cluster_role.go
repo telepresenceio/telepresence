@@ -11,7 +11,9 @@ import (
 
 type tmClusterRole int
 
-var TrafficManagerClusterRole Instance = tmClusterRole(0)
+const TrafficManagerClusterRole = tmClusterRole(0)
+
+var _ Instance = TrafficManagerClusterRole
 
 func (ri tmClusterRole) clusterRole() *kates.ClusterRole {
 	cr := new(kates.ClusterRole)

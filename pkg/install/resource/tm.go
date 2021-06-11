@@ -17,7 +17,7 @@ func GetTrafficManagerResources() Instances {
 		TrafficManagerClusterRole,
 		TrafficManagerClusterRoleBinding,
 		MutatorWebhookSecret,
-		TrafficManagerDeployment,
+		NewTrafficManagerDeployment(),
 		TrafficManagerSvc,
 		AgentInjectorSvc,
 		AgentInjectorWebhook,

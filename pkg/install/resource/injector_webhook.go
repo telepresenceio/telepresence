@@ -13,7 +13,9 @@ const agentInjectorWebhookName = install.AgentInjectorName + "-webhook"
 
 type injectorWebhook int
 
-var AgentInjectorWebhook Instance = injectorWebhook(0)
+const AgentInjectorWebhook = injectorWebhook(0)
+
+var _ Instance = AgentInjectorWebhook
 
 func (ri injectorWebhook) webhook(ctx context.Context) *admreg.MutatingWebhookConfiguration {
 	sec := new(admreg.MutatingWebhookConfiguration)

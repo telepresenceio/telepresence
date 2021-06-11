@@ -11,7 +11,9 @@ import (
 
 type tmSvc int
 
-var TrafficManagerSvc Instance = tmSvc(0)
+const TrafficManagerSvc = tmSvc(0)
+
+var _ Instance = TrafficManagerSvc
 
 func (ri tmSvc) service(ctx context.Context) *kates.Service {
 	svc := new(kates.Service)

@@ -9,7 +9,9 @@ import (
 
 type mwhSecret int
 
-var MutatorWebhookSecret Instance = mwhSecret(0)
+const MutatorWebhookSecret = mwhSecret(0)
+
+var _ Instance = MutatorWebhookSecret
 
 func (ri mwhSecret) secret(ctx context.Context) *kates.Secret {
 	sec := new(kates.Secret)

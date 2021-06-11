@@ -9,7 +9,9 @@ import (
 
 type tmServiceAccount int
 
-var TrafficManagerServiceAccount Instance = tmServiceAccount(0)
+const TrafficManagerServiceAccount = tmServiceAccount(0)
+
+var _ Instance = TrafficManagerServiceAccount
 
 func (ri tmServiceAccount) svcAccount(ctx context.Context) *kates.ServiceAccount {
 	cr := new(kates.ServiceAccount)

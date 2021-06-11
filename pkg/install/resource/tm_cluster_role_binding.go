@@ -11,7 +11,9 @@ import (
 
 type tmClusterRoleBinding int
 
-var TrafficManagerClusterRoleBinding Instance = tmClusterRoleBinding(0)
+const TrafficManagerClusterRoleBinding = tmClusterRoleBinding(0)
+
+var _ Instance = TrafficManagerClusterRoleBinding
 
 func (ri tmClusterRoleBinding) roleBinding() *kates.ClusterRoleBinding {
 	cr := new(kates.ClusterRoleBinding)

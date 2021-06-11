@@ -21,7 +21,9 @@ type tmDeployment struct {
 	found *kates.Deployment
 }
 
-var TrafficManagerDeployment Instance = &tmDeployment{}
+func NewTrafficManagerDeployment() Instance {
+	return &tmDeployment{}
+}
 
 func (ri *tmDeployment) deployment(ctx context.Context) *kates.Deployment {
 	dep := new(kates.Deployment)

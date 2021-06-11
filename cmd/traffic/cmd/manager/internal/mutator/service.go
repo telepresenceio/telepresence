@@ -12,12 +12,13 @@ import (
 	"strconv"
 
 	admission "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
@@ -78,13 +79,10 @@ func ServeMutator(ctx context.Context) error {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	server := &http.Server{
-		Addr:     ":" + strconv.Itoa(install.MutatorWebhookPortHTTPS),
-		ErrorLog: dlog.StdLogger(ctx, dlog.LogLevelError),
-		Handler:  mux}
-
-	dlog.Infof(ctx, "Mutating webhook service is listening on %v", server.Addr)
-	err := dutil.ListenAndServeHTTPSWithContext(ctx, server, certPath, keyPath)
+	server := &dhttp.ServerConfig{Handler: mux}
+	addr := ":" + strconv.Itoa(install.MutatorWebhookPortHTTPS)
+	dlog.Infof(ctx, "Mutating webhook service is listening on %v", addr)
+	err := server.ListenAndServeTLS(ctx, addr, certPath, keyPath)
 	if err != nil {
 		err = fmt.Errorf("mutating webhook service stopped. %w", err)
 		return err
@@ -98,7 +96,7 @@ func isNamespaceOfInterest(ctx context.Context, ns string) bool {
 	for _, skippedNs := range []string{
 		metav1.NamespacePublic,
 		metav1.NamespaceSystem,
-		"kube-node-lease",
+		corev1.NamespaceNodeLease,
 	} {
 		if ns == skippedNs {
 			return false

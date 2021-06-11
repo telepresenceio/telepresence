@@ -8,8 +8,10 @@ import (
 
 type nsResource int
 
-var TrafficManagerNamespace Instance = nsResource(0)
-var TrafficManagerNamespaceKeep Instance = nsResource(1)
+const TrafficManagerNamespace = nsResource(0)
+const TrafficManagerNamespaceKeep = nsResource(1)
+
+var _ Instance = TrafficManagerNamespace
 
 func (ri *nsResource) ns(ctx context.Context) *kates.Namespace {
 	cr := new(kates.Namespace)

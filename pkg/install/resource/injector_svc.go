@@ -11,7 +11,9 @@ import (
 
 type injectorSvc int
 
-var AgentInjectorSvc Instance = injectorSvc(0)
+const AgentInjectorSvc = injectorSvc(0)
+
+var _ Instance = AgentInjectorSvc
 
 func (ri injectorSvc) service(ctx context.Context) *kates.Service {
 	svc := new(kates.Service)
