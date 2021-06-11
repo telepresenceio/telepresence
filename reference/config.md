@@ -51,7 +51,7 @@ Some configuration is not global to Telepresence and is actually specific to a c
 
 ### Values
 The current per-cluster configuration supports `dns` and `alsoProxy` keys.
-To add configuration, simply add a `telepresence.getambassador.io` entry to the cluster in your kubeconfig like so:
+To add configuration, simply add a `telepresence.io` entry to the cluster in your kubeconfig like so:
 
 ```
 apiVersion: v1
@@ -59,20 +59,21 @@ clusters:
 - cluster:
     server: https://127.0.0.1
     extensions:
-    - name: telepresence.getambassador.io
+    - name: telepresence.io
       extension:
         dns:
         also-proxy:
   name: example-cluster
 ```
 #### DNS
-The fields for `dns` are: LocalIP, RemoteIP, ExcludeSuffixes, and IncludeSuffixes.
+The fields for `dns` are: local-ip, remote-ip, exclude-suffixes, include-suffixes, and lookup-timeout.
 |Field|Description|Type|Default|
 |---|---|---|---|
 |`local-ip`|The address of the local DNS server. This entry is only used on Linux system that are not configured to use systemd.resolved|ip|first line of /etc/resolv.conf|
 |`remote-ip`|the address of the cluster's DNS service|ip|ip|IP of the kube-dns.kube-system or the dns-default.openshift-dns service|
 |`exclude-suffixes`|suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver)|list||
 |`include-suffixes`|suffixes for which the DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes.|list||
+|`lookup-timeout`|maximum time to wait for a cluster side host lookup|duration||
 
 Here is an example kubeconfig:
 ```
@@ -81,7 +82,7 @@ clusters:
 - cluster:
     server: https://127.0.0.1
     extensions:
-    - name: telepresence.getambassador.io
+    - name: telepresence.io
       extension:
         dns:
           include-suffixes:
@@ -102,7 +103,7 @@ clusters:
 - cluster:
     server: https://127.0.0.1
     extensions:
-    - name: telepresence.getambassador.io
+    - name: telepresence.io
       extension:
         also-proxy:
         - 1.2.3.4/32
