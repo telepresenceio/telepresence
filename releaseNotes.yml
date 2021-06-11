@@ -30,8 +30,8 @@ items:
         image: ./telepresence-2.3.1-alsoProxy.png
         docs: reference/config
         type: feature
-      - title: Mutating Webhook Traffic Manager
-        body: "The Traffic Manager now contains a mutating webhook to automatically add an agent to pods that have the `telepresence.getambassador.io/traffic-agent: enabled`.  This enables Telepresence to work well with GitOps CD platforms that rely on higher level kubernetes objects matching what is stored in git.  For workloads without the annotation, Telepresence will add the agent the way it has in the past"
+      - title: Mutating Webhook for Injecting Traffic Agents
+        body: "The Traffic Manager now contains a mutating webhook to automatically add an agent to pods that have the <code>telepresence.getambassador.io/traffic-agent: enabled</code> annotation.  This enables Telepresence to work well with GitOps CD platforms that rely on higher level kubernetes objects matching what is stored in git.  For workloads without the annotation, Telepresence will add the agent the way it has in the past"
         image: ./telepresence-2.3.1-inject.png
         docs: reference/rbac
         type: feature
