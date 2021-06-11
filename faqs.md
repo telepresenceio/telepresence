@@ -16,6 +16,10 @@ You can “intercept” any requests made to a target Kubernetes workload, and c
 
 By using the preview URL functionality you can share access with additional developers or stakeholders to the application via an entry point associated with your intercept and locally developed service. You can make changes that are visible in near real-time to all of the participants authenticated and viewing the preview URL. All other viewers of the application entrypoint will not see the results of your changes.
 
+** What operating systems does Telepresence work on?**
+
+Telepresence currently works natively on macOS and Linux. We are working on a nativer Windows port, but in the meantime, Windows users can use Telepresence with WSL 2.
+
 ** What protocols can be intercepted by Telepresence?**
 
  All HTTP/1.1 and HTTP/2 protocols can be intercepted. This includes:
