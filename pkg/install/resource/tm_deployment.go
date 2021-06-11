@@ -74,6 +74,15 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 				},
 			},
 		},
+		{
+			Name: "tls",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: install.MutatorWebhookTLSName,
+					Optional:   &optional,
+				},
+			},
+		},
 	}
 	volumeMounts := []corev1.VolumeMount{
 		{
@@ -109,6 +118,10 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 							{
 								Name:          "api",
 								ContainerPort: install.ManagerPortHTTP,
+							},
+							{
+								Name:          "https",
+								ContainerPort: install.MutatorWebhookPortHTTPS,
 							},
 						},
 						VolumeMounts: volumeMounts,
