@@ -616,6 +616,32 @@ func (cs *connectedSuite) TestL_LegacySwapDeploymentDoesIntercept() {
 	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 }
 
+func (cs *connectedSuite) TestM_AutoInjectedAgent() {
+	ctx := dlog.NewTestContext(cs.T(), false)
+	cs.NoError(cs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
+	defer func() {
+		cs.NoError(cs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
+	}()
+
+	cs.Run("shows up with agent installed in list output", func() {
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+		cs.Empty(stderr)
+		cs.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+	})
+
+	cs.Run("can be intercepted", func() {
+		defer telepresence(cs.T(), "leave", "echo-auto-inject-"+cs.ns())
+
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "echo-auto-inject", "--port", "9091")
+		require.Empty(stderr)
+		require.Contains(stdout, "Using Deployment echo-auto-inject")
+		stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+		require.Empty(stderr)
+		require.Contains(stdout, "echo-auto-inject: intercepted")
+	})
+}
+
 func (cs *connectedSuite) TestZ_Uninstall() {
 	cs.Run("Uninstalls agent on given deployment", func() {
 		require := cs.Require()
