@@ -13,8 +13,14 @@ const telName = "manager"
 func GetTrafficManagerResources() Instances {
 	return Instances{
 		TrafficManagerNamespaceKeep, // Don't delete when deleting the manager
+		TrafficManagerServiceAccount,
+		TrafficManagerClusterRole,
+		TrafficManagerClusterRoleBinding,
+		MutatorWebhookSecret,
 		TrafficManagerDeployment,
 		TrafficManagerSvc,
+		AgentInjectorSvc,
+		AgentInjectorWebhook,
 	}
 }
 

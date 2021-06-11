@@ -28,6 +28,9 @@ type scope struct {
 	tmSelector map[string]string
 	client     *kates.Client
 	env        *client.Env
+	caPem      []byte
+	crtPem     []byte
+	keyPem     []byte
 }
 
 // The scope is available through the context

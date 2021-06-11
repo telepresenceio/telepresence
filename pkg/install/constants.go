@@ -3,6 +3,7 @@ package install
 const (
 	AgentContainerName        = "traffic-agent"
 	AgentAnnotationVolumeName = "traffic-annotations"
+	AgentInjectorName         = "agent-injector"
 	DomainPrefix              = "telepresence.getambassador.io/"
 	InjectAnnotation          = DomainPrefix + "inject-" + AgentContainerName
 	ManagerAppName            = "traffic-manager"

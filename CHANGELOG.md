@@ -2,6 +2,7 @@
 
 ### 2.3.1 (TBD)
 
+- Feature: Agents can now be installed using a mutator webhook
 - Feature: DNS resolver can now be configured with respect to what IP addresses that are used, and what lookups that gets sent to the cluster.
 - Feature: Telepresence can now be configured to proxy subnets that aren't part of the cluster but only accesible from the cluster.
 - Change: The `trafficManagerConnect` timout default has changed from 20 seconds to 60 seconds, in order to facilitate TODO.
