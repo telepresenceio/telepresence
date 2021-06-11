@@ -67,10 +67,11 @@ clusters:
 ```
 #### DNS
 The fields for `dns` are: local-ip, remote-ip, exclude-suffixes, include-suffixes, and lookup-timeout.
+
 |Field|Description|Type|Default|
 |---|---|---|---|
 |`local-ip`|The address of the local DNS server. This entry is only used on Linux system that are not configured to use systemd.resolved|ip|first line of /etc/resolv.conf|
-|`remote-ip`|the address of the cluster's DNS service|ip|ip|IP of the kube-dns.kube-system or the dns-default.openshift-dns service|
+|`remote-ip`|the address of the cluster's DNS service|ip|IP of the kube-dns.kube-system or the dns-default.openshift-dns service|
 |`exclude-suffixes`|suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver)|list||
 |`include-suffixes`|suffixes for which the DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes.|list||
 |`lookup-timeout`|maximum time to wait for a cluster side host lookup|duration||
