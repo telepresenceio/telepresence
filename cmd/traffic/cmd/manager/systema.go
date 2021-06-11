@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	systemarpc "github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/systema"
 )
 
@@ -109,8 +110,9 @@ func (p *systemaPool) Get() (systemarpc.SystemACRUDClient, error) {
 	defer p.mu.Unlock()
 
 	if p.ctx == nil {
-		host := p.mgr.env.SystemAHost
-		port := p.mgr.env.SystemAPort
+		env := managerutil.GetEnv(p.mgr.ctx)
+		host := env.SystemAHost
+		port := env.SystemAPort
 
 		ctx, cancel := context.WithCancel(dgroup.WithGoroutineName(p.mgr.ctx, "/systema"))
 		client, wait, err := systema.ConnectToSystemA(

@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-example
+spec:
+  type: ExternalName
+  externalName: example.com

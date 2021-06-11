@@ -18,6 +18,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -31,7 +32,6 @@ type Clock interface {
 type Manager struct {
 	ctx     context.Context
 	clock   Clock
-	env     Env
 	ID      string
 	state   *state.State
 	systema *systemaPool
@@ -47,11 +47,10 @@ func (wall) Now() time.Time {
 	return time.Now()
 }
 
-func NewManager(ctx context.Context, env Env) *Manager {
+func NewManager(ctx context.Context) *Manager {
 	ret := &Manager{
 		ctx:   ctx,
 		clock: wall{},
-		env:   env,
 		ID:    uuid.New().String(),
 		state: state.NewState(ctx),
 	}
@@ -67,7 +66,7 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // GetLicense returns the license for the cluster. This directory is mounted
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
-func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
+func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
 	licenseData, err := ioutil.ReadFile("/home/telepresence/license")
 	if err != nil {
 		return &rpc.License{}, err
@@ -79,14 +78,15 @@ func (m *Manager) GetLicense(context.Context, *empty.Empty) (*rpc.License, error
 		return &rpc.License{}, err
 	}
 	hostDomain := string(hostDomainData)
-	return &rpc.License{License: license, Host: hostDomain, ClusterId: m.env.ClusterID}, nil
+	return &rpc.License{License: license, Host: hostDomain, ClusterId: managerutil.GetEnv(ctx).ClusterID}, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
 // from within a cluster
 func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
+	env := managerutil.GetEnv(ctx)
 	timeout := 2 * time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", m.env.SystemAHost, m.env.SystemAPort), timeout)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", env.SystemAHost, env.SystemAPort), timeout)
 	if err != nil {
 		dlog.Debugf(ctx, "Failed to connect so assuming in air-gapped environment %s", err)
 		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
@@ -98,7 +98,8 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 // GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
 // the agents)
 func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
-	return &rpc.AmbassadorCloudConfig{Host: m.env.SystemAHost, Port: m.env.SystemAPort}, nil
+	env := managerutil.GetEnv(ctx)
+	return &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.

@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
-
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
@@ -21,6 +19,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {
@@ -426,8 +426,8 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 			// mount directives
 			"-o", "follow_symlinks",
 			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-			"localhost:" + telAppMountPoint, // what to mount
-			mountPoint,                      // where to mount it
+			"localhost:" + install.TelAppMountPoint, // what to mount
+			mountPoint,                              // where to mount it
 		}
 		return dpipe.DPipe(ctx, dexec.CommandContext(ctx, "sshfs", sshfsArgs...), conn)
 	}, 3*time.Second, 6*time.Second)

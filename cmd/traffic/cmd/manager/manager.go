@@ -18,14 +18,16 @@ import (
 	"github.com/datawire/dlib/dutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
-	env, err := LoadEnv(ctx)
+	ctx, err := managerutil.LoadEnv(ctx)
 	if err != nil {
 		return err
 	}
@@ -33,10 +35,11 @@ func Main(ctx context.Context, args ...string) error {
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 	})
-	mgr := NewManager(ctx, env)
+	mgr := NewManager(ctx)
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", func(ctx context.Context) error {
+		env := managerutil.GetEnv(ctx)
 		host := env.ServerHost
 		port := env.ServerPort
 
@@ -61,6 +64,8 @@ func Main(ctx context.Context, args ...string) error {
 
 		return dutil.ListenAndServeHTTPWithContext(ctx, server)
 	})
+
+	g.Go("agent-injector", mutator.ServeMutator)
 
 	g.Go("intercept-gc", func(ctx context.Context) error {
 		// Loop calling Expire

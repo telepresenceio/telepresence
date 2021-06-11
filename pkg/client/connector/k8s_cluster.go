@@ -256,32 +256,6 @@ func (kc *k8sCluster) findPod(c context.Context, namespace, name string) (*kates
 	return pod, nil
 }
 
-// findSecret returns a secret with the given name in the given namespace or nil
-// if no such secret could be found.
-func (kc *k8sCluster) findSecret(c context.Context, namespace, name string) (*kates.Secret, error) {
-	sec := &kates.Secret{
-		TypeMeta:   kates.TypeMeta{Kind: "Secret"},
-		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
-	}
-	if err := kc.client.Get(c, sec, sec); err != nil {
-		return nil, err
-	}
-	return sec, nil
-}
-
-// findNamespace returns a namespace with the given name or nil
-// if no such namespace could be found.
-func (kc *k8sCluster) findNamespace(c context.Context, name string) (*kates.Namespace, error) {
-	ns := &kates.Namespace{
-		TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
-		ObjectMeta: kates.ObjectMeta{Name: name},
-	}
-	if err := kc.client.Get(c, ns, ns); err != nil {
-		return nil, err
-	}
-	return ns, nil
-}
-
 // findObjectKind returns a workload for the given name and namespace. We
 // search in a specific order based on how we prefer workload objects:
 // 1. Deployments

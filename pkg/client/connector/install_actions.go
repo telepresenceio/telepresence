@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 // Public interface-y pieces ///////////////////////////////////////////////////
@@ -150,26 +150,6 @@ func unmarshalString(in string, out completeAction) error {
 	return json.Unmarshal([]byte(in), out)
 }
 
-func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) {
-	var tplSpec *kates.PodTemplateSpec
-	kind := obj.GetObjectKind().GroupVersionKind().Kind
-	switch kind {
-	case "ReplicaSet":
-		rs := obj.(*kates.ReplicaSet)
-		tplSpec = &rs.Spec.Template
-	case "Deployment":
-		dep := obj.(*kates.Deployment)
-		tplSpec = &dep.Spec.Template
-	case "StatefulSet":
-		statefulSet := obj.(*kates.StatefulSet)
-		tplSpec = &statefulSet.Spec.Template
-	default:
-		return nil, objErrorf(obj, "unsupported workload kind %q", kind)
-	}
-
-	return tplSpec, nil
-}
-
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
 // symbolic name so that an traffic-agent in a designated Workload can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
@@ -196,7 +176,7 @@ func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.Int
 			return p, nil
 		}
 	}
-	return nil, objErrorf(svc, "unable to find target port %q",
+	return nil, install.ObjErrorf(svc, "unable to find target port %q",
 		m.portName(targetPort.String()))
 }
 
@@ -253,7 +233,7 @@ func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*ka
 			return p, nil
 		}
 	}
-	return nil, objErrorf(svc, "unable to find port %d", targetPort)
+	return nil, install.ObjErrorf(svc, "unable to find port %d", targetPort)
 }
 
 func (m *addSymbolicPortAction) ExplainDo(_ kates.Object, out io.Writer) {
@@ -341,11 +321,6 @@ func (s *svcActions) TelVersion() (semver.Version, error) {
 
 // addTrafficAgentAction ///////////////////////////////////////////////////////
 
-const (
-	envPrefix        = "TEL_APP_"
-	telAppMountPoint = "/tel_app_mounts"
-)
-
 // addTrafficAgentAction is a partialAction that adds a traffic-agent to the set of containers in a
 // pod template spec.
 type addTrafficAgentAction struct {
@@ -374,147 +349,30 @@ func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Con
 }
 
 func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
-	tplSpec, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
 	cns := tplSpec.Spec.Containers
 	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
-		return objErrorf(obj, "unable to find app container %q in", ata.containerName)
+		return install.ObjErrorf(obj, "unable to find app container %q in", ata.containerName)
 	}
 
-	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, corev1.Volume{
-		Name: agentAnnotationVolumeName,
-		VolumeSource: corev1.VolumeSource{
-			DownwardAPI: &corev1.DownwardAPIVolumeSource{
-				Items: []corev1.DownwardAPIVolumeFile{
-					{
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: "metadata.annotations",
-						},
-						Path: "annotations",
-					},
-				},
+	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, install.AgentVolume())
+	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers,
+		install.AgentContainer(
+			obj.GetName(),
+			ata.ImageName,
+			appContainer,
+			corev1.ContainerPort{
+				Name:          ata.ContainerPortName,
+				Protocol:      ata.ContainerPortProto,
+				ContainerPort: 9900,
 			},
-		},
-	})
-	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers, corev1.Container{
-		Name:  agentContainerName,
-		Image: ata.ImageName,
-		Args:  []string{"agent"},
-		Ports: []corev1.ContainerPort{{
-			Name:          ata.ContainerPortName,
-			Protocol:      ata.ContainerPortProto,
-			ContainerPort: 9900,
-		}},
-		Env:          ata.agentEnvironment(obj.GetName(), appContainer),
-		EnvFrom:      ata.agentEnvFrom(appContainer.EnvFrom),
-		VolumeMounts: ata.agentVolumeMounts(appContainer.VolumeMounts),
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/stat", "/tmp/agent/ready"},
-				},
-			},
-		},
-	})
+			int(ata.ContainerPortNumber),
+			managerNamespace))
 	return nil
-}
-
-func (ata *addTrafficAgentAction) agentEnvFrom(appEF []corev1.EnvFromSource) []corev1.EnvFromSource {
-	if ln := len(appEF); ln > 0 {
-		agentEF := make([]corev1.EnvFromSource, ln)
-		for i, appE := range appEF {
-			appE.Prefix = envPrefix + appE.Prefix
-			agentEF[i] = appE
-		}
-		return agentEF
-	}
-	return appEF
-}
-
-func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContainer *kates.Container) []corev1.EnvVar {
-	appEnv := ata.appEnvironment(appContainer)
-	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+7)
-	copy(env, appEnv)
-	env = append(env,
-		corev1.EnvVar{
-			Name:  "LOG_LEVEL",
-			Value: "debug",
-		},
-		corev1.EnvVar{
-			Name:  "AGENT_NAME",
-			Value: agentName,
-		},
-		corev1.EnvVar{
-			Name: "AGENT_NAMESPACE",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.namespace",
-				},
-			},
-		},
-		corev1.EnvVar{
-			Name: "AGENT_POD_IP",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "status.podIP",
-				},
-			},
-		},
-		corev1.EnvVar{
-			Name:  "APP_PORT",
-			Value: strconv.Itoa(int(ata.ContainerPortNumber)),
-		})
-	if len(appContainer.VolumeMounts) > 0 {
-		env = append(env, corev1.EnvVar{
-			Name:  "APP_MOUNTS",
-			Value: telAppMountPoint,
-		})
-
-		// Have the agent propagate the mount-points as TELEPRESENCE_MOUNTS to make it easy for the
-		// local app to create symlinks.
-		mounts := make([]string, len(appContainer.VolumeMounts))
-		for i := range appContainer.VolumeMounts {
-			mounts[i] = appContainer.VolumeMounts[i].MountPath
-		}
-		env = append(env, corev1.EnvVar{
-			Name:  envPrefix + "TELEPRESENCE_MOUNTS",
-			Value: strings.Join(mounts, ":"),
-		})
-	}
-	env = append(env, corev1.EnvVar{
-		Name:  "MANAGER_HOST",
-		Value: managerAppName + "." + managerNamespace,
-	})
-	return env
-}
-
-func (ata *addTrafficAgentAction) agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
-	agentMounts := make([]corev1.VolumeMount, len(mounts)+1)
-	for i, mount := range mounts {
-		mount.MountPath = filepath.Join(telAppMountPoint, mount.MountPath)
-		agentMounts[i] = mount
-	}
-	agentMounts[len(mounts)] = corev1.VolumeMount{
-		Name:      agentAnnotationVolumeName,
-		MountPath: "/tel_pod_info",
-	}
-	return agentMounts
-}
-
-func (ata *addTrafficAgentAction) appEnvironment(appContainer *kates.Container) []corev1.EnvVar {
-	envCopy := make([]corev1.EnvVar, len(appContainer.Env)+1)
-	for i, ev := range appContainer.Env {
-		ev.Name = envPrefix + ev.Name
-		envCopy[i] = ev
-	}
-	envCopy[len(appContainer.Env)] = corev1.EnvVar{
-		Name:  "TELEPRESENCE_CONTAINER",
-		Value: appContainer.Name,
-	}
-	return envCopy
 }
 
 func (ata *addTrafficAgentAction) ExplainDo(_ kates.Object, out io.Writer) {
@@ -526,14 +384,14 @@ func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
 }
 
 func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
-	tplSpec, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return false
 	}
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == agentContainerName {
+		if cn.Name == install.AgentContainerName {
 			return true
 		}
 	}
@@ -541,34 +399,34 @@ func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
 }
 
 func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) error {
-	tplSpec, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
 
 	containerIdx := -1
 	for i := range tplSpec.Spec.Containers {
-		if tplSpec.Spec.Containers[i].Name == agentContainerName {
+		if tplSpec.Spec.Containers[i].Name == install.AgentContainerName {
 			containerIdx = i
 			break
 		}
 	}
 	if containerIdx < 0 {
-		return objErrorf(obj, "does not contain a %q container", agentContainerName)
+		return install.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName)
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
 	if ver.GE(semver.MustParse("2.1.5")) {
 		volumeIdx := -1
 		for i := range tplSpec.Spec.Volumes {
-			if tplSpec.Spec.Volumes[i].Name == agentAnnotationVolumeName {
+			if tplSpec.Spec.Volumes[i].Name == install.AgentAnnotationVolumeName {
 				volumeIdx = i
 				break
 			}
 		}
 
 		if volumeIdx < 0 {
-			return objErrorf(obj, "does not contain a %q volume", agentAnnotationVolumeName)
+			return install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName)
 		}
 		if len(tplSpec.Spec.Volumes) == 1 {
 			tplSpec.Spec.Volumes = nil
@@ -600,7 +458,7 @@ type hideContainerPortAction struct {
 var _ partialAction = (*hideContainerPortAction)(nil)
 
 func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	tplSpec, err := GetPodTemplateFromObject(obj)
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -610,15 +468,13 @@ func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kat
 		if cn.Name != hcp.ContainerName {
 			continue
 		}
-		ports := cn.Ports
-		for pn := range ports {
-			p := &ports[pn]
-			if p.Name == name {
-				return cn, p, nil
-			}
+		p, err := install.GetPort(cn, name)
+		if err != nil {
+			return nil, nil, install.ObjErrorf(obj, err.Error())
 		}
+		return cn, p, nil
 	}
-	return nil, nil, objErrorf(obj, "unable to locate port %q in container %q", name, hcp.ContainerName)
+	return nil, nil, install.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {
@@ -640,8 +496,6 @@ func (hcp *hideContainerPortAction) Do(obj kates.Object) error {
 	return hcp.do(obj)
 }
 
-const maxPortNameLen = 15
-
 func (hcp *hideContainerPortAction) do(obj kates.Object) error {
 	cn, p, err := hcp.getPort(obj, hcp.PortName)
 	if err != nil {
@@ -649,14 +503,7 @@ func (hcp *hideContainerPortAction) do(obj kates.Object) error {
 	}
 
 	// New name must be max 15 characters long
-	hcp.HiddenName = "tm-" + p.Name
-	if len(hcp.HiddenName) > maxPortNameLen {
-		if hcp.ordinal > 0 {
-			hcp.HiddenName = hcp.HiddenName[:maxPortNameLen-2] + strconv.FormatInt(int64(hcp.ordinal), 16) // we don't expect more than 256 ports
-		} else {
-			hcp.HiddenName = hcp.HiddenName[:maxPortNameLen]
-		}
-	}
+	hcp.HiddenName = install.HiddenPortName(p.Name, hcp.ordinal)
 	swapPortName(cn, p, hcp.PortName, hcp.HiddenName)
 	return nil
 }

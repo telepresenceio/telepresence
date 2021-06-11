@@ -334,6 +334,9 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := names()
 		require.NoError(err)
 		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
+
+		// The telepresence-test-developer will not be able to uninstall everything
+		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
 		require.Contains(stdout, "Daemon quitting")
@@ -611,6 +614,37 @@ func (cs *connectedSuite) TestL_LegacySwapDeploymentDoesIntercept() {
 	stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+}
+
+func (cs *connectedSuite) TestM_AutoInjectedAgent() {
+	ctx := dlog.NewTestContext(cs.T(), false)
+	cs.NoError(cs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
+	defer func() {
+		cs.NoError(cs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
+	}()
+
+	cs.Run("shows up with agent installed in list output", func() {
+		cs.Eventually(func() bool {
+			stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+			cs.Empty(stderr)
+			return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+		},
+			10*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
+	})
+
+	cs.Run("can be intercepted", func() {
+		defer telepresence(cs.T(), "leave", "echo-auto-inject-"+cs.ns())
+
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "echo-auto-inject", "--port", "9091")
+		require.Empty(stderr)
+		require.Contains(stdout, "Using Deployment echo-auto-inject")
+		stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+		require.Empty(stderr)
+		require.Contains(stdout, "echo-auto-inject: intercepted")
+	})
 }
 
 func (cs *connectedSuite) TestZ_Uninstall() {

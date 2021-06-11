@@ -1,4 +1,4 @@
-package manager_test
+package managerutil_test
 
 import (
 	"context"
@@ -8,7 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func TestEnvconfig(t *testing.T) {
@@ -26,27 +27,30 @@ func TestEnvconfig(t *testing.T) {
 		}
 	}()
 
-	defaults := manager.Env{
-		User:        "",
-		ServerHost:  "",
-		ServerPort:  "8081",
-		SystemAHost: "app.getambassador.io",
-		SystemAPort: "443",
+	defaults := managerutil.Env{
+		User:          "",
+		ServerHost:    "",
+		ServerPort:    "8081",
+		SystemAHost:   "app.getambassador.io",
+		SystemAPort:   "443",
+		AgentRegistry: "docker.io/datawire",
+		AgentImage:    "docker.io/datawire/tel2:" + strings.TrimPrefix(version.Version, "v"),
+		AgentPort:     9900,
 	}
 
 	testcases := map[string]struct {
 		Input  map[string]string
-		Output func(*manager.Env)
+		Output func(*managerutil.Env)
 	}{
 		"empty": {
 			Input:  nil,
-			Output: func(*manager.Env) {},
+			Output: func(*managerutil.Env) {},
 		},
 		"simple": {
 			Input: map[string]string{
 				"SYSTEMA_HOST": "app.getambassador.io",
 			},
-			Output: func(e *manager.Env) {
+			Output: func(e *managerutil.Env) {
 				e.SystemAHost = "app.getambassador.io"
 			},
 		},
@@ -68,9 +72,10 @@ func TestEnvconfig(t *testing.T) {
 			expected := defaults
 			tc.Output(&expected)
 
-			actual, err := manager.LoadEnv(context.Background())
+			ctx, err := managerutil.LoadEnv(context.Background())
 			assert.Nil(err)
-			assert.Equal(expected, actual)
+			actual := managerutil.GetEnv(ctx)
+			assert.Equal(&expected, actual)
 		})
 	}
 }

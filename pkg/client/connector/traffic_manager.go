@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -99,7 +100,7 @@ func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 }
 
 func (tm *trafficManager) run(c context.Context) error {
-	err := tm.ensureManager(c, tm.env)
+	err := tm.ensureManager(c, &tm.env)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
 		close(tm.startup)
@@ -110,7 +111,7 @@ func (tm *trafficManager) run(c context.Context) error {
 		"--namespace",
 		managerNamespace,
 		"svc/traffic-manager",
-		fmt.Sprintf(":%d", ManagerPortHTTP)}
+		fmt.Sprintf(":%d", install.ManagerPortHTTP)}
 
 	// Scan port-forward output and grab the dynamically allocated ports
 	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
@@ -118,7 +119,7 @@ func (tm *trafficManager) run(c context.Context) error {
 		for sc.Scan() {
 			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
 				toPort, _ := strconv.Atoi(rxr[2])
-				if toPort == ManagerPortHTTP {
+				if toPort == install.ManagerPortHTTP {
 					apiPort := rxr[1]
 					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
 					return apiPort
@@ -318,7 +319,7 @@ func (tm *trafficManager) getInfosForWorkload(
 					continue
 				}
 
-				matchingSvcs, err := tm.findMatchingServices(ctx, "", "", namespace, labels)
+				matchingSvcs, err := install.FindMatchingServices(ctx, tm.client, "", "", namespace, labels)
 				if err != nil {
 					continue
 				}
@@ -515,13 +516,13 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		fallthrough
 	case rpc.UninstallRequest_ALL_AGENTS:
 		if len(agents) > 0 {
-			if err := tm.removeManagerAndAgents(c, true, agents); err != nil {
+			if err := tm.removeManagerAndAgents(c, true, agents, &tm.env); err != nil {
 				result.ErrorText = err.Error()
 			}
 		}
 	default:
 		// Cancel all communication with the manager
-		if err := tm.removeManagerAndAgents(c, false, agents); err != nil {
+		if err := tm.removeManagerAndAgents(c, false, agents, &tm.env); err != nil {
 			result.ErrorText = err.Error()
 		}
 	}
