@@ -7,6 +7,43 @@
     max-width: @docs-max-width;
     min-width: @docs-min-width;
 
+    h1,
+    h2 {
+        color: @blue-dark;
+        font-style: normal;
+        font-weight: normal;
+        letter-spacing: 0.25px;
+    }
+
+    h1 {
+        font-size: 33px;
+        line-height: 40px;
+
+        svg {
+            vertical-align: text-bottom;
+        }
+    }
+
+    h2 {
+        font-size: 23px;
+        line-height: 33px;
+        margin: 0 0 1rem;
+
+        .highlight-mark {
+            background: transparent;
+            color: @blue-dark;
+            background: -moz-linear-gradient(top,  transparent 0%, transparent 60%, fade(@blue-electric, 15%) 60%, fade(@blue-electric, 15%) 100%);
+            background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,transparent), color-stop(60%,transparent), color-stop(60%,fade(@blue-electric, 15%)), color-stop(100%,fade(@blue-electric, 15%)));
+            background: -webkit-linear-gradient(top,  transparent 0%,transparent 60%,fade(@blue-electric, 15%) 60%,fade(@blue-electric, 15%) 100%);
+            background: -o-linear-gradient(top,  transparent 0%,transparent 60%,fade(@blue-electric, 15%) 60%,fade(@blue-electric, 15%) 100%);
+            background: -ms-linear-gradient(top,  transparent 0%,transparent 60%,fade(@blue-electric, 15%) 60%,fade(@blue-electric, 15%) 100%);
+            background: linear-gradient(to bottom,  transparent 0%,transparent 60%,fade(@blue-electric, 15%) 60%,fade(@blue-electric, 15%) 100%);
+            filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='transparent', endColorstr='fade(@blue-electric, 15%)',GradientType=0 );
+            padding: 0 3px;
+            margin: 0 .1em 0 0;
+        }
+    }
+
     .telepresence-choice {
         background: @white;
         border: 2px solid @grey-separator;
@@ -16,10 +53,6 @@
 
         strong {
             color: @blue;
-        }
-
-        h2 {
-            padding: 0;
         }
     }
 
@@ -48,7 +81,7 @@
                 font-weight: 600;
                 font-size: 14px;
                 line-height: 24px;
-                margin: 0;
+                margin: 0 0 15px 5px;
                 padding: 13px 20px;
                 align-items: center;
                 letter-spacing: 1.25px;
@@ -66,6 +99,15 @@
                     background-color: @green-dark;
                     text-decoration: none;
                 }
+            }
+
+
+            p {
+                font-style: normal;
+                font-weight: normal;
+                font-size: 16px;
+                line-height: 26px;
+                letter-spacing: 0.5px;
             }
         }
     }
