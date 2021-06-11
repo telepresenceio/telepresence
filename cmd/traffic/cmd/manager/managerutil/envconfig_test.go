@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func TestEnvconfig(t *testing.T) {
@@ -27,11 +28,14 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := managerutil.Env{
-		User:        "",
-		ServerHost:  "",
-		ServerPort:  "8081",
-		SystemAHost: "app.getambassador.io",
-		SystemAPort: "443",
+		User:          "",
+		ServerHost:    "",
+		ServerPort:    "8081",
+		SystemAHost:   "app.getambassador.io",
+		SystemAPort:   "443",
+		AgentRegistry: "docker.io/datawire",
+		AgentImage:    "docker.io/datawire/tel2:" + strings.TrimPrefix(version.Version, "v"),
+		AgentPort:     9900,
 	}
 
 	testcases := map[string]struct {

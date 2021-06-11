@@ -4,6 +4,7 @@ const (
 	AgentContainerName        = "traffic-agent"
 	AgentAnnotationVolumeName = "traffic-annotations"
 	DomainPrefix              = "telepresence.getambassador.io/"
+	InjectAnnotation          = DomainPrefix + "inject-" + AgentContainerName
 	ManagerAppName            = "traffic-manager"
 	ManagerPortHTTP           = 8081
 	MutatorWebhookPortHTTPS   = 8443
