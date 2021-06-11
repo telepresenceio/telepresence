@@ -100,6 +100,15 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 				addError(fmt.Errorf("agent %q associated with unsupported workload kind %q, cannot be removed", ai.Name, kind))
 				return
 			}
+			// Assume that the agent was added using the mutating webhook when no actions
+			// annotation can be found in the workload.
+			ann := agent.GetAnnotations()
+			if ann == nil {
+				return
+			}
+			if _, ok := ann[annTelepresenceActions]; !ok {
+				return
+			}
 			if err = ki.undoObjectMods(c, agent); err != nil {
 				addError(err)
 				return
@@ -230,6 +239,15 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 	}
 
 	var svc *kates.Service
+	if a := podTemplate.ObjectMeta.Annotations; a != nil && a[install.InjectAnnotation] == "enabled" {
+		// agent is injected using a mutating webhook. Get its service and skip the rest
+		svc, err = install.FindMatchingService(c, ki.client, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		if err != nil {
+			return "", "", err
+		}
+		return string(svc.GetUID()), kind, nil
+	}
+
 	var agentContainer *kates.Container
 	for i := range podTemplate.Spec.Containers {
 		container := &podTemplate.Spec.Containers[i]
