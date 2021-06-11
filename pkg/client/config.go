@@ -338,7 +338,7 @@ var defaultConfig = Config{
 		PrivateIntercept:             5 * time.Second,
 		PrivateProxyDial:             5 * time.Second,
 		PrivateTrafficManagerAPI:     5 * time.Second,
-		PrivateTrafficManagerConnect: 20 * time.Second,
+		PrivateTrafficManagerConnect: 60 * time.Second,
 	},
 	LogLevels: LogLevels{
 		UserDaemon: logrus.DebugLevel,
