@@ -18,7 +18,7 @@ By using the preview URL functionality you can share access with additional deve
 
 ** What operating systems does Telepresence work on?**
 
-Telepresence currently works natively on macOS and Linux. We are working on a nativer Windows port, but in the meantime, Windows users can use Telepresence with WSL 2.
+Telepresence currently works natively on macOS and Linux. We are working on a native Windows port, but in the meantime, Windows users can use Telepresence with WSL 2.
 
 ** What protocols can be intercepted by Telepresence?**
 

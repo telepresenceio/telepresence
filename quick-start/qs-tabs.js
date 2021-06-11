@@ -103,7 +103,7 @@ export default function SimpleTabs() {
       <TabPanel value={value} index={2}>
         <div class="docs-hubspot-formwrapper">
           <p>
-            Telepresence for Windows is coming soon! Sign up here to notified when it is available. Until then, Telepresence will work in WSL 2.
+            Telepresence for Windows is coming soon! Sign up here to notified when it is available. Until then, Telepresence will work with WSL 2.
           </p>
           <div class="docs-hubspot-form">
             <HubspotForm
