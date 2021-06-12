@@ -1,4 +1,4 @@
-# Intercepts 
+# Intercepts
 
 ## Intercept behvaior when logged into Ambassador Cloud
 
