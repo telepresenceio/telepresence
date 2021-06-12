@@ -1,3 +1,5 @@
+import Alert from '@material-ui/lab/Alert';
+
 # Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special
@@ -118,3 +120,35 @@ run this command to generate the Cluster ID:
 3. Save the output as a YAML file and apply it to your
 cluster with `kubectl`.  Once applied, you will be able to use selective intercepts with the
 `--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).
+
+## Mutating Webhook
+
+By default, Telepresence updates the intercepted workload (Deployment, StatefulSet, ReplicaSet)
+template to add the [Traffic Agent](../architecture/#traffic-agent) sidecar container and update the
+port definitions. If you use GitOps workflows (with tools like ArgoCD) to automatically update your
+cluster so that it reflects the desired state from an external Git repository, this behavior can make
+your workload out of sync with that external desired state.
+
+To solve this issue, you can use Telepresence's Mutating Webhook alternative mechanism. Intercepted
+workloads will then stay untouched and only the underlying pods will be modified to inject the Traffic
+Agent sidecar container and update the port definitions.
+
+<Alert severity="info">
+A current limitation of the Mutating Webhook mechanism is that the <code>targetPort</code> of your intercepted
+Service needs to point to the <strong>name</strong> of a port on your container, not the port number itself.
+</Alert>
+
+Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` annotation to your
+workload template's annotations:
+
+```diff
+ spec:
+   template:
+     metadata:
+       labels:
+         service: your-service
++      annotations:
++        telepresence.getambassador.io/inject-traffic-agent: enabled
+     spec:
+       containers:
+```
