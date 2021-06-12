@@ -75,7 +75,7 @@ When using this option, it is important to include all namespaces containing ser
 
 An intercept with the flag`--local-only` can be used to control outbound connectivity to specific namespaces.
 
-When developing services that have not yet been deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service is intended to be deployed so that it can access other services in that namespace without using qualified names. 
+When developing services that have not yet been deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service is intended to be deployed so that it can access other services in that namespace without using qualified names.
 
   ```
   $ telepresence intercept <deployment name> --namespace <namespace> --local-only

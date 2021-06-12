@@ -24,7 +24,7 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
 ## Creating a Preview URL
 
-1. List the services that you can intercept with `telepresence list` and make sure the one you want is listed. 
+1. List the services that you can intercept with `telepresence list` and make sure the one you want is listed.
 
     If it isn't:
 
@@ -32,18 +32,18 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
     * If the service is in a different namespace, specify it with the `--namespace` flag
 
-2. Login to Ambassador Cloud where you can manage and share preview URLs:  
+2. Login to Ambassador Cloud where you can manage and share preview URLs:
 `telepresence login`
-    
+
   ```
   $ telepresence login
-    
+
      Launching browser authentication flow...
      <browser opens, login and choose your org>
      Login successful.
    ```
 
-3. Start the intercept:  
+3. Start the intercept:
 `telepresence intercept <service-name> --port <TCP-port> --env-file <path-to-env-file>`
 
   For `--port`, specify the port on which your local instance of your service will be running. If the service you are intercepting exposes more than one port, specify the one you want to intercept after a colon.
@@ -57,32 +57,32 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
    4. **Ingress layer 5 hostname**: If your ingress controller routes traffic based on a domain name (often using the `Host` HTTP header), enter that value here.
 
    For the example below, you will create a preview URL for `example-service` which listens on port 8080.  The preview URL for ingress will use the `ambassador` service in the `ambassador` namespace on port `443` using TLS encryption and the hostname `dev-environment.edgestack.me`:
-   
+
    ```
    $ telepresence intercept example-service --port 8080 --env-file ~/ex-svc.env
-     
+
      To create a preview URL, telepresence needs to know how cluster
      ingress works for this service.  Please Confirm the ingress to use.
-       
+
      1/4: What's your ingress' layer 3 (IP) address?
           You may use an IP address or a DNS name (this is usually a
           "service.namespace" DNS name).
-       
+
             [default: -]: ambassador.ambassador
-       
+
      2/4: What's your ingress' layer 4 address (TCP port number)?
-       
+
             [default: -]: 443
-       
+
      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-       
+
             [default: n]: y
-       
+
      4/4: If required by your ingress, specify a different layer 5 hostname
           (TLS-SNI, HTTP "Host" header) to access this service.
-       
+
             [default: ambassador.ambassador]: dev-environment.edgestack.me
-       
+
      Using deployment example-service
      intercepted
          Intercept name         : example-service
@@ -119,13 +119,13 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 7. Share with a teammate.
 
   You can collaborate with teammates by sending your preview URL to them. They will be asked to log in to Ambassador Cloud if they are not already. Upon log in they must select the same identity provider and org as you are using; that is how they are authorized to access the preview URL (see the [list of supported identity providers](../../faqs/#idps)). When they visit the preview URL, they will see the intercepted service running on your laptop.
-  
+
 <Alert severity="success">
   <strong>Congratulations!</strong> You have now created a dev environment and shared it with a teammate!  While you and your partner work together to debug your service, the production version remains unchanged to the rest of your team until you commit your changes.
 </Alert>
 
 ## Sharing a Preview URL with People Outside Your Team
 
-To collaborate with someone outside of your identity provider's organization, you must go to [Ambassador Cloud](https://app.getambassador.io/cloud/preview/), select the preview URL, and click **Make Publicly Accessible**.  Now anyone with the link will have access to the preview URL. When they visit the preview URL, they will see the intercepted service running on your laptop. 
+To collaborate with someone outside of your identity provider's organization, you must go to [Ambassador Cloud](https://app.getambassador.io/cloud/preview/), select the preview URL, and click **Make Publicly Accessible**.  Now anyone with the link will have access to the preview URL. When they visit the preview URL, they will see the intercepted service running on your laptop.
 
 To disable sharing the preview URL publicly, click **Require Authentication** in the dashboard. Removing the intercept either from the dashboard or by running `telepresence leave <service-name>` also removes all access to the preview URL.
