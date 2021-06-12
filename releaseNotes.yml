@@ -35,6 +35,16 @@ items:
         image: ./telepresence-2.3.1-inject.png
         docs: reference/rbac
         type: feature
+      - title: Traffic Manager Connect Timeout
+        body: "The trafficManagerConnect timeout default has changed from 20 seconds to 60 seconds, in order to facilitate the extended time it takes to apply everything needed for the mutator webhook."
+        image: ./telepresence-2.3.1-trafficmanagerconnect.png
+        docs: reference/config
+        type: change
+      - title: Fix for large file transfers
+        body: "Fix a tun-device bug where sometimes large transfers from services on the cluster would hang indefinitely"
+        image: ./telepresence-2.3.1-large-file-transfer.png
+        docs: reference/tun-device
+        type: bugfix
   - version: 2.3.0
     date: '2021-06-01'
     notes:
