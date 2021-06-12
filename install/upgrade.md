@@ -31,7 +31,7 @@ Use these URLs to download an older version for your OS, replacing `x.x.x` with 
 
 ## Migrating from Telepresence 1 to Telepresence 2
 
-Telepresence 2 (the current major version) has different mechanics and requires a different mental model from [Telepresence 1](https://www.telepresence.io/) when working with local instances of your services.
+Telepresence 2 (the current major version) has different mechanics and requires a different mental model from [Telepresence 1](/docs/v1/) when working with local instances of your services.
 
 In Telepresence 1, a pod running a service is swapped with a pod running the Telepresence proxy. This proxy receives traffic intended for the service, and sends the traffic onward to the target workstation or laptop. We called this mechanism "swap-deployment".
 
