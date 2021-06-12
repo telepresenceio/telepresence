@@ -23,7 +23,12 @@ import QSCards from '../quick-start/qs-cards'
 <Alert severity="info">For a detailed walk-though on creating intercepts using our sample app, follow the <a href="../../quick-start/qs-node/">quick start guide</a>.</Alert>
 
 ## Prerequisites
-You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [set up](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.
+You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/#kubectl)
+and set up
+([Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#verify-kubectl-configuration) /
+ [macOS](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/#verify-kubectl-configuration) /
+ [Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/#verify-kubectl-configuration))
+to use a Kubernetes cluster, preferably an empty test cluster.
 
 If you have used Telepresence previously, please first reset your Telepresence deployment with:
 `telepresence uninstall --everything`.
@@ -187,7 +192,7 @@ be routed to your cluster as usual.
    4. **Ingress layer 5 hostname**: If your ingress controller routes traffic based on a domain name (often using the `Host` HTTP header), this is the value you would need to enter here.
 
     <Alert severity="info">
-        Telepresence supports any ingress controller, not just <a href="../../../../edge-stack/latest/tutorials/getting-started/">Ambassador Edge Stack</a>.
+        Telepresence supports any ingress controller, not just <a href="https://www.getambassador.io/docs/edge-stack/latest/tutorials/getting-started/">Ambassador Edge Stack</a>.
     </Alert>
 
    For the example below, you will create a preview URL that will send traffic to the `ambassador` service in the `ambassador` namespace on port `443` using TLS encryption and setting the `Host` HTTP header to `dev-environment.edgestack.me`:
