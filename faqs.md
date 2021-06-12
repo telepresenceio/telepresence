@@ -10,7 +10,7 @@ description: "Learn how Telepresence helps with fast development and debugging i
 
 Telepresence enables you to connect your local development machine seamlessly to the cluster via a two way proxying mechanism. This enables you to code locally and run the majority of your services within a remote Kubernetes cluster -- which in the cloud means you have access to effectively unlimited resources.
 
-Ultimately, this empowers you to develop services locally and still test integrations with dependent services or data stores running in the remote cluster. 
+Ultimately, this empowers you to develop services locally and still test integrations with dependent services or data stores running in the remote cluster.
 
 You can “intercept” any requests made to a target Kubernetes workload, and code and debug your associated service locally using your favourite local IDE and in-process debugger. You can test your integrations by making requests against the remote cluster’s ingress and watching how the resulting internal traffic is handled by your service running locally.
 
@@ -25,7 +25,7 @@ By using the preview URL functionality you can share access with additional deve
 - gRPC
 - GraphQL
 
-If you need another protocol supported, please [drop us a line](../../../../feedback) to request it. 
+If you need another protocol supported, please [drop us a line](../../../../feedback) to request it.
 
 ** When using Telepresence to intercept a pod, are the Kubernetes cluster environment variables proxied to my local machine?**
 
@@ -41,7 +41,7 @@ Yes. After you have successfully connected to your cluster via `telepresence con
 
 This means you can curl endpoints directly e.g. `curl <my_service_name>.<my_service_namespace>:8080/mypath`.
 
-If you create an intercept for a service in a namespace, you will be able to use the service name directly. 
+If you create an intercept for a service in a namespace, you will be able to use the service name directly.
 
 This means if you `telepresence intercept <my_service_name> -n <my_service_namespace>`, you will be able to resolve just the `<my_service_name>` DNS record.
 
@@ -53,13 +53,13 @@ You can connect to databases or middleware running in the cluster, such as MySQL
 
 ** What types of ingress does Telepresence support for the preview URL functionality?**
 
- The preview URL functionality should work with most ingress configurations, including straightforward load balancer setups. 
+ The preview URL functionality should work with most ingress configurations, including straightforward load balancer setups.
 
-Telepresence will discover/prompt during first use for this info and make its best guess at figuring this out and ask you to confirm or update this. 
+Telepresence will discover/prompt during first use for this info and make its best guess at figuring this out and ask you to confirm or update this.
 
 ** Will Telepresence be able to intercept workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?**
 
- Yes. The cluster has to have outbound access to the internet for the preview URLs to function correctly, but it doesn’t need to have a publicly accessible IP address. 
+ Yes. The cluster has to have outbound access to the internet for the preview URLs to function correctly, but it doesn’t need to have a publicly accessible IP address.
 
 The cluster must also have access to an external registry in order to be able to download the Traffic Manager and Traffic Agent containers that are deployed when connecting with Telepresence.
 
@@ -77,7 +77,7 @@ A Traffic Agent container is injected per pod that is being intercepted. The fir
 
 ** How can I remove all of the Telepresence components installed within my cluster?**
 
- You can run the command `telepresence uninstall --everything` to remove the Traffic Manager service installed in the cluster and Traffic Agent containers injected into each pod being intercepted. 
+ You can run the command `telepresence uninstall --everything` to remove the Traffic Manager service installed in the cluster and Traffic Agent containers injected into each pod being intercepted.
 
 Running this command will also stop the local daemon running.
 
@@ -105,4 +105,4 @@ More authentication mechanisms and identity provider support will be added soon.
 
 ** How do I share my feedback on Telepresence?**
 
- Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our [feedback page](../../../../feedback), or you can [join our Slack channel](https://a8r.io/Slack) to share your thoughts. 
+ Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our [feedback page](../../../../feedback), or you can [join our Slack channel](https://a8r.io/Slack) to share your thoughts.
