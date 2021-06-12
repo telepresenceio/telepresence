@@ -264,26 +264,26 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 
       To create a preview URL, telepresence needs to know how cluster
       ingress works for this service.  Please Select the ingress to use.
-      
+
       1/4: What's your ingress' layer 3 (IP) address?
            You may use an IP address or a DNS name (this is usually a
            "service.namespace" DNS name).
-      
+
              [no default]: verylargejavaservice.default
-      
+
       2/4: What's your ingress' layer 4 address (TCP port number)?
-      
+
              [no default]: 8080
-      
+
       3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-      
+
              [default: n]:
-      
+
       4/4: If required by your ingress, specify a different layer 5 hostname
            (TLS-SNI, HTTP "Host" header) to access this service.
-      
+
              [default: verylargejavaservice.default]:
-      
+
       Using Deployment dataprocessingservice
       intercepted
           Intercept name  : dataprocessingservice

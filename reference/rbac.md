@@ -115,11 +115,11 @@ metadata:
   name: tp-user                                       # Update value for appropriate user name
   namespace: ambassador                                # Traffic-Manager is deployed to Ambassador namespace
 ---
-kind: ClusterRole                         
+kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name:  telepresence-role
-rules: 
+rules:
 - apiGroups:
   - ""
   resources: ["pods"]
@@ -157,9 +157,9 @@ subjects:
 roleRef:
   kind: ClusterRole
   name: telepresence-role
-  apiGroup: rbac.authorization.k8s.io 
+  apiGroup: rbac.authorization.k8s.io
 ---
-kind: RoleBinding                                      # RoleBinding T2 namespace to be intecpeted 
+kind: RoleBinding                                      # RoleBinding T2 namespace to be intecpeted
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: telepresence-test-binding                      # Update "test" for appropriate namespace to be intercepted
@@ -175,10 +175,10 @@ roleRef:
 ​
 ---
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1 
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name:  telepresence-namespace-role
-rules: 
+rules:
 - apiGroups:
   - ""
   resources: ["namespaces"]
