@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.1 (TBD)
+### 2.3.1 (June 14, 2021)
 
 - Feature: Agents can now be installed using a mutator webhook
 - Feature: DNS resolver can now be configured with respect to what IP addresses that are used, and what lookups that gets sent to the cluster.
