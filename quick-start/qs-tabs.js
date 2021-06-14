@@ -73,7 +73,7 @@ export default function SimpleTabs() {
         {
           '# Install via brew:' +
           '\n' +
-          'brew install datawire/blackbird/telepresence2' +
+          'brew install datawire/blackbird/telepresence' +
           '\n \n' +
           '# OR install manually:' +
           '\n' +
