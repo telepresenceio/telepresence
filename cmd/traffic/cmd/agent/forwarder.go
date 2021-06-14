@@ -50,28 +50,18 @@ func (f *Forwarder) SetManager(sessionInfo *manager.SessionInfo, manager manager
 }
 
 func (f *Forwarder) Serve(ctx context.Context) error {
-	f.mu.Lock()
-
-	// Set up listener lifetime (same as the overall forwarder lifetime)
-	f.lCtx, f.lCancel = context.WithCancel(ctx)
-	f.lCtx = dlog.WithField(f.lCtx, "lis", f.listenAddr.String())
-
-	// Set up target lifetime
-	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
-
-	ctx = f.lCtx
-	listenAddr := f.listenAddr
-
-	f.mu.Unlock()
-
-	listener, err := net.ListenTCP("tcp", listenAddr)
+	listener, err := f.Listen(ctx)
 	if err != nil {
 		return err
 	}
+	return f.ServeListener(ctx, listener)
+}
+
+func (f *Forwarder) ServeListener(ctx context.Context, listener *net.TCPListener) error {
 	defer listener.Close()
 
-	dlog.Debugf(ctx, "Forwarding from %s", listenAddr.String())
-	defer dlog.Debugf(ctx, "Done forwarding from %s", listenAddr.String())
+	dlog.Debugf(ctx, "Forwarding from %s", f.listenAddr.String())
+	defer dlog.Debugf(ctx, "Done forwarding from %s", f.listenAddr.String())
 
 	go func() {
 		<-ctx.Done()
@@ -96,6 +86,21 @@ func (f *Forwarder) Serve(ctx context.Context) error {
 			}
 		}()
 	}
+}
+
+func (f *Forwarder) Listen(ctx context.Context) (*net.TCPListener, error) {
+	f.mu.Lock()
+
+	// Set up listener lifetime (same as the overall forwarder lifetime)
+	f.lCtx, f.lCancel = context.WithCancel(ctx)
+	f.lCtx = dlog.WithField(f.lCtx, "lis", f.listenAddr.String())
+
+	// Set up target lifetime
+	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
+	listenAddr := f.listenAddr
+
+	f.mu.Unlock()
+	return net.ListenTCP("tcp", listenAddr)
 }
 
 func (f *Forwarder) Close() error {
