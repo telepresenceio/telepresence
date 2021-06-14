@@ -18,7 +18,7 @@
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
   - version: 2.3.1
-    date: 'TBD'
+    date: '2021-06-14'
     notes:
       - title: DNS Resolver Configuration
         body: "Telepresence now supports per-cluster configuration for custom dns behavior, which will enable users to determine which local + remote resolver to use and which suffixes should be ignored + included. These can be configured on a per-cluster basis."
