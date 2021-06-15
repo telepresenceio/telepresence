@@ -17,25 +17,28 @@ type ipAndNetwork struct {
 // stubbable version
 var interfaceAddrs = net.InterfaceAddrs
 
-// IPv4 subnet key. Identifies a class B subnet
-type ipv4SubnetKey [2]byte
-
-// IPv6 subnet key. This is the 48-bit route and 16-bit subnet identifier. Identifies a 64 bit subnet.
-type ipv6SubnetKey [8]byte
-
-// AnalyzeIPs returns the ip networks needed to cover the given IPs with as
+// CoveringCIDRs returns the ip networks needed to cover the given IPs with as
 // big mask as possible for each subnet. The analyze starts by finding all
 // subnets using a 16-bit mask for IPv4 and a 64 bit mask for IPv6 addresses.
 // Once the subnets are established, the mask for each one will be increased
 // to the maximum value that still masks all IPs that it was created for.
-func AnalyzeIPs(ips []net.IP) []*net.IPNet {
-	ipv6Subnets := make(map[ipv6SubnetKey]*[7]ByteSet)
+//
+// Note: A similar method exists in Telepresence 1, but this method was not
+// compared to it when written.
+func CoveringCIDRs(ips []net.IP) []*net.IPNet {
+	// IPv4 subnet key. Identifies a class B subnet
+	type ipv4SubnetKey [2]byte
+
+	// IPv6 subnet key. This is the 48-bit route and 16-bit subnet identifier. Identifies a 64 bit subnet.
+	type ipv6SubnetKey [8]byte
+
+	ipv6Subnets := make(map[ipv6SubnetKey]*[7]Bitfield256)
 
 	// Divide into subnets with ByteSets.
 
-	// IPv4 has 2 byte subnets and one ByteSet representing the third byte.
+	// IPv4 has 2 byte subnets and one Bitfield256 representing the third byte.
 	// (last byte is skipped because no split on subnet is made on that byte).
-	ipv4Subnets := make(map[ipv4SubnetKey]*ByteSet)
+	ipv4Subnets := make(map[ipv4SubnetKey]*Bitfield256)
 
 	// IPv6 has 8 byte subnets and seven ByteSets representing all but the last
 	// byte of the subnet relative 64 bit address (last byte is skipped because
@@ -43,22 +46,22 @@ func AnalyzeIPs(ips []net.IP) []*net.IPNet {
 	for _, ip := range ips {
 		if ip4 := ip.To4(); ip4 != nil {
 			bk := ipv4SubnetKey{ip4[0], ip4[1]}
-			var bytes *ByteSet
+			var bytes *Bitfield256
 			if bytes = ipv4Subnets[bk]; bytes == nil {
-				bytes = &ByteSet{}
+				bytes = &Bitfield256{}
 				ipv4Subnets[bk] = bytes
 			}
-			bytes.Add(ip4[2])
+			bytes.SetBit(ip4[2])
 		} else if ip16 := ip.To16(); ip16 != nil {
 			r := ipv6SubnetKey{}
 			copy(r[:], ip16)
 			byteSets, ok := ipv6Subnets[r]
 			if !ok {
-				byteSets = &[7]ByteSet{}
+				byteSets = &[7]Bitfield256{}
 				ipv6Subnets[r] = byteSets
 			}
 			for i := range byteSets {
-				byteSets[i].Add(ip16[i+8])
+				byteSets[i].SetBit(ip16[i+8])
 			}
 		}
 	}

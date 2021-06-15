@@ -8,39 +8,39 @@ import (
 
 func TestByteSet_Add(t *testing.T) {
 	x := *fullSet
-	x.Add(1)
+	x.SetBit(1)
 	assert.True(t, x.Equals(fullSet))
 
 	x = *emptySet
-	x.Add(1)
+	x.SetBit(1)
 	assert.False(t, x.Equals(emptySet))
-	assert.True(t, x.Contains(1))
-	assert.False(t, x.Contains(233))
-	x.Add(233)
-	assert.True(t, x.Contains(233))
-	assert.Equal(t, 2, x.Len())
+	assert.True(t, x.GetBit(1))
+	assert.False(t, x.GetBit(233))
+	x.SetBit(233)
+	assert.True(t, x.GetBit(233))
+	assert.Equal(t, 2, x.OnesCount())
 }
 
 func TestByteSet_Remove(t *testing.T) {
 	x := *fullSet
-	x.Remove(255)
-	assert.Equal(t, 255, x.Len())
-	x.Remove(0)
-	assert.Equal(t, 254, x.Len())
+	x.ClearBit(255)
+	assert.Equal(t, 255, x.OnesCount())
+	x.ClearBit(0)
+	assert.Equal(t, 254, x.OnesCount())
 }
 
 func TestByteSet_Mask(t *testing.T) {
-	bytes00To0F := &ByteSet{}
+	bytes00To0F := &Bitfield256{}
 	for i := 0; i < 0xf; i++ {
-		bytes00To0F.Add(byte(i))
+		bytes00To0F.SetBit(byte(i))
 	}
-	bytesF0ToFF := &ByteSet{}
+	bytesF0ToFF := &Bitfield256{}
 	for i := 0xf0; i < 0xff; i++ {
-		bytesF0ToFF.Add(byte(i))
+		bytesF0ToFF.SetBit(byte(i))
 	}
 	tests := []struct {
 		name      string
-		set       *ByteSet
+		set       *Bitfield256
 		wantOnes  int
 		wantValue byte
 	}{
@@ -84,13 +84,13 @@ func TestByteSet_Mask(t *testing.T) {
 	}
 }
 
-var emptySet = &ByteSet{}
-var fullSet = &ByteSet{0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}
+var emptySet = &Bitfield256{}
+var fullSet = &Bitfield256{0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}
 
 func TestByteSet_String(t *testing.T) {
 	tests := []struct {
 		name string
-		set  *ByteSet
+		set  *Bitfield256
 		want string
 	}{
 		{
