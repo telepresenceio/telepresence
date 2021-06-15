@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.2 TBD
+### 2.3.2 (TBD)
 
 - Bug: On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
 
