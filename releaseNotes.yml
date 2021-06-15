@@ -17,14 +17,6 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
-  - version: 2.3.2
-    date: 'TBD'
-    notes:
-      - title: Brew Formula Changed
-        body: "Now that the Telepresence rewrite is the main version of Telepresence, you can install it via Brew like so: <code>brew install datawire/blackbird/telepresence</code>."
-        image: <todo>
-        docs: install/index/
-        type: change
   - version: 2.3.1
     date: '2021-06-14'
     notes:
@@ -53,6 +45,11 @@ items:
         image: ./telepresence-2.3.1-large-file-transfer.png
         docs: reference/tun-device
         type: bugfix
+      - title: Brew Formula Changed
+        body: "Now that the Telepresence rewrite is the main version of Telepresence, you can install it via Brew like so: <code>brew install datawire/blackbird/telepresence</code>."
+        image: <todo>
+        docs: install/index/
+        type: change
   - version: 2.3.0
     date: '2021-06-01'
     notes:
