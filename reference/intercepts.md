@@ -1,3 +1,5 @@
+import Alert from '@material-ui/lab/Alert';
+
 # Intercepts
 
 ## Intercept behvaior when logged into Ambassador Cloud
