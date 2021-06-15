@@ -1,55 +1,54 @@
 package subnet
 
-import "fmt"
+import (
+	"fmt"
+	"math/bits"
+)
 
-// ByteSet represents 0 - 255 unique bytes.
-type ByteSet [4]uint64
+// Bitfield256 represents 0 - 255 unique bytes.
+type Bitfield256 [4]uint64
 
-// Add adds a byte to this ByteSet
-func (b *ByteSet) Add(bv byte) {
+// SetBit sets the 1<<bv bit of the bitfield to 1.
+func (b *Bitfield256) SetBit(bv byte) {
 	b[bv>>6] |= uint64(1) << uint64(bv&0x3f)
 }
 
-// Remove removes a byte from this ByteSet
-func (b *ByteSet) Remove(bv byte) {
+// ClearBit clears the 1<<bv bit of the bitfield to 0.
+func (b *Bitfield256) ClearBit(bv byte) {
 	b[bv>>6] &^= uint64(1) << uint64(bv&0x3f)
 }
 
-// Contains returns true if this ByteSet contains the given byte
-func (b *ByteSet) Contains(bv byte) bool {
+// GetBit returns the value of the 1<<bv bit of the bitfield (0 is false, 1 is true).
+func (b *Bitfield256) GetBit(bv byte) bool {
 	return b[bv>>6]&(uint64(1)<<uint64(bv&0x3f)) != 0
 }
 
-// Equals returns true if this ByteSet equals the argument
-func (b *ByteSet) Equals(other *ByteSet) bool {
+// Equals returns true if this Bitfield256 equals the argument
+func (b *Bitfield256) Equals(other *Bitfield256) bool {
 	if other == nil {
 		return false
 	}
 	return *b == *other
 }
 
-// ToSlice returns the number of bytes in this ByteSet
-func (b *ByteSet) Len() (l int) {
+// OnesCount returns the number of 1 bits in the bitfield.
+func (b *Bitfield256) OnesCount() (l int) {
 	for _, g := range b {
 		if g != 0 {
-			for bit := 0; bit < 64; bit++ {
-				if g&(uint64(1)<<bit) != 0 {
-					l++
-				}
-			}
+			l += bits.OnesCount64(g)
 		}
 	}
 	return
 }
 
 // String prints the hexadecimal representation of the bits
-func (b *ByteSet) String() string {
+func (b *Bitfield256) String() string {
 	return fmt.Sprintf("%0.16x%0.16x%0.16x%0.16x", b[0], b[1], b[2], b[3])
 }
 
-// ToSlice returns an ordered slice of all bytes in this ByteSet
-func (b *ByteSet) ToSlice() []byte {
-	l := b.Len() // faster and more accurate than repeatedly growing a slice
+// ToSlice returns an ordered slice of all bytes in this Bitfield256
+func (b *Bitfield256) ToSlice() []byte {
+	l := b.OnesCount() // faster and more accurate than repeatedly growing a slice
 	if l == 0 {
 		return []byte{}
 	}
@@ -70,9 +69,9 @@ func (b *ByteSet) ToSlice() []byte {
 }
 
 // Mask returns how many bits, from left to right, that have the same
-// value for all bytes represented by this ByteSet and a byte containing
+// value for all bytes represented by this Bitfield256 and a byte containing
 // the value of those bits.
-func (b *ByteSet) Mask() (ones int, value byte) {
+func (b *Bitfield256) Mask() (ones int, value byte) {
 	for testBit := 7; testBit >= 0; testBit-- {
 		hasBit := false
 		first := true

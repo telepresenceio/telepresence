@@ -150,7 +150,7 @@ func Test_findAvailableIPV4CIDR_all_busy(t *testing.T) {
 
 func TestAnalyzeIPs(t *testing.T) {
 	ips := loadIPs(t)
-	ipNets := AnalyzeIPs(ips)
+	ipNets := CoveringCIDRs(ips)
 	require.Equal(t, 4, len(ipNets))
 	require.Equal(t, &net.IPNet{
 		IP:   net.IP{10, 101, 128, 0},
