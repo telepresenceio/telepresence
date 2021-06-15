@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -29,6 +30,13 @@ func Main(ctx context.Context, args ...string) error {
 	if err != nil {
 		return err
 	}
+
+	// Make the kates client available in the context
+	client, err := kates.NewClient(kates.ClientConfig{})
+	if err != nil {
+		return err
+	}
+	ctx = managerutil.WithKatesClient(ctx, client)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,

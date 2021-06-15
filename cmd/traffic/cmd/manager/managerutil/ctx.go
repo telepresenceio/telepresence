@@ -3,6 +3,7 @@ package managerutil
 import (
 	"context"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -29,3 +30,17 @@ func GetSessionID(ctx context.Context) string {
 }
 
 type sessionContextKey struct{}
+
+func WithKatesClient(ctx context.Context, client *kates.Client) context.Context {
+	return context.WithValue(ctx, katesClientContextKey{}, client)
+}
+
+func GetKatesClient(ctx context.Context) *kates.Client {
+	client, ok := ctx.Value(katesClientContextKey{}).(*kates.Client)
+	if !ok {
+		return nil
+	}
+	return client
+}
+
+type katesClientContextKey struct{}
