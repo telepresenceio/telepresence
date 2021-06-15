@@ -1,6 +1,6 @@
 # This script is generated automatically by the release automation code in the
 # Telepresence repository:
-class Telepresence2 < Formula
+class Telepresence < Formula
   desc "Local dev environment attached to a remote Kubernetes cluster"
   homepage "https://telepresence.io"
   url "https://app.getambassador.io/download/tel2/darwin/amd64/__NEW_VERSION__/telepresence"

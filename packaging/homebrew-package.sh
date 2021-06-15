@@ -15,7 +15,7 @@ BINDIR="${BINDIR:-./build-output/bin}"
 BUILD_HOMEBREW_DIR=$(mktemp -d)
 echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
 git clone git@github.com:datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
-FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence2.rb"
+FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 
 # Update recipe
 cp packaging/homebrew-formula.rb "$FORMULA"
