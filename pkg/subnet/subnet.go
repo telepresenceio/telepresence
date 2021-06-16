@@ -102,6 +102,37 @@ func compareIPs(a, b net.IP) int {
 	return dl
 }
 
+// Unique will drop any subnet that is covered by another subnet
+func Unique(subnets []*net.IPNet) []*net.IPNet {
+	ln := len(subnets)
+	for i, isn := range subnets {
+		if i >= ln {
+			break
+		}
+		for r, rsn := range subnets {
+			if i == r {
+				continue
+			}
+			if Covers(rsn, isn) {
+				ln--
+				subnets[i] = subnets[ln]
+				break
+			}
+		}
+	}
+	return subnets[:ln]
+}
+
+// Equal returns true if a and b have equal IP and masks
+func Equal(a, b *net.IPNet) bool {
+	if a.IP.Equal(b.IP) {
+		ao, ab := a.Mask.Size()
+		bo, bb := b.Mask.Size()
+		return ao == bo && ab == bb
+	}
+	return false
+}
+
 // Covers answers the question if network range a contains all of network range b
 func Covers(a, b *net.IPNet) bool {
 	if !a.Contains(b.IP) {
