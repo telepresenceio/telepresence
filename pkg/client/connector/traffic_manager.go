@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	v1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
@@ -27,7 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -187,12 +186,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 	tm.sessionInfo = si
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	outboundInfo, err := tm.getOutboundInfo(c, int32(grpcPort))
-	if err != nil {
-		tm.managerClient = nil
-		return fmt.Errorf("getOutboundInfo: %w", err)
-	}
-	if _, err := tm.daemon.SetOutboundInfo(c, outboundInfo); err != nil {
+	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo(int32(grpcPort))); err != nil {
 		tm.managerClient = nil
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
@@ -529,122 +523,32 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 	return result, nil
 }
 
-var svcCIDRrx = regexp.MustCompile(`range of valid IPs is (.*)$`)
-
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
-func (tm *trafficManager) getOutboundInfo(c context.Context, mgrPort int32) (*daemon.OutboundInfo, error) {
-	// Get all nodes
-	var nodes []kates.Node
-	var cidr *net.IPNet
-
-	var kubeDNS net.IP
-	if tm.DNS != nil && len(tm.DNS.RemoteIP) > 0 {
-		kubeDNS = tm.DNS.RemoteIP.IP()
-	}
-
-	if kubeDNS == nil {
-		dnsServices := []metav1.ObjectMeta{
-			{
-				Name:      "kube-dns",
-				Namespace: "kube-system",
-			},
-			{
-				Name:      "dns-default",
-				Namespace: "openshift-dns",
-			},
-		}
-		for _, dnsService := range dnsServices {
-			svc := kates.Service{TypeMeta: metav1.TypeMeta{Kind: "Service"}, ObjectMeta: dnsService}
-			if err := tm.client.Get(c, &svc, &svc); err == nil {
-				kubeDNS = iputil.Parse(svc.Spec.ClusterIP)
-				break
-			}
-		}
-	}
-
-	if kubeDNS == nil {
-		return nil, fmt.Errorf("failed to get IP of cluster's DNS service")
-	}
-
-	// make an attempt to create a service with ClusterIP that is out of range and then
-	// check the error message for the correct range as suggested tin the second answer here:
-	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
-	// This requires an additional permission to create a service, which we might not have
-	svc := kates.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "t2-tst-dummy",
-		},
-		Spec: v1.ServiceSpec{
-			Ports:     []kates.ServicePort{{Port: 443}},
-			ClusterIP: "1.1.1.1",
-		},
-	}
-
-	var serviceSubnet *daemon.IPNet
-	if err := tm.client.Create(c, &svc, &svc); err != nil {
-		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
-			_, cidr, err = net.ParseCIDR(match[1])
-			if err != nil {
-				dlog.Errorf(c, "unable to parse service CIDR %q", match[1])
-			} else {
-				serviceSubnet = iputil.IPNetToRPC(cidr)
-			}
-		} else {
-			dlog.Debugf(c, "Probably insufficient permissions to attempt dummy service creation in order to find service subnet: %v", err)
-		}
-	}
-
-	if serviceSubnet == nil {
-		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
-		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
-		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
-		// unlikely to cover less than half the bits.
-		dlog.Debugf(c, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", kubeDNS)
-		bits := len(kubeDNS) * 8
-		ones := bits / 2
-		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-		serviceSubnet = &daemon.IPNet{Ip: kubeDNS.Mask(mask), Mask: int32(ones)}
-	}
-
-	if err := tm.client.List(c, kates.Query{Kind: "Node"}, &nodes); err != nil {
-		return nil, fmt.Errorf("failed to get nodes: %v", err)
-	}
-	podCIDRs := make([]*daemon.IPNet, 0, len(nodes)+1)
-	for i := range nodes {
-		node := &nodes[i]
-		for _, podCIDR := range node.Spec.PodCIDRs {
-			_, cidr, err := net.ParseCIDR(podCIDR)
-			if err != nil {
-				dlog.Errorf(c, "unable to parse podCIDR %q in %s.%s", podCIDR, node.Name, node.Namespace)
-				continue
-			}
-			podCIDRs = append(podCIDRs, iputil.IPNetToRPC(cidr))
-		}
-	}
-
+func (tm *trafficManager) getOutboundInfo(mgrPort int32) *daemon.OutboundInfo {
 	info := &daemon.OutboundInfo{
-		Session:       tm.sessionInfo,
-		ManagerPort:   mgrPort,
-		ServiceSubnet: serviceSubnet,
-		Dns: &daemon.DNSConfig{
-			RemoteIp: kubeDNS,
-		},
+		Session:     tm.sessionInfo,
+		ManagerPort: mgrPort,
 	}
 
 	if tm.DNS != nil {
-		info.Dns.ExcludeSuffixes = tm.DNS.ExcludeSuffixes
-		info.Dns.IncludeSuffixes = tm.DNS.IncludeSuffixes
+		info.Dns = &daemon.DNSConfig{
+			ExcludeSuffixes: tm.DNS.ExcludeSuffixes,
+			IncludeSuffixes: tm.DNS.IncludeSuffixes,
+			LookupTimeout:   int64(tm.DNS.LookupTimeout.Duration),
+		}
 		if len(tm.DNS.LocalIP) > 0 {
 			info.Dns.LocalIp = tm.DNS.LocalIP.IP()
 		}
-		info.Dns.LookupTimeout = int64(tm.DNS.LookupTimeout.Duration)
+		if len(tm.DNS.RemoteIP) > 0 {
+			info.Dns.RemoteIp = tm.DNS.RemoteIP.IP()
+		}
 	}
-	for _, subnet := range tm.AlsoProxy {
-		podCIDRs = append(podCIDRs, iputil.IPNetToRPC((*net.IPNet)(subnet)))
+
+	if len(tm.AlsoProxy) > 0 {
+		info.AlsoProxySubnets = make([]*manager.IPNet, len(tm.AlsoProxy))
+		for i, ap := range tm.AlsoProxy {
+			info.AlsoProxySubnets[i] = iputil.IPNetToRPC((*net.IPNet)(ap))
+		}
 	}
-	info.PodSubnets = podCIDRs
-	return info, nil
+	return info
 }

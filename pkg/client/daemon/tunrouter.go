@@ -103,27 +103,31 @@ type tunRouter struct {
 	// session contains the manager session
 	session *manager.SessionInfo
 
-	// mgrConfigured will be closed as soon as the connector has sent over the correct port to
+	// cfgComplete will be closed as soon as the connector has sent over the correct port to
 	// the traffic manager and the managerClient has been connected.
-	mgrConfigured <-chan struct{}
+	cfgComplete chan struct{}
 
 	// rndSource is the source for the random number generator in the TCP handlers
 	rndSource rand.Source
 }
 
-func newTunRouter(managerConfigured <-chan struct{}) (*tunRouter, error) {
+func newTunRouter() (*tunRouter, error) {
 	td, err := tun.OpenTun()
 	if err != nil {
 		return nil, err
 	}
 	return &tunRouter{
-		dev:           td,
-		handlers:      connpool.NewPool(),
-		toTunCh:       make(chan ip.Packet, 100),
-		mgrConfigured: managerConfigured,
-		fragmentMap:   make(map[uint16][]*buffer.Data),
-		rndSource:     rand.NewSource(time.Now().UnixNano()),
+		dev:         td,
+		handlers:    connpool.NewPool(),
+		toTunCh:     make(chan ip.Packet, 100),
+		cfgComplete: make(chan struct{}),
+		fragmentMap: make(map[uint16][]*buffer.Data),
+		rndSource:   rand.NewSource(time.Now().UnixNano()),
 	}, nil
+}
+
+func (t *tunRouter) configured() <-chan struct{} {
+	return t.cfgComplete
 }
 
 func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
@@ -131,11 +135,6 @@ func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16
 	t.dnsPort = dnsPort
 	t.dnsLocalAddr = dnsLocalAddr
 	return nil
-}
-
-func (t *tunRouter) alsoProxy(ctx context.Context, subnets []*net.IPNet) error {
-	t.alsoProxySubnets = subnets
-	return t.refreshSubnets(ctx)
 }
 
 func (t *tunRouter) refreshSubnets(ctx context.Context) error {
@@ -183,7 +182,7 @@ func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 	return nil
 }
 
-func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
+func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo, kubeDNS chan<- net.IP) (err error) {
 	if t.managerClient == nil {
 		// First check. Establish connection
 		tos := &client.GetConfig(ctx).Timeouts
@@ -201,24 +200,72 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		t.session = mi.Session
 		t.managerClient = manager.NewManagerClient(conn)
 
-		subnets := make([]*net.IPNet, 0, len(mi.PodSubnets)+1)
-		cidr := iputil.IPNetFromRPC(mi.ServiceSubnet)
-		dlog.Infof(ctx, "Adding service subnet %s", cidr)
-		subnets = append(subnets, cidr)
+		if len(mi.AlsoProxySubnets) > 0 {
+			t.alsoProxySubnets = make([]*net.IPNet, len(mi.AlsoProxySubnets))
+			for i, ap := range mi.AlsoProxySubnets {
+				apSn := iputil.IPNetFromRPC(ap)
+				dlog.Infof(ctx, "Adding also-proxy subnet %s", apSn)
+				t.alsoProxySubnets[i] = apSn
+			}
+		}
 
-		for _, sn := range mi.PodSubnets {
-			cidr = iputil.IPNetFromRPC(sn)
+		dgroup.ParentGroup(ctx).Go("watch-cluster-info", func(ctx context.Context) error {
+			return t.watchClusterInfo(ctx, kubeDNS)
+		})
+	}
+	return nil
+}
+
+func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP) error {
+	infoStream, err := t.managerClient.WatchClusterInfo(ctx, t.session)
+	if err != nil {
+		return fmt.Errorf("error when calling WatchClusterInfo: %w", err)
+	}
+	for {
+		mgrInfo, err := infoStream.Recv()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("error when reading WatchOutboundInfo: %w", err)
+		}
+
+		if kubeDNS != nil {
+			go func(ch chan<- net.IP) {
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- mgrInfo.KubeDnsIp:
+				}
+			}(kubeDNS)
+			// This is one shot.
+			kubeDNS = nil
+		}
+
+		subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
+		if mgrInfo.ServiceSubnet != nil {
+			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
+			dlog.Infof(ctx, "Adding service subnet %s", cidr)
+			subnets = append(subnets, cidr)
+		}
+
+		for _, sn := range mgrInfo.PodSubnets {
+			cidr := iputil.IPNetFromRPC(sn)
 			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
 			subnets = append(subnets, cidr)
 		}
 
-		// This is not strictly true at this point since we cannot know what subnets that
-		// were added as also-proxy in the config and what subnets that were found in the
-		// cluster. That will get sorted when the latter is provided by the traffic-manager.
 		t.clusterSubnets = subnets
-		return t.refreshSubnets(ctx)
+		if err := t.refreshSubnets(ctx); err != nil {
+			dlog.Error(ctx, err)
+		}
+
+		mgrConfigured := t.cfgComplete
+		t.cfgComplete = nil
+		if mgrConfigured != nil {
+			close(mgrConfigured)
+		}
 	}
-	return nil
 }
 
 func (t *tunRouter) stop(c context.Context) {
@@ -269,7 +316,7 @@ func (t *tunRouter) run(c context.Context) error {
 		select {
 		case <-c.Done():
 			return nil
-		case <-t.mgrConfigured:
+		case <-t.cfgComplete:
 		}
 
 		tunnel, err := t.managerClient.ClientTunnel(c)
@@ -289,7 +336,7 @@ func (t *tunRouter) run(c context.Context) error {
 		select {
 		case <-c.Done():
 			return nil
-		case <-t.mgrConfigured:
+		case <-t.cfgComplete:
 		}
 
 		dlog.Debug(c, "TUN read loop starting")

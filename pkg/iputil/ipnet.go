@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"net"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-func IPNetToRPC(n *net.IPNet) *daemon.IPNet {
+func IPNetToRPC(n *net.IPNet) *manager.IPNet {
 	ones, _ := n.Mask.Size()
-	return &daemon.IPNet{
+	return &manager.IPNet{
 		Ip:   n.IP,
 		Mask: int32(ones),
 	}
 }
 
-func IPNetFromRPC(r *daemon.IPNet) *net.IPNet {
+func IPNetFromRPC(r *manager.IPNet) *net.IPNet {
 	return &net.IPNet{
 		IP:   r.Ip,
 		Mask: net.CIDRMask(int(r.Mask), len(r.Ip)*8),

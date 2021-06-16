@@ -192,6 +192,10 @@ func (p *mgrProxy) AgentLookupHostResponse(ctx context.Context, arg *managerrpc.
 	return client.AgentLookupHostResponse(ctx, arg, callOptions...)
 }
 
-func (p *mgrProxy) WatchLookupHost(info *managerrpc.SessionInfo, server managerrpc.Manager_WatchLookupHostServer) error {
+func (p *mgrProxy) WatchLookupHost(_ *managerrpc.SessionInfo, server managerrpc.Manager_WatchLookupHostServer) error {
 	return errors.New("WatchLookupHost is not implemented by the mgrProxy")
+}
+
+func (p *mgrProxy) WatchClusterInfo(_ *managerrpc.SessionInfo, server managerrpc.Manager_WatchClusterInfoServer) error {
+	return errors.New("WatchClusterInfo is not implemented by the mgrProxy")
 }
