@@ -41,7 +41,7 @@ type ManagerClient interface {
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
-	// returns immediately, having not deliverd any snapshots.
+	// returns immediately, having not delivered any snapshots.
 	WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error)
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
@@ -50,6 +50,9 @@ type ManagerClient interface {
 	// that session are watched.  If no session ID is given, then all
 	// intercepts are watched.
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error)
+	// WatchClusterInfo returns information needed when establishing
+	// connectivity to the cluster.
+	WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error)
 	// CreateIntercept lets a client create an intercept.  It will be
 	// created in the "WATING" disposition, and it will remain in that
 	// state until the Agent (the app-sidecar) calls ReviewIntercept()
@@ -220,6 +223,38 @@ func (x *managerWatchInterceptsClient) Recv() (*InterceptInfoSnapshot, error) {
 	return m, nil
 }
 
+func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/WatchClusterInfo", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchClusterInfoClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchClusterInfoClient interface {
+	Recv() (*ClusterInfo, error)
+	grpc.ClientStream
+}
+
+type managerWatchClusterInfoClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchClusterInfoClient) Recv() (*ClusterInfo, error) {
+	m := new(ClusterInfo)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *managerClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
 	out := new(InterceptInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/CreateIntercept", in, out, opts...)
@@ -257,7 +292,7 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 }
 
 func (c *managerClient) ConnTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ConnTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/ConnTunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[3], "/telepresence.manager.Manager/ConnTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +341,7 @@ func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupH
 }
 
 func (c *managerClient) WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[3], "/telepresence.manager.Manager/WatchLookupHost", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[4], "/telepresence.manager.Manager/WatchLookupHost", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +399,7 @@ type ManagerServer interface {
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
-	// returns immediately, having not deliverd any snapshots.
+	// returns immediately, having not delivered any snapshots.
 	WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
@@ -373,6 +408,9 @@ type ManagerServer interface {
 	// that session are watched.  If no session ID is given, then all
 	// intercepts are watched.
 	WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error
+	// WatchClusterInfo returns information needed when establishing
+	// connectivity to the cluster.
+	WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error
 	// CreateIntercept lets a client create an intercept.  It will be
 	// created in the "WATING" disposition, and it will remain in that
 	// state until the Agent (the app-sidecar) calls ReviewIntercept()
@@ -433,6 +471,9 @@ func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsS
 }
 func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchIntercepts not implemented")
+}
+func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
 }
 func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
@@ -654,6 +695,27 @@ type managerWatchInterceptsServer struct {
 }
 
 func (x *managerWatchInterceptsServer) Send(m *InterceptInfoSnapshot) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Manager_WatchClusterInfo_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchClusterInfo(m, &managerWatchClusterInfoServer{stream})
+}
+
+type Manager_WatchClusterInfoServer interface {
+	Send(*ClusterInfo) error
+	grpc.ServerStream
+}
+
+type managerWatchClusterInfoServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchClusterInfoServer) Send(m *ClusterInfo) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -882,6 +944,11 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchIntercepts",
 			Handler:       _Manager_WatchIntercepts_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchClusterInfo",
+			Handler:       _Manager_WatchClusterInfo_Handler,
 			ServerStreams: true,
 		},
 		{

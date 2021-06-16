@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
@@ -30,11 +31,12 @@ type Clock interface {
 }
 
 type Manager struct {
-	ctx     context.Context
-	clock   Clock
-	ID      string
-	state   *state.State
-	systema *systemaPool
+	ctx         context.Context
+	clock       Clock
+	ID          string
+	state       *state.State
+	systema     *systemaPool
+	clusterInfo cluster.Info
 
 	rpc.UnsafeManagerServer
 }
@@ -49,10 +51,11 @@ func (wall) Now() time.Time {
 
 func NewManager(ctx context.Context) *Manager {
 	ret := &Manager{
-		ctx:   ctx,
-		clock: wall{},
-		ID:    uuid.New().String(),
-		state: state.NewState(ctx),
+		ctx:         ctx,
+		clock:       wall{},
+		ID:          uuid.New().String(),
+		state:       state.NewState(ctx),
+		clusterInfo: cluster.NewInfo(ctx),
 	}
 	ret.systema = NewSystemAPool(ret)
 	return ret
@@ -540,6 +543,12 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 			}
 		}
 	}
+}
+
+func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_WatchClusterInfoServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	dlog.Debugf(ctx, "WatchClusterInfo called")
+	return m.clusterInfo.Watch(ctx, stream)
 }
 
 // expire removes stale sessions.

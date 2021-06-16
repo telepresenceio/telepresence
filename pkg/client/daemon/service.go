@@ -157,7 +157,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-d.outbound.managerConfigured:
+		case <-d.outbound.router.configured():
 			return d.outbound.dnsServerWorker(ctx)
 		}
 	})

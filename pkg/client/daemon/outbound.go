@@ -40,12 +40,6 @@ type outbound struct {
 	domains    map[string]struct{}
 	search     []string
 
-	// managerConfigured is closed when the traffic manager has performed
-	// its first update. The DNS resolver awaits this close and so does
-	// the TUN device readers and writers
-	managerConfigured      chan struct{}
-	closeManagerConfigured sync.Once
-
 	// dnsConfigured is closed when the dnsWorker has configured
 	// the dnsServer.
 	dnsConfigured chan struct{}
@@ -93,20 +87,19 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 	rand.Seed(time.Now().UnixNano())
 
 	ret := &outbound{
-		dnsListener:       listener,
-		dnsIP:             iputil.Parse(dnsIPStr),
-		noSearch:          noSearch,
-		namespaces:        make(map[string]struct{}),
-		domains:           make(map[string]struct{}),
-		dnsInProgress:     make(map[string]*awaitLookupResult),
-		search:            []string{""},
-		work:              make(chan func(context.Context) error),
-		dnsConfigured:     make(chan struct{}),
-		managerConfigured: make(chan struct{}),
-		kubeDNS:           make(chan net.IP, 1),
+		dnsListener:   listener,
+		dnsIP:         iputil.Parse(dnsIPStr),
+		noSearch:      noSearch,
+		namespaces:    make(map[string]struct{}),
+		domains:       make(map[string]struct{}),
+		dnsInProgress: make(map[string]*awaitLookupResult),
+		search:        []string{""},
+		work:          make(chan func(context.Context) error),
+		dnsConfigured: make(chan struct{}),
+		kubeDNS:       make(chan net.IP, 1),
 	}
 
-	if ret.router, err = newTunRouter(ret.managerConfigured); err != nil {
+	if ret.router, err = newTunRouter(); err != nil {
 		return nil, err
 	}
 	return ret, nil
@@ -243,19 +236,12 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 }
 
 func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
-	defer o.closeManagerConfigured.Do(func() {
-		close(o.managerConfigured)
-	})
-	if err := o.router.setOutboundInfo(ctx, info); err != nil {
-		return err
-	}
 	if info.Dns == nil {
-		o.dnsConfig = &rpc.DNSConfig{}
-	} else {
-		o.dnsConfig = info.Dns
-		if len(o.dnsIP) == 0 && len(info.Dns.LocalIp) > 0 {
-			o.dnsIP = info.Dns.LocalIp
-		}
+		info.Dns = &rpc.DNSConfig{}
+	}
+	o.dnsConfig = info.Dns
+	if len(o.dnsIP) == 0 && len(info.Dns.LocalIp) > 0 {
+		o.dnsIP = info.Dns.LocalIp
 	}
 	if len(o.dnsConfig.ExcludeSuffixes) == 0 {
 		o.dnsConfig.ExcludeSuffixes = []string{
@@ -267,12 +253,20 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 			".ru",
 		}
 	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case o.kubeDNS <- o.dnsConfig.RemoteIp:
-		return nil
+
+	kubeDNS := o.kubeDNS
+	if len(info.Dns.RemoteIp) > 0 {
+		// Never mind what the traffic-manager reports
+		kubeDNS = nil
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case o.kubeDNS <- info.Dns.RemoteIp:
+			}
+		}()
 	}
+	return o.router.setOutboundInfo(ctx, info, kubeDNS)
 }
 
 func (o *outbound) noMoreUpdates() {
