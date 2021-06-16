@@ -2,6 +2,9 @@ package resource
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/datawire/dlib/dlog"
 
 	rbac "k8s.io/api/rbac/v1"
 
@@ -9,11 +12,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
-type tmClusterRole int
+type tmClusterRole struct {
+	found *kates.ClusterRole
+}
 
-const TrafficManagerClusterRole = tmClusterRole(0)
-
-var _ Instance = TrafficManagerClusterRole
+func NewTrafficManagerClusterRole() Instance {
+	return &tmClusterRole{}
+}
 
 func (ri tmClusterRole) clusterRole() *kates.ClusterRole {
 	cr := new(kates.ClusterRole)
@@ -27,7 +32,7 @@ func (ri tmClusterRole) clusterRole() *kates.ClusterRole {
 	return cr
 }
 
-func (ri tmClusterRole) Create(ctx context.Context) error {
+func (ri tmClusterRole) desiredClusterRole() *kates.ClusterRole {
 	cl := ri.clusterRole()
 	cl.Rules = []rbac.PolicyRule{
 		{
@@ -35,19 +40,54 @@ func (ri tmClusterRole) Create(ctx context.Context) error {
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 		},
+		{
+			Verbs:     []string{"list", "get", "watch"},
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+		},
+		{
+			Verbs:     []string{"list", "get", "watch"},
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+		},
 	}
-	return create(ctx, cl)
+	return cl
 }
 
-func (ri tmClusterRole) Exists(ctx context.Context) (bool, error) {
-	return exists(ctx, ri.clusterRole())
+func (ri tmClusterRole) Create(ctx context.Context) error {
+	return create(ctx, ri.desiredClusterRole())
+}
+
+func (ri *tmClusterRole) Exists(ctx context.Context) (bool, error) {
+	found, err := find(ctx, ri.clusterRole())
+	if err != nil {
+		return false, err
+	}
+	if found == nil {
+		return false, nil
+	}
+	ri.found = found.(*kates.ClusterRole)
+	return true, nil
 }
 
 func (ri tmClusterRole) Delete(ctx context.Context) error {
 	return remove(ctx, ri.clusterRole())
 }
 
-func (ri tmClusterRole) Update(_ context.Context) error {
-	// Noop
+func (ri tmClusterRole) Update(ctx context.Context) error {
+	if ri.found == nil {
+		return nil
+	}
+
+	dcr := ri.desiredClusterRole()
+	if rulesEqual(ri.found.Rules, dcr.Rules) {
+		return nil
+	}
+
+	dcr.ResourceVersion = ri.found.ResourceVersion
+	dlog.Infof(ctx, "Updating %s", logName(dcr))
+	if err := getScope(ctx).client.Update(ctx, dcr, dcr); err != nil {
+		return fmt.Errorf("failed to update %s: %w", logName(dcr), err)
+	}
 	return nil
 }
