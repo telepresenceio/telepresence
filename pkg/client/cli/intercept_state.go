@@ -44,6 +44,7 @@ type interceptInfo struct {
 	envFile string
 	envJSON string
 	mount   string // "true", "false", or desired mount point
+	toPod   []string
 
 	dockerRun   bool
 	dockerMount string // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
@@ -102,6 +103,10 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags.StringVarP(&ii.mount, "mount", "", "true", ``+
 		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
 		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
+
+	flags.StringSliceVar(&ii.toPod, "to-pod", []string{}, ``+
+		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
+		`Use this to, for example, access proxy/helper sidecars in the intercepted pod.`)
 
 	flags.BoolVarP(&ii.dockerRun, "docker-run", "", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
@@ -282,9 +287,8 @@ Please specify one or more header matches using --http-match.`
 	}
 	if id := r.GetInterceptInfo().GetId(); id != "" {
 		return fmt.Sprintf("Intercept %q: %s", id, msg)
-	} else {
-		return fmt.Sprintf("Intercept: %s", msg)
 	}
+	return fmt.Sprintf("Intercept: %s", msg)
 }
 
 func checkMountCapability(ctx context.Context) error {
@@ -405,6 +409,14 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 			// not --mount=false, so refuse.
 			return nil, fmt.Errorf("remote volume mounts are disabled: %w", err)
 		}
+	}
+
+	for _, toPod := range is.toPod {
+		port, err := parsePort(toPod)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to parse port %s: %w", toPod, err)
+		}
+		spec.ExtraPorts = append(spec.ExtraPorts, int32(port))
 	}
 
 	if is.dockerMount != "" {

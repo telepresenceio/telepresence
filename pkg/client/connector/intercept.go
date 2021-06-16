@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
@@ -45,10 +46,19 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 	return ie, msg
 }
 
+type forwardKey struct {
+	Name  string
+	PodIP string
+}
+
 type mountForward struct {
-	Name     string
-	PodIP    string
+	forwardKey
 	SftpPort int32
+}
+
+type portForward struct {
+	forwardKey
+	Port int32
 }
 
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
@@ -61,7 +71,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
 	var wg sync.WaitGroup
 
-	livePortForwards := make(map[mountForward]context.CancelFunc)
+	livePortForwards := make(map[forwardKey]context.CancelFunc)
 
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
@@ -77,36 +87,33 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
 				break
 			}
-			snapshotPortForwards := make(map[mountForward]struct{})
+			snapshotPortForwards := make(map[forwardKey]struct{})
 			namespaces := make(map[string]struct{})
 			for _, intercept := range snapshot.Intercepts {
 				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
 					continue
 				}
 				namespaces[intercept.Spec.Namespace] = struct{}{}
-				if intercept.SftpPort == 0 {
-					// There's nothing to mount if the SftpPort is zero
-					continue
+				fk := forwardKey{
+					Name:  intercept.Spec.Name,
+					PodIP: intercept.PodIp,
 				}
-				mf := mountForward{
-					Name:     intercept.Spec.Name,
-					PodIP:    intercept.PodIp,
-					SftpPort: intercept.SftpPort,
-				}
-				snapshotPortForwards[mf] = struct{}{}
-				if _, isLive := livePortForwards[mf]; !isLive {
+				if _, isLive := livePortForwards[fk]; !isLive {
 					pfCtx, pfCancel := context.WithCancel(ctx)
-					pfCtx = dgroup.WithGoroutineName(pfCtx, fmt.Sprintf("/%s:%d", mf.PodIP, mf.SftpPort))
-					livePortForwards[mf] = pfCancel
-					wg.Add(1)
-					go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
+					forwarded := tm.startForwards(pfCtx, &wg, fk, intercept.SftpPort, intercept.Spec.ExtraPorts)
+					if forwarded {
+						snapshotPortForwards[fk] = struct{}{}
+						livePortForwards[fk] = pfCancel
+					} else {
+						pfCancel()
+					}
 				}
 			}
-			for mf, cancel := range livePortForwards {
-				if _, isWanted := snapshotPortForwards[mf]; !isWanted {
-					dlog.Infof(ctx, "Terminating sshfs %s:%d", mf.PodIP, mf.SftpPort)
+			for fk, cancel := range livePortForwards {
+				if _, isWanted := snapshotPortForwards[fk]; !isWanted {
+					dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
 					cancel()
-					delete(livePortForwards, mf)
+					delete(livePortForwards, fk)
 				}
 			}
 			tm.setInterceptedNamespaces(ctx, namespaces)
@@ -372,6 +379,43 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string, namespa
 		if managerutil.AgentsAreCompatible(agentList) {
 			return agentList[0], nil
 		}
+	}
+}
+
+// startForwards starts port forwards and mounts for the given forwardKey. It returns true if either was started (port-forward or a mount), false otherwise
+func (tm *trafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, extraPorts []int32) bool {
+	started := false
+	if sftpPort > 0 {
+		// There's nothing to mount if the SftpPort is zero
+		started = true
+		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
+		wg.Add(1)
+		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort}, wg)
+	}
+	for _, port := range extraPorts {
+		started = true
+		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, port))
+		wg.Add(1)
+		go tm.workerPortForwardIntercept(pfCtx, portForward{fk, port}, wg)
+	}
+	return started
+}
+
+func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
+	defer wg.Done()
+	// Using kubectl port-forward here would require the pod name to be either fetched from the API server, or threaded
+	// all the way through from the intercept request to the agent and into the WatchIntercepts; it would also create
+	// additional connections that would have to be recovered in case of failure. Instead, we re-use the forwarder from
+	// the agent, and dial the pod's IP directly. This will keep all connections to the cluster going through the TUN
+	// device and the existing port-forward to the traffic manager.
+	addr := net.TCPAddr{
+		IP:   net.IPv4(127, 0, 0, 1),
+		Port: int(pf.Port),
+	}
+	f := forwarder.NewForwarder(&addr, pf.PodIP, pf.Port)
+	err := f.Serve(ctx)
+	if err != nil {
+		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
 	}
 }
 

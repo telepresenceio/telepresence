@@ -242,3 +242,21 @@ $ kubectl config set-credentials telepresence-test-developer --token <plaintext 
 This creates a service account, clusterrole, and clusterrolebinding which can be used
 with kubectl (`kubectl config use-context telepresence-test-developer`) to work in
 a rbac-restricted environment.
+
+## Build Troubleshooting
+
+### Errors from make generate
+
+When running `make generate` you may hit errors that look like:
+
+```
+./generic.gen: line 23: generated_${MAPTYPE,,}.go: bad substitution
+./generic.gen: line 37: generated_${MAPTYPE,,}_test.go: bad substitution
+cmd/traffic/cmd/manager/internal/watchable/generic.go:1: running "./generic.gen": exit status 1
+```
+
+To fix them, ensure you're running a recent version of `bash`. In MacOS this can be done installing it from brew:
+
+```bash
+brew install bash
+```
