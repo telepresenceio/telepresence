@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/icmp"
@@ -83,6 +84,16 @@ type tunRouter struct {
 	// dnsLocalAddr is the address of the local DNS server
 	dnsLocalAddr *net.UDPAddr
 
+	// Cluster subnets reported by the traffic-manager
+	clusterSubnets []*net.IPNet
+
+	// Subnets configured by the user
+	alsoProxySubnets []*net.IPNet
+
+	// Subnets that the router is currently configured with. Managed, and only used in
+	// the refreshSubnets() method.
+	curSubnets []*net.IPNet
+
 	// closing is set during shutdown and can have the values:
 	//   0 = running
 	//   1 = closing
@@ -122,6 +133,56 @@ func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16
 	return nil
 }
 
+func (t *tunRouter) alsoProxy(ctx context.Context, subnets []*net.IPNet) error {
+	t.alsoProxySubnets = subnets
+	return t.refreshSubnets(ctx)
+}
+
+func (t *tunRouter) refreshSubnets(ctx context.Context) error {
+	// Create a unique slice of all desired subnets.
+	desired := make([]*net.IPNet, len(t.clusterSubnets)+len(t.alsoProxySubnets))
+	copy(desired, t.clusterSubnets)
+	copy(desired[len(t.clusterSubnets):], t.alsoProxySubnets)
+	desired = subnet.Unique(desired)
+
+	// Remove all no longer desired subnets from the t.curSubnets
+	var removed []*net.IPNet
+	t.curSubnets, removed = subnet.Partition(t.curSubnets, func(_ int, sn *net.IPNet) bool {
+		for _, d := range desired {
+			if subnet.Equal(sn, d) {
+				return true
+			}
+		}
+		return false
+	})
+
+	// Remove already routed subnets from the desiredSubnets
+	added, _ := subnet.Partition(desired, func(_ int, sn *net.IPNet) bool {
+		for _, d := range t.curSubnets {
+			if subnet.Equal(sn, d) {
+				return false
+			}
+		}
+		return true
+	})
+
+	// Add desiredSubnets to the currently routed subnets
+	t.curSubnets = append(t.curSubnets, added...)
+
+	for _, sn := range removed {
+		if err := t.dev.RemoveSubnet(ctx, sn); err != nil {
+			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
+		}
+	}
+
+	for _, sn := range added {
+		if err := t.dev.AddSubnet(ctx, sn); err != nil {
+			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
+		}
+	}
+	return nil
+}
+
 func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
 	if t.managerClient == nil {
 		// First check. Establish connection
@@ -140,19 +201,22 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		t.session = mi.Session
 		t.managerClient = manager.NewManagerClient(conn)
 
+		subnets := make([]*net.IPNet, 0, len(mi.PodSubnets)+1)
 		cidr := iputil.IPNetFromRPC(mi.ServiceSubnet)
 		dlog.Infof(ctx, "Adding service subnet %s", cidr)
-		if err = t.dev.AddSubnet(ctx, cidr); err != nil {
-			return err
-		}
+		subnets = append(subnets, cidr)
 
 		for _, sn := range mi.PodSubnets {
 			cidr = iputil.IPNetFromRPC(sn)
 			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
-			if err = t.dev.AddSubnet(ctx, cidr); err != nil {
-				return err
-			}
+			subnets = append(subnets, cidr)
 		}
+
+		// This is not strictly true at this point since we cannot know what subnets that
+		// were added as also-proxy in the config and what subnets that were found in the
+		// cluster. That will get sorted when the latter is provided by the traffic-manager.
+		t.clusterSubnets = subnets
+		return t.refreshSubnets(ctx)
 	}
 	return nil
 }

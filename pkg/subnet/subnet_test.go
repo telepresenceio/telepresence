@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"net"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func Test_covers(t *testing.T) {
@@ -85,4 +88,102 @@ func loadIPs(t *testing.T) []net.IP {
 		ips = append(ips, ip)
 	}
 	return ips
+}
+
+func TestUnique(t *testing.T) {
+	tests := []struct {
+		name    string
+		subnets []*net.IPNet
+		want    []*net.IPNet
+	}{
+		{
+			name: "Removes equal subnets",
+			subnets: []*net.IPNet{
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.172.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+			},
+			want: []*net.IPNet{
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.172.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+			},
+		},
+		{
+			name: "Removes covered subnets",
+			subnets: []*net.IPNet{
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(24, 32),
+				},
+				{
+					IP:   iputil.Parse("192.172.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+			},
+			want: []*net.IPNet{
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.172.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+			},
+		},
+		{
+			name: "Removes covered subnets reverse",
+			subnets: []*net.IPNet{
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.172.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(24, 32),
+				},
+			},
+			want: []*net.IPNet{
+				{
+					IP:   iputil.Parse("192.168.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+				{
+					IP:   iputil.Parse("192.172.0.0"),
+					Mask: net.CIDRMask(16, 32),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Unique(tt.subnets); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Unique() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
