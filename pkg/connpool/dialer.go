@@ -33,14 +33,15 @@ type TunnelStream interface {
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections
 type dialer struct {
-	id         ConnID
-	release    func()
-	bidiStream TunnelStream
-	incoming   chan Message
-	conn       net.Conn
-	idleTimer  *time.Timer
-	idleLock   sync.Mutex
-	connected  int32
+	id            ConnID
+	release       func()
+	bidiStream    TunnelStream
+	incoming      chan Message
+	conn          net.Conn
+	idleTimer     *time.Timer
+	idleLock      sync.Mutex
+	connected     int32
+	writerClosing chan struct{}
 }
 
 // NewDialer creates a new handler that dispatches messages in both directions between the given gRPC server
@@ -50,23 +51,25 @@ type dialer struct {
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
 func NewDialer(connID ConnID, bidiStream TunnelStream, release func()) Handler {
 	return &dialer{
-		id:         connID,
-		bidiStream: bidiStream,
-		release:    release,
-		incoming:   make(chan Message, 10),
-		connected:  notConnected,
+		id:            connID,
+		bidiStream:    bidiStream,
+		release:       release,
+		incoming:      make(chan Message, 10),
+		writerClosing: make(chan struct{}),
+		connected:     notConnected,
 	}
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
 func HandlerFromConn(connID ConnID, bidiStream TunnelStream, release func(), conn net.Conn) Handler {
 	return &dialer{
-		id:         connID,
-		bidiStream: bidiStream,
-		release:    release,
-		incoming:   make(chan Message, 10),
-		connected:  halfConnected,
-		conn:       conn,
+		id:            connID,
+		bidiStream:    bidiStream,
+		release:       release,
+		incoming:      make(chan Message, 10),
+		writerClosing: make(chan struct{}),
+		connected:     halfConnected,
+		conn:          conn,
 	}
 }
 
@@ -117,7 +120,21 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	case Disconnect:
 		h.Close(ctx)
 		h.sendTCD(ctx, DisconnectOK)
-	case ReadClosed, WriteClosed:
+	case ReadClosed:
+		// If there's nothing more for us to read, then it's time to ask the writer to close.
+		// We do this instead of h.Close() because it will ensure that anything the writeLoop
+		// is already dealing with will be written. Will prevent connections from being
+		// abruptly terminated after the source has sent everything but before we've had
+		// a chance to forward it.
+		if atomic.LoadInt32(&h.connected) > 0 {
+			select {
+			case <-h.writerClosing:
+				// Already closed, nothing to do
+			default:
+				close(h.writerClosing)
+			}
+		}
+	case WriteClosed:
 		h.Close(ctx)
 	case KeepAlive:
 		h.resetIdle()
@@ -161,7 +178,7 @@ func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 func (h *dialer) readLoop(ctx context.Context) {
 	defer func() {
 		// allow write to drain and perform the close of the connection
-		dtime.SleepWithContext(ctx, 200*time.Millisecond)
+		dtime.SleepWithContext(ctx, 100*time.Millisecond)
 		close(h.incoming)
 	}()
 	b := make([]byte, 0x8000)
@@ -227,6 +244,8 @@ func (h *dialer) writeLoop(ctx context.Context) {
 				dlog.Debugf(ctx, "-> CONN %s, len %d", h.id, wn)
 				n += wn
 			}
+		case <-h.writerClosing:
+			return
 		}
 	}
 }
