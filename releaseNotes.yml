@@ -30,6 +30,11 @@ items:
           (which in turn allows for better separation of permissions).
         image: ./telepresence-2.3.3-helm.png
         docs: install/helm/
+      - title: intercept --to-pod
+        body: "telepresence intercept now supports a --to-pod flag that can be used to port-forward sidecars' ports from an intercepted pod"
+        image: ./telepresence-2.3.3-to-pod.png
+        docs: reference/intercept
+        type: feature
   - version: 2.3.2
     date: '2021-06-18'
     notes:
@@ -133,7 +138,6 @@ items:
           Now it can be counted on that by the time the command has
           returned that all of the side-effects on the laptop have
           been cleaned up.
-
   - version: 2.3.1
     date: '2021-06-14'
     notes:
