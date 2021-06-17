@@ -247,7 +247,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		_ = os.Remove(resolverFileName)
 
 		// Remove each namespace resolver file
-		for namespace := range o.namespaces {
+		for namespace := range o.domains {
 			_ = os.Remove(namespaceResolverFile(namespace))
 		}
 		dns.Flush(dcontext.HardContext(c))

@@ -1,14 +1,19 @@
 # Changelog
 
-### 2.3.1 (TBD)
+### 2.3.2 (TBD)
+
+- Change: Outbound connections are now routed to intercepted agents.
+- Change: Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection.
+- Bug: On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
+
+### 2.3.1 (June 14, 2021)
 
 - Feature: Agents can now be installed using a mutator webhook
 - Feature: DNS resolver can now be configured with respect to what IP addresses that are used, and what lookups that gets sent to the cluster.
 - Feature: Telepresence can now be configured to proxy subnets that aren't part of the cluster but only accesible from the cluster.
 - Change: The `trafficManagerConnect` timout default has changed from 20 seconds to 60 seconds, in order to facilitate
   the extended time it takes to apply everything needed for the mutator webhook.
-- Change: Outbound connections are now routed to intercepted agents.
-- Change: Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection.
+- Change: Telepresence is now installable via `brew install datawire/blackbird/telepresence`
 - Bugfix: Fix a bug where sometimes large transfers from services on the cluster would hang indefinitely
 
 ### 2.3.0 (June 1, 2021)
