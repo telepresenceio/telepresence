@@ -276,16 +276,19 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP)
 }
 
 func (t *tunRouter) stop(c context.Context) {
-	cc, cancel := context.WithTimeout(c, time.Second)
-	defer cancel()
-	go func() {
-		atomic.StoreInt32(&t.closing, 1)
-		t.handlers.CloseAll(cc)
-		cancel()
-	}()
-	<-cc.Done()
-	atomic.StoreInt32(&t.closing, 2)
-	t.dev.Close()
+	if atomic.CompareAndSwapInt32(&t.closing, 0, 1) {
+		cc, cancel := context.WithTimeout(c, time.Second)
+		defer cancel()
+		go func() {
+			atomic.StoreInt32(&t.closing, 1)
+			t.handlers.CloseAll(cc)
+			cancel()
+		}()
+		<-cc.Done()
+	}
+	if atomic.CompareAndSwapInt32(&t.closing, 1, 2) {
+		t.dev.Close()
+	}
 }
 
 var blockedUDPPorts = map[uint16]bool{
@@ -302,6 +305,7 @@ func (t *tunRouter) run(c context.Context) error {
 		for atomic.LoadInt32(&t.closing) < 2 {
 			select {
 			case <-c.Done():
+				t.stop(c)
 				return nil
 			case pkt := <-t.toTunCh:
 				dlog.Debugf(c, "-> TUN %s", pkt)
