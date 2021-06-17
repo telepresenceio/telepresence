@@ -3,6 +3,7 @@
 ### 2.3.2 (TBD)
 
 - Bug: On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
+- Bugfix: Fix a bug where large transfers from intercepted services would sometimes terminate early
 
 ### 2.3.1 (June 14, 2021)
 
