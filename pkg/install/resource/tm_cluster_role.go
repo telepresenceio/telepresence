@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/datawire/dlib/dlog"
-
 	rbac "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
@@ -20,20 +20,20 @@ func NewTrafficManagerClusterRole() Instance {
 	return &tmClusterRole{}
 }
 
-func (ri tmClusterRole) clusterRole() *kates.ClusterRole {
+func (ri tmClusterRole) clusterRole(ctx context.Context) *kates.ClusterRole {
 	cr := new(kates.ClusterRole)
 	cr.TypeMeta = kates.TypeMeta{
 		Kind:       "ClusterRole",
 		APIVersion: "rbac.authorization.k8s.io/v1",
 	}
 	cr.ObjectMeta = kates.ObjectMeta{
-		Name: install.ManagerAppName,
+		Name: fmt.Sprintf("%s-%s", install.ManagerAppName, getScope(ctx).namespace),
 	}
 	return cr
 }
 
-func (ri tmClusterRole) desiredClusterRole() *kates.ClusterRole {
-	cl := ri.clusterRole()
+func (ri tmClusterRole) desiredClusterRole(ctx context.Context) *kates.ClusterRole {
+	cl := ri.clusterRole(ctx)
 	cl.Rules = []rbac.PolicyRule{
 		{
 			Verbs:     []string{"get", "list"},
@@ -55,12 +55,17 @@ func (ri tmClusterRole) desiredClusterRole() *kates.ClusterRole {
 }
 
 func (ri tmClusterRole) Create(ctx context.Context) error {
-	return create(ctx, ri.desiredClusterRole())
+	return create(ctx, ri.desiredClusterRole(ctx))
 }
 
 func (ri *tmClusterRole) Exists(ctx context.Context) (bool, error) {
-	found, err := find(ctx, ri.clusterRole())
+	found, err := find(ctx, ri.clusterRole(ctx))
 	if err != nil {
+		if errors.IsForbidden(err) {
+			// Simply assume that it exists. Not much else we can do unless
+			// RBAC is configured to give access.
+			return true, nil
+		}
 		return false, err
 	}
 	if found == nil {
@@ -71,7 +76,7 @@ func (ri *tmClusterRole) Exists(ctx context.Context) (bool, error) {
 }
 
 func (ri tmClusterRole) Delete(ctx context.Context) error {
-	return remove(ctx, ri.clusterRole())
+	return remove(ctx, ri.clusterRole(ctx))
 }
 
 func (ri tmClusterRole) Update(ctx context.Context) error {
@@ -79,7 +84,7 @@ func (ri tmClusterRole) Update(ctx context.Context) error {
 		return nil
 	}
 
-	dcr := ri.desiredClusterRole()
+	dcr := ri.desiredClusterRole(ctx)
 	if rulesEqual(ri.found.Rules, dcr.Rules) {
 		return nil
 	}

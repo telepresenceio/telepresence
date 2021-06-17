@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/datawire/dlib/dlog"
-
 	rbac "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
@@ -52,6 +52,11 @@ func (ri tmRole) Create(ctx context.Context) error {
 func (ri *tmRole) Exists(ctx context.Context) (bool, error) {
 	found, err := find(ctx, ri.role(ctx))
 	if err != nil {
+		if errors.IsForbidden(err) {
+			// Simply assume that it exists. Not much else we can do unless
+			// RBAC is configured to give access.
+			return true, nil
+		}
 		return false, err
 	}
 	if found == nil {
