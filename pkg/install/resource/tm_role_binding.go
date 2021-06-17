@@ -15,20 +15,21 @@ const TrafficManagerRoleBinding = tmRoleBinding(0)
 
 var _ Instance = TrafficManagerRoleBinding
 
-func (ri tmRoleBinding) roleBinding() *kates.RoleBinding {
+func (ri tmRoleBinding) roleBinding(ctx context.Context) *kates.RoleBinding {
 	cr := new(kates.RoleBinding)
 	cr.TypeMeta = kates.TypeMeta{
 		Kind:       "RoleBinding",
 		APIVersion: "rbac.authorization.k8s.io/v1",
 	}
 	cr.ObjectMeta = kates.ObjectMeta{
-		Name: install.ManagerAppName,
+		Name:      install.ManagerAppName,
+		Namespace: getScope(ctx).namespace,
 	}
 	return cr
 }
 
 func (ri tmRoleBinding) Create(ctx context.Context) error {
-	clb := ri.roleBinding()
+	clb := ri.roleBinding(ctx)
 	clb.Subjects = []rbac.Subject{
 		{
 			Kind:      "ServiceAccount",
@@ -45,11 +46,11 @@ func (ri tmRoleBinding) Create(ctx context.Context) error {
 }
 
 func (ri tmRoleBinding) Exists(ctx context.Context) (bool, error) {
-	return exists(ctx, ri.roleBinding())
+	return exists(ctx, ri.roleBinding(ctx))
 }
 
 func (ri tmRoleBinding) Delete(ctx context.Context) error {
-	return remove(ctx, ri.roleBinding())
+	return remove(ctx, ri.roleBinding(ctx))
 }
 
 func (ri tmRoleBinding) Update(_ context.Context) error {

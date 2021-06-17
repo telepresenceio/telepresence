@@ -3,6 +3,8 @@ package resource
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
@@ -41,7 +43,28 @@ func (ri mwhSecret) Create(ctx context.Context) (err error) {
 }
 
 func (ri mwhSecret) Exists(ctx context.Context) (bool, error) {
-	return exists(ctx, ri.secret(ctx))
+	found, err := find(ctx, ri.secret(ctx))
+	if err != nil {
+		if errors.IsForbidden(err) {
+			// Simply assume that it exists. Not much else we can do unless
+			// RBAC is configured to give access.
+			return true, nil
+		}
+		return false, err
+	}
+	if found == nil {
+		return false, nil
+	}
+	if sec, ok := found.(*kates.Secret); ok && sec.Data != nil {
+		// These will be needed in case someone deleted the traffic-manager
+		// Deployment or MutatorWebhookConfiguration
+		sc := getScope(ctx)
+		sc.crtPem = sec.Data["crt.pem"]
+		sc.keyPem = sec.Data["key.pem"]
+		sc.caPem = sec.Data["ca.pem"]
+		return true, nil
+	}
+	return false, nil
 }
 
 func (ri mwhSecret) Delete(ctx context.Context) error {
