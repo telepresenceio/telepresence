@@ -78,7 +78,10 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		dlog.Error(ctx, err)
 		return nil, nil
 	}
-	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, "", svc)
+
+	// The ServicePortAnnotation is expected to contain a string that identifies the service port.
+	portNameOrNumber := pod.Annotations[install.ServicePortAnnotation]
+	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, portNameOrNumber, svc)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil, nil
