@@ -15,12 +15,19 @@
 # The client will default to docker.io/datawire/tel2:{{CLIENT_VERSION}}
 
 image:
-  repository: docker.io/datawire/tel2
+  registry: docker.io/datawire
+  name: tel2
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
   imagePullSecrets: []
+
+ports:
+- name: api
+  containerPort: 8081
+- name: https
+  containerPort: 8443
 
 podAnnotations: {}
 
@@ -47,15 +54,12 @@ tolerations: []
 affinity: {}
 
 ################################################################################
-## Service Configuration
+## Traffic Manager Service Configuration
 ################################################################################
 
 service:
   type: ClusterIP
   ports:
-  - name: sshd
-    port: 8022
-    targetPort: sshd
   - name: api
     port: 8081
     targetPort: api
@@ -110,6 +114,30 @@ licenseKey:
     #
     # Default: systema-license
     name: systema-license
+
+################################################################################
+## Agent Injector Configuration
+################################################################################
+agentInjector:
+  create: true
+  name: agent-injector
+  service:
+    type: ClusterIP
+    ports:
+    - name: https
+      port: 443
+      targetPort: https
+  secret:
+    name: mutator-webhook-tls
+  webhook:
+    name: agent-injector-webhook
+    admissionReviewVersions: ["v1"]
+    servicePath: /traffic-agent
+    port: 443
+    failurePolicy: Ignore
+    sideEffects: None
+    timeoutSeconds: 5
+
 
 ################################################################################
 ## User Configuration

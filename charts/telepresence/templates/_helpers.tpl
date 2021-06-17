@@ -26,7 +26,7 @@ If release name contains chart name it will be used as a full name.
 {{- define "telepresence.fullname" -}}
 {{- $name := default "traffic-manager" }}
 {{- if .Values.isCI }}
-{{- print "traffic-agent" }}
+{{- print $name }}
 {{- else }}
 {{- if ne $name .Release.Name }}
 {{- fail "The name of the release MUST BE traffic-manager" }}
