@@ -4,19 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
@@ -295,12 +292,10 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- dutil.ServeHTTPWithContext(ctx, &http.Server{
-			ErrorLog: dlog.StdLogger(ctx, dlog.LogLevelError),
-			Handler: h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				s.ServeHTTP(w, r)
-			}), &http2.Server{}),
-		}, lis)
+		sc := &dhttp.ServerConfig{
+			Handler: s,
+		}
+		errCh <- sc.Serve(ctx, lis)
 		close(errCh)
 	}()
 	t.Cleanup(func() {

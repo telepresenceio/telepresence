@@ -20,6 +20,7 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -79,11 +80,6 @@ type service struct {
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
 	managerRequest  chan *trafficManager      // connectWorker -> background-manager
-
-	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
-	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
-	// Contexts can get passed around properly for HTTP/2 requests.
-	ctx context.Context
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
@@ -99,43 +95,6 @@ func Command() *cobra.Command {
 		},
 	}
 	return c
-}
-
-type callCtx struct {
-	context.Context
-	caller context.Context
-}
-
-func (c callCtx) Deadline() (deadline time.Time, ok bool) {
-	if dl, ok := c.Context.Deadline(); ok {
-		return dl, true
-	}
-	return c.caller.Deadline()
-}
-
-func (c callCtx) Done() <-chan struct{} {
-	ch := make(chan struct{})
-	go func() {
-		select {
-		case <-c.Context.Done():
-			close(ch)
-		case <-c.caller.Done():
-			close(ch)
-		}
-	}()
-	return ch
-}
-
-func (c callCtx) Err() error {
-	err := c.Context.Err()
-	if err == nil {
-		err = c.caller.Err()
-	}
-	return err
-}
-
-func (c callCtx) Value(key interface{}) interface{} {
-	return c.Context.Value(key)
 }
 
 func callRecovery(c context.Context, r interface{}, err error) error {
@@ -164,7 +123,7 @@ func callName(s string) string {
 }
 
 func (s *service) callCtx(c context.Context, name string) context.Context {
-	return dgroup.WithGoroutineName(&callCtx{Context: s.ctx, caller: c}, callName(name))
+	return dgroup.WithGoroutineName(c, "/"+callName(name))
 }
 
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
@@ -615,22 +574,10 @@ func run(c context.Context) error {
 		rpc.RegisterConnectorServer(svc, s)
 		manager.RegisterManagerServer(svc, &s.managerProxy)
 
-		subg := dgroup.NewGroup(c, dgroup.GroupConfig{})
-
-		subg.Go("GracefulStop", func(c context.Context) error {
-			<-c.Done()
-			dlog.Info(c, "Shutting down")
-			svc.GracefulStop()
-			return nil
-		})
-		subg.Go("Serve", func(c context.Context) error {
-			s.ctx = c
-			err = svc.Serve(listener)
-			dlog.Info(c, "Done serving")
-			return err
-		})
-
-		return subg.Wait()
+		sc := &dhttp.ServerConfig{
+			Handler: svc,
+		}
+		return sc.Serve(c, listener)
 	})
 
 	g.Go("background-init", func(c context.Context) error {

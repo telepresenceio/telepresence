@@ -19,6 +19,7 @@ import (
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth"
@@ -58,7 +59,10 @@ func (m *MockOpenURLWrapper) OpenURL(url string) error {
 }
 
 type MockOauth2Server struct {
-	Server                 *http.Server
+	ServerConfig  *dhttp.ServerConfig
+	ServerAddress string
+	ServerStop    func() error
+
 	TokenRequestFormValues []url.Values
 	TokenResponseCode      int
 	UserInfo               *authdata.UserInfo
@@ -70,16 +74,24 @@ func newMockOauth2Server(t *testing.T) *MockOauth2Server {
 		t.Fatal(err)
 	}
 	handler := http.NewServeMux()
-	server := &http.Server{
-		Addr:    listener.Addr().String(),
+	sc := &dhttp.ServerConfig{
 		Handler: handler,
 	}
+	ctx, cancel := context.WithCancel(dlog.NewTestContext(t, true))
+	ch := make(chan error)
 	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("callback server error: %v", err)
-		}
+		ch <- sc.Serve(ctx, listener)
+		close(ch)
 	}()
-	oauth2Server := &MockOauth2Server{Server: server, TokenResponseCode: http.StatusOK}
+	oauth2Server := &MockOauth2Server{
+		ServerConfig:  sc,
+		ServerAddress: listener.Addr().String(),
+		ServerStop: func() error {
+			cancel()
+			return <-ch
+		},
+		TokenResponseCode: http.StatusOK,
+	}
 	oauth2Server.UserInfo = &authdata.UserInfo{
 		Id:               "mock-user-id",
 		Name:             "mock-user-name",
@@ -95,8 +107,8 @@ func newMockOauth2Server(t *testing.T) *MockOauth2Server {
 }
 
 func (s *MockOauth2Server) TearDown(t *testing.T) {
-	if err := s.Server.Close(); err != nil {
-		t.Fatal(err)
+	if err := s.ServerStop(); err != nil {
+		t.Logf("mock oauth2 server: %v", err)
 	}
 }
 
@@ -113,7 +125,7 @@ func (s *MockOauth2Server) UserInfoUrl() string {
 }
 
 func (s *MockOauth2Server) urlForPath(path string) string {
-	return fmt.Sprintf("http://%s%s", s.Server.Addr, path)
+	return fmt.Sprintf("http://%s%s", s.ServerAddress, path)
 }
 
 func (s *MockOauth2Server) HandleToken() http.Handler {

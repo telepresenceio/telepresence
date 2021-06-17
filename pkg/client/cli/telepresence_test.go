@@ -25,7 +25,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
@@ -722,9 +725,10 @@ func (cs *connectedSuite) TestZ_Uninstall() {
 
 type interceptedSuite struct {
 	suite.Suite
-	tpSuite    *telepresenceSuite
-	intercepts []string
-	services   []*http.Server
+	tpSuite        *telepresenceSuite
+	intercepts     []string
+	services       *dgroup.Group
+	cancelServices context.CancelFunc
 }
 
 func (is *interceptedSuite) ns() string {
@@ -733,7 +737,9 @@ func (is *interceptedSuite) ns() string {
 
 func (is *interceptedSuite) SetupSuite() {
 	is.intercepts = make([]string, 0, serviceCount)
-	is.services = make([]*http.Server, 0, serviceCount)
+	ctx, cancel := context.WithCancel(dcontext.WithSoftness(dlog.NewTestContext(is.T(), true)))
+	is.services = dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	is.cancelServices = cancel
 
 	is.Run("all intercepts ready", func() {
 		rxs := make([]*regexp.Regexp, serviceCount)
@@ -773,15 +779,15 @@ func (is *interceptedSuite) SetupSuite() {
 		for i := 0; i < serviceCount; i++ {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
-			srv := &http.Server{Addr: ":" + port, Handler: http.NewServeMux()}
-			go func() {
-				srv.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
-				})
-				is.services = append(is.services, srv)
-				err := srv.ListenAndServe()
-				is.Equal(http.ErrServerClosed, err)
-			}()
+
+			is.services.Go(svc, func(ctx context.Context) error {
+				sc := &dhttp.ServerConfig{
+					Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
+					}),
+				}
+				return sc.ListenAndServe(ctx, ":"+port)
+			})
 		}
 	})
 }
@@ -792,9 +798,8 @@ func (is *interceptedSuite) TearDownSuite() {
 		is.Empty(stderr)
 		is.Empty(stdout)
 	}
-	for _, srv := range is.services {
-		_ = srv.Shutdown(context.Background())
-	}
+	is.cancelServices()
+	is.NoError(is.services.Wait())
 	time.Sleep(time.Second) // Allow some time for processes to die and intercepts to vanish
 }
 
