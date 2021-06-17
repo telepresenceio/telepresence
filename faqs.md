@@ -16,6 +16,10 @@ You can “intercept” any requests made to a target Kubernetes workload, and c
 
 By using the preview URL functionality you can share access with additional developers or stakeholders to the application via an entry point associated with your intercept and locally developed service. You can make changes that are visible in near real-time to all of the participants authenticated and viewing the preview URL. All other viewers of the application entrypoint will not see the results of your changes.
 
+** What operating systems does Telepresence work on?**
+
+Telepresence currently works natively on macOS and Linux. We are working on a native Windows port, but in the meantime, Windows users can use Telepresence with WSL 2.
+
 ** What protocols can be intercepted by Telepresence?**
 
  All HTTP/1.1 and HTTP/2 protocols can be intercepted. This includes:
@@ -56,6 +60,14 @@ You can connect to databases or middleware running in the cluster, such as MySQL
  The preview URL functionality should work with most ingress configurations, including straightforward load balancer setups. 
 
 Telepresence will discover/prompt during first use for this info and make its best guess at figuring this out and ask you to confirm or update this. 
+
+** Why are my intercepts still reporting as active when they've been disconnected?**
+
+  In certain cases, Telepresence might not have been able to communicate back with Ambassador Cloud to update the intercept's status. Worry not, they will get garbage collected after a period of time.
+
+** Why is my intercept associated with an "Unreported" cluster?**
+
+  Intercepts tagged with "Unreported" clusters simply mean Ambassador Cloud was unable to associate a service instance with a known detailed service from an Edge Stack or API Gateway cluster. [Connecting your cluster to the Service Catalog](../../service-catalog/quick-start/) will properly match your services from multiple data sources.
 
 ** Will Telepresence be able to intercept workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?**
 

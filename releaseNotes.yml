@@ -17,6 +17,39 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
+  - version: 2.3.1
+    date: '2021-06-14'
+    notes:
+      - title: DNS Resolver Configuration
+        body: "Telepresence now supports per-cluster configuration for custom dns behavior, which will enable users to determine which local + remote resolver to use and which suffixes should be ignored + included. These can be configured on a per-cluster basis."
+        image: ./telepresence-2.3.1-dns.png
+        docs: reference/config
+        type: feature
+      - title: AlsoProxy Configuration
+        body: "Telepresence now supports also proxying user-specified subnets so that they can access external services only accessible to the cluster while connected to Telepresence. These can be configured on a per-cluster basis and each subnet is added to the TUN device so that requests are routed to the cluster for IPs that fall within that subnet."
+        image: ./telepresence-2.3.1-alsoProxy.png
+        docs: reference/config
+        type: feature
+      - title: Mutating Webhook for Injecting Traffic Agents
+        body: "The Traffic Manager now contains a mutating webhook to automatically add an agent to pods that have the <code>telepresence.getambassador.io/traffic-agent: enabled</code> annotation.  This enables Telepresence to work well with GitOps CD platforms that rely on higher level kubernetes objects matching what is stored in git.  For workloads without the annotation, Telepresence will add the agent the way it has in the past"
+        image: ./telepresence-2.3.1-inject.png
+        docs: reference/rbac
+        type: feature
+      - title: Traffic Manager Connect Timeout
+        body: "The trafficManagerConnect timeout default has changed from 20 seconds to 60 seconds, in order to facilitate the extended time it takes to apply everything needed for the mutator webhook."
+        image: ./telepresence-2.3.1-trafficmanagerconnect.png
+        docs: reference/config
+        type: change
+      - title: Fix for large file transfers
+        body: "Fix a tun-device bug where sometimes large transfers from services on the cluster would hang indefinitely"
+        image: ./telepresence-2.3.1-large-file-transfer.png
+        docs: reference/tun-device
+        type: bugfix
+      - title: Brew Formula Changed
+        body: "Now that the Telepresence rewrite is the main version of Telepresence, you can install it via Brew like so: <code>brew install datawire/blackbird/telepresence</code>."
+        image: ./telepresence-2.3.1-brew.png
+        docs: install/index/
+        type: change
   - version: 2.3.0
     date: '2021-06-01'
     notes:

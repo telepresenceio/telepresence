@@ -71,7 +71,7 @@ export default function SimpleTabs() {
         {
           '# Upgrade via brew:' +
           '\n' +
-          'brew upgrade datawire/blackbird/telepresence2' +
+          'brew upgrade datawire/blackbird/telepresence' +
           '\n \n' +
           '# OR upgrade manually:' +
           '\n' +
