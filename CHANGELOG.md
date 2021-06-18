@@ -7,6 +7,8 @@
 - Change: The traffic-manager requires permissions to list nodes, pods, and to create a dummy service (in the manager's namespace).
 - Change: Outbound connections are now routed to intercepted agents.
 - Change: Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection.
+- Change: The `trafficManagerAPI` timout default has changed from 5 seconds to 15 seconds, in order to facilitate
+  the extended time it takes to for the traffic-manager to do its initial discovery of cluster info.
 - Bugfix: Telepresence will now find the pod CIDRs even if its not listed in the nodes.
 - Bugfix: Telepresence no longer requires permission to create a service in order to determine the service subnet accurately.
 - Bugfix: Subnets covered by other subnets are now removed and thus never added to the virtual network interface.
