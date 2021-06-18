@@ -6,11 +6,11 @@ import (
 
 const PrefixLen = 4
 
-// Data on a MacOS consists of two slices that share the same underlying byte array. The
+// Data on a macOS consists of two slices that share the same underlying byte array. The
 // raw data points to the beginning of the array and the buf points PrefixLen into the array.
 // All data manipulation is then done using the buf, except reads/writes to the tun device which
 // uses the raw. This setup enables the read/write to receive and write the required 4-byte
-// header that MacOS TUN socket uses without copying data.
+// header that macOS TUN socket uses without copying data.
 type Data struct {
 	buf []byte
 	raw []byte

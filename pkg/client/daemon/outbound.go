@@ -124,8 +124,8 @@ func (o *outbound) routerServerWorker(c context.Context) (err error) {
 	return o.router.run(c)
 }
 
-// On a MacOS, Docker uses its own search-path for single label names. This means that the search path that is declared
-// in the MacOS resolver is ignored although the rest of the DNS-resolution works OK. Since the search-path is likely to
+// On a macOS, Docker uses its own search-path for single label names. This means that the search path that is declared
+// in the macOS resolver is ignored although the rest of the DNS-resolution works OK. Since the search-path is likely to
 // change during a session, a stable fake domain is needed to emulate the search-path. That fake-domain can then be used
 // in the search path declared in the Docker config. The "tel2-search" domain fills this purpose and a request for
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.

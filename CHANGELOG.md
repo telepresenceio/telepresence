@@ -12,7 +12,7 @@
 - Bugfix: Telepresence will now find the pod CIDRs even if its not listed in the nodes.
 - Bugfix: Telepresence no longer requires permission to create a service in order to determine the service subnet accurately.
 - Bugfix: Subnets covered by other subnets are now removed and thus never added to the virtual network interface.
-- Bugfix: On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
+- Bugfix: On macOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
 - Bugfix: Fix a bug where large transfers from intercepted services would sometimes terminate early
 
 ### 2.3.1 (June 14, 2021)
@@ -95,7 +95,7 @@
 
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
-- Bugfix: IPv6 routes now work and don't prevent other pfctl rules being written in MacOS
+- Bugfix: IPv6 routes now work and don't prevent other pfctl rules being written in macOS
 - Bugfix: Pods with `hostname` and/or `subdomain` now get correct DNS-names and routes.
 - Change: Service UID was added to InterceptSpec to better link intercepts and services.
 - Feature: All timeouts can now be configured in a <user-config-dir>/telepresence/config.yml file
@@ -150,5 +150,5 @@
 - Bugfix: A bug causing a failure in the Telepresence DNS resolver when attempting to listen to the Docker gateway IP was fixed. The fix affects Windows using a combination of Docker and WSL2 only.
 - Bugfix: Telepresence now works correctly while OpenVPN is running on macOS.
 - Change: The background processes `connector` and `daemon` will now use rotating logs and a common directory.
-  + MacOS: `~/Library/Logs/telepresence/`
+  + macOS: `~/Library/Logs/telepresence/`
   + Linux: `$XDG_CACHE_HOME/telepresence/logs/` or `$HOME/.cache/telepresence/logs/`
