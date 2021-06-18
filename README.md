@@ -279,7 +279,7 @@ will remove everything that was automatically installed by telepresence from the
 
 ### Troubleshooting
 
-The telepresence background processes `daemon` and `commector`both produces log files that can be very helpful when problems are encountered. The files are named `daemon.log` and `connector.log`. The location of the logs differ depending on what platform that is used:
+The telepresence background processes `daemon` and `connector` both produces log files that can be very helpful when problems are encountered. The files are named `daemon.log` and `connector.log`. The location of the logs differ depending on what platform that is used:
 
 - MacOS `~/Library/Logs/telepresence`
 - Linux `~/.cache/telepresence/logs`
