@@ -66,3 +66,5 @@ $ curl verylargejavaservice:8080
 Now curling that service by its short name works and will as long as the intercept is active.
 
 The DNS resolver will always be able to resolve services using `<service-name>.<namespace>` regardless of intercepts.
+
+See [Outbound connectivity](../routing/#dns-resolution) for details on DNS lookups.

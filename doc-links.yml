@@ -26,6 +26,8 @@
        link: howtos/preview-urls
      - title: Proxy outbound traffic to my cluster
        link: howtos/outbound
+     - title: Send requests to an intercepted service
+       link: howtos/request
  - title: Technical reference
    items:
      - title: Architecture
