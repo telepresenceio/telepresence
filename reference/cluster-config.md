@@ -123,13 +123,13 @@ cluster with `kubectl`.  Once applied, you will be able to use selective interce
 
 ## Mutating Webhook
 
-By default, Telepresence updates the intercepted workload (Deployment, StatefulSet, ReplicaSet) 
-template to add the [Traffic Agent](../architecture/#traffic-agent) sidecar container and update the 
-port definitions. If you use GitOps workflows (with tools like ArgoCD) to automatically update your 
-cluster so that it reflects the desired state from an external Git repository, this behavior can make 
+By default, Telepresence updates the intercepted workload (Deployment, StatefulSet, ReplicaSet)
+template to add the [Traffic Agent](../architecture/#traffic-agent) sidecar container and update the
+port definitions. If you use GitOps workflows (with tools like ArgoCD) to automatically update your
+cluster so that it reflects the desired state from an external Git repository, this behavior can make
 your workload out of sync with that external desired state.
 
-To solve this issue, you can use Telepresence's Mutating Webhook alternative mechanism. Intercepted 
+To solve this issue, you can use Telepresence's Mutating Webhook alternative mechanism. Intercepted
 workloads will then stay untouched and only the underlying pods will be modified to inject the Traffic
 Agent sidecar container and update the port definitions.
 
@@ -149,6 +149,24 @@ workload template's annotations:
          service: your-service
 +      annotations:
 +        telepresence.getambassador.io/inject-traffic-agent: enabled
+     spec:
+       containers:
+```
+
+### Service Port Annotation
+
+A service port annotation can be added to the workload to make the Mutating Webhook select a specific port
+in the service. This is necessary when the service has multiple ports.
+
+```diff
+ spec:
+   template:
+     metadata:
+       labels:
+         service: your-service
+       annotations:
+         telepresence.getambassador.io/inject-traffic-agent: enabled
++        telepresence.getambassador.io/inject-service-port: https
      spec:
        containers:
 ```

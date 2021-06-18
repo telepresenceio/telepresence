@@ -61,6 +61,14 @@ You can connect to databases or middleware running in the cluster, such as MySQL
 
 Telepresence will discover/prompt during first use for this info and make its best guess at figuring this out and ask you to confirm or update this.
 
+** Why are my intercepts still reporting as active when they've been disconnected?**
+
+  In certain cases, Telepresence might not have been able to communicate back with Ambassador Cloud to update the intercept's status. Worry not, they will get garbage collected after a period of time.
+
+** Why is my intercept associated with an "Unreported" cluster?**
+
+  Intercepts tagged with "Unreported" clusters simply mean Ambassador Cloud was unable to associate a service instance with a known detailed service from an Edge Stack or API Gateway cluster. [Connecting your cluster to the Service Catalog](../../service-catalog/quick-start/) will properly match your services from multiple data sources.
+
 ** Will Telepresence be able to intercept workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?**
 
  Yes. The cluster has to have outbound access to the internet for the preview URLs to function correctly, but it doesn’t need to have a publicly accessible IP address.
