@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -147,6 +148,13 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
+	var grpcListener net.Listener
+	defer func() {
+		if grpcListener != nil {
+			_ = os.Remove(grpcListener.Addr().String())
+		}
+	}()
+
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
 	g.Go("server-dns", func(ctx context.Context) error {
@@ -168,20 +176,35 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
 	// from the connector and from the CLI.
 	g.Go("server-grpc", func(c context.Context) (err error) {
-		var listener net.Listener
 		defer func() {
-			// Tell the firewall-configurator that we won't be sending it any more
-			// updates.
-			d.outbound.noMoreUpdates()
-
 			// Error recovery.
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
-				if listener != nil {
-					_ = listener.Close()
-				}
-				_ = os.Remove(client.DaemonSocketName)
 			}
+
+			// Tell the firewall-configurator that we won't be sending it any more
+			// updates.
+			d.outbound.noMoreUpdates()
+		}()
+
+		// Listen on unix domain socket
+		dlog.Debug(c, "gRPC server starting")
+		origUmask := unix.Umask(0)
+		grpcListener, err = net.Listen("unix", client.DaemonSocketName)
+		unix.Umask(origUmask)
+		if err != nil {
+			if errors.Is(err, syscall.EADDRINUSE) {
+				return fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully",
+					client.SocketURL(client.DaemonSocketName), processName)
+			}
+			return err
+		}
+		// Don't have dhttp.ServerConfig.Serve unlink the socket; defer unlinking the socket
+		// until the process exits.
+		grpcListener.(*net.UnixListener).SetUnlinkOnClose(false)
+
+		dlog.Info(c, "gRPC server started")
+		defer func() {
 			if err != nil {
 				dlog.Errorf(c, "gRPC server ended with: %v", err)
 			} else {
@@ -189,23 +212,13 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			}
 		}()
 
-		// Listen on unix domain socket
-		dlog.Debug(c, "gRPC server starting")
-		origUmask := unix.Umask(0)
-		listener, err = net.Listen("unix", client.DaemonSocketName)
-		unix.Umask(origUmask)
-		if err != nil {
-			return errors.Wrap(err, "listen")
-		}
-		dlog.Info(c, "gRPC server started")
-
 		svc := grpc.NewServer()
 		rpc.RegisterDaemonServer(svc, d)
 
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
-		return sc.Serve(c, listener)
+		return sc.Serve(c, grpcListener)
 	})
 
 	err = g.Wait()
