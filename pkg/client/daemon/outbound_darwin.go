@@ -122,7 +122,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 }
 
 // dnsServerWorker places a file under the /etc/resolver directory so that it is picked up by the
-// MacOS resolver. The file is configured with a single nameserver that points to the local IP
+// macOS resolver. The file is configured with a single nameserver that points to the local IP
 // that the Telepresence DNS server listens to. The file is removed, and the DNS is flushed when
 // the worker terminates
 //

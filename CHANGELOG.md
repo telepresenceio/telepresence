@@ -1,19 +1,61 @@
 # Changelog
 
-### 2.3.2 (TBD)
+### 2.3.2 (June 18, 2021)
 
-- Change: The list of subnets that the virtual network interface will route is configured dynamically and will follow changes in the cluster.
-- Change: The client no longer needs permission to list nodes.
-- Change: The traffic-manager requires permissions to list nodes, pods, and to create a dummy service (in the manager's namespace).
-- Change: Outbound connections are now routed to intercepted agents.
-- Change: Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection.
-- Change: The `trafficManagerAPI` timout default has changed from 5 seconds to 15 seconds, in order to facilitate
-  the extended time it takes to for the traffic-manager to do its initial discovery of cluster info.
-- Bugfix: Telepresence will now find the pod CIDRs even if its not listed in the nodes.
-- Bugfix: Telepresence no longer requires permission to create a service in order to determine the service subnet accurately.
-- Bugfix: Subnets covered by other subnets are now removed and thus never added to the virtual network interface.
-- Bugfix: On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
-- Bugfix: Fix a bug where large transfers from intercepted services would sometimes terminate early
+- Feature: The mutator webhook for injecting traffic-agents now
+  recognizes a `telepresence.getambassador.io/inject-service-port`
+  annotation to specify which port to intercept; bringing the
+  functionality of the `--port` flag to users who use the mutator
+  webook in order to control Telepresence via GitOps.
+
+- Feature: Outbound connections are now routed through the intercepted
+  Pods which means that the connections originate from that Pod from
+  the cluster's perspective.  This allows service meshes to correctly
+  identify the traffic.
+
+- Change: Inbound connections from an intercepted agent are now
+  tunneled to the manager over the existing gRPC connection, instead
+  of establishing a new connection to the manager for each inbound
+  connection.  This avoids interference from certain service mesh
+  configurations.
+
+- Change: The traffic-manager requires RBAC permissions to list Nodes,
+  Pods, and to create a dummy Service in the manager's namespace.
+
+- Change: The on-laptop client no longer requires RBAC permissions to
+  list Nodes in the cluster or to create Services, as that
+  functionality has been moved to the traffic-manager.
+
+- Bugfix: Telepresence will now detect the pod CIDR ranges even if
+  they are not listed in the Nodes.
+
+- Bugfix: The list of cluster subnets that the virtual network
+  interface will route is now configured dynamically and will follow
+  changes in the cluster.
+
+- Bugfix: Subnets fully covered by other subnets are now pruned
+  internally and thus never superfluously added to the laptop's
+  routing table.
+
+- Change: The `trafficManagerAPI` timout default has changed from 5
+  seconds to 15 seconds, in order to facilitate the extended time it
+  takes for the traffic-manager to do its initial discovery of cluster
+  info as a result of the above bugfixes.
+
+- Bugfix: On macOS, files generated under `/etc/resolver/` as the
+  result of using `include-suffixes` in the cluster config are now
+  properly removed on quit.
+
+- Bugfix: Telepresence no longer erroneously terminates connections
+  early when sending a large HTTP response from an intercepted
+  service.
+
+- Bugfix: When shutting down the user-daemon or root-daemon on the
+  laptop, `telepresence quit` and related commands no longer return
+  early before everything is fully shut down.  Now it can be counted
+  on that by the time the command has returned that all of the
+  side-effects on the laptop have been cleaned up.
+
 
 ### 2.3.1 (June 14, 2021)
 
@@ -95,7 +137,7 @@
 
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
-- Bugfix: IPv6 routes now work and don't prevent other pfctl rules being written in MacOS
+- Bugfix: IPv6 routes now work and don't prevent other pfctl rules being written in macOS
 - Bugfix: Pods with `hostname` and/or `subdomain` now get correct DNS-names and routes.
 - Change: Service UID was added to InterceptSpec to better link intercepts and services.
 - Feature: All timeouts can now be configured in a <user-config-dir>/telepresence/config.yml file
@@ -150,5 +192,5 @@
 - Bugfix: A bug causing a failure in the Telepresence DNS resolver when attempting to listen to the Docker gateway IP was fixed. The fix affects Windows using a combination of Docker and WSL2 only.
 - Bugfix: Telepresence now works correctly while OpenVPN is running on macOS.
 - Change: The background processes `connector` and `daemon` will now use rotating logs and a common directory.
-  + MacOS: `~/Library/Logs/telepresence/`
+  + macOS: `~/Library/Logs/telepresence/`
   + Linux: `$XDG_CACHE_HOME/telepresence/logs/` or `$HOME/.cache/telepresence/logs/`

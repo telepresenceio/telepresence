@@ -75,7 +75,7 @@ type tunRouter struct {
 	fragmentMap map[uint16][]*buffer.Data
 
 	// dnsIP is the IP of the DNS server attached to the TUN device. This is currently only
-	// used in conjunction with systemd.resolved. The current MacOS and the overriding solution
+	// used in conjunction with systemd.resolved. The current macOS and the overriding solution
 	// will dispatch directly to the local DNS service without going through the TUN device but
 	// that may change later if we decide to dispatch to the DNS-server in the cluster.
 	dnsIP   net.IP

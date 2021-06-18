@@ -10,6 +10,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -532,11 +533,19 @@ func run(c context.Context) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	g.Go("server-grpc", func(c context.Context) error {
+	var grpcListener net.Listener
+	defer func() {
+		if grpcListener != nil {
+			_ = os.Remove(grpcListener.Addr().String())
+		}
+	}()
+
+	g.Go("server-grpc", func(c context.Context) (err error) {
 		defer func() {
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
+
 			// Close s.connectRequest if it hasn't already been closed.
 			select {
 			case <-s.connectRequest:
@@ -546,27 +555,24 @@ func run(c context.Context) error {
 		}()
 
 		// Listen on unix domain socket
-		if client.SocketExists(client.ConnectorSocketName) {
-			return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
-				client.SocketURL(client.ConnectorSocketName), processName)
-		}
-		defer func() {
-			_ = os.Remove(client.ConnectorSocketName)
-		}()
-		listener, err := net.Listen("unix", client.ConnectorSocketName)
+		grpcListener, err = net.Listen("unix", client.ConnectorSocketName)
 		if err != nil {
+			if errors.Is(err, syscall.EADDRINUSE) {
+				return fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully",
+					client.SocketURL(client.ConnectorSocketName), processName)
+			}
 			return err
 		}
+		// Don't have dhttp.ServerConfig.Serve unlink the socket; defer unlinking the socket
+		// until the process exits.
+		grpcListener.(*net.UnixListener).SetUnlinkOnClose(false)
 
+		dlog.Info(c, "gRPC server started")
 		defer func() {
-			if perr := derror.PanicToError(recover()); perr != nil {
-				dlog.Error(c, perr)
-			}
-			_ = listener.Close()
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %v", err)
+				dlog.Errorf(c, "gRPC server ended with: %v", err)
 			} else {
-				dlog.Debug(c, "Server ended")
+				dlog.Debug(c, "gRPC server ended")
 			}
 		}()
 
@@ -577,7 +583,7 @@ func run(c context.Context) error {
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
-		return sc.Serve(c, listener)
+		return sc.Serve(c, grpcListener)
 	})
 
 	g.Go("background-init", func(c context.Context) error {

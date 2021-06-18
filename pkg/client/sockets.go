@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -67,9 +68,19 @@ func SocketURL(socket string) string {
 
 // DialSocket dials the given unix socket and returns the resulting connection
 func DialSocket(ctx context.Context, socketName string) (*grpc.ClientConn, error) {
-	return grpc.DialContext(ctx, SocketURL(socketName),
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, SocketURL(socketName),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 	)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("socket %q exists but isn't responding; this means that either the process has locked up or has terminated ungracefully",
+				SocketURL(socketName))
+		}
+		return nil, err
+	}
+	return conn, nil
 }

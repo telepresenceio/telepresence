@@ -189,7 +189,7 @@ So, `file-pr.go` sets the target branch to `release/v2`, and sets
 
 There are two logs. The `connector.log` which contains output from the interaction with the traffic-manager and the cluster (traffic-manager and traffic-agent installs, intercepts, port forwards, etc.), and the `daemon.log` which contains output from the DNS resolver and the NAT service. The location of both logs is:
 
-- on MacOS: ~/Library/Logs/telepresence
+- on macOS: ~/Library/Logs/telepresence
 - on Linux: ~/.cache/telepresence/logs
 
 The logs are rotating and a new log is created every time telepresence creates a new connection to the cluster, e.g. on `telepresence connect` after a `telepresence quit` that terminated the last session.
