@@ -38,7 +38,7 @@ items:
         body: >-
           Outbound connections are now routed through the intercepted
           Pods which means that the connections originate from that
-          Pod the from the cluster's perspective.  This allows service
+          Pod from the cluster's perspective.  This allows service
           meshes to correctly identify the traffic.
         docs: reference/routing/#outbound
       - type: change
@@ -93,9 +93,9 @@ items:
         body: >-
           The <code>trafficManagerAPI</code> timeout default has
           changed from 5 seconds to 15 seconds, in order to facilitate
-          the extended time it takes to for the traffic-manager to do
-          its initial discovery of cluster info as a result of the
-          above bugfixes.
+          the extended time it takes for the traffic-manager to do its
+          initial discovery of cluster info as a result of the above
+          bugfixes.
       - type: bugfix
         title: Removal of DNS config files on macOS
         body: >-
