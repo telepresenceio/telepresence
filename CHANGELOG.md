@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.2 (TBD)
+### 2.3.2 (June 18, 2021)
 
 - Feature: The mutator webhook for injecting traffic-agents now
   recognizes a `telepresence.getambassador.io/inject-service-port`
