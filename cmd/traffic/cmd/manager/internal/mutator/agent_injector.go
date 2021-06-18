@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -74,17 +73,15 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		}
 	}
 
-	client, err := kates.NewClient(kates.ClientConfig{})
-	if err != nil {
-		return nil, err
-	}
-
-	svc, err := findMatchingService(ctx, client, "", "", podNamespace, pod.Labels)
+	svc, err := findMatchingService(ctx, managerutil.GetKatesClient(ctx), "", "", podNamespace, pod.Labels)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil, nil
 	}
-	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, "", svc)
+
+	// The ServicePortAnnotation is expected to contain a string that identifies the service port.
+	portNameOrNumber := pod.Annotations[install.ServicePortAnnotation]
+	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, portNameOrNumber, svc)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil, nil

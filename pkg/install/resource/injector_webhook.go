@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"fmt"
 
 	admreg "k8s.io/api/admissionregistration/v1"
 
@@ -24,8 +25,7 @@ func (ri injectorWebhook) webhook(ctx context.Context) *admreg.MutatingWebhookCo
 		APIVersion: "admissionregistration.k8s.io/v1",
 	}
 	sec.ObjectMeta = kates.ObjectMeta{
-		Namespace: getScope(ctx).namespace,
-		Name:      agentInjectorWebhookName,
+		Name: fmt.Sprintf("%s-%s", agentInjectorWebhookName, getScope(ctx).namespace),
 	}
 	return sec
 }
@@ -35,6 +35,7 @@ func (ri injectorWebhook) Create(ctx context.Context) error {
 	sideEffects := admreg.SideEffectClassNone
 	failurePolicy := admreg.Ignore
 	servicePath := "/traffic-agent"
+	scope := admreg.ScopeType("*")
 	mwc := ri.webhook(ctx)
 	mwc.Webhooks = []admreg.MutatingWebhook{
 		{
@@ -54,6 +55,7 @@ func (ri injectorWebhook) Create(ctx context.Context) error {
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"pods"},
+						Scope:       &scope,
 					},
 				},
 			},

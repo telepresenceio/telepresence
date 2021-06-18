@@ -337,7 +337,7 @@ var defaultConfig = Config{
 		PrivateClusterConnect:        20 * time.Second,
 		PrivateIntercept:             5 * time.Second,
 		PrivateProxyDial:             5 * time.Second,
-		PrivateTrafficManagerAPI:     5 * time.Second,
+		PrivateTrafficManagerAPI:     15 * time.Second,
 		PrivateTrafficManagerConnect: 60 * time.Second,
 	},
 	LogLevels: LogLevels{

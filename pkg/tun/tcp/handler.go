@@ -623,10 +623,10 @@ type resend struct {
 
 func (h *handler) processResends(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			ticker.Stop()
 			return
 		case <-ticker.C:
 		}

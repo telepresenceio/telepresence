@@ -14,8 +14,10 @@ func GetTrafficManagerResources() Instances {
 	return Instances{
 		TrafficManagerNamespaceKeep, // Don't delete when deleting the manager
 		TrafficManagerServiceAccount,
-		TrafficManagerClusterRole,
+		NewTrafficManagerClusterRole(),
 		TrafficManagerClusterRoleBinding,
+		NewTrafficManagerRole(),
+		TrafficManagerRoleBinding,
 		MutatorWebhookSecret,
 		NewTrafficManagerDeployment(),
 		TrafficManagerSvc,

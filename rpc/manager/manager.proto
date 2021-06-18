@@ -305,6 +305,25 @@ message LookupHostAgentResponse {
   LookupHostResponse response = 3;
 }
 
+// IPNet is a subnet. I.e. 10.43.0.0/16
+message IPNet {
+  bytes ip = 1;
+  int32 mask = 2;
+}
+
+// ClusterInfo contains information that the root daemon needs in order to
+// establish outbound traffic to the cluster.
+message ClusterInfo {
+  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  bytes kube_dns_ip = 1;
+
+  // service_subnet is the Kubernetes service subnet
+  IPNet service_subnet = 2;
+
+  // pod_subnets are the subnets used for Kubenetes pods.
+  repeated IPNet pod_subnets = 3;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -341,7 +360,7 @@ service Manager {
   // WatchAgents notifies a client of the set of known Agents.
   //
   // A session ID is required; if no session ID is given then the call
-  // returns immediately, having not deliverd any snapshots.
+  // returns immediately, having not delivered any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
 
   // WatchIntercepts notifies a client or agent of the set of intercepts
@@ -351,6 +370,10 @@ service Manager {
   // that session are watched.  If no session ID is given, then all
   // intercepts are watched.
   rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
+
+  // WatchClusterInfo returns information needed when establishing
+  // connectivity to the cluster.
+  rpc WatchClusterInfo(SessionInfo) returns (stream ClusterInfo);
 
   // CRUD
 

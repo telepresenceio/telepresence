@@ -41,12 +41,6 @@ message Paths {
   repeated string paths = 1;
 }
 
-// IPNet is a subnet. I.e. 10.43.0.0/16
-message IPNet {
-  bytes ip = 1;
-  int32 mask = 2;
-}
-
 // DNS configuration for the local DNS resolver
 message DNSConfig {
   // local_ip is the address of the local DNS server. Only used by Linux systems that have no
@@ -79,9 +73,8 @@ message OutboundInfo {
   // DNS configuration
   DNSConfig dns = 3;
 
-  // service_subnet is the Kubernetes service subnet
-  IPNet service_subnet = 4;
+  // also_proxy are user-added subnets.
+  repeated manager.IPNet also_proxy_subnets = 5;
 
-  // pod_subnets are the subnets used for Kubenetes pods.
-  repeated IPNet pod_subnets = 5;
+  reserved 4;
 }
