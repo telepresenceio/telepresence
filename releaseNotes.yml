@@ -17,6 +17,47 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
+  - version: 2.3.2
+    date: '2021-06-21'
+    notes:
+      - title: Outbound Connections
+        body: "Outbound connections are now routed to intercepted agents which means that the connections originate from the agent from the clusters perspective."
+        docs: reference/routing/#outbound
+        type: feature
+      - title: Inbound Connections
+        body: "Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection."
+        docs: reference/routing/#inbound
+        type: feature
+      - title: Service Port Annotation
+        body: "The mutator webhook for injecting traffic-agents will now recognize a service port annotation"
+        image: ./telepresence-2.3.2-svcport-annotation.png
+        docs: reference/cluster-config#service-port-annotation
+        type: feature
+      - title: Traffic-manager needs new RBAC permissions
+        body: "The traffic-manager requires permissions to list nodes, pods, and to create a dummy service."
+        docs: reference/routing/#subnets
+        type: change
+      - title: No need for RBAC to list nodes
+        body: "The client no longer needs RBAC permissions to list the nodes in the cluster since that functionality has been moved to the traffic-manager."
+        docs: reference/routing/#subnets
+        type: bugfix
+      - title: No need for RBAC to create service
+        body: "The client no longer needs RBAC permission to create a service in order to determine the service subnet accurately."
+        docs: reference/routing/#subnets
+        type: bugfix
+      - title: Able to find subnets
+        body: "Telepresence will now find the pod CIDRs even if its not listed in the nodes."
+        image: ./telepresence-2.3.2-subnets.png
+        docs: reference/routing/#subnets
+        type: bugfix
+      - title: Removal of covered subnets
+        body: "Subnets covered by other subnets are now removed and thus never added to the virtual network interface."
+        docs: reference/routing/#subnets
+        type: bugfix
+      - title: Removal of DNS config files on MacOS
+        body: "On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit."
+        docs: reference/routing/#mac-os-resolver
+        type: bugfix
   - version: 2.3.1
     date: '2021-06-14'
     notes:
