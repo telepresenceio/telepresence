@@ -58,6 +58,14 @@ items:
         body: "On a macOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit."
         docs: reference/routing/#mac-os-resolver
         type: bugfix
+      - type: bugfix
+        title: Race condition in shutdown
+        body: >-
+          When shutting down the user-daemon or root-daemon on the
+          laptop, `telepresence quit` and related commands no longer
+          return early before everything is fully shut down.  Now it
+          can be counted on that by the time the command returns that
+          all of the side-effects on the laptop have been cleaned up.
   - version: 2.3.1
     date: '2021-06-14'
     notes:
