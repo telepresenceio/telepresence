@@ -2,6 +2,8 @@
 
 ### 2.3.2 (TBD)
 
+- Change: Outbound connections are now routed to intercepted agents.
+- Change: Inbound connections from an intercepted agent are now tunneled to the manager over the existing gRPC connection, instead of establishing a new connection to the manager for each inbound connection.
 - Bug: On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit.
 - Bugfix: Fix a bug where large transfers from intercepted services would sometimes terminate early
 

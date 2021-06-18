@@ -42,7 +42,7 @@ import (
 // source IP, source port, destination IP, and destination port. A handler is then obtained that matches
 // that ID (active handlers are cached in a connpool.Pool) and the package is then sent to that handler.
 // The handler typically sends the ConnID and the payload of the package over to the traffic-manager
-// using the gRPC ConnTunnel. At the receiving en din the traffic-manager, a similar connpool.Pool obtains
+// using the gRPC ClientTunnel. At the receiving en din the traffic-manager, a similar connpool.Pool obtains
 // a corresponding handler which manages a net.Conn matching the ConnID in the cluster.
 //
 // Negotiation:
@@ -208,7 +208,7 @@ func (t *tunRouter) run(c context.Context) error {
 		case <-t.mgrConfigured:
 		}
 
-		tunnel, err := t.managerClient.ConnTunnel(c)
+		tunnel, err := t.managerClient.ClientTunnel(c)
 		if err != nil {
 			return err
 		}

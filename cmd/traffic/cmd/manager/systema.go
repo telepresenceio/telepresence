@@ -24,7 +24,7 @@ type systemaCredentials struct {
 
 // GetRequestMetadata implements credentials.PerRPCCredentials.
 func (c *systemaCredentials) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
-	sessionID := GetSessionID(ctx)
+	sessionID := managerutil.GetSessionID(ctx)
 
 	var apikey string
 	if sessionID != "" {

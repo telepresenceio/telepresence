@@ -129,6 +129,23 @@ func (id ConnID) Network() string {
 	return "ip6"
 }
 
+// IPProto returns the IP protocol for the given network. Currently only supports
+// TCP, UDP, and ICMP
+func IPProto(network string) int {
+	switch network {
+	case "tcp", "tcp4":
+		return unix.IPPROTO_TCP
+	case "udp", "udp4", "udp6":
+		return unix.IPPROTO_UDP
+	case "icmp":
+		return unix.IPPROTO_ICMP
+	case "icmpv6":
+		return unix.IPPROTO_ICMPV6
+	default:
+		return -1
+	}
+}
+
 func protoString(proto int) string {
 	switch proto {
 	case unix.IPPROTO_ICMP:
@@ -142,6 +159,11 @@ func protoString(proto int) string {
 	default:
 		return fmt.Sprintf("IP-protocol %d", proto)
 	}
+}
+
+// Reply returns a copy of this ConnID with swapped source and destination properties
+func (id ConnID) Reply() ConnID {
+	return NewConnID(id.Protocol(), id.Destination(), id.Source(), id.DestinationPort(), id.SourcePort())
 }
 
 // ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort

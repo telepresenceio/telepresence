@@ -3,7 +3,6 @@ package state
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,11 +21,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-)
-
-const (
-	loPort = 6000
-	hiPort = 8000
 )
 
 type SessionState interface {
@@ -58,10 +52,69 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 	ss.lastMarked = lastMarked
 }
 
+type agentTunnel struct {
+	name      string
+	namespace string
+	tunnel    rpc.Manager_AgentTunnelServer
+}
+
 type clientSessionState struct {
 	sessionState
-	pool             *connpool.Pool
-	connTunnelServer rpc.Manager_ConnTunnelServer
+	name               string
+	pool               *connpool.Pool
+	ClientTunnelServer rpc.Manager_ClientTunnelServer
+	agentTunnelsMu     sync.Mutex
+	agentTunnels       map[string]*agentTunnel
+}
+
+func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, tunnel rpc.Manager_AgentTunnelServer) {
+	cs.agentTunnelsMu.Lock()
+	cs.agentTunnels[agentSessionID] = &agentTunnel{
+		name:      name,
+		namespace: namespace,
+		tunnel:    tunnel,
+	}
+	cs.agentTunnelsMu.Unlock()
+}
+
+func (cs *clientSessionState) deleteAgentTunnel(agentSessionID string) {
+	cs.agentTunnelsMu.Lock()
+	delete(cs.agentTunnels, agentSessionID)
+	cs.agentTunnelsMu.Unlock()
+}
+
+// getRandomAgentTunnel will return the tunnel of an intercepted agent provided all intercepted
+// agents live in the same namespace. The method will return nil if the client currently has no
+// intercepts or if it has several intercepts that span more than one namespace.
+func (cs *clientSessionState) getRandomAgentTunnel() (tunnel *agentTunnel) {
+	cs.agentTunnelsMu.Lock()
+	defer cs.agentTunnelsMu.Unlock()
+	prevNs := ""
+	for _, agentTunnel := range cs.agentTunnels {
+		tunnel = agentTunnel
+		if prevNs == "" {
+			prevNs = agentTunnel.namespace
+		} else if prevNs != agentTunnel.name {
+			return nil
+		}
+	}
+	// return the first tunnel found. In case there are several, the map will
+	// randomize which one
+	return tunnel
+}
+
+// getInterceptedAgents returns the session ID of each agent currently intercepted
+// by this client
+func (cs *clientSessionState) getInterceptedAgents() []string {
+	cs.agentTunnelsMu.Lock()
+	agentSessionIDs := make([]string, len(cs.agentTunnels))
+	i := 0
+	for agentSession := range cs.agentTunnels {
+		agentSessionIDs[i] = agentSession
+		i++
+	}
+	cs.agentTunnelsMu.Unlock()
+	return agentSessionIDs
 }
 
 type agentSessionState struct {
@@ -99,7 +152,6 @@ type State struct {
 	//     `agent.Name == intercept.Spec.Agent`)
 	//  7. `interceptAPIKeys` need to be created and updated in-sync with `intercepts` (but not deleted
 	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
-	port             uint16
 	intercepts       watchable.InterceptMap
 	agents           watchable.AgentMap                   // info for agent sessions
 	clients          watchable.ClientMap                  // info for client sessions
@@ -112,7 +164,6 @@ type State struct {
 func NewState(ctx context.Context) *State {
 	return &State{
 		ctx:              ctx,
-		port:             loPort - 1,
 		sessions:         make(map[string]SessionState),
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
@@ -121,36 +172,6 @@ func NewState(ctx context.Context) *State {
 }
 
 // Internal ////////////////////////////////////////////////////////////////////////////////////////
-
-func (s *State) unlockedNextPort() uint16 {
-	for attempts := 0; attempts < hiPort-loPort; attempts++ {
-		// Bump the port number
-
-		s.port++
-
-		if s.port == hiPort {
-			s.port = loPort
-		}
-
-		// Check whether the new port number is available
-
-		used := false
-		for _, intercept := range s.intercepts.LoadAll() {
-			if intercept.ManagerPort == int32(s.port) {
-				used = true
-				break
-			}
-		}
-
-		if !used {
-			return s.port
-		}
-	}
-
-	// Hmm. We've checked every possible port and they're all in use. This is
-	// unlikely. Return 0 to indicate an error...
-	return 0
-}
 
 // unlockedCheckAgentsForIntercept (1) assumes that s.mu is already locked, and (2) checks the
 // status of all agents that would be relevant to the given intercept spec, and returns whether the
@@ -336,7 +357,9 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 			cancel:     cancel,
 			lastMarked: now,
 		},
-		pool: connpool.NewPool(),
+		name:         client.Name,
+		pool:         connpool.NewPool(),
+		agentTunnels: make(map[string]*agentTunnel),
 	}
 	return sessionID
 }
@@ -449,7 +472,6 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	s.interceptAPIKeys[interceptID] = apiKey
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
-		ManagerPort: 0,
 		Disposition: rpc.InterceptDispositionType_WAITING,
 		Message:     "Waiting for Agent approval",
 		Id:          interceptID,
@@ -464,16 +486,6 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	//     if cept.Disposition == rpc.InterceptDispositionType_WAITING { … }
 	//
 	// so that we don't need to worry about different state-changes stomping on eachother.
-
-	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
-		cept.ManagerPort = int32(s.unlockedNextPort())
-		if cept.ManagerPort == 0 {
-			// Wow, there are no ports left!  That is... unlikely!
-			cept.Disposition = rpc.InterceptDispositionType_NO_PORTS
-			cept.Message = ""
-		}
-	}
-
 	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
 		if errCode, errMsg := s.unlockedCheckAgentsForIntercept(cept); errCode != 0 {
 			cept.Disposition = errCode
@@ -488,28 +500,16 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	return cept, nil
 }
 
-func (s *State) getAgentsInterceptedByClient(clientSessionID string) (agentSessionIDs []string, err error) {
-	client := s.GetClient(clientSessionID)
-	if client == nil {
-		return nil, status.Errorf(codes.NotFound, "Client session %q not found", clientSessionID)
+// getAgentsInterceptedByClient returns the session IDs for each agent that is currently
+// intercepted by the client with the given client session ID.
+func (s *State) getAgentsInterceptedByClient(clientSessionID string) ([]string, error) {
+	s.mu.Lock()
+	ss := s.sessions[clientSessionID]
+	s.mu.Unlock()
+	if cs, ok := ss.(*clientSessionState); ok {
+		return cs.getInterceptedAgents(), nil
 	}
-	for _, intercept := range s.intercepts.LoadAll() {
-		if intercept.Disposition != rpc.InterceptDispositionType_ACTIVE {
-			continue
-		}
-		spec := intercept.Spec
-		if spec.Client != client.Name {
-			continue
-		}
-		s.mu.Lock()
-		for asi, agent := range s.sessions {
-			if as, ok := agent.(*agentSessionState); ok && as.agent.Name == spec.Agent && as.agent.Namespace == spec.Namespace {
-				agentSessionIDs = append(agentSessionIDs, asi)
-			}
-		}
-		s.mu.Unlock()
-	}
-	return agentSessionIDs, nil
+	return nil, status.Errorf(codes.NotFound, "Client session %q not found", clientSessionID)
 }
 
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
@@ -598,38 +598,8 @@ func (s *State) WatchIntercepts(
 	}
 }
 
-func (s *State) StartInterceptListener(ctx context.Context, intercept *rpc.InterceptInfo) {
-	clientSessionID := intercept.ClientSession.GetSessionId()
-	s.mu.Lock()
-	ss := s.sessions[clientSessionID]
-	s.mu.Unlock()
-	cs, ok := ss.(*clientSessionState)
-	if !ok {
-		dlog.Errorf(ctx, "Client session %q not found", clientSessionID)
-		return
-	}
-	spec := intercept.Spec
-	srcIP := iputil.Parse(spec.TargetHost)
-	if srcIP == nil {
-		dlog.Errorf(ctx, "TargetHost %q is not a valid IP", spec.TargetHost)
-		return
-	}
-	id := connpool.NewConnID(unix.IPPROTO_TCP, srcIP, net.IP{127, 0, 0, 1}, uint16(spec.TargetPort), uint16(intercept.ManagerPort))
-
-	ctx = connpool.WithPool(ctx, cs.pool)
-	_, _, err := cs.pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-		lh := connpool.NewListener(id, cs.connTunnelServer, release)
-		s.mu.Lock()
-		s.listeners[intercept.GetId()] = lh
-		s.mu.Unlock()
-		return lh, nil
-	})
-	if err != nil {
-		dlog.Errorf(ctx, "failed to create intercept listener: %v", err)
-	}
-}
-
-func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Manager_ConnTunnelServer) error {
+func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunnelServer) error {
+	sessionID := managerutil.GetSessionID(ctx)
 	s.mu.Lock()
 	ss := s.sessions[sessionID]
 	s.mu.Unlock()
@@ -639,7 +609,7 @@ func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Man
 	}
 	dlog.Debug(ctx, "Established TCP tunnel")
 	pool := cs.pool // must have one pool per client
-	cs.connTunnelServer = server
+	cs.ClientTunnelServer = server
 	defer pool.CloseAll(ctx)
 	closing := int32(0)
 	msgCh, errCh := connpool.NewStream(server).ReadLoop(ctx, &closing)
@@ -660,7 +630,12 @@ func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Man
 			h, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 				switch id.Protocol() {
 				case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
-					return connpool.NewDialer(id, cs.connTunnelServer, release), nil
+					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
+						// Dispatch directly to agent and let the dial happen there
+						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
+						return newConnForward(release, agentTunnel.tunnel), nil
+					}
+					return connpool.NewDialer(id, cs.ClientTunnelServer, release), nil
 				default:
 					return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
 				}
@@ -669,6 +644,98 @@ func (s *State) ConnTunnel(ctx context.Context, sessionID string, server rpc.Man
 				return fmt.Errorf("failed to get connection handler: %w", err)
 			}
 			h.HandleMessage(ctx, msg)
+		}
+	}
+}
+
+type connForward struct {
+	release  func()
+	toStream connpool.TunnelStream
+}
+
+func newConnForward(release func(), toStream connpool.TunnelStream) *connForward {
+	return &connForward{release: release, toStream: toStream}
+}
+
+func (cf *connForward) Close(_ context.Context) {
+	cf.release()
+}
+
+func (cf *connForward) HandleMessage(ctx context.Context, cm connpool.Message) {
+	dlog.Debugf(ctx, ">> FRWD %s to agent", cm.ID())
+	if err := cf.toStream.Send(cm.TunnelMessage()); err != nil {
+		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", cm.ID(), err)
+	}
+}
+
+func (cf *connForward) Start(_ context.Context) {
+}
+
+func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, server rpc.Manager_AgentTunnelServer) error {
+	agentSessionID := managerutil.GetSessionID(ctx)
+	as, cs, err := func() (*agentSessionState, *clientSessionState, error) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		ss := s.sessions[agentSessionID]
+		as, ok := ss.(*agentSessionState)
+		if !ok {
+			return nil, nil, status.Errorf(codes.NotFound, "agent session %q not found", agentSessionID)
+		}
+		clientSessionID := clientSessionInfo.GetSessionId()
+		ss = s.sessions[clientSessionID]
+		cs, ok := ss.(*clientSessionState)
+		if !ok {
+			return nil, nil, status.Errorf(codes.NotFound, "client session %q not found", clientSessionID)
+		}
+		return as, cs, nil
+	}()
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(ctx, "Established TCP tunnel from agent %s to client %s", as.agent.Name, cs.name)
+
+	// During intercept, all requests that are made to this pool, are forwarded to the intercepted
+	// agent(s)
+	cs.addAgentTunnel(agentSessionID, as.agent.Name, as.agent.Namespace, server)
+	defer cs.deleteAgentTunnel(agentSessionID)
+
+	pool := cs.pool
+	stream := connpool.NewStream(server)
+	closing := int32(0)
+	msgCh, errCh := stream.ReadLoop(ctx, &closing)
+	for {
+		select {
+		case <-ctx.Done():
+			atomic.StoreInt32(&closing, 2)
+			return nil
+		case err := <-errCh:
+			return err
+		case msg := <-msgCh:
+			if msg == nil {
+				return nil
+			}
+			id := msg.ID()
+			conn, found, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+				return newConnForward(release, server), nil
+			})
+			if found {
+				if _, ok := conn.(*connForward); !ok {
+					// lingering, non intercepted outbound connection to agent. Close it and create a new forward
+					conn.Close(ctx)
+					_, _, err = pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+						return newConnForward(release, server), nil
+					})
+				}
+			}
+			if err != nil {
+				dlog.Error(ctx, err)
+				return status.Error(codes.Internal, err.Error())
+			}
+			dlog.Debugf(ctx, ">> FRWD %s to client", id)
+			if err = cs.ClientTunnelServer.Send(msg.TunnelMessage()); err != nil {
+				dlog.Errorf(ctx, "Send to client failed: %v", err)
+				return err
+			}
 		}
 	}
 }

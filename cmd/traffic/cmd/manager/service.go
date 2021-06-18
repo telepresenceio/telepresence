@@ -144,7 +144,7 @@ func (m *Manager) Remain(_ context.Context, req *rpc.RemainRequest) (*empty.Empt
 
 // Depart terminates a session.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
-	ctx = WithSessionInfo(ctx, session)
+	ctx = managerutil.WithSessionInfo(ctx, session)
 	dlog.Debug(ctx, "Depart called")
 
 	m.state.RemoveSession(session.GetSessionId())
@@ -154,7 +154,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 
 // WatchAgents notifies a client of the set of known Agents.
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
-	ctx := WithSessionInfo(stream.Context(), session)
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 
 	dlog.Debug(ctx, "WatchAgents called")
 
@@ -186,7 +186,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 // WatchIntercepts notifies a client or agent of the set of intercepts
 // relevant to that client or agent.
 func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
-	ctx := WithSessionInfo(stream.Context(), session)
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	sessionID := session.GetSessionId()
 
 	dlog.Debug(ctx, "WatchIntercepts called")
@@ -265,7 +265,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 // CreateIntercept lets a client create an intercept.
 func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
-	ctx = WithSessionInfo(ctx, ciReq.GetSession())
+	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
 	apiKey := ciReq.GetApiKey()
@@ -283,7 +283,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 }
 
 func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {
-	ctx = WithSessionInfo(ctx, req.GetSession())
+	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
 	sessionID := req.GetSession().GetSessionId()
 	var interceptID string
 	// When something without a session ID (e.g. System A) calls this function,
@@ -402,7 +402,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 // RemoveIntercept lets a client remove an intercept.
 func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
-	ctx = WithSessionInfo(ctx, riReq.GetSession())
+	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
 	sessionID := riReq.GetSession().GetSessionId()
 	name := riReq.Name
 
@@ -421,7 +421,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 // ReviewIntercept lets an agent approve or reject an intercept.
 func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewInterceptRequest) (*empty.Empty, error) {
-	ctx = WithSessionInfo(ctx, rIReq.GetSession())
+	ctx = managerutil.WithSessionInfo(ctx, rIReq.GetSession())
 	sessionID := rIReq.GetSession().GetSessionId()
 	ceptID := rIReq.Id
 
@@ -446,10 +446,6 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.PodIp = rIReq.PodIp
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
-
-			if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
-				m.state.StartInterceptListener(ctx, intercept)
-			}
 		}
 	})
 
@@ -460,12 +456,24 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	return &empty.Empty{}, nil
 }
 
-func (m *Manager) ConnTunnel(server rpc.Manager_ConnTunnelServer) error {
+func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
 	sessionInfo, err := readTunnelSessionID(server)
 	if err != nil {
 		return err
 	}
-	return m.state.ConnTunnel(WithSessionInfo(server.Context(), sessionInfo), sessionInfo.GetSessionId(), server)
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), server)
+}
+
+func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
+	agentSessionInfo, err := readTunnelSessionID(server)
+	if err != nil {
+		return err
+	}
+	clientSessionInfo, err := readTunnelSessionID(server)
+	if err != nil {
+		return err
+	}
+	return m.state.AgentTunnel(managerutil.WithSessionInfo(server.Context(), agentSessionInfo), clientSessionInfo, server)
 }
 
 func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {
@@ -484,7 +492,7 @@ func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error)
 }
 
 func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {
-	ctx = WithSessionInfo(ctx, request.GetSession())
+	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
 	sessionID := request.GetSession().GetSessionId()
 	response := &rpc.LookupHostResponse{}
@@ -516,14 +524,14 @@ func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest
 }
 
 func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.LookupHostAgentResponse) (*empty.Empty, error) {
-	ctx = WithSessionInfo(ctx, response.GetSession())
+	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
 	dlog.Debugf(ctx, "AgentLookupHostResponse called %s -> %s", response.Request.Host, iputil.IPsFromBytesSlice(response.Response.Ips))
 	m.state.PostLookupResponse(response)
 	return &empty.Empty{}, nil
 }
 
 func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupHostServer) error {
-	ctx := WithSessionInfo(stream.Context(), session)
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchLookupHost called")
 	lrCh := m.state.WatchLookupHost(session.SessionId)
 	for {

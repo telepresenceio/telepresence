@@ -168,7 +168,7 @@ func (h *dialer) Close(_ context.Context) {
 
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
-	dlog.Debugf(ctx, "<- GRPC %s", ctrl)
+	dlog.Debugf(ctx, "-> GRPC %s", ctrl)
 	err := h.bidiStream.Send(ctrl.TunnelMessage())
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)

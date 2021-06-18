@@ -171,10 +171,7 @@ message InterceptInfo {
   // authenticate with external APIs, such as SystemA.
   string api_key = 13;
 
-  // manager_port is the port on the manager that the agent should
-  // send intercepted traffic to.  This gets set by the manager when
-  // the intercept is first created.
-  int32 manager_port = 2;
+  reserved 2;
 
   // preview_domain is the SystemA domain that will proxy in traffic
   // to this intercept, and preview_ingress is where it will get
@@ -374,10 +371,15 @@ service Manager {
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
 
-  // ConnTunnel receives messages from the client and dispatches them to tracked
+  // ClientTunnel receives messages from the client and dispatches them to tracked
   // net.Conn instances in the traffic-manager. Responses from tracked instances
   // are sent back on the returned message stream
-  rpc ConnTunnel(stream ConnMessage) returns (stream ConnMessage);
+  rpc ClientTunnel(stream ConnMessage) returns (stream ConnMessage);
+
+  // AgentTunnel receives messages from the agent and dispatches them to tracked
+  // net.Conn instances in the traffic-manager. Responses from tracked instances
+  // are sent back on the returned message stream
+  rpc AgentTunnel(stream ConnMessage) returns (stream ConnMessage);
 
   // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
