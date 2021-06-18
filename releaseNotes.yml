@@ -34,19 +34,19 @@ items:
         docs: reference/cluster-config#service-port-annotation
         type: feature
       - title: Traffic-manager needs new RBAC permissions
-        body: "The traffic-manager requires permissions to list nodes, pods, and to create a dummy service."
+        body: "The traffic-manager requires [RBAC permissions](reference/rbac) to list nodes, pods, and to create a dummy service."
         docs: reference/routing/#subnets
         type: change
       - title: No need for RBAC to list nodes
-        body: "The client no longer needs RBAC permissions to list the nodes in the cluster since that functionality has been moved to the traffic-manager."
+        body: "The client no longer needs [RBAC permissions](reference/rbac) to list the nodes in the cluster since that functionality has been moved to the traffic-manager."
         docs: reference/routing/#subnets
         type: bugfix
       - title: No need for RBAC to create service
-        body: "The client no longer needs RBAC permission to create a service in order to determine the service subnet accurately."
+        body: "The client no longer needs [RBAC permissions](reference/rbac) to create a service in order to determine the service subnet accurately."
         docs: reference/routing/#subnets
         type: bugfix
       - title: Able to find subnets
-        body: "Telepresence will now find the pod CIDRs even if its not listed in the nodes."
+        body: "Telepresence will now find the pod CIDRs even if they are not listed in the nodes."
         image: ./telepresence-2.3.2-subnets.png
         docs: reference/routing/#subnets
         type: bugfix
@@ -54,8 +54,8 @@ items:
         body: "Subnets covered by other subnets are now removed and thus never added to the virtual network interface."
         docs: reference/routing/#subnets
         type: bugfix
-      - title: Removal of DNS config files on MacOS
-        body: "On a MacOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit."
+      - title: Removal of DNS config files on macOS
+        body: "On a macOS, files generated under /etc/resolver as the result of using include-suffixes in the cluster config, are now properly removed on quit."
         docs: reference/routing/#mac-os-resolver
         type: bugfix
   - version: 2.3.1
