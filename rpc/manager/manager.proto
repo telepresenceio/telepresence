@@ -99,6 +99,9 @@ message InterceptSpec {
 
   // name of the aforementioned service
   string service_name = 14;
+
+  // extra ports that will be forwarded to the intercepting client
+  repeated int32 extra_ports = 15;
 }
 
 enum InterceptDispositionType {

@@ -11,6 +11,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
 const (
@@ -19,11 +20,11 @@ const (
 	mgrHost       = "managerHost"
 )
 
-func makeFS(t *testing.T) (*agent.Forwarder, agent.State) {
+func makeFS(t *testing.T) (*forwarder.Forwarder, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
-	f := agent.NewForwarder(lAddr, appHost, appPort)
+	f := forwarder.NewForwarder(lAddr, appHost, appPort)
 	go func() {
 		if err := f.Serve(context.Background()); err != nil {
 			panic(err)

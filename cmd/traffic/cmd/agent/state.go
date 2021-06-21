@@ -6,6 +6,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
 type State interface {
@@ -15,7 +16,7 @@ type State interface {
 
 // State of the Traffic Agent.
 type state struct {
-	forwarder   *Forwarder
+	forwarder   *forwarder.Forwarder
 	managerHost string
 	appHost     string
 	appPort     int32
@@ -25,7 +26,7 @@ type state struct {
 	sftpPort    int32
 }
 
-func NewState(forwarder *Forwarder, managerHost, namespace, podIP string, sftpPort int32) State {
+func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP string, sftpPort int32) State {
 	host, port := forwarder.Target()
 	return &state{
 		forwarder:   forwarder,

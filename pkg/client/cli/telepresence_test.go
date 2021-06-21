@@ -165,6 +165,14 @@ func (ts *telepresenceSuite) SetupSuite() {
 		err = ts.applyApp(ctx, "ss-echo", "ss-echo", 80)
 		ts.NoError(err)
 	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = ts.applyApp(ctx, "echo-w-sidecars", "echo-w-sidecars", 80)
+		ts.NoError(err)
+	}()
+
 	wg.Wait()
 
 	// Ensure that telepresence is not logged in
@@ -647,6 +655,40 @@ func (cs *connectedSuite) TestM_AutoInjectedAgent() {
 		stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 		require.Empty(stderr)
 		require.Contains(stdout, "echo-auto-inject: intercepted")
+	})
+}
+
+func (cs *connectedSuite) TestN_ToPodPortForwarding() {
+	defer telepresence(cs.T(), "leave", "echo-w-sidecars-"+cs.ns())
+
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "echo-w-sidecars", "--port", "8080", "--to-pod", "8081", "--to-pod", "8082")
+	require.Empty(stderr)
+	require.Contains(stdout, "Using Deployment echo-w-sidecars")
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+	require.Empty(stderr)
+	require.Contains(stdout, "echo-w-sidecars: intercepted")
+
+	cs.Run("Forwarded port is reachable as localhost:PORT", func() {
+		ctx := dlog.NewTestContext(cs.T(), false)
+
+		cs.Eventually(func() bool {
+			return run(ctx, "curl", "--silent", "localhost:8081") == nil
+		}, 3*time.Second, 1*time.Second)
+
+		cs.Eventually(func() bool {
+			return run(ctx, "curl", "--silent", "localhost:8082") == nil
+		}, 3*time.Second, 1*time.Second)
+	})
+
+	cs.Run("Non-forwarded port is not reachable", func() {
+		ctx := dlog.NewTestContext(cs.T(), false)
+
+		cs.Eventually(func() bool {
+			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+			return run(ctx, "curl", "--silent", "localhost:8083") != nil
+		}, 3*time.Second, 1*time.Second)
 	})
 }
 

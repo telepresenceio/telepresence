@@ -1,0 +1,76 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-w-sidecars
+spec:
+  type: ClusterIP
+  selector:
+    service: echo-w-sidecars
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-w-sidecars
+  labels:
+    service: echo-w-sidecars
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: echo-w-sidecars
+  template:
+    metadata:
+      labels:
+        service: echo-w-sidecars
+    spec:
+      containers:
+        - name: echo-main
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+        - name: echo-side-one
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8081
+              name: http-one
+          env:
+            - name: PORT
+              value: "8081"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+        - name: echo-side-two
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8082
+              name: http-two
+          env:
+            - name: PORT
+              value: "8082"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+        - name: echo-side-three
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8083
+              name: http-two
+          env:
+            - name: PORT
+              value: "8083"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

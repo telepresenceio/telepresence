@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.3.3 (TBD)
+
+- Feature: `telepresence intercept` now supports a `--to-pod` flag that can be used to port-forward sidecars' ports from an intercepted pod
+
 ### 2.3.2 (June 18, 2021)
 
 - Feature: The mutator webhook for injecting traffic-agents now
@@ -55,7 +59,6 @@
   early before everything is fully shut down.  Now it can be counted
   on that by the time the command has returned that all of the
   side-effects on the laptop have been cleaned up.
-
 
 ### 2.3.1 (June 14, 2021)
 
