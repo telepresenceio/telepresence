@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traffic-manager
+  namespace: ambassador
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create

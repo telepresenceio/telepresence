@@ -5,8 +5,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: {{ .Values.agentInjector.webhook.name }}
-  namespace: {{ include "telepresence.namespace" . }}
+  name: {{ .Values.agentInjector.webhook.name }}-{{ include "telepresence.namespace" . }}
 webhooks:
 {{- with .Values.agentInjector.webhook.admissionReviewVersions }}
 - admissionReviewVersions:

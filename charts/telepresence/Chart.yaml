@@ -9,4 +9,4 @@ icon: https://www.getambassador.io/images/logo.png
 # this chart. The telepresence CLI will always attempt to update the Traffic 
 # Manager if it is not the same version as the CLI so ensure you are keeping
 # these in sync.
-appVersion: 2.3.1
+appVersion: 2.3.2
