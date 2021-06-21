@@ -153,8 +153,8 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check
-check: $(tools/ko) ## (QA) Run the test suite
-	go test ./...
+test check: $(tools/ko) $(tools/richgo) ## (QA) Run the test suite
+	$(tools/richgo) test ./...
 
 # Install
 # =======
