@@ -144,7 +144,6 @@ jobs:
           name: "Pre-load Go build cache"
           command: go list ./... | xargs -n1 go test -c -o /dev/null
       - run: make lint
-      - run: make lint-chart
 
   "generate":
     executor: vm-linux
@@ -182,7 +181,7 @@ jobs:
     steps:
     - checkout
     - install-helm
-    - run: make lint-chart
+    - run: make lint
     # For now, I don't think we need to build rc charts (nor do I think
     # we have a need for rc charts), but explicitly calling them out here
     # in case we change our mind
