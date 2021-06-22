@@ -115,6 +115,12 @@ licenseKey:
     # Default: systema-license
     name: systema-license
 
+
+managerRbac:
+  # Default: true
+  create: true
+
+
 ################################################################################
 ## Agent Injector Configuration
 ################################################################################
@@ -150,18 +156,12 @@ agentInjector:
 # You do not need to create any extra RBAC if your users are cluster admins.
 # For more on how telepresence uses rbac, check out:
 # https://www.getambassador.io/docs/telepresence/latest/reference/rbac/
-rbac:
+clientRbac:
   
   # Create the extra RBAC for non-admin users.
   #
   # Default: false
   create: false
-
-  # Configure this release to ONLY create the RBAC. This allows for RBAC and the
-  # installation to be managed separately.
-  #
-  # Default: false
-  only: false
 
   # The user accounts to bind to the Roles created by this chart. This can be a
   # ServiceAccount, user account, user group, etc. depending on how accounts are
@@ -186,3 +186,11 @@ rbac:
   # Default: ambassador
   namespaces:
   - ambassador
+
+rbac:
+  # Configure this release to ONLY create the rbac-related objects. This allows for RBAC and the
+  # installation to be managed separately. This can be used in conjunction with clientRbac.create=true
+  # and managerRbac.create=true to select which sets of rbac objects you wish to create.
+  #
+  # Default: false
+  only: false
