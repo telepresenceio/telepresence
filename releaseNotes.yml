@@ -17,6 +17,20 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
+  - version: 2.3.3
+    date: 'TBD'
+    notes:
+      # Headliners
+      - type: feature
+        title: Traffic-manager Helm Chart
+        body: >-
+          We now support installing the traffic-manager via helm.
+          This will make it easier for operators to see what the
+          traffic-manager needs to install so that telepresence works
+          correctly, as well as providing a more direct route to customizing
+          installation.
+        image: ./telepresence-2.3.3-helm.png
+        docs: install/helm/
   - version: 2.3.2
     date: '2021-06-18'
     notes:
