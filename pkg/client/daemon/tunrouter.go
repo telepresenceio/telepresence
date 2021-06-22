@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -210,7 +211,14 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		}
 
 		dgroup.ParentGroup(ctx).Go("watch-cluster-info", func(ctx context.Context) error {
-			return t.watchClusterInfo(ctx, kubeDNS)
+			err := t.watchClusterInfo(ctx, kubeDNS)
+			var recvErr *client.RecvEOF
+			if errors.As(err, &recvErr) {
+				// If the remote end, which is the connector, has hung up mid-stream, that usually means that
+				// the daemon will be shutting down soon too.
+				<-ctx.Done()
+			}
+			return err
 		})
 	}
 	return nil
@@ -227,7 +235,7 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP)
 			if ctx.Err() != nil {
 				return nil
 			}
-			return fmt.Errorf("error when reading WatchOutboundInfo: %w", err)
+			return client.WrapRecvErr(err, "error when reading WatchOutboundInfo")
 		}
 
 		if kubeDNS != nil {
@@ -332,7 +340,12 @@ func (t *tunRouter) run(c context.Context) error {
 		}
 		t.connStream = connpool.NewStream(tunnel)
 		dlog.Debug(c, "MGR read loop starting")
-		return t.connStream.DialLoop(c, &t.closing, t.handlers)
+		err = t.connStream.DialLoop(c, &t.closing, t.handlers)
+		var recvErr *client.RecvEOF
+		if errors.As(err, &recvErr) {
+			<-c.Done()
+		}
+		return err
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {
