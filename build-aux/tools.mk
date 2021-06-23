@@ -57,6 +57,19 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
 	tar -C $(@D) -zxmf $< protolint protoc-gen-protolint
 
+# Shellcheck
+# ==========
+#
+tools/shellcheck = $(TOOLSBINDIR)/shellcheck
+SHELLCHECK_VERSION=0.7.2
+SHELLCHECK_TXZ = https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(GOHOSTOS).$(shell uname -m).tar.xz
+$(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
+	mkdir -p $(@D)
+	curl -sfL $(SHELLCHECK_TXZ) -o $@
+%/bin/shellcheck: %/$(notdir $(SHELLCHECK_TXZ))
+	mkdir -p $(@D)
+	tar -C $(@D) -Jxmf $< --strip-components=1 shellcheck-v$(SHELLCHECK_VERSION)/shellcheck
+
 # `go get`-able things
 # ====================
 #

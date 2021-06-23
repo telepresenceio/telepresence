@@ -131,12 +131,16 @@ endif
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) ## (QA) Everything nescessary to lint
+lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) ## (QA) Everything nescessary to lint
 
+shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
+shellscripts += ./packaging/homebrew-package.sh
+shellscripts += ./smoke-tests/run_smoke_test.sh
 .PHONY: lint
 lint: lint-deps ## (QA) Run the linters (golangci-lint and protolint)
 	$(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
+	$(tools/shellcheck) $(shellscripts)
 
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints

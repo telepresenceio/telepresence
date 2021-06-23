@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# -*- sh-basic-offset: 4 ; indent-tabs-mode: nil -*-
 
 # This is a script for more-or-less automating our smoke tests
 # given the scenarios we have currently.
@@ -16,25 +17,25 @@ finish_step() {
 verify_output_empty() {
     local output=${1}
     local is_empty=${2}
-    local operator=""
-    local msg=""
     if $is_empty; then
-        operator="-n"
-        msg="Output was supposed to be empty and it was not"
+        if [ -n "$output" ]; then
+            echo "Failed in step: ${STEP}"
+            echo '> Output was supposed to be empty and it was not'
+            exit 1
+        fi
     else
-        operator="-z"
-        msg="Output wasn't supposed to be empty and it was"
-    fi
-    if [ $operator "$output" ]; then
-        echo "Failed in step: ${STEP}"
-        echo "> $msg"
-        exit 1
+        if [ -z "$output" ]; then
+            echo "Failed in step: ${STEP}"
+            echo "> Output wasn't supposed to be empty and it was"
+            exit 1
+        fi
     fi
 }
 
 # Run telepresence login command + reports output
 login() {
-    local output=`$TELEPRESENCE login`
+    local output
+    output=$($TELEPRESENCE login)
     if [[ $output != *"Login successful"* ]]; then
         echo "Login Failed in step: ${STEP}"
         exit 1
@@ -44,7 +45,8 @@ login() {
 # Verify that the user logged out and was logged in prior.
 verify_logout() {
     # We care about the error here, so we redirect stderr to stdout
-    local output=`$TELEPRESENCE logout 2>&1`
+    local output
+    output=$($TELEPRESENCE logout 2>&1)
     if [[ $output != *"not logged in"* ]]; then
         echo "Login Failed in step: ${STEP}"
         exit 1
@@ -89,6 +91,7 @@ has_intercept_id() {
 get_preview_url() {
     local regex="Preview URL : (https://[^ >]+)"
     if [[ $output =~ $regex ]]; then
+        # shellcheck disable=SC2034
         previewurl="${BASH_REMATCH[1]}"
     else
         echo "No Preview URL found"
@@ -98,8 +101,9 @@ get_preview_url() {
 
 # Puts intercept id in a variable
 get_intercept_id() {
-    local header=`grep 'x-telepresence-intercept-id' <<<"$output"`
-    #local header=`echo $output | grep 'x-telepresence-intercept-id'`
+    local header
+    header=$(grep 'x-telepresence-intercept-id' <<<"$output")
+    #local header=$(echo $output | grep 'x-telepresence-intercept-id')
     local regex=" ([a-zA-Z0-9-]+:dataprocessingservice)'"
     if [[ $header =~ $regex ]]; then
         interceptid="${BASH_REMATCH[1]}"
@@ -112,23 +116,26 @@ get_intercept_id() {
 # Checks to see if traffic agent is present + proprietary or dummy based on inputs
 is_prop_traffic_agent() {
     local present=${1}
-    local image=`kubectl get deployment dataprocessingservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}"`
+    local image
+    image=$(kubectl get deployment dataprocessingservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}")
     if [[ -z $image ]]; then
         echo "There is no traffic-agent sidecar and there should be"
         exit 1
     fi
 
     if $present; then
-        local image_present=`echo $image | grep 'ambassador-telepresence-agent:'`
+        local image_present
+        image_present=$(echo "$image" | grep 'ambassador-telepresence-agent:')
         if [[ -z $image_present ]]; then
             echo "Proprietary traffic agent image wasn't used and it should be"
             exit 1
-        elif [[ ! -z $TELEPRESENCE_AGENT_IMAGE && $image_present != *$TELEPRESENCE_AGENT_IMAGE ]]; then
+        elif [[ -n $TELEPRESENCE_AGENT_IMAGE && $image_present != *$TELEPRESENCE_AGENT_IMAGE ]]; then
             echo "Propietary traffic agent was supposed to have been overridden but it wasn't"
             exit 1
         fi
     else
-        local image_present=`echo $image | grep 'tel2:'`
+        local image_present
+        image_present=$(echo "$image" | grep 'tel2:')
         if [[ -z $image_present ]]; then
             echo "Non-proprietary traffic agent image wasn't used and it should be"
             exit 1
@@ -140,9 +147,9 @@ is_prop_traffic_agent() {
 setup_demo_app() {
     echo "Applying quick start apps to the cluster"
     kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
-    kubectl wait -n default deploy dataprocessingservice --for condition=available --timeout=90s > $output_location
-    kubectl wait -n default deploy verylargejavaservice --for condition=available --timeout=90s > $output_location
-    kubectl wait -n default deploy verylargedatastore --for condition=available --timeout=90s > $output_location
+    kubectl wait -n default deploy dataprocessingservice --for condition=available --timeout=90s >"$output_location"
+    kubectl wait -n default deploy verylargejavaservice --for condition=available --timeout=90s >"$output_location"
+    kubectl wait -n default deploy verylargedatastore --for condition=available --timeout=90s >"$output_location"
 }
 
 # Deletes amb-code-quickstart-app *only* if it was created by this script
@@ -155,38 +162,38 @@ cleanup_demo_app() {
 #### The beginning of the script                      ####
 ##########################################################
 DEBUG=${DEBUG:-0}
-start_time=`date -u +%s`
-if [ -z $TELEPRESENCE ]; then
-    TELEPRESENCE=`which telepresence`
+start_time=$(date -u +%s)
+if [ -z "$TELEPRESENCE" ]; then
+    TELEPRESENCE=$(which telepresence)
 fi
 curl_opts=( -s )
 
 # DEBUG 1 gives you output of higher level commands (e.g. telepresence, kubectl)
-if [ $DEBUG -ge 1 ]; then
-    output_location=( "/dev/stdout" )
+if [ "$DEBUG" -ge 1 ]; then
+    output_location="/dev/stdout"
 else
-    output_location=( "/dev/null" )
+    output_location="/dev/null"
 fi
 
 # DEBUG 2 provides all the same as 1 + curl ouput and prints out commands
 # before they are ran
-if [ $DEBUG == 2 ]; then
+if [ "$DEBUG" == 2 ]; then
     curl_opts=( )
     set -x
 fi
 
 echo "Using telepresence: "
-echo $TELEPRESENCE
-$TELEPRESENCE version
+echo "$TELEPRESENCE"
+"$TELEPRESENCE" version
 echo
 
 # If this environment variable is set, we want to run the smoke tests with that
 # agent. But this agent isn't used unless we are logged in, so we unset the
 # var here, and will re-set it after we log in.
-if [ ! -z $TELEPRESENCE_AGENT_IMAGE ]; then
+if [ -n "$TELEPRESENCE_AGENT_IMAGE" ]; then
     TELEPRESENCE_AGENT_OVERRIDE=$TELEPRESENCE_AGENT_IMAGE
     echo "Using Agent Image for tests where you are logged in:"
-    echo $TELEPRESENCE_AGENT_IMAGE
+    echo "$TELEPRESENCE_AGENT_IMAGE"
     echo
     unset TELEPRESENCE_AGENT_IMAGE
 fi
@@ -204,13 +211,12 @@ echo "Using context: "
 kubectl config current-context
 echo
 
-kubectl get svc -n default verylargejavaservice > $output_location 2>&1
-if [[ "$?" == 0 ]]; then
+if kubectl get svc -n default verylargejavaservice >"$output_location" 2>&1; then
     echo "verylargejavaservice is present, so assuming rest of demo apps are already present"
 else
     echo "Will setup demo app"
     INSTALL_DEMO=true
-    read -p "Would you like it to be cleaned up if all tests pass? (y/n)?" choice
+    read -r -p "Would you like it to be cleaned up if all tests pass? (y/n)?" choice
     case "$choice" in
         y|Y ) CLEANUP_DEMO=true;;
         * ) ;;
@@ -218,7 +224,7 @@ else
 fi
 
 
-read -p "Is this configuration okay (y/n)?" choice
+read -r -p "Is this configuration okay (y/n)?" choice
 case "$choice" in
     y|Y ) echo ":)";;
     n|N ) echo "Exiting..."; exit 1;;
@@ -226,33 +232,34 @@ case "$choice" in
 esac
 
 echo "Okay one more thing. Please login to System A in the window that pops up"
-$TELEPRESENCE login > $output_location
+$TELEPRESENCE login >"$output_location"
 
 # For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
-$TELEPRESENCE uninstall --everything > $output_location
+$TELEPRESENCE uninstall --everything >"$output_location"
 if [[ -n "$INSTALL_DEMO" ]]; then
     setup_demo_app
 fi
 
 VERYLARGEJAVASERVICE=verylargejavaservice.default:8080
-$TELEPRESENCE connect > $output_location
+$TELEPRESENCE connect >"$output_location"
 
 # When the sevice is initially deployed, it can take a few seconds (~7)
 # before the service is actually running, so we build in a few retries
 # instead of jumping straight to verify_output_empty which exits upon
 # failure
-for i in {1..20}
-do
-    output=`curl -m 1 "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'green'`
+#
+# shellcheck disable=SC2034
+for i in {1..20}; do
+    output=$(curl -m 1 "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'green')
     if [ -n "$output" ]; then
         break
     else
-        echo "output from verylargejavaservice not found so sleeping" > $output_location
+        echo "output from verylargejavaservice not found so sleeping" >"$output_location"
         sleep 1
     fi
 done
-output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'green'`
+output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'green')
 verify_output_empty "${output}" false
 
 STEP=1
@@ -260,7 +267,7 @@ STEP=1
 #### Step 1 - Verify telepresence list works           ####
 ###########################################################
 
-output=`$TELEPRESENCE list | grep 'ready to intercept'`
+output=$($TELEPRESENCE list | grep 'ready to intercept')
 verify_output_empty "${output}" false
 
 finish_step
@@ -269,8 +276,7 @@ finish_step
 #### Step 2 - Verify that service has been intercepted ####
 ###########################################################
 
-curl "${curl_opts[@]}" localhost:3000 > $output_location
-if [[ "$?" != 0 ]]; then
+if ! curl "${curl_opts[@]}" localhost:3000 >"$output_location"; then
     echo "Ensure you have a local version of dataprocessingservice running on port 3000"
     exit
 fi
@@ -278,21 +284,21 @@ fi
 # General note about intercepts, I've found sleeping for 1 second gives time for the
 # commands to run and things to propagate. Could probably be optimized to add automatic
 # retries but was trying to keep it simple
-$TELEPRESENCE intercept dataprocessingservice -p 3000 > $output_location
+$TELEPRESENCE intercept dataprocessingservice -p 3000 >"$output_location"
 sleep 1
 
 is_prop_traffic_agent false
 
-output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
-$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --mechanism=tcp > $output_location
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
+$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --mechanism=tcp >"$output_location"
 sleep 1
 
 is_prop_traffic_agent false
 
-output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 verify_logout
 
@@ -302,7 +308,7 @@ finish_step
 #### Step 3 - Verify intercept can be seen ####
 ###############################################
 
-output=`$TELEPRESENCE list | grep 'dataprocessingservice: intercepted'`
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
 verify_output_empty "${output}" false
 
 finish_step
@@ -311,8 +317,8 @@ finish_step
 #### Step 4 - Verify intercept can be left ####
 ###############################################
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
-output=`$TELEPRESENCE list | grep 'dataprocessingservice: intercepted'`
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
 verify_output_empty "${output}" true
 
 finish_step
@@ -321,8 +327,7 @@ finish_step
 #### Step 5 - Verify can access svc        ####
 ###############################################
 
-curl "${curl_opts[@]}" dataprocessingservice.default:3000 > $output_location
-if [[ "$?" != 0 ]]; then
+if ! curl "${curl_opts[@]}" dataprocessingservice.default:3000 >"$output_location"; then
     echo "Unable to access service after leaving intercept"
     exit
 fi
@@ -333,25 +338,25 @@ finish_step
 #### Step 6 - Verify login prompted        ####
 ###############################################
 
-if [[ ! -z $TELEPRESENCE_AGENT_OVERRIDE ]]; then
+if [[ -n $TELEPRESENCE_AGENT_OVERRIDE ]]; then
     export TELEPRESENCE_AGENT_IMAGE=$TELEPRESENCE_AGENT_OVERRIDE
     echo "Using $TELEPRESENCE_AGENT_IMAGE as the agent for remainder of tests"
-    $TELEPRESENCE quit > $output_location
-    $TELEPRESENCE connect > $output_location
+    $TELEPRESENCE quit >"$output_location"
+    $TELEPRESENCE connect >"$output_location"
 fi
 
-$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n' > $output_location
+$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n' >"$output_location"
 sleep 1
 is_prop_traffic_agent true
 
 # Verify intercept works
-output=`$TELEPRESENCE list | grep 'dataprocessingservice: intercepted'`
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
 # Verify user can logout without error
 # Find a better way to determine if a user is logged in
-output=`$TELEPRESENCE logout`
+output=$($TELEPRESENCE logout)
 verify_output_empty "${output}" true
 
 finish_step
@@ -362,7 +367,7 @@ finish_step
 
 login
 sleep 5 # avoid known agent mechanism-args race
-output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 <<<$'verylargejavaservice.default\n8080\nN\n'`
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 <<<$'verylargejavaservice.default\n8080\nN\n')
 sleep 1
 has_preview_url true
 is_prop_traffic_agent true
@@ -376,16 +381,16 @@ finish_step
 has_intercept_id true
 has_preview_url true
 get_intercept_id
-output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" true
 
 # Gotta figure out how to get a cookie for this to work
-#output=`curl $previewurl | grep 'blue'`
+#output=$(curl $previewurl | grep 'blue')
 #verify_output_empty "${output}" false
-output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 ###############################################################
@@ -393,14 +398,14 @@ finish_step
 ###############################################################
 
 sleep 5 # avoid known agent mechanism-args race
-output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false`
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false)
 sleep 1
 has_intercept_id true
 has_preview_url false
-output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 ###############################################
@@ -408,28 +413,28 @@ finish_step
 ###############################################
 
 sleep 5 # avoid known agent mechanism-args race
-output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n'`
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n')
 sleep 1
 has_intercept_id false
 has_preview_url true
-output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 ##########################################################
 #### Step 11 - licensed intercept all w/o preview url ####
 ##########################################################
 
-output=`$TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all --preview-url=false`
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all --preview-url=false)
 sleep 1
 has_intercept_id false
 has_preview_url false
-output=`curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue'`
+output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
-$TELEPRESENCE leave dataprocessingservice > $output_location
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 
@@ -437,7 +442,7 @@ finish_step
 #### Step 12 - licensed uninstall everything          ####
 ##########################################################
 
-$TELEPRESENCE uninstall --everything > $output_location
+$TELEPRESENCE uninstall --everything >"$output_location"
 verify_logout
 
 finish_step
@@ -445,11 +450,11 @@ finish_step
 ##########################################################
 #### Step 13 - Verify version prompts new version     ####
 ##########################################################
-os=`uname -s | awk '{print tolower($0)}'`
+os=$(uname -s | awk '{print tolower($0)}')
 echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
-sudo curl "${curl_opts[@]}" -fL https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence -o /tmp/old_telepresence
+sudo curl "${curl_opts[@]}" -fL "https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence" -o /tmp/old_telepresence
 sudo chmod +x /tmp/old_telepresence
-output=`/tmp/old_telepresence version | grep 'An update of telepresence from version'`
+output=$(/tmp/old_telepresence version | grep 'An update of telepresence from version')
 verify_output_empty "${output}" false
 echo "Removing old version of telepresence: /tmp/old_telepresence"
 sudo rm /tmp/old_telepresence
@@ -463,7 +468,7 @@ finish_step
 if [[ -n "$CLEANUP_DEMO" ]]; then
     cleanup_demo_app
 fi
-end_time=`date -u +%s`
-let elapsed_time="$end_time-$start_time"
+end_time=$(date -u +%s)
+elapsed_time=$((end_time - start_time))
 echo "$TELEPRESENCE has been (mostly) smoke tested and took $elapsed_time seconds :)"
 echo "Please test a preview URL manually to ensure that is working on the system A side"
