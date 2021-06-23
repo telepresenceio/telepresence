@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This file deals installing programs used by the build.
+# This file deals with installing programs used by the build.
 
 TOOLSDIR=tools
 TOOLSBINDIR=$(TOOLSDIR)/bin

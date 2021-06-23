@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This file deals with the "main" flow of Make.  The user-facing
+# targets, the generate/build/release cycle.  Try to keep boilerplate
+# out of this file.  Try to keep this file simple; anything complex or
+# clever should probably be factored into a separate file.
+
 # All build artifacts that are files end up in $(BUILDDIR).
 BUILDDIR=build-output
 
