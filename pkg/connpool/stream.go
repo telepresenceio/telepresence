@@ -2,10 +2,10 @@ package connpool
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type Stream struct {
@@ -30,7 +30,7 @@ func (s *Stream) ReadLoop(ctx context.Context, closing *int32) (<-chan Message, 
 			cm, err := s.Recv()
 			if err != nil {
 				if atomic.LoadInt32(closing) == 0 && ctx.Err() == nil {
-					errCh <- fmt.Errorf("read from grpc.ClientStream failed: %w", err)
+					errCh <- client.WrapRecvErr(err, "read from grpc.ClientStream failed")
 				}
 				return
 			}
