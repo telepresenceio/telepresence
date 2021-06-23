@@ -15,7 +15,7 @@
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
 DOCKER_PUSH           ?= docker-push
 
-_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build/genversion.go)
+_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build-aux/genversion.go)
 TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
   $(info Building TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
@@ -26,9 +26,9 @@ default: help
 .SECONDARY:
 .DELETE_ON_ERROR:
 
-include build/tools.mk
-include build/go.mk
-include build/support.mk
+include build-aux/tools.mk
+include build-aux/go.mk
+include build-aux/support.mk
 
 .PHONY: prepare-release
 prepare-release: ## (Release) Update nescessary files and tag the release (does not push)
