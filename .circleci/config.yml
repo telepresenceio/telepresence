@@ -176,6 +176,27 @@ jobs:
     - checkout
     - run: |
         [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
+  
+  "tag-nightly":
+    executor: vm-linux
+    steps:
+    - checkout
+    - install-go
+    - run:
+        name: "Tag nightly"
+        command: |
+          existingTags=$(git tag --points-at HEAD)
+          if [[ -n $existingTags ]]; then
+              echo "Tag for the HEAD of release/v2 already exists:"
+              echo $existingTags
+              exit 0
+          else
+              lastTag=$(git describe --tags --match="v*" --abbrev=0
+              time=$(date +"%s")
+              newTag="$lastTag-nightly-$time"
+              make prepare-release TELEPRESENCE_VERSION=$newTag
+              git push origin {,rpc/}$time
+          fi
 
 #  "release-finalize":
 #    executor: vm-linux
@@ -215,6 +236,17 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
+
+  'Nightly':
+    triggers:
+    - schedule:
+        cron: "0 0 * * 1-5"
+        filters:
+          branches:
+            only:
+              - release/v2
+    jobs:
+      - tag-nightly
       #- release-finalize:
       #    context: telepresence2-release
       #    requires:
