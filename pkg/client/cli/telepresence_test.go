@@ -346,6 +346,15 @@ func (cs *connectedSuite) SetupSuite() {
 	require := cs.Require()
 	c := dlog.NewTestContext(cs.T(), false)
 	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "telepresence-test-developer"))
+	require.Eventually(
+		func() bool {
+			err := cs.tpSuite.kubectl(c, "get", "pod")
+			return err == nil
+		},
+		5*time.Second,
+		time.Second,
+		"Timed out waiting for kubernetes to become ready",
+	)
 	stdout, stderr := telepresence(cs.T(), "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
