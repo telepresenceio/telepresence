@@ -12,14 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
-.PHONY: base-image
-base-image: base-image/Dockerfile ## (ZSupport) Rebuild the base image
-	if ! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); then \
-	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) . && \
-	  docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); \
-	fi
+# This file deals with baseline 'Makefile' utilities, without doing
+# anything specific to Telepresence.
 
+# Delete implicit rules not used here (clutters debug output).
+MAKEFLAGS += --no-builtin-rules
+
+# Turn off .INTERMEDIATE file removal by marking all files as
+# .SECONDARY.  .INTERMEDIATE file removal is a space-saving hack from
+# a time when drives were small; on modern computers with plenty of
+# storage, it causes nothing but headaches.
+#
+# https://news.ycombinator.com/item?id=16486331
+.SECONDARY:
+
+# If a recipe errors, remove the target it was building.  This
+# prevents outdated/incomplete results of failed runs from tainting
+# future runs.  The only reason .DELETE_ON_ERROR is off by default is
+# for historical compatibility.
+#
+# If for some reason this behavior is not desired for a specific
+# target, mark that target as .PRECIOUS.
+.DELETE_ON_ERROR:
+
+# Add a rule to generate `make help` output from comments in the
+# Makefiles.
 .PHONY: help
 help:  ## (ZSupport) Show this message
 	@echo 'Usage: [VARIABLE=VALUE...] $(MAKE) [TARGETS...]'

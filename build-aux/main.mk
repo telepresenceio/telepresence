@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Delete implicit rules not used here (clutters debug output)
-MAKEFLAGS += --no-builtin-rules
-
 # All build artifacts that are files end up in $(BUILDDIR).
 BUILDDIR=build-output
 
 BINDIR=$(BUILDDIR)/bin
 
-# proto/gRPC generation using protoc
+bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
+
+# Generate: artifacts that get checked in to Git
+# ==============================================
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
@@ -51,6 +51,17 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 	rm -rf ./vendor
 	find pkg cmd -name 'generated_*.go' -delete
 
+# Build: artifacts that don't get checked in to Git
+# =================================================
+
+TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
+.PHONY: base-image
+base-image: base-image/Dockerfile # Intentionally not in 'make help'
+	if ! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); then \
+	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) . && \
+	  docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); \
+	fi
+
 PKG_VERSION = $(shell go list ./pkg/version)
 
 .PHONY: build
@@ -64,18 +75,38 @@ build: ## (Build) Build all the source code
 image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container image
 	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -trimpath" ko publish --local ./cmd/traffic) && \
 	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
-push-image: image
+
+.PHONY: push-image
+push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
-.PHONY: images push-images
-images: image
-push-images: push-image
+.PHONY: clean
+clean: ## (Build) Remove all build artifacts
+	rm -rf $(BUILDDIR)
+
+.PHONY: clobber
+clobber: clean ## (Build) Remove all build artifacts and tools
+
+# Release: Push the artifacts places, update pointers ot them
+# ===========================================================
+
+.PHONY: prepare-release
+prepare-release: ## (Release) Update nescessary files and tag the release (does not push)
+	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
+	rm -f CHANGELOG.md.bak
+	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
+	git add CHANGELOG.md go.mod
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/testdata/addAgentToWorkload/cur pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
+	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
+	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: push-executable
-push-executable: build
+push-executable: build ## (Release) Upload the executable to S3
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
@@ -85,7 +116,7 @@ push-executable: build
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: promote-to-stable
-promote-to-stable:
+promote-to-stable: ## (Release) Update stable.txt in S3
 	mkdir -p $(BUILDDIR)
 	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
@@ -96,36 +127,38 @@ ifeq ($(GOHOSTOS), darwin)
 	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION))
 endif
 
-.PHONY: install
-install:  ## (Install) installs the telepresence binary under ~/go/bin
-	go install -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) ./cmd/telepresence
-
-.PHONY: clean
-clean: ## (Build) Remove all build artifacts
-	rm -rf $(BUILDDIR)
-
-.PHONY: clobber
-clobber: clean ## (Build) Remove all build artifacts and tools
+# Quality Assurance: Make sure things are good
+# ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Everything nescessary to lint
+lint-deps: $(tools/golangci-lint) $(tools/protolint) ## (QA) Everything nescessary to lint
 
 .PHONY: lint
-lint: lint-deps ## (Lint) Run the linters (golangci-lint and protolint)
+lint: lint-deps ## (QA) Run the linters (golangci-lint and protolint)
 	$(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
 
 .PHONY: format
-format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix linter complaints
+format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints
 	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check
-check: $(tools/ko) ## (Test) Run the test suite
+check: $(tools/ko) ## (QA) Run the test suite
 	go test ./...
 
-.PHONY: all
-all: build ## (ZAlias) Alias for 'build'
+# Install
+# =======
 
-.PHONY: test
-test: check ## (ZAlias) Alias for 'check'
+.PHONY: install
+install: build ## (Install) Installs the telepresence binary to $(bindir)
+	install -Dm755 $(BINDIR)/telepresence $(bindir)/telepresence
+
+# Aliases
+# =======
+
+.PHONY: all test images push-images
+all:         build image ## (ZAlias) Alias for 'build image'
+test:        check       ## (ZAlias) Alias for 'check'
+images:      image       ## (ZAlias) Alias for 'image'
+push-images: push-image  ## (ZAlias) Alias for 'push-image'
