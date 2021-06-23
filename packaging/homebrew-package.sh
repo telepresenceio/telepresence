@@ -20,12 +20,12 @@ FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 # Update recipe
 cp packaging/homebrew-formula.rb "$FORMULA"
 sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "$FORMULA"
-TARBALL_HASH=$(shasum -a 256 $BINDIR/telepresence | cut -f 1 -d " ")
+TARBALL_HASH=$(shasum -a 256 "$BINDIR/telepresence" | cut -f 1 -d " ")
 
 # We don't want to update our homebrew formula if there
 # isn't a hash, so exit early if that's the case.
 if [ -z "${TARBALL_HASH}" ]
-then 
+then
     echo "Telepresence binary could not be hashed"
     exit 1
 fi
@@ -45,5 +45,5 @@ git commit -m "Release ${VERSION}"
 # the git permissions are incorrect and we can't publish
 # the change. Once we know the automation is working, we can
 # remove it.
-cat  ${FORMULA}
+cat "${FORMULA}"
 git push origin master

@@ -1,4 +1,18 @@
-# Install tools used by the build
+# Copyright 2020-2021 Datawire.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This file deals with installing programs used by the build.
 
 TOOLSDIR=tools
 TOOLSBINDIR=$(TOOLSDIR)/bin
@@ -12,7 +26,6 @@ export PATH := $(abspath $(TOOLSBINDIR)):$(PATH)
 clobber: clobber-tools
 
 .PHONY: clobber-tools
-
 clobber-tools:
 	rm -rf $(TOOLSBINDIR) $(TOOLSDIR)/include $(TOOLSDIR)/*.*
 
@@ -31,6 +44,32 @@ $(TOOLSDIR)/$(PROTOC_ZIP):
 %/bin/protoc %/include %/readme.txt: %/$(PROTOC_ZIP)
 	cd $* && unzip -q -o -DD $(<F)
 
+# Protobuf linter
+# ===============
+#
+tools/protolint = $(TOOLSBINDIR)/protolint
+PROTOLINT_VERSION=0.26.0
+PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
+$(TOOLSDIR)/$(PROTOLINT_TGZ):
+	mkdir -p $(@D)
+	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $@
+%/bin/protolint %/bin/protoc-gen-protolint: %/$(PROTOLINT_TGZ)
+	mkdir -p $(@D)
+	tar -C $(@D) -zxmf $< protolint protoc-gen-protolint
+
+# Shellcheck
+# ==========
+#
+tools/shellcheck = $(TOOLSBINDIR)/shellcheck
+SHELLCHECK_VERSION=0.7.2
+SHELLCHECK_TXZ = https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(GOHOSTOS).$(shell uname -m).tar.xz
+$(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
+	mkdir -p $(@D)
+	curl -sfL $(SHELLCHECK_TXZ) -o $@
+%/bin/shellcheck: %/$(notdir $(SHELLCHECK_TXZ))
+	mkdir -p $(@D)
+	tar -C $(@D) -Jxmf $< --strip-components=1 shellcheck-v$(SHELLCHECK_VERSION)/shellcheck
+
 # `go get`-able things
 # ====================
 #
@@ -48,16 +87,3 @@ tools/ko                 = $(TOOLSBINDIR)/ko
 tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint
 $(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
 	cd $(<D) && go build -o $(abspath $@) $$(sed -En 's,^import "(.*)"$$,\1,p' pin.go)
-
-# Protobuf linter
-# ===============
-#
-tools/protolint = $(TOOLSBINDIR)/protolint
-PROTOLINT_VERSION=0.26.0
-PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
-$(TOOLSDIR)/$(PROTOLINT_TGZ):
-	mkdir -p $(@D)
-	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $@
-%/bin/protolint %/bin/protoc-gen-protolint: %/$(PROTOLINT_TGZ)
-	mkdir -p $(@D)
-	tar -C $(@D) -zxmf $< protolint protoc-gen-protolint

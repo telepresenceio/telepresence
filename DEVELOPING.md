@@ -159,26 +159,6 @@ In practice, this is not a big deal. If you get the version numbers correct once
 
 In the long run we'll improve this to work more like classic Telepresence, but even there this is not a fully-solved problem. And we can't really use Telepresence to develop Telepresence. At least not yet.
 
-## Filing a pull request
-
-TL;DR: run `go run ./build/file-pr.go` to push the current branch and
-launch your web browser to file a PR for that branch.
-
-Why you should use `file-pr.go` instead of just clicking around in
-your web browser:
-
- 1. By default GitHub wants to merge pull requests in to the default
-    branch (in our case: `master`).  But telepresence.git's default
-    branch is telepresence v1, and you need to PR in to the
-    telepresence v2 branch (`release/v2`).  That's some extra
-    clicking.
- 2. We'd like to have a different pull request template for v1 and v2.
-    Unfortunately, the only way to accomplish this is to manually add
-    a `template=TEMPLATE_FILENAME` query parameter to the URL.
-
-So, `file-pr.go` sets the target branch to `release/v2`, and sets
-`template=v2.md`.
-
 ## Building for Release
 
 1. Add a `vSEMVER` tag for the new version: `git tag -a v0.x.y -m "Release 0.x.y"`

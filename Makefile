@@ -1,4 +1,4 @@
-# Copyright 2020 Datawire. All rights reserved.
+# Copyright 2020-2021 Datawire.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,31 +13,15 @@
 # limitations under the License.
 
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
-DOCKER_PUSH           ?= docker-push
 
-_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build/genversion.go)
+_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build-aux/genversion.go)
 TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
-  $(info Building TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
+  $(info [make] TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
   $(error TELEPRESENCE_VERSION variable is invalid: It must be a v2.* string, but is '$(TELEPRESENCE_VERSION)'))
 
-default: help
-.PHONY: default
-.SECONDARY:
-.DELETE_ON_ERROR:
+.DEFAULT_GOAL = help
 
-include build/tools.mk
-include build/go.mk
-include build/support.mk
-
-.PHONY: prepare-release
-prepare-release: ## (Release) Update nescessary files and tag the release (does not push)
-	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
-	rm -f CHANGELOG.md.bak
-	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
-	git add CHANGELOG.md go.mod
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/testdata/addAgentToWorkload/cur pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
-	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
-	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
+include build-aux/prelude.mk
+include build-aux/tools.mk
+include build-aux/main.mk
