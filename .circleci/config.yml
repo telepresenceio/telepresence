@@ -107,7 +107,7 @@ jobs:
       - run: make build
       - install-kubectl
       - run:
-          command: make test
+          command: ./run_tests.sh
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
