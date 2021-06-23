@@ -1,4 +1,4 @@
-# Copyright 2020 Datawire. All rights reserved.
+# Copyright 2020-2021 Datawire.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,14 @@
 # limitations under the License.
 
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
-DOCKER_PUSH           ?= docker-push
 
 _TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build-aux/genversion.go)
 TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
-  $(info Building TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
+  $(info [make] TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
   $(error TELEPRESENCE_VERSION variable is invalid: It must be a v2.* string, but is '$(TELEPRESENCE_VERSION)'))
 
-default: help
-.PHONY: default
+.DEFAULT_GOAL = help
 .SECONDARY:
 .DELETE_ON_ERROR:
 

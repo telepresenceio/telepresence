@@ -1,15 +1,23 @@
-# .DEFAULT_GOAL = all
+# Copyright 2020-2021 Datawire.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # Delete implicit rules not used here (clutters debug output)
-.SUFFIXES:
-%:: RCS/%,v
-%:: RCS/%
-%:: s.%
-%:: %,v
-%:: SCCS/s.%
+MAKEFLAGS += --no-builtin-rules
 
-# All build artifacts end up here except go packages. Their destination is controlled by the go environment
+# All build artifacts that are files end up in $(BUILDDIR).
 BUILDDIR=build-output
+
 BINDIR=$(BUILDDIR)/bin
 
 # proto/gRPC generation using protoc
@@ -112,9 +120,12 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix li
 	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
 	$(tools/protolint) lint --fix rpc || true
 
-.PHONY: test check
-test check: $(tools/ko) ## (Test) Run the test suite
+.PHONY: check
+check: $(tools/ko) ## (Test) Run the test suite
 	go test ./...
 
 .PHONY: all
-all: test
+all: build ## (ZAlias) Alias for 'build'
+
+.PHONY: test
+test: check ## (ZAlias) Alias for 'check'
