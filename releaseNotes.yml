@@ -17,6 +17,110 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
+  - version: 2.3.2
+    date: '2021-06-18'
+    notes:
+      # Headliners
+      - type: feature
+        title: Service Port Annotation
+        body: >-
+          The mutator webhook for injecting traffic-agents now
+          recognizes a
+          <code>telepresence.getambassador.io/inject-service-port</code>
+          annotation to specify which port to intercept; bringing the
+          functionality of the <code>--port</code> flag to users who
+          use the mutator webook in order to control Telepresence via
+          GitOps.
+        image: ./telepresence-2.3.2-svcport-annotation.png
+        docs: reference/cluster-config#service-port-annotation
+      - type: feature
+        title: Outbound Connections
+        body: >-
+          Outbound connections are now routed through the intercepted
+          Pods which means that the connections originate from that
+          Pod from the cluster's perspective.  This allows service
+          meshes to correctly identify the traffic.
+        docs: reference/routing/#outbound
+      - type: change
+        title: Inbound Connections
+        body: >-
+          Inbound connections from an intercepted agent are now
+          tunneled to the manager over the existing gRPC connection,
+          instead of establishing a new connection to the manager for
+          each inbound connection.  This avoids interference from
+          certain service mesh configurations.
+        docs: reference/routing/#inbound
+
+      # RBAC changes
+      - type: change
+        title: Traffic-manager needs new RBAC permissions
+        body: >-
+          The traffic-manager requires <a href="reference/rbac">RBAC
+          permissions</a> to list Nodes, Pods, and to create a dummy
+          Service in the manager's namespace.
+        docs: reference/routing/#subnets
+      - type: change
+        title: Reduced developer RBAC requirements
+        body: >-
+          The on-laptop client no longer requires <a
+          href="reference/rbac">RBAC permissions</a> to list the Nodes
+          in the cluster or to create Services, as that functionality
+          has been moved to the traffic-manager.
+
+      # Bugfixes
+      - type: bugfix
+        title: Able to detect subnets
+        body: >-
+          Telepresence will now detect the Pod CIDR ranges even if
+          they are not listed in the Nodes.
+        image: ./telepresence-2.3.2-subnets.png
+        docs: reference/routing/#subnets
+      - type: bugfix
+        title: Dynamic IP ranges
+        body: >-
+          The list of cluster subnets that the virtual network
+          interface will route is now configured dynamically and will
+          follow changes in the cluster.
+      - type: bugfix
+        title: No duplicate subnets
+        body: >-
+          Subnets fully covered by other subnets are now pruned
+          internally and thus never superfluously added to the
+          laptop's routing table.
+        docs: reference/routing/#subnets
+      - type: change # not a bugfix, but it only makes sense to mention after the above bugfixes
+        title: Change in default timeout
+        body: >-
+          The <code>trafficManagerAPI</code> timeout default has
+          changed from 5 seconds to 15 seconds, in order to facilitate
+          the extended time it takes for the traffic-manager to do its
+          initial discovery of cluster info as a result of the above
+          bugfixes.
+      - type: bugfix
+        title: Removal of DNS config files on macOS
+        body: >-
+          On macOS, files generated under
+          <code>/etc/resolver/</code> as the result of using
+          <code>include-suffixes</code> in the cluster config are now
+          properly removed on quit.
+        docs: reference/routing/#mac-os-resolver
+
+      - type: bugfix
+        title: Large file transfers
+        body: >-
+          Telepresence no longer erroneously terminates connections
+          early when sending a large HTTP response from an intercepted
+          service.
+      - type: bugfix
+        title: Race condition in shutdown
+        body: >-
+          When shutting down the user-daemon or root-daemon on the
+          laptop, <code>telepresence quit</code> and related commands
+          no longer return early before everything is fully shut down.
+          Now it can be counted on that by the time the command has
+          returned that all of the side-effects on the laptop have
+          been cleaned up.
+
   - version: 2.3.1
     date: '2021-06-14'
     notes:

@@ -152,3 +152,21 @@ workload template's annotations:
      spec:
        containers:
 ```
+
+### Service Port Annotation
+
+A service port annotation can be added to the workload to make the Mutating Webhook select a specific port
+in the service. This is necessary when the service has multiple ports.
+
+```diff
+ spec:
+   template:
+     metadata:
+       labels:
+         service: your-service
+       annotations:
+         telepresence.getambassador.io/inject-traffic-agent: enabled
++        telepresence.getambassador.io/inject-service-port: https
+     spec:
+       containers:
+```

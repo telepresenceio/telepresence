@@ -35,7 +35,7 @@ These are the valid fields for the `timeouts` key:
 |`intercept`|Waiting for an intercept to become active|5 seconds|
 |`proxyDial`|Waiting for an outbound connection to be established|5 seconds|
 |`trafficManagerConnect`|Waiting for the Traffic Manager API to connect for port fowards|20 seconds|
-|`trafficManagerAPI`|Waiting for connection to the gPRC API after `trafficManagerConnect` is successful|5 seconds|
+|`trafficManagerAPI`|Waiting for connection to the gPRC API after `trafficManagerConnect` is successful|15 seconds|
 
 #### Log Levels
 Values for `logLevels` are one of the following strings: `trace`, `debug`, `info`, `warning`, `error`, `fatal` and `panic`.
