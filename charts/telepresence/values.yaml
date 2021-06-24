@@ -23,12 +23,6 @@ image:
 
   imagePullSecrets: []
 
-ports:
-- name: api
-  containerPort: 8081
-- name: https
-  containerPort: 8443
-
 podAnnotations: {}
 
 podSecurityContext: {}
@@ -59,10 +53,6 @@ affinity: {}
 
 service:
   type: ClusterIP
-  ports:
-  - name: api
-    port: 8081
-    targetPort: api
 
 ################################################################################
 ## Traffic Manager Configuration

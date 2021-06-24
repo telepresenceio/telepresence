@@ -16,13 +16,13 @@ fi
 # Get the toplevel dir of the repo so we can run this command
 # no matter which directory we are in.
 TOP_DIR="$( git rev-parse --show-toplevel)"
-echo $TOP_DIR
+echo "$TOP_DIR"
 
-CHART_VERSION=$(grep version: $TOP_DIR/charts/telepresence/Chart.yaml | awk ' { print $2 }')
+CHART_VERSION=$(grep version: "$TOP_DIR"/charts/telepresence/Chart.yaml | awk ' { print $2 }')
 PACKAGE_FILE=telepresence-$CHART_VERSION.tgz
 CHART_ARTIFACT_DIR=$(mktemp -d)
 echo "Artifacts will be stored in ${CHART_ARTIFACT_DIR}"
-helm package $TOP_DIR/charts/telepresence -d $CHART_ARTIFACT_DIR
+helm package "$TOP_DIR"/charts/telepresence -d "$CHART_ARTIFACT_DIR"
 
 CHART_PACKAGE=$CHART_ARTIFACT_DIR/$PACKAGE_FILE
 echo "CHART_PACKAGE is here: ${CHART_PACKAGE}"
@@ -34,7 +34,7 @@ else
     bucket_dir="charts-dev"
 fi
 
-if [ -z "$AWS_BUCKET"] ; then
+if [ -z "$AWS_BUCKET" ] ; then
     AWS_BUCKET=datawire-static-files
 fi
 
@@ -71,6 +71,6 @@ aws s3api put-object \
     --body "$CHART_PACKAGE" && echo "Successfully pushed ${bucket_dir}/$PACKAGE_FILE"
 
 # Clean up
-rm -rf $CHART_ARTIFACT_DIR
+rm -rf "$CHART_ARTIFACT_DIR"
 
 exit 0

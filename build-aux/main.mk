@@ -117,6 +117,10 @@ push-executable: build ## (Release) Upload the executable to S3
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
 
+.PHONY: push-chart
+push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart 
+	packaging/push_chart.sh	
+
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
@@ -136,16 +140,18 @@ endif
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) ## (QA) Everything nescessary to lint
+lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything nescessary to lint
 
 shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
+shellscripts += ./packaging/push_chart.sh
 .PHONY: lint
 lint: lint-deps ## (QA) Run the linters (golangci-lint and protolint)
 	$(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
 	$(tools/shellcheck) $(shellscripts)
+	$(tools/helm) lint charts/telepresence --set isCI=true
 
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints

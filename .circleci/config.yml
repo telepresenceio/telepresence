@@ -59,21 +59,6 @@ commands:
             curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
             sudo install /tmp/kubectl /usr/local/bin/kubectl
 
-  "install-helm":
-    parameters:
-      version:
-        type: string
-        default: "v3.5.4"
-    steps:
-      - run:
-          name: "Install Helm << parameters.version >>"
-          command: |
-            set -x
-            curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
-            chmod 700 get_helm.sh
-            ./get_helm.sh --version << parameters.version >>
-            rm ./get_helm.sh
-
   "dirty-check":
     steps:
       - run:
@@ -134,7 +119,6 @@ jobs:
     executor: vm-linux
     steps:
       - checkout
-      - install-helm
       # Split prep out to reduce noise in the output, and help with
       # timeouts.
       - run: make lint-deps
@@ -180,13 +164,8 @@ jobs:
     executor: vm-linux
     steps:
     - checkout
-    - install-helm
-    - run: make lint
-    # For now, I don't think we need to build rc charts (nor do I think
-    # we have a need for rc charts), but explicitly calling them out here
-    # in case we change our mind
     - run: |
-        [[ $CIRCLE_TAG == "*rc*" ]] || BUCKET_DIR="charts" packaging/push_chart.sh
+        [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
 
 #  "release-finalize":
 #    executor: vm-linux
@@ -223,7 +202,7 @@ workflows:
           context: telepresence2-release
           filters:
             tags:
-              only: /^chart-v.*/
+              only: /^v.*/
             branches:
               ignore: /.*/
       #- release-finalize:

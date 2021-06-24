@@ -70,6 +70,19 @@ $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 	mkdir -p $(@D)
 	tar -C $(@D) -Jxmf $< --strip-components=1 shellcheck-v$(SHELLCHECK_VERSION)/shellcheck
 
+# Helm
+# ====
+#
+tools/helm = $(TOOLSBINDIR)/helm
+HELM_VERSION=3.5.4
+HELM_TGZ = https://get.helm.sh/helm-v$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
+$(TOOLSDIR)/$(notdir $(HELM_TGZ)):
+	mkdir -p $(@D)
+	curl -sfL $(HELM_TGZ) -o $@
+%/bin/helm: %/$(notdir $(HELM_TGZ))
+	mkdir -p $(@D)
+	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm
+
 # `go get`-able things
 # ====================
 #

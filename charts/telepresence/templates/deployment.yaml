@@ -48,10 +48,11 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
-          {{- with .Values.ports }}
           ports:
-          {{- toYaml . | nindent 10}}
-          {{- end }}
+          - name: api
+            containerPort: 8081
+          - name: https
+            containerPort: 8443
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

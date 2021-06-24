@@ -5,7 +5,8 @@
 - Feature: Include service account + ClusterRole + ClusterRoleBinding for the traffic-manager, since it now communicates directly with the cluster.
 - Change: image.repository has been split into image.registry and image.name since the registry is now used in another field.
 - Change: the `rbac` value has been changed to be `clientRbac`.
-## v0.2.0
+- Change: `service.ports` has been removed since those values are not able to be changed.
+# v0.2.0
 
 - Feature: Create RBAC resources from helm chart
 - Feature: Update to the 2.3.0 image of Telepresence
