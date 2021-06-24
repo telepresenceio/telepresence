@@ -102,38 +102,9 @@ func (ts *telepresenceSuite) SetupSuite() {
 		ts.NoError(err)
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		kubeconfig := dtest.Kubeconfig(ctx)
-		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-		os.Setenv("KUBECONFIG", kubeconfig)
-		err = run(ctx, "kubectl", "create", "namespace", ts.namespace)
-		ts.NoError(err)
-		err = run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml")
-		ts.NoError(err)
-
-		// This is how we create a user that has their rbac restricted to what we have in
-		// k8s/client_rbac.yaml. We do this by creating a service account and then getting
-		// the token from said service account and storing it in our kubeconfig.
-		secret, err := output(ctx, "kubectl", "get", "sa", "telepresence-test-developer", "-o", "jsonpath={.secrets[0].name}")
-		ts.NoError(err)
-		encSecret, err := output(ctx, "kubectl", "get", "secret", secret, "-o", "jsonpath={.data.token}")
-		ts.NoError(err)
-		token, err := base64.StdEncoding.DecodeString(encSecret)
-		ts.NoError(err)
-		err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--token", string(token))
-		ts.NoError(err)
-		err = run(ctx, "kubectl", "config", "set-context", "telepresence-test-developer", "--user", "telepresence-test-developer", "--cluster", "default")
-		ts.NoError(err)
-
-		// We start with the default context, and will switch to the
-		// telepresence-test-developer user later in the tests
-		err = run(ctx, "kubectl", "config", "use-context", "default")
-		ts.NoError(err)
-	}()
 	wg.Wait()
+
+	ts.setupKubeConfig(ctx)
 
 	wg.Add(serviceCount)
 	for i := 0; i < serviceCount; i++ {
@@ -968,6 +939,35 @@ func (ts *telepresenceSuite) buildExecutable(c context.Context) (string, error) 
 	return executable, run(c, "go", "build", "-ldflags",
 		fmt.Sprintf("-X=github.com/telepresenceio/telepresence/v2/pkg/version.Version=%s", ts.testVersion),
 		"-o", executable, "./cmd/telepresence")
+}
+
+func (ts *telepresenceSuite) setupKubeConfig(ctx context.Context) {
+	kubeconfig := dtest.Kubeconfig(ctx)
+	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+	os.Setenv("KUBECONFIG", kubeconfig)
+	err := run(ctx, "kubectl", "create", "namespace", ts.namespace)
+	ts.NoError(err)
+	err = run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml")
+	ts.NoError(err)
+
+	// This is how we create a user that has their rbac restricted to what we have in
+	// k8s/client_rbac.yaml. We do this by creating a service account and then getting
+	// the token from said service account and storing it in our kubeconfig.
+	secret, err := output(ctx, "kubectl", "get", "sa", "telepresence-test-developer", "-o", "jsonpath={.secrets[0].name}")
+	ts.NoError(err)
+	encSecret, err := output(ctx, "kubectl", "get", "secret", secret, "-o", "jsonpath={.data.token}")
+	ts.NoError(err)
+	token, err := base64.StdEncoding.DecodeString(encSecret)
+	ts.NoError(err)
+	err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--token", string(token))
+	ts.NoError(err)
+	err = run(ctx, "kubectl", "config", "set-context", "telepresence-test-developer", "--user", "telepresence-test-developer", "--cluster", "default")
+	ts.NoError(err)
+
+	// We start with the default context, and will switch to the
+	// telepresence-test-developer user later in the tests
+	err = run(ctx, "kubectl", "config", "use-context", "default")
+	ts.NoError(err)
 }
 
 func run(c context.Context, args ...string) error {
