@@ -2,5 +2,5 @@
 
 for _ in $(seq 1 10); do
     make tools/bin/ko
-    go test -count 1 ./... || exit 1
+    go test -timeout=15m -count 1 ./... || exit 1
 done
