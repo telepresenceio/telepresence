@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -31,7 +30,7 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -547,39 +546,42 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	require.NoError(err)
 	abs, err := filepath.Abs(testDir)
 	require.NoError(err)
-	// Kill container on exit
-	defer func() {
-		_ = dexec.CommandContext(ctx, "docker", "kill", fmt.Sprintf("intercept-%s-%s-8000", svc, cs.ns())).Run()
-	}()
 
-	ccx, cancel := context.WithCancel(ctx)
-	stdoutCh := make(chan string)
-	go func() {
-		stdout, _ := telepresenceContext(ccx, "intercept", "--namespace", cs.ns(), svc,
+	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableWithSoftness: true,
+		ShutdownOnNonError: true,
+	})
+
+	grp.Go("server", func(ctx context.Context) error {
+		stdout, _ := telepresenceContext(ctx, "intercept", "--namespace", cs.ns(), svc,
 			"--docker-run", "--port", "8000", "--", "--rm", "-v", abs+":/usr/src/app", tag)
-		stdoutCh <- stdout
-	}()
+		cs.Contains(stdout, "Using Deployment "+svc)
+		return nil
+	})
 
-	expectedOutput := "Hello from intercepted echo-server!"
-	cs.Eventually(
-		// condition
-		func() bool {
-			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-			defer cancel()
-			out, err := output(ctx, "curl", "--silent", svc)
-			if err != nil {
-				dlog.Error(ctx, err)
-				return false
-			}
-			dlog.Info(ctx, out)
-			return strings.Contains(out, expectedOutput)
-		},
-		30*time.Second, // waitFor
-		1*time.Second,  // polling interval
-		`body of %q equals %q`, "http://"+svc, expectedOutput,
-	)
-	cancel()
-	cs.Contains(<-stdoutCh, "Using Deployment "+svc)
+	grp.Go("client", func(ctx context.Context) error {
+		expectedOutput := "Hello from intercepted echo-server!"
+		cs.Eventually(
+			// condition
+			func() bool {
+				ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+				defer cancel()
+				out, err := output(ctx, "curl", "--silent", svc)
+				if err != nil {
+					dlog.Error(ctx, err)
+					return false
+				}
+				dlog.Info(ctx, out)
+				return strings.Contains(out, expectedOutput)
+			},
+			30*time.Second, // waitFor
+			1*time.Second,  // polling interval
+			`body of %q equals %q`, "http://"+svc, expectedOutput,
+		)
+		return nil
+	})
+
+	cs.NoError(grp.Wait())
 }
 
 func (cs *connectedSuite) TestL_LegacySwapDeploymentDoesIntercept() {
@@ -992,27 +994,19 @@ func telepresence(t testing.TB, args ...string) (string, string) {
 
 // telepresence executes the CLI command in-process
 func telepresenceContext(ctx context.Context, args ...string) (string, string) {
-	dlog.Infof(ctx, "running command: %q", append([]string{"telepresence"}, args...))
+	var stdout, stderr strings.Builder
 
-	cmd := cli.Command(ctx)
+	configDir, _ := filelocation.AppUserConfigDir(ctx)
+	logDir, _ := filelocation.AppUserLogDir(ctx)
 
-	stdout := new(strings.Builder)
-	cmd.SetOut(io.MultiWriter(
-		stdout,
-		dlog.StdLogger(dlog.WithField(ctx, "stream", "stdout"), dlog.LogLevelInfo).Writer(),
-	))
+	cmd := dexec.CommandContext(ctx, client.GetExe(), args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	cmd.Env = append(os.Environ(),
+		"DEV_TELEPRESENCE_CONFIG_DIR="+configDir,
+		"DEV_TELEPRESENCE_LOG_DIR="+logDir)
 
-	stderr := new(strings.Builder)
-	cmd.SetErr(io.MultiWriter(
-		stderr,
-		dlog.StdLogger(dlog.WithField(ctx, "stream", "stderr"), dlog.LogLevelInfo).Writer(),
-	))
+	_ = cmd.Run()
 
-	cmd.SetArgs(args)
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), err)
-	}
-
-	dlog.Infof(ctx, "command terminated %q", append([]string{"telepresence"}, args...))
 	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
 }
