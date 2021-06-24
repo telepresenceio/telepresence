@@ -1,40 +1,36 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"io"
-
-	// nolint:depguard // This is just a simple kubectl command and we don't want the
-	// extra logging that comes with dexec, so I think os.exec should be fine here
-	"os/exec"
 
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/dlib/dexec"
 )
 
+// getClusterID is a simple command that makes it easier for users to
+// figure out what their cluster ID is. For now this is just used when
+// people are making licenses for air-gapped environments
 func ClusterIdCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:  "current-cluster-id",
 		Args: cobra.NoArgs,
 
 		Short: "Get cluster ID for your kubernetes cluster",
 		Long:  "Get cluster ID for your kubernetes cluster, mostly used for licenses in air-gapped environments",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return getClusterID(context.Background(), cmd.OutOrStdout())
+		RunE: func(flags *cobra.Command, _ []string) error {
+			// NB: Even without logging, dexec is still an improvement over os/exec
+			// because it better handles kubectl hanging.
+			cmd := dexec.CommandContext(flags.Context(), "kubectl", "get", "ns", "default", "-o", "jsonpath={.metadata.uid}")
+			cmd.DisableLogging = true
+			cmd.Stderr = flags.ErrOrStderr()
+
+			output, err := cmd.Output()
+			if err != nil {
+				return fmt.Errorf("kubectl: %w", err)
+			}
+			fmt.Fprintf(flags.OutOrStdout(), "Cluster ID: %s", output)
+			return nil
 		},
 	}
-
-	return cmd
-}
-
-// getClusterID is a simple command that makes it easier for users to
-// figure out what their cluster ID is. For now this is just used when
-// people are making licenses for air-gapped environments
-func getClusterID(ctx context.Context, stdout io.Writer) error {
-	output, err := exec.Command("kubectl", "get", "ns", "default", "-o", "jsonpath={.metadata.uid}").Output()
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(stdout, "Cluster ID: %s", output)
-	return nil
 }
