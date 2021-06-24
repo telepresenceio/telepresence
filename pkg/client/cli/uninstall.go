@@ -88,7 +88,7 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		return nil
 	})
 	if err == nil && doQuit {
-		err = quit(cmd, nil)
+		err = quit(cmd.Context())
 	}
 	return err
 }

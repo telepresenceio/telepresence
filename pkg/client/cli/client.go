@@ -1,32 +1,24 @@
 package cli
 
 import (
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
+	"context"
+	"errors"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-// IsServerRunning reports whether or not the daemon server is running.
-func IsServerRunning() bool {
-	return assertDaemonStarted() == nil
-}
-
-var errDaemonIsNotRunning = errors.New("the telepresence daemon has not been started")
 var errConnectorIsNotRunning = errors.New("not connected")
 
 // quit sends the quit message to the daemon and waits for it to exit.
-func quit(cmd *cobra.Command, _ []string) error {
-	si := &sessionInfo{cmd: cmd}
-	ds, err := si.newDaemonState()
-	if err == nil {
-		// Let daemon kill the connector
-		defer ds.disconnect()
-		return ds.DeactivateState()
+func quit(ctx context.Context) error {
+	// When the daemon shuts down, it will tell the connector to shut down.
+	if err := cliutil.QuitDaemon(ctx); err != nil {
+		return err
 	}
 
-	// Ensure the connector is killed even if daemon isn't running
-	if err := cliutil.QuitConnector(cmd.Context()); err != nil {
+	// But also do that ourselves; to ensure the connector is killed even if daemon isn't
+	// running.  If the daemon already shut down the connector, then this is a no-op.
+	if err := cliutil.QuitConnector(ctx); err != nil {
 		return err
 	}
 

@@ -40,7 +40,9 @@ func quitCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 
 		Short: "Tell telepresence daemon to quit",
-		RunE:  quit,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return quit(cmd.Context())
+		},
 	}
 }
 
@@ -107,15 +109,11 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 
 // Command returns the top level "telepresence" CLI command
 func Command(ctx context.Context) *cobra.Command {
-	myName := "Telepresence"
-	if !IsServerRunning() {
-		myName = "Telepresence (daemon unavailable)"
-	}
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
 		Args: OnlySubcommands,
 
-		Short:              myName,
+		Short:              "Connect your workstation to a Kubernetes cluster",
 		Long:               help,
 		RunE:               RunSubcommands,
 		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns

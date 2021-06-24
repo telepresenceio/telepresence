@@ -29,7 +29,7 @@ service Daemon {
 message DaemonStatus {
   enum ErrType {
     UNSPECIFIED = 0;
-    NOT_STARTED = 1;
+    reserved 1;
     NO_NETWORK = 3;
   }
   ErrType error = 1;

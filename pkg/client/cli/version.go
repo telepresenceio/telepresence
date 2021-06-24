@@ -9,6 +9,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -31,12 +32,12 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 
 	var retErr error
 
-	version, err := daemonVersion(cmd)
+	version, err := daemonVersion(cmd.Context())
 	switch {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: %s (api v%d)\n",
 			version.Version, version.ApiVersion)
-	case err == errDaemonIsNotRunning:
+	case err == cliutil.ErrNoDaemon:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: not running\n")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: error: %v\n", err)
@@ -58,11 +59,11 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	return retErr
 }
 
-func daemonVersion(cmd *cobra.Command) (*common.VersionInfo, error) {
+func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 	var version *common.VersionInfo
-	err := withStartedDaemon(cmd, func(ds *daemonState) error {
+	err := cliutil.WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 		var err error
-		version, err = ds.grpc.Version(cmd.Context(), &empty.Empty{})
+		version, err = daemonClient.Version(ctx, &empty.Empty{})
 		if err != nil {
 			return err
 		}

@@ -16,20 +16,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )
 
-func runAsRoot(ctx context.Context, exe string, args []string) error {
-	if os.Geteuid() != 0 {
-		if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
-			fmt.Printf("Need root privileges to run %q\n", logging.ShellString(exe, args))
-			if err = exec.Command("sudo", "true").Run(); err != nil {
-				return err
-			}
-		}
-		args = append([]string{"-n", "-E", exe}, args...)
-		exe = "sudo"
-	}
-	return start(ctx, exe, args, false, nil, nil, nil)
-}
-
 func envPairs(env map[string]string) []string {
 	pairs := make([]string, len(env))
 	i := 0
