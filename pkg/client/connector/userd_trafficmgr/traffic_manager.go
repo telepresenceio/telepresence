@@ -159,7 +159,8 @@ func (tm *trafficManager) Run(c context.Context) error {
 	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
-		grpc.WithBlock()}
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError()}
 
 	conn, err = grpc.DialContext(tc, grpcAddr, opts...)
 	if err != nil {
