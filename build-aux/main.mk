@@ -142,6 +142,18 @@ ifeq ($(GOHOSTOS), darwin)
 	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION))
 endif
 
+# Prerequisites:
+# The awscli command must be installed and configured with credentials to upload
+# to the datawire-static-files bucket.
+.PHONY: promote-nightly
+promote-nightly: ## (Release) Update stable.txt in S3
+	mkdir -p $(BUILDDIR)
+	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/nightly.txt
+	AWS_PAGER="" aws s3api put-object \
+		--bucket datawire-static-files \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/nightly.txt \
+		--body $(BUILDDIR)/nightly.txt
+
 # Quality Assurance: Make sure things are good
 # ============================================
 

@@ -159,6 +159,7 @@ jobs:
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+          [[ $CIRCLE_TAG == *-nightly-* ]] && TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-nightly
 
   "release-macos":
     executor: vm-macos
@@ -169,6 +170,7 @@ jobs:
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+          [[ $CIRCLE_TAG == *-nightly-* ]] && TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-nightly
 
   "release-chart":
     executor: vm-linux
