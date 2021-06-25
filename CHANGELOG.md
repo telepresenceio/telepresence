@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ### 2.3.4 (TBD)
 
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.
@@ -25,6 +26,8 @@
 
 - Feature: `telepresence status` now includes more information about
   the root daemon.
+
+- Feature: We now do nightly builds of Telepresence for commits on release/v2 that haven't been tagged and published yet.
 
 - Change: Telepresence no longer automatically shuts down the old
   `api_version=1` `edgectl` daemon.  If migrating from such an old
