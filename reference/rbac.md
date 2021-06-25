@@ -2,7 +2,7 @@ import Alert from '@material-ui/lab/Alert';
 
 # Telepresence RBAC
 The intention of this document is to provide a template for securing and limiting the permissions of Telepresence.
-This documentation will cover the full extent of permissions necessary to administrate Telepresence components in a cluster.
+This documentation covers the full extent of permissions necessary to administrate Telepresence components in a cluster.
 
 There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
 

@@ -4,9 +4,9 @@
 
 ## Before you begin
 
-The Telepresence Helm chart is hosted by Datawire and published at `https://www.getambassador.io`.
+The Telepresence Helm chart is hosted by Ambassador Labs and published at `https://www.getambassador.io`.
 
-Start by adding this repo to your helm client with the following command:
+Start by adding this repo to your Helm client with the following command:
 
 ```
 helm repo add datawire https://www.getambassador.io
@@ -16,7 +16,7 @@ helm repo add datawire https://www.getambassador.io
 
 When you run the Helm chart, it installs all the components required for the Telepresence Traffic Manager. 
 
-1. If you are installing the Telepresence Traffic Manager **for the first time on your cluster**, create the `ambassador` namespace in the cluster you are deploying to:
+1. If you are installing the Telepresence Traffic Manager **for the first time on your cluster**, create the `ambassador` namespace in your cluster:
 
    ```
    kubectl create namespace ambassador
@@ -28,11 +28,11 @@ When you run the Helm chart, it installs all the components required for the Tel
    helm install traffic-manager --namespace ambassador datawire/telepresence
    ```
 
-For more details on what the helm chart installs and what can be configured, take a look at the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence).
+For more details on what the Helm chart installs and what can be configured, take a look at the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence).
 
 ## Install RBAC only
 
-Telepresence Traffic Manager does require some RBAC for the traffic-manager itself, as well as for users.
+Telepresence Traffic Manager does require some [RBAC](../../refrence/rbac/) for the traffic-manager itself, as well as for users.
 To make it easier for operators to introspect / manage RBAC separately, you can use `rbac.only=true` to
 only create the rbac-related objects.
-Additionally, you can use `clientRbac.create=true` and `managerRbac.create=true` to toggle which subset(s) of rbac objects you wish to create.
+Additionally, you can use `clientRbac.create=true` and `managerRbac.create=true` to toggle which subset(s) of RBAC objects you wish to create.
