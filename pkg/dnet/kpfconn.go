@@ -206,6 +206,7 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *kates.Pod) (httpstream.Connectio
 
 	spdyStream, _, err := spdyDialer.Dial(portforward.PortForwardProtocolV1Name)
 	if err != nil {
+		dlog.Errorf(pf.logCtx, "Error dialing portForward: %s", err)
 		return nil, err
 	}
 
