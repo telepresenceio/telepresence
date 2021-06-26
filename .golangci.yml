@@ -61,11 +61,11 @@ linters:
     - depguard
     - dogsled
     - errcheck
-    - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
     - gocognit
     - gocritic
     - gocyclo
     - gofmt
+    - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
     - gosimple
     - govet
     - ineffassign
@@ -74,8 +74,8 @@ linters:
     - nakedret
     - prealloc
     - scopelint
-    - structcheck
     - staticcheck
+    - structcheck
     - typecheck
     - unconvert
     - unused
