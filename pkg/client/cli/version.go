@@ -48,7 +48,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: %s (api v%d)\n",
 			version.Version, version.ApiVersion)
-	case err == errConnectorIsNotRunning:
+	case err == cliutil.ErrNoConnector:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: not running\n")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: error: %v\n", err)
@@ -75,11 +75,8 @@ func daemonVersion(cmd *cobra.Command) (*common.VersionInfo, error) {
 }
 
 func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if !cliutil.IsConnectorRunning() {
-		return nil, errConnectorIsNotRunning
-	}
 	var version *common.VersionInfo
-	err := cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		version, err = connectorClient.Version(ctx, &empty.Empty{})
 		if err != nil {

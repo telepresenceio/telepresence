@@ -74,11 +74,12 @@ func DialSocket(ctx context.Context, socketName string) (*grpc.ClientConn, error
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
+		grpc.FailOnNonTempDialError(true),
 	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = fmt.Errorf("socket %q exists but isn't responding; this means that either the process has locked up or has terminated ungracefully",
-				SocketURL(socketName))
+			err = fmt.Errorf("%w: socket %q exists but isn't responding; this means that either the process has locked up or has terminated ungracefully",
+				err, SocketURL(socketName))
 		}
 		return nil, err
 	}

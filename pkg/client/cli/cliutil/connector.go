@@ -2,8 +2,10 @@ package cliutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -13,7 +15,6 @@ import (
 	// logging, using dexec would just be extra overhead.
 	"os/exec"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -25,6 +26,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
+
+var ErrNoConnector = errors.New("telepresence user daemon is not running")
 
 func launchConnector() error {
 	args := []string{client.GetExe(), "connector-foreground"}
@@ -46,10 +49,6 @@ func launchConnector() error {
 	return nil
 }
 
-func IsConnectorRunning() bool {
-	return client.SocketExists(client.ConnectorSocketName)
-}
-
 // WithConnector (1) ensures that the connector is running, (2) establishes a connection to it, and
 // (3) runs the given function with that connection.
 //
@@ -59,6 +58,16 @@ func IsConnectorRunning() bool {
 //
 // Nested calls to WithConnector will reuse the outer connection.
 func WithConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
+	return withConnector(ctx, true, fn)
+}
+
+// WithStartedConnector is like WithConnector, but returns ErrNoConnector if the connector is not
+// already running, rather than starting it.
+func WithStartedConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
+	return withConnector(ctx, false, fn)
+}
+
+func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context, connector.ConnectorClient) error) error {
 	type connectorConnCtxKey struct{}
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
@@ -66,19 +75,29 @@ func WithConnector(ctx context.Context, fn func(context.Context, connector.Conne
 		return fn(ctx, connectorClient)
 	}
 
-	if !client.SocketExists(client.ConnectorSocketName) {
-		if err := launchConnector(); err != nil {
-			return errors.Wrap(err, "failed to launch the connector service")
+	var conn *grpc.ClientConn
+	for {
+		var err error
+		conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
+		if err == nil {
+			break
 		}
+		if errors.Is(err, os.ErrNotExist) {
+			err = ErrNoConnector
+			if maybeStart {
+				if err := launchConnector(); err != nil {
+					return fmt.Errorf("failed to launch the connector service: %w", err)
+				}
 
-		if err := client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-			logDir, _ := filelocation.AppUserLogDir(ctx)
-			return fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(logDir, "connector.log"))
+				if err := client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
+					logDir, _ := filelocation.AppUserLogDir(ctx)
+					return fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(logDir, "connector.log"))
+				}
+
+				maybeStart = false
+				continue
+			}
 		}
-	}
-
-	conn, err := client.DialSocket(ctx, client.ConnectorSocketName)
-	if err != nil {
 		return err
 	}
 	defer conn.Close()
@@ -117,17 +136,18 @@ func WithConnector(ctx context.Context, fn func(context.Context, connector.Conne
 }
 
 func QuitConnector(ctx context.Context) error {
-	if IsConnectorRunning() {
-		err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-			_, err := connectorClient.Quit(ctx, &empty.Empty{})
-			return err
-		})
-		if err == nil {
-			err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
+	err := WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		_, err := connectorClient.Quit(ctx, &empty.Empty{})
+		return err
+	})
+	if err == nil {
+		err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
+	}
+	if err != nil {
+		if errors.Is(err, ErrNoConnector) {
+			return nil
 		}
-		if err != nil {
-			return err
-		}
+		return err
 	}
 	return nil
 }

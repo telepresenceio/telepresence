@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -79,34 +80,30 @@ func daemonStatus(cmd *cobra.Command) error {
 func connectorStatus(cmd *cobra.Command) error {
 	out := cmd.OutOrStdout()
 
-	if !cliutil.IsConnectorRunning() {
-		fmt.Fprintln(out, "User Daemon: Not running")
-		return nil
-	}
-	fmt.Fprintln(out, "User Daemon: Running")
+	err := cliutil.WithStartedConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		fmt.Fprintln(out, "User Daemon: Running")
 
-	type kv struct {
-		Key   string
-		Value string
-	}
-	var fields []kv
-	defer func() {
-		klen := 0
-		for _, kv := range fields {
-			if len(kv.Key) > klen {
-				klen = len(kv.Key)
-			}
+		type kv struct {
+			Key   string
+			Value string
 		}
-		for _, kv := range fields {
-			vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
-			fmt.Fprintf(out, "  %-*s: %s\n", klen, kv.Key, vlines[0])
-			for _, vline := range vlines[1:] {
-				fmt.Fprintf(out, "    %s\n", vline)
+		var fields []kv
+		defer func() {
+			klen := 0
+			for _, kv := range fields {
+				if len(kv.Key) > klen {
+					klen = len(kv.Key)
+				}
 			}
-		}
-	}()
+			for _, kv := range fields {
+				vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
+				fmt.Fprintf(out, "  %-*s: %s\n", klen, kv.Key, vlines[0])
+				for _, vline := range vlines[1:] {
+					fmt.Fprintf(out, "    %s\n", vline)
+				}
+			}
+		}()
 
-	return cliutil.WithConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		version, err := connectorClient.Version(ctx, &empty.Empty{})
 		if err != nil {
 			return err
@@ -159,4 +156,12 @@ func connectorStatus(cmd *cobra.Command) error {
 
 		return nil
 	})
+	if err != nil {
+		if errors.Is(err, cliutil.ErrNoConnector) {
+			fmt.Fprintln(out, "User Daemon: Not running")
+			return nil
+		}
+		return err
+	}
+	return nil
 }
