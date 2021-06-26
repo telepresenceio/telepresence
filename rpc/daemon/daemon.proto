@@ -27,12 +27,7 @@ service Daemon {
 }
 
 message DaemonStatus {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    reserved 1;
-    NO_NETWORK = 3;
-  }
-  ErrType error = 1;
+  reserved 1;
   string dns = 2;
   reserved 3;
 }

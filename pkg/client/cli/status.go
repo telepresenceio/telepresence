@@ -51,12 +51,7 @@ func daemonStatus(cmd *cobra.Command) error {
 			return err
 		}
 
-		switch status.Error {
-		case daemon.DaemonStatus_NO_NETWORK:
-			fmt.Fprintln(out, "Root Daemon: Running, network overrides NOT established")
-		case daemon.DaemonStatus_UNSPECIFIED:
-			fmt.Fprintln(out, "Root Daemon: Running")
-		}
+		fmt.Fprintln(out, "Root Daemon: Running")
 		fmt.Fprintf(out, "  Version     : %s (api %d)\n", version.Version, version.ApiVersion)
 		fmt.Fprintf(out, "  DNS : %q\n", status.Dns)
 

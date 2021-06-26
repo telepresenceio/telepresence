@@ -41,22 +41,9 @@ func (cs *connectorState) EnsureState() (bool, error) {
 		return false, cs.setConnectInfo()
 	}
 
-	for attempt := 0; ; attempt++ {
-		dr, err := cs.daemonClient.Status(cs.cmd.Context(), &empty.Empty{})
-		if err != nil {
-			return false, err
-		}
-		switch dr.Error {
-		case daemon.DaemonStatus_UNSPECIFIED:
-			// no error
-		case daemon.DaemonStatus_NO_NETWORK:
-			if attempt >= 40 {
-				return false, errors.New("Unable to connect: Network overrides are not established")
-			}
-			time.Sleep(250 * time.Millisecond)
-			continue
-		}
-		break
+	// Do a liveliness check on the daemon
+	if _, err := cs.daemonClient.Status(cs.cmd.Context(), &empty.Empty{}); err != nil {
+		return false, err
 	}
 
 	err := start(cs.cmd.Context(), client.GetExe(), []string{"connector-foreground"}, false, nil, nil, nil)
