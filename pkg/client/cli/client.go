@@ -2,12 +2,9 @@ package cli
 
 import (
 	"context"
-	"errors"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
-
-var errConnectorIsNotRunning = errors.New("not connected")
 
 // quit sends the quit message to the daemon and waits for it to exit.
 func quit(ctx context.Context) error {

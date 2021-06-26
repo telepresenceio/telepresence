@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -12,7 +13,6 @@ import (
 )
 
 type listInfo struct {
-	sessionInfo
 	onlyIntercepts    bool
 	onlyAgents        bool
 	onlyInterceptable bool
@@ -42,8 +42,7 @@ func listCommand() *cobra.Command {
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	var r *connector.WorkloadInfoSnapshot
 	var err error
-	s.cmd = cmd
-	err = s.withConnector(true, func(cs *connectorState) error {
+	err = withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, _ *connector.ConnectInfo) error {
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:
@@ -55,7 +54,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = cs.connectorClient.List(cmd.Context(), &connector.ListRequest{Filter: filter, Namespace: s.namespace})
+		r, err = connectorClient.List(cmd.Context(), &connector.ListRequest{Filter: filter, Namespace: s.namespace})
 		return err
 	})
 	if err != nil {

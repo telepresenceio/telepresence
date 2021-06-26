@@ -2,19 +2,17 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
-
-type sessionInfo struct {
-	cmd *cobra.Command
-}
 
 func kubeFlagMap() map[string]string {
 	kubeFlagMap := make(map[string]string)
@@ -28,8 +26,8 @@ func kubeFlagMap() map[string]string {
 
 // withConnector establishes a daemon and a connector session and calls the function with the gRPC client. If
 // retain is false, the sessions will end unless they were already started.
-func (si *sessionInfo) withConnector(retain bool, f func(state *connectorState) error) error {
-	return cliutil.WithDaemon(si.cmd.Context(), dnsIP, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
+func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, connector.ConnectorClient, *connector.ConnectInfo) error) error {
+	return cliutil.WithDaemon(cmd.Context(), dnsIP, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
 		if cliutil.DidLaunchDaemon(ctx) {
 			defer func() {
 				if err != nil || !retain {
@@ -37,46 +35,75 @@ func (si *sessionInfo) withConnector(retain bool, f func(state *connectorState) 
 				}
 			}()
 		}
+		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
+			if cliutil.DidLaunchConnector(ctx) && !cliutil.DidLaunchDaemon(ctx) {
+				// Don't shut down the connector if we're shutting down the daemon.
+				// The daemon will shut down the connector for us, and if we shut it
+				// down early the daemon will get upset.
+				defer func() {
+					if err != nil || !retain {
+						_ = cliutil.QuitConnector(dcontext.WithoutCancel(ctx))
+					}
+				}()
+			}
+			connInfo, err := setConnectInfo(ctx, cmd.OutOrStdout())
+			if err != nil {
+				return err
+			}
+			return f(ctx, connectorClient, connInfo)
+		})
+	})
+}
 
-		cs, err := si.newConnectorState(daemonClient)
-		if err == errConnectorIsNotRunning {
-			err = nil
-		}
+func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectInfo, error) {
+	var resp *connector.ConnectInfo
+	err := cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		var err error
+		resp, err = connectorClient.Connect(ctx, &connector.ConnectRequest{
+			KubeFlags:        kubeFlagMap(),
+			MappedNamespaces: mappedNamespaces,
+		})
 		if err != nil {
 			return err
 		}
-		defer cs.disconnect()
-		return client.WithEnsuredState(ctx, cs, retain, func() error { return f(cs) })
-	})
-}
 
-func (si *sessionInfo) connect(cmd *cobra.Command, args []string) error {
-	si.cmd = cmd
-	if len(args) == 0 {
-		return si.withConnector(true, func(_ *connectorState) error { return nil })
-	}
-	return si.withConnector(false, func(cs *connectorState) error {
-		return start(cmd.Context(), args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		var msg string
+		switch resp.Error {
+		case connector.ConnectInfo_UNSPECIFIED:
+			fmt.Fprintf(stdout, "Connected to context %s (%s)\n", resp.ClusterContext, resp.ClusterServer)
+			return nil
+		case connector.ConnectInfo_ALREADY_CONNECTED:
+			return nil
+		case connector.ConnectInfo_DISCONNECTED:
+			msg = "Not connected"
+		case connector.ConnectInfo_MUST_RESTART:
+			msg = "Cluster configuration changed, please quit telepresence and reconnect"
+		case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
+			msg = resp.ErrorText
+		}
+		return fmt.Errorf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
 	})
-}
-
-func (si *sessionInfo) newConnectorState(daemon daemon.DaemonClient) (*connectorState, error) {
-	cs := NewConnectorState(si, daemon)
-	err := assertConnectorStarted()
-	if err == nil {
-		err = cs.connect()
+	if err != nil {
+		return nil, err
 	}
-	return cs, err
+	return resp, nil
 }
 
 func connectCommand() *cobra.Command {
-	si := &sessionInfo{}
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:  "connect [flags] [-- <command to run while connected>]",
 		Args: cobra.ArbitraryArgs,
 
 		Short: "Connect to a cluster",
-		RunE:  si.connect,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return withConnector(cmd, true, func(_ context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
+					return nil
+				})
+			}
+			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
+				return start(ctx, args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			})
+		},
 	}
-	return cmd
 }

@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -35,27 +37,28 @@ func previewCommand() *cobra.Command {
 			if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
 				return err
 			}
-			si := &sessionInfo{cmd: cmd}
-			return si.withConnector(true, func(cs *connectorState) error {
-				if createSpec.Ingress == nil {
-					ingress, err := selectIngress(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout(), cs.info)
+			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+					if createSpec.Ingress == nil {
+						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), connInfo)
+						if err != nil {
+							return err
+						}
+						createSpec.Ingress = ingress
+					}
+					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+						Session: connInfo.SessionInfo,
+						Name:    args[0],
+						PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+							AddPreviewDomain: &createSpec,
+						},
+					})
 					if err != nil {
 						return err
 					}
-					createSpec.Ingress = ingress
-				}
-				intercept, err := cs.managerClient.UpdateIntercept(cmd.Context(), &manager.UpdateInterceptRequest{
-					Session: cs.info.SessionInfo,
-					Name:    args[0],
-					PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-						AddPreviewDomain: &createSpec,
-					},
+					fmt.Println(DescribeIntercept(intercept, nil, false))
+					return nil
 				})
-				if err != nil {
-					return err
-				}
-				fmt.Println(DescribeIntercept(intercept, nil, false))
-				return nil
 			})
 		},
 	}
@@ -67,20 +70,21 @@ func previewCommand() *cobra.Command {
 
 		Short: "Remove a preview domain from an intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			si := &sessionInfo{cmd: cmd}
-			return si.withConnector(true, func(cs *connectorState) error {
-				intercept, err := cs.managerClient.UpdateIntercept(cmd.Context(), &manager.UpdateInterceptRequest{
-					Session: cs.info.SessionInfo,
-					Name:    args[0],
-					PreviewDomainAction: &manager.UpdateInterceptRequest_RemovePreviewDomain{
-						RemovePreviewDomain: true,
-					},
+			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+						Session: connInfo.SessionInfo,
+						Name:    args[0],
+						PreviewDomainAction: &manager.UpdateInterceptRequest_RemovePreviewDomain{
+							RemovePreviewDomain: true,
+						},
+					})
+					if err != nil {
+						return err
+					}
+					fmt.Println(DescribeIntercept(intercept, nil, false))
+					return nil
 				})
-				if err != nil {
-					return err
-				}
-				fmt.Println(DescribeIntercept(intercept, nil, false))
-				return nil
 			})
 		},
 	}

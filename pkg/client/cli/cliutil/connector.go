@@ -67,8 +67,10 @@ func WithStartedConnector(ctx context.Context, fn func(context.Context, connecto
 	return withConnector(ctx, false, fn)
 }
 
+type connectorConnCtxKey struct{}
+type connectorStartedCtxKey struct{}
+
 func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context, connector.ConnectorClient) error) error {
-	type connectorConnCtxKey struct{}
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		connectorClient := connector.NewConnectorClient(conn)
@@ -76,6 +78,7 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	}
 
 	var conn *grpc.ClientConn
+	started := false
 	for {
 		var err error
 		conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
@@ -95,6 +98,7 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 				}
 
 				maybeStart = false
+				started = true
 				continue
 			}
 		}
@@ -102,6 +106,7 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	}
 	defer conn.Close()
 	ctx = context.WithValue(ctx, connectorConnCtxKey{}, conn)
+	ctx = context.WithValue(ctx, connectorStartedCtxKey{}, started)
 	connectorClient := connector.NewConnectorClient(conn)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
@@ -133,6 +138,14 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	})
 
 	return grp.Wait()
+}
+
+// DidLaunchConnector returns whether WithConnector launched the connector or merely connected to a
+// running instance.  If there are nested calls to WithConnector, it returns the answer for the
+// inner-most call; even if the outer-most call launches the connector false will be returned.
+func DidLaunchConnector(ctx context.Context) bool {
+	launched, _ := ctx.Value(connectorStartedCtxKey{}).(bool)
+	return launched
 }
 
 func QuitConnector(ctx context.Context) error {

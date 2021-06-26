@@ -214,53 +214,58 @@ func leaveCommand() *cobra.Command {
 
 // Checks if login is necessary and then takes the necessary actions
 // depending if the cluster can connect to Ambassador Cloud
-func loginIfNeeded(cs *connectorState, args interceptArgs) error {
+func loginIfNeeded(ctx context.Context, args interceptArgs) error {
 	if args.previewEnabled || args.extRequiresLogin {
-		// We default to assuming they can connect to Ambassador Cloud
-		// unless the cluster tells us they can't
-		canConnect := true
-		if resp, err := cs.managerClient.CanConnectAmbassadorCloud(cs.cmd.Context(), &empty.Empty{}); err == nil {
-			// We got a response from the manager; trust that response.
-			canConnect = resp.CanConnect
-		}
-		if canConnect {
-			if _, err := cliutil.EnsureLoggedIn(cs.cmd.Context()); err != nil {
-				return err
-			}
-		}
+		return cliutil.WithConnector(ctx, func(ctx context.Context, _ connector.ConnectorClient) error {
+			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+				// We default to assuming they can connect to Ambassador Cloud
+				// unless the cluster tells us they can't
+				canConnect := true
+				if resp, err := managerClient.CanConnectAmbassadorCloud(ctx, &empty.Empty{}); err == nil {
+					// We got a response from the manager; trust that response.
+					canConnect = resp.CanConnect
+				}
+				if canConnect {
+					if _, err := cliutil.EnsureLoggedIn(ctx); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		})
 	}
 	return nil
 }
 
 func intercept(cmd *cobra.Command, args interceptArgs) error {
-	si := sessionInfo{cmd}
-	ctx := cmd.Context()
-
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		return si.withConnector(true, func(cs *connectorState) (err error) {
-			err = loginIfNeeded(cs, args)
-			if err != nil {
+		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+			if err := loginIfNeeded(ctx, args); err != nil {
 				return err
 			}
-			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs.connectorClient, cs.managerClient, cs.info)
-			return client.WithEnsuredState(ctx, is, true, func() error { return nil })
+			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
+			})
 		})
 	}
 
 	// start intercept, run command, then stop the intercept
-	return si.withConnector(false, func(cs *connectorState) error {
-		if err := loginIfNeeded(cs, args); err != nil {
+	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+		if err := loginIfNeeded(ctx, args); err != nil {
 			return err
 		}
-		is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs.connectorClient, cs.managerClient, cs.info)
-		return client.WithEnsuredState(ctx, is, false, func() error {
-			if args.dockerRun {
-				return is.runInDocker(ctx, is.cmd, args.cmdline)
-			}
-			return start(ctx, args.cmdline[0], args.cmdline[1:], true,
-				cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
-				envPairs(is.env)...)
+		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+			return client.WithEnsuredState(ctx, is, false, func() error {
+				if args.dockerRun {
+					return is.runInDocker(ctx, is.cmd, args.cmdline)
+				}
+				return start(ctx, args.cmdline[0], args.cmdline[1:], true,
+					cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
+					envPairs(is.env)...)
+			})
 		})
 	})
 }
