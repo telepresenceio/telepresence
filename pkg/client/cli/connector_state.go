@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -112,9 +112,9 @@ func (cs *connectorState) DeactivateState() error {
 	fmt.Fprint(out, "Disconnecting...")
 	var err error
 	if client.SocketExists(client.ConnectorSocketName) {
-		// using context.Background() here since it's likely that the
+		// using WithoutCancel here since it's likely that the
 		// command context has been cancelled.
-		_, err = cs.connectorClient.Quit(context.Background(), &empty.Empty{})
+		_, err = cs.connectorClient.Quit(dcontext.WithoutCancel(cs.cmd.Context()), &empty.Empty{})
 	}
 	cs.disconnect()
 	if err == nil {

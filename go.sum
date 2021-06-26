@@ -191,8 +191,8 @@ github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59 h1:E1B8gCq5
 github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59/go.mod h1:/NtIrOjBmVRs6RPCCiHjJ7VictnZ6pkAZuLlTB3iNy0=
 github.com/datawire/dlib v1.1.0/go.mod h1:aCzh74rJ3kOireYbg4gH0CuD48/xA4G+LuHhkpcqo1s=
 github.com/datawire/dlib v1.2.0/go.mod h1:t0upKFHApJskdVFH/gyksG5+vMCl0GCKeEZIEJBBv4g=
-github.com/datawire/dlib v1.2.2 h1:xjhaiW1MIVNJy2TNrO9tL/esAFN5vnsL3lgLdtHSMx4=
-github.com/datawire/dlib v1.2.2/go.mod h1:OdrErY06tawcmEkhTLeb1k3IN2HyzT3zcW4DsqQsJOM=
+github.com/datawire/dlib v1.2.4-0.20210626221837-1263db8c3201 h1:vhqum68ukUAkpMS8e1tJFHcm7rqRJ3KdTr9tuo98XAA=
+github.com/datawire/dlib v1.2.4-0.20210626221837-1263db8c3201/go.mod h1:OdrErY06tawcmEkhTLeb1k3IN2HyzT3zcW4DsqQsJOM=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316 h1:XAaJXdJB3rus/iErfsOIz5S8bv/Yp5s/ZXnpAzcfVxI=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a/go.mod h1:H8uUmE8qqo7z9u30MYB9riLyRckPHOPBk9ZdCuH+dQQ=

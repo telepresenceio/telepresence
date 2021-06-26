@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -229,8 +230,13 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 // removeIntercept tells the daemon to deactivate and remove an existent intercept
 func removeIntercept(cmd *cobra.Command, args []string) error {
 	return withStartedConnector(cmd, func(cs *connectorState) error {
-		is := &interceptInfo{name: strings.TrimSpace(args[0])}
-		return is.newInterceptState(cs).DeactivateState()
+		ii := &interceptInfo{
+			sessionInfo: sessionInfo{
+				cmd: cmd,
+			},
+			name: strings.TrimSpace(args[0]),
+		}
+		return ii.newInterceptState(cs).DeactivateState()
 	})
 }
 
@@ -565,7 +571,7 @@ func (is *interceptState) DeactivateState() error {
 	name := strings.TrimSpace(is.name)
 	var r *connector.InterceptResult
 	var err error
-	r, err = is.cs.connectorClient.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
+	r, err = is.cs.connectorClient.RemoveIntercept(dcontext.WithoutCancel(is.cmd.Context()), &manager.RemoveInterceptRequest2{Name: name})
 	if err != nil {
 		return err
 	}

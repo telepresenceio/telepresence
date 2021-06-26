@@ -10,10 +10,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	dns2 "github.com/miekg/dns"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -132,7 +132,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	ncc := withoutCancel{c}
+	ncc := dcontext.WithoutCancel(c)
 	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port)
 
 	// Create the connection later used for fallback. We need to create this before the firewall
@@ -239,15 +239,6 @@ func runningInDocker() bool {
 	_, err := os.Stat("/.dockerenv")
 	return err == nil
 }
-
-type withoutCancel struct {
-	context.Context
-}
-
-func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
-func (withoutCancel) Done() <-chan struct{}                   { return nil }
-func (withoutCancel) Err() error                              { return nil }
-func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
 
 // runNatTableCmd runs "iptables -t nat ..."
 func runNatTableCmd(c context.Context, args ...string) error {

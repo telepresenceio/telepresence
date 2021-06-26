@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -87,9 +87,9 @@ func (ds *daemonState) DeactivateState() error {
 	fmt.Fprint(ds.cmd.OutOrStdout(), "Telepresence Daemon quitting...")
 	var err error
 	if client.SocketExists(client.DaemonSocketName) {
-		// using context.Background() here since it's likely that the
+		// using WithoutCancel here since it's likely that the
 		// command context has been cancelled.
-		_, err = ds.grpc.Quit(context.Background(), &empty.Empty{})
+		_, err = ds.grpc.Quit(dcontext.WithoutCancel(ds.cmd.Context()), &empty.Empty{})
 	}
 	ds.disconnect()
 	if err == nil {
