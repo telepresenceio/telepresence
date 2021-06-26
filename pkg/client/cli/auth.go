@@ -6,7 +6,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-// Command returns the telepresence sub-command "auth"
 func LoginCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:  "login",
