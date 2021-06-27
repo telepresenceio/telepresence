@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	// nolint:depguard // Because we won't ever .Wait() for the process and we'd turn off
+	//nolint:depguard // Because we won't ever .Wait() for the process and we'd turn off
 	// logging, using dexec would just be extra overhead.
 	"os/exec"
 

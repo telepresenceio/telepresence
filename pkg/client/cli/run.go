@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	// nolint:depguard // TODO: switch this stuff over to dexec
+	//nolint:depguard // TODO: switch this stuff over to dexec
 	"os/exec"
 
 	"github.com/datawire/dlib/dcontext"
