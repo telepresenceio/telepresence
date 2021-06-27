@@ -24,8 +24,14 @@ func kubeFlagMap() map[string]string {
 	return kubeFlagMap
 }
 
-// withConnector establishes a daemon and a connector session and calls the function with the gRPC client. If
-// retain is false, the sessions will end unless they were already started.
+// withConnector is like cliutil.WithConnector, but also
+//
+//  - Ensures that the damon is running too
+//
+//  - Cleans up after itself if !retain (If it launches the daemon or connector, then it will shut
+//    them down when it's done.  If they were already running, it will leave them running.)
+//
+//  - Makes the connector.Connect gRPC call to set up networking
 func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, connector.ConnectorClient, *connector.ConnectInfo) error) error {
 	return cliutil.WithDaemon(cmd.Context(), dnsIP, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
 		if cliutil.DidLaunchDaemon(ctx) {
