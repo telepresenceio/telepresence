@@ -34,18 +34,6 @@ recommended) which in turn may result in a password prompt.`
 
 // TODO: Provide a link in the help text to more info about telepresence
 
-func quitCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "quit",
-		Args: cobra.NoArgs,
-
-		Short: "Tell telepresence daemon to quit",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return quit(cmd.Context())
-		},
-	}
-}
-
 // global options
 var dnsIP string
 var mappedNamespaces []string
