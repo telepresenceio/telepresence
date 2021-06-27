@@ -1,6 +1,7 @@
 syntax = "proto3";
 package telepresence.daemon;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
@@ -51,8 +52,10 @@ message DNSConfig {
   // Suffixes to include. Has higher prio than the excludes
   repeated string include_suffixes = 4;
 
+  reserved 5;
+
   // The maximum time wait for a cluster side host lookup.
-  int64 lookup_timeout = 5;
+  google.protobuf.Duration lookup_timeout = 6;
 }
 
 // OutboundInfo contains all information that the root daemon needs in order to

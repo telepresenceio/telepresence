@@ -1696,7 +1696,7 @@ func (x *LookupHostAgentResponse) GetResponse() *LookupHostResponse {
 	return nil
 }
 
-// IPNet is a subnet. I.e. 10.43.0.0/16
+// IPNet is a subnet. e.g. 10.43.0.0/16
 type IPNet struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

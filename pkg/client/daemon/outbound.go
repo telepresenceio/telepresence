@@ -201,7 +201,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	maxWait := time.Duration(o.dnsConfig.LookupTimeout)
+	maxWait := o.dnsConfig.LookupTimeout.AsDuration()
 	if maxWait <= 0 {
 		maxWait = 4 * time.Second
 	}
