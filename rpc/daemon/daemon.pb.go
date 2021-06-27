@@ -129,7 +129,7 @@ type DNSConfig struct {
 	unknownFields protoimpl.UnknownFields
 
 	// local_ip is the address of the local DNS server. Only used by Linux systems that have no
-	// systemd.resolved configured. Defaults to the first line of /etc/resolv.conf
+	// systemd-resolved configured. Defaults to the first line of /etc/resolv.conf
 	LocalIp []byte `protobuf:"bytes,1,opt,name=local_ip,json=localIp,proto3" json:"local_ip,omitempty"`
 	// remote_ip is the address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
 	RemoteIp []byte `protobuf:"bytes,2,opt,name=remote_ip,json=remoteIp,proto3" json:"remote_ip,omitempty"`

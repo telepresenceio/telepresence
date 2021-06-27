@@ -18,7 +18,7 @@ import (
 // The dnsConfig is part of the kubeconfigExtension struct
 type dnsConfig struct {
 	// LocalIP is the address of the local DNS server. This entry is only
-	// used on Linux system that are not configured to use systemd.resolved and
+	// used on Linux system that are not configured to use systemd-resolved and
 	// can be overridden by using the option --dns on the command line and defaults
 	// to the first line of /etc/resolv.conf
 	LocalIP iputil.IPKey `json:"local-ip,omitempty"`

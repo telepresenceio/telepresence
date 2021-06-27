@@ -153,7 +153,7 @@ func Command(ctx context.Context) *cobra.Command {
 		Name: "Telepresence networking flags",
 		Flags: func() *pflag.FlagSet {
 			netflags := pflag.NewFlagSet("", 0)
-			// TODO: Those flags aren't applicable on a Linux with systemd.resolved configured either but
+			// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
 			//  that's unknown until it's been tested during the first connect attempt.
 			if runtime.GOOS != "darwin" {
 				netflags.StringVarP(&dnsIP,

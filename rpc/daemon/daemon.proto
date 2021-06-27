@@ -39,7 +39,7 @@ message Paths {
 // DNS configuration for the local DNS resolver
 message DNSConfig {
   // local_ip is the address of the local DNS server. Only used by Linux systems that have no
-  // systemd.resolved configured. Defaults to the first line of /etc/resolv.conf
+  // systemd-resolved configured. Defaults to the first line of /etc/resolv.conf
   bytes local_ip = 1;
 
   // remote_ip is the address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
