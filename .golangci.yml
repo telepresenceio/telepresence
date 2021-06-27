@@ -49,10 +49,6 @@ linters-settings:
     line-length: 180
     tab-width: 2
 
-  misspell:
-    ignore-words:
-      - mosquitto
-
   nolintlint:
     allow-unused: false
     allow-leading-space: false
