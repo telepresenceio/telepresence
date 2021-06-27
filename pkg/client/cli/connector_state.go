@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -36,7 +37,7 @@ func NewConnectorState(sessionInfo *sessionInfo, daemonClient daemon.DaemonClien
 }
 
 // Connect asks the daemon to connect to a cluster
-func (cs *connectorState) EnsureState() (bool, error) {
+func (cs *connectorState) EnsureState(ctx context.Context) (bool, error) {
 	if cs.isConnected() {
 		return false, cs.setConnectInfo()
 	}
@@ -90,7 +91,7 @@ func (cs *connectorState) setConnectInfo() error {
 	return fmt.Errorf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
 }
 
-func (cs *connectorState) DeactivateState() error {
+func (cs *connectorState) DeactivateState(ctx context.Context) error {
 	if !cs.isConnected() {
 		return nil
 	}

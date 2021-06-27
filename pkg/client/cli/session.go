@@ -46,25 +46,7 @@ func (si *sessionInfo) withConnector(retain bool, f func(state *connectorState) 
 			return err
 		}
 		defer cs.disconnect()
-		return client.WithEnsuredState(cs, retain, func() error { return f(cs) })
-	})
-}
-
-func withStartedConnector(cmd *cobra.Command, f func(state *connectorState) error) error {
-	return cliutil.WithStartedDaemon(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-		if err := assertConnectorStarted(); err != nil {
-			return err
-		}
-		si := &sessionInfo{cmd: cmd}
-		cs, err := si.newConnectorState(daemonClient)
-		if err == errConnectorIsNotRunning {
-			err = nil
-		}
-		if err != nil {
-			return err
-		}
-		defer cs.disconnect()
-		return client.WithEnsuredState(cs, true, func() error { return f(cs) })
+		return client.WithEnsuredState(ctx, cs, retain, func() error { return f(cs) })
 	})
 }
 

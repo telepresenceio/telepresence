@@ -55,10 +55,37 @@ type interceptArgs struct {
 	cmdline []string // Args[1:]
 }
 
+// safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
+// have to worry about things using it in ways they shouldn't.
+type safeCobraCommand interface {
+	InOrStdin() io.Reader
+	OutOrStdout() io.Writer
+	ErrOrStderr() io.Writer
+	FlagError(error) error
+}
+
+type safeCobraCommandImpl struct {
+	*cobra.Command
+}
+
+func (w safeCobraCommandImpl) FlagError(err error) error {
+	return w.Command.FlagErrorFunc()(w.Command, err)
+}
+
 type interceptState struct {
-	args       interceptArgs
-	cs         *connectorState
-	Scout      *client.Scout
+	// static after newInterceptState() ////////////////////////////////////
+
+	cmd  safeCobraCommand
+	args interceptArgs
+
+	Scout *client.Scout
+
+	connectorClient connector.ConnectorClient
+	managerClient   manager.ManagerClient
+	connInfo        *connector.ConnectInfo
+
+	// set later ///////////////////////////////////////////////////////////
+
 	env        map[string]string
 	mountPoint string // if non-empty, this the final mount point of a successful mount
 	localPort  uint16 // the parsed <local port>
@@ -167,8 +194,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 			}
 		}
 		// run
-		si := sessionInfo{cmd}
-		return intercept(si, args)
+		return intercept(cmd, args)
 	}
 
 	return cmd
@@ -181,9 +207,7 @@ func leaveCommand() *cobra.Command {
 
 		Short: "Remove existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withStartedConnector(cmd, func(cs *connectorState) error {
-				return removeIntercept(cs, strings.TrimSpace(args[0]))
-			})
+			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
 		},
 	}
 }
@@ -208,7 +232,10 @@ func loginIfNeeded(cs *connectorState, args interceptArgs) error {
 	return nil
 }
 
-func intercept(si sessionInfo, args interceptArgs) error {
+func intercept(cmd *cobra.Command, args interceptArgs) error {
+	si := sessionInfo{cmd}
+	ctx := cmd.Context()
+
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
 		return si.withConnector(true, func(cs *connectorState) (err error) {
@@ -216,8 +243,8 @@ func intercept(si sessionInfo, args interceptArgs) error {
 			if err != nil {
 				return err
 			}
-			is := newInterceptState(cs, args)
-			return client.WithEnsuredState(is, true, func() error { return nil })
+			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs.connectorClient, cs.managerClient, cs.info)
+			return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 		})
 	}
 
@@ -226,23 +253,35 @@ func intercept(si sessionInfo, args interceptArgs) error {
 		if err := loginIfNeeded(cs, args); err != nil {
 			return err
 		}
-		is := newInterceptState(cs, args)
-		return client.WithEnsuredState(is, false, func() error {
+		is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs.connectorClient, cs.managerClient, cs.info)
+		return client.WithEnsuredState(ctx, is, false, func() error {
 			if args.dockerRun {
-				return is.runInDocker(is.cs.cmd, args.cmdline)
+				return is.runInDocker(ctx, is.cmd, args.cmdline)
 			}
-			return start(is.cs.cmd.Context(), args.cmdline[0], args.cmdline[1:], true,
-				is.cs.cmd.InOrStdin(), is.cs.cmd.OutOrStdout(), is.cs.cmd.ErrOrStderr(),
+			return start(ctx, args.cmdline[0], args.cmdline[1:], true,
+				cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
 				envPairs(is.env)...)
 		})
 	})
 }
 
-func newInterceptState(cs *connectorState, args interceptArgs) *interceptState {
+func newInterceptState(
+	ctx context.Context,
+	cmd safeCobraCommand,
+	args interceptArgs,
+	connectorClient connector.ConnectorClient,
+	managerClient manager.ManagerClient,
+	connInfo *connector.ConnectInfo,
+) *interceptState {
 	return &interceptState{
-		args:  args,
-		cs:    cs,
-		Scout: client.NewScout(cs.cmd.Context(), "cli"),
+		cmd:  cmd,
+		args: args,
+
+		Scout: client.NewScout(ctx, "cli"),
+
+		connectorClient: connectorClient,
+		managerClient:   managerClient,
+		connInfo:        connInfo,
 	}
 }
 
@@ -317,7 +356,7 @@ func checkMountCapability(ctx context.Context) error {
 	return nil
 }
 
-func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, error) {
+func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
 		Name:      is.args.name,
 		Namespace: is.args.namespace,
@@ -386,7 +425,7 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 	}
 
 	doMount := false
-	err = checkMountCapability(is.cs.cmd.Context())
+	err = checkMountCapability(ctx)
 	if err == nil {
 		mountPoint := ""
 		doMount, err = strconv.ParseBool(is.args.mount)
@@ -443,28 +482,28 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 	}
 
 	var env client.Env
-	env, err = client.LoadEnv(is.cs.cmd.Context())
+	env, err = client.LoadEnv(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ir.AgentImage, err = is.args.extState.AgentImage(is.cs.cmd.Context(), env)
+	ir.AgentImage, err = is.args.extState.AgentImage(ctx, env)
 	if err != nil {
 		return nil, err
 	}
 	return ir, nil
 }
 
-func (is *interceptState) EnsureState() (acquired bool, err error) {
+func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
-		ingress, err := is.cs.selectIngress(is.cs.cmd.Context(), is.cs.cmd.InOrStdin(), is.cs.cmd.OutOrStdout())
+		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo)
 		if err != nil {
 			return false, err
 		}
 		is.args.previewSpec.Ingress = ingress
 	}
 
-	ir, err := is.createRequest()
+	ir, err := is.createRequest(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -480,7 +519,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	}
 
 	// Submit the request
-	r, err := is.cs.connectorClient.CreateIntercept(is.cs.cmd.Context(), ir)
+	r, err := is.connectorClient.CreateIntercept(ctx, ir)
 	if err != nil {
 		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
@@ -491,7 +530,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 			// local-only
 			return true, nil
 		}
-		fmt.Fprintf(is.cs.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.args.agentName)
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.args.agentName)
 		var intercept *manager.InterceptInfo
 
 		// Add metadata to scout from InterceptResult
@@ -505,7 +544,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 
 		// Add metadata to scout
 		is.Scout.SetMetadatum("service_name", is.args.agentName)
-		is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
+		is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
 
 		mechanism, _ := is.args.extState.Mechanism()
 		mechanismArgs, _ := is.args.extState.MechanismArgs()
@@ -513,15 +552,15 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
 
 		if is.args.previewEnabled {
-			intercept, err = is.cs.managerClient.UpdateIntercept(is.cs.cmd.Context(), &manager.UpdateInterceptRequest{
-				Session: is.cs.info.SessionInfo,
+			intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+				Session: is.connInfo.SessionInfo,
 				Name:    is.args.name,
 				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 					AddPreviewDomain: is.args.previewSpec,
 				},
 			})
 			if err != nil {
-				_ = is.Scout.Report(is.cs.cmd.Context(), "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+				_ = is.Scout.Report(ctx, "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
@@ -546,39 +585,41 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		var volumeMountProblem error
 		doMount, err := strconv.ParseBool(is.args.mount)
 		if doMount || err != nil {
-			volumeMountProblem = checkMountCapability(is.cs.cmd.Context())
+			volumeMountProblem = checkMountCapability(ctx)
 		}
-		fmt.Fprintln(is.cs.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
-		_ = is.Scout.Report(is.cs.cmd.Context(), "intercept_success")
+		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
+		_ = is.Scout.Report(ctx, "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
-		fmt.Fprintln(is.cs.cmd.OutOrStdout(), interceptMessage(r))
+		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
 		return false, nil
 	default:
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
-			_ = is.DeactivateState()
-			_ = is.cs.cmd.FlagErrorFunc()(is.cs.cmd, errors.New(r.InterceptInfo.Message))
+			_ = is.DeactivateState(ctx)
+			_ = is.cmd.FlagError(errors.New(r.InterceptInfo.Message))
 			panic("not reached; FlagErrorFunc should call os.Exit()")
 		}
 		return false, errors.New(interceptMessage(r))
 	}
 }
 
-func (is *interceptState) DeactivateState() error {
-	return removeIntercept(is.cs, strings.TrimSpace(is.args.name))
+func (is *interceptState) DeactivateState(ctx context.Context) error {
+	return removeIntercept(ctx, strings.TrimSpace(is.args.name))
 }
 
-func removeIntercept(cs *connectorState, name string) error {
-	var r *connector.InterceptResult
-	var err error
-	r, err = cs.connectorClient.RemoveIntercept(dcontext.WithoutCancel(cs.cmd.Context()), &manager.RemoveInterceptRequest2{Name: name})
-	if err != nil {
-		return err
-	}
-	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return errors.New(interceptMessage(r))
-	}
-	return nil
+func removeIntercept(ctx context.Context, name string) error {
+	return cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		var r *connector.InterceptResult
+		var err error
+		r, err = connectorClient.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})
+		if err != nil {
+			return err
+		}
+		if r.Error != connector.InterceptError_UNSPECIFIED {
+			return errors.New(interceptMessage(r))
+		}
+		return nil
+	})
 }
 
 func validateDockerArgs(args []string) error {
@@ -590,7 +631,7 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) runInDocker(cmd *cobra.Command, args []string) error {
+func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
 	envFile := is.args.envFile
 	if envFile == "" {
 		file, err := ioutil.TempFile("", "tel-*.env")
@@ -635,7 +676,7 @@ func (is *interceptState) runInDocker(cmd *cobra.Command, args []string) error {
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return start(cmd.Context(), "docker", append(ourArgs, args...), true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	return start(ctx, "docker", append(ourArgs, args...), true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 }
 
 func (is *interceptState) writeEnvFile() error {
@@ -774,16 +815,16 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
+func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *connector.ConnectInfo) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return nil, err
 	}
-	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
+	key := connInfo.ClusterServer + "/" + connInfo.ClusterContext
 	selectOrConfirm := "Confirm"
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
-		iis := cs.info.IngressInfos
+		iis := connInfo.IngressInfos
 		if len(iis) > 0 {
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {
