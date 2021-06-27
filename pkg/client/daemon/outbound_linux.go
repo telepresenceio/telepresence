@@ -90,7 +90,7 @@ func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string
 }
 
 func (o *outbound) runOverridingServer(c context.Context) error {
-	if o.dnsIP == nil {
+	if o.dnsConfig.LocalIp == nil {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -98,13 +98,13 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
-				o.dnsIP = net.ParseIP(fields[1])
-				dlog.Infof(c, "Automatically set -dns=%s", o.dnsIP)
+				o.dnsConfig.LocalIp = net.ParseIP(fields[1])
+				dlog.Infof(c, "Automatically set -dns=%s", o.dnsConfig.LocalIp)
 				break
 			}
 		}
 	}
-	if o.dnsIP == nil {
+	if o.dnsConfig.LocalIp == nil {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -138,11 +138,11 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	// Create the connection later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	conn, err := dns2.Dial("udp", o.dnsIP.String()+":53")
+	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(o.dnsConfig.LocalIp).String(), "53"))
 	if err != nil {
 		return err
 	}
-	if err = routeDNS(ncc, o.dnsIP, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr)); err != nil {
+	if err = routeDNS(ncc, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr)); err != nil {
 		return err
 	}
 	defer func() {

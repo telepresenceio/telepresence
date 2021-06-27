@@ -28,9 +28,8 @@ service Daemon {
 }
 
 message DaemonStatus {
-  reserved 1;
-  string dns = 2;
-  reserved 3;
+  reserved 1, 2, 3;
+  OutboundInfo outbound_config = 4;
 }
 
 message Paths {

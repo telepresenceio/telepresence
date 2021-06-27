@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func statusCommand() *cobra.Command {
@@ -53,7 +55,17 @@ func daemonStatus(cmd *cobra.Command) error {
 
 		fmt.Fprintln(out, "Root Daemon: Running")
 		fmt.Fprintf(out, "  Version     : %s (api %d)\n", version.Version, version.ApiVersion)
-		fmt.Fprintf(out, "  DNS : %q\n", status.Dns)
+		fmt.Fprintf(out, "  Manager Port: %v\n", status.OutboundConfig.ManagerPort)
+		fmt.Fprintf(out, "  DNS         :\n")
+		fmt.Fprintf(out, "    Local IP        : %v\n", net.IP(status.OutboundConfig.Dns.LocalIp))
+		fmt.Fprintf(out, "    Remote IP       : %v\n", net.IP(status.OutboundConfig.Dns.RemoteIp))
+		fmt.Fprintf(out, "    Exclude suffixes: %v\n", status.OutboundConfig.Dns.ExcludeSuffixes)
+		fmt.Fprintf(out, "    Include suffixes: %v\n", status.OutboundConfig.Dns.IncludeSuffixes)
+		fmt.Fprintf(out, "    Timeout         : %v\n", status.OutboundConfig.Dns.LookupTimeout.AsDuration())
+		fmt.Fprintf(out, "  Also Proxy  : (%d subnets)\n", len(status.OutboundConfig.AlsoProxySubnets))
+		for _, subnet := range status.OutboundConfig.AlsoProxySubnets {
+			fmt.Fprintf(out, "    - %s\n", iputil.IPNetFromRPC(subnet))
+		}
 
 		return nil
 	})

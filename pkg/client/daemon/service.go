@@ -74,8 +74,9 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 }
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
-	r := &rpc.DaemonStatus{}
-	r.Dns = d.dns
+	r := &rpc.DaemonStatus{
+		OutboundConfig: d.outbound.getInfo(),
+	}
 	return r, nil
 }
 
