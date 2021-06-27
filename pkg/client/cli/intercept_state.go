@@ -250,16 +250,15 @@ func interceptMessage(r *connector.InterceptResult) string {
 	msg := ""
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-	case connector.InterceptError_NO_PREVIEW_HOST:
-		msg = `Your cluster is not configured for Preview URLs.
-(Could not find a Host resource that enables Path-type Preview URLs.)
-Please specify one or more header matches using --http-match.`
+		msg = "No error"
 	case connector.InterceptError_NO_CONNECTION:
-		msg = errConnectorIsNotRunning.Error()
+		msg = "Local network is not connected to the cluster"
 	case connector.InterceptError_NO_TRAFFIC_MANAGER:
 		msg = "Intercept unavailable: no traffic manager"
 	case connector.InterceptError_TRAFFIC_MANAGER_CONNECTING:
 		msg = "Connecting to traffic manager..."
+	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
+		msg = r.ErrorText
 	case connector.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
 	case connector.InterceptError_LOCAL_TARGET_IN_USE:
@@ -268,8 +267,6 @@ Please specify one or more header matches using --http-match.`
 			spec.TargetHost, spec.TargetPort, r.ErrorText)
 	case connector.InterceptError_NO_ACCEPTABLE_WORKLOAD:
 		msg = fmt.Sprintf("No interceptable deployment or replicaset matching %s found", r.ErrorText)
-	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
-		msg = r.ErrorText
 	case connector.InterceptError_AMBIGUOUS_MATCH:
 		var matches []manager.AgentInfo
 		err := json.Unmarshal([]byte(r.ErrorText), &matches)
@@ -286,12 +283,12 @@ Please specify one or more header matches using --http-match.`
 		msg = st.String()
 	case connector.InterceptError_FAILED_TO_ESTABLISH:
 		msg = fmt.Sprintf("Failed to establish intercept: %s", r.ErrorText)
-	case connector.InterceptError_FAILED_TO_REMOVE:
-		msg = fmt.Sprintf("Error while removing intercept: %v", r.ErrorText)
 	case connector.InterceptError_NOT_FOUND:
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
 	case connector.InterceptError_MOUNT_POINT_BUSY:
 		msg = fmt.Sprintf("Mount point already in use by intercept %q", r.ErrorText)
+	default:
+		msg = fmt.Sprintf("Unknown error code %d", r.Error)
 	}
 	if id := r.GetInterceptInfo().GetId(); id != "" {
 		return fmt.Sprintf("Intercept %q: %s", id, msg)
@@ -557,8 +554,6 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cs.cmd.OutOrStdout(), interceptMessage(r))
 		return false, nil
-	case connector.InterceptError_NO_CONNECTION:
-		return false, errConnectorIsNotRunning
 	default:
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
 			_ = is.DeactivateState()
