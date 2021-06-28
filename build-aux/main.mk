@@ -165,7 +165,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 
 .PHONY: check
 check: $(tools/ko) ## (QA) Run the test suite
-	go test ./...
+	go test -timeout=15m ./...
 
 # Install
 # =======

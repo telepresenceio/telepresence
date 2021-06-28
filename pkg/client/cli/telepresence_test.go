@@ -880,17 +880,17 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 }
 
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
-	c, cancel := context.WithTimeout(c, 90*time.Second)
+	c, cancel := context.WithTimeout(c, 120*time.Second)
 	defer cancel()
 
 	// Since this function can be called multiple times in parallel
-	// we add the name of the servie to the title of the pod so they
+	// we add the name of the service to the title of the pod so they
 	// can run at the same time. We strip out any characters that we
 	// can't use in a name in k8s.
 	reg := regexp.MustCompile("[^a-zA-Z0-9-]+")
 	k8sSafeName := reg.ReplaceAllString(name, "")
 	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
-	for i := 0; i < 60; i++ {
+	for c.Err() == nil {
 		time.Sleep(time.Second)
 		err := ts.kubectl(c, "run", containerName, "--context", "default", "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
