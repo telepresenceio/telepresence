@@ -77,6 +77,9 @@ func (f *Forwarder) ServeListener(ctx context.Context, listener *net.TCPListener
 
 		conn, err := listener.AcceptTCP()
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			dlog.Infof(ctx, "Error on accept: %+v", err)
 			continue
 		}
