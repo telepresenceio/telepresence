@@ -184,7 +184,8 @@ fi
 
 echo "Using telepresence: "
 echo "$TELEPRESENCE"
-"$TELEPRESENCE" version
+tp_version_output=$($TELEPRESENCE version)
+echo "$tp_version_output"
 echo
 
 # If this environment variable is set, we want to run the smoke tests with that
@@ -210,6 +211,28 @@ echo
 echo "Using context: "
 kubectl config current-context
 echo
+
+if [[ -n $USE_CHART ]]; then
+    echo "Using helm chart for traffic-manager installation"
+
+    # Determine if we need to override the registry
+    if [[ -n $TELEPRESENCE_REGISTRY ]]; then
+        helm_overrides=()
+        helm_overrides+=("image.registry=")
+        helm_overrides+=("$TELEPRESENCE_REGISTRY")
+        helm_overrides+=(",")
+    fi
+
+    semver_regex="([1-9][0-9]*)\\.([1-9][0-9]*)\\.([1-9][0-9]*)(\\-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\-[0-9]*)?"
+    # Install the traffic-manager that matches the version of the cli
+    if [[ $tp_version_output =~ $semver_regex ]]; then
+        helm_overrides+=("image.tag=")
+        helm_overrides+=("${BASH_REMATCH[0]}")
+    fi
+        echo "Using helm overrides:"
+        echo "${helm_overrides[*]}"
+        echo
+fi
 
 if kubectl get svc -n default verylargejavaservice >"$output_location" 2>&1; then
     echo "verylargejavaservice is present, so assuming rest of demo apps are already present"
@@ -239,6 +262,17 @@ $TELEPRESENCE login >"$output_location"
 $TELEPRESENCE uninstall --everything >"$output_location"
 if [[ -n "$INSTALL_DEMO" ]]; then
     setup_demo_app
+fi
+
+if [[ -n "$USE_CHART" ]]; then
+
+    # Clean up any pre-existing helm installation for the traffic-manager
+    output=$(helm list --namespace ambassador | grep 'traffic-manager')
+    if [[ -n "$output" ]]; then
+        helm uninstall traffic-manager --namespace ambassador
+    fi
+
+    helm install traffic-manager charts/telepresence --namespace ambassador --set "${helm_overrides[*]}"
 fi
 
 VERYLARGEJAVASERVICE=verylargejavaservice.default:8080
@@ -442,7 +476,14 @@ finish_step
 #### Step 12 - licensed uninstall everything          ####
 ##########################################################
 
-$TELEPRESENCE uninstall --everything >"$output_location"
+# First we uninstall the helm chart if it was used
+if [ -n "$USE_CHART" ]; then
+    helm uninstall traffic-manager --namespace ambassador
+fi
+
+# But we still want to test that uninstall logs the user out,
+# so we still call uninstall regardless of whether chart was used.
+$TELEPRESENCE uninstall --everything > "$output_location"
 verify_logout
 
 finish_step

@@ -9,10 +9,26 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   clusterIP: None
-  {{- with .Values.service.ports }}
   ports:
-  {{- toYaml . | nindent 2}}
-  {{- end }}
+  - name: api
+    port: 8081
+    targetPort: api
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
+---
+{{- if .Values.agentInjector.create }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.agentInjector.name }}
+  namespace: {{ include "telepresence.namespace" . }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - name: https
+    port: 443
+    targetPort: https
+  selector:
+    {{- include "telepresence.selectorLabels" . | nindent 4 }}
+{{- end }}
 {{- end }}

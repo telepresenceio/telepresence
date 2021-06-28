@@ -1,0 +1,45 @@
+{{- if not .Values.rbac.only }}
+{{- $altNames := list ( printf "agent-injector.%s" .Release.Namespace ) ( printf "agent-injector.%s.svc" .Release.Namespace ) -}}
+{{- $ca := genCA "agent-injector-ca" 365 -}}
+{{- $cert := genSignedCert "agent-injector" nil $altNames 365 $ca -}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ .Values.agentInjector.webhook.name }}-{{ include "telepresence.namespace" . }}
+webhooks:
+{{- with .Values.agentInjector.webhook.admissionReviewVersions }}
+- admissionReviewVersions:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+  clientConfig:
+    caBundle: {{ $ca.Cert | b64enc }}
+    service:
+      name: {{ .Values.agentInjector.name }}
+      namespace: {{ include "telepresence.namespace" . }}
+      path: {{ .Values.agentInjector.webhook.servicePath }}
+      port: {{ .Values.agentInjector.webhook.port }}
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+    scope: '*'
+  failurePolicy: {{ .Values.agentInjector.webhook.failurePolicy }}
+  name: agent-injector.getambassador.io
+  sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
+  timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.agentInjector.secret.name }}
+  namespace: {{ include "telepresence.namespace" . }}
+data:
+  ca.pem: {{ $ca.Cert | b64enc }}
+  crt.pem: {{ $cert.Cert | b64enc }}
+  key.pem: {{ $cert.Key | b64enc }}
+{{- end }}

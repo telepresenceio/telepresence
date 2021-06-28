@@ -101,6 +101,11 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 	rm -f CHANGELOG.md.bak
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
 	git add CHANGELOG.md go.mod
+	sed -i.bak "s/^version:.*/version: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
+	sed -i.bak "s/^appVersion:.*/appVersion: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
+	rm -f charts/telepresence/Chart.yaml.bak
+	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
+	rm -f charts/telepresence/CHANGELOG.md.bak
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/testdata/addAgentToWorkload/cur pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
@@ -116,6 +121,10 @@ push-executable: build ## (Release) Upload the executable to S3
 		--bucket datawire-static-files \
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
+
+.PHONY: push-chart
+push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart 
+	packaging/push_chart.sh	
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
@@ -136,16 +145,18 @@ endif
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) ## (QA) Everything nescessary to lint
+lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything nescessary to lint
 
 shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
+shellscripts += ./packaging/push_chart.sh
 .PHONY: lint
 lint: lint-deps ## (QA) Run the linters (golangci-lint and protolint)
 	$(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
 	$(tools/shellcheck) $(shellscripts)
+	$(tools/helm) lint charts/telepresence --set isCI=true
 
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints

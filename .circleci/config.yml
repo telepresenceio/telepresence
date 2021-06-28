@@ -160,6 +160,13 @@ jobs:
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
+  "release-chart":
+    executor: vm-linux
+    steps:
+    - checkout
+    - run: |
+        [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
+
 #  "release-finalize":
 #    executor: vm-linux
 #    steps:
@@ -185,6 +192,13 @@ workflows:
             branches:
               ignore: /.*/
       - release-macos:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-chart:
           context: telepresence2-release
           filters:
             tags:

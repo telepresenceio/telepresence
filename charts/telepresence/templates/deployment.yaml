@@ -30,7 +30,7 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
           - name: LOG_LEVEL
@@ -41,19 +41,31 @@ spec:
             value: "443"
           - name: CLUSTER_ID
             value: {{ .Values.clusterID }}
+          - name: TELEPRESENCE_REGISTRY
+            value: {{ .Values.image.registry }}
+          - name: MANAGER_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
           ports:
-          - name: sshd
-            containerPort: 8022
           - name: api
             containerPort: 8081
+          - name: https
+            containerPort: 8443
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.licenseKey.create }}
           volumeMounts:
+          {{- if .Values.licenseKey.create }}
           - name: license
             mountPath: /home/telepresence
+            readOnly: true
+          {{- end }}
+          {{- if .Values.agentInjector.create }}
+          - name: tls
+            mountPath: /var/run/secrets/tls
             readOnly: true
           {{- end }}
       {{- with .Values.nodeSelector }}
@@ -68,11 +80,19 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.licenseKey.create }}
       volumes:
+      {{- if .Values.licenseKey.create }}
       - name: license
         secret: 
           defaultMode: 420
           secretName: {{ .Values.licenseKey.secret.name }}
       {{- end }}
+      {{- if .Values.agentInjector.create }}
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.agentInjector.secret.name }}
+      {{- end }}
+      serviceAccount: traffic-manager
+      serviceAccountName: traffic-manager
 {{- end }}

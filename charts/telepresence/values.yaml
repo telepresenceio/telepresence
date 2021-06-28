@@ -15,7 +15,8 @@
 # The client will default to docker.io/datawire/tel2:{{CLIENT_VERSION}}
 
 image:
-  repository: docker.io/datawire/tel2
+  registry: docker.io/datawire
+  name: tel2
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
@@ -47,18 +48,11 @@ tolerations: []
 affinity: {}
 
 ################################################################################
-## Service Configuration
+## Traffic Manager Service Configuration
 ################################################################################
 
 service:
   type: ClusterIP
-  ports:
-  - name: sshd
-    port: 8022
-    targetPort: sshd
-  - name: api
-    port: 8081
-    targetPort: api
 
 ################################################################################
 ## Traffic Manager Configuration
@@ -111,6 +105,36 @@ licenseKey:
     # Default: systema-license
     name: systema-license
 
+
+managerRbac:
+  # Default: true
+  create: true
+
+
+################################################################################
+## Agent Injector Configuration
+################################################################################
+agentInjector:
+  create: true
+  name: agent-injector
+  service:
+    type: ClusterIP
+    ports:
+    - name: https
+      port: 443
+      targetPort: https
+  secret:
+    name: mutator-webhook-tls
+  webhook:
+    name: agent-injector-webhook
+    admissionReviewVersions: ["v1"]
+    servicePath: /traffic-agent
+    port: 443
+    failurePolicy: Ignore
+    sideEffects: None
+    timeoutSeconds: 5
+
+
 ################################################################################
 ## User Configuration
 ################################################################################
@@ -120,18 +144,14 @@ licenseKey:
 # so non-admin users can create intercepts.
 #
 # You do not need to create any extra RBAC if your users are cluster admins.
-rbac:
+# For more on how telepresence uses rbac, check out:
+# https://www.getambassador.io/docs/telepresence/latest/reference/rbac/
+clientRbac:
   
   # Create the extra RBAC for non-admin users.
   #
   # Default: false
   create: false
-
-  # Configure this release to ONLY create the RBAC. This allows for RBAC and the
-  # installation to be managed separately.
-  #
-  # Default: false
-  only: false
 
   # The user accounts to bind to the Roles created by this chart. This can be a
   # ServiceAccount, user account, user group, etc. depending on how accounts are
@@ -156,3 +176,11 @@ rbac:
   # Default: ambassador
   namespaces:
   - ambassador
+
+rbac:
+  # Configure this release to ONLY create the rbac-related objects. This allows for RBAC and the
+  # installation to be managed separately. This can be used in conjunction with clientRbac.create=true
+  # and managerRbac.create=true to select which sets of rbac objects you wish to create.
+  #
+  # Default: false
+  only: false
