@@ -1,6 +1,5 @@
 # Changelog
 
-<<<<<<< HEAD
 ### 2.3.4 (TBD)
 
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.

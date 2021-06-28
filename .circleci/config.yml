@@ -159,7 +159,6 @@ jobs:
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
-          [[ $CIRCLE_TAG == *-nightly-* ]] && TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-nightly
 
   "release-macos":
     executor: vm-macos
@@ -170,7 +169,6 @@ jobs:
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
-          [[ $CIRCLE_TAG == *-nightly-* ]] && TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-nightly
 
   "release-chart":
     executor: vm-linux
@@ -179,26 +177,35 @@ jobs:
     - run: |
         [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
   
-  "tag-nightly":
+  "publish-nightly-linux":
     executor: vm-linux
     steps:
     - checkout
     - install-go
+    - run: pip3 install awscli
     - run:
-        name: "Tag nightly"
+        name: Docker login
         command: |
-          existingTags=$(git tag --points-at HEAD)
-          if [[ -n $existingTags ]]; then
-              echo "Tag for the HEAD of release/v2 already exists:"
-              echo $existingTags
-              exit 0
-          else
-              lastTag=$(git describe --tags --match="v*" --abbrev=0
-              time=$(date +"%s")
-              newTag="$lastTag-nightly-$time"
-              make prepare-release TELEPRESENCE_VERSION=$newTag
-              git push origin {,rpc/}$time
-          fi
+          docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+    - run:
+        name: "Publish nightly linux"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag make push-images push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
+
+  "publish-nightly-macos":
+    executor: vm-macos
+    steps:
+    - checkout
+    - install-go
+    - run: sudo pip3 install awscli
+    - run:
+        name: "Publish nightly macos"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
 
 #  "release-finalize":
 #    executor: vm-linux
@@ -248,7 +255,8 @@ workflows:
             only:
               - release/v2
     jobs:
-      - tag-nightly
+      - publish-nightly-linux
+      - publish-nightly-macos
       #- release-finalize:
       #    context: telepresence2-release
       #    requires:

@@ -146,7 +146,7 @@ endif
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: promote-nightly
-promote-nightly: ## (Release) Update stable.txt in S3
+promote-nightly: ## (Release) Update nightly.txt in S3
 	mkdir -p $(BUILDDIR)
 	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/nightly.txt
 	AWS_PAGER="" aws s3api put-object \
