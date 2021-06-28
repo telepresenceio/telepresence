@@ -160,6 +160,7 @@ func (ts *telepresenceSuite) TearDownSuite() {
 	ctx := dlog.NewTestContext(ts.T(), false)
 	_ = run(ctx, "kubectl", "config", "use-context", "default")
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.namespace)
+	_ = run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration", "agent-injector-webhook-"+ts.managerTestNamespace)
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.managerTestNamespace)
 	// Undo RBAC things
 	_ = run(ctx, "kubectl", "delete", "-f", "k8s/client_rbac.yaml")
