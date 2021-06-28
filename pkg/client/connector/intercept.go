@@ -414,7 +414,7 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	}
 	f := forwarder.NewForwarder(&addr, pf.PodIP, pf.Port)
 	err := f.Serve(ctx)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
 	}
 }
@@ -476,7 +476,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		return dpipe.DPipe(ctx, dexec.CommandContext(ctx, "sshfs", sshfsArgs...), conn)
 	}, 3*time.Second, 6*time.Second)
 
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		dlog.Error(ctx, err)
 	}
 }
