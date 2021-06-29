@@ -5,6 +5,7 @@
 - Feature: `telepresence intercept` now supports a `--to-pod` flag that can be used to port-forward sidecars' ports from an intercepted pod
 - Bugfix: The root daemon no longer terminates when the user daemon disconnects from its gRPC streams, and instead waits to be terminated by the CLI.
 - Feature: The Helm chart is now published as part of our CI.
+- Feature: Telepresence can now be configured to look for the traffic manager in a namespace other than `ambassador`. This can be configured on a per-cluster basis.
 
 ### 2.3.2 (June 18, 2021)
 

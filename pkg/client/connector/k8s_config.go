@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -39,10 +40,17 @@ type dnsConfig struct {
 	LookupTimeout metav1.Duration `json:"lookup-timeout,omitempty"`
 }
 
+// The managerConfig is part of the kubeconfigExtension struct. It configures discovery of the traffic manager
+type managerConfig struct {
+	// Namespace is the name of the namespace where the traffic manager is to be found
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
 type kubeconfigExtension struct {
 	DNS       *dnsConfig       `json:"dns,omitempty"`
 	AlsoProxy []*iputil.Subnet `json:"also-proxy,omitempty"`
+	Manager   *managerConfig   `json:"manager,omitempty"`
 }
 
 type k8sConfig struct {
@@ -58,7 +66,7 @@ type k8sConfig struct {
 
 const configExtension = "telepresence.io"
 
-func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
+func newK8sConfig(flagMap map[string]string, env client.Env) (*k8sConfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -126,6 +134,14 @@ func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 		if err = json.Unmarshal(ext.Raw, &k.kubeconfigExtension); err != nil {
 			return nil, fmt.Errorf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
 		}
+	}
+
+	if k.kubeconfigExtension.Manager == nil {
+		k.kubeconfigExtension.Manager = &managerConfig{}
+	}
+
+	if k.kubeconfigExtension.Manager.Namespace == "" {
+		k.kubeconfigExtension.Manager.Namespace = env.ManagerNamespace
 	}
 
 	return k, nil

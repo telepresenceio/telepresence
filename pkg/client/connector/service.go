@@ -293,7 +293,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	k8sConfig, err := newK8sConfig(cr.KubeFlags)
+	k8sConfig, err := newK8sConfig(cr.KubeFlags, s.env)
 	if err != nil && !dryRun {
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,

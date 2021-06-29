@@ -108,7 +108,7 @@ func (tm *trafficManager) run(c context.Context) error {
 
 	kpfArgs := []string{
 		"--namespace",
-		managerNamespace,
+		tm.kubeconfigExtension.Manager.Namespace,
 		"svc/traffic-manager",
 		fmt.Sprintf(":%d", install.ManagerPortHTTP)}
 

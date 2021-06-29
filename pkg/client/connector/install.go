@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,14 +32,6 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 }
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
-
-// this is modified in tests
-var managerNamespace = func() string {
-	if ns := os.Getenv("TELEPRESENCE_MANAGER_NAMESPACE"); ns != "" {
-		return ns
-	}
-	return "ambassador"
-}()
 
 func managerImageName(env client.Env) string {
 	return fmt.Sprintf("%s/tel2:%s", env.Registry, strings.TrimPrefix(client.Version(), "v"))
@@ -123,7 +114,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 
 	if !agentsOnly && len(errs) == 0 {
 		// agent removal succeeded. Remove the manager resources
-		if err := resource.DeleteTrafficManager(c, ki.client, managerNamespace, env); err != nil {
+		if err := resource.DeleteTrafficManager(c, ki.client, ki.kubeconfigExtension.Manager.Namespace, env); err != nil {
 			addError(err)
 		}
 	}
@@ -274,7 +265,7 @@ already exist for this service`, kind, obj.GetName())
 		if err != nil {
 			return "", "", err
 		}
-		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, obj, matchingSvc)
+		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.kubeconfigExtension.Manager.Namespace, obj, matchingSvc)
 		if err != nil {
 			return "", "", err
 		}
@@ -575,6 +566,7 @@ func addAgentToWorkload(
 	c context.Context,
 	portNameOrNumber string,
 	agentImageName string,
+	trafficManagerNamespace string,
 	object kates.Object, matchingService *kates.Service,
 ) (
 	kates.Object,
@@ -661,11 +653,12 @@ func addAgentToWorkload(
 		ReferencedServicePort:     strconv.Itoa(int(servicePort.Port)),
 		ReferencedServicePortName: servicePort.Name,
 		AddTrafficAgent: &addTrafficAgentAction{
-			containerName:       container.Name,
-			ContainerPortName:   containerPort.Name,
-			ContainerPortProto:  containerPort.Protocol,
-			ContainerPortNumber: containerPort.Number,
-			ImageName:           agentImageName,
+			containerName:           container.Name,
+			trafficManagerNamespace: trafficManagerNamespace,
+			ContainerPortName:       containerPort.Name,
+			ContainerPortProto:      containerPort.Protocol,
+			ContainerPortNumber:     containerPort.Number,
+			ImageName:               agentImageName,
 		},
 	}
 	// Depending on whether the Service refers to the port by name or by number, we either need
@@ -744,5 +737,5 @@ func addAgentToWorkload(
 }
 
 func (ki *installer) ensureManager(c context.Context, env *client.Env) error {
-	return resource.EnsureTrafficManager(c, ki.client, managerNamespace, ki.getClusterId(c), env)
+	return resource.EnsureTrafficManager(c, ki.client, ki.kubeconfigExtension.Manager.Namespace, ki.getClusterId(c), env)
 }
