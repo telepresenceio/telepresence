@@ -390,30 +390,16 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.agentsByName[agent.Name] == nil {
-		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
-	}
-
-	for interceptID, intercept := range s.intercepts.LoadAll() {
-		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
-		// because this agent made things incosnsitent, or (2) be moved out of a NO_AGENT
-		// state because it just gained an agent.
-		if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
-			intercept.Disposition = errCode
-			intercept.Message = errMsg
-			s.intercepts.Store(interceptID, intercept)
-		} else if intercept.Disposition == rpc.InterceptDispositionType_NO_AGENT {
-			intercept.Disposition = rpc.InterceptDispositionType_WAITING
-			intercept.Message = ""
-			s.intercepts.Store(interceptID, intercept)
-		}
-	}
-
 	sessionID := uuid.New().String()
 	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
 	}
+
+	if s.agentsByName[agent.Name] == nil {
+		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
+	}
 	s.agentsByName[agent.Name][sessionID] = agent
+
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.sessions[sessionID] = &agentSessionState{
 		sessionState: sessionState{
@@ -424,6 +410,21 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 		lookups:         make(chan *rpc.LookupHostRequest),
 		lookupResponses: make(map[string]chan *rpc.LookupHostResponse),
 		agent:           agent,
+	}
+
+	for interceptID, intercept := range s.intercepts.LoadAll() {
+		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
+		// because this agent made things inconsistent, or (2) be moved out of a NO_AGENT
+		// state because it just gained an agent.
+		if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
+			intercept.Disposition = errCode
+			intercept.Message = errMsg
+			s.intercepts.Store(interceptID, intercept)
+		} else if intercept.Disposition == rpc.InterceptDispositionType_NO_AGENT {
+			intercept.Disposition = rpc.InterceptDispositionType_WAITING
+			intercept.Message = ""
+			s.intercepts.Store(interceptID, intercept)
+		}
 	}
 	return sessionID
 }
