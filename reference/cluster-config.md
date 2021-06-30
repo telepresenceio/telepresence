@@ -118,8 +118,34 @@ run this command to generate the Cluster ID:
   ```
 
 3. Save the output as a YAML file and apply it to your
-cluster with `kubectl`.  Once applied, you will be able to use selective intercepts with the
+cluster with `kubectl`.
+
+4. Ensure that you have the docker image for the Smart Agent (datawire/ambassador-telepresence-agent:1.8.0)
+pulled and in a registry your cluster can pull from.
+
+5. Have users use the `images` [config key](../config/#images) keys so telepresence uses the aforementioned image for their agent.
+
+Users will now be able to use selective intercepts with the
 `--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).
+
+If using Helm to install the server-side components, see the chart's [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence) to learn how to configure the image registry and license secret.
+
+### Have users of the cli add the following to their config.yml
+Telepresence attempts to auto-detect if the cluster is air-gapped,
+but you can add this to your config.yml to ensure the client behaves
+as if it was in an air-gapped environment.
+  ```
+  cloud:
+    skipLogin: true
+  ```
+
+Reminder: To use selective intercepts, which normally require a login, you
+must have a license in your cluster and specify which agentImage should be installed,
+by also adding the following to your config.yml:
+  ```
+  images:
+    agentImage: <privateRegistry>/<agentImage>
+  ```
 
 ## Mutating Webhook
 

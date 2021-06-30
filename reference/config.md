@@ -10,7 +10,7 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ### Values
 
-The config file currently supports values for the `timeouts` and `logLevels` keys.
+The config file currently supports values for the `timeouts`, `logLevels`, `images` keys.
 
 Here is an example configuration:
 
@@ -20,6 +20,9 @@ timeouts:
   intercept: 10s
 logLevels:
   userDaemon: debug
+images:
+  registry: privateRepo
+  agentImage: ambassador-telepresence-agent:1.8.0
 ```
 
 #### Timeouts
@@ -45,6 +48,26 @@ These are the valid fields for the `logLevels` key:
 |---|---|---|
 |`userDaemon`|Logging level to be used by the User Daemon (logs to connector.log)|debug|
 |`rootDaemon`|Logging level to be used for the Root Daemon (logs to daemon.log)|info|
+
+#### Images
+Values for `images` are strings.
+These are the valid fields for the `images` key:
+
+|Field|Description|Default|
+|---|---|---|
+|`registry`|Docker registry to be used for installing the Traffic Manager and default Traffic Agent|docker.io/datawire|
+|`agentImage`|$registry/$imageName:$imageTag to use when installing the Traffic Agent||
+|`webhookRegistry`|The container $registry that the [Traffic Manager](../cluster-config/#mutating-webhook) will use with the `webhookAgentImage` *only used if a new traffic-manager is deployed*||
+|`webhookAgentImage`|The container image that the [Traffic Manager](../cluster-config/#mutating-webhook) will use when installing the Traffic Agent in annotated pods *only used if a new traffic-manager is deployed*||
+
+#### Cloud
+These fields control how the client interacts with the Cloud service.
+Currently there is only one key and it accepts bools: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F,` `FALSE`
+
+|Field|Description|Default|
+|---|---|---|
+|`skipLogin`|Whether the cli should skipping login to Ambassador Cloud. If you set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster to perform selective intercepts |false|
+
 
 ## Per-Cluster Configuration
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.
