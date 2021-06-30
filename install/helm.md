@@ -33,7 +33,7 @@ For more details on what the Helm chart installs and what can be configured, tak
 
 ## Install RBAC only
 
-Telepresence Traffic Manager does require some [RBAC](../../refrence/rbac/) for the traffic-manager itself, as well as for users.
+Telepresence Traffic Manager does require some [RBAC](../../refrence/rbac/) for the traffic-manager deployment itself, as well as for users.
 To make it easier for operators to introspect / manage RBAC separately, you can use `rbac.only=true` to
 only create the rbac-related objects.
 Additionally, you can use `clientRbac.create=true` and `managerRbac.create=true` to toggle which subset(s) of RBAC objects you wish to create.

@@ -22,9 +22,9 @@ items:
     notes:
       # Headliners
       - type: feature
-        title: Traffic-manager Helm Chart
+        title: Traffic Manager Helm Chart
         body: >-
-          We now support installing the traffic-manager via Helm.
+          We now support installing the Traffic Manager via Helm.
           This will make it easy for operators to install and configure the
           server-side components of Telepresence separately from the CLI
           (which in turn allows for better separation of permissions).
@@ -66,9 +66,9 @@ items:
 
       # RBAC changes
       - type: change
-        title: Traffic-manager needs new RBAC permissions
+        title: Traffic Manager needs new RBAC permissions
         body: >-
-          The traffic-manager requires <a href="reference/rbac">RBAC
+          The Traffic Manager requires <a href="reference/rbac">RBAC
           permissions</a> to list Nodes, Pods, and to create a dummy
           Service in the manager's namespace.
         docs: reference/routing/#subnets
@@ -78,7 +78,7 @@ items:
           The on-laptop client no longer requires <a
           href="reference/rbac">RBAC permissions</a> to list the Nodes
           in the cluster or to create Services, as that functionality
-          has been moved to the traffic-manager.
+          has been moved to the Traffic Manager.
 
       # Bugfixes
       - type: bugfix
