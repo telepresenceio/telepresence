@@ -4,12 +4,13 @@
 
 ## Before you begin
 
-The Telepresence Helm chart is hosted by Ambassador Labs and published at `https://www.getambassador.io`.
+The Telepresence Helm chart is hosted by Ambassador Labs and published at `https://app.getambassador.io`.
 
 Start by adding this repo to your Helm client with the following command:
 
 ```
-helm repo add datawire https://www.getambassador.io
+helm repo add datawire  https://app.getambassador.io
+helm repo update
 ```
 
 ## Install with Helm

@@ -24,11 +24,10 @@ items:
       - type: feature
         title: Traffic-manager Helm Chart
         body: >-
-          We now support installing the traffic-manager via helm.
-          This will make it easier for operators to see what the
-          traffic-manager needs to install so that telepresence works
-          correctly, as well as providing a more direct route to customizing
-          installation.
+          We now support installing the traffic-manager via Helm.
+          This will make it easy for operators to install and configure the
+          server-side components of Telepresence separately from the CLI
+          (which in turn allows for better separation of permissions).
         image: ./telepresence-2.3.3-helm.png
         docs: install/helm/
   - version: 2.3.2

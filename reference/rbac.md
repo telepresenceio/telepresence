@@ -41,7 +41,7 @@ After creating `config.yaml` in your current directory, export the file's locati
 
 ## Administrating Telepresence
 
-[Telepresence administration](/products/telepresence/) requires permissions for creating Namespaces, ServiceAccounts, ClusterRoles, ClusterRoleBindings, Secrets, Services, MutatingWebhookConfiguration, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator.
+[Telepresence administration](/products/telepresence/) requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator.
 
 There are two ways to install the traffic-manager: Using `telepresence connect` and installing the [helm chart](../../install/helm/).
 
