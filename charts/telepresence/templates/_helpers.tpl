@@ -42,9 +42,6 @@ Traffic Manager Namespace
 {{- if .Values.isCI }}
 {{- print "ambassador" }}
 {{- else }}
-{{- if ne "ambassador" .Release.Namespace}}
-{{- fail "The Traffic Manager MUST BE deployed to the namespace named Ambassador" }}
-{{- end }}
 {{- printf "%s" .Release.Namespace }}
 {{- end }}
 {{- end -}}
