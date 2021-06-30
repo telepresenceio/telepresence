@@ -23,12 +23,14 @@ const configFile = "config.yml"
 type Config struct {
 	Timeouts  Timeouts  `json:"timeouts,omitempty"`
 	LogLevels LogLevels `json:"logLevels,omitempty"`
+	Images    Images    `json:"images,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
+	c.Images.merge(&o.Images)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -50,21 +52,26 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 		if err != nil {
 			return err
 		}
-		if kv == "timeouts" {
+		switch {
+		case kv == "timeouts":
 			err := ms[i+1].Decode(&c.Timeouts)
 			if err != nil {
 				return err
 			}
 			continue
-		}
-		if kv == "logLevels" {
+		case kv == "logLevels":
 			err := ms[i+1].Decode(&c.LogLevels)
 			if err != nil {
 				return err
 			}
 			continue
-		}
-		if parseContext != nil {
+		case kv == "images":
+			err := ms[i+1].Decode(&c.Images)
+			if err != nil {
+				return err
+			}
+			continue
+		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
@@ -330,6 +337,48 @@ func (ll *LogLevels) merge(o *LogLevels) {
 	}
 }
 
+type Images struct {
+	Registry   string `json:"registry,omitempty"`
+	AgentImage string `json:"agentImage,omitempty"`
+}
+
+// UnmarshalYAML parses the images YAML
+func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("images must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		switch kv {
+		case "registry":
+			img.Registry = v.Value
+		case "agentImage":
+			img.AgentImage = v.Value
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
+func (i *Images) merge(o *Images) {
+	if o.AgentImage != "" {
+		i.AgentImage = o.AgentImage
+	}
+	if o.Registry != "" {
+		i.Registry = o.Registry
+	}
+}
+
 var defaultConfig = Config{
 	Timeouts: Timeouts{
 		PrivateAgentInstall:          120 * time.Second,
@@ -343,6 +392,10 @@ var defaultConfig = Config{
 	LogLevels: LogLevels{
 		UserDaemon: logrus.DebugLevel,
 		RootDaemon: logrus.InfoLevel,
+	},
+	Images: Images{
+		Registry:   "docker.io/datawire",
+		AgentImage: "",
 	}}
 
 var config *Config

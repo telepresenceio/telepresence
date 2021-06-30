@@ -43,12 +43,13 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 	replicas := int32(1)
 
 	sc := getScope(ctx)
+	imgConfig := client.GetConfig(ctx).Images
 	var containerEnv = []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "SYSTEMA_HOST", Value: sc.env.SystemAHost},
 		{Name: "SYSTEMA_PORT", Value: sc.env.SystemAPort},
 		{Name: "CLUSTER_ID", Value: sc.clusterID},
-		{Name: "TELEPRESENCE_REGISTRY", Value: sc.env.Registry},
+		{Name: "TELEPRESENCE_REGISTRY", Value: imgConfig.Registry},
 
 		// Manager needs to know its own namespace so that it can propagate that when
 		// to agents when injecting them
@@ -61,8 +62,9 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 			},
 		},
 	}
-	if sc.env.AgentImage != "" {
-		containerEnv = append(containerEnv, corev1.EnvVar{Name: "TELEPRESENCE_AGENT_IMAGE", Value: sc.env.AgentImage})
+	if imgConfig.AgentImage != "" {
+		image := fmt.Sprintf("%s/%s", imgConfig.Registry, imgConfig.AgentImage)
+		containerEnv = append(containerEnv, corev1.EnvVar{Name: "TELEPRESENCE_AGENT_IMAGE", Value: image})
 	}
 
 	optional := true
@@ -136,7 +138,7 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 }
 
 func (ri *tmDeployment) imageName(ctx context.Context) string {
-	return fmt.Sprintf("%s/tel2:%s", getScope(ctx).env.Registry, strings.TrimPrefix(client.Version(), "v"))
+	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry, strings.TrimPrefix(client.Version(), "v"))
 }
 
 func (ri *tmDeployment) Create(ctx context.Context) error {
