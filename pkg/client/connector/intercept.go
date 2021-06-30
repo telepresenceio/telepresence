@@ -60,6 +60,26 @@ type portForward struct {
 	Port int32
 }
 
+// reconcileMountPoints deletes mount points for which there no longer is an intercept
+func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
+	var mountsToDelete []interface{}
+	tm.mountPoints.Range(func(key, value interface{}) bool {
+		if _, ok := existingIntercepts[value.(string)]; !ok {
+			mountsToDelete = append(mountsToDelete, key)
+		}
+		return true
+	})
+	for _, key := range mountsToDelete {
+		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
+			mountPoint := key.(string)
+			if err := os.Remove(mountPoint); err != nil {
+				dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
+			}
+			dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
+		}
+	}
+}
+
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
@@ -68,9 +88,17 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	//     their exit statuses is just a memory leak
 	//  3. because we want a per-worker cancel, we'd have to implement our own Context
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
-	var wg sync.WaitGroup
 
-	livePortForwards := make(map[forwardKey]context.CancelFunc)
+	// The livePortForward struct provides synchronization for cancellation of port forwards.
+	// This is necessary because a volume mount process must terminate before the corresponding
+	// file system is removed. The removal cannot take place when the process ends because there
+	// may be subsequent processes that use the same volume mount during the life time of an
+	// intercept (since an intercept may change pods).
+	type livePortForward struct {
+		wg     sync.WaitGroup
+		cancel context.CancelFunc
+	}
+	livePortForwards := make(map[forwardKey]*livePortForward)
 
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
@@ -79,20 +107,34 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 		if err != nil {
 			err = fmt.Errorf("manager.WatchIntercepts dial: %w", err)
 		}
-		for err == nil {
+		for err == nil && ctx.Err() == nil {
 			var snapshot *manager.InterceptInfoSnapshot
 			snapshot, err = stream.Recv()
+			var intercepts []*manager.InterceptInfo
+
 			if err != nil {
-				err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
-				break
+				if ctx.Err() == nil {
+					err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
+					break
+				}
+				// context is cancelled. Continue as if we had an empty snapshot. This
+				// will ensure that volume mounts are cancelled correctly.
+			} else {
+				intercepts = snapshot.Intercepts
 			}
+
 			tm.currentInterceptsLock.Lock()
-			tm.currentIntercepts = snapshot.Intercepts
+			tm.currentIntercepts = intercepts
 			tm.currentInterceptsLock.Unlock()
+
+			// allNames contains the names of all intercepts, irrespective of their status
+			allNames := make(map[string]struct{})
 
 			snapshotPortForwards := make(map[forwardKey]struct{})
 			namespaces := make(map[string]struct{})
-			for _, intercept := range snapshot.Intercepts {
+			for _, intercept := range intercepts {
+				allNames[intercept.Spec.Name] = struct{}{}
+
 				var iceptError error
 				switch intercept.Disposition {
 				case manager.InterceptDispositionType_ACTIVE:
@@ -123,23 +165,28 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				}
 				if _, isLive := livePortForwards[fk]; !isLive {
 					pfCtx, pfCancel := context.WithCancel(ctx)
-					forwarded := tm.startForwards(pfCtx, &wg, fk, intercept.SftpPort, intercept.Spec.ExtraPorts)
+					livePortForward := &livePortForward{cancel: pfCancel}
+					forwarded := tm.startForwards(pfCtx, &livePortForward.wg, fk, intercept.SftpPort, intercept.Spec.ExtraPorts)
 					if forwarded {
 						snapshotPortForwards[fk] = struct{}{}
-						livePortForwards[fk] = pfCancel
+						livePortForwards[fk] = livePortForward
 					} else {
 						pfCancel()
 					}
 				}
 			}
-			for fk, cancel := range livePortForwards {
+			for fk, livePortForward := range livePortForwards {
 				if _, isWanted := snapshotPortForwards[fk]; !isWanted {
 					dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
-					cancel()
+					livePortForward.cancel()
 					delete(livePortForwards, fk)
+					livePortForward.wg.Wait()
 				}
 			}
-			tm.setInterceptedNamespaces(ctx, namespaces)
+			if ctx.Err() == nil {
+				tm.setInterceptedNamespaces(ctx, namespaces)
+			}
+			tm.reconcileMountPoints(ctx, allNames)
 		}
 
 		if ctx.Err() == nil {
@@ -151,9 +198,6 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			}
 		}
 	}
-
-	wg.Wait()
-
 	return nil
 }
 
@@ -448,17 +492,6 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		dlog.Errorf(ctx, "No mount point found for intercept %q", mf.Name)
 		return
 	}
-
-	defer func() {
-		if _, err := os.Stat(mountPoint); !os.IsNotExist(err) {
-			// Remove if empty
-			if err := os.Remove(mountPoint); err != nil {
-				dlog.Errorf(ctx, "removal of %q failed: %v", mountPoint, err)
-			}
-		}
-		tm.mountPoints.Delete(mountPoint)
-		dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
-	}()
 
 	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
 
