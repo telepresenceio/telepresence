@@ -60,6 +60,64 @@ type portForward struct {
 	Port int32
 }
 
+// The livePortForward struct provides synchronization for cancellation of port forwards.
+// This is necessary because a volume mount process must terminate before the corresponding
+// file system is removed. The removal cannot take place when the process ends because there
+// may be subsequent processes that use the same volume mount during the life time of an
+// intercept (since an intercept may change pods).
+type livePortForward struct {
+	wg     sync.WaitGroup
+	cancel context.CancelFunc
+}
+
+type livePortForwards struct {
+	// live contains a map of the currently alive port forwards
+	live map[forwardKey]*livePortForward
+
+	// snapshot is recreated for each new intercept snapshot read from the manager
+	snapshot map[forwardKey]struct{}
+}
+
+func newPortForwards() *livePortForwards {
+	return &livePortForwards{live: make(map[forwardKey]*livePortForward)}
+}
+
+// start starts a port forward for the given intercept and remembers that it's alive
+func (lpf livePortForwards) start(ctx context.Context, tm *trafficManager, ii *manager.InterceptInfo) {
+	fk := forwardKey{
+		Name:  ii.Spec.Name,
+		PodIP: ii.PodIp,
+	}
+	if _, isLive := lpf.live[fk]; !isLive {
+		pfCtx, pfCancel := context.WithCancel(ctx)
+		livePortForward := &livePortForward{cancel: pfCancel}
+		forwarded := tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.Spec.ExtraPorts)
+		if forwarded {
+			lpf.snapshot[fk] = struct{}{}
+			lpf.live[fk] = livePortForward
+		} else {
+			pfCancel()
+		}
+	}
+}
+
+// initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted
+func (lpf *livePortForwards) initSnapshot() {
+	lpf.snapshot = make(map[forwardKey]struct{})
+}
+
+// cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot
+func (lpf livePortForwards) cancelUnwanted(ctx context.Context) {
+	for fk, lp := range lpf.live {
+		if _, isWanted := lpf.snapshot[fk]; !isWanted {
+			dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
+			lp.cancel()
+			delete(lpf.live, fk)
+			lp.wg.Wait()
+		}
+	}
+}
+
 // reconcileMountPoints deletes mount points for which there no longer is an intercept
 func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
 	var mountsToDelete []interface{}
@@ -88,18 +146,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	//     their exit statuses is just a memory leak
 	//  3. because we want a per-worker cancel, we'd have to implement our own Context
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
-
-	// The livePortForward struct provides synchronization for cancellation of port forwards.
-	// This is necessary because a volume mount process must terminate before the corresponding
-	// file system is removed. The removal cannot take place when the process ends because there
-	// may be subsequent processes that use the same volume mount during the life time of an
-	// intercept (since an intercept may change pods).
-	type livePortForward struct {
-		wg     sync.WaitGroup
-		cancel context.CancelFunc
-	}
-	livePortForwards := make(map[forwardKey]*livePortForward)
-
+	portForwards := newPortForwards()
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
 		<-tm.startup
@@ -122,15 +169,12 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			} else {
 				intercepts = snapshot.Intercepts
 			}
-
-			tm.currentInterceptsLock.Lock()
-			tm.currentIntercepts = intercepts
-			tm.currentInterceptsLock.Unlock()
+			tm.setCurrentIntercepts(intercepts)
 
 			// allNames contains the names of all intercepts, irrespective of their status
 			allNames := make(map[string]struct{})
 
-			snapshotPortForwards := make(map[forwardKey]struct{})
+			portForwards.initSnapshot()
 			namespaces := make(map[string]struct{})
 			for _, intercept := range intercepts {
 				allNames[intercept.Spec.Name] = struct{}{}
@@ -155,38 +199,16 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 						close(ch)
 					}
 				}
-				if iceptError != nil {
-					continue
-				}
-				namespaces[intercept.Spec.Namespace] = struct{}{}
-				fk := forwardKey{
-					Name:  intercept.Spec.Name,
-					PodIP: intercept.PodIp,
-				}
-				if _, isLive := livePortForwards[fk]; !isLive {
-					pfCtx, pfCancel := context.WithCancel(ctx)
-					livePortForward := &livePortForward{cancel: pfCancel}
-					forwarded := tm.startForwards(pfCtx, &livePortForward.wg, fk, intercept.SftpPort, intercept.Spec.ExtraPorts)
-					if forwarded {
-						snapshotPortForwards[fk] = struct{}{}
-						livePortForwards[fk] = livePortForward
-					} else {
-						pfCancel()
-					}
+				if iceptError == nil {
+					namespaces[intercept.Spec.Namespace] = struct{}{}
+					portForwards.start(ctx, tm, intercept)
 				}
 			}
-			for fk, livePortForward := range livePortForwards {
-				if _, isWanted := snapshotPortForwards[fk]; !isWanted {
-					dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
-					livePortForward.cancel()
-					delete(livePortForwards, fk)
-					livePortForward.wg.Wait()
-				}
-			}
+			portForwards.cancelUnwanted(ctx)
+			tm.reconcileMountPoints(ctx, allNames)
 			if ctx.Err() == nil {
 				tm.setInterceptedNamespaces(ctx, namespaces)
 			}
-			tm.reconcileMountPoints(ctx, allNames)
 		}
 
 		if ctx.Err() == nil {
@@ -219,6 +241,12 @@ func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 		}
 	}
 	return intercepts
+}
+
+func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptInfo) {
+	tm.currentInterceptsLock.Lock()
+	tm.currentIntercepts = intercepts
+	tm.currentInterceptsLock.Unlock()
 }
 
 // addIntercept adds one intercept
