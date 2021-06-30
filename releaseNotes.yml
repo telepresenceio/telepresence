@@ -59,7 +59,7 @@ items:
           change any behavior with Telepresence.
         image: ./telepresence-2.3.5-agent-config.png
         docs: reference/config/#images
-      - type: Feature
+      - type: feature
         title: CLI can be used in air-gapped environments
         body: >-
           While Telepresence will auto-detect if your cluster is in an air-gapped environment,
