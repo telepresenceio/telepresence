@@ -15,6 +15,7 @@
 
 - Bugfix: The root daemon no longer terminates when the user daemon disconnects from its gRPC streams, and instead waits to be terminated by the CLI.
 - Feature: The Helm chart is now published as part of our CI.
+- Bugfix: An intercept will survive deletion of the intercepted pod provided that another pod is created (or already exists) that can take over. 
 
 ### 2.3.2 (June 18, 2021)
 
