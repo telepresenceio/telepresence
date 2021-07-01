@@ -240,14 +240,13 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 			return err
 		}
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			is := newInterceptState(ctx, cliutil.NewSafeCobraCommand(cmd), args, connectorClient, managerClient, connInfo)
+			safeCmd := cliutil.NewSafeCobraCommand(cmd)
+			is := newInterceptState(ctx, safeCmd, args, connectorClient, managerClient, connInfo)
 			return client.WithEnsuredState(ctx, is, false, func() error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
 				}
-				return cliutil.Start(ctx, args.cmdline[0], args.cmdline[1:], true,
-					cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
-					cliutil.EnvPairs(is.env)...)
+				return cliutil.Run(ctx, safeCmd, args.cmdline[0], args.cmdline[1:], is.env)
 			})
 		})
 	})
@@ -664,7 +663,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd cliutil.SafeCobra
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return cliutil.Start(ctx, "docker", append(ourArgs, args...), true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	return cliutil.Run(ctx, cmd, "docker", append(ourArgs, args...), nil)
 }
 
 func (is *interceptState) writeEnvFile() error {

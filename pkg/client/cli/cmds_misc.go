@@ -40,7 +40,7 @@ func ClusterIdCommand() *cobra.Command {
 }
 
 func connectCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:  "connect [flags] [-- <command to run while connected>]",
 		Args: cobra.ArbitraryArgs,
 
@@ -52,10 +52,11 @@ func connectCommand() *cobra.Command {
 				})
 			}
 			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
-				return cliutil.Start(ctx, args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+				return cliutil.Run(ctx, cliutil.NewSafeCobraCommand(cmd), args[0], args[1:], nil)
 			})
 		},
 	}
+	return cmd
 }
 
 func dashboardCommand() *cobra.Command {
