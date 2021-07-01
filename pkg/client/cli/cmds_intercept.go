@@ -55,27 +55,10 @@ type interceptArgs struct {
 	cmdline []string // Args[1:]
 }
 
-// safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
-// have to worry about things using it in ways they shouldn't.
-type safeCobraCommand interface {
-	InOrStdin() io.Reader
-	OutOrStdout() io.Writer
-	ErrOrStderr() io.Writer
-	FlagError(error) error
-}
-
-type safeCobraCommandImpl struct {
-	*cobra.Command
-}
-
-func (w safeCobraCommandImpl) FlagError(err error) error {
-	return w.Command.FlagErrorFunc()(w.Command, err)
-}
-
 type interceptState struct {
 	// static after newInterceptState() ////////////////////////////////////
 
-	cmd  safeCobraCommand
+	cmd  cliutil.SafeCobraCommand
 	args interceptArgs
 
 	Scout *client.Scout
@@ -245,7 +228,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 				return err
 			}
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+				is := newInterceptState(ctx, cliutil.NewSafeCobraCommand(cmd), args, connectorClient, managerClient, connInfo)
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 			})
 		})
@@ -257,7 +240,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 			return err
 		}
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+			is := newInterceptState(ctx, cliutil.NewSafeCobraCommand(cmd), args, connectorClient, managerClient, connInfo)
 			return client.WithEnsuredState(ctx, is, false, func() error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
@@ -272,7 +255,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 
 func newInterceptState(
 	ctx context.Context,
-	cmd safeCobraCommand,
+	cmd cliutil.SafeCobraCommand,
 	args interceptArgs,
 	connectorClient connector.ConnectorClient,
 	managerClient manager.ManagerClient,
@@ -636,7 +619,7 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
+func (is *interceptState) runInDocker(ctx context.Context, cmd cliutil.SafeCobraCommand, args []string) error {
 	envFile := is.args.envFile
 	if envFile == "" {
 		file, err := ioutil.TempFile("", "tel-*.env")
