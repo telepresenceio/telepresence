@@ -13,7 +13,6 @@ import (
 	// logging, using dexec would just be extra overhead.
 	"os/exec"
 
-	"github.com/kballard/go-shellquote"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -23,6 +22,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -37,10 +37,10 @@ func launchConnector() error {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %w", shellquote.Join(args...), err)
+		return fmt.Errorf("%s: %w", logging.ShellString(args[0], args[1:]), err)
 	}
 	if err := cmd.Process.Release(); err != nil {
-		return fmt.Errorf("%s: %w", shellquote.Join(args...), err)
+		return fmt.Errorf("%s: %w", logging.ShellString(args[0], args[1:]), err)
 	}
 
 	return nil

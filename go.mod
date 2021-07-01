@@ -10,7 +10,6 @@ require (
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.2
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/miekg/dns v1.1.35
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pkg/errors v0.9.1
