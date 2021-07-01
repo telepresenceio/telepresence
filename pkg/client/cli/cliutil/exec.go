@@ -1,4 +1,4 @@
-package cli
+package cliutil
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )
 
-func envPairs(env map[string]string) []string {
+func EnvPairs(env map[string]string) []string {
 	pairs := make([]string, len(env))
 	i := 0
 	for k, v := range env {
@@ -26,7 +26,7 @@ func envPairs(env map[string]string) []string {
 	return pairs
 }
 
-func start(ctx context.Context, exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer, env ...string) error {
+func Start(ctx context.Context, exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer, env ...string) error {
 	if !wait {
 		// The context should not kill it if cancelled
 		ctx = dcontext.WithoutCancel(ctx)
