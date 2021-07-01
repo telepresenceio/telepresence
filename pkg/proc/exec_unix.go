@@ -20,8 +20,9 @@ var signalsToForward = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
 
 func startInBackground(args ...string) error {
 	cmd := exec.Command(args[0], args[1:]...)
-	// Process must live in a process group of its own to prevent
-	// getting affected by <ctrl-c> in the terminal
+
+	// Ensure that the processes uses a process group of its own to prevent
+	// it getting affected by <ctrl-c> in the terminal
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}

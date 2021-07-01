@@ -13,6 +13,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )
 
+// Run will run the given executable with given args and env, wait for it to terminate, and return
+// the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
+// and os.Interrupt on Windows).
 func Run(ctx context.Context, exe string, args []string, env map[string]string) error {
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Stdout = os.Stdout
