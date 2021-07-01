@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net"
 
-	"golang.org/x/sys/unix"
-
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 )
 
 // A Header provides a common interface for the V4Header and the V6Header
@@ -125,7 +125,7 @@ func L4Checksum(ipHdr Header, checksumPosition, l4Proto int) {
 	}
 	c := ^uint16(s)
 
-	if c == 0 && l4Proto == unix.IPPROTO_UDP {
+	if c == 0 && l4Proto == ipproto.UDP {
 		// From RFC 768: If the computed checksum is zero, it is transmitted as all ones.
 		c = 0xffff
 	}

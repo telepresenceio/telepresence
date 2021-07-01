@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"golang.org/x/sys/unix"
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 )
 
 // A ConnID is a compact and immutable representation of protocol, source IP, source port, destination IP and destination port which
@@ -55,7 +55,7 @@ func (id ConnID) Source() net.IP {
 // SourceAddr returns the *net.TCPAddr or *net.UDPAddr that corresponds to the
 // source IP and port of this instance.
 func (id ConnID) SourceAddr() net.Addr {
-	if id.Protocol() == unix.IPPROTO_TCP {
+	if id.Protocol() == ipproto.TCP {
 		return &net.TCPAddr{IP: id.Source(), Port: int(id.SourcePort())}
 	}
 	return &net.UDPAddr{IP: id.Source(), Port: int(id.SourcePort())}
@@ -80,7 +80,7 @@ func (id ConnID) Destination() net.IP {
 // DestinationAddr returns the *net.TCPAddr or *net.UDPAddr that corresponds to the
 // destination IP and port of this instance.
 func (id ConnID) DestinationAddr() net.Addr {
-	if id.Protocol() == unix.IPPROTO_TCP {
+	if id.Protocol() == ipproto.TCP {
 		return &net.TCPAddr{IP: id.Destination(), Port: int(id.DestinationPort())}
 	}
 	return &net.UDPAddr{IP: id.Destination(), Port: int(id.DestinationPort())}
@@ -103,13 +103,13 @@ func (id ConnID) Protocol() int {
 func (id ConnID) ProtocolString() (proto string) {
 	p := id.Protocol()
 	switch p {
-	case unix.IPPROTO_TCP:
+	case ipproto.TCP:
 		if id.IsIPv4() {
 			proto = "tcp4"
 		} else {
 			proto = "tcp6"
 		}
-	case unix.IPPROTO_UDP:
+	case ipproto.UDP:
 		if id.IsIPv4() {
 			proto = "udp4"
 		} else {
@@ -134,13 +134,13 @@ func (id ConnID) Network() string {
 func IPProto(network string) int {
 	switch network {
 	case "tcp", "tcp4":
-		return unix.IPPROTO_TCP
+		return ipproto.TCP
 	case "udp", "udp4", "udp6":
-		return unix.IPPROTO_UDP
+		return ipproto.UDP
 	case "icmp":
-		return unix.IPPROTO_ICMP
+		return ipproto.ICMP
 	case "icmpv6":
-		return unix.IPPROTO_ICMPV6
+		return ipproto.ICMPV6
 	default:
 		return -1
 	}
@@ -148,13 +148,13 @@ func IPProto(network string) int {
 
 func protoString(proto int) string {
 	switch proto {
-	case unix.IPPROTO_ICMP:
+	case ipproto.ICMP:
 		return "icmp"
-	case unix.IPPROTO_TCP:
+	case ipproto.TCP:
 		return "tcp"
-	case unix.IPPROTO_UDP:
+	case ipproto.UDP:
 		return "udp"
-	case unix.IPPROTO_ICMPV6:
+	case ipproto.ICMPV6:
 		return "icmpv6"
 	default:
 		return fmt.Sprintf("IP-protocol %d", proto)

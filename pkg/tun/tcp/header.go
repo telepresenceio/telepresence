@@ -5,8 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
@@ -247,7 +246,7 @@ func (h Header) Payload() []byte {
 }
 
 func (h Header) SetChecksum(ipHdr ip.Header) {
-	ip.L4Checksum(ipHdr, 16, unix.IPPROTO_TCP)
+	ip.L4Checksum(ipHdr, 16, ipproto.TCP)
 }
 
 // AppendFlags appends a comma separated list of all flags that are currently set.
