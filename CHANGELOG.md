@@ -3,6 +3,13 @@
 ### 2.3.3 (TBD)
 
 - Feature: `telepresence intercept` now supports a `--to-pod` flag that can be used to port-forward sidecars' ports from an intercepted pod
+
+- Change: Telepresence no longer automatically shuts down the old
+  `api_version=1` `edgectl` daemon.  If migrating from such an old
+  version of `edgectl` you must now manually shut down the `edgectl`
+  daemon before running Telepresence.  This was already the case when
+  migrating from the newer `api_version=2` `edgectl`.
+
 - Bugfix: The root daemon no longer terminates when the user daemon disconnects from its gRPC streams, and instead waits to be terminated by the CLI.
 - Feature: The Helm chart is now published as part of our CI.
 

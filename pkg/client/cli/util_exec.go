@@ -8,27 +8,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
-	// nolint:depguard // TODO: switch this stuff over to dexec
+	//nolint:depguard // TODO: switch this stuff over to dexec
 	"os/exec"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )
-
-func runAsRoot(ctx context.Context, exe string, args []string) error {
-	if os.Geteuid() != 0 {
-		if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
-			fmt.Printf("Need root privileges to run %q\n", logging.ShellString(exe, args))
-			if err = exec.Command("sudo", "true").Run(); err != nil {
-				return err
-			}
-		}
-		args = append([]string{"-n", "-E", exe}, args...)
-		exe = "sudo"
-	}
-	return start(ctx, exe, args, false, nil, nil, nil)
-}
 
 func envPairs(env map[string]string) []string {
 	pairs := make([]string, len(env))
@@ -40,19 +26,10 @@ func envPairs(env map[string]string) []string {
 	return pairs
 }
 
-type withoutCancel struct {
-	context.Context
-}
-
-func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
-func (withoutCancel) Done() <-chan struct{}                   { return nil }
-func (withoutCancel) Err() error                              { return nil }
-func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
-
 func start(ctx context.Context, exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer, env ...string) error {
 	if !wait {
 		// The context should not kill it if cancelled
-		ctx = &withoutCancel{ctx}
+		ctx = dcontext.WithoutCancel(ctx)
 	}
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Stdout = stdout

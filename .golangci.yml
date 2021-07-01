@@ -31,8 +31,9 @@ linters-settings:
     packages-with-error-message:
       - os/exec:                    "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
       - github.com/golang/protobuf: "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
-      - github/datawire/dlib/dutil: "Use either `github/datawire/dlib/derror` or `github/datawire/dlib/dhttp` instead of `github/datawire/dlib/dutil`"
-      - golang.org/x/net/http2/h2c: "Use `github/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
+      - github/datawire/dlib/dutil: "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"
+      - golang.org/x/net/http2/h2c: "Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
+      - github.com/kballard/go-shellquote: "Use `github.com/telepresenceio/telepresence/pkg/client/logging.ShellString` instead of `github.com/kballard/go-shellquote.Join`"
 
   gocyclo:
     min-complexity: 35
@@ -48,9 +49,11 @@ linters-settings:
     line-length: 180
     tab-width: 2
 
-  misspell:
-    ignore-words:
-      - mosquitto
+  nolintlint:
+    allow-unused: false
+    allow-leading-space: false
+    require-explanation: true
+    require-specific: true
 
 linters:
   disable-all: true
@@ -60,11 +63,11 @@ linters:
     - depguard
     - dogsled
     - errcheck
-    - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
     - gocognit
     - gocritic
     - gocyclo
     - gofmt
+    - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
     - gosimple
     - govet
     - ineffassign
@@ -73,13 +76,14 @@ linters:
     - nakedret
     - prealloc
     - scopelint
-    - structcheck
     - staticcheck
+    - structcheck
     - typecheck
     - unconvert
     - unused
     - varcheck
     - whitespace
+    - nolintlint
 
   # don't enable:
   # - dupl

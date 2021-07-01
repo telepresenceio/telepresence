@@ -5,12 +5,11 @@ go 1.15
 require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59
-	github.com/datawire/dlib v1.2.2
+	github.com/datawire/dlib v1.2.4-0.20210626221837-1263db8c3201
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.2
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/miekg/dns v1.1.35
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pkg/errors v0.9.1
@@ -24,7 +23,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
-	google.golang.org/grpc v1.34.0
+	google.golang.org/grpc v1.38.0
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 	gotest.tools v2.2.0+incompatible
@@ -42,3 +41,6 @@ replace (
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
+
+// https://github.com/grpc/grpc-go/pull/4567
+replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316

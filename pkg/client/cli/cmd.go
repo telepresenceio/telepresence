@@ -34,16 +34,6 @@ recommended) which in turn may result in a password prompt.`
 
 // TODO: Provide a link in the help text to more info about telepresence
 
-func quitCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "quit",
-		Args: cobra.NoArgs,
-
-		Short: "Tell telepresence daemon to quit",
-		RunE:  quit,
-	}
-}
-
 // global options
 var dnsIP string
 var mappedNamespaces []string
@@ -107,15 +97,11 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 
 // Command returns the top level "telepresence" CLI command
 func Command(ctx context.Context) *cobra.Command {
-	myName := "Telepresence"
-	if !IsServerRunning() {
-		myName = "Telepresence (daemon unavailable)"
-	}
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
 		Args: OnlySubcommands,
 
-		Short:              myName,
+		Short:              "Connect your workstation to a Kubernetes cluster",
 		Long:               help,
 		RunE:               RunSubcommands,
 		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns

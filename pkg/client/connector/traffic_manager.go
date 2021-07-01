@@ -19,6 +19,7 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -415,8 +416,8 @@ func (tm *trafficManager) remain(c context.Context) error {
 	for {
 		select {
 		case <-c.Done():
-			_ = tm.clearIntercepts(context.Background())
-			_, _ = tm.managerClient.Depart(context.Background(), tm.session())
+			_ = tm.clearIntercepts(dcontext.WithoutCancel(c))
+			_, _ = tm.managerClient.Depart(dcontext.WithoutCancel(c), tm.session())
 			return nil
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{

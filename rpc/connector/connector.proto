@@ -135,9 +135,9 @@ message CreateInterceptRequest {
 // InterceptError is a common error type used by the intercept call family (add,
 // remove, list, available).
 enum InterceptError {
-  UNSPECIFIED = 0;
-  NO_PREVIEW_HOST = 1;
-  NO_CONNECTION = 2;
+  UNSPECIFIED = 0; // no error
+  reserved 1;
+  NO_CONNECTION = 2; // Have not made the .Connect RPC call (or it errored)
   NO_TRAFFIC_MANAGER = 3;
   TRAFFIC_MANAGER_CONNECTING = 4;
   TRAFFIC_MANAGER_ERROR = 5;
@@ -146,7 +146,7 @@ enum InterceptError {
   NO_ACCEPTABLE_WORKLOAD = 8;
   AMBIGUOUS_MATCH = 9;
   FAILED_TO_ESTABLISH = 10;
-  FAILED_TO_REMOVE = 11;
+  reserved 11;
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
 }

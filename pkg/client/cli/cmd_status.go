@@ -2,13 +2,13 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -40,73 +40,60 @@ func status(cmd *cobra.Command, _ []string) error {
 func daemonStatus(cmd *cobra.Command) error {
 	out := cmd.OutOrStdout()
 
-	var status *daemon.DaemonStatus
-	var version *common.VersionInfo
-	err := withStartedDaemon(cmd, func(ds *daemonState) error {
+	err := cliutil.WithStartedDaemon(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 		var err error
-		status, err = ds.grpc.Status(cmd.Context(), &empty.Empty{})
+		status, err := daemonClient.Status(cmd.Context(), &empty.Empty{})
 		if err != nil {
 			return err
 		}
-		version, err = ds.grpc.Version(cmd.Context(), &empty.Empty{})
+		version, err := daemonClient.Version(cmd.Context(), &empty.Empty{})
 		if err != nil {
 			return err
 		}
+
+		fmt.Fprintln(out, "Root Daemon: Running")
+		fmt.Fprintf(out, "  Version     : %s (api %d)\n", version.Version, version.ApiVersion)
+		fmt.Fprintf(out, "  DNS : %q\n", status.Dns)
+
 		return nil
 	})
-	if err == errDaemonIsNotRunning {
-		err = nil
-		status = &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}
-	}
 	if err != nil {
+		if errors.Is(err, cliutil.ErrNoDaemon) {
+			fmt.Fprintln(out, "Root Daemon: Not running")
+			return nil
+		}
 		return err
 	}
-
-	switch status.Error {
-	case daemon.DaemonStatus_NOT_STARTED:
-		fmt.Fprintln(out, "Root Daemon: Not running")
-		return nil
-	case daemon.DaemonStatus_NO_NETWORK:
-		fmt.Fprintln(out, "Root Daemon: Running, network overrides NOT established")
-	case daemon.DaemonStatus_UNSPECIFIED:
-		fmt.Fprintln(out, "Root Daemon: Running")
-	}
-	fmt.Fprintf(out, "  Version     : %s (api %d)\n", version.Version, version.ApiVersion)
-	fmt.Fprintf(out, "  DNS : %q\n", status.Dns)
 	return nil
 }
 
 func connectorStatus(cmd *cobra.Command) error {
 	out := cmd.OutOrStdout()
 
-	if !cliutil.IsConnectorRunning() {
-		fmt.Fprintln(out, "User Daemon: Not running")
-		return nil
-	}
-	fmt.Fprintln(out, "User Daemon: Running")
+	err := cliutil.WithStartedConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		fmt.Fprintln(out, "User Daemon: Running")
 
-	type kv struct {
-		Key   string
-		Value string
-	}
-	var fields []kv
-	defer func() {
-		klen := 0
-		for _, kv := range fields {
-			if len(kv.Key) > klen {
-				klen = len(kv.Key)
-			}
+		type kv struct {
+			Key   string
+			Value string
 		}
-		for _, kv := range fields {
-			vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
-			fmt.Fprintf(out, "  %-*s: %s\n", klen, kv.Key, vlines[0])
-			for _, vline := range vlines[1:] {
-				fmt.Fprintf(out, "    %s\n", vline)
+		var fields []kv
+		defer func() {
+			klen := 0
+			for _, kv := range fields {
+				if len(kv.Key) > klen {
+					klen = len(kv.Key)
+				}
 			}
-		}
-	}()
+			for _, kv := range fields {
+				vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
+				fmt.Fprintf(out, "  %-*s: %s\n", klen, kv.Key, vlines[0])
+				for _, vline := range vlines[1:] {
+					fmt.Fprintf(out, "    %s\n", vline)
+				}
+			}
+		}()
 
-	return cliutil.WithConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		version, err := connectorClient.Version(ctx, &empty.Empty{})
 		if err != nil {
 			return err
@@ -159,4 +146,12 @@ func connectorStatus(cmd *cobra.Command) error {
 
 		return nil
 	})
+	if err != nil {
+		if errors.Is(err, cliutil.ErrNoConnector) {
+			fmt.Fprintln(out, "User Daemon: Not running")
+			return nil
+		}
+		return err
+	}
+	return nil
 }

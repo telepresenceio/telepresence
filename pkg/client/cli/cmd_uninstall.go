@@ -12,7 +12,6 @@ import (
 )
 
 type uninstallInfo struct {
-	sessionInfo
 	agent      bool
 	allAgents  bool
 	everything bool
@@ -56,9 +55,8 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
-	u.cmd = cmd
 	doQuit := false
-	err := u.withConnector(true, func(cs *connectorState) error {
+	err := withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
 			Namespace:     u.namespace,
@@ -72,7 +70,7 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		default:
 			ur.UninstallType = connector.UninstallRequest_EVERYTHING
 		}
-		r, err := cs.connectorClient.Uninstall(cmd.Context(), ur)
+		r, err := connectorClient.Uninstall(ctx, ur)
 		if err != nil {
 			return err
 		}
@@ -83,17 +81,17 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
 			// No need to keep daemons once everything is uninstalled
 			doQuit = true
-			return cs.removeClusterFromUserCache(cmd.Context())
+			return removeClusterFromUserCache(ctx, connInfo)
 		}
 		return nil
 	})
 	if err == nil && doQuit {
-		err = quit(cmd, nil)
+		err = quit(cmd.Context())
 	}
 	return err
 }
 
-func (cs *connectorState) removeClusterFromUserCache(ctx context.Context) (err error) {
+func removeClusterFromUserCache(ctx context.Context, connInfo *connector.ConnectInfo) (err error) {
 	// Login token is affined to the traffic-manager that just got removed. The user-info
 	// in turn, is info obtained using that token so both are removed here as a
 	// consequence of removing the manager.
@@ -107,7 +105,7 @@ func (cs *connectorState) removeClusterFromUserCache(ctx context.Context) (err e
 		return err
 	}
 
-	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
+	key := connInfo.ClusterServer + "/" + connInfo.ClusterContext
 	if _, ok := ingresses[key]; ok {
 		delete(ingresses, key)
 		if err = cache.SaveIngressesToUserCache(ctx, ingresses); err != nil {
