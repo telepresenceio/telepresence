@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
@@ -27,7 +26,7 @@ func DatagramFromData(ipHdr ip.Header, data *buffer.Data) Datagram {
 func NewDatagram(ipPayloadLen int, src, dst net.IP) Datagram {
 	pkt := &datagram{}
 	ip.InitPacket(pkt, ipPayloadLen, src, dst)
-	pkt.ipHdr.SetL4Protocol(unix.IPPROTO_UDP)
+	pkt.ipHdr.SetL4Protocol(ipproto.UDP)
 	return pkt
 }
 

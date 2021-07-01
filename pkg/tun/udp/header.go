@@ -4,8 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
 
@@ -47,7 +46,7 @@ func (u Header) Checksum() uint16 {
 }
 
 func (u Header) SetChecksum(ipHdr ip.Header) {
-	ip.L4Checksum(ipHdr, 6, unix.IPPROTO_UDP)
+	ip.L4Checksum(ipHdr, 6, ipproto.UDP)
 }
 
 func (u Header) Packet() []byte {

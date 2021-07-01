@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
@@ -82,7 +81,7 @@ func (p *packet) Reset() Packet {
 
 	pkt := NewPacket(HeaderLen, incIp.Source(), incIp.Destination(), false)
 	iph := pkt.IPHeader()
-	iph.SetL4Protocol(unix.IPPROTO_TCP)
+	iph.SetL4Protocol(ipproto.TCP)
 	iph.SetChecksum()
 
 	tcpHdr := Header(iph.Payload())

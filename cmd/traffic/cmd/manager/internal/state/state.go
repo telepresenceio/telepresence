@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -630,7 +630,7 @@ func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunne
 			// Retrieve the connection that is tracked for the given id. Create a new one if necessary
 			h, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 				switch id.Protocol() {
-				case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
+				case ipproto.TCP, ipproto.UDP:
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
 						// Dispatch directly to agent and let the dial happen there
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
