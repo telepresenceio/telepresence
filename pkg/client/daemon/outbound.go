@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
-
 	dns2 "github.com/miekg/dns"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
@@ -31,7 +31,6 @@ type awaitLookupResult struct {
 // A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
 	dnsListener net.PacketConn
-	dnsIP       net.IP
 	noSearch    bool
 	router      *tunRouter
 
@@ -87,8 +86,10 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 	rand.Seed(time.Now().UnixNano())
 
 	ret := &outbound{
-		dnsListener:   listener,
-		dnsIP:         iputil.Parse(dnsIPStr),
+		dnsListener: listener,
+		dnsConfig: &rpc.DNSConfig{
+			LocalIp: iputil.Parse(dnsIPStr),
+		},
 		noSearch:      noSearch,
 		namespaces:    make(map[string]struct{}),
 		domains:       make(map[string]struct{}),
@@ -201,11 +202,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	maxWait := time.Duration(o.dnsConfig.LookupTimeout)
-	if maxWait <= 0 {
-		maxWait = 4 * time.Second
-	}
-	c, cancel := context.WithTimeout(c, maxWait)
+	c, cancel := context.WithTimeout(c, o.dnsConfig.LookupTimeout.AsDuration())
 	defer func() {
 		cancel()
 		o.dnsQueriesLock.Lock()
@@ -239,12 +236,11 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 	if info.Dns == nil {
 		info.Dns = &rpc.DNSConfig{}
 	}
-	o.dnsConfig = info.Dns
-	if len(o.dnsIP) == 0 && len(info.Dns.LocalIp) > 0 {
-		o.dnsIP = info.Dns.LocalIp
+	if oldIP := o.dnsConfig.GetLocalIp(); len(oldIP) > 0 {
+		info.Dns.LocalIp = oldIP
 	}
-	if len(o.dnsConfig.ExcludeSuffixes) == 0 {
-		o.dnsConfig.ExcludeSuffixes = []string{
+	if len(info.Dns.ExcludeSuffixes) == 0 {
+		info.Dns.ExcludeSuffixes = []string{
 			".arpa",
 			".com",
 			".io",
@@ -253,6 +249,10 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 			".ru",
 		}
 	}
+	if info.Dns.LookupTimeout.AsDuration() <= 0 {
+		info.Dns.LookupTimeout = durationpb.New(4 * time.Second)
+	}
+	o.dnsConfig = info.Dns
 
 	kubeDNS := o.kubeDNS
 	if len(info.Dns.RemoteIp) > 0 {
@@ -267,6 +267,12 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 		}()
 	}
 	return o.router.setOutboundInfo(ctx, info, kubeDNS)
+}
+
+func (o *outbound) getInfo() *rpc.OutboundInfo {
+	return &rpc.OutboundInfo{
+		Dns: o.dnsConfig,
+	}
 }
 
 func (o *outbound) noMoreUpdates() {

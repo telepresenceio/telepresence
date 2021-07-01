@@ -308,7 +308,7 @@ message LookupHostAgentResponse {
   LookupHostResponse response = 3;
 }
 
-// IPNet is a subnet. I.e. 10.43.0.0/16
+// IPNet is a subnet. e.g. 10.43.0.0/16
 message IPNet {
   bytes ip = 1;
   int32 mask = 2;

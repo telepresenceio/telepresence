@@ -16,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -535,7 +536,7 @@ func (tm *trafficManager) getOutboundInfo(mgrPort int32) *daemon.OutboundInfo {
 		info.Dns = &daemon.DNSConfig{
 			ExcludeSuffixes: tm.DNS.ExcludeSuffixes,
 			IncludeSuffixes: tm.DNS.IncludeSuffixes,
-			LookupTimeout:   int64(tm.DNS.LookupTimeout.Duration),
+			LookupTimeout:   durationpb.New(tm.DNS.LookupTimeout.Duration),
 		}
 		if len(tm.DNS.LocalIP) > 0 {
 			info.Dns.LocalIp = tm.DNS.LocalIP.IP()

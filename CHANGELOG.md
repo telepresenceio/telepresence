@@ -4,6 +4,9 @@
 
 - Feature: `telepresence intercept` now supports a `--to-pod` flag that can be used to port-forward sidecars' ports from an intercepted pod
 
+- Feature: `telepresence status` now includes more information about
+  the root daemon.
+
 - Change: Telepresence no longer automatically shuts down the old
   `api_version=1` `edgectl` daemon.  If migrating from such an old
   version of `edgectl` you must now manually shut down the `edgectl`

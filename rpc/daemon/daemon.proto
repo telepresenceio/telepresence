@@ -1,6 +1,7 @@
 syntax = "proto3";
 package telepresence.daemon;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
@@ -27,9 +28,8 @@ service Daemon {
 }
 
 message DaemonStatus {
-  reserved 1;
-  string dns = 2;
-  reserved 3;
+  reserved 1, 2, 3;
+  OutboundInfo outbound_config = 4;
 }
 
 message Paths {
@@ -39,7 +39,7 @@ message Paths {
 // DNS configuration for the local DNS resolver
 message DNSConfig {
   // local_ip is the address of the local DNS server. Only used by Linux systems that have no
-  // systemd.resolved configured. Defaults to the first line of /etc/resolv.conf
+  // systemd-resolved configured. Defaults to the first line of /etc/resolv.conf
   bytes local_ip = 1;
 
   // remote_ip is the address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
@@ -51,8 +51,10 @@ message DNSConfig {
   // Suffixes to include. Has higher prio than the excludes
   repeated string include_suffixes = 4;
 
+  reserved 5;
+
   // The maximum time wait for a cluster side host lookup.
-  int64 lookup_timeout = 5;
+  google.protobuf.Duration lookup_timeout = 6;
 }
 
 // OutboundInfo contains all information that the root daemon needs in order to

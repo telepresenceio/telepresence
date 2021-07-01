@@ -26,7 +26,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	}()
 
 	if !dConn.IsRunning() {
-		dlog.Error(c, "systemd.resolved is not running")
+		dlog.Error(c, "systemd-resolved is not running")
 		return errResolveDNotConfigured
 	}
 
@@ -43,7 +43,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		// When using systemd.resolved, we provide resolution of NAME.NAMESPACE by adding each
+		// When using systemd-resolved, we provide resolution of NAME.NAMESPACE by adding each
 		// namespace as a route (a search entry prefixed with ~)
 		namespaces := make(map[string]struct{})
 		search := make([]string, 0)
@@ -119,7 +119,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 			}
 			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 		}
-		dlog.Error(c, "resolver did not receive requests from systemd.resolved")
+		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured
 	})
 	return g.Wait()
