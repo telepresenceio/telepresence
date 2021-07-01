@@ -55,10 +55,10 @@ func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 		if err := needPwCmd.Run(); err != nil {
 			fmt.Printf("Need root privileges to run: %s\n", logging.ShellString(args[0], args[1:]))
 			// `sudo` won't be able to read the password from the terminal when we run
-			// it with Setpgid=true, so do a pre-flight `sudo --validate` to read the
+			// it with Setpgid=true, so do a pre-flight `sudo true` to read the
 			// password, and then enforce that being re-used by passing
 			// `--non-interactive`.
-			pwCmd := dexec.CommandContext(ctx, "sudo", "--validate")
+			pwCmd := dexec.CommandContext(ctx, "sudo", "true")
 			pwCmd.DisableLogging = true
 			if err := pwCmd.Run(); err != nil {
 				return err
