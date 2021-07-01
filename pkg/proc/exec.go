@@ -31,6 +31,10 @@ func Run(ctx context.Context, exe string, args []string, env map[string]string) 
 	// Ensure that signals are propagated to the child process
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, signalsToForward...)
+	defer func() {
+		signal.Stop(sigCh)
+		close(sigCh)
+	}()
 	go func() {
 		sig := <-sigCh
 		if sig == nil {
@@ -43,7 +47,6 @@ func Run(ctx context.Context, exe string, args []string, env map[string]string) 
 		return fmt.Errorf("%s: %w", logging.ShellString(exe, args), err)
 	}
 
-	sigCh <- nil
 	exitCode := s.ExitCode()
 	if exitCode != 0 {
 		return fmt.Errorf("%s %s: exited with %d", exe, strings.Join(args, " "), exitCode)
