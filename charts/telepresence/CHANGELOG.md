@@ -1,6 +1,6 @@
 # Change Log
 
-### (TBD)
+### v2.3.3-rc.0
 
 - Feature: Add AgentInjectorWebhook yaml files, newly introduced in 2.3.1.
 - Feature: Include service account + ClusterRole + ClusterRoleBinding for the traffic-manager, since it now communicates directly with the cluster.
