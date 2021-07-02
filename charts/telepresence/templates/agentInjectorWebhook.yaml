@@ -6,6 +6,8 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   name: {{ .Values.agentInjector.webhook.name }}-{{ include "telepresence.namespace" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
 webhooks:
 {{- with .Values.agentInjector.webhook.admissionReviewVersions }}
 - admissionReviewVersions:
@@ -38,6 +40,8 @@ kind: Secret
 metadata:
   name: {{ .Values.agentInjector.secret.name }}
   namespace: {{ include "telepresence.namespace" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
 data:
   ca.pem: {{ $ca.Cert | b64enc }}
   crt.pem: {{ $cert.Cert | b64enc }}
