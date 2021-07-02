@@ -50,7 +50,7 @@ These are the valid fields for the `logLevels` key:
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.
 
 ### Values
-The current per-cluster configuration supports `dns` and `alsoProxy` keys.
+The current per-cluster configuration supports `dns`, `alsoProxy`, and `manager` keys.
 To add configuration, simply add a `telepresence.io` entry to the cluster in your kubeconfig like so:
 
 ```
@@ -63,6 +63,7 @@ clusters:
       extension:
         dns:
         also-proxy:
+        manager:
   name: example-cluster
 ```
 #### DNS
@@ -108,5 +109,24 @@ clusters:
       extension:
         also-proxy:
         - 1.2.3.4/32
+  name: example-cluster
+```
+
+#### Manager
+
+The `manager` key contains configuration for finding the `traffic-manager` that telepresence will connect to. It supports one key, `namespace`, indicating the namespace where the traffic manager is to be found
+
+Here is an example kubeconfig that will instruct telepresence to connect to a manager in namespace `staging`:
+
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    server: https://127.0.0.1
+    extensions:
+    - name: telepresence.io
+      extension:
+        manager:
+          namespace: staging
   name: example-cluster
 ```
