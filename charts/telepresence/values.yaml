@@ -110,6 +110,13 @@ managerRbac:
   # Default: true
   create: true
 
+  # Whether the manager rbac should limit itself to only certain namespaces
+  # Default: false
+  namespaceScoped: false
+
+  # If namespaceScoped is true, which namespaces the managerRbac should apply to
+  namespaces: []
+
 
 ################################################################################
 ## Agent Injector Configuration

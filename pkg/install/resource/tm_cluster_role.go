@@ -83,6 +83,9 @@ func (ri tmClusterRole) Update(ctx context.Context) error {
 	if ri.found == nil {
 		return nil
 	}
+	if isManagedByHelm(ctx, ri.found) {
+		return nil
+	}
 
 	dcr := ri.desiredClusterRole(ctx)
 	if rulesEqual(ri.found.Rules, dcr.Rules) {

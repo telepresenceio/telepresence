@@ -165,6 +165,9 @@ func (ri *tmDeployment) Update(ctx context.Context) error {
 	if ri.found == nil {
 		return nil
 	}
+	if isManagedByHelm(ctx, ri.found) {
+		return nil
+	}
 
 	imageName := ri.imageName(ctx)
 	currentPodSpec := &ri.found.Spec.Template.Spec

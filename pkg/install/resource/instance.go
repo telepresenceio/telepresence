@@ -136,3 +136,11 @@ func remove(ctx context.Context, resource kates.Object) error {
 	}
 	return nil
 }
+
+func isManagedByHelm(ctx context.Context, resource kates.Object) bool {
+	labels := resource.GetLabels()
+	if manager, ok := labels["app.kubernetes.io/managed-by"]; ok {
+		return manager == "Helm"
+	}
+	return false
+}
