@@ -978,13 +978,19 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 	}, 5*time.Second, time.Second)
 
 	// Verify response from intercepting client
-	hc := http.Client{Timeout: time.Second}
-	resp, err := hc.Get("http://hello-0")
-	require.NoError(err)
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	assert.NoError(err)
-	assert.Equal("hello-0 from intercept at /", string(body))
+	assert.Eventually(func() bool {
+		hc := http.Client{Timeout: time.Second}
+		resp, err := hc.Get("http://hello-0")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return false
+		}
+		return "hello-0 from intercept at /" == string(body)
+	}, 5*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
