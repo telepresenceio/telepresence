@@ -459,9 +459,8 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 		}
 	} else {
 		agents, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId)
-		intercepts := tm.getCurrentIntercepts()
 		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
-		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: intercepts}
+		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()}
 		r.SessionInfo = tm.session()
 		r.BridgeOk = true
 	}

@@ -236,9 +236,14 @@ func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 
 	// Amend with local info
 	for _, ii := range intercepts {
-		if mp, ok := tm.mountPoints.Load(ii.Spec.Name); ok {
-			ii.Spec.MountPoint = mp.(string)
-		}
+		ii := ii // Pin it
+		tm.mountPoints.Range(func(k, v interface{}) bool {
+			if v.(string) == ii.Spec.Name {
+				ii.Spec.MountPoint = k.(string)
+				return false
+			}
+			return true
+		})
 	}
 	return intercepts
 }
