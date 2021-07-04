@@ -39,3 +39,24 @@ Any org with a red X requires access to be granted to Ambassador Labs.  Owners o
 
 Once approval is granted, you will have to log out of Ambassador Cloud then back in to select the org.
 
+### Volume mounts are not working on macOS
+
+It's necessary to have `sshfs` installed in order for volume mounts to work correctly during intercepts. Lately there's been some issues using `brew install sshfs` a macOS workstation because the required component `osxfuse` (now named `macfuse`) isn't open source and hence, no longer supported. As a workaround, you can now use `gromgit/fuse/sshfs-mac` instead. Follow these steps:
+
+1. Remove old sshfs, macfuse, osxfuse using `brew uninstall`
+2. `brew install --cask macfuse`
+3. `brew install gromgit/fuse/sshfs-mac`
+4. `brew link --overwrite sshfs-mac`
+
+Now sshfs -V shows you the correct version, e.g.:
+```
+$ sshfs -V
+SSHFS version 2.10
+FUSE library version: 2.9.9
+fuse: no mount point
+```
+
+but one more thing must be done before it works OK:
+5. Try a mount (or an intercept that performs a mount). It will fail because you need to give permission to “Benjamin Fleischer” to execute a kernel extension (a pop-up appears that takes you to the system preferences).
+6. Approve the needed permission
+7. Reboot your computer.
