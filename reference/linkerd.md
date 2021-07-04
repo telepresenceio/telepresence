@@ -12,10 +12,10 @@ spec:
   template:
     metadata:
       annotations:
-        config.linkerd.io/skip-outbound-ports: "8081,8022,6000-7999"
+        config.linkerd.io/skip-outbound-ports: "8081"
 ```
 
-The Traffic Agent uses port 8081 for its API, 8022 for SSHFS, and 6001 for the actual tunnel between the Traffic Manager and the local system.  Telling Linkerd to skip these ports allows the Traffic Agent sidecar to fully communicate with the Traffic Manager, and therefore the rest of the Telepresence system.
+The local system and the Traffic Agent connect to the Traffic Manager using its gRPC API on port 8081. Telling Linkerd to skip that port allows the Traffic Agent sidecar to fully communicate with the Traffic Manager, and therefore the rest of the Telepresence system.
 
 ## Prerequisites
 1. [Telepresence binary](../../install)
