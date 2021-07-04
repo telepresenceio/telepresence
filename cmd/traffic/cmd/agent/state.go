@@ -56,18 +56,28 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				break
 			}
 		}
-	}
 
-	if chosenIntercept != nil {
-		// The chosen intercept still exists
-		if chosenIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
-			// and is active
-			activeIntercept = chosenIntercept
+		if chosenIntercept != nil {
+			// The chosen intercept still exists
+			if chosenIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
+				// and is active
+				activeIntercept = chosenIntercept
+			}
+		} else {
+			// The chosen intercept was deleted by the user
+			dlog.Info(ctx, "The previously-active intercept has been deleted")
+			s.chosenID = ""
 		}
 	} else {
-		// The chosen intercept was deleted by the user
-		dlog.Info(ctx, "The previously-active intercept has been deleted")
-		s.chosenID = ""
+		// Attach to already ACTIVE intercept if there is one.
+		for _, cept := range cepts {
+			if cept.Disposition == manager.InterceptDispositionType_ACTIVE {
+				chosenIntercept = cept
+				s.chosenID = cept.Id
+				activeIntercept = cept
+				break
+			}
+		}
 	}
 
 	// Update forwarding
@@ -75,7 +85,7 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 
 	// Review waiting intercepts
 	reviews := []*manager.ReviewInterceptRequest{}
-	for i, cept := range cepts {
+	for _, cept := range cepts {
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active
 			switch {
@@ -102,7 +112,7 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				// once the manager assigns a port.
 				dlog.Infof(ctx, "Setting intercept %q as ACTIVE", cept.Id)
 				s.chosenID = cept.Id
-				chosenIntercept = cepts[i]
+				chosenIntercept = cept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:                cept.Id,
 					Disposition:       manager.InterceptDispositionType_ACTIVE,

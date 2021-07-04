@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -74,6 +75,17 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	defer file.Close()
 
 	defer func() {
+		// The ctx might well be cancelled at this point but is used as parent during
+		// the timed clean-up to keep logging intact.
+		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
+		defer cancel()
+
+		// Reset state by processing an empty snapshot
+		// - clear out any intercepts
+		// - set forwarding to the app
+		state.HandleIntercepts(ctx, nil)
+
+		// Depart session
 		if _, err := manager.Depart(ctx, session); err != nil {
 			dlog.Errorf(ctx, "depart session: %+v", err)
 		}
@@ -97,13 +109,6 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 			}
 			snapshots <- snapshot
 		}
-	}()
-
-	defer func() {
-		// Reset state by processing an empty snapshot
-		// - clear out any intercepts
-		// - set forwarding to the app
-		state.HandleIntercepts(ctx, nil)
 	}()
 
 	// Deal with host lookups dispatched to this agent during intercepts

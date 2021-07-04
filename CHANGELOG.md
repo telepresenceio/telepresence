@@ -12,10 +12,15 @@
   version of `edgectl` you must now manually shut down the `edgectl`
   daemon before running Telepresence.  This was already the case when
   migrating from the newer `api_version=2` `edgectl`.
-
+  
 - Bugfix: The root daemon no longer terminates when the user daemon disconnects from its gRPC streams, and instead waits to be terminated by the CLI.
+
 - Feature: The Helm chart is now published as part of our CI.
+
+- Bugfix: An intercept will survive deletion of the intercepted pod provided that another pod is created (or already exists) that can take over. 
+
 - Feature: Telepresence can now be configured to look for the traffic manager in a namespace other than `ambassador`. This can be configured on a per-cluster basis.
+
 
 ### 2.3.2 (June 18, 2021)
 

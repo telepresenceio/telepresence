@@ -348,7 +348,11 @@ func (cs *connectedSuite) ns() string {
 func (cs *connectedSuite) SetupSuite() {
 	require := cs.Require()
 	c := dlog.NewTestContext(cs.T(), false)
-	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "telepresence-test-developer"))
+
+	cs.Eventually(func() bool {
+		return run(c, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
+	}, 5*time.Second, time.Second)
+
 	stdout, stderr := telepresence(cs.T(), "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
@@ -746,6 +750,7 @@ type interceptedSuite struct {
 	suite.Suite
 	tpSuite        *telepresenceSuite
 	intercepts     []string
+	mountPoint     string // mount point for service 0.
 	services       *dgroup.Group
 	cancelServices context.CancelFunc
 }
@@ -783,14 +788,21 @@ func (is *interceptedSuite) SetupSuite() {
 		)
 	})
 
+	is.mountPoint = is.T().TempDir()
 	is.Run("adding intercepts", func() {
-		for i := 0; i < serviceCount; i++ {
+		// Add all `hello-N` intercepts. Let `hello-0` have a mounted volume.
+		addIntercept := func(i int, extraArgs ...string) {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
-			stdout, stderr := telepresence(is.T(), "intercept", "--namespace", is.ns(), "--mount", "false", svc, "--port", port)
+			args := []string{"intercept", "--namespace", is.ns(), svc, "--port", port}
+			stdout, stderr := telepresence(is.T(), append(args, extraArgs...)...)
 			is.Require().Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
 			is.Contains(stdout, "Using Deployment "+svc)
+		}
+		addIntercept(0, "--mount", is.mountPoint)
+		for i := 1; i < serviceCount; i++ {
+			addIntercept(i, "--mount", "false")
 		}
 	})
 
@@ -860,6 +872,131 @@ func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
 	for i := 0; i < serviceCount; i++ {
 		require.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
 	}
+}
+
+func (is *interceptedSuite) TestC_MountedFilesystem() {
+	require := is.Require()
+	st, err := os.Stat(is.mountPoint)
+	require.NoError(err, "Stat on <mount point> failed")
+	require.True(st.IsDir(), "Mount point is not a directory")
+	st, err = os.Stat(filepath.Join(is.mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+func (is *interceptedSuite) TestD_RestartInterceptedPod() {
+	ts := is.tpSuite
+	assert := is.Assert()
+	require := is.Require()
+	c := dlog.NewTestContext(is.T(), false)
+	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: hello-0-` + is.ns() + `\s+State\s*: ([^\n]+)\n`))
+
+	// Scale down to zero pods
+	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "0"))
+
+	// Verify that intercept remains but that no agent is found
+	assert.Eventually(func() bool {
+		stdout, _ := telepresence(is.T(), "--namespace", is.ns(), "list")
+		if match := rx.FindStringSubmatch(stdout); match != nil {
+			dlog.Infof(c, "Got match '%s'", match[1])
+			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "hello-0"`)
+		}
+		return false
+	}, 5*time.Second, time.Second)
+
+	// Verify that volume mount is broken
+	_, err := os.Stat(filepath.Join(is.mountPoint, "var"))
+	assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
+
+	// Scale up again (start intercepted pod)
+	assert.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "1"))
+
+	// Verify that intercept becomes active
+	assert.Eventually(func() bool {
+		stdout, _ := telepresence(is.T(), "--namespace", is.ns(), "list")
+		if match := rx.FindStringSubmatch(stdout); match != nil {
+			return match[1] == "ACTIVE"
+		}
+		return false
+	}, 5*time.Second, time.Second)
+
+	// Verify that volume mount is restored
+	assert.Eventually(func() bool {
+		st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
+		return err == nil && st.IsDir()
+	}, 5*time.Second, time.Second)
+}
+
+func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
+	ts := is.tpSuite
+	assert := is.Assert()
+	require := is.Require()
+	c := dlog.NewTestContext(is.T(), false)
+	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: hello-0-` + is.ns() + `\s+State\s*: ([^\n]+)\n`))
+
+	helloZeroPods := func() []string {
+		pods, err := ts.kubectlOut(c, "get", "pods", "--field-selector", "status.phase==Running", "-l", "app=hello-0", "-o", "jsonpath={.items[*].metadata.name}")
+		assert.NoError(err)
+		pods = strings.TrimSpace(pods)
+		dlog.Infof(c, "Pods = '%s'", pods)
+		return strings.Split(pods, " ")
+	}
+	// Get current pod
+	currentPods := helloZeroPods()
+	require.True(len(currentPods) == 1)
+	currentPod := currentPods[0]
+
+	// Scale up to two pods
+	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "2"))
+	defer func() {
+		_ = ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "1")
+	}()
+
+	// Wait for second pod to arrive
+	assert.Eventually(func() bool { return len(helloZeroPods()) == 2 }, 5*time.Second, time.Second)
+
+	// Delete the currently intercepted pod
+	require.NoError(ts.kubectl(c, "--context", "default", "delete", "pod", currentPod))
+
+	// Wait for that pod to disappear
+	assert.Eventually(
+		func() bool {
+			for _, zp := range helloZeroPods() {
+				if zp == currentPod {
+					return false
+				}
+			}
+			return true
+		}, 5*time.Second, time.Second)
+
+	// Verify that intercept is still active
+	assert.Eventually(func() bool {
+		stdout, _ := telepresence(is.T(), "--namespace", is.ns(), "list", "--intercepts")
+		if match := rx.FindStringSubmatch(stdout); match != nil {
+			return match[1] == "ACTIVE"
+		}
+		return false
+	}, 5*time.Second, time.Second)
+
+	// Verify response from intercepting client
+	assert.Eventually(func() bool {
+		hc := http.Client{Timeout: time.Second}
+		resp, err := hc.Get("http://hello-0")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return false
+		}
+		return "hello-0 from intercept at /" == string(body)
+	}, 5*time.Second, time.Second)
+
+	// Verify that volume mount is restored
+	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
 func (ts *telepresenceSuite) applyApp(c context.Context, name, svcName string, port int) error {

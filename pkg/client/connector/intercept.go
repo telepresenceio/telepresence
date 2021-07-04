@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -61,6 +60,84 @@ type portForward struct {
 	Port int32
 }
 
+// The livePortForward struct provides synchronization for cancellation of port forwards.
+// This is necessary because a volume mount process must terminate before the corresponding
+// file system is removed. The removal cannot take place when the process ends because there
+// may be subsequent processes that use the same volume mount during the life time of an
+// intercept (since an intercept may change pods).
+type livePortForward struct {
+	wg     sync.WaitGroup
+	cancel context.CancelFunc
+}
+
+type livePortForwards struct {
+	// live contains a map of the currently alive port forwards
+	live map[forwardKey]*livePortForward
+
+	// snapshot is recreated for each new intercept snapshot read from the manager
+	snapshot map[forwardKey]struct{}
+}
+
+func newPortForwards() *livePortForwards {
+	return &livePortForwards{live: make(map[forwardKey]*livePortForward)}
+}
+
+// start starts a port forward for the given intercept and remembers that it's alive
+func (lpf livePortForwards) start(ctx context.Context, tm *trafficManager, ii *manager.InterceptInfo) {
+	fk := forwardKey{
+		Name:  ii.Spec.Name,
+		PodIP: ii.PodIp,
+	}
+	if _, isLive := lpf.live[fk]; !isLive {
+		pfCtx, pfCancel := context.WithCancel(ctx)
+		livePortForward := &livePortForward{cancel: pfCancel}
+		forwarded := tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.Spec.ExtraPorts)
+		if forwarded {
+			lpf.snapshot[fk] = struct{}{}
+			lpf.live[fk] = livePortForward
+		} else {
+			pfCancel()
+		}
+	}
+}
+
+// initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted
+func (lpf *livePortForwards) initSnapshot() {
+	lpf.snapshot = make(map[forwardKey]struct{})
+}
+
+// cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot
+func (lpf livePortForwards) cancelUnwanted(ctx context.Context) {
+	for fk, lp := range lpf.live {
+		if _, isWanted := lpf.snapshot[fk]; !isWanted {
+			dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
+			lp.cancel()
+			delete(lpf.live, fk)
+			lp.wg.Wait()
+		}
+	}
+}
+
+// reconcileMountPoints deletes mount points for which there no longer is an intercept
+func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
+	var mountsToDelete []interface{}
+	tm.mountPoints.Range(func(key, value interface{}) bool {
+		if _, ok := existingIntercepts[value.(string)]; !ok {
+			mountsToDelete = append(mountsToDelete, key)
+		}
+		return true
+	})
+	for _, key := range mountsToDelete {
+		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
+			mountPoint := key.(string)
+			if err := os.Remove(mountPoint); err != nil {
+				dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
+			}
+			dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
+		}
+	}
+}
+
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
@@ -69,10 +146,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	//     their exit statuses is just a memory leak
 	//  3. because we want a per-worker cancel, we'd have to implement our own Context
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
-	var wg sync.WaitGroup
-
-	livePortForwards := make(map[forwardKey]context.CancelFunc)
-
+	portForwards := newPortForwards()
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
 		<-tm.startup
@@ -80,43 +154,61 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 		if err != nil {
 			err = fmt.Errorf("manager.WatchIntercepts dial: %w", err)
 		}
-		for err == nil {
+		for err == nil && ctx.Err() == nil {
 			var snapshot *manager.InterceptInfoSnapshot
 			snapshot, err = stream.Recv()
+			var intercepts []*manager.InterceptInfo
+
 			if err != nil {
-				err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
-				break
+				if ctx.Err() == nil {
+					err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
+					break
+				}
+				// context is cancelled. Continue as if we had an empty snapshot. This
+				// will ensure that volume mounts are cancelled correctly.
+			} else {
+				intercepts = snapshot.Intercepts
 			}
-			snapshotPortForwards := make(map[forwardKey]struct{})
+			tm.setCurrentIntercepts(intercepts)
+
+			// allNames contains the names of all intercepts, irrespective of their status
+			allNames := make(map[string]struct{})
+
+			portForwards.initSnapshot()
 			namespaces := make(map[string]struct{})
-			for _, intercept := range snapshot.Intercepts {
-				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
+			for _, intercept := range intercepts {
+				allNames[intercept.Spec.Name] = struct{}{}
+
+				var iceptError error
+				switch intercept.Disposition {
+				case manager.InterceptDispositionType_ACTIVE:
+				case manager.InterceptDispositionType_WAITING:
 					continue
+				default:
+					iceptError = fmt.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
 				}
-				namespaces[intercept.Spec.Namespace] = struct{}{}
-				fk := forwardKey{
-					Name:  intercept.Spec.Name,
-					PodIP: intercept.PodIp,
-				}
-				if _, isLive := livePortForwards[fk]; !isLive {
-					pfCtx, pfCancel := context.WithCancel(ctx)
-					forwarded := tm.startForwards(pfCtx, &wg, fk, intercept.SftpPort, intercept.Spec.ExtraPorts)
-					if forwarded {
-						snapshotPortForwards[fk] = struct{}{}
-						livePortForwards[fk] = pfCancel
-					} else {
-						pfCancel()
+
+				// Notify waiters for active intercepts
+				if chUt, loaded := tm.activeInterceptsWaiters.LoadAndDelete(intercept.Spec.Name); loaded {
+					if ch, ok := chUt.(chan interceptResult); ok {
+						dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", intercept.Id, intercept.Disposition)
+						ch <- interceptResult{
+							intercept: intercept,
+							err:       iceptError,
+						}
+						close(ch)
 					}
 				}
-			}
-			for fk, cancel := range livePortForwards {
-				if _, isWanted := snapshotPortForwards[fk]; !isWanted {
-					dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
-					cancel()
-					delete(livePortForwards, fk)
+				if iceptError == nil {
+					namespaces[intercept.Spec.Namespace] = struct{}{}
+					portForwards.start(ctx, tm, intercept)
 				}
 			}
-			tm.setInterceptedNamespaces(ctx, namespaces)
+			portForwards.cancelUnwanted(ctx)
+			tm.reconcileMountPoints(ctx, allNames)
+			if ctx.Err() == nil {
+				tm.setInterceptedNamespaces(ctx, namespaces)
+			}
 		}
 
 		if ctx.Err() == nil {
@@ -128,10 +220,38 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			}
 		}
 	}
-
-	wg.Wait()
-
 	return nil
+}
+
+// getCurrentIntercepts returns a copy of the current intercept snapshot amended with
+// the local filesystem mount point.
+func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
+	// Copy the current snapshot
+	tm.currentInterceptsLock.Lock()
+	intercepts := make([]*manager.InterceptInfo, len(tm.currentIntercepts))
+	for i, ii := range tm.currentIntercepts {
+		intercepts[i] = proto.Clone(ii).(*manager.InterceptInfo)
+	}
+	tm.currentInterceptsLock.Unlock()
+
+	// Amend with local info
+	for _, ii := range intercepts {
+		ii := ii // Pin it
+		tm.mountPoints.Range(func(k, v interface{}) bool {
+			if v.(string) == ii.Spec.Name {
+				ii.Spec.MountPoint = k.(string)
+				return false
+			}
+			return true
+		})
+	}
+	return intercepts
+}
+
+func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptInfo) {
+	tm.currentInterceptsLock.Lock()
+	tm.currentIntercepts = intercepts
+	tm.currentInterceptsLock.Unlock()
 }
 
 // addIntercept adds one intercept
@@ -154,11 +274,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	<-tm.startup
-	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
-	if err != nil {
-		return nil, err
-	}
-	for _, iCept := range intercepts {
+	for _, iCept := range tm.getCurrentIntercepts() {
 		if iCept.Spec.Name == spec.Name {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_ALREADY_EXISTS,
@@ -223,6 +339,13 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
 	defer cancel()
 	<-tm.startup
+
+	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
+	// should become active within a few seconds.
+	waitCh := make(chan interceptResult)
+	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
+	defer tm.activeInterceptsWaiters.Delete(spec.Name)
+
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
@@ -235,22 +358,30 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
-	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
-	// should become active within a few seconds.
-	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
+	select {
+	case <-c.Done():
 		return &rpc.InterceptResult{
 			InterceptInfo: ii,
 			Error:         rpc.InterceptError_FAILED_TO_ESTABLISH,
-			ErrorText:     err.Error(),
+			ErrorText:     c.Err().Error(),
 		}, nil
+	case wr := <-waitCh:
+		ii = wr.intercept
+		if wr.err != nil {
+			return &rpc.InterceptResult{
+				InterceptInfo: ii,
+				Error:         rpc.InterceptError_FAILED_TO_ESTABLISH,
+				ErrorText:     wr.err.Error(),
+			}, nil
+		}
+		result.InterceptInfo = wr.intercept
+		if ir.MountPoint != "" && ii.SftpPort > 0 {
+			result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
+			deleteMount = false // Mount-point is busy until intercept ends
+			ii.Spec.MountPoint = ir.MountPoint
+		}
+		return result, nil
 	}
-	result.InterceptInfo = ii
-	if ir.MountPoint != "" && ii.SftpPort > 0 {
-		result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
-		deleteMount = false // Mount-point is busy until intercept ends
-		ii.Spec.MountPoint = ir.MountPoint
-	}
-	return result, nil
 }
 
 // addLocalOnlyIntercept adds a local-only intercept
@@ -309,46 +440,6 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcN
 		Environment:  agent.Environment,
 		ServiceUid:   svcUID,
 		WorkloadKind: kind,
-	}
-}
-
-func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
-	dlog.Debugf(ctx, "waiting for intercept id=%q to become active", id)
-	waitError := func(err error) error {
-		return client.CheckTimeout(ctx,
-			fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err))
-	}
-	<-tm.startup
-	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
-	if err != nil {
-		return nil, waitError(err)
-	}
-	for {
-		snapshot, err := stream.Recv()
-		if err != nil {
-			return nil, waitError(err)
-		}
-
-		var intercept *manager.InterceptInfo
-		for _, straw := range snapshot.Intercepts {
-			if straw.Id == id {
-				intercept = straw
-				break
-			}
-		}
-
-		switch {
-		case intercept == nil:
-			dlog.Debugf(ctx, "wait status: intercept id=%q does not yet exist", id)
-		case intercept.Disposition == manager.InterceptDispositionType_WAITING:
-			dlog.Debugf(ctx, "wait status: intercept id=%q is still WAITING", id)
-		default:
-			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", id, intercept.Disposition)
-			if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
-				return intercept, errors.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
-			}
-			return intercept, nil
-		}
 	}
 }
 
@@ -414,7 +505,7 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	}
 	f := forwarder.NewForwarder(&addr, pf.PodIP, pf.Port)
 	err := f.Serve(ctx)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
 	}
 }
@@ -434,17 +525,6 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		dlog.Errorf(ctx, "No mount point found for intercept %q", mf.Name)
 		return
 	}
-
-	defer func() {
-		if _, err := os.Stat(mountPoint); !os.IsNotExist(err) {
-			// Remove if empty
-			if err := os.Remove(mountPoint); err != nil {
-				dlog.Errorf(ctx, "removal of %q failed: %v", mountPoint, err)
-			}
-		}
-		tm.mountPoints.Delete(mountPoint)
-		dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
-	}()
 
 	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
 
@@ -476,7 +556,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		return dpipe.DPipe(ctx, dexec.CommandContext(ctx, "sshfs", sshfsArgs...), conn)
 	}, 3*time.Second, 6*time.Second)
 
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		dlog.Error(ctx, err)
 	}
 }
@@ -516,8 +596,7 @@ func (tm *trafficManager) removeLocalOnlyIntercept(c context.Context, name, name
 // clearIntercepts removes all intercepts
 func (tm *trafficManager) clearIntercepts(c context.Context) error {
 	<-tm.startup
-	intercepts, _ := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
-	for _, cept := range intercepts {
+	for _, cept := range tm.getCurrentIntercepts() {
 		err := tm.removeIntercept(c, cept.Spec.Name)
 		if err != nil {
 			return err

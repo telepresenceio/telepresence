@@ -61,8 +61,14 @@ func launchDaemon(ctx context.Context, dnsIP string) error {
 		// use `sudo`'s `--prompt` flag for this because (1) we don't want it to be
 		// re-displayed if they typo their password, and (2) it might be ignored anyway
 		// depending on `passprompt_override` in `/etc/sudoers`.  So we'll do a pre-flight
-		// `sudo --non-interactive --validate` to decide whether to display it.
-		needPwCmd := dexec.CommandContext(ctx, "sudo", "--non-interactive", "--validate")
+		// `sudo --non-interactive true` to decide whether to display it.
+		//
+		// Note: Using `sudo --non-interactive --validate` does not work well in situations
+		// where the user has configured `myuser ALL=(ALL:ALL) NOPASSWD: ALL` in the sudoers
+		// file. Hence the use of `sudo --non-interactive true`. A plausible cause can be
+		// found in the first comment here:
+		// https://unix.stackexchange.com/questions/50584/why-sudo-timestamp-is-not-updated-when-nopasswd-is-set
+		needPwCmd := dexec.CommandContext(ctx, "sudo", "--non-interactive", "true")
 		needPwCmd.DisableLogging = true
 		if err := needPwCmd.Run(); err != nil {
 			fmt.Printf("Need root privileges to run: %s\n", logging.ShellString(args[0], args[1:]))

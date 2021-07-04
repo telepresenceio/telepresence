@@ -54,6 +54,19 @@ type trafficManager struct {
 
 	// Map of desired mount points for intercepts
 	mountPoints sync.Map
+
+	// currentIntercepts is the latest snapshot returned by the intercept watcher
+	currentIntercepts     []*manager.InterceptInfo
+	currentInterceptsLock sync.Mutex
+
+	// activeInterceptsWaiters contains chan interceptResult keyed by intercept name
+	activeInterceptsWaiters sync.Map
+}
+
+// interceptResult is what gets written to the activeInterceptsWaiters channels
+type interceptResult struct {
+	intercept *manager.InterceptInfo
+	err       error
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
@@ -353,15 +366,12 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 	}
 
 	<-tm.startup
-	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
-		iMap = make(map[string]*manager.InterceptInfo, len(is))
-		for _, i := range is {
-			if i.Spec.Namespace == namespace {
-				iMap[i.Spec.Agent] = i
-			}
+	is := tm.getCurrentIntercepts()
+	iMap = make(map[string]*manager.InterceptInfo, len(is))
+	for _, i := range is {
+		if i.Spec.Namespace == namespace {
+			iMap[i.Spec.Agent] = i
 		}
-	} else {
-		iMap = map[string]*manager.InterceptInfo{}
 	}
 	var aMap map[string]*manager.AgentInfo
 	if as, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId); as != nil {
@@ -449,9 +459,8 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 		}
 	} else {
 		agents, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId)
-		intercepts, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId)
 		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
-		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: intercepts}
+		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()}
 		r.SessionInfo = tm.session()
 		r.BridgeOk = true
 	}
