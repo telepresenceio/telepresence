@@ -44,6 +44,11 @@ items:
         image: ./telepresence-2.3.3-to-pod.png
         docs: reference/intercept
         type: feature
+      - type: bugfix
+        title: Intercepts will survive deletion of intercepted pod
+        body: >-
+          An intercept will survive deletion of the intercepted pod provided that another
+          pod is created (or already exists) that can take over.
   - version: 2.3.2
     date: '2021-06-18'
     notes:
