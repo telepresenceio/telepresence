@@ -921,9 +921,10 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	}, 5*time.Second, time.Second)
 
 	// Verify that volume mount is restored
-	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
-	require.NoError(err, "Stat on <mount point>/var failed")
-	assert.True(st.IsDir(), "<mount point>/var is not a directory")
+	assert.Eventually(func() bool {
+		st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
+		return err == nil && st.IsDir()
+	}, 5*time.Second, time.Second)
 }
 
 func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
