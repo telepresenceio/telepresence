@@ -15,6 +15,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/ambassador/pkg/dtest"
@@ -101,6 +104,16 @@ func TestE2E(t *testing.T) {
 	os.Setenv("KO_DOCKER_REPO", registry)
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 
+	saveManagerNamespace, ok := os.LookupEnv("TELEPRESENCE_MANAGER_NAMESPACE")
+	defer func() {
+		if !ok {
+			os.Unsetenv("TELEPRESENCE_MANAGER_NAMESPACE")
+		} else {
+			os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", saveManagerNamespace)
+		}
+	}()
+	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", managerTestNamespace)
+
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
 		_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace).Run()
 		defer func() {
@@ -109,14 +122,12 @@ func TestE2E(t *testing.T) {
 		}()
 
 		t.Run("findTrafficManager_notPresent", func(t *testing.T) {
-			saveManagerNamespace := managerNamespace
-			defer func() {
-				managerNamespace = saveManagerNamespace
-			}()
-			managerNamespace = managerTestNamespace
-
 			ctx := dlog.NewTestContext(t, false)
-			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+			env, err := client.LoadEnv(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -131,83 +142,69 @@ func TestE2E(t *testing.T) {
 			version.Version = "v0.0.0-bogus"
 			defer func() { version.Version = testVersion }()
 
-			if _, err := ti.findDeployment(ctx, managerNamespace, install.ManagerAppName); err == nil {
+			if _, err := ti.findDeployment(ctx, managerTestNamespace, install.ManagerAppName); err == nil {
 				t.Fatal("expected find to not find deployment")
 			}
 		})
 
 		t.Run("findTrafficManager_present", func(t *testing.T) {
-			saveManagerNamespace := managerNamespace
+			findTrafficManagerPresent(t, kubeconfig, managerTestNamespace)
+		})
+
+		t.Run("findTrafficManager_differentNamespace_present", func(t *testing.T) {
+			oldCfg, err := clientcmd.LoadFromFile(kubeconfig)
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer func() {
-				managerNamespace = saveManagerNamespace
-			}()
-			managerNamespace = managerTestNamespace
-
-			c := dlog.NewTestContext(t, false)
-			publishManager(t)
-			defer removeManager(t, kubeconfig, managerNamespace)
-
-			env, err := client.LoadEnv(c)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
-			if err != nil {
-				t.Fatal(err)
-			}
-			kc, err := newKCluster(c, cfgAndFlags, nil, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			watcherErr := make(chan error)
-			watchCtx, watchCancel := context.WithCancel(c)
-			defer func() {
-				watchCancel()
-				if err := <-watcherErr; err != nil {
-					t.Error(err)
+				err := clientcmd.WriteToFile(*oldCfg, kubeconfig)
+				if err != nil {
+					t.Fatal(err)
 				}
 			}()
-			go func() {
-				watcherErr <- kc.runWatchers(watchCtx)
-			}()
-			waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
-			defer waitCancel()
-			if err := kc.waitUntilReady(waitCtx); err != nil {
-				t.Fatal(err)
-			}
 
-			ti, err := newTrafficManagerInstaller(kc)
+			customNamespace := fmt.Sprintf("custom-%d", os.Getpid())
+			_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", customNamespace).Run()
+			defer func() {
+				_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", customNamespace, "--wait=false").Run()
+			}()
+
+			// Load the config again so that oldCfg isn't disturbed.
+			cfg, err := clientcmd.LoadFromFile(kubeconfig)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = ti.ensureManager(c, &env)
+			err = api.MinifyConfig(cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			for i := 0; i < 50; i++ {
-				if _, err := ti.findDeployment(c, managerNamespace, install.ManagerAppName); err == nil {
-					return
-				}
-				time.Sleep(100 * time.Millisecond)
+			var cluster *api.Cluster
+			for _, c := range cfg.Clusters {
+				cluster = c
+				break
 			}
-			t.Fatal("traffic-manager deployment not found")
+			if cluster == nil {
+				t.Fatal("Unable to get cluster from config")
+			}
+			cluster.Extensions = map[string]runtime.Object{"telepresence.io": &runtime.Unknown{
+				Raw: []byte(fmt.Sprintf(`{"manager":{"namespace": "%s"}}`, customNamespace)),
+			}}
+			err = clientcmd.WriteToFile(*cfg, kubeconfig)
+			if err != nil {
+				t.Fatal(err)
+			}
+			findTrafficManagerPresent(t, kubeconfig, customNamespace)
 		})
 
 		t.Run("ensureTrafficManager_notPresent", func(t *testing.T) {
-			saveManagerNamespace := managerNamespace
-			defer func() {
-				managerNamespace = saveManagerNamespace
-			}()
-			managerNamespace = managerTestNamespace
 			c := dlog.NewTestContext(t, false)
 			publishManager(t)
-			defer removeManager(t, kubeconfig, managerNamespace)
+			defer removeManager(t, kubeconfig, managerTestNamespace)
 			env, err := client.LoadEnv(c)
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -224,6 +221,58 @@ func TestE2E(t *testing.T) {
 			}
 		})
 	})
+}
+
+func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string) {
+	c := dlog.NewTestContext(t, false)
+	publishManager(t)
+	defer removeManager(t, kubeconfig, namespace)
+
+	env, err := client.LoadEnv(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	watcherErr := make(chan error)
+	watchCtx, watchCancel := context.WithCancel(c)
+	defer func() {
+		watchCancel()
+		if err := <-watcherErr; err != nil {
+			t.Error(err)
+		}
+	}()
+	go func() {
+		watcherErr <- kc.runWatchers(watchCtx)
+	}()
+	waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
+	defer waitCancel()
+	if err := kc.waitUntilReady(waitCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	ti, err := newTrafficManagerInstaller(kc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ti.ensureManager(c, &env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		if _, err := ti.findDeployment(c, namespace, install.ManagerAppName); err == nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("traffic-manager deployment not found")
 }
 
 func TestAddAgentToWorkload(t *testing.T) {
@@ -358,6 +407,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 			actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
 				tc.InputPortName,
 				managerImageName(env), // ignore extensions
+				env.ManagerNamespace,
 				deepCopyObject(tc.InputWorkload),
 				tc.InputService.DeepCopy(),
 			)

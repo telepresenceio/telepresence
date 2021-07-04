@@ -334,6 +334,9 @@ type addTrafficAgentAction struct {
 
 	// The name of the app container. Not exported because its not needed for undo.
 	containerName string
+
+	// The name of the namespace where the traffic manager that "owns" this agent is to be found.
+	trafficManagerNamespace string
 }
 
 var _ partialAction = (*addTrafficAgentAction)(nil)
@@ -371,7 +374,7 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 				ContainerPort: 9900,
 			},
 			int(ata.ContainerPortNumber),
-			managerNamespace))
+			ata.trafficManagerNamespace))
 	return nil
 }
 
