@@ -4,6 +4,6 @@ import (
 	"time"
 )
 
-func (u *unixSysInfo) birthtime() time.Time {
+func (u *unixSysInfo) BirthTime() time.Time {
 	return time.Unix(u.Ctim.Sec, u.Ctim.Nsec)
 }
