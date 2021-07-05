@@ -11,7 +11,6 @@ import (
 
 	"github.com/sethvargo/go-envconfig"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -194,7 +193,7 @@ func Main(ctx context.Context, args ...string) error {
 				}
 				go func() {
 					dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
-					err := dpipe.DPipe(ctx, dexec.CommandContext(ctx, "/usr/lib/ssh/sftp-server"), conn)
+					err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
 					if err != nil {
 						dlog.Error(ctx, err)
 					}
