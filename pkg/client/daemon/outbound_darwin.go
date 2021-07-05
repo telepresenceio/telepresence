@@ -260,9 +260,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case dnsIP := <-o.kubeDNS:
-			if err = o.router.configureDNS(c, dnsIP, uint16(53), o.dnsListener.LocalAddr().(*net.UDPAddr)); err != nil {
-				dlog.Error(c, err)
-			}
+			o.router.configureDNS(c, dnsIP, uint16(53), o.dnsListener.LocalAddr().(*net.UDPAddr))
 		}
 		defer o.dnsListener.Close()
 		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, nil, o.resolveInCluster)

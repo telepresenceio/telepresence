@@ -98,11 +98,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				}
 			}()
 			dnsServer = dns.NewServer(c, listeners, nil, o.resolveInCluster)
-			if err = o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr); err != nil {
-				dlog.Error(c, err)
-				initDone <- struct{}{}
-				return err
-			}
+			o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr)
 			close(initDone)
 			return dnsServer.Run(c)
 		}
