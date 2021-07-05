@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-func (u *unixSysInfo) birthtime() time.Time {
+func (u *unixSysInfo) Birthtime() time.Time {
 	sec, nsec := u.Birthtimespec.Unix()
 	return time.Unix(sec, nsec)
 }
