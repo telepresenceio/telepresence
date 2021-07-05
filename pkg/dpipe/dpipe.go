@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 )
@@ -16,39 +14,30 @@ import (
 func DPipe(ctx context.Context, cmd *dexec.Cmd, peer io.ReadWriteCloser) error {
 	cmdOut, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("failed to establish stdout pipe: %v", err)
+		return fmt.Errorf("failed to establish stdout pipe: %w", err)
 	}
 	defer cmdOut.Close()
 
 	cmdIn, err := cmd.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("failed to establish stdin pipe: %v", err)
+		return fmt.Errorf("failed to establish stdin pipe: %w", err)
 	}
 	defer cmdIn.Close()
 
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start: %v", err)
+		return fmt.Errorf("failed to start: %w", err)
 	}
 
 	var killTimer *time.Timer
 	closing := int32(0)
+
 	defer func() {
-		if atomic.LoadInt32(&closing) == 1 {
+		if killTimer != nil && atomic.LoadInt32(&closing) == 1 {
 			killTimer.Stop()
 		}
 	}()
 
-	go func() {
-		<-ctx.Done()
-		// A process is sometimes not terminated gracefully by the SIGTERM, so we give
-		// it a second to succeed and then kill it forcefully.
-		killTimer = time.AfterFunc(time.Second, func() {
-			_ = cmd.Process.Signal(unix.SIGKILL)
-		})
-		atomic.StoreInt32(&closing, 1)
-		_ = peer.Close()
-		_ = cmd.Process.Signal(unix.SIGTERM)
-	}()
+	go waitCloseAndKill(ctx, cmd, peer, &closing, &killTimer)
 
 	go func() {
 		if _, err := io.Copy(cmdIn, peer); err != nil && atomic.LoadInt32(&closing) == 0 {
@@ -62,7 +51,7 @@ func DPipe(ctx context.Context, cmd *dexec.Cmd, peer io.ReadWriteCloser) error {
 		}
 	}()
 	if err = cmd.Wait(); err != nil && atomic.LoadInt32(&closing) == 0 {
-		return fmt.Errorf("execution failed: %v", err)
+		return fmt.Errorf("execution failed: %w", err)
 	}
 	return nil
 }
