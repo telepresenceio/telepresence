@@ -3,6 +3,7 @@ module github.com/telepresenceio/telepresence/v2
 go 1.15
 
 require (
+	github.com/Microsoft/go-winio v0.4.16
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
