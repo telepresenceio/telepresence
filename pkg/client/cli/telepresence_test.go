@@ -941,10 +941,17 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 		dlog.Infof(c, "Pods = '%s'", pods)
 		return strings.Split(pods, " ")
 	}
-	// Get current pod
-	currentPods := helloZeroPods()
-	require.True(len(currentPods) == 1)
-	currentPod := currentPods[0]
+
+	// Wait for exactly one active pod
+	var currentPod string
+	require.Eventually(func() bool {
+		currentPods := helloZeroPods()
+		if len(currentPods) == 1 {
+			currentPod = currentPods[0]
+			return true
+		}
+		return false
+	}, 5*time.Second, time.Second)
 
 	// Scale up to two pods
 	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "2"))
