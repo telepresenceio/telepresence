@@ -11,8 +11,8 @@ import (
 )
 
 // OpenTun creates a new TUN device and ensures that it is up and running.
-func OpenTun() (*Device, error) {
-	return openTun()
+func OpenTun(ctx context.Context) (*Device, error) {
+	return openTun(ctx)
 }
 
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which

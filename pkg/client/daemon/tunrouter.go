@@ -112,8 +112,8 @@ type tunRouter struct {
 	rndSource rand.Source
 }
 
-func newTunRouter() (*tunRouter, error) {
-	td, err := tun.OpenTun()
+func newTunRouter(ctx context.Context) (*tunRouter, error) {
+	td, err := tun.OpenTun(ctx)
 	if err != nil {
 		return nil, err
 	}
