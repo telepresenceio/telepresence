@@ -18,6 +18,10 @@ import (
 
 var signalsToForward = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
 
+func isAdmin() bool {
+	return os.Geteuid() == 0
+}
+
 func startInBackground(args ...string) error {
 	cmd := exec.Command(args[0], args[1:]...)
 
@@ -38,7 +42,7 @@ func startInBackground(args ...string) error {
 }
 
 func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
-	if os.Geteuid() != 0 {
+	if !isAdmin() {
 		// If we're going to be prompting for the `sudo` password, we want to first provide
 		// the user with some info about exactly what we're prompting for.  We don't want to
 		// use `sudo`'s `--prompt` flag for this because (1) we don't want it to be

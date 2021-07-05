@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 const ProcessName = "daemon"
@@ -97,8 +98,8 @@ func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (
 
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, configDir, dns string) error {
-	if os.Geteuid() != 0 {
-		return fmt.Errorf("telepresence %s must run as root", ProcessName)
+	if !proc.IsAdmin() {
+		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's

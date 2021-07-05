@@ -64,3 +64,7 @@ func StartInBackground(args ...string) error {
 func StartInBackgroundAsRoot(ctx context.Context, args ...string) error {
 	return startInBackgroundAsRoot(ctx, args...)
 }
+
+func IsAdmin() bool {
+	return isAdmin()
+}
