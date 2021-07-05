@@ -20,11 +20,13 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.3.7
-	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
+	github.com/telepresenceio/telepresence/rpc/v2 v2.3.6
+	golang.org/x/net v0.0.0-20210410081132-afb366fc7cd1
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
+	golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
+	golang.zx2c4.com/wireguard v0.0.0-20210427022245-097af6e1351b
+	golang.zx2c4.com/wireguard/windows v0.3.11
 	google.golang.org/grpc v1.38.0
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
