@@ -8,12 +8,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -153,7 +150,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	var grpcListener net.Listener
 	defer func() {
 		if grpcListener != nil {
-			_ = os.Remove(grpcListener.Addr().String())
+			_ = client.RemoveSocket(grpcListener)
 		}
 	}()
 
@@ -191,19 +188,10 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 		// Listen on unix domain socket
 		dlog.Debug(c, "gRPC server starting")
-		origUmask := unix.Umask(0)
-		grpcListener, err = net.Listen("unix", client.DaemonSocketName)
-		unix.Umask(origUmask)
+		grpcListener, err = client.ListenSocket(c, ProcessName, client.DaemonSocketName)
 		if err != nil {
-			if errors.Is(err, syscall.EADDRINUSE) {
-				return fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully",
-					client.SocketURL(client.DaemonSocketName), ProcessName)
-			}
 			return err
 		}
-		// Don't have dhttp.ServerConfig.Serve unlink the socket; defer unlinking the socket
-		// until the process exits.
-		grpcListener.(*net.UnixListener).SetUnlinkOnClose(false)
 
 		dlog.Info(c, "gRPC server started")
 		defer func() {
