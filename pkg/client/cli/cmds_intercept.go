@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -325,7 +326,12 @@ func interceptMessage(r *connector.InterceptResult) string {
 func checkMountCapability(ctx context.Context) error {
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
-	cmd := dexec.CommandContext(ctx, "sshfs", "-V")
+	var cmd *dexec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = dexec.CommandContext(ctx, "sshfs-win", "cmd", "-V")
+	} else {
+		cmd = dexec.CommandContext(ctx, "sshfs", "-V")
+	}
 	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -414,24 +420,8 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	doMount := false
 	err = checkMountCapability(ctx)
 	if err == nil {
-		mountPoint := ""
-		doMount, err = strconv.ParseBool(is.args.mount)
-		if err != nil {
-			mountPoint = is.args.mount
-			doMount = len(mountPoint) > 0
-		}
-
-		if doMount {
-			if mountPoint == "" {
-				if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
-					return nil, err
-				}
-			} else {
-				if err = os.MkdirAll(mountPoint, 0700); err != nil {
-					return nil, err
-				}
-			}
-			ir.MountPoint = mountPoint
+		if ir.MountPoint, doMount, err = is.getMountPoint(); err != nil {
+			return nil, err
 		}
 	} else if is.args.mountSet {
 		var boolErr error
@@ -480,6 +470,17 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	return ir, nil
 }
 
+func (is *interceptState) getMountPoint() (string, bool, error) {
+	mountPoint := ""
+	doMount, err := strconv.ParseBool(is.args.mount)
+	if err != nil {
+		mountPoint = is.args.mount
+		doMount = len(mountPoint) > 0
+	}
+	mountPoint, err = prepareMount(mountPoint)
+	return mountPoint, doMount, err
+}
+
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
@@ -497,7 +498,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	if ir.MountPoint != "" {
 		defer func() {
-			if !acquired {
+			if !acquired && runtime.GOOS != "windows" {
 				// remove if empty
 				_ = os.Remove(ir.MountPoint)
 			}

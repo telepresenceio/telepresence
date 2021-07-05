@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -444,7 +445,13 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 			"localhost:" + install.TelAppMountPoint, // what to mount
 			mountPoint,                              // where to mount it
 		}
-		return dpipe.DPipe(ctx, dexec.CommandContext(ctx, "sshfs", sshfsArgs...), conn)
+		exe := "sshfs"
+		if runtime.GOOS == "windows" {
+			// Use sshfs-win to launch the sshfs
+			sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
+			exe = "sshfs-win"
+		}
+		return dpipe.DPipe(ctx, dexec.CommandContext(ctx, exe, sshfsArgs...), conn)
 	}, 3*time.Second, 6*time.Second)
 
 	if err != nil && ctx.Err() == nil {
