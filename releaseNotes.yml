@@ -20,35 +20,52 @@ items:
   - version: 2.3.3
     date: 'TBD'
     notes:
-      # Headliners
       - type: feature
         title: Traffic Manager Helm Chart
         body: >-
-          We now support installing the Traffic Manager via Helm.
+          Telepresence now supports installing the Traffic Manager via Helm.
           This will make it easy for operators to install and configure the
-          server-side components of Telepresence separately from the CLI
-          (which in turn allows for better separation of permissions).
+          server-side components of Telepresence separately from the CLI (which
+          in turn allows for better separation of permissions).
         image: ./telepresence-2.3.3-helm.png
         docs: install/helm/
       - type: feature
         title: Traffic-manager in custom namespace
         body: >-
-          As the traffic manager can now be installed in any namespace via helm,
-          telepresence can now be configured to look for the traffic manager in
-          a namespace other than <code>ambassador</code>. This can be configured
-          on a per-cluster basis.
+          As the traffic manager can now be installed in any namespace via Helm,
+          Telepresence can now be configured to look for the Traffic Manager in
+          a namespace other than <code>ambassador</code>.  This can be
+          configured on a per-cluster basis.
         image: ./telepresence-2.3.3-namespace-config.png
         docs: reference/config
-      - title: intercept --to-pod
-        body: "telepresence intercept now supports a --to-pod flag that can be used to port-forward sidecars' ports from an intercepted pod"
+      - type: feature
+        title: Intercept <code>--to-pod</code>
+        body: >-
+          <code>telepresence intercept</code> now supports a
+          <code>--to-pod</code> flag that can be used to port-forward sidecars'
+          ports from an intercepted pod.
         image: ./telepresence-2.3.3-to-pod.png
         docs: reference/intercept
-        type: feature
+      - type: change
+        title: Change in migration from <code>edgectl</code>
+        body: >-
+          Telepresence no longer automatically shuts down the old
+          <code>api_version=1</code> <code>edgectl</code> daemon.  If migrating
+          from such an old version of <code>edgectl</code> you must now manually
+          shut down the <code>edgectl</code> daemon before running Telepresence.
+          This was already the case when migrating from the newer
+          <code>api_version=2</code> <code>edgectl</code>.
+      - type: bugfix
+        title: Fixed error during shutdown
+        body: >-
+          The root daemon no longer terminates when the user daemon disconnects
+          from its gRPC streams, and instead waits to be terminated by the CLI.
+          This could cause problems with things not being cleaned up correctly.
       - type: bugfix
         title: Intercepts will survive deletion of intercepted pod
         body: >-
-          An intercept will survive deletion of the intercepted pod provided that another
-          pod is created (or already exists) that can take over.
+          An intercept will survive deletion of the intercepted pod provided
+          that another pod is created (or already exists) that can take over.
   - version: 2.3.2
     date: '2021-06-18'
     notes:
