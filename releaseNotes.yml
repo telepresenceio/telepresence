@@ -39,7 +39,7 @@ items:
         image: ./telepresence-2.3.3-namespace-config.png
         docs: reference/config
       - type: feature
-        title: Intercept <code>--to-pod</code>
+        title: Intercept --to-pod
         body: >-
           <code>telepresence intercept</code> now supports a
           <code>--to-pod</code> flag that can be used to port-forward sidecars'
