@@ -125,3 +125,25 @@ intercepted
     Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-921196036
     Intercepting      : all TCP connections
 ```
+
+## Port-forwarding an intercepted container's sidecars
+
+Sidecars are containers that sit in the same pod as an application container; they usually provide auxiliary functionality to an application, and can usually be reached at `localhost:${SIDECAR_PORT}`.
+For example, a common use case for a sidecar is to proxy requests to a database -- your application would connect to `localhost:${SIDECAR_PORT}`, and the sidecar would then connect to the database, perhaps augmenting the connection with TLS or authentication.
+
+When intercepting a container that uses sidecars, you might want those sidecars' ports to be available to your local application at `localhost:${SIDECAR_PORT}`, exactly as they would be if running in-cluster.
+Telepresence's `--to-pod ${PORT}` flag implements this behavior, adding port-forwards for the port given.
+
+```
+$ telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortIdentifier> --to-pod=<sidecarPort>
+Using Deployment <name of deployment>
+intercepted
+    Intercept name         : <full name of intercept>
+    State                  : ACTIVE
+    Workload kind          : Deployment
+    Destination            : 127.0.0.1:<local TCP port>
+    Service Port Identifier: <servicePortIdentifier>
+    Intercepting           : all TCP connections
+```
+
+If there are multiple ports that you need forwarded, simply repeat the flag (`--to-pod=<sidecarPort0> --to-pod=<sidecarPort1>`).

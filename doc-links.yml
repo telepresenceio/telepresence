@@ -6,6 +6,8 @@
        link: install/
      - title: Upgrade
        link: install/upgrade/
+     - title: Install Traffic Manager with Helm
+       link: install/helm/
      - title: Migrate from legacy Telepresence
        link: install/migrate-from-legacy/
  - title: Core concepts
