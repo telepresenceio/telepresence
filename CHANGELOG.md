@@ -2,7 +2,19 @@
 
 ### 2.3.3 (TBD)
 
-- Feature: `telepresence intercept` now supports a `--to-pod` flag that can be used to port-forward sidecars' ports from an intercepted pod
+- Feature: Telepresence now supports installing the Traffic Manager
+  via Helm.  This will make it easy for operators to install and
+  configure the server-side components of Telepresence separately from
+  the CLI (which in turn allows for better separation of permissions).
+
+- Feature: As the traffic manager can now be installed in any
+  namespace via Helm, Telepresence can now be configured to look for
+  the traffic manager in a namespace other than `ambassador`.  This
+  can be configured on a per-cluster basis.
+
+- Feature: `telepresence intercept` now supports a `--to-pod` flag
+  that can be used to port-forward sidecars' ports from an intercepted
+  pod
 
 - Feature: `telepresence status` now includes more information about
   the root daemon.
@@ -12,15 +24,15 @@
   version of `edgectl` you must now manually shut down the `edgectl`
   daemon before running Telepresence.  This was already the case when
   migrating from the newer `api_version=2` `edgectl`.
-  
-- Bugfix: The root daemon no longer terminates when the user daemon disconnects from its gRPC streams, and instead waits to be terminated by the CLI.
 
-- Feature: The Helm chart is now published as part of our CI.
+- Bugfix: The root daemon no longer terminates when the user daemon
+  disconnects from its gRPC streams, and instead waits to be
+  terminated by the CLI.  This could cause problems with things not
+  being cleaned up correctly.
 
-- Bugfix: An intercept will survive deletion of the intercepted pod provided that another pod is created (or already exists) that can take over. 
-
-- Feature: Telepresence can now be configured to look for the traffic manager in a namespace other than `ambassador`. This can be configured on a per-cluster basis.
-
+- Bugfix: An intercept will survive deletion of the intercepted pod
+  provided that another pod is created (or already exists) that can
+  take over.
 
 ### 2.3.2 (June 18, 2021)
 
