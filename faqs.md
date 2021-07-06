@@ -73,7 +73,7 @@ Telepresence will discover/prompt during first use for this info and make its be
 
  Yes. The cluster has to have outbound access to the internet for the preview URLs to function correctly, but it doesn’t need to have a publicly accessible IP address. 
 
-The cluster must also have access to an external registry in order to be able to download the Traffic Manager and Traffic Agent containers that are deployed when connecting with Telepresence.
+The cluster must also have access to an external registry in order to be able to download the traffic-manager and traffic-agent images that are deployed when connecting with Telepresence.
 
 ** Why does running Telepresence require sudo access for the local daemon?**
 
@@ -83,13 +83,13 @@ On Fedora, Telepresence also creates a virtual network device (a TUN network) fo
 
 ** What components get installed in the cluster when running Telepresence?**
 
- A single Traffic Manager service is deployed in the `ambassador` namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
+ A single `traffic-manager` service is deployed in the `ambassador` namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
 
 A Traffic Agent container is injected per pod that is being intercepted. The first time a workload is intercepted all pods associated with this workload will be restarted with the Traffic Agent automatically injected.
 
 ** How can I remove all of the Telepresence components installed within my cluster?**
 
- You can run the command `telepresence uninstall --everything` to remove the Traffic Manager service installed in the cluster and Traffic Agent containers injected into each pod being intercepted. 
+ You can run the command `telepresence uninstall --everything` to remove the `traffic-manager` service installed in the cluster and `traffic-agent` containers injected into each pod being intercepted.
 
 Running this command will also stop the local daemon running.
 
