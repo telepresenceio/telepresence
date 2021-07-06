@@ -7,6 +7,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
+	github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/google/go-cmp v0.5.5
@@ -23,7 +24,7 @@ require (
 	github.com/telepresenceio/telepresence/rpc/v2 v2.3.7
 	golang.org/x/net v0.0.0-20210410081132-afb366fc7cd1
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.zx2c4.com/wireguard v0.0.0-20210427022245-097af6e1351b
 	golang.zx2c4.com/wireguard/windows v0.3.11

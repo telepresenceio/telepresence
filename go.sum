@@ -194,6 +194,8 @@ github.com/datawire/dlib v1.1.0/go.mod h1:aCzh74rJ3kOireYbg4gH0CuD48/xA4G+LuHhkp
 github.com/datawire/dlib v1.2.0/go.mod h1:t0upKFHApJskdVFH/gyksG5+vMCl0GCKeEZIEJBBv4g=
 github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8 h1:WqvO+Sa8l7ydURsEYNrpCKTKv6ps67rb39NmYGg13ek=
 github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8/go.mod h1:OdrErY06tawcmEkhTLeb1k3IN2HyzT3zcW4DsqQsJOM=
+github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448 h1:FjlIH+QkeTQ6jW4G2xeO6udD2ZhLtdPyBIDMHa64Z0E=
+github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448/go.mod h1:D/jb71PHlfUjfNSUVpXQAscXsXy3x+CY+c52lPnW2qU=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316 h1:XAaJXdJB3rus/iErfsOIz5S8bv/Yp5s/ZXnpAzcfVxI=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a/go.mod h1:H8uUmE8qqo7z9u30MYB9riLyRckPHOPBk9ZdCuH+dQQ=
@@ -1017,6 +1019,8 @@ golang.org/x/sys v0.0.0-20210309040221-94ec62e08169/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210330210617-4fbd30eecc44/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57 h1:F5Gozwx4I1xtr/sr/8CFbb57iKi3297KFs0QDbGN60A=
 golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c h1:F1jZWGFhYfh0Ci55sIpILtKKK8p3i2/krTr0H1rg74I=
+golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/term v0.0.0-20201117132131-f5c789dd3221/go.mod h1:Nr5EML6q2oocZ2LXRh80K7BxOlk5/8JxuGnuhpl+muw=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 h1:v+OssWQX+hTHEmOBgwxdZxK4zHq3yOs8F9J7mk0PY8E=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=

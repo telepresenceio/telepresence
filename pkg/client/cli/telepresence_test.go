@@ -25,12 +25,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
