@@ -88,15 +88,14 @@ func (lpf livePortForwards) start(ctx context.Context, tm *trafficManager, ii *m
 		Name:  ii.Spec.Name,
 		PodIP: ii.PodIp,
 	}
-	if _, isLive := lpf.live[fk]; !isLive {
-		pfCtx, pfCancel := context.WithCancel(ctx)
-		livePortForward := &livePortForward{cancel: pfCancel}
-		forwarded := tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.Spec.ExtraPorts)
-		if forwarded {
-			lpf.snapshot[fk] = struct{}{}
+	if tm.shouldForward(ii) {
+		lpf.snapshot[fk] = struct{}{}
+		if _, isLive := lpf.live[fk]; !isLive {
+			pfCtx, pfCancel := context.WithCancel(ctx)
+			livePortForward := &livePortForward{cancel: pfCancel}
+			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.Spec.ExtraPorts)
+			dlog.Debugf(ctx, "Started forward for %+v", fk)
 			lpf.live[fk] = livePortForward
-		} else {
-			pfCancel()
 		}
 	}
 }
@@ -473,23 +472,25 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string, namespa
 	}
 }
 
-// startForwards starts port forwards and mounts for the given forwardKey. It returns true if either was started (port-forward or a mount), false otherwise
-func (tm *trafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, extraPorts []int32) bool {
-	started := false
+// shouldForward returns true if the intercept info given should result in mounts or ports being forwarded
+func (tm *trafficManager) shouldForward(ii *manager.InterceptInfo) bool {
+	return ii.SftpPort > 0 || len(ii.Spec.ExtraPorts) > 0
+}
+
+// startForwards starts port forwards and mounts for the given forwardKey.
+// It assumes that the user has called shouldForward and is sure that something will be started.
+func (tm *trafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, extraPorts []int32) {
 	if sftpPort > 0 {
 		// There's nothing to mount if the SftpPort is zero
-		started = true
 		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
 		wg.Add(1)
 		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort}, wg)
 	}
 	for _, port := range extraPorts {
-		started = true
 		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, port))
 		wg.Add(1)
 		go tm.workerPortForwardIntercept(pfCtx, portForward{fk, port}, wg)
 	}
-	return started
 }
 
 func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
