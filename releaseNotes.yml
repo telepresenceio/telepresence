@@ -17,6 +17,33 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
+  - version: 2.3.3
+    date: 'TBD'
+    notes:
+      # Headliners
+      - type: feature
+        title: Traffic Manager Helm Chart
+        body: >-
+          We now support installing the Traffic Manager via Helm.
+          This will make it easy for operators to install and configure the
+          server-side components of Telepresence separately from the CLI
+          (which in turn allows for better separation of permissions).
+        image: ./telepresence-2.3.3-helm.png
+        docs: install/helm/
+      - type: feature
+        title: Traffic-manager in custom namespace
+        body: >-
+          As the traffic manager can now be installed in any namespace via helm,
+          telepresence can now be configured to look for the traffic manager in
+          a namespace other than <code>ambassador</code>. This can be configured
+          on a per-cluster basis.
+        image: ./telepresence-2.3.3-namespace-config.png
+        docs: reference/config
+      - title: intercept --to-pod
+        body: "telepresence intercept now supports a --to-pod flag that can be used to port-forward sidecars' ports from an intercepted pod"
+        image: ./telepresence-2.3.3-to-pod.png
+        docs: reference/intercept
+        type: feature
   - version: 2.3.2
     date: '2021-06-18'
     notes:
@@ -53,9 +80,9 @@ items:
 
       # RBAC changes
       - type: change
-        title: Traffic-manager needs new RBAC permissions
+        title: Traffic Manager needs new RBAC permissions
         body: >-
-          The traffic-manager requires <a href="reference/rbac">RBAC
+          The Traffic Manager requires <a href="reference/rbac">RBAC
           permissions</a> to list Nodes, Pods, and to create a dummy
           Service in the manager's namespace.
         docs: reference/routing/#subnets
@@ -65,7 +92,7 @@ items:
           The on-laptop client no longer requires <a
           href="reference/rbac">RBAC permissions</a> to list the Nodes
           in the cluster or to create Services, as that functionality
-          has been moved to the traffic-manager.
+          has been moved to the Traffic Manager.
 
       # Bugfixes
       - type: bugfix
@@ -120,7 +147,6 @@ items:
           Now it can be counted on that by the time the command has
           returned that all of the side-effects on the laptop have
           been cleaned up.
-
   - version: 2.3.1
     date: '2021-06-14'
     notes:
