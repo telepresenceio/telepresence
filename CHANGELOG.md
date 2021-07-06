@@ -7,7 +7,7 @@
   configure the server-side components of Telepresence separately from
   the CLI (which in turn allows for better separation of permissions).
 
-- Feature: As the traffic manager can now be installed in any
+- Feature: As the `traffic-manager` can now be installed in any
   namespace via Helm, Telepresence can now be configured to look for
   the traffic manager in a namespace other than `ambassador`.  This
   can be configured on a per-cluster basis.
