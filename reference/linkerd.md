@@ -21,7 +21,7 @@ The Traffic Agent uses port 8081 for its API, 8022 for SSHFS, and 6001 for the a
 1. [Telepresence binary](../../install)
 2. Linkerd control plane [installed to cluster](https://linkerd.io/2.10/tasks/install/)
 3. Kubectl
-4. [Working ingress controller](../../../../edge-stack/latest/howtos/linkerd2)
+4. [Working ingress controller](https://www.getambassador.io/docs/edge-stack/latest/howtos/linkerd2)
 
 ## Deploy
 Save and deploy the following YAML. Note the `config.linkerd.io/skip-outbound-ports` annotation in the metadata of the pod template.
