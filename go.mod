@@ -7,6 +7,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
+	github.com/datawire/dtest v0.0.0-20210706074031-e135bba2cef8
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/google/go-cmp v0.5.5

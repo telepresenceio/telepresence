@@ -194,6 +194,8 @@ github.com/datawire/dlib v1.1.0/go.mod h1:aCzh74rJ3kOireYbg4gH0CuD48/xA4G+LuHhkp
 github.com/datawire/dlib v1.2.0/go.mod h1:t0upKFHApJskdVFH/gyksG5+vMCl0GCKeEZIEJBBv4g=
 github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8 h1:WqvO+Sa8l7ydURsEYNrpCKTKv6ps67rb39NmYGg13ek=
 github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8/go.mod h1:OdrErY06tawcmEkhTLeb1k3IN2HyzT3zcW4DsqQsJOM=
+github.com/datawire/dtest v0.0.0-20210706074031-e135bba2cef8 h1:MPoXa7sqNf+JQVCD4+6p5K2vEcRw8TQkdEhhamkBiwM=
+github.com/datawire/dtest v0.0.0-20210706074031-e135bba2cef8/go.mod h1:DdyyzfyZ31/oRJhAZnhdF36uNYmBk9RQPMJujU78v2M=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316 h1:XAaJXdJB3rus/iErfsOIz5S8bv/Yp5s/ZXnpAzcfVxI=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a/go.mod h1:H8uUmE8qqo7z9u30MYB9riLyRckPHOPBk9ZdCuH+dQQ=
