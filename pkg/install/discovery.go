@@ -95,9 +95,9 @@ func FindMatchingService(c context.Context, client *kates.Client, portNameOrNumb
 	suffix := ""
 	portRef := ""
 	if len(matchingSvcs) > 0 {
-		svcNames := make([]string, 0, len(matchingSvcs))
-		for _, svc := range matchingSvcs {
-			svcNames = append(svcNames, svc.Name)
+		svcNames := make([]string, len(matchingSvcs))
+		for i, svc := range matchingSvcs {
+			svcNames[i] = svc.Name
 		}
 		count = "multiple"
 		suffix = fmt.Sprintf(", use --service and one of: %s", strings.Join(svcNames, ","))
