@@ -58,7 +58,7 @@ items:
           <code>--to-pod</code> flag that can be used to port-forward sidecars'
           ports from an intercepted pod.
         image: ./telepresence-2.3.3-to-pod.png
-        docs: reference/intercept
+        docs: reference/intercepts
       - type: change
         title: Change in migration from <code>edgectl</code>
         body: >-
