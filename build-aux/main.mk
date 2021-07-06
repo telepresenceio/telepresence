@@ -103,6 +103,7 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 	git add CHANGELOG.md go.mod
 	sed -i.bak "s/^version:.*/version: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
 	sed -i.bak "s/^appVersion:.*/appVersion: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
+	git add charts/telepresence/Chart.yaml
 	rm -f charts/telepresence/Chart.yaml.bak
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
