@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.3 (TBD)
+### 2.3.3 (July 7, 2021)
 
 - Feature: Telepresence now supports installing the Traffic Manager
   via Helm.  This will make it easy for operators to install and
