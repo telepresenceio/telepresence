@@ -68,6 +68,19 @@ commands:
             sudo apt-get install -y sshfs
             sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
 
+  "install-helm":
+    parameters:
+      version:
+        type: string
+        default: "3.6.2"
+    steps:
+      - run:
+          name: "Install helm << parameters.version >>"
+          command: |
+            curl -L --fail -o /tmp/helm.tar.gz https://get.helm.sh/helm-v<< parameters.version>>-$(uname -s | tr A-Z a-z)-amd64.tar.gz
+            sudo tar -C /tmp --strip-components=1 -xvzf /tmp/helm.tar.gz $(uname -s | tr A-Z a-z)-amd64/helm
+            sudo install /tmp/helm /usr/local/bin/helm
+
   "dirty-check":
     steps:
       - run:
@@ -116,6 +129,7 @@ jobs:
       - run: make build
       - install-kubectl
       - install-sshfs
+      - install-helm
       - run:
           command: make test
           # Both CircleCI and `go test` itself time out after 10m by

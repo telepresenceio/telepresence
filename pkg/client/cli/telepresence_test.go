@@ -381,6 +381,10 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 	})
 }
 
+func (ts *telepresenceSuite) TestD_HelmChart() {
+	suite.Run(ts.T(), &helmSuite{tpSuite: ts})
+}
+
 type connectedSuite struct {
 	suite.Suite
 	tpSuite *telepresenceSuite
@@ -1058,6 +1062,230 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+type helmSuite struct {
+	suite.Suite
+	tpSuite           *telepresenceSuite
+	managerNamespace1 string
+	appNamespace1     string
+	managerNamespace2 string
+	appNamespace2     string
+}
+
+func (hs *helmSuite) SetupSuite() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+
+	hs.appNamespace1 = hs.tpSuite.namespace
+	hs.managerNamespace1 = hs.tpSuite.managerTestNamespace
+	hs.appNamespace2 = fmt.Sprintf("telepresence-2-%d", os.Getpid())
+	hs.managerNamespace2 = fmt.Sprintf("ambassador-2-%d", os.Getpid())
+
+	hs.NoError(run(ctx, "kubectl", "create", "namespace", hs.appNamespace2))
+	hs.NoError(run(ctx, "kubectl", "create", "namespace", hs.managerNamespace2))
+
+	// These namespaces need to be labelled so that the webhook selector can find the namespaces
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "label", "namespace", hs.appNamespace1, fmt.Sprintf("app.kubernetes.io/name=%s", hs.appNamespace1)) != nil
+	}, 5*time.Second, time.Second)
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "label", "namespace", hs.managerNamespace1, fmt.Sprintf("app.kubernetes.io/name=%s", hs.managerNamespace1)) != nil
+	}, 5*time.Second, time.Second)
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "label", "namespace", hs.appNamespace2, fmt.Sprintf("app.kubernetes.io/name=%s", hs.appNamespace2)) != nil
+	}, 5*time.Second, time.Second)
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "label", "namespace", hs.managerNamespace2, fmt.Sprintf("app.kubernetes.io/name=%s", hs.managerNamespace2)) != nil
+	}, 5*time.Second, time.Second)
+
+	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+	// Uninstall to make sure we're starting fresh
+	_, stderr := telepresence(hs.T(), "uninstall", "--everything")
+	hs.Empty(stderr)
+
+	// Destroy the telepresence-clusterrolebinding so that we actually test the RBAC set up in the helm chart
+	err := run(ctx, "kubectl", "delete", "clusterrolebinding", "telepresence-clusterrolebinding")
+	hs.NoError(err)
+
+	hs.NoError(hs.helmInstall(ctx, hs.appNamespace1, hs.managerNamespace1))
+
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
+	}, 5*time.Second, time.Second)
+}
+
+func (hs *helmSuite) TestA_CanConnect() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	stdout, stderr := telepresenceContext(ctx, "connect")
+	hs.Empty(stderr)
+	hs.Contains(stdout, "Connected to context")
+	// This has been shamelessly lifted from connectedSuite.TestC_ProxiesOutboundTraffic
+	// TODO: There might be a better way to re-use this logic.
+	for i := 0; i < serviceCount; i++ {
+		svc := fmt.Sprintf("hello-%d.%s", i, hs.appNamespace1)
+		expectedOutput := fmt.Sprintf("Request served by hello-%d", i)
+		hs.Require().Eventually(
+			// condition
+			func() bool {
+				dlog.Infof(ctx, "trying %q...", "http://"+svc)
+				hc := http.Client{Timeout: time.Second}
+				resp, err := hc.Get("http://" + svc)
+				if err != nil {
+					dlog.Error(ctx, err)
+					return false
+				}
+				defer resp.Body.Close()
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					dlog.Error(ctx, err)
+					return false
+				}
+				dlog.Infof(ctx, "body: %q", body)
+				return strings.Contains(string(body), expectedOutput)
+			},
+			15*time.Second, // waitfor
+			3*time.Second,  // polling interval
+			`body of %q contains %q`, "http://"+svc, expectedOutput,
+		)
+	}
+}
+
+func (hs *helmSuite) TestB_CanInterceptInManagedNamespace() {
+	// Lifted from TestF_SuccessfullyInterceptsDeploymentWithProbes
+	defer telepresence(hs.T(), "leave", "with-probes-"+hs.appNamespace1)
+
+	stdout, stderr := telepresence(hs.T(), "intercept", "--namespace", hs.appNamespace1, "--mount", "false", "with-probes", "--port", "9090")
+	hs.Empty(stderr)
+	hs.Contains(stdout, "Using Deployment with-probes")
+	stdout, stderr = telepresence(hs.T(), "list", "--namespace", hs.appNamespace1, "--intercepts")
+	hs.Empty(stderr)
+	hs.Contains(stdout, "with-probes: intercepted")
+}
+
+func (hs *helmSuite) TestC_CannotInterceptInUnmanagedNamespace() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	hs.tpSuite.namespace = hs.appNamespace2
+	hs.NoError(hs.tpSuite.applyApp(ctx, "with-probes", "with-probes", 80))
+	defer func() {
+		hs.NoError(hs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "with-probes", "--context", "default"))
+		hs.tpSuite.namespace = hs.appNamespace1
+	}()
+	_, stderr := telepresence(hs.T(), "intercept", "--namespace", hs.appNamespace2, "--mount", "false", "with-probes", "--port", "9090")
+	hs.Contains(stderr, "Failed to establish intercept")
+}
+
+func (hs *helmSuite) TestD_WebhookInjectsInManagedNamespace() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	hs.NoError(hs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
+	defer func() {
+		hs.NoError(hs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
+	}()
+
+	hs.Eventually(func() bool {
+		stdout, stderr := telepresence(hs.T(), "list", "--namespace", hs.appNamespace1, "--agents")
+		hs.Empty(stderr)
+		return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+	},
+		10*time.Second, // waitFor
+		2*time.Second,  // polling interval
+	)
+}
+
+func (hs *helmSuite) TestE_WebhookDoesntInjectInUnmanagedNamespace() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	defer func() {
+		hs.NoError(hs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
+		hs.tpSuite.namespace = hs.appNamespace1
+	}()
+	hs.tpSuite.namespace = hs.appNamespace2
+	hs.NoError(hs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
+
+	hs.Never(func() bool {
+		stdout, stderr := telepresence(hs.T(), "list", "--namespace", hs.appNamespace2, "--agents")
+		hs.Empty(stderr)
+		return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+	},
+		10*time.Second, // waitFor
+		2*time.Second,  // polling interval
+	)
+}
+
+func (hs *helmSuite) TestF_MultipleInstalls() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	telepresenceContext(ctx, "quit")
+	hs.tpSuite.namespace = hs.appNamespace2
+	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", hs.managerNamespace2)
+	hs.NoError(hs.tpSuite.applyApp(ctx, "with-probes", "with-probes", 80))
+	defer func() {
+		hs.NoError(hs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "with-probes", "--context", "default"))
+		hs.tpSuite.namespace = hs.appNamespace1
+		os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", hs.managerNamespace1)
+	}()
+
+	hs.Run("Installs Successfully", func() {
+		hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+		defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
+		hs.NoError(hs.helmInstall(ctx, hs.appNamespace2, hs.managerNamespace2))
+	})
+	hs.Run("Can be connected to", func() {
+		stdout, stderr := telepresenceContext(ctx, "connect")
+		hs.Empty(stderr)
+		hs.Contains(stdout, "Connected to context")
+		hs.Eventually(func() bool {
+			return run(ctx, "curl", "--silent", fmt.Sprintf("with-probes.%s", hs.appNamespace2)) == nil
+		}, 7*time.Second, 1*time.Second)
+	})
+	hs.Run("Can intercept", func() {
+		defer telepresence(hs.T(), "leave", "with-probes-"+hs.appNamespace2)
+
+		stdout, stderr := telepresence(hs.T(), "intercept", "--namespace", hs.appNamespace2, "--mount", "false", "with-probes", "--port", "9090")
+		hs.Empty(stderr)
+		hs.Contains(stdout, "Using Deployment with-probes")
+		stdout, stderr = telepresence(hs.T(), "list", "--namespace", hs.appNamespace2, "--intercepts")
+		hs.Empty(stderr)
+		hs.Contains(stdout, "with-probes: intercepted")
+	})
+	hs.Run("Uninstalls successfully", func() {
+		hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+		defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
+		hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace2))
+	})
+}
+
+func (hs *helmSuite) TestZ_Uninstall() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+	hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace1))
+	// Make sure the RBAC was cleaned up by uninstall
+	hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer"))
+	hs.Error(run(ctx, "kubectl", "get", "namespaces"))
+	hs.Error(run(ctx, "kubectl", "get", "deploy", "-n", hs.managerNamespace1))
+}
+
+func (hs *helmSuite) helmInstall(ctx context.Context, appNamespace, managerNamespace string) error {
+	clusterID, err := hs.tpSuite.kubectlOut(ctx, "get", "ns", hs.appNamespace1, "-o", "jsonpath={.metadata.uid}")
+	if err != nil {
+		return err
+	}
+	helmValues := "pkg/client/cli/testdata/test-values.yaml"
+	helmChart := "charts/telepresence"
+	return run(ctx, "helm", "install", "traffic-manager",
+		"-n", managerNamespace, helmChart,
+		"--set", fmt.Sprintf("clusterId=%s", clusterID),
+		"--set", fmt.Sprintf("image.registry=%s", dtest.DockerRegistry(ctx)),
+		"--set", fmt.Sprintf("image.tag=%s", hs.tpSuite.testVersion[1:]),
+		"--set", fmt.Sprintf("clientRbac.namespaces={%s,%s}", appNamespace, managerNamespace),
+		"--set", fmt.Sprintf("managerRbac.namespaces={%s,%s}", appNamespace, managerNamespace),
+		"-f", helmValues,
+	)
+}
+
+func (hs *helmSuite) TearDownSuite() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	// Restore the rbac we blew up in the setup
+	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+	hs.NoError(run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml"))
+	hs.NoError(run(ctx, "kubectl", "delete", "namespace", hs.appNamespace2, hs.managerNamespace2))
 }
 
 func (ts *telepresenceSuite) applyApp(c context.Context, name, svcName string, port int) error {

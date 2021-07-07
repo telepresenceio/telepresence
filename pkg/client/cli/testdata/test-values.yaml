@@ -1,0 +1,12 @@
+
+clientRbac:
+  create: true
+  subjects:
+  - name: telepresence-test-developer
+    kind: ServiceAccount
+    namespace: default
+  namespaced: true
+
+managerRbac:
+  create: true
+  namespaceScoped: true
