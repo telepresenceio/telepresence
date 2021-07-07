@@ -18,7 +18,7 @@
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
   - version: 2.3.3
-    date: 'TBD'
+    date: '2021-07-07'
     notes:
       - type: feature
         title: Traffic Manager Helm Chart
