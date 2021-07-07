@@ -31,7 +31,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 
 items:
   - version: 2.3.3
-    date: 'TBD'
+    date: '2021-07-07'
     notes:
       - type: feature
         title: Traffic Manager Helm Chart
@@ -60,7 +60,7 @@ items:
         image: ./telepresence-2.3.3-to-pod.png
         docs: reference/intercepts
       - type: change
-        title: Change in migration from <code>edgectl</code>
+        title: Change in migration from edgectl
         body: >-
           Telepresence no longer automatically shuts down the old
           <code>api_version=1</code> <code>edgectl</code> daemon.  If migrating
