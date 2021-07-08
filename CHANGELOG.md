@@ -2,7 +2,8 @@
 
 ### 2.3.4 (TBD)
 
-- Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address. 
+- Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.
+- Bugfix: Telepresence will no longer panic when multiple services match a workload.
 
 ### 2.3.3 (July 7, 2021)
 
