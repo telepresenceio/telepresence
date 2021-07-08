@@ -7,9 +7,10 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
@@ -23,18 +24,16 @@ func ClusterIdCommand() *cobra.Command {
 
 		Short: "Get cluster ID for your kubernetes cluster",
 		Long:  "Get cluster ID for your kubernetes cluster, mostly used for licenses in air-gapped environments",
-		RunE: func(flags *cobra.Command, _ []string) error {
-			// NB: Even without logging, dexec is still an improvement over os/exec
-			// because it better handles kubectl hanging.
-			cmd := dexec.CommandContext(flags.Context(), "kubectl", "get", "ns", "default", "-o", "jsonpath={.metadata.uid}")
-			cmd.DisableLogging = true
-			cmd.Stderr = flags.ErrOrStderr()
-
-			output, err := cmd.Output()
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			client, err := kates.NewClientFromConfigFlags(kubeConfig)
 			if err != nil {
-				return fmt.Errorf("kubectl: %w", err)
+				return err
 			}
-			fmt.Fprintf(flags.OutOrStdout(), "Cluster ID: %s", output)
+			clusterID, err := actions.GetClusterID(cmd.Context(), client)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Cluster ID: %s\n", clusterID)
 			return nil
 		},
 	}
