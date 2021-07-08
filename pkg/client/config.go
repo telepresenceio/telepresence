@@ -58,19 +58,16 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 			if err != nil {
 				return err
 			}
-			continue
 		case kv == "logLevels":
 			err := ms[i+1].Decode(&c.LogLevels)
 			if err != nil {
 				return err
 			}
-			continue
 		case kv == "images":
 			err := ms[i+1].Decode(&c.Images)
 			if err != nil {
 				return err
 			}
-			continue
 		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
@@ -400,7 +397,7 @@ var defaultConfig = Config{
 
 var config *Config
 
-var configOnce = sync.Once{}
+var configOnce = new(sync.Once)
 
 var parseContext context.Context
 
@@ -428,6 +425,12 @@ func GetConfig(c context.Context) *Config {
 		}
 	})
 	return config
+}
+
+// ResetConfig updates configOnce with a new sync.Once. This is currently only used
+// for tests.
+func ResetConfig(c context.Context) {
+	configOnce = new(sync.Once)
 }
 
 func loadConfig(c context.Context) (*Config, error) {

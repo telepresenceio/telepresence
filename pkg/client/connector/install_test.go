@@ -25,6 +25,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -276,56 +277,7 @@ func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string) {
 }
 
 func TestAddAgentToWorkload(t *testing.T) {
-	// Part 0: Helper functions ////////////////////////////////////////////
-
-	loadFile := func(filename, inputVersion string) (workload kates.Object, service *kates.Service, portname string, err error) {
-		tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
-		if err != nil {
-			return nil, nil, "", fmt.Errorf("read template: %s: %w", filename, err)
-		}
-
-		var buff bytes.Buffer
-		err = tmpl.Execute(&buff, map[string]interface{}{
-			"Version": strings.TrimPrefix(inputVersion, "v"),
-		})
-		if err != nil {
-			return nil, nil, "", fmt.Errorf("execute template: %s: %w", filename, err)
-		}
-
-		var dat struct {
-			Deployment  *kates.Deployment  `json:"deployment"`
-			ReplicaSet  *kates.ReplicaSet  `json:"replicaset"`
-			StatefulSet *kates.StatefulSet `json:"statefulset"`
-
-			Service       *kates.Service `json:"service"`
-			InterceptPort string         `json:"interceptPort"`
-		}
-		if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
-			return nil, nil, "", fmt.Errorf("parse yaml: %s: %w", filename, err)
-		}
-
-		cnt := 0
-		if dat.Deployment != nil {
-			cnt++
-			workload = dat.Deployment
-		}
-		if dat.ReplicaSet != nil {
-			cnt++
-			workload = dat.ReplicaSet
-		}
-		if dat.StatefulSet != nil {
-			cnt++
-			workload = dat.StatefulSet
-		}
-		if cnt != 1 {
-			return nil, nil, "", fmt.Errorf("yaml must contain exactly one of 'deployment', 'replicaset', or 'statefulset'; got %d of them", cnt)
-		}
-
-		return workload, dat.Service, dat.InterceptPort, nil
-	}
-
 	// Part 1: Build the testcases /////////////////////////////////////////
-
 	type testcase struct {
 		InputVersion  string
 		InputPortName string
@@ -379,72 +331,79 @@ func TestAddAgentToWorkload(t *testing.T) {
 	}
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
-
-	os.Setenv("TELEPRESENCE_REGISTRY", "localhost:5000")
-
-	env, err := client.LoadEnv(dlog.NewTestContext(t, true))
+	ctx := dlog.NewTestContext(t, true)
+	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for tcName, tc := range testcases {
-		tcName := tcName // "{version-dir}/{yaml-base-name}"
-		tc := tc
-		if !strings.HasPrefix(tcName, "cur/") {
-			// Don't check install for historical snapshots.
-			continue
-		}
-		t.Run(tcName+"/install", func(t *testing.T) {
-			ctx := dlog.NewTestContext(t, true)
-			version.Version = tc.InputVersion
+	// We use the MachineLock here since we have to reset + set the config.yml
+	dtest.WithMachineLock(ctx, func(ctx context.Context) {
+		// Specify the registry used in the test data
+		configDir := t.TempDir()
+		err = prepareConfig(ctx, configDir)
 
-			expectedWrk := deepCopyObject(tc.OutputWorkload)
-			sanitizeWorkload(expectedWrk)
-
-			expectedSvc := tc.OutputService.DeepCopy()
-			sanitizeService(expectedSvc)
-
-			actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
-				tc.InputPortName,
-				managerImageName(env), // ignore extensions
-				env.ManagerNamespace,
-				deepCopyObject(tc.InputWorkload),
-				tc.InputService.DeepCopy(),
-			)
-			if !assert.NoError(t, actualErr) {
-				return
+		for tcName, tc := range testcases {
+			tcName := tcName // "{version-dir}/{yaml-base-name}"
+			tc := tc
+			if !strings.HasPrefix(tcName, "cur/") {
+				// Don't check install for historical snapshots.
+				continue
 			}
 
-			sanitizeWorkload(actualWrk)
-			assert.Equal(t, expectedWrk, actualWrk)
+			t.Run(tcName+"/install", func(t *testing.T) {
+				ctx := dlog.NewTestContext(t, true)
+				ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+				version.Version = tc.InputVersion
 
-			if actualSvc != nil {
-				sanitizeService(actualSvc)
-				assert.Equal(t, expectedSvc, actualSvc)
-			}
+				expectedWrk := deepCopyObject(tc.OutputWorkload)
+				sanitizeWorkload(expectedWrk)
 
-			if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
-				workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
+				expectedSvc := tc.OutputService.DeepCopy()
+				sanitizeService(expectedSvc)
 
-				goldBytes, err := yaml.Marshal(map[string]interface{}{
-					strings.ToLower(workloadKind): actualWrk,
-					"service":                     actualSvc,
-				})
-				if !assert.NoError(t, err) {
+				actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
+					tc.InputPortName,
+					managerImageName(ctx), // ignore extensions
+					env.ManagerNamespace,
+					deepCopyObject(tc.InputWorkload),
+					tc.InputService.DeepCopy(),
+				)
+				if !assert.NoError(t, actualErr) {
 					return
 				}
-				goldBytes = bytes.ReplaceAll(goldBytes,
-					[]byte(strings.TrimPrefix(version.Version, "v")),
-					[]byte("{{.Version}}"))
 
-				err = ioutil.WriteFile(
-					filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
-					goldBytes,
-					0644)
-				assert.NoError(t, err)
-			}
-		})
-	}
+				sanitizeWorkload(actualWrk)
+				assert.Equal(t, expectedWrk, actualWrk)
+
+				if actualSvc != nil {
+					sanitizeService(actualSvc)
+					assert.Equal(t, expectedSvc, actualSvc)
+				}
+
+				if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
+					workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
+
+					goldBytes, err := yaml.Marshal(map[string]interface{}{
+						strings.ToLower(workloadKind): actualWrk,
+						"service":                     actualSvc,
+					})
+					if !assert.NoError(t, err) {
+						return
+					}
+					goldBytes = bytes.ReplaceAll(goldBytes,
+						[]byte(strings.TrimPrefix(version.Version, "v")),
+						[]byte("{{.Version}}"))
+
+					err = ioutil.WriteFile(
+						filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
+						goldBytes,
+						0644)
+					assert.NoError(t, err)
+				}
+			})
+		}
+	})
 
 	// Part 3: Run the testcases in "uninstall" mode ///////////////////////
 
@@ -503,4 +462,68 @@ func deepCopyObject(obj kates.Object) kates.Object {
 	objValue := reflect.ValueOf(obj)
 	retValues := objValue.MethodByName("DeepCopy").Call([]reflect.Value{})
 	return retValues[0].Interface().(kates.Object)
+}
+
+// loadFile is a helper function that reads test data files and converts them
+// to a format that can be used in the tests.
+func loadFile(filename, inputVersion string) (workload kates.Object, service *kates.Service, portname string, err error) {
+	tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("read template: %s: %w", filename, err)
+	}
+
+	var buff bytes.Buffer
+	err = tmpl.Execute(&buff, map[string]interface{}{
+		"Version": strings.TrimPrefix(inputVersion, "v"),
+	})
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("execute template: %s: %w", filename, err)
+	}
+
+	var dat struct {
+		Deployment  *kates.Deployment  `json:"deployment"`
+		ReplicaSet  *kates.ReplicaSet  `json:"replicaset"`
+		StatefulSet *kates.StatefulSet `json:"statefulset"`
+
+		Service       *kates.Service `json:"service"`
+		InterceptPort string         `json:"interceptPort"`
+	}
+	if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
+		return nil, nil, "", fmt.Errorf("parse yaml: %s: %w", filename, err)
+	}
+
+	cnt := 0
+	if dat.Deployment != nil {
+		cnt++
+		workload = dat.Deployment
+	}
+	if dat.ReplicaSet != nil {
+		cnt++
+		workload = dat.ReplicaSet
+	}
+	if dat.StatefulSet != nil {
+		cnt++
+		workload = dat.StatefulSet
+	}
+	if cnt != 1 {
+		return nil, nil, "", fmt.Errorf("yaml must contain exactly one of 'deployment', 'replicaset', or 'statefulset'; got %d of them", cnt)
+	}
+
+	return workload, dat.Service, dat.InterceptPort, nil
+}
+
+// prepareConfig resets the config + sets the registry. Only use within
+// withMachineLock
+func prepareConfig(ctx context.Context, configDir string) error {
+	client.ResetConfig(ctx)
+	config, err := os.Create(filepath.Join(configDir, "config.yml"))
+	if err != nil {
+		return err
+	}
+	_, err = config.WriteString("images:\n  registry: localhost:5000\n")
+	if err != nil {
+		return err
+	}
+	config.Close()
+	return nil
 }
