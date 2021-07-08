@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 )
 
 type nameMeta struct {
@@ -298,26 +299,7 @@ func (kc *k8sCluster) waitUntilReady(ctx context.Context) error {
 	}
 }
 
-func (kc *k8sCluster) getClusterId(c context.Context) (clusterID string) {
-	rootID := func() (rootID string) {
-		defer func() {
-			// If kates panics, we'll use the default rootID, so we
-			// can recover here
-			_ = recover()
-		}()
-		rootID = "00000000-0000-0000-0000-000000000000"
-
-		nsName := "default"
-		ns := &kates.Namespace{
-			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
-			ObjectMeta: kates.ObjectMeta{Name: nsName},
-		}
-		if err := kc.client.Get(c, ns, ns); err != nil {
-			return
-		}
-
-		rootID = string(ns.GetUID())
-		return
-	}()
-	return rootID
+func (kc *k8sCluster) getClusterId(ctx context.Context) string {
+	clusterID, _ := actions.GetClusterID(ctx, kc.client)
+	return clusterID
 }
