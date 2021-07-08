@@ -362,6 +362,11 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 		return install.ObjErrorf(obj, "unable to find app container %q in", ata.containerName)
 	}
 
+	// Under some odd circumstances, the agent volume can be left over after an uninstall.
+	// Drop it if we get here and it's present, since it'll cause errors.
+	// We ignore the error from this since we don't care if the volume isn't already present
+	_ = ata.dropAgentAnnotationVolume(obj, tplSpec)
+
 	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, install.AgentVolume())
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers,
 		install.AgentContainer(
@@ -401,6 +406,26 @@ func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
 	return false
 }
 
+func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tplSpec *corev1.PodTemplateSpec) error {
+	volumeIdx := -1
+	for i := range tplSpec.Spec.Volumes {
+		if tplSpec.Spec.Volumes[i].Name == install.AgentAnnotationVolumeName {
+			volumeIdx = i
+			break
+		}
+	}
+
+	if volumeIdx < 0 {
+		return install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName)
+	}
+	if len(tplSpec.Spec.Volumes) == 1 {
+		tplSpec.Spec.Volumes = nil
+	} else {
+		tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes[:volumeIdx], tplSpec.Spec.Volumes[volumeIdx+1:]...)
+	}
+	return nil
+}
+
 func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) error {
 	tplSpec, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
@@ -420,21 +445,9 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
 	if ver.GE(semver.MustParse("2.1.5")) {
-		volumeIdx := -1
-		for i := range tplSpec.Spec.Volumes {
-			if tplSpec.Spec.Volumes[i].Name == install.AgentAnnotationVolumeName {
-				volumeIdx = i
-				break
-			}
-		}
-
-		if volumeIdx < 0 {
-			return install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName)
-		}
-		if len(tplSpec.Spec.Volumes) == 1 {
-			tplSpec.Spec.Volumes = nil
-		} else {
-			tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes[:volumeIdx], tplSpec.Spec.Volumes[volumeIdx+1:]...)
+		err := ata.dropAgentAnnotationVolume(obj, tplSpec)
+		if err != nil {
+			return err
 		}
 	}
 
