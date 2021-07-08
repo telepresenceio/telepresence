@@ -2,6 +2,10 @@
 
 ### 2.3.5 (TBD)
 
+- Feature: Telepresence no longer depends on having an external
+  `kubectl` binary, which might not be present for OpenShift users
+  (who have `oc` instead of `kubectl`).
+
 - Bugfix: Fixed and improved several error messages, to hopefully be
   more helpful.
 

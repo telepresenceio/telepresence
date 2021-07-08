@@ -413,17 +413,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	connectStart := time.Now()
 
-	// Check the `kubectl` version; no point continuing if it's too old.
-	if err := checkKubectl(c); err != nil {
-		dlog.Errorln(c, err)
-		// No point in continuing without a bridge
-		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
-	}
-
 	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := newTrafficManager(c,
 		s.env,
