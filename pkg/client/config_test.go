@@ -37,6 +37,10 @@ timeouts:
   proxyDial: 17.0
 logLevels:
   rootDaemon: trace
+images:
+  registry: testregistry.io
+  agentImage: ambassador-telepresence-client-image:0.0.1
+  webhookAgentImage: ambassador-telepresence-webhook-image:0.0.2
 `,
 	}
 
@@ -64,4 +68,8 @@ logLevels:
 
 	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels.UserDaemon) // from sys2
 	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels.RootDaemon) // from user
+
+	assert.Equal(t, "testregistry.io", cfg.Images.Registry)                                      // from user
+	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.AgentImage)         // from user
+	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.WebhookAgentImage) // from user
 }

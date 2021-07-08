@@ -62,8 +62,8 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 			},
 		},
 	}
-	if imgConfig.AgentImage != "" {
-		image := fmt.Sprintf("%s/%s", imgConfig.Registry, imgConfig.AgentImage)
+	if imgConfig.WebhookAgentImage != "" {
+		image := fmt.Sprintf("%s/%s", imgConfig.Registry, imgConfig.WebhookAgentImage)
 		containerEnv = append(containerEnv, corev1.EnvVar{Name: "TELEPRESENCE_AGENT_IMAGE", Value: image})
 	}
 

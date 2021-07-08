@@ -335,8 +335,9 @@ func (ll *LogLevels) merge(o *LogLevels) {
 }
 
 type Images struct {
-	Registry   string `json:"registry,omitempty"`
-	AgentImage string `json:"agentImage,omitempty"`
+	Registry          string `json:"registry,omitempty"`
+	AgentImage        string `json:"agentImage,omitempty"`
+	WebhookAgentImage string `json:"webhookAgentImage,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -358,6 +359,8 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 			img.Registry = v.Value
 		case "agentImage":
 			img.AgentImage = v.Value
+		case "webhookAgentImage":
+			img.WebhookAgentImage = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -370,6 +373,9 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 func (i *Images) merge(o *Images) {
 	if o.AgentImage != "" {
 		i.AgentImage = o.AgentImage
+	}
+	if o.WebhookAgentImage != "" {
+		i.WebhookAgentImage = o.WebhookAgentImage
 	}
 	if o.Registry != "" {
 		i.Registry = o.Registry
@@ -391,8 +397,9 @@ var defaultConfig = Config{
 		RootDaemon: logrus.InfoLevel,
 	},
 	Images: Images{
-		Registry:   "docker.io/datawire",
-		AgentImage: "",
+		Registry:          "docker.io/datawire",
+		AgentImage:        "",
+		WebhookAgentImage: "",
 	}}
 
 var config *Config

@@ -294,6 +294,56 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		}
 		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
 	})
+
+	ts.Run("Webhook Agent Image From Config", func() {
+		t := ts.T()
+		require := ts.Require()
+		uninstallTrafficManager := func() {
+			stdout, stderr := telepresence(t, "uninstall", "--everything")
+			require.Empty(stderr)
+			require.Contains(stdout, "Daemon quitting")
+		}
+		// Remove the traffic-manager since we are altering config that applies to
+		// creating the traffic-manager
+		uninstallTrafficManager()
+		stdout, stderr := telepresence(t, "uninstall", "--everything")
+		require.Empty(stderr)
+		require.Contains(stdout, "Daemon quitting")
+
+		configDir := t.TempDir()
+
+		// Use a config with agentImage and webhookAgentImage to validate that its the
+		// latter that is used in the traffic-manager
+		ctx := dlog.NewTestContext(t, false)
+		registry := dtest.DockerRegistry(ctx)
+		configYml := fmt.Sprintf("images:\n  registry: %s\n  agentImage: notUsed:0.0.1\n  webhookAgentImage: imageFromConfig:0.0.1\n", registry)
+		ctx, err := setConfig(ctx, configDir, configYml)
+		require.NoError(err)
+
+		_, stderr = telepresenceContext(ctx, "connect")
+		require.Empty(stderr)
+
+		// When this function ends we uninstall the manager,
+		// connect again to establish a traffic-manager without
+		// our edited config, and then quit our connection to the manager.
+		defer func() {
+			uninstallTrafficManager()
+			_, stderr = telepresence(t, "connect")
+			require.Empty(stderr)
+			_, stderr = telepresence(t, "quit")
+			require.Empty(stderr)
+		}()
+
+		image, err := ts.kubectlOut(ctx, "get",
+			"--namespace", ts.managerTestNamespace,
+			"deploy", "traffic-manager",
+			"--ignore-not-found",
+			"-o",
+			"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='TELEPRESENCE_AGENT_IMAGE')].value}")
+		require.NoError(err)
+		desiredImage := fmt.Sprintf("%s/imageFromConfig:0.0.1", registry)
+		ts.Equal(desiredImage, image)
+	})
 }
 
 func (ts *telepresenceSuite) TestB_Connected() {
