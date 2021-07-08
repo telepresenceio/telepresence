@@ -39,6 +39,10 @@ rules:
   resources: ["endpoints"]
   verbs: ["get", "list"]
 - apiGroups:
+  - "rbac.authorization.k8s.io"
+  resources: ["clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "watch"]
+- apiGroups:
   - ""
   resources: ["namespaces"]
   verbs: ["get", "list", "watch"]
