@@ -73,12 +73,14 @@ func NewInfo(ctx context.Context) Info {
 	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
 	// This requires an additional permission to create a service, which the traffic-manager
 	// should have.
+	env := managerutil.GetEnv(ctx)
 	svc := kates.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "t2-tst-dummy",
+			Namespace: env.ManagerNamespace,
+			Name:      "t2-tst-dummy",
 		},
 		Spec: v1.ServiceSpec{
 			Ports:     []kates.ServicePort{{Port: 443}},
