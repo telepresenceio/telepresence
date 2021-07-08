@@ -99,7 +99,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
 				o.dnsConfig.LocalIp = net.ParseIP(fields[1])
-				dlog.Infof(c, "Automatically set -dns=%s", o.dnsConfig.LocalIp)
+				dlog.Infof(c, "Automatically set -dns=%s", net.IP(o.dnsConfig.LocalIp))
 				break
 			}
 		}

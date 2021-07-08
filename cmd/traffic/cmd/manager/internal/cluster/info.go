@@ -96,6 +96,8 @@ func NewInfo(ctx context.Context) Info {
 				dlog.Infof(ctx, "Extracting service subnet %v from create service error message", cidr)
 				oi.ServiceSubnet = iputil.IPNetToRPC(cidr)
 			}
+		} else {
+			dlog.Errorf(ctx, "unable to extract service subnet from error message %q", err.Error())
 		}
 	}
 
@@ -104,7 +106,7 @@ func NewInfo(ctx context.Context) Info {
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
 		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
 		// unlikely to cover less than half the bits.
-		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", oi.KubeDnsIp)
+		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", net.IP(oi.KubeDnsIp))
 		bits := len(oi.KubeDnsIp) * 8
 		ones := bits / 2
 		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
