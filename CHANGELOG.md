@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.3.4 (TBD)
+
+- Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address. 
+
 ### 2.3.3 (July 7, 2021)
 
 - Feature: Telepresence now supports installing the Traffic Manager
