@@ -36,7 +36,7 @@ func (ri tmClusterRole) desiredClusterRole(ctx context.Context) *kates.ClusterRo
 	cl := ri.clusterRole(ctx)
 	cl.Rules = []rbac.PolicyRule{
 		{
-			Verbs:     []string{"get", "list"},
+			Verbs:     []string{"get", "list", "create"},
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 		},
