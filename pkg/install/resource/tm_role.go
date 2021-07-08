@@ -111,5 +111,5 @@ func rulesEqual(ar []rbac.PolicyRule, br []rbac.PolicyRule) bool {
 			return false
 		}
 	}
-	return false
+	return true
 }
