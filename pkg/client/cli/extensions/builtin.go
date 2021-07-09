@@ -3,6 +3,7 @@ package extensions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -10,12 +11,15 @@ import (
 
 // builtinExtensions is a function instead of a would-be-const var because its result includes the
 // CLI version number, which might not be initialized yet at init-time (esp. during `go test`).
-func builtinExtensions(_ context.Context) map[string]ExtensionInfo {
+func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
+	registry := client.GetConfig(ctx).Images.Registry
+	version := strings.TrimPrefix(client.Version(), "v")
+	image := fmt.Sprintf("%s/tel2:%s", registry, version)
 	return map[string]ExtensionInfo{
 		// Real extensions won't have a "/" in the extname, by putting one builtin extension names
 		// we can avoid clashes.
 		"/builtin/telepresence": {
-			Image: "${TELEPRESENCE_REGISTRY}/tel2:" + strings.TrimPrefix(client.Version(), "v"),
+			Image: image,
 			Mechanisms: map[string]MechanismInfo{
 				"tcp": {},
 			},
