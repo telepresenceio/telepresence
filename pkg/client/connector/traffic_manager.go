@@ -1,14 +1,11 @@
 package connector
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/user"
-	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
@@ -28,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
@@ -126,44 +124,13 @@ func (tm *trafficManager) run(c context.Context) error {
 		return err
 	}
 
-	kpfArgs := []string{
-		"--namespace",
-		tm.kubeconfigExtension.Manager.Namespace,
-		"svc/traffic-manager",
-		fmt.Sprintf(":%d", install.ManagerPortHTTP)}
-
-	// Scan port-forward output and grab the dynamically allocated ports
-	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
-	outputScanner := func(sc *bufio.Scanner) interface{} {
-		for sc.Scan() {
-			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
-				toPort, _ := strconv.Atoi(rxr[2])
-				if toPort == install.ManagerPortHTTP {
-					apiPort := rxr[1]
-					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
-					return apiPort
-				}
-			}
-		}
-		return nil
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.configFlags, tm.client)
+	if err != nil {
+		return err
 	}
-
-	return client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
-		return tm.portForwardAndThen(c, kpfArgs, outputScanner, func(ctx context.Context, portIf interface{}) error {
-			err := tm.initGrpc(ctx, portIf.(string))
-			if err != nil {
-				// Go ahead and log here, since `client.Retry()` will swallow most
-				// errors from being logged.
-				dlog.Errorf(ctx, "initGrpc: %v", err)
-				return err
-			}
-			return nil
-		})
-	}, 2*time.Second, 6*time.Second)
-}
-
-func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error) {
-	grpcPort, _ := strconv.Atoi(portStr)
+	grpcAddr := net.JoinHostPort(
+		"svc/traffic-manager."+tm.kubeconfigExtension.Manager.Namespace,
+		fmt.Sprint(install.ManagerPortHTTP))
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
@@ -183,7 +150,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 		}
 	}()
 
-	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", grpcPort),
+	conn, err = grpc.DialContext(tc, grpcAddr,
+		grpc.WithContextDialer(grpcDialer),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
