@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.4 (TBD)
+### 2.3.4 (July 9, 2021)
 
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.
 - Bugfix: Telepresence will no longer panic when multiple services match a workload.
