@@ -3,11 +3,17 @@
 # up in the cluster.
 {{- if .Values.clientRbac.create }}
 
+{{- if (not .Values.clientRbac.subjects) }}
+{{/* fail comes out really ugly if we just do fail "the message here" */}}
+{{- $msg := "You must set clientRbac.subjects to a list of valid rbac subjects. See the kubernetes docs for more: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#referring-to-subjects" }}
+{{- fail $msg }}
+{{- end }}
+
 {{- if .Values.clientRbac.namespaced }}
 ---
 # Required so the user is able to create intercepts across namespaces
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1 
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name:  {{ include "telepresence.rbacName" . }}-namespace
   labels:
@@ -17,11 +23,16 @@ rules:
   - ""
   resources: ["namespaces"]
   verbs: ["get", "list", "watch"]
+- apiGroups:
+  - ""
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
 {{- end }}
 
 ---
 # Rest of the permissions needed to create intercepts.
 kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: {{ include "telepresence.rbacName" . }}
   labels:
@@ -34,7 +45,7 @@ rules:
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "watch", "update"]
+  verbs: ["update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]

@@ -22,6 +22,8 @@ kind: Service
 metadata:
   name: {{ .Values.agentInjector.name }}
   namespace: {{ include "telepresence.namespace" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
