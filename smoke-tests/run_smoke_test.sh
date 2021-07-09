@@ -129,7 +129,7 @@ is_prop_traffic_agent() {
         if [[ -z $image_present ]]; then
             echo "Proprietary traffic agent image wasn't used and it should be"
             exit 1
-        elif [[ -n $TELEPRESENCE_AGENT_IMAGE && $image_present != *$TELEPRESENCE_AGENT_IMAGE ]]; then
+        elif [[ -n $smart_agent && $image_present != *$smart_agent ]]; then
             echo "Propietary traffic agent was supposed to have been overridden but it wasn't"
             exit 1
         fi
@@ -140,6 +140,45 @@ is_prop_traffic_agent() {
             echo "Non-proprietary traffic agent image wasn't used and it should be"
             exit 1
         fi
+    fi
+}
+
+get_config() {
+    if [ -n "$TELEPRESENCE_AGENT_IMAGE" ]; then
+        echo "Use images.agentImage in your config.yml to configure the Smart Agent Image to use"
+        exit 1
+    fi
+
+    uname=$(uname)
+    if [ "$uname" == "Darwin" ]; then
+        config_file="$HOME/Library/ApplicationSupport/telepresence/config.yml"
+    elif [ "$uname" == "Linux" ]; then
+        if [ -n "$XDG_CONFIG_HOME" ]; then
+            config_file="$XDG_CONFIG_HOME/telepresence/config.yml"
+        else 
+            config_file="$HOME/.config/telepresence/config.yml"
+        fi
+    else
+        echo "$uname is unknown by smoke-tests. Update get_config() to include default config location for your OS"
+        exit 1
+    fi
+    echo "Using config_file: $config_file"
+}
+
+unset_agent_image_config() {
+    if [ -f "$config_file" ]; then
+        sed -i.bak 's/^  agentImage:.*//' "${config_file}"
+    fi
+}
+
+restore_config () {
+    config_bak="$config_file.bak"
+    if [ -f "$config_file" ]; then
+        echo "$config_file"
+        echo "$config_bak"
+        echo "restoring file"
+        cp "$config_bak" "$config_file"
+        rm "$config_bak"
     fi
 }
 
@@ -191,13 +230,18 @@ echo
 # If this environment variable is set, we want to run the smoke tests with that
 # agent. But this agent isn't used unless we are logged in, so we unset the
 # var here, and will re-set it after we log in.
-if [ -n "$TELEPRESENCE_AGENT_IMAGE" ]; then
-    TELEPRESENCE_AGENT_OVERRIDE=$TELEPRESENCE_AGENT_IMAGE
-    echo "Using Agent Image for tests where you are logged in:"
-    echo "$TELEPRESENCE_AGENT_IMAGE"
+get_config
+if [ -f "$config_file" ]; then
+    smart_agent=$(sed -n -e 's/^[ ]*agentImage\:[ ]*//p' "$config_file")
+    echo "Smart agent: $smart_agent"
+    unset_agent_image_config
+    trap restore_config EXIT
+    echo "Using the following config for non-Smart Agent steps: "
+    config_bak="$config_file.bak"
+    cat "$config_file"
     echo
-    unset TELEPRESENCE_AGENT_IMAGE
 fi
+
 
 echo "Using kubectl: "
 which kubectl
@@ -372,11 +416,12 @@ finish_step
 #### Step 6 - Verify login prompted        ####
 ###############################################
 
-if [[ -n $TELEPRESENCE_AGENT_OVERRIDE ]]; then
-    export TELEPRESENCE_AGENT_IMAGE=$TELEPRESENCE_AGENT_OVERRIDE
-    echo "Using $TELEPRESENCE_AGENT_IMAGE as the agent for remainder of tests"
-    $TELEPRESENCE quit >"$output_location"
-    $TELEPRESENCE connect >"$output_location"
+if [ -f "$config_file" ]; then 
+    restore_config
+    trap - EXIT
+    echo "Using the following config for remainder of tests:"
+    cat "$config_file"
+    $TELEPRESENCE quit > "$output_location"
 fi
 
 $TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n' >"$output_location"
