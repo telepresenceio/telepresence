@@ -23,15 +23,16 @@ items:
       - type: bugfix
         title: Improved IP log statements
         body: >-
-          Fixed log statements that were printing incorrect IP addresses.
+          Some log statements were printing incorrect characters, when they should have been IP addresses.
+          This has been resolved to include more accurate and useful logging.
       - type: bugfix
         title: Improved messaging when multiple services match a workload
         body: >-
-          If multiple services matched a workload when performing an intercept, Telepresence would panic.
+          If multiple services matched a workload when performing an intercept, Telepresence would crash.
           It now gives the correct error message, instructing the user on how to specify which
           service the intercept should use.
       - type: bugfix
-        title: Traffic-manger determine's service subnet in own namespace
+        title: Traffic-manger creates services in its own namespace to determine subnet
         body: >-
           Telepresence will now determine the service subnet by creating a dummy-service in its own
           namespace, instead of the default namespace, which was causing RBAC permissions issues in
@@ -44,7 +45,7 @@ items:
       - type: bugfix
         title: Helm Chart fixed for clientRbac.namespaced
         body: >-
-          The Telepresence helm chart no longer fails when installing with `--set clientRbac.namespaced=true`.
+          The Telepresence Helm chart no longer fails when installing with <code>--set clientRbac.namespaced=true</code>.
         docs: install/helm
   - version: 2.3.3
     date: 'TBD'
