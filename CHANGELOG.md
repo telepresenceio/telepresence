@@ -6,6 +6,7 @@
 - Bugfix: Telepresence will no longer panic when multiple services match a workload.
 - Bugfix: The traffic-manager will now accurately determine the service subnet by creating a dummy-service in its own namespace.
 - Bugfix: Telepresence connect will no longer try to update the traffic-manager's clusterrole if the live one is identical to the desired one.
+- Bugfix: The Telepresence helm chart no longer fails when installing with `--set clientRbac.namespaced=true`
 
 ### 2.3.3 (July 7, 2021)
 
