@@ -191,10 +191,7 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.ManagerPort),
-			grpc.WithInsecure(),
-			grpc.WithNoProxy(),
-			grpc.WithBlock())
+		conn, err = client.DialSocket(tc, client.ConnectorSocketName)
 		if err != nil {
 			return client.CheckTimeout(tc, err)
 		}

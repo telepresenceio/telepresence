@@ -11,6 +11,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dgroup"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -115,7 +116,7 @@ func (p *mgrProxy) WatchAgents(arg *managerrpc.SessionInfo, srv managerrpc.Manag
 	for {
 		snapshot, err := cli.Recv()
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || srv.Context().Err() != nil {
 				return nil
 			}
 			return err
@@ -137,7 +138,7 @@ func (p *mgrProxy) WatchIntercepts(arg *managerrpc.SessionInfo, srv managerrpc.M
 	for {
 		snapshot, err := cli.Recv()
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || srv.Context().Err() != nil {
 				return nil
 			}
 			return err
@@ -168,12 +169,51 @@ func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewIn
 	return client.ReviewIntercept(ctx, arg, callOptions...)
 }
 
-func (p *mgrProxy) ClientTunnel(_ managerrpc.Manager_ClientTunnelServer) error {
-	return errors.New("ClientTunnel is not implemented by the mgrProxy")
+func (p *mgrProxy) ClientTunnel(fhDaemon managerrpc.Manager_ClientTunnelServer) error {
+	ctx := fhDaemon.Context()
+	client, callOptions, err := p.get()
+	if err != nil {
+		return err
+	}
+
+	fhManager, err := client.ClientTunnel(ctx, callOptions...)
+	if err != nil {
+		return err
+	}
+	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	grp.Go("manager->daemon", func(ctx context.Context) error {
+		for {
+			payload, err := fhManager.Recv()
+			if err != nil {
+				if err == io.EOF || ctx.Err() != nil {
+					return nil
+				}
+				return err
+			}
+			if err := fhDaemon.Send(payload); err != nil {
+				return err
+			}
+		}
+	})
+	grp.Go("daemon->manager", func(ctx context.Context) error {
+		for {
+			payload, err := fhDaemon.Recv()
+			if err != nil {
+				if err == io.EOF || ctx.Err() != nil {
+					return nil
+				}
+				return err
+			}
+			if err := fhManager.Send(payload); err != nil {
+				return err
+			}
+		}
+	})
+	return grp.Wait()
 }
 
 func (p *mgrProxy) AgentTunnel(server managerrpc.Manager_AgentTunnelServer) error {
-	return errors.New("AgentTunnel is not implemented by the mgrProxy")
+	return errors.New("must call manager.AgentTunnel from an agent (intercepted Pod), not from a client (workstation)")
 }
 
 func (p *mgrProxy) LookupHost(ctx context.Context, arg *managerrpc.LookupHostRequest) (*managerrpc.LookupHostResponse, error) {
@@ -193,9 +233,28 @@ func (p *mgrProxy) AgentLookupHostResponse(ctx context.Context, arg *managerrpc.
 }
 
 func (p *mgrProxy) WatchLookupHost(_ *managerrpc.SessionInfo, server managerrpc.Manager_WatchLookupHostServer) error {
-	return errors.New("WatchLookupHost is not implemented by the mgrProxy")
+	return errors.New("must call manager.WatchLookupHost from an agent (intercepted Pod), not from a client (workstation)")
 }
 
-func (p *mgrProxy) WatchClusterInfo(_ *managerrpc.SessionInfo, server managerrpc.Manager_WatchClusterInfoServer) error {
-	return errors.New("WatchClusterInfo is not implemented by the mgrProxy")
+func (p *mgrProxy) WatchClusterInfo(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchClusterInfoServer) error {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return err
+	}
+	cli, err := client.WatchClusterInfo(srv.Context(), arg, callOptions...)
+	if err != nil {
+		return err
+	}
+	for {
+		info, err := cli.Recv()
+		if err != nil {
+			if err == io.EOF || srv.Context().Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if err := srv.Send(info); err != nil {
+			return err
+		}
+	}
 }

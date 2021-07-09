@@ -33,6 +33,7 @@ import (
 
 type trafficManagerCallbacks struct {
 	GetAPIKey func(context.Context, string, bool) (string, error)
+	SetClient func(client manager.ManagerClient, callOptions ...grpc.CallOption)
 }
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -204,9 +205,14 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
+	// Gotta call mgrProxy.SetClient before we call daemon.SetOutboundInfo which tells the
+	// daemon to use the proxy.
+	tm.callbacks.SetClient(tm.managerClient)
+
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo(int32(grpcPort))); err != nil {
+	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
 		tm.managerClient = nil
+		tm.callbacks.SetClient(nil)
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
 
@@ -539,10 +545,9 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
-func (tm *trafficManager) getOutboundInfo(mgrPort int32) *daemon.OutboundInfo {
+func (tm *trafficManager) getOutboundInfo() *daemon.OutboundInfo {
 	info := &daemon.OutboundInfo{
-		Session:     tm.sessionInfo,
-		ManagerPort: mgrPort,
+		Session: tm.sessionInfo,
 	}
 
 	if tm.DNS != nil {

@@ -431,6 +431,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		s.scoutClient.Reporter.InstallID(),
 		trafficManagerCallbacks{
 			GetAPIKey: s.getCloudAPIKey,
+			SetClient: s.managerProxy.SetClient,
 		})
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -457,7 +458,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-	s.managerProxy.SetClient(tmgr.managerClient)
 
 	// Start k8s-watches
 	s.clusterRequest <- cluster
