@@ -135,7 +135,7 @@ rules:
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "watch", "update"]
+  verbs: ["update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]
@@ -190,6 +190,10 @@ rules:
 - apiGroups:
   - ""
   resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - ""
+  resources: ["services"]
   verbs: ["get", "list", "watch"]
 ---
 kind: ClusterRoleBinding
