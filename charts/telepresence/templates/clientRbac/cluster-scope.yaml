@@ -1,0 +1,48 @@
+# These are the cluster-wide rbac roles + bindings that will be used by users
+# who want to use telepresence once its components have been set
+# up in the cluster.
+
+{{- if .Values.clientRbac.create }}
+
+{{- if (not .Values.clientRbac.subjects) }}
+{{/* fail comes out really ugly if we just do fail "the message here" */}}
+{{- $msg := "You must set clientRbac.subjects to a list of valid rbac subjects. See the kubernetes docs for more: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#referring-to-subjects" }}
+{{- fail $msg }}
+{{- end }}
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  {{ include "telepresence.clientRbacName" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+rules: 
+- apiGroups:
+  - ""
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - ""
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+{{- if not .Values.clientRbac.namespaced }}
+{{ include "telepresence.clientRbacInterceptRules" . }}
+{{- end }}
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "telepresence.clientRbacName" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+subjects:
+{{- toYaml .Values.clientRbac.subjects | nindent 0}}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "telepresence.clientRbacName" . }}
+  apiGroup: rbac.authorization.k8s.io
+
+{{- end }}
