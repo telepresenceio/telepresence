@@ -17,16 +17,53 @@
 
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 items:
+  - version: 2.3.4
+    date: '2021-07-09'
+    notes:
+      - type: bugfix
+        title: Improved IP log statements
+        body: >-
+          Some log statements were printing incorrect characters, when they should have been IP addresses.
+          This has been resolved to include more accurate and useful logging.
+        docs: reference/config/#log-levels
+        image: ./telepresence-2.3.4-ip-error.png
+      - type: bugfix
+        title: Improved messaging when multiple services match a workload
+        body: >-
+          If multiple services matched a workload when performing an intercept, Telepresence would crash.
+          It now gives the correct error message, instructing the user on how to specify which
+          service the intercept should use.
+        image: ./telepresence-2.3.4-improved-error.png
+        docs: reference/intercepts
+      - type: bugfix
+        title: Traffic-manger creates services in its own namespace to determine subnet
+        body: >-
+          Telepresence will now determine the service subnet by creating a dummy-service in its own
+          namespace, instead of the default namespace, which was causing RBAC permissions issues in
+          some clusters.
+        docs: reference/routing/#subnets
+      - type: bugfix
+        title: Telepresence connect respects pre-existing clusterrole
+        body: >-
+          When Telepresence connects, if the <code>traffic-manager</code>'s desired <code>clusterrole</code> already exists in the
+          cluster, Telepresence will no longer try to update the clusterrole.
+        docs: reference/rbac
+      - type: bugfix
+        title: Helm Chart fixed for clientRbac.namespaced
+        body: >-
+          The Telepresence Helm chart no longer fails when installing with <code>--set clientRbac.namespaced=true</code>.
+        docs: install/helm
   - version: 2.3.3
     date: '2021-07-07'
     notes:
+      # Headliners
       - type: feature
         title: Traffic Manager Helm Chart
         body: >-
-          Telepresence now supports installing the Traffic Manager via Helm.
+          We now support installing the Traffic Manager via Helm.
           This will make it easy for operators to install and configure the
-          server-side components of Telepresence separately from the CLI (which
-          in turn allows for better separation of permissions).
+          server-side components of Telepresence separately from the CLI
+          (which in turn allows for better separation of permissions).
         image: ./telepresence-2.3.3-helm.png
         docs: install/helm/
       - type: feature
