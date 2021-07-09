@@ -44,6 +44,7 @@ items:
           If multiple services matched a workload when performing an intercept, Telepresence would crash.
           It now gives the correct error message, instructing the user on how to specify which
           service the intercept should use.
+        image: ./telepresence-2.3.4-improved-error.png
       - type: bugfix
         title: Traffic-manger creates services in its own namespace to determine subnet
         body: >-
