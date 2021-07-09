@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,11 +18,10 @@ import (
 )
 
 func TestDialSocket(t *testing.T) {
-	t.Parallel()
 	tmpdir := t.TempDir()
 	t.Run("OK", func(t *testing.T) {
-		t.Parallel()
-		listener, err := net.Listen("unix", filepath.Join(tmpdir, "ok.sock"))
+		sockname := filepath.Join(tmpdir, "ok.sock")
+		listener, err := net.Listen("unix", sockname)
 		if !assert.NoError(t, err) {
 			return
 		}
@@ -31,6 +31,7 @@ func TestDialSocket(t *testing.T) {
 		grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 			EnableWithSoftness: true,
 			ShutdownOnNonError: true,
+			DisableLogging:     true,
 		})
 
 		grp.Go("server", func(ctx context.Context) error {
@@ -41,7 +42,7 @@ func TestDialSocket(t *testing.T) {
 		})
 
 		grp.Go("client", func(ctx context.Context) error {
-			conn, err := client.DialSocket(ctx, filepath.Join(tmpdir, "ok.sock"))
+			conn, err := client.DialSocket(ctx, sockname)
 			assert.NoError(t, err)
 			if assert.NotNil(t, conn) {
 				assert.NoError(t, conn.Close())
@@ -52,27 +53,49 @@ func TestDialSocket(t *testing.T) {
 		assert.NoError(t, grp.Wait())
 	})
 	t.Run("Hang", func(t *testing.T) {
-		t.Parallel()
-		listener, err := net.Listen("unix", filepath.Join(tmpdir, "hang.sock"))
+		sockname := filepath.Join(tmpdir, "hang.sock")
+		listener, err := net.Listen("unix", sockname)
 		if !assert.NoError(t, err) {
 			return
 		}
 		defer listener.Close()
 
 		ctx := dlog.NewTestContext(t, false)
-		conn, err := client.DialSocket(ctx, filepath.Join(tmpdir, "hang.sock"))
+		conn, err := client.DialSocket(ctx, sockname)
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Contains(t, err.Error(), "dial unix "+sockname)
+		assert.Contains(t, err.Error(), "this usually means that the process has locked up")
+	})
+	t.Run("Orphan", func(t *testing.T) {
+		sockname := filepath.Join(tmpdir, "orphan.sock")
+		listener, err := net.Listen("unix", sockname)
+		if !assert.NoError(t, err) {
+			return
+		}
+		listener.(*net.UnixListener).SetUnlinkOnClose(false)
+		listener.Close()
+
+		ctx := dlog.NewTestContext(t, false)
+		conn, err := client.DialSocket(ctx, sockname)
+		assert.Nil(t, conn)
+		assert.Error(t, err)
+		t.Log(err)
+		assert.ErrorIs(t, err, syscall.ECONNREFUSED)
+		assert.Contains(t, err.Error(), "dial unix "+sockname)
+		assert.Contains(t, err.Error(), "this usually means that the process has terminated ungracefully")
 	})
 	t.Run("NotExist", func(t *testing.T) {
-		t.Parallel()
 		ctx := dlog.NewTestContext(t, false)
-		conn, err := client.DialSocket(ctx, filepath.Join(tmpdir, "not-exist.sock"))
+		sockname := filepath.Join(tmpdir, "not-exist.sock")
+		conn, err := client.DialSocket(ctx, sockname)
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)
 		assert.ErrorIs(t, err, os.ErrNotExist)
+		assert.Contains(t, err.Error(), "dial unix "+sockname)
+		assert.Contains(t, err.Error(), "this usually means that the process is not running")
 	})
 }

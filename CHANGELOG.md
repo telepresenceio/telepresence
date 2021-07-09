@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.3.5 (TBD)
+
+- Bugfix: Fixed and improved several error messages, to hopefully be
+  more helpful.
+
 ### 2.3.4 (July 9, 2021)
 
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.

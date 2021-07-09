@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -77,9 +79,27 @@ func DialSocket(ctx context.Context, socketName string) (*grpc.ClientConn, error
 		grpc.FailOnNonTempDialError(true),
 	)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			err = fmt.Errorf("%w: socket %q exists but isn't responding; this means that either the process has locked up or has terminated ungracefully",
-				err, SocketURL(socketName))
+		if err == context.DeadlineExceeded {
+			// grpc.DialContext doesn't wrap context.DeadlineExceeded with any useful
+			// information at all.  Fix that.
+			err = &net.OpError{
+				Op:  "dial",
+				Net: "unix",
+				Addr: &net.UnixAddr{
+					Name: socketName,
+					Net:  "unix",
+				},
+				Err: fmt.Errorf("socket exists but is not responding: %w", err),
+			}
+		}
+		// Add some Telepresence-specific commentary on what specific common errors mean.
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			err = fmt.Errorf("%w; this usually means that the process has locked up", err)
+		case errors.Is(err, syscall.ECONNREFUSED):
+			err = fmt.Errorf("%w; this usually means that the process has terminated ungracefully", err)
+		case errors.Is(err, os.ErrNotExist):
+			err = fmt.Errorf("%w; this usually means that the process is not running", err)
 		}
 		return nil, err
 	}
