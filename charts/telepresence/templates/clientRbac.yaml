@@ -3,6 +3,12 @@
 # up in the cluster.
 {{- if .Values.clientRbac.create }}
 
+{{- if (not .Values.clientRbac.subjects) }}
+{{/* fail comes out really ugly if we just do fail "the message here" */}}
+{{- $msg := "You must set clientRbac.subjects to a list of valid rbac subjects. See the kubernetes docs for more: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#referring-to-subjects" }}
+{{- fail $msg }}
+{{- end }}
+
 {{- if .Values.clientRbac.namespaced }}
 ---
 # Required so the user is able to create intercepts across namespaces
