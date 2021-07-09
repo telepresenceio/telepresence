@@ -26,6 +26,8 @@
 - Feature: `telepresence status` now includes more information about
   the root daemon.
 
+- Feature: We now do nightly builds of Telepresence for commits on release/v2 that haven't been tagged and published yet.
+
 - Change: Telepresence no longer automatically shuts down the old
   `api_version=1` `edgectl` daemon.  If migrating from such an old
   version of `edgectl` you must now manually shut down the `edgectl`

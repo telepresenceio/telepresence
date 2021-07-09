@@ -176,6 +176,36 @@ jobs:
     - checkout
     - run: |
         [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
+  
+  "publish-nightly-linux":
+    executor: vm-linux
+    steps:
+    - checkout
+    - install-go
+    - run: pip3 install awscli
+    - run:
+        name: Docker login
+        command: |
+          docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+    - run:
+        name: "Publish nightly linux"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag make push-images push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
+
+  "publish-nightly-macos":
+    executor: vm-macos
+    steps:
+    - checkout
+    - install-go
+    - run: sudo pip3 install awscli
+    - run:
+        name: "Publish nightly macos"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
 
 #  "release-finalize":
 #    executor: vm-linux
@@ -215,6 +245,18 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
+
+  'Nightly':
+    triggers:
+    - schedule:
+        cron: "0 0 * * 1-5"
+        filters:
+          branches:
+            only:
+              - release/v2
+    jobs:
+      - publish-nightly-linux
+      - publish-nightly-macos
       #- release-finalize:
       #    context: telepresence2-release
       #    requires:

@@ -39,9 +39,21 @@ func Main() error {
 	}
 	gitDescVer.Patch++
 
-	_, err = fmt.Printf("v%s-%d\n", gitDescVer, time.Now().Unix())
-	if err != nil {
-		return err
+	// If an additional arg has been used, we include it in the tag
+	if len(os.Args) >= 2 {
+		// gitDescVer.Pre[0] contains the number of commits since the last tag and the
+		// shortHash with a 'g' appended.  Since the first section isn't relevant,
+		// we get the shortHash this way since we don't need that extra information.
+		shortHash, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Printf("v%d.%d.%d-%s-%s\n", gitDescVer.Major, gitDescVer.Minor, gitDescVer.Patch, os.Args[1], shortHash)
+	} else {
+		_, err = fmt.Printf("v%s-%d\n", gitDescVer, time.Now().Unix())
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
