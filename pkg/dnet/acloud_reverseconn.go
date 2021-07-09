@@ -1,10 +1,7 @@
-package grpctun
+package dnet
 
 import (
 	"bytes"
-	"context"
-	"errors"
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -12,49 +9,20 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 )
 
-type handledConnectionImpl interface {
-	Send(*manager.ConnectionChunk) error
-	Recv() (*manager.ConnectionChunk, error)
+// AmbassadorCloudTunnel is the intersection of these two interfaces:
+//
+//   systema.SystemAProxy_ReverseConnectionClient
+//   systema.SystemAProxy_ReverseConnectionServer
+type AmbassadorCloudTunnel interface {
+	Send(*systema.Chunk) error
+	Recv() (*systema.Chunk, error)
 }
 
-// DialToManager uses a ReverseConnection to dial from SystemA to a Telepresence manager.
-func DialToManager(ctx context.Context, managerClient manager.ManagerProxyClient, interceptID string, opts ...grpc.CallOption) (Conn, error) {
-	impl, err := managerClient.HandleConnection(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	err = impl.Send(&manager.ConnectionChunk{
-		Value: &manager.ConnectionChunk_InterceptId{
-			InterceptId: interceptID,
-		},
-	})
-	if err != nil {
-		_ = impl.CloseSend()
-		return nil, err
-	}
-	return wrap(impl), nil
-}
-
-// AcceptFromSystemA is used by a Telepresence manger to accept a connection from SystemA.
-func AcceptFromSystemA(systema manager.ManagerProxy_HandleConnectionServer) (interceptID string, conn Conn, err error) {
-	chunk, err := systema.Recv()
-	if err != nil {
-		return "", nil, err
-	}
-	chunkValue, ok := chunk.Value.(*manager.ConnectionChunk_InterceptId)
-	if !ok {
-		return "", nil, fmt.Errorf("HandleConnection: first chunk must be an intercept_id")
-	}
-	interceptID = chunkValue.InterceptId
-
-	return interceptID, wrap(systema), nil
-}
-
-type handledConn struct {
-	conn handledConnectionImpl
+type reverseConn struct {
+	conn AmbassadorCloudTunnel
 
 	waitOnce sync.Once
 	wait     chan struct{}
@@ -73,10 +41,10 @@ type handledConn struct {
 	writeErr      error
 }
 
-// Wrap takes a manager.ManagerProxy_HandleConnectionClient or
-// manager.ManagerProxy_HandleConnectionServer and wraps it so that it can be used as a net.Conn.
-func wrap(impl handledConnectionImpl) Conn {
-	return &handledConn{
+// WrapAmbassadorCloudTunnel takes a systema.SystemAProxy_ReverseConnectionClient or
+// systema.SystemAProxy_ReverseConnectionServer and wraps it so that it can be used as a net.Conn.
+func WrapAmbassadorCloudTunnel(impl AmbassadorCloudTunnel) Conn {
+	return &reverseConn{
 		conn: impl,
 
 		wait:          make(chan struct{}),
@@ -87,7 +55,7 @@ func wrap(impl handledConnectionImpl) Conn {
 }
 
 // Read implements net.Conn.
-func (c *handledConn) Read(b []byte) (int, error) {
+func (c *reverseConn) Read(b []byte) (int, error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
 	for c.readBuff.Len() == 0 {
@@ -104,21 +72,8 @@ func (c *handledConn) Read(b []byte) (int, error) {
 		}
 
 		chunk, err := c.conn.Recv()
-		if chunk != nil && chunk.Value != nil {
-			switch chunk := chunk.Value.(type) {
-			case *manager.ConnectionChunk_InterceptId:
-				c.readErr = errors.New("HandleConnection: unexpected intercept_id chunk")
-				c.Close()
-				continue
-			case *manager.ConnectionChunk_Data:
-				if chunk != nil && len(chunk.Data) > 0 {
-					c.readBuff.Write(chunk.Data)
-				}
-			case *manager.ConnectionChunk_Error:
-				c.readErr = fmt.Errorf("HandleConnection: remote error: %s", chunk.Error)
-				c.Close()
-				continue
-			}
+		if chunk != nil && len(chunk.Content) > 0 {
+			c.readBuff.Write(chunk.Content)
 		}
 		if err != nil && c.readErr == nil {
 			c.waitOnce.Do(func() { c.waitErr = err; close(c.wait) })
@@ -129,7 +84,7 @@ func (c *handledConn) Read(b []byte) (int, error) {
 }
 
 // Write implements net.Conn.
-func (c *handledConn) Write(b []byte) (int, error) {
+func (c *reverseConn) Write(b []byte) (int, error) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 
@@ -145,10 +100,8 @@ func (c *handledConn) Write(b []byte) (int, error) {
 		return 0, c.writeErr
 	}
 
-	err := c.conn.Send(&manager.ConnectionChunk{
-		Value: &manager.ConnectionChunk_Data{
-			Data: b,
-		},
+	err := c.conn.Send(&systema.Chunk{
+		Content: b,
 	})
 	if err != nil {
 		c.waitOnce.Do(func() { c.waitErr = err; close(c.wait) })
@@ -159,7 +112,7 @@ func (c *handledConn) Write(b []byte) (int, error) {
 }
 
 // Close implements net.Conn.
-func (c *handledConn) Close() error {
+func (c *reverseConn) Close() error {
 	c.closeOnce.Do(func() {
 		if client, isClient := c.conn.(grpc.ClientStream); isClient {
 			c.writeMu.Lock()
@@ -172,39 +125,39 @@ func (c *handledConn) Close() error {
 }
 
 // LocalAddr implements net.Conn.
-func (c *handledConn) LocalAddr() net.Addr {
+func (c *reverseConn) LocalAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-handleconnection-client",
+			net:  "tp-reverseconnection-client",
 			addr: "local",
 		}
 	} else {
 		return addr{
-			net:  "tp-handleconnection-server",
+			net:  "tp-reverseconnection-server",
 			addr: "local",
 		}
 	}
 }
 
 // RemoteAddr implements net.Conn.
-func (c *handledConn) RemoteAddr() net.Addr {
+func (c *reverseConn) RemoteAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-handleconnection-client",
+			net:  "tp-reverseconnection-client",
 			addr: "remote",
 		}
 	} else {
 		return addr{
-			net:  "tp-handleconnection-server",
+			net:  "tp-reverseconnection-server",
 			addr: "remote",
 		}
 	}
 }
 
 // SetDeadline implements net.Conn.
-func (c *handledConn) SetDeadline(t time.Time) error {
+func (c *reverseConn) SetDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
 		return os.ErrClosed
 	}
@@ -214,7 +167,7 @@ func (c *handledConn) SetDeadline(t time.Time) error {
 }
 
 // SetReadDeadline implements net.Conn.
-func (c *handledConn) SetReadDeadline(t time.Time) error {
+func (c *reverseConn) SetReadDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
 		return os.ErrClosed
 	}
@@ -223,7 +176,7 @@ func (c *handledConn) SetReadDeadline(t time.Time) error {
 }
 
 // SetWriteDeadline implements net.Conn.
-func (c *handledConn) SetWriteDeadline(t time.Time) error {
+func (c *reverseConn) SetWriteDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
 		return os.ErrClosed
 	}
@@ -234,7 +187,7 @@ func (c *handledConn) SetWriteDeadline(t time.Time) error {
 // Wait waits until either the connection is Close()d, or one of Read() or Write() encounters an
 // error (*not* counting errors caused by deadlines).  If this returns because Close() was called,
 // nil is returned; otherwise the triggering error is returned.
-func (c *handledConn) Wait() error {
+func (c *reverseConn) Wait() error {
 	<-c.wait
 	return c.waitErr
 }

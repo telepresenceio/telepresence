@@ -1,4 +1,5 @@
-package grpctun
+// Package dnet contains alternative net.Conn implementations.
+package dnet
 
 import (
 	"net"
