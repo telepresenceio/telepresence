@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ type Config struct {
 	Timeouts  Timeouts  `json:"timeouts,omitempty"`
 	LogLevels LogLevels `json:"logLevels,omitempty"`
 	Images    Images    `json:"images,omitempty"`
+	Cloud     Cloud     `json:"cloud,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
@@ -31,6 +33,7 @@ func (c *Config) merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
 	c.Images.merge(&o.Images)
+	c.Cloud.merge(&o.Cloud)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -65,6 +68,11 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 			}
 		case kv == "images":
 			err := ms[i+1].Decode(&c.Images)
+			if err != nil {
+				return err
+			}
+		case kv == "cloud":
+			err := ms[i+1].Decode(&c.Cloud)
 			if err != nil {
 				return err
 			}
@@ -120,11 +128,10 @@ type timeoutContext struct {
 func (ctx timeoutContext) Err() error {
 	err := ctx.Context.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
-		dir, _ := filelocation.AppUserConfigDir(ctx)
 		err = timeoutErr{
 			timeoutID:  ctx.timeoutID,
 			timeoutVal: ctx.timeoutVal,
-			configFile: filepath.Join(dir, configFile),
+			configFile: GetConfigFile(ctx),
 			err:        err,
 		}
 	}
@@ -382,6 +389,47 @@ func (i *Images) merge(o *Images) {
 	}
 }
 
+type Cloud struct {
+	SkipLogin bool `json:"skipLogin,omitempty"`
+}
+
+// UnmarshalYAML parses the images YAML
+func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("cloud must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		switch kv {
+		case "skipLogin":
+			val, err := strconv.ParseBool(v.Value)
+			if err != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("bool expected for key %q", kv), ms[i]))
+			} else {
+				cloud.SkipLogin = val
+			}
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
+func (i *Cloud) merge(o *Cloud) {
+	if o.SkipLogin {
+		i.SkipLogin = o.SkipLogin
+	}
+}
+
 var defaultConfig = Config{
 	Timeouts: Timeouts{
 		PrivateAgentInstall:          120 * time.Second,
@@ -400,6 +448,9 @@ var defaultConfig = Config{
 		Registry:          "docker.io/datawire",
 		AgentImage:        "",
 		WebhookAgentImage: "",
+	},
+	Cloud: Cloud{
+		SkipLogin: false,
 	}}
 
 var config *Config
@@ -432,6 +483,12 @@ func GetConfig(c context.Context) *Config {
 		}
 	})
 	return config
+}
+
+// GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir
+func GetConfigFile(c context.Context) string {
+	dir, _ := filelocation.AppUserConfigDir(c)
+	return filepath.Join(dir, configFile)
 }
 
 // ResetConfig updates configOnce with a new sync.Once. This is currently only used

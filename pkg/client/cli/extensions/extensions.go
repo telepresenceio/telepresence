@@ -3,6 +3,7 @@ package extensions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -299,9 +300,9 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 }
 
 func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (string, error) {
-	imgConfig := client.GetConfig(ctx).Images
-	if imgConfig.AgentImage != "" {
-		return imgConfig.AgentImage, nil
+	cfg := client.GetConfig(ctx)
+	if cfg.Images.AgentImage != "" {
+		return cfg.Images.AgentImage, nil
 	}
 	if es.cachedImage.Image != "" || es.cachedImage.Err != nil {
 		return es.cachedImage.Image, es.cachedImage.Err
@@ -311,7 +312,13 @@ func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (stri
 		return "", err
 	}
 	image := os.Expand(es.exts[es.mech2ext[mechname]].Image, env.Get)
-
+	if cfg.Cloud.SkipLogin {
+		msg := fmt.Sprintf(
+			`images.agentImage must be set with cloud.skipLogin in
+%s for intercepts of mechanism: %s`, client.GetConfigFile(ctx), mechname)
+		err := errors.New(msg)
+		return "", err
+	}
 	for urlSchemeIsOneOf(image, "http", "https", "grpc+https") {
 		if strings.HasPrefix(strings.ToLower(image), "grpc+") {
 			image, err = systemaGetPreferredAgentImageName(ctx, image)

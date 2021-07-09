@@ -215,7 +215,7 @@ func leaveCommand() *cobra.Command {
 // Checks if login is necessary and then takes the necessary actions
 // depending if the cluster can connect to Ambassador Cloud
 func loginIfNeeded(ctx context.Context, args interceptArgs) error {
-	if args.previewEnabled || args.extRequiresLogin {
+	if !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin) {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, _ connector.ConnectorClient) error {
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				// We default to assuming they can connect to Ambassador Cloud
