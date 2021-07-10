@@ -26,20 +26,22 @@ import (
 func (s *service) interceptStatus() (rpc.InterceptError, string) {
 	ie := rpc.InterceptError_UNSPECIFIED
 	msg := ""
+	mgr := s.sharedState.GetTrafficManagerNonBlocking()
 	switch {
 	case s.cluster == nil:
 		ie = rpc.InterceptError_NO_CONNECTION
-	case s.trafficMgr == nil:
+	case mgr == nil:
 		ie = rpc.InterceptError_NO_TRAFFIC_MANAGER
 	default:
-		select {
-		case <-s.trafficMgr.startup:
-			if s.trafficMgr.managerClient == nil {
+		if mgrClient, mgrErr := mgr.GetClientNonBlocking(); mgrClient == nil {
+			if mgrErr == nil {
+				// still in the process of connectingnot connected yet
+				ie = rpc.InterceptError_TRAFFIC_MANAGER_CONNECTING
+			} else {
+				// there was an error connecting
 				ie = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
-				msg = s.trafficMgr.managerErr.Error()
+				msg = mgrErr.Error()
 			}
-		default:
-			ie = rpc.InterceptError_TRAFFIC_MANAGER_CONNECTING
 		}
 	}
 	return ie, msg
@@ -253,8 +255,8 @@ func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptIn
 	tm.currentInterceptsLock.Unlock()
 }
 
-// addIntercept adds one intercept
-func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+// AddIntercept adds one intercept
+func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	spec := ir.Spec
 	spec.Namespace = tm.actualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
@@ -563,8 +565,8 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	}
 }
 
-// removeIntercept removes one intercept by name
-func (tm *trafficManager) removeIntercept(c context.Context, name string) error {
+// RemoveIntercept removes one intercept by name
+func (tm *trafficManager) RemoveIntercept(c context.Context, name string) error {
 	if ns, ok := tm.localIntercepts[name]; ok {
 		return tm.removeLocalOnlyIntercept(c, name, ns)
 	}
@@ -599,7 +601,7 @@ func (tm *trafficManager) removeLocalOnlyIntercept(c context.Context, name, name
 func (tm *trafficManager) clearIntercepts(c context.Context) error {
 	<-tm.startup
 	for _, cept := range tm.getCurrentIntercepts() {
-		err := tm.removeIntercept(c, cept.Spec.Name)
+		err := tm.RemoveIntercept(c, cept.Spec.Name)
 		if err != nil {
 			return err
 		}

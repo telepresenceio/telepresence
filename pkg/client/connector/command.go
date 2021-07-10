@@ -9,28 +9,24 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
-	grpcCodes "google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -58,26 +54,20 @@ type ScoutReport = scout.ScoutReport
 
 // service represents the state of the Telepresence Connector
 type service struct {
-	rpc.UnsafeConnectorServer
-
 	env         client.Env
 	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
 
-	managerProxy mgrProxy
+	managerProxy userd_grpc.MgrProxy
 	cancel       func()
-
-	userNotifications broadcastqueue.BroadcastQueue
-
-	loginExecutor userd_auth.LoginExecutor
 
 	// To access `cluster` or `trafficMgr`:
 	//  - writing: must hold connectMu, AND xxxFinalized must not be closed
 	//  - reading: must either hold connectMu, OR xxxFinalized must be closed
-	connectMu           sync.Mutex
-	clusterFinalized    chan struct{}
-	cluster             *k8sCluster
-	trafficMgrFinalized chan struct{}
-	trafficMgr          *trafficManager
+	connectMu        sync.Mutex
+	clusterFinalized chan struct{}
+	cluster          *k8sCluster
+
+	sharedState *sharedstate.State
 
 	// These are used to communicate between the various goroutines.
 	scout           chan ScoutReport          // any-of-scoutUsers -> background-metriton
@@ -98,196 +88,6 @@ func Command() *cobra.Command {
 		},
 	}
 	return c
-}
-
-func callRecovery(c context.Context, r interface{}, err error) error {
-	perr := derror.PanicToError(r)
-	if perr != nil {
-		if err == nil {
-			err = perr
-		} else {
-			dlog.Errorf(c, "%+v", perr)
-		}
-	}
-	if err != nil {
-		dlog.Errorf(c, "%+v", err)
-	}
-	return err
-}
-
-var ucn int64 = 0
-
-func nextUcn() int {
-	return int(atomic.AddInt64(&ucn, 1))
-}
-
-func callName(s string) string {
-	return fmt.Sprintf("%s-%d", s, nextUcn())
-}
-
-func (s *service) callCtx(c context.Context, name string) context.Context {
-	return dgroup.WithGoroutineName(c, "/"+callName(name))
-}
-
-func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
-	return &common.VersionInfo{
-		ApiVersion: client.APIVersion,
-		Version:    client.Version(),
-	}, nil
-}
-
-func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
-	c = s.callCtx(c, "Connect")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.connect(c, cr, false), nil
-}
-
-func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
-	c = s.callCtx(c, "Status")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.connect(c, cr, true), nil
-}
-
-func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	ie, is := s.interceptStatus()
-	if ie != rpc.InterceptError_UNSPECIFIED {
-		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
-	}
-	c = s.callCtx(c, "CreateIntercept")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.trafficMgr.addIntercept(c, ir)
-}
-
-func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	ie, is := s.interceptStatus()
-	if ie != rpc.InterceptError_UNSPECIFIED {
-		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
-	}
-	c = s.callCtx(c, "RemoveIntercept")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	err = s.trafficMgr.removeIntercept(c, rr.Name)
-	return &rpc.InterceptResult{}, err
-}
-
-func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
-	noManager := false
-	select {
-	case <-s.trafficMgr.startup:
-		noManager = (s.trafficMgr.managerClient == nil)
-	default:
-		noManager = true
-	}
-	if noManager {
-		return &rpc.WorkloadInfoSnapshot{}, nil
-	}
-
-	return s.trafficMgr.workloadInfoSnapshot(ctx, lr), nil
-}
-
-func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
-	c = s.callCtx(c, "Uninstall")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.trafficMgr.uninstall(c, ur)
-}
-
-func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
-	ctx := s.callCtx(stream.Context(), "UserNotifications")
-
-	for msg := range s.userNotifications.Subscribe(ctx) {
-		if err := stream.Send(&rpc.Notification{Message: msg}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
-	ctx = s.callCtx(ctx, "Login")
-	if _, err := s.loginExecutor.GetToken(ctx); err == nil {
-		return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
-	}
-	if err := s.loginExecutor.Login(ctx); err != nil {
-		return nil, err
-	}
-	return &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}, nil
-}
-
-func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
-	ctx = s.callCtx(ctx, "Logout")
-	if err := s.loginExecutor.Logout(ctx); err != nil {
-		if errors.Is(err, userd_auth.ErrNotLoggedIn) {
-			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
-		}
-		return nil, err
-	}
-	return &empty.Empty{}, nil
-}
-
-func (s *service) getCloudAccessToken(ctx context.Context, autoLogin bool) (string, error) {
-	token, err := s.loginExecutor.GetToken(ctx)
-	if autoLogin && err != nil {
-		if _err := s.loginExecutor.Login(ctx); _err == nil {
-			token, err = s.loginExecutor.GetToken(ctx)
-		}
-	}
-	if err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-func (s *service) GetCloudAccessToken(ctx context.Context, req *rpc.TokenReq) (*rpc.TokenData, error) {
-	ctx = s.callCtx(ctx, "GetCloudAccessToken")
-	token, err := s.getCloudAccessToken(ctx, req.GetAutoLogin())
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.TokenData{AccessToken: token}, nil
-}
-
-func (s *service) getCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
-	key, err := s.loginExecutor.GetAPIKey(ctx, desc)
-	if autoLogin && err != nil {
-		if _err := s.loginExecutor.Login(ctx); _err == nil {
-			key, err = s.loginExecutor.GetAPIKey(ctx, desc)
-		}
-	}
-	if err != nil {
-		return "", err
-	}
-	return key, nil
-}
-
-func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
-	ctx = s.callCtx(ctx, "GetCloudAPIKey")
-	key, err := s.getCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.KeyData{ApiKey: key}, nil
-}
-
-func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
-	ctx = s.callCtx(ctx, "GetCloudLicense")
-
-	license, hostDomain, err := s.loginExecutor.GetLicense(ctx, req.GetId())
-	// login is required to get the license from system a so
-	// we try to login before retrying the request
-	if err != nil {
-		if _err := s.loginExecutor.Login(ctx); _err == nil {
-			license, hostDomain, err = s.loginExecutor.GetLicense(ctx, req.GetId())
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.LicenseData{License: license, HostDomain: hostDomain}, nil
-}
-
-func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
-	s.cancel()
-	return &empty.Empty{}, nil
 }
 
 // connect the connector to a cluster
@@ -325,7 +125,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			ClusterId:      s.cluster.getClusterId(c),
 			IngressInfos:   ingressInfo,
 		}
-		s.trafficMgr.setStatus(c, ret)
+		s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
 		return ret
 	case s.cluster != nil /* && !s.cluster.k8sConfig.equals(k8sConfig) */ :
 		ret := &rpc.ConnectInfo{
@@ -334,7 +134,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
 		}
-		s.trafficMgr.setStatus(c, ret)
+		s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
 		return ret
 	default:
 		// This is the first call to Connect; we have to tell the background connect
@@ -422,7 +222,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		s.cluster,
 		s.scoutClient.Reporter.InstallID(),
 		trafficManagerCallbacks{
-			GetAPIKey: s.getCloudAPIKey,
+			GetAPIKey: s.sharedState.GetCloudAPIKey,
 			SetClient: s.managerProxy.SetClient,
 		})
 	if err != nil {
@@ -434,8 +234,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-	s.trafficMgr = tmgr
-	close(s.trafficMgrFinalized)
+	s.sharedState.MaybeSetTrafficManager(tmgr)
 
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
@@ -484,7 +283,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		ClusterId:      s.cluster.getClusterId(c),
 		IngressInfos:   ingressInfo,
 	}
-	s.trafficMgr.setStatus(c, ret)
+	tmgr.setStatus(c, ret)
 	return ret
 }
 
@@ -505,8 +304,8 @@ func run(c context.Context) error {
 		env:         env,
 		scoutClient: client.NewScout(c, "connector"),
 
-		clusterFinalized:    make(chan struct{}),
-		trafficMgrFinalized: make(chan struct{}),
+		clusterFinalized: make(chan struct{}),
+		sharedState:      sharedstate.NewState(),
 
 		scout:           make(chan ScoutReport, 10),
 		connectRequest:  make(chan parsedConnectRequest),
@@ -518,7 +317,7 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
-	s.loginExecutor = userd_auth.NewStandardLoginExecutor(env, &s.userNotifications, s.scout)
+	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(env, &s.sharedState.UserNotifications, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {
@@ -575,7 +374,14 @@ func run(c context.Context) error {
 		}()
 
 		svc := grpc.NewServer()
-		rpc.RegisterConnectorServer(svc, s)
+		rpc.RegisterConnectorServer(svc, userd_grpc.NewGRPCService(
+			userd_grpc.Callbacks{
+				InterceptStatus: s.interceptStatus,
+				Cancel:          s.cancel,
+				Connect:         s.connect,
+			},
+			s.sharedState,
+		))
 		manager.RegisterManagerServer(svc, &s.managerProxy)
 
 		sc := &dhttp.ServerConfig{
@@ -596,12 +402,7 @@ func run(c context.Context) error {
 			default:
 				close(s.clusterFinalized)
 			}
-			select {
-			case <-s.trafficMgrFinalized:
-				// already closed
-			default:
-				close(s.trafficMgrFinalized)
-			}
+			s.sharedState.MaybeSetTrafficManager(nil)
 			<-c.Done() // Don't trip ShutdownOnNonError in the parent group.
 			scoutUsers.Done()
 		}()
@@ -632,16 +433,16 @@ func run(c context.Context) error {
 	//      Services, and
 	//    + (4) mount the appropriate remote valumes.
 	g.Go("background-manager", func(c context.Context) error {
-		<-s.trafficMgrFinalized
-		if s.trafficMgr == nil {
+		mgr, _ := s.sharedState.GetTrafficManagerBlocking(c)
+		if mgr == nil {
 			return nil
 		}
-		return s.trafficMgr.run(c)
+		return mgr.Run(c)
 	})
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
 	// Ambassador Cloud login flow.
-	g.Go("background-systema", s.loginExecutor.Worker)
+	g.Go("background-systema", s.sharedState.LoginExecutor.Worker)
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.

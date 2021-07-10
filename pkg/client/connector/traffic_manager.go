@@ -47,8 +47,8 @@ type trafficManager struct {
 
 	// manager client
 	managerClient manager.ManagerClient
-	managerErr    error     // if managerClient is nil, why it's nil
-	startup       chan bool // gets closed when managerClient is fully initialized (or managerErr is set)
+	managerErr    error         // if managerClient is nil, why it's nil
+	startup       chan struct{} // gets closed when managerClient is fully initialized (or managerErr is set)
 	//
 	// What you should read in to the above: It isn't safe to read .managerClient or .managerErr
 	// until .startup is closed, and it isn't safe to mutate them after .startup is closed.
@@ -99,7 +99,7 @@ func newTrafficManager(
 		installer:   ti,
 		env:         env,
 		installID:   installID,
-		startup:     make(chan bool),
+		startup:     make(chan struct{}),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
 		callbacks:   callbacks,
 	}
@@ -116,7 +116,7 @@ func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 	}
 }
 
-func (tm *trafficManager) run(c context.Context) error {
+func (tm *trafficManager) Run(c context.Context) error {
 	err := tm.ensureManager(c, &tm.env)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
@@ -341,7 +341,7 @@ func (tm *trafficManager) getInfosForWorkload(
 	return workloadInfos
 }
 
-func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
+func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
 	namespace := tm.actualNamespace(rq.Namespace)
@@ -469,7 +469,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 	return representativeAgents
 }
 
-func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
 	<-tm.startup
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
@@ -546,4 +546,22 @@ func (tm *trafficManager) getOutboundInfo() *daemon.OutboundInfo {
 		}
 	}
 	return info
+}
+
+func (tm *trafficManager) GetClientBlocking(ctx context.Context) (manager.ManagerClient, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-tm.startup:
+		return tm.managerClient, tm.managerErr
+	}
+}
+
+func (tm *trafficManager) GetClientNonBlocking() (manager.ManagerClient, error) {
+	select {
+	case <-tm.startup:
+		return tm.managerClient, tm.managerErr
+	default:
+		return nil, nil
+	}
 }
