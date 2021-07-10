@@ -581,6 +581,9 @@ func run(c context.Context) error {
 		return sc.Serve(c, grpcListener)
 	})
 
+	// background-init handles the work done by the initial connector.Connect RPC call.  This
+	// happens in a separage goroutine from the gRPC server's connection handler so that the
+	// request getting cancelled doesn't cancel the work.
 	g.Go("background-init", func(c context.Context) error {
 		defer func() {
 			close(s.connectResponse) // -> server-grpc.connect()
@@ -599,6 +602,7 @@ func run(c context.Context) error {
 		return nil
 	})
 
+	// background-k8swatch watches all of the nescessary Kubernetes resources.
 	g.Go("background-k8swatch", func(c context.Context) error {
 		cluster, ok := <-s.clusterRequest
 		if !ok {
@@ -607,6 +611,13 @@ func run(c context.Context) error {
 		return cluster.runWatchers(c)
 	})
 
+	// background-manager (1) starts up with ensuring that the manager is installed and running,
+	// but then for most of its life
+	//  - (2) calls manager.ArriveAsClient and then periodically calls manager.Remain
+	//  - watch the intercepts (manager.WatchIntercepts) and then
+	//    + (3) listen on the appropriate local ports and forward them to the intercepted
+	//      Services, and
+	//    + (4) mount the appropriate remote valumes.
 	g.Go("background-manager", func(c context.Context) error {
 		tm, ok := <-s.managerRequest
 		if !ok {
@@ -615,6 +626,12 @@ func run(c context.Context) error {
 		return tm.run(c)
 	})
 
+	// background-systema runs a localhost HTTP server for handling callbacks from the
+	// Ambassador Cloud login flow.
+	g.Go("background-systema", s.loginExecutor.Worker)
+
+	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
+	// metriton don't block the functional goroutines.
 	g.Go("background-metriton", func(c context.Context) error {
 		for report := range s.scout {
 			for k, v := range report.PersistentMetadata {
@@ -635,8 +652,6 @@ func run(c context.Context) error {
 		}
 		return nil
 	})
-
-	g.Go("background-systema", s.loginExecutor.Worker)
 
 	err = g.Wait()
 	if err != nil {
