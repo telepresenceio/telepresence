@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -25,13 +26,15 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 type trafficManagerCallbacks struct {
-	GetAPIKey func(context.Context, string, bool) (string, error)
-	SetClient func(client manager.ManagerClient, callOptions ...grpc.CallOption)
+	GetAPIKey       func(context.Context, string, bool) (string, error)
+	SetClient       func(client manager.ManagerClient, callOptions ...grpc.CallOption)
+	SetOutboundInfo func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -77,7 +80,7 @@ type interceptResult struct {
 func newTrafficManager(
 	_ context.Context,
 	env client.Env,
-	cluster *k8sCluster,
+	cluster *userd_k8s.Cluster,
 	installID string,
 	callbacks trafficManagerCallbacks,
 ) (*trafficManager, error) {
@@ -124,12 +127,12 @@ func (tm *trafficManager) Run(c context.Context) error {
 		return err
 	}
 
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.configFlags, tm.client)
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.ConfigFlags, tm.Client())
 	if err != nil {
 		return err
 	}
 	grpcAddr := net.JoinHostPort(
-		"svc/traffic-manager."+tm.kubeconfigExtension.Manager.Namespace,
+		"svc/traffic-manager."+tm.GetManagerNamespace(),
 		fmt.Sprint(install.ManagerPortHTTP))
 
 	// First check. Establish connection
@@ -185,7 +188,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 	tm.callbacks.SetClient(tm.managerClient)
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
+	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
 		tm.managerClient = nil
 		tm.callbacks.SetClient(nil)
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
@@ -223,7 +226,7 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 	var reason string
 	switch objectKind {
 	case "Deployment":
-		dep, err := tm.findDeployment(ctx, namespace, name)
+		dep, err := tm.FindDeployment(ctx, namespace, name)
 		if err != nil {
 			// Removed from snapshot since the name slice was obtained
 			if !errors2.IsNotFound(err) {
@@ -240,7 +243,7 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 		labels = dep.Spec.Template.Labels
 
 	case "ReplicaSet":
-		rs, err := tm.findReplicaSet(ctx, namespace, name)
+		rs, err := tm.FindReplicaSet(ctx, namespace, name)
 		if err != nil {
 			// Removed from snapshot since the name slice was obtained
 			if !errors2.IsNotFound(err) {
@@ -256,7 +259,7 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 		labels = rs.Spec.Template.Labels
 
 	case "StatefulSet":
-		statefulSet, err := tm.findStatefulSet(ctx, namespace, name)
+		statefulSet, err := tm.FindStatefulSet(ctx, namespace, name)
 		if err != nil {
 			// Removed from snapshot since the name slice was obtained
 			if !errors2.IsNotFound(err) {
@@ -313,7 +316,7 @@ func (tm *trafficManager) getInfosForWorkload(
 					continue
 				}
 
-				matchingSvcs, err := install.FindMatchingServices(ctx, tm.client, "", "", namespace, labels)
+				matchingSvcs, err := install.FindMatchingServices(ctx, tm.Client(), "", "", namespace, labels)
 				if err != nil {
 					continue
 				}
@@ -344,7 +347,7 @@ func (tm *trafficManager) getInfosForWorkload(
 func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
-	namespace := tm.actualNamespace(rq.Namespace)
+	namespace := tm.ActualNamespace(rq.Namespace)
 	if namespace == "" {
 		// namespace is not currently mapped
 		return &rpc.WorkloadInfoSnapshot{}
@@ -376,9 +379,9 @@ func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 	// These are all the workloads we care about and their associated function
 	// to get the names of those workloads
 	workloadsToGet := map[string]func(context.Context, string) ([]string, error){
-		"Deployment":  tm.deploymentNames,
-		"ReplicaSet":  tm.replicaSetNames,
-		"StatefulSet": tm.statefulSetNames,
+		"Deployment":  tm.DeploymentNames,
+		"ReplicaSet":  tm.ReplicaSetNames,
+		"StatefulSet": tm.StatefulSetNames,
 	}
 
 	for workloadKind, namesFunc := range workloadsToGet {
@@ -392,7 +395,7 @@ func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 		workloadInfos = append(workloadInfos, newWorkloadInfos...)
 	}
 
-	for localIntercept, localNs := range tm.localIntercepts {
+	for localIntercept, localNs := range tm.LocalIntercepts {
 		if localNs == namespace {
 			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
 				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
@@ -488,7 +491,7 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 		var selectedAgents []*manager.AgentInfo
 		for _, di := range ur.Agents {
 			found := false
-			namespace := tm.actualNamespace(ur.Namespace)
+			namespace := tm.ActualNamespace(ur.Namespace)
 			if namespace != "" {
 				for _, ai := range agents {
 					if namespace == ai.Namespace && di == ai.Name {

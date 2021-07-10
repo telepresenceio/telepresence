@@ -25,6 +25,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -128,11 +129,11 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
+			cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
 			if err != nil {
 				t.Fatal(err)
 			}
-			kc, err := newKCluster(ctx, cfgAndFlags, nil, nil)
+			kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -143,7 +144,7 @@ func TestE2E(t *testing.T) {
 			version.Version = "v0.0.0-bogus"
 			defer func() { version.Version = testVersion }()
 
-			if _, err := ti.findDeployment(ctx, managerTestNamespace, install.ManagerAppName); err == nil {
+			if _, err := ti.FindDeployment(ctx, managerTestNamespace, install.ManagerAppName); err == nil {
 				t.Fatal("expected find to not find deployment")
 			}
 		})
@@ -205,11 +206,11 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
+			cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
 			if err != nil {
 				t.Fatal(err)
 			}
-			kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+			kc, err := userd_k8s.NewCluster(c, cfgAndFlags, nil, userd_k8s.Callbacks{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -234,11 +235,11 @@ func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string) {
 		t.Fatal(err)
 	}
 
-	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+	kc, err := userd_k8s.NewCluster(c, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,11 +252,11 @@ func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string) {
 		}
 	}()
 	go func() {
-		watcherErr <- kc.runWatchers(watchCtx)
+		watcherErr <- kc.RunWatchers(watchCtx)
 	}()
 	waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
 	defer waitCancel()
-	if err := kc.waitUntilReady(waitCtx); err != nil {
+	if err := kc.WaitUntilReady(waitCtx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -268,7 +269,7 @@ func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 50; i++ {
-		if _, err := ti.findDeployment(c, namespace, install.ManagerAppName); err == nil {
+		if _, err := ti.FindDeployment(c, namespace, install.ManagerAppName); err == nil {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)

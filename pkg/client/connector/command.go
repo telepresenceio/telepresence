@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -47,7 +48,7 @@ to troubleshoot problems.
 
 type parsedConnectRequest struct {
 	*rpc.ConnectRequest
-	*k8sConfig
+	*userd_k8s.Config
 }
 
 type ScoutReport = scout.ScoutReport
@@ -65,7 +66,7 @@ type service struct {
 	//  - reading: must either hold connectMu, OR xxxFinalized must be closed
 	connectMu        sync.Mutex
 	clusterFinalized chan struct{}
-	cluster          *k8sCluster
+	cluster          *userd_k8s.Cluster
 
 	sharedState *sharedstate.State
 
@@ -95,7 +96,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	k8sConfig, err := newK8sConfig(cr.KubeFlags, s.env)
+	Config, err := userd_k8s.NewConfig(cr.KubeFlags, s.env)
 	if err != nil && !dryRun {
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
@@ -103,15 +104,15 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 		}
 	}
 	switch {
-	case s.cluster != nil && s.cluster.k8sConfig.equals(k8sConfig):
+	case s.cluster != nil && s.cluster.Config.Equals(Config):
 		if mns := cr.MappedNamespaces; len(mns) > 0 {
 			if len(mns) == 1 && mns[0] == "all" {
 				mns = nil
 			}
 			sort.Strings(mns)
-			s.cluster.setMappedNamespaces(c, mns)
+			s.cluster.SetMappedNamespaces(c, mns)
 		}
-		ingressInfo, err := s.cluster.detectIngressBehavior(c)
+		ingressInfo, err := s.cluster.DetectIngressBehavior(c)
 		if err != nil {
 			return &rpc.ConnectInfo{
 				Error:     rpc.ConnectInfo_CLUSTER_FAILED,
@@ -120,9 +121,9 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 		}
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
-			ClusterContext: s.cluster.k8sConfig.Context,
-			ClusterServer:  s.cluster.k8sConfig.Server,
-			ClusterId:      s.cluster.getClusterId(c),
+			ClusterContext: s.cluster.Config.Context,
+			ClusterServer:  s.cluster.Config.Server,
+			ClusterId:      s.cluster.GetClusterId(c),
 			IngressInfos:   ingressInfo,
 		}
 		s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
@@ -130,9 +131,9 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	case s.cluster != nil /* && !s.cluster.k8sConfig.equals(k8sConfig) */ :
 		ret := &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterContext: s.cluster.k8sConfig.Context,
-			ClusterServer:  s.cluster.k8sConfig.Server,
-			ClusterId:      s.cluster.getClusterId(c),
+			ClusterContext: s.cluster.Config.Context,
+			ClusterServer:  s.cluster.Config.Server,
+			ClusterId:      s.cluster.GetClusterId(c),
 		}
 		s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
 		return ret
@@ -146,7 +147,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 		} else {
 			s.connectRequest <- parsedConnectRequest{
 				ConnectRequest: cr,
-				k8sConfig:      k8sConfig,
+				Config:         Config,
 			}
 			close(s.connectRequest)
 			return <-s.connectResponse
@@ -154,7 +155,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	}
 }
 
-func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *k8sConfig) *rpc.ConnectInfo {
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -181,10 +182,16 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	daemonClient := daemon.NewDaemonClient(conn)
 
 	dlog.Info(c, "Connecting to k8s cluster...")
-	cluster, err := func() (*k8sCluster, error) {
+	cluster, err := func() (*userd_k8s.Cluster, error) {
 		c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
 		defer cancel()
-		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, daemonClient)
+		cluster, err := userd_k8s.NewCluster(c,
+			k8sConfig,
+			mappedNamespaces,
+			userd_k8s.Callbacks{
+				SetDNSSearchPath: daemonClient.SetDnsSearchPath,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -207,7 +214,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		report := ScoutReport{
 			Action: "connecting_traffic_manager",
 			PersistentMetadata: map[string]interface{}{
-				"cluster_id":        s.cluster.getClusterId(c),
+				"cluster_id":        s.cluster.GetClusterId(c),
 				"mapped_namespaces": len(cr.MappedNamespaces),
 			},
 		}
@@ -222,8 +229,9 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		s.cluster,
 		s.scoutClient.Reporter.InstallID(),
 		trafficManagerCallbacks{
-			GetAPIKey: s.sharedState.GetCloudAPIKey,
-			SetClient: s.managerProxy.SetClient,
+			GetAPIKey:       s.sharedState.GetCloudAPIKey,
+			SetClient:       s.managerProxy.SetClient,
+			SetOutboundInfo: daemonClient.SetOutboundInfo,
 		})
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -251,7 +259,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	// Wait until all of the k8s watches (in the "background-k8swatch" goroutine) are running.
-	if err = s.cluster.waitUntilReady(c); err != nil {
+	if err = s.cluster.WaitUntilReady(c); err != nil {
 		s.cancel()
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
@@ -267,7 +275,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		},
 	}
 
-	ingressInfo, err := s.cluster.detectIngressBehavior(c)
+	ingressInfo, err := s.cluster.DetectIngressBehavior(c)
 	if err != nil {
 		s.cancel()
 		return &rpc.ConnectInfo{
@@ -278,9 +286,9 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterContext: s.cluster.k8sConfig.Context,
-		ClusterServer:  s.cluster.k8sConfig.Server,
-		ClusterId:      s.cluster.getClusterId(c),
+		ClusterContext: s.cluster.Config.Context,
+		ClusterServer:  s.cluster.Config.Server,
+		ClusterId:      s.cluster.GetClusterId(c),
 		IngressInfos:   ingressInfo,
 	}
 	tmgr.setStatus(c, ret)
@@ -411,7 +419,7 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.k8sConfig)
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config)
 
 		return nil
 	})
@@ -422,7 +430,7 @@ func run(c context.Context) error {
 		if s.cluster == nil {
 			return nil
 		}
-		return s.cluster.runWatchers(c)
+		return s.cluster.RunWatchers(c)
 	})
 
 	// background-manager (1) starts up with ensuring that the manager is installed and running,

@@ -1,4 +1,4 @@
-package connector
+package userd_k8s
 
 import (
 	"encoding/json"
@@ -53,20 +53,20 @@ type kubeconfigExtension struct {
 	Manager   *managerConfig   `json:"manager,omitempty"`
 }
 
-type k8sConfig struct {
+type Config struct {
 	kubeconfigExtension
 	Namespace   string // default cluster namespace.
 	Context     string
 	Server      string
 	flagMap     map[string]string
 	flagArgs    []string
-	configFlags *kates.ConfigFlags
+	ConfigFlags *kates.ConfigFlags
 	config      *rest.Config
 }
 
 const configExtension = "telepresence.io"
 
-func newK8sConfig(flagMap map[string]string, env client.Env) (*k8sConfig, error) {
+func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -120,13 +120,13 @@ func newK8sConfig(flagMap map[string]string, env client.Env) (*k8sConfig, error)
 	// Sort for easy comparison
 	sort.Strings(flagArgs)
 
-	k := &k8sConfig{
+	k := &Config{
 		Context:     ctxName,
 		Server:      cluster.Server,
 		Namespace:   namespace,
 		flagMap:     flagMap,
 		flagArgs:    flagArgs,
-		configFlags: configFlags,
+		ConfigFlags: configFlags,
 		config:      restConfig,
 	}
 
@@ -147,9 +147,9 @@ func newK8sConfig(flagMap map[string]string, env client.Env) (*k8sConfig, error)
 	return k, nil
 }
 
-// equals determines if this instance is equal to the given instance with respect to everything but
+// Equals determines if this instance is equal to the given instance with respect to everything but
 // Namespace.
-func (kf *k8sConfig) equals(okf *k8sConfig) bool {
+func (kf *Config) Equals(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&

@@ -208,7 +208,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			portForwards.cancelUnwanted(ctx)
 			tm.reconcileMountPoints(ctx, allNames)
 			if ctx.Err() == nil {
-				tm.setInterceptedNamespaces(ctx, namespaces)
+				tm.SetInterceptedNamespaces(ctx, namespaces)
 			}
 		}
 
@@ -258,7 +258,7 @@ func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptIn
 // AddIntercept adds one intercept
 func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	spec := ir.Spec
-	spec.Namespace = tm.actualNamespace(spec.Namespace)
+	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
 		return &rpc.InterceptResult{
@@ -267,7 +267,7 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		}, nil
 	}
 
-	if _, inUse := tm.localIntercepts[spec.Name]; inUse {
+	if _, inUse := tm.LocalIntercepts[spec.Name]; inUse {
 		return &rpc.InterceptResult{
 			Error:     rpc.InterceptError_ALREADY_EXISTS,
 			ErrorText: spec.Name,
@@ -292,7 +292,7 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	if spec.Agent == "" {
-		return tm.addLocalOnlyIntercept(c, spec)
+		return tm.AddLocalOnlyIntercept(c, spec)
 	}
 
 	spec.Client = tm.userAndHost
@@ -384,31 +384,6 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		}
 		return result, nil
 	}
-}
-
-// addLocalOnlyIntercept adds a local-only intercept
-func (tm *trafficManager) addLocalOnlyIntercept(c context.Context, spec *manager.InterceptSpec) (*rpc.InterceptResult, error) {
-	tm.accLock.Lock()
-	if tm.localInterceptedNamespaces == nil {
-		tm.localInterceptedNamespaces = map[string]struct{}{}
-	}
-	tm.localIntercepts[spec.Name] = spec.Namespace
-	_, found := tm.interceptedNamespaces[spec.Namespace]
-	if !found {
-		_, found = tm.localInterceptedNamespaces[spec.Namespace]
-	}
-	tm.localInterceptedNamespaces[spec.Namespace] = struct{}{}
-	tm.accLock.Unlock()
-	if !found {
-		tm.updateDaemonNamespaces(c)
-	}
-	return &rpc.InterceptResult{
-		InterceptInfo: &manager.InterceptInfo{
-			Spec:              spec,
-			Disposition:       manager.InterceptDispositionType_ACTIVE,
-			MechanismArgsDesc: "as local-only",
-		},
-	}, nil
 }
 
 func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string) *rpc.InterceptResult {
@@ -567,8 +542,8 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 // RemoveIntercept removes one intercept by name
 func (tm *trafficManager) RemoveIntercept(c context.Context, name string) error {
-	if ns, ok := tm.localIntercepts[name]; ok {
-		return tm.removeLocalOnlyIntercept(c, name, ns)
+	if ns, ok := tm.LocalIntercepts[name]; ok {
+		return tm.RemoveLocalOnlyIntercept(c, name, ns)
 	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	<-tm.startup
@@ -577,24 +552,6 @@ func (tm *trafficManager) RemoveIntercept(c context.Context, name string) error 
 		Name:    name,
 	})
 	return err
-}
-
-func (tm *trafficManager) removeLocalOnlyIntercept(c context.Context, name, namespace string) error {
-	dlog.Debugf(c, "removing local-only intercept %s", name)
-	delete(tm.localIntercepts, name)
-	for _, otherNs := range tm.localIntercepts {
-		if otherNs == namespace {
-			return nil
-		}
-	}
-
-	// Ensure that namespace is removed from localInterceptedNamespaces if this was the last local intercept
-	// for the given namespace.
-	tm.accLock.Lock()
-	delete(tm.localInterceptedNamespaces, namespace)
-	tm.accLock.Unlock()
-	tm.updateDaemonNamespaces(c)
-	return nil
 }
 
 // clearIntercepts removes all intercepts

@@ -19,16 +19,17 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/resource"
 )
 
 type installer struct {
-	*k8sCluster
+	*userd_k8s.Cluster
 }
 
-func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
-	return &installer{k8sCluster: kc}, nil
+func newTrafficManagerInstaller(kc *userd_k8s.Cluster) (*installer, error) {
+	return &installer{Cluster: kc}, nil
 }
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
@@ -56,7 +57,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			kind, err := ki.findObjectKind(c, ai.Namespace, ai.Name)
+			kind, err := ki.FindObjectKind(c, ai.Namespace, ai.Name)
 			if err != nil {
 				addError(err)
 				return
@@ -64,7 +65,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 			var agent kates.Object
 			switch kind {
 			case "ReplicaSet":
-				agent, err = ki.findReplicaSet(c, ai.Namespace, ai.Name)
+				agent, err = ki.FindReplicaSet(c, ai.Namespace, ai.Name)
 				if err != nil {
 					if !errors2.IsNotFound(err) {
 						addError(err)
@@ -72,7 +73,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 					return
 				}
 			case "Deployment":
-				agent, err = ki.findDeployment(c, ai.Namespace, ai.Name)
+				agent, err = ki.FindDeployment(c, ai.Namespace, ai.Name)
 				if err != nil {
 					if !errors2.IsNotFound(err) {
 						addError(err)
@@ -80,7 +81,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 					return
 				}
 			case "StatefulSet":
-				agent, err = ki.findStatefulSet(c, ai.Namespace, ai.Name)
+				agent, err = ki.FindStatefulSet(c, ai.Namespace, ai.Name)
 				if err != nil {
 					if !errors2.IsNotFound(err) {
 						addError(err)
@@ -114,7 +115,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 
 	if !agentsOnly && len(errs) == 0 {
 		// agent removal succeeded. Remove the manager resources
-		if err := resource.DeleteTrafficManager(c, ki.client, ki.kubeconfigExtension.Manager.Namespace, env); err != nil {
+		if err := resource.DeleteTrafficManager(c, ki.Client(), ki.GetManagerNamespace(), env); err != nil {
 			addError(err)
 		}
 	}
@@ -150,7 +151,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 		return nil, install.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
-	svc, err := ki.findSvc(c, namespace, svcName)
+	svc, err := ki.FindSvc(c, namespace, svcName)
 	if err != nil && !kates.IsNotFound(err) {
 		return nil, err
 	}
@@ -199,24 +200,24 @@ var agentNotFound = errors.New("no such agent")
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
 func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
-	kind, err := ki.findObjectKind(c, namespace, name)
+	kind, err := ki.FindObjectKind(c, namespace, name)
 	if err != nil {
 		return "", "", err
 	}
 	var obj kates.Object
 	switch kind {
 	case "ReplicaSet":
-		obj, err = ki.findReplicaSet(c, namespace, name)
+		obj, err = ki.FindReplicaSet(c, namespace, name)
 		if err != nil {
 			return "", "", err
 		}
 	case "Deployment":
-		obj, err = ki.findDeployment(c, namespace, name)
+		obj, err = ki.FindDeployment(c, namespace, name)
 		if err != nil {
 			return "", "", err
 		}
 	case "StatefulSet":
-		obj, err = ki.findStatefulSet(c, namespace, name)
+		obj, err = ki.FindStatefulSet(c, namespace, name)
 		if err != nil {
 			return "", "", err
 		}
@@ -232,7 +233,7 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 	var svc *kates.Service
 	if a := podTemplate.ObjectMeta.Annotations; a != nil && a[install.InjectAnnotation] == "enabled" {
 		// agent is injected using a mutating webhook. Get its service and skip the rest
-		svc, err = install.FindMatchingService(c, ki.client, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		svc, err = install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}
@@ -261,11 +262,11 @@ already exist for this service`, kind, obj.GetName())
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
-		matchingSvc, err := install.FindMatchingService(c, ki.client, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvc, err := install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}
-		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.kubeconfigExtension.Manager.Namespace, obj, matchingSvc)
+		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.GetManagerNamespace(), obj, matchingSvc)
 		if err != nil {
 			return "", "", err
 		}
@@ -292,11 +293,11 @@ already exist for this service`, kind, obj.GetName())
 		dlog.Debugf(c, "%s %s.%s already has an installed and up-to-date agent", kind, name, namespace)
 	}
 
-	if err := ki.client.Update(c, obj, obj); err != nil {
+	if err := ki.Client().Update(c, obj, obj); err != nil {
 		return "", "", err
 	}
 	if svc != nil {
-		if err := ki.client.Update(c, svc, svc); err != nil {
+		if err := ki.Client().Update(c, svc, svc); err != nil {
 			return "", "", err
 		}
 	} else {
@@ -354,7 +355,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	if obj != nil {
 		origGeneration = obj.GetGeneration()
 	}
-	kind, err := ki.findObjectKind(c, namespace, name)
+	kind, err := ki.FindObjectKind(c, namespace, name)
 	if err != nil {
 		return err
 	}
@@ -370,7 +371,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return err
 			}
 
-			rs, err := ki.findReplicaSet(c, namespace, name)
+			rs, err := ki.FindReplicaSet(c, namespace, name)
 			if err != nil {
 				return client.CheckTimeout(c, err)
 			}
@@ -387,7 +388,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return err
 			}
 
-			dep, err := ki.findDeployment(c, namespace, name)
+			dep, err := ki.FindDeployment(c, namespace, name)
 			if err != nil {
 				return client.CheckTimeout(c, err)
 			}
@@ -404,7 +405,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 				return err
 			}
 
-			statefulSet, err := ki.findStatefulSet(c, namespace, name)
+			statefulSet, err := ki.FindStatefulSet(c, namespace, name)
 			if err != nil {
 				return client.CheckTimeout(c, err)
 			}
@@ -424,12 +425,12 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
 func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string) error {
-	rs, err := ki.findReplicaSet(c, namespace, name)
+	rs, err := ki.FindReplicaSet(c, namespace, name)
 	if err != nil {
 		return err
 	}
 
-	podNames, err := ki.podNames(c, namespace)
+	podNames, err := ki.PodNames(c, namespace)
 	if err != nil {
 		return err
 	}
@@ -440,7 +441,7 @@ func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string
 		if !strings.Contains(podName, name) {
 			continue
 		}
-		podInfo, err := ki.findPod(c, namespace, podName)
+		podInfo, err := ki.FindPod(c, namespace, podName)
 		if err != nil {
 			return err
 		}
@@ -457,7 +458,7 @@ func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string
 						Name:      podInfo.Name,
 					},
 				}
-				if err := ki.client.Delete(c, pod, pod); err != nil {
+				if err := ki.Client().Delete(c, pod, pod); err != nil {
 					return err
 				}
 			}
@@ -501,7 +502,7 @@ func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
 	if err != nil {
 		return err
 	}
-	svc, err := ki.findSvc(c, obj.GetNamespace(), referencedService)
+	svc, err := ki.FindSvc(c, obj.GetNamespace(), referencedService)
 	if err != nil && !kates.IsNotFound(err) {
 		return err
 	}
@@ -510,7 +511,7 @@ func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
 			return err
 		}
 	}
-	return ki.client.Update(c, obj, obj)
+	return ki.Client().Update(c, obj, obj)
 }
 
 func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
@@ -539,7 +540,7 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 	if err := undoServiceMods(c, svc); err != nil {
 		return err
 	}
-	return ki.client.Update(c, svc, svc)
+	return ki.Client().Update(c, svc, svc)
 }
 
 func undoServiceMods(c context.Context, svc *kates.Service) error {
@@ -737,5 +738,5 @@ func addAgentToWorkload(
 }
 
 func (ki *installer) ensureManager(c context.Context, env *client.Env) error {
-	return resource.EnsureTrafficManager(c, ki.client, ki.kubeconfigExtension.Manager.Namespace, ki.getClusterId(c), env)
+	return resource.EnsureTrafficManager(c, ki.Client(), ki.GetManagerNamespace(), ki.GetClusterId(c), env)
 }
