@@ -70,17 +70,19 @@ type service struct {
 
 	loginExecutor auth.LoginExecutor
 
-	connectMu sync.Mutex
-	// These get set by .connect() and are protected by connectMu.
-	cluster    *k8sCluster
-	trafficMgr *trafficManager
+	// To access `cluster` or `trafficMgr`:
+	//  - writing: must hold connectMu, AND xxxFinalized must not be closed
+	//  - reading: must either hold connectMu, OR xxxFinalized must be closed
+	connectMu           sync.Mutex
+	clusterFinalized    chan struct{}
+	cluster             *k8sCluster
+	trafficMgrFinalized chan struct{}
+	trafficMgr          *trafficManager
 
 	// These are used to communicate between the various goroutines.
 	scout           chan ScoutReport          // any-of-scoutUsers -> background-metriton
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
-	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
-	managerRequest  chan *trafficManager      // connectWorker -> background-manager
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
@@ -397,6 +399,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		}
 	}
 	s.cluster = cluster
+	close(s.clusterFinalized)
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
 	// Phone home with the information about the size of the cluster
@@ -431,8 +434,8 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-	s.managerRequest <- tmgr
 	s.trafficMgr = tmgr
+	close(s.trafficMgrFinalized)
 
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
@@ -448,9 +451,8 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		}
 	}
 
-	// Start k8s-watches
-	s.clusterRequest <- cluster
-	if err = cluster.waitUntilReady(c); err != nil {
+	// Wait until all of the k8s watches (in the "background-k8swatch" goroutine) are running.
+	if err = s.cluster.waitUntilReady(c); err != nil {
 		s.cancel()
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
@@ -503,11 +505,12 @@ func run(c context.Context) error {
 		env:         env,
 		scoutClient: client.NewScout(c, "connector"),
 
+		clusterFinalized:    make(chan struct{}),
+		trafficMgrFinalized: make(chan struct{}),
+
 		scout:           make(chan ScoutReport, 10),
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		clusterRequest:  make(chan *k8sCluster),
-		managerRequest:  make(chan *trafficManager),
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -587,9 +590,19 @@ func run(c context.Context) error {
 	g.Go("background-init", func(c context.Context) error {
 		defer func() {
 			close(s.connectResponse) // -> server-grpc.connect()
-			close(s.clusterRequest)  // -> background-k8swatch
-			close(s.managerRequest)  // -> background-manager
-			<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
+			select {
+			case <-s.clusterFinalized:
+				// already closed
+			default:
+				close(s.clusterFinalized)
+			}
+			select {
+			case <-s.trafficMgrFinalized:
+				// already closed
+			default:
+				close(s.trafficMgrFinalized)
+			}
+			<-c.Done() // Don't trip ShutdownOnNonError in the parent group.
 			scoutUsers.Done()
 		}()
 
@@ -604,11 +617,11 @@ func run(c context.Context) error {
 
 	// background-k8swatch watches all of the nescessary Kubernetes resources.
 	g.Go("background-k8swatch", func(c context.Context) error {
-		cluster, ok := <-s.clusterRequest
-		if !ok {
+		<-s.clusterFinalized
+		if s.cluster == nil {
 			return nil
 		}
-		return cluster.runWatchers(c)
+		return s.cluster.runWatchers(c)
 	})
 
 	// background-manager (1) starts up with ensuring that the manager is installed and running,
@@ -619,11 +632,11 @@ func run(c context.Context) error {
 	//      Services, and
 	//    + (4) mount the appropriate remote valumes.
 	g.Go("background-manager", func(c context.Context) error {
-		tm, ok := <-s.managerRequest
-		if !ok {
+		<-s.trafficMgrFinalized
+		if s.trafficMgr == nil {
 			return nil
 		}
-		return tm.run(c)
+		return s.trafficMgr.run(c)
 	})
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
