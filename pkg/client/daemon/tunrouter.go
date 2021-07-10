@@ -235,7 +235,7 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP)
 			if ctx.Err() != nil {
 				return nil
 			}
-			return client.WrapRecvErr(err, "error when reading WatchOutboundInfo")
+			return client.WrapRecvErr(err, "error when reading WatchClusterInfo")
 		}
 
 		if kubeDNS != nil {
