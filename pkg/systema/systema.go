@@ -20,7 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
-	"github.com/telepresenceio/telepresence/v2/pkg/systema/grpctun"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/systema/internal/loopback"
 )
 
@@ -39,7 +39,7 @@ type server struct {
 func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionServer) error {
 	ctx := rawconn.Context()
 
-	interceptID, systemaConn, err := grpctun.AcceptFromSystemA(rawconn)
+	interceptID, systemaConn, err := dnet.AcceptFromAmbassadorCloud(rawconn)
 	if err != nil {
 		return fmt.Errorf("HandleConnection: accept: %w", err)
 	}
@@ -117,7 +117,7 @@ func ConnectToSystemA(ctx context.Context,
 					return err
 				}
 				dlog.Info(ctx, "connection to System A established")
-				rconn := grpctun.Wrap(rconnInner)
+				rconn := dnet.WrapAmbassadorCloudTunnel(rconnInner)
 				if err := addConn(rconn); err != nil {
 					return err
 				}

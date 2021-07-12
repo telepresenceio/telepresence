@@ -1,4 +1,4 @@
-package grpctun
+package dnet
 
 import (
 	"bytes"
@@ -12,17 +12,17 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 )
 
-// ReverseConnectionImpl is the intersection of these two interfaces:
+// AmbassadorCloudTunnel is the intersection of these two interfaces:
 //
 //   systema.SystemAProxy_ReverseConnectionClient
 //   systema.SystemAProxy_ReverseConnectionServer
-type ReverseConnectionImpl interface {
+type AmbassadorCloudTunnel interface {
 	Send(*systema.Chunk) error
 	Recv() (*systema.Chunk, error)
 }
 
 type reverseConn struct {
-	conn ReverseConnectionImpl
+	conn AmbassadorCloudTunnel
 
 	waitOnce sync.Once
 	wait     chan struct{}
@@ -41,9 +41,9 @@ type reverseConn struct {
 	writeErr      error
 }
 
-// Wrap takes a systema.SystemAProxy_ReverseConnectionClient or
+// WrapAmbassadorCloudTunnel takes a systema.SystemAProxy_ReverseConnectionClient or
 // systema.SystemAProxy_ReverseConnectionServer and wraps it so that it can be used as a net.Conn.
-func Wrap(impl ReverseConnectionImpl) Conn {
+func WrapAmbassadorCloudTunnel(impl AmbassadorCloudTunnel) Conn {
 	return &reverseConn{
 		conn: impl,
 
@@ -158,24 +158,29 @@ func (c *reverseConn) RemoteAddr() net.Addr {
 
 // SetDeadline implements net.Conn.
 func (c *reverseConn) SetDeadline(t time.Time) error {
-	_ = c.SetReadDeadline(t)
-	_ = c.SetWriteDeadline(t)
+	if isClosedChan(c.closed) {
+		return os.ErrClosed
+	}
+	c.readDeadline.set(t)
+	c.writeDeadline.set(t)
 	return nil
 }
 
 // SetReadDeadline implements net.Conn.
 func (c *reverseConn) SetReadDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
-		c.readDeadline.set(t)
+		return os.ErrClosed
 	}
+	c.readDeadline.set(t)
 	return nil
 }
 
 // SetWriteDeadline implements net.Conn.
 func (c *reverseConn) SetWriteDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
-		c.writeDeadline.set(t)
+		return os.ErrClosed
 	}
+	c.writeDeadline.set(t)
 	return nil
 }
 

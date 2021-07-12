@@ -1,14 +1,11 @@
 package connector
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/user"
-	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
@@ -28,14 +25,20 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
+
+type trafficManagerCallbacks struct {
+	GetAPIKey func(context.Context, string, bool) (string, error)
+	SetClient func(client manager.ManagerClient, callOptions ...grpc.CallOption)
+}
 
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
 	*installer // installer is also a k8sCluster
-	getAPIKey  func(context.Context, string, bool) (string, error)
+	callbacks  trafficManagerCallbacks
 
 	// local information
 	env         client.Env
@@ -76,7 +79,7 @@ func newTrafficManager(
 	env client.Env,
 	cluster *k8sCluster,
 	installID string,
-	getAPIKey func(context.Context, string, bool) (string, error),
+	callbacks trafficManagerCallbacks,
 ) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
@@ -98,7 +101,7 @@ func newTrafficManager(
 		installID:   installID,
 		startup:     make(chan bool),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
-		getAPIKey:   getAPIKey,
+		callbacks:   callbacks,
 	}
 
 	return tm, nil
@@ -121,44 +124,13 @@ func (tm *trafficManager) run(c context.Context) error {
 		return err
 	}
 
-	kpfArgs := []string{
-		"--namespace",
-		tm.kubeconfigExtension.Manager.Namespace,
-		"svc/traffic-manager",
-		fmt.Sprintf(":%d", install.ManagerPortHTTP)}
-
-	// Scan port-forward output and grab the dynamically allocated ports
-	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
-	outputScanner := func(sc *bufio.Scanner) interface{} {
-		for sc.Scan() {
-			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
-				toPort, _ := strconv.Atoi(rxr[2])
-				if toPort == install.ManagerPortHTTP {
-					apiPort := rxr[1]
-					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
-					return apiPort
-				}
-			}
-		}
-		return nil
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.configFlags, tm.client)
+	if err != nil {
+		return err
 	}
-
-	return client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
-		return tm.portForwardAndThen(c, kpfArgs, outputScanner, func(ctx context.Context, portIf interface{}) error {
-			err := tm.initGrpc(ctx, portIf.(string))
-			if err != nil {
-				// Go ahead and log here, since `client.Retry()` will swallow most
-				// errors from being logged.
-				dlog.Errorf(ctx, "initGrpc: %v", err)
-				return err
-			}
-			return nil
-		})
-	}, 2*time.Second, 6*time.Second)
-}
-
-func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error) {
-	grpcPort, _ := strconv.Atoi(portStr)
+	grpcAddr := net.JoinHostPort(
+		"svc/traffic-manager."+tm.kubeconfigExtension.Manager.Namespace,
+		fmt.Sprint(install.ManagerPortHTTP))
 
 	// First check. Establish connection
 	tos := &client.GetConfig(c).Timeouts
@@ -178,7 +150,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 		}
 	}()
 
-	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", grpcPort),
+	conn, err = grpc.DialContext(tc, grpcAddr,
+		grpc.WithContextDialer(grpcDialer),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
@@ -192,7 +165,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 		InstallId: tm.installID,
 		Product:   "telepresence",
 		Version:   client.Version(),
-		ApiKey:    func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
+		ApiKey:    func() string { tok, _ := tm.callbacks.GetAPIKey(c, "manager", false); return tok }(),
 	})
 	if err != nil {
 		return client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
@@ -200,9 +173,14 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
+	// Gotta call mgrProxy.SetClient before we call daemon.SetOutboundInfo which tells the
+	// daemon to use the proxy.
+	tm.callbacks.SetClient(tm.managerClient)
+
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo(int32(grpcPort))); err != nil {
+	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
 		tm.managerClient = nil
+		tm.callbacks.SetClient(nil)
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
 
@@ -433,7 +411,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session: tm.session(),
-				ApiKey:  func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
+				ApiKey:  func() string { tok, _ := tm.callbacks.GetAPIKey(c, "manager", false); return tok }(),
 			})
 			if err != nil {
 				if c.Err() != nil {
@@ -535,10 +513,9 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
-func (tm *trafficManager) getOutboundInfo(mgrPort int32) *daemon.OutboundInfo {
+func (tm *trafficManager) getOutboundInfo() *daemon.OutboundInfo {
 	info := &daemon.OutboundInfo{
-		Session:     tm.sessionInfo,
-		ManagerPort: mgrPort,
+		Session: tm.sessionInfo,
 	}
 
 	if tm.DNS != nil {

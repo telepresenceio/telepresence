@@ -413,19 +413,15 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	connectStart := time.Now()
 
-	// Check the `kubectl` version; no point continuing if it's too old.
-	if err := checkKubectl(c); err != nil {
-		dlog.Errorln(c, err)
-		// No point in continuing without a bridge
-		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
-	}
-
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID(), s.getCloudAPIKey)
+	tmgr, err := newTrafficManager(c,
+		s.env,
+		s.cluster,
+		s.scoutClient.Reporter.InstallID(),
+		trafficManagerCallbacks{
+			GetAPIKey: s.getCloudAPIKey,
+			SetClient: s.managerProxy.SetClient,
+		})
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
@@ -451,7 +447,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-	s.managerProxy.SetClient(tmgr.managerClient)
 
 	// Start k8s-watches
 	s.clusterRequest <- cluster

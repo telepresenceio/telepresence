@@ -38,6 +38,7 @@ recommended) which in turn may result in a password prompt.`
 var dnsIP string
 var mappedNamespaces []string
 var kubeFlags *pflag.FlagSet
+var kubeConfig *kates.ConfigFlags
 
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
@@ -142,9 +143,9 @@ func Command(ctx context.Context) *cobra.Command {
 			Name: "Kubernetes flags",
 			Flags: func() *pflag.FlagSet {
 				kubeFlags = pflag.NewFlagSet("", 0)
-				cfgFlags := kates.NewConfigFlags(false)
-				cfgFlags.Namespace = nil // some of the subcommands, like "connect", don't take --namespace
-				cfgFlags.AddFlags(kubeFlags)
+				kubeConfig := kates.NewConfigFlags(false)
+				kubeConfig.Namespace = nil // some of the subcommands, like "connect", don't take --namespace
+				kubeConfig.AddFlags(kubeFlags)
 				return kubeFlags
 			}(),
 		}}

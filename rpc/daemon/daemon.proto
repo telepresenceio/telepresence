@@ -60,8 +60,7 @@ message DNSConfig {
 // OutboundInfo contains all information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message OutboundInfo {
-  // manager_port is the port for the traffic-manager gRPC API.
-  int32 manager_port = 1;
+  reserved 1;
 
   // session makes it possible for the root daemon to identify itself as the
   // same client as the user daemon.

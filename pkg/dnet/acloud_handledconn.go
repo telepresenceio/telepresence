@@ -1,4 +1,4 @@
-package grpctun
+package dnet
 
 import (
 	"bytes"
@@ -20,8 +20,11 @@ type handledConnectionImpl interface {
 	Recv() (*manager.ConnectionChunk, error)
 }
 
-// DialToManager uses a ReverseConnection to dial from SystemA to a Telepresence manager.
-func DialToManager(ctx context.Context, managerClient manager.ManagerProxyClient, interceptID string, opts ...grpc.CallOption) (Conn, error) {
+// DialFromAmbassadorCloud is used by Ambassador Cloud to dial to the manager, initiating a
+// connection to an intercept for a preview URL.
+//
+// It is the counterpart to AcceptFromAmbassadorCloud.
+func DialFromAmbassadorCloud(ctx context.Context, managerClient manager.ManagerProxyClient, interceptID string, opts ...grpc.CallOption) (Conn, error) {
 	impl, err := managerClient.HandleConnection(ctx, opts...)
 	if err != nil {
 		return nil, err
@@ -38,8 +41,11 @@ func DialToManager(ctx context.Context, managerClient manager.ManagerProxyClient
 	return wrap(impl), nil
 }
 
-// AcceptFromSystemA is used by a Telepresence manger to accept a connection from SystemA.
-func AcceptFromSystemA(systema manager.ManagerProxy_HandleConnectionServer) (interceptID string, conn Conn, err error) {
+// AcceptFromAmbassadorCloud is used by a Telepresence manger to accept a connection to an intercept
+// for a preview URL from a Ambassador Cloud.
+//
+// It is the counterpart to DialFromAmbassadorCloud.
+func AcceptFromAmbassadorCloud(systema manager.ManagerProxy_HandleConnectionServer) (interceptID string, conn Conn, err error) {
 	chunk, err := systema.Recv()
 	if err != nil {
 		return "", nil, err
@@ -205,24 +211,29 @@ func (c *handledConn) RemoteAddr() net.Addr {
 
 // SetDeadline implements net.Conn.
 func (c *handledConn) SetDeadline(t time.Time) error {
-	_ = c.SetReadDeadline(t)
-	_ = c.SetWriteDeadline(t)
+	if isClosedChan(c.closed) {
+		return os.ErrClosed
+	}
+	c.readDeadline.set(t)
+	c.writeDeadline.set(t)
 	return nil
 }
 
 // SetReadDeadline implements net.Conn.
 func (c *handledConn) SetReadDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
-		c.readDeadline.set(t)
+		return os.ErrClosed
 	}
+	c.readDeadline.set(t)
 	return nil
 }
 
 // SetWriteDeadline implements net.Conn.
 func (c *handledConn) SetWriteDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
-		c.writeDeadline.set(t)
+		return os.ErrClosed
 	}
+	c.writeDeadline.set(t)
 	return nil
 }
 

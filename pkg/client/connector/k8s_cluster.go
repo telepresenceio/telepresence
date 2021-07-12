@@ -1,22 +1,19 @@
 package connector
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/discovery"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 )
 
 type nameMeta struct {
@@ -60,82 +57,6 @@ func (kc *k8sCluster) actualNamespace(namespace string) string {
 		namespace = ""
 	}
 	return namespace
-}
-
-// portForwardAndThen starts a kubectl port-forward command, passes its output to the given scanner, and waits for
-// the scanner to produce a result. The then function is started in a new goroutine if the scanner returns something
-// other than nil using returned value as an argument. The kubectl port-forward is cancelled when the then function
-// returns.
-func (kc *k8sCluster) portForwardAndThen(
-	c context.Context,
-	kpfArgs []string,
-	outputHandler func(*bufio.Scanner) interface{},
-	then func(context.Context, interface{}) error,
-) error {
-	args := make([]string, 0, len(kc.flagArgs)+1+len(kpfArgs))
-	args = append(args, kc.flagArgs...)
-	args = append(args, "port-forward")
-	args = append(args, kpfArgs...)
-
-	c, cancel := context.WithCancel(c)
-	defer cancel()
-
-	pf := dexec.CommandContext(c, "kubectl", args...)
-	out, err := pf.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	errBuf := bytes.Buffer{}
-	pf.Stderr = &errBuf
-
-	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
-	if err = pf.Start(); err != nil {
-		out.Close()
-		dlog.Errorf(c, "port-forward failed to start: %v", client.RunError(err))
-		return err
-	}
-
-	sc := bufio.NewScanner(out)
-
-	// Give port-forward at least the port-forward timeout to produce the correct output and spawn the next process
-	timer := time.AfterFunc(client.GetConfig(c).Timeouts.PrivateTrafficManagerConnect, func() {
-		cancel()
-	})
-
-	// wait group is done when next process starts.
-	var thenErr error
-	go func() {
-		if output := outputHandler(sc); output != nil {
-			timer.Stop() // prevent premature context cancellation
-			go func() {
-				// discard other output sent to the scanner
-				for sc.Scan() {
-				}
-			}()
-			thenErr = then(c, output)
-			cancel()
-		}
-		if errBuf.Len() > 0 {
-			dlog.Error(c, errBuf.String())
-		}
-	}()
-
-	// let the port forward continue running. It will either be killed by the
-	// timer (if it didn't produce the expected output) or by a context cancel.
-	if err = pf.Wait(); err != nil {
-		switch {
-		case errors.Is(c.Err(), context.Canceled):
-			err = thenErr
-		case errors.Is(c.Err(), context.DeadlineExceeded):
-			err = errors.New("port-forward timed out")
-		default:
-			err = client.RunError(err)
-			dlog.Errorf(c, "port-forward failed: %v", err)
-		}
-	}
-	return err
 }
 
 // check uses a non-caching DiscoveryClientConfig to retrieve the server version
@@ -378,26 +299,7 @@ func (kc *k8sCluster) waitUntilReady(ctx context.Context) error {
 	}
 }
 
-func (kc *k8sCluster) getClusterId(c context.Context) (clusterID string) {
-	rootID := func() (rootID string) {
-		defer func() {
-			// If kates panics, we'll use the default rootID, so we
-			// can recover here
-			_ = recover()
-		}()
-		rootID = "00000000-0000-0000-0000-000000000000"
-
-		nsName := "default"
-		ns := &kates.Namespace{
-			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
-			ObjectMeta: kates.ObjectMeta{Name: nsName},
-		}
-		if err := kc.client.Get(c, ns, ns); err != nil {
-			return
-		}
-
-		rootID = string(ns.GetUID())
-		return
-	}()
-	return rootID
+func (kc *k8sCluster) getClusterId(ctx context.Context) string {
+	clusterID, _ := actions.GetClusterID(ctx, kc.client)
+	return clusterID
 }

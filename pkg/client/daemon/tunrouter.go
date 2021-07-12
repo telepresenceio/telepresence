@@ -191,10 +191,7 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", mi.ManagerPort),
-			grpc.WithInsecure(),
-			grpc.WithNoProxy(),
-			grpc.WithBlock())
+		conn, err = client.DialSocket(tc, client.ConnectorSocketName)
 		if err != nil {
 			return client.CheckTimeout(tc, err)
 		}
@@ -235,7 +232,7 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP)
 			if ctx.Err() != nil {
 				return nil
 			}
-			return client.WrapRecvErr(err, "error when reading WatchOutboundInfo")
+			return client.WrapRecvErr(err, "error when reading WatchClusterInfo")
 		}
 
 		if kubeDNS != nil {
