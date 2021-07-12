@@ -49,7 +49,7 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 		{Name: "SYSTEMA_HOST", Value: sc.env.SystemAHost},
 		{Name: "SYSTEMA_PORT", Value: sc.env.SystemAPort},
 		{Name: "CLUSTER_ID", Value: sc.clusterID},
-		{Name: "TELEPRESENCE_REGISTRY", Value: imgConfig.Registry},
+		{Name: "TELEPRESENCE_REGISTRY", Value: imgConfig.WebhookRegistry},
 
 		// Manager needs to know its own namespace so that it can propagate that when
 		// to agents when injecting them
@@ -63,7 +63,7 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 		},
 	}
 	if imgConfig.WebhookAgentImage != "" {
-		image := fmt.Sprintf("%s/%s", imgConfig.Registry, imgConfig.WebhookAgentImage)
+		image := fmt.Sprintf("%s/%s", imgConfig.WebhookRegistry, imgConfig.WebhookAgentImage)
 		containerEnv = append(containerEnv, corev1.EnvVar{Name: "TELEPRESENCE_AGENT_IMAGE", Value: image})
 	}
 

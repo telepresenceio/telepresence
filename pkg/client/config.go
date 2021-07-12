@@ -344,6 +344,7 @@ func (ll *LogLevels) merge(o *LogLevels) {
 type Images struct {
 	Registry          string `json:"registry,omitempty"`
 	AgentImage        string `json:"agentImage,omitempty"`
+	WebhookRegistry   string `json:"webhookRegistry,omitempty"`
 	WebhookAgentImage string `json:"webhookAgentImage,omitempty"`
 }
 
@@ -366,6 +367,8 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 			img.Registry = v.Value
 		case "agentImage":
 			img.AgentImage = v.Value
+		case "webhookRegistry":
+			img.WebhookRegistry = v.Value
 		case "webhookAgentImage":
 			img.WebhookAgentImage = v.Value
 		default:
@@ -386,6 +389,9 @@ func (i *Images) merge(o *Images) {
 	}
 	if o.Registry != "" {
 		i.Registry = o.Registry
+	}
+	if o.WebhookRegistry != "" {
+		i.WebhookRegistry = o.WebhookRegistry
 	}
 }
 
@@ -446,6 +452,7 @@ var defaultConfig = Config{
 	},
 	Images: Images{
 		Registry:          "docker.io/datawire",
+		WebhookRegistry:   "docker.io/datawire",
 		AgentImage:        "",
 		WebhookAgentImage: "",
 	},

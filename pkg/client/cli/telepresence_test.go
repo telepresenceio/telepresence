@@ -316,7 +316,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		// latter that is used in the traffic-manager
 		ctx := dlog.NewTestContext(t, false)
 		registry := dtest.DockerRegistry(ctx)
-		configYml := fmt.Sprintf("images:\n  registry: %s\n  agentImage: notUsed:0.0.1\n  webhookAgentImage: imageFromConfig:0.0.1\n", registry)
+		configYml := fmt.Sprintf("images:\n  registry: %s\n  agentImage: notUsed:0.0.1\n  webhookAgentImage: imageFromConfig:0.0.1\n  webhookRegistry: %s", registry, registry)
 		ctx, err := setConfig(ctx, configDir, configYml)
 		require.NoError(err)
 
@@ -1224,7 +1224,7 @@ func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 // isn't used, which could cause conflict with the tests.
 func setDefaultConfig(ctx context.Context, configDir string) (context.Context, error) {
 	registry := dtest.DockerRegistry(ctx)
-	configYml := fmt.Sprintf("images:\n  registry: %s\n", registry)
+	configYml := fmt.Sprintf("images:\n  registry: %s\n  webhookRegistry: %s\n", registry, registry)
 	return setConfig(ctx, configDir, configYml)
 }
 
