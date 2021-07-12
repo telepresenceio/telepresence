@@ -78,7 +78,7 @@ build: ## (Build) Build all the source code
 	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
 .PHONY: image push-image
 image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container image
-	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -trimpath" ko publish --local ./cmd/traffic) && \
+	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -trimpath" GOOS= ko publish --local ./cmd/traffic) && \
 	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: push-image
@@ -179,6 +179,11 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 .PHONY: check
 check: $(tools/ko) $(tools/helm) ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=10 go test -timeout=18m ./...
+
+.PHONY: _login
+_login:
+	docker login --username "$$TELEPRESENCE_REGISTRY_USERNAME" --password "$$TELEPRESENCE_REGISTRY_PASSWORD"
+
 
 # Install
 # =======

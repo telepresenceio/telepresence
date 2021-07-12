@@ -34,3 +34,7 @@ tst-systema
 
 # The Chart directory
 !/charts/telepresence
+
+# Needed to build on windows
+.wintools
+.gocache
