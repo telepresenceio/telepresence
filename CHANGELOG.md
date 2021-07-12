@@ -5,21 +5,18 @@
 - Feature: Telepresence no longer depends on having an external
   `kubectl` binary, which might not be present for OpenShift users
   (who have `oc` instead of `kubectl`).
-
 - Feature: `skipLogin` can be used in the config.yml to tell the cli not to connect to cloud when using an air-gapped environment.
-
+- Feature: The Telepresence Helm chart now supports installing multiple
+  Traffic Managers in multiple namespaces. This will allow operators to
+  install Traffic Managers with limited permissions that match the
+  permissions restrictions that Telepresence users are subject to.
 - Change: `TELEPRESENCE_AGENT_IMAGE` and `TELEPRESENCE_REGISTRY` are now only configurable via config.yml.
-
 - Bugfix: Fixed and improved several error messages, to hopefully be
   more helpful.
 - Bugfix: Fixed a DNS problem on macOS causing slow DNS lookups when connecting to a local cluster.
 
 ### 2.3.4 (July 9, 2021)
 
-- Feature: The Telepresence Helm chart now supports installing multiple
-  Traffic Managers in multiple namespaces. This will allow operators to
-  install Traffic Managers with limited permissions that match the
-  permissions restrictions that Telepresence users are subject to.
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.
 - Bugfix: Telepresence will no longer panic when multiple services match a workload.
 - Bugfix: The traffic-manager will now accurately determine the service subnet by creating a dummy-service in its own namespace.

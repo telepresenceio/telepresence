@@ -1,19 +1,8 @@
 {{- if .Values.managerRbac.create }}
-# This contains the serviceAccount used for the traffic-manager deployment,
-# as well as the various namespace-scoped roles + bindings that the traffic-manager needs.
+# This contains the various namespace-scoped roles + bindings that the traffic-manager needs.
 # This will likely expand over time as we move more things from the clients
 # domain into the traffic-manager.  But the good news there is that it will
 # require less permissions in clientRbac.yaml
-
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: traffic-manager
-  namespace: {{ include "telepresence.namespace" . }}
-  labels:
-    {{- include "telepresence.labels" . | nindent 4 }}
-
----
 
 {{- if .Values.managerRbac.namespaceScoped }}
 

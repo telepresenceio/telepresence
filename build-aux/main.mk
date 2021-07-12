@@ -177,7 +177,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check
-check: $(tools/ko) ## (QA) Run the test suite
+check: $(tools/ko) $(tools/helm) ## (QA) Run the test suite
 	go test -timeout=15m ./...
 
 # Install
