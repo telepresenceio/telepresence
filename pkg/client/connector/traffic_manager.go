@@ -31,11 +31,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
+type trafficManagerCallbacks struct {
+	GetAPIKey func(context.Context, string, bool) (string, error)
+}
+
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
 	*installer // installer is also a k8sCluster
-	getAPIKey  func(context.Context, string, bool) (string, error)
+	callbacks  trafficManagerCallbacks
 
 	// local information
 	env         client.Env
@@ -76,7 +80,7 @@ func newTrafficManager(
 	env client.Env,
 	cluster *k8sCluster,
 	installID string,
-	getAPIKey func(context.Context, string, bool) (string, error),
+	callbacks trafficManagerCallbacks,
 ) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
@@ -98,7 +102,7 @@ func newTrafficManager(
 		installID:   installID,
 		startup:     make(chan bool),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
-		getAPIKey:   getAPIKey,
+		callbacks:   callbacks,
 	}
 
 	return tm, nil
@@ -192,7 +196,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portStr string) (err error
 		InstallId: tm.installID,
 		Product:   "telepresence",
 		Version:   client.Version(),
-		ApiKey:    func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
+		ApiKey:    func() string { tok, _ := tm.callbacks.GetAPIKey(c, "manager", false); return tok }(),
 	})
 	if err != nil {
 		return client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
@@ -433,7 +437,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session: tm.session(),
-				ApiKey:  func() string { tok, _ := tm.getAPIKey(c, "manager", false); return tok }(),
+				ApiKey:  func() string { tok, _ := tm.callbacks.GetAPIKey(c, "manager", false); return tok }(),
 			})
 			if err != nil {
 				if c.Err() != nil {
