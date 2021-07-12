@@ -32,6 +32,7 @@ type TrafficManager interface {
 	RemoveIntercept(context.Context, string) error
 	WorkloadInfoSnapshot(context.Context, *connector.ListRequest) *connector.WorkloadInfoSnapshot
 	Uninstall(context.Context, *connector.UninstallRequest) (*connector.UninstallResult, error)
+	SetStatus(context.Context, *connector.ConnectInfo)
 }
 
 type State struct {

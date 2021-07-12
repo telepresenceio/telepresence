@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -121,7 +122,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 				ClusterId:      cluster.GetClusterId(c),
 				IngressInfos:   ingressInfo,
 			}
-			s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
+			s.sharedState.GetTrafficManagerNonBlocking().SetStatus(c, ret)
 			return ret
 		} else {
 			ret := &rpc.ConnectInfo{
@@ -130,7 +131,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 				ClusterServer:  cluster.Config.Server,
 				ClusterId:      cluster.GetClusterId(c),
 			}
-			s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
+			s.sharedState.GetTrafficManagerNonBlocking().SetStatus(c, ret)
 			return ret
 		}
 	} else {
@@ -219,11 +220,11 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := newTrafficManager(c,
+	tmgr, err := userd_trafficmgr.New(c,
 		s.env,
 		cluster,
 		s.scoutClient.Reporter.InstallID(),
-		trafficManagerCallbacks{
+		userd_trafficmgr.Callbacks{
 			GetAPIKey:       s.sharedState.GetCloudAPIKey,
 			SetClient:       s.managerProxy.SetClient,
 			SetOutboundInfo: daemonClient.SetOutboundInfo,
@@ -243,7 +244,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	dlog.Info(c, "Waiting for TrafficManager to connect")
 	tc, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-	if err := tmgr.waitUntilStarted(tc); err != nil {
+	if _, err := tmgr.GetClientBlocking(tc); err != nil {
 		dlog.Errorf(c, "Failed to initialize session with traffic-manager: %v", err)
 		// No point in continuing without a traffic manager
 		s.cancel()
@@ -286,7 +287,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		ClusterId:      cluster.GetClusterId(c),
 		IngressInfos:   ingressInfo,
 	}
-	tmgr.setStatus(c, ret)
+	tmgr.SetStatus(c, ret)
 	return ret
 }
 

@@ -1,4 +1,4 @@
-package connector
+package userd_trafficmgr
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
-type trafficManagerCallbacks struct {
+type Callbacks struct {
 	GetAPIKey       func(context.Context, string, bool) (string, error)
 	SetClient       func(client manager.ManagerClient, callOptions ...grpc.CallOption)
 	SetOutboundInfo func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
@@ -41,7 +41,7 @@ type trafficManagerCallbacks struct {
 // cluster.
 type trafficManager struct {
 	*installer // installer is also a k8sCluster
-	callbacks  trafficManagerCallbacks
+	callbacks  Callbacks
 
 	// local information
 	env         client.Env
@@ -75,14 +75,13 @@ type interceptResult struct {
 	err       error
 }
 
-// newTrafficManager returns a TrafficManager resource for the given
-// cluster if it has a Traffic Manager service.
-func newTrafficManager(
+// New returns a TrafficManager resource for the given cluster if it has a Traffic Manager service.
+func New(
 	_ context.Context,
 	env client.Env,
 	cluster *userd_k8s.Cluster,
 	installID string,
-	callbacks trafficManagerCallbacks,
+	callbacks Callbacks,
 ) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
@@ -108,15 +107,6 @@ func newTrafficManager(
 	}
 
 	return tm, nil
-}
-
-func (tm *trafficManager) waitUntilStarted(c context.Context) error {
-	select {
-	case <-c.Done():
-		return c.Err()
-	case <-tm.startup:
-		return tm.managerErr
-	}
 }
 
 func (tm *trafficManager) Run(c context.Context) error {
@@ -433,7 +423,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 	}
 }
 
-func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
+func (tm *trafficManager) SetStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
