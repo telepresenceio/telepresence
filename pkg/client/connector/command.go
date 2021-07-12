@@ -61,13 +61,8 @@ type service struct {
 	managerProxy userd_grpc.MgrProxy
 	cancel       func()
 
-	// To access `cluster` or `trafficMgr`:
-	//  - writing: must hold connectMu, AND xxxFinalized must not be closed
-	//  - reading: must either hold connectMu, OR xxxFinalized must be closed
-	connectMu        sync.Mutex
-	clusterFinalized chan struct{}
-	cluster          *userd_k8s.Cluster
-
+	// Must hold connectMu to use the sharedState.MaybeSetXXX methods.
+	connectMu   sync.Mutex
 	sharedState *sharedstate.State
 
 	// These are used to communicate between the various goroutines.
@@ -103,41 +98,42 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			ErrorText: err.Error(),
 		}
 	}
-	switch {
-	case s.cluster != nil && s.cluster.Config.Equals(Config):
-		if mns := cr.MappedNamespaces; len(mns) > 0 {
-			if len(mns) == 1 && mns[0] == "all" {
-				mns = nil
+	if cluster := s.sharedState.GetClusterNonBlocking(); cluster != nil {
+		if cluster.Config.Equals(Config) {
+			if mns := cr.MappedNamespaces; len(mns) > 0 {
+				if len(mns) == 1 && mns[0] == "all" {
+					mns = nil
+				}
+				sort.Strings(mns)
+				cluster.SetMappedNamespaces(c, mns)
 			}
-			sort.Strings(mns)
-			s.cluster.SetMappedNamespaces(c, mns)
-		}
-		ingressInfo, err := s.cluster.DetectIngressBehavior(c)
-		if err != nil {
-			return &rpc.ConnectInfo{
-				Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-				ErrorText: err.Error(),
+			ingressInfo, err := cluster.DetectIngressBehavior(c)
+			if err != nil {
+				return &rpc.ConnectInfo{
+					Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+					ErrorText: err.Error(),
+				}
 			}
+			ret := &rpc.ConnectInfo{
+				Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
+				ClusterContext: cluster.Config.Context,
+				ClusterServer:  cluster.Config.Server,
+				ClusterId:      cluster.GetClusterId(c),
+				IngressInfos:   ingressInfo,
+			}
+			s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
+			return ret
+		} else {
+			ret := &rpc.ConnectInfo{
+				Error:          rpc.ConnectInfo_MUST_RESTART,
+				ClusterContext: cluster.Config.Context,
+				ClusterServer:  cluster.Config.Server,
+				ClusterId:      cluster.GetClusterId(c),
+			}
+			s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
+			return ret
 		}
-		ret := &rpc.ConnectInfo{
-			Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
-			ClusterContext: s.cluster.Config.Context,
-			ClusterServer:  s.cluster.Config.Server,
-			ClusterId:      s.cluster.GetClusterId(c),
-			IngressInfos:   ingressInfo,
-		}
-		s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
-		return ret
-	case s.cluster != nil /* && !s.cluster.k8sConfig.equals(k8sConfig) */ :
-		ret := &rpc.ConnectInfo{
-			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterContext: s.cluster.Config.Context,
-			ClusterServer:  s.cluster.Config.Server,
-			ClusterId:      s.cluster.GetClusterId(c),
-		}
-		s.sharedState.GetTrafficManagerNonBlocking().(*trafficManager).setStatus(c, ret)
-		return ret
-	default:
+	} else {
 		// This is the first call to Connect; we have to tell the background connect
 		// goroutine to actually do the work.
 		if dryRun {
@@ -205,16 +201,15 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-	s.cluster = cluster
-	close(s.clusterFinalized)
-	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
+	s.sharedState.MaybeSetCluster(cluster)
+	dlog.Infof(c, "Connected to context %s (%s)", cluster.Context, cluster.Server)
 
 	// Phone home with the information about the size of the cluster
 	s.scout <- func() ScoutReport {
 		report := ScoutReport{
 			Action: "connecting_traffic_manager",
 			PersistentMetadata: map[string]interface{}{
-				"cluster_id":        s.cluster.GetClusterId(c),
+				"cluster_id":        cluster.GetClusterId(c),
 				"mapped_namespaces": len(cr.MappedNamespaces),
 			},
 		}
@@ -226,7 +221,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := newTrafficManager(c,
 		s.env,
-		s.cluster,
+		cluster,
 		s.scoutClient.Reporter.InstallID(),
 		trafficManagerCallbacks{
 			GetAPIKey:       s.sharedState.GetCloudAPIKey,
@@ -259,7 +254,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	// Wait until all of the k8s watches (in the "background-k8swatch" goroutine) are running.
-	if err = s.cluster.WaitUntilReady(c); err != nil {
+	if err = cluster.WaitUntilReady(c); err != nil {
 		s.cancel()
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
@@ -275,7 +270,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		},
 	}
 
-	ingressInfo, err := s.cluster.DetectIngressBehavior(c)
+	ingressInfo, err := cluster.DetectIngressBehavior(c)
 	if err != nil {
 		s.cancel()
 		return &rpc.ConnectInfo{
@@ -286,9 +281,9 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterContext: s.cluster.Config.Context,
-		ClusterServer:  s.cluster.Config.Server,
-		ClusterId:      s.cluster.GetClusterId(c),
+		ClusterContext: cluster.Config.Context,
+		ClusterServer:  cluster.Config.Server,
+		ClusterId:      cluster.GetClusterId(c),
 		IngressInfos:   ingressInfo,
 	}
 	tmgr.setStatus(c, ret)
@@ -312,8 +307,7 @@ func run(c context.Context) error {
 		env:         env,
 		scoutClient: client.NewScout(c, "connector"),
 
-		clusterFinalized: make(chan struct{}),
-		sharedState:      sharedstate.NewState(),
+		sharedState: sharedstate.NewState(),
 
 		scout:           make(chan ScoutReport, 10),
 		connectRequest:  make(chan parsedConnectRequest),
@@ -404,12 +398,7 @@ func run(c context.Context) error {
 	g.Go("background-init", func(c context.Context) error {
 		defer func() {
 			close(s.connectResponse) // -> server-grpc.connect()
-			select {
-			case <-s.clusterFinalized:
-				// already closed
-			default:
-				close(s.clusterFinalized)
-			}
+			s.sharedState.MaybeSetCluster(nil)
 			s.sharedState.MaybeSetTrafficManager(nil)
 			<-c.Done() // Don't trip ShutdownOnNonError in the parent group.
 			scoutUsers.Done()
@@ -426,11 +415,11 @@ func run(c context.Context) error {
 
 	// background-k8swatch watches all of the nescessary Kubernetes resources.
 	g.Go("background-k8swatch", func(c context.Context) error {
-		<-s.clusterFinalized
-		if s.cluster == nil {
+		cluster, _ := s.sharedState.GetClusterBlocking(c)
+		if cluster == nil {
 			return nil
 		}
-		return s.cluster.RunWatchers(c)
+		return cluster.RunWatchers(c)
 	})
 
 	// background-manager (1) starts up with ensuring that the manager is installed and running,

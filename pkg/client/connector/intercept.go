@@ -28,7 +28,7 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 	msg := ""
 	mgr := s.sharedState.GetTrafficManagerNonBlocking()
 	switch {
-	case s.cluster == nil:
+	case s.sharedState.GetClusterNonBlocking() == nil:
 		ie = rpc.InterceptError_NO_CONNECTION
 	case mgr == nil:
 		ie = rpc.InterceptError_NO_TRAFFIC_MANAGER
