@@ -17,6 +17,9 @@
   more helpful.
 - Bugfix: Fixed a DNS problem on macOS causing slow DNS lookups when connecting to a local cluster.
 
+- Bugfix: Fixed an issue that could cause the user daemon to crash
+  during shutdown.
+
 ### 2.3.4 (July 9, 2021)
 
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.

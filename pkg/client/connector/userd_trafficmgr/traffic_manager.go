@@ -133,14 +133,17 @@ func (tm *trafficManager) Run(c context.Context) error {
 
 	var conn *grpc.ClientConn
 	defer func() {
-		if err != nil {
-			if conn != nil {
-				conn.Close()
-			}
-			if tm.managerClient == nil {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+		select {
+		case <-tm.startup:
+			// closed, nothing to do
+		default:
+			if err != nil && tm.managerClient == nil {
 				tm.managerErr = err
-				close(tm.startup)
 			}
+			close(tm.startup)
 		}
 	}()
 
