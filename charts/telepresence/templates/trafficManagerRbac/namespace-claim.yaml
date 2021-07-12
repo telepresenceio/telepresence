@@ -1,0 +1,23 @@
+{{- if .Values.managerRbac.create }}
+{{- if .Values.managerRbac.namespaceScoped }}
+
+# These configmaps will ensure that only one traffic manager can be installed
+# to manage any given namespace.
+# This only works provided traffic managers are being managed through the helm chart, and are all namespaced.
+
+{{- range .Values.managerRbac.namespaces }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traffic-manager-claim
+  namespace: {{ . }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+data:
+  owned-by: {{ include "telepresence.namespace" $ }}
+
+{{- end }}
+
+{{- end }}
+{{- end }}

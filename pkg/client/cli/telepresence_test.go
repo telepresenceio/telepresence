@@ -1107,7 +1107,7 @@ func (hs *helmSuite) SetupSuite() {
 	err := run(ctx, "kubectl", "delete", "clusterrolebinding", "telepresence-clusterrolebinding")
 	hs.NoError(err)
 
-	hs.NoError(hs.helmInstall(ctx, hs.appNamespace1, hs.managerNamespace1))
+	hs.NoError(hs.helmInstall(ctx, hs.managerNamespace1, hs.appNamespace1))
 
 	hs.Eventually(func() bool {
 		return run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
@@ -1225,7 +1225,7 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 	hs.Run("Installs Successfully", func() {
 		hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
-		hs.NoError(hs.helmInstall(ctx, hs.appNamespace2, hs.managerNamespace2))
+		hs.NoError(hs.helmInstall(ctx, hs.managerNamespace2, hs.appNamespace2))
 	})
 	hs.Run("Can be connected to", func() {
 		stdout, stderr := telepresenceContext(ctx, "connect")
@@ -1252,6 +1252,13 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 	})
 }
 
+func (hs *helmSuite) TestG_CollidingInstalls() {
+	ctx := dlog.NewTestContext(hs.T(), false)
+	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+	defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
+	hs.Error(hs.helmInstall(ctx, hs.managerNamespace2, hs.appNamespace1, hs.appNamespace2))
+}
+
 func (hs *helmSuite) TestZ_Uninstall() {
 	ctx := dlog.NewTestContext(hs.T(), false)
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
@@ -1262,7 +1269,7 @@ func (hs *helmSuite) TestZ_Uninstall() {
 	hs.Error(run(ctx, "kubectl", "get", "deploy", "-n", hs.managerNamespace1))
 }
 
-func (hs *helmSuite) helmInstall(ctx context.Context, appNamespace, managerNamespace string) error {
+func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, appNamespaces ...string) error {
 	clusterID, err := hs.tpSuite.kubectlOut(ctx, "get", "ns", hs.appNamespace1, "-o", "jsonpath={.metadata.uid}")
 	if err != nil {
 		return err
@@ -1274,8 +1281,8 @@ func (hs *helmSuite) helmInstall(ctx context.Context, appNamespace, managerNames
 		"--set", fmt.Sprintf("clusterId=%s", clusterID),
 		"--set", fmt.Sprintf("image.registry=%s", dtest.DockerRegistry(ctx)),
 		"--set", fmt.Sprintf("image.tag=%s", hs.tpSuite.testVersion[1:]),
-		"--set", fmt.Sprintf("clientRbac.namespaces={%s,%s}", appNamespace, managerNamespace),
-		"--set", fmt.Sprintf("managerRbac.namespaces={%s,%s}", appNamespace, managerNamespace),
+		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
+		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"-f", helmValues,
 	)
 }
