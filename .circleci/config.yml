@@ -255,8 +255,10 @@ workflows:
             only:
               - release/v2
     jobs:
-      - publish-nightly-linux
-      - publish-nightly-macos
+      - publish-nightly-linux:
+          context: telepresence2-release
+      - publish-nightly-macos:
+          context: telepresence2-release
       #- release-finalize:
       #    context: telepresence2-release
       #    requires:
