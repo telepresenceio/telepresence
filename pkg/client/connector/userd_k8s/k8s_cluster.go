@@ -52,7 +52,9 @@ type Cluster struct {
 	LocalIntercepts map[string]string
 
 	// Current Namespace snapshot, get set by acc.Update().
-	Namespaces []*objName
+	curSnapshot struct {
+		Namespaces []*objName
+	}
 }
 
 func (kc *Cluster) ActualNamespace(namespace string) string {

@@ -66,7 +66,7 @@ func (kc *Cluster) onNamespacesChange(c context.Context, acc *kates.Accumulator,
 	changed := func() bool {
 		kc.accLock.Lock()
 		defer kc.accLock.Unlock()
-		return acc.Update(kc)
+		return acc.Update(&kc.curSnapshot)
 	}()
 	if changed {
 		changed = kc.refreshNamespaces(c, accWait)
@@ -84,8 +84,8 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) {
 
 func (kc *Cluster) refreshNamespaces(c context.Context, accWait chan<- struct{}) bool {
 	kc.accLock.Lock()
-	namespaces := make([]string, 0, len(kc.Namespaces))
-	for _, ns := range kc.Namespaces {
+	namespaces := make([]string, 0, len(kc.curSnapshot.Namespaces))
+	for _, ns := range kc.curSnapshot.Namespaces {
 		if kc.shouldBeWatched(ns.Name) {
 			namespaces = append(namespaces, ns.Name)
 		}
@@ -144,7 +144,7 @@ func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
 	}
 
 	kc.accLock.Lock()
-	if len(kc.Namespaces) == 0 {
+	if len(kc.curSnapshot.Namespaces) == 0 {
 		// daemon must not be updated until the namespace watcher has made its first delivery
 		kc.accLock.Unlock()
 		return
