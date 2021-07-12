@@ -124,8 +124,8 @@ push-executable: build ## (Release) Upload the executable to S3
 		--body $(BINDIR)/telepresence
 
 .PHONY: push-chart
-push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart 
-	packaging/push_chart.sh	
+push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart
+	packaging/push_chart.sh
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
