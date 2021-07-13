@@ -1,0 +1,41 @@
+# These are the namespace-scoped rbac roles + bindings that will be used by users
+# who want to use telepresence once its components have been set
+# up in the cluster.
+{{- if .Values.clientRbac.create }}
+{{- if .Values.clientRbac.namespaced }}
+
+{{- $namespaces := .Values.clientRbac.namespaces }}
+{{- $subjects := .Values.clientRbac.subjects }}
+{{- range $namespaces }}
+
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  {{ include "telepresence.clientRbacName" $ }}
+  namespace: {{ . }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+rules: 
+{{ include "telepresence.clientRbacInterceptRules" $ }}
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "telepresence.clientRbacName" $ }}
+  namespace: {{ . }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+subjects:
+{{- toYaml $subjects | nindent 0}}
+roleRef:
+  kind: Role
+  name: {{ include "telepresence.clientRbacName" $ }}
+  apiGroup: rbac.authorization.k8s.io
+
+{{- end }}
+
+{{- end }}
+{{- end }}

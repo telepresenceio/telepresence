@@ -27,7 +27,7 @@ func (ri tmRole) role(ctx context.Context) *kates.Role {
 		APIVersion: "rbac.authorization.k8s.io/v1",
 	}
 	cr.ObjectMeta = kates.ObjectMeta{
-		Name:      install.ManagerAppName,
+		Name:      fmt.Sprintf("%s-%s", install.ManagerAppName, getScope(ctx).namespace),
 		Namespace: getScope(ctx).namespace,
 	}
 	return cr
@@ -72,6 +72,9 @@ func (ri tmRole) Delete(ctx context.Context) error {
 
 func (ri tmRole) Update(ctx context.Context) error {
 	if ri.found == nil {
+		return nil
+	}
+	if isManagedByHelm(ctx, ri.found) {
 		return nil
 	}
 

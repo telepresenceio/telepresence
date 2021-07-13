@@ -63,6 +63,8 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | clientRbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `["ambassador"]`                                                                                  |
 | clientRbac.namespaces          | The namespaces to give users access to.                                                                                 | `false`                                                                                           |
 | managerRbac.create              | Create RBAC resources for traffic-manager with this release.                                                           | `true`                                                                                            |
+| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false`
+| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]`
 
 
 ## License Key 
@@ -105,3 +107,36 @@ give access to the entire cluster or restrict to certain namespaces.
 
 You can also create a separate release for managing RBAC by setting 
 `Values.rbac.only: true`.
+
+## Namespace-scoped traffic manager
+
+Telepresence's Helm chart supports installing a Traffic Manager at the namespace scope.
+You might want to do this if you have multiple namespaces, say representing multiple different environments, and would like their Traffic Managers to be isolated from one another.
+To do this, set `managerRbac.namespaced=true` and `managerRbac.namespaces={a,b,c}` to manage namespaces `a`, `b` and `c`.
+
+**NOTE** Do not install namespace-scoped traffic managers and a cluster-scoped traffic manager in the same cluster!
+
+### Namespace collision detection
+
+The Telepresence Helm chart will try to prevent namespace-scoped Traffic Managers from managing the same namespaces.
+It will do this by creating a ConfigMap, called `traffic-manager-claim`, in each namespace that a given install manages.
+
+So, for example, suppose you install one Traffic Manager to manage namespaces `a` and `b`, as:
+
+```bash
+helm install traffic-manager --namespace a datawire/telepresence --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={a,b}'
+```
+
+You might then attempt to install another Traffic Manager to manage namespaces `b` and `c`:
+
+```bash
+helm install traffic-manager --namespace c datawire/telepresence --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={b,c}'
+```
+
+This would fail with an error:
+
+```
+Error: rendered manifests contain a resource that already exists. Unable to continue with install: ConfigMap "traffic-manager-claim" in namespace "b" exists and cannot be imported into the current release: invalid ownership metadata; annotation validation error: key "meta.helm.sh/release-namespace" must equal "c": current value is "a"
+```
+
+To fix this error, fix the overlap either by removing `b` from the first install, or from the second.

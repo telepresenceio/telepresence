@@ -1,0 +1,92 @@
+{{- if .Values.managerRbac.create }}
+# This contains the various namespace-scoped roles + bindings that the traffic-manager needs.
+# This will likely expand over time as we move more things from the clients
+# domain into the traffic-manager.  But the good news there is that it will
+# require less permissions in clientRbac.yaml
+
+{{- if .Values.managerRbac.namespaced }}
+
+{{- if not (has (include "telepresence.namespace" .) .Values.managerRbac.namespaces) }}
+{{- fail (printf "Namespace %s must be included in managerRbac.namespaces (managerRbac.namespaces contains: %s)" (include "telepresence.namespace" .) (join "," .Values.managerRbac.namespaces)) }}
+{{- end }}
+
+{{- range .Values.managerRbac.namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traffic-manager-{{ include "telepresence.namespace" $ }}
+  namespace: {{ . }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+  - get
+  - watch
+{{- if eq . (include "telepresence.namespace" $) }}
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager-{{ include "telepresence.namespace" $ }}
+  namespace: {{ . }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traffic-manager-{{ include "telepresence.namespace" $ }}
+subjects:
+- kind: ServiceAccount
+  name: traffic-manager
+  namespace: {{ include "telepresence.namespace" $ }}
+{{- end }}
+
+{{- else }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ include "telepresence.namespace" . }}
+  name: traffic-manager-{{ include "telepresence.namespace" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager
+  name: traffic-manager-{{ include "telepresence.namespace" . }}
+  labels:
+    {{- include "telepresence.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traffic-manager
+subjects:
+- kind: ServiceAccount
+  name: traffic-manager
+  namespace: {{ include "telepresence.namespace" . }}
+{{- end }}
+{{- end }}

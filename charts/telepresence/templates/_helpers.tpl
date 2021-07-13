@@ -74,8 +74,38 @@ telepresence: manager
 {{- end }}
 
 {{/*
-RBAC name suffix
+Client RBAC name suffix
 */}}
-{{- define "telepresence.rbacName" -}}
-{{ default (include "telepresence.name" .) .Values.rbac.nameOverride }}
+{{- define "telepresence.clientRbacName" -}}
+{{ printf "%s-%s" (default (include "telepresence.name" .) .Values.rbac.nameOverride) (include "telepresence.namespace" .) }}
 {{- end -}}
+
+{{/*
+RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
+*/}}
+{{- define "telepresence.clientRbacInterceptRules" -}}
+- apiGroups:
+  - ""
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "watch", "delete"]
+- apiGroups:
+  - ""
+  resources: ["services"]
+  verbs: ["update"]
+- apiGroups:
+  - ""
+  resources: ["pods/portforward"]
+  verbs: ["create"]
+- apiGroups:
+  - "apps"
+  resources: ["deployments", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "update"]
+- apiGroups:
+  - "getambassador.io"
+  resources: ["hosts", "mappings"]
+  verbs: ["*"]
+- apiGroups:
+  - ""
+  resources: ["endpoints"]
+  verbs: ["get", "list", "watch"]
+{{- end }}
