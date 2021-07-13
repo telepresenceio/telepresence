@@ -1086,16 +1086,16 @@ func (hs *helmSuite) SetupSuite() {
 
 	// These namespaces need to be labelled so that the webhook selector can find the namespaces
 	hs.Eventually(func() bool {
-		return run(ctx, "kubectl", "label", "namespace", hs.appNamespace1, fmt.Sprintf("app.kubernetes.io/name=%s", hs.appNamespace1)) != nil
+		return run(ctx, "kubectl", "label", "--overwrite", "namespace", hs.appNamespace1, fmt.Sprintf("app.kubernetes.io/name=%s", hs.appNamespace1)) == nil
 	}, 5*time.Second, time.Second)
 	hs.Eventually(func() bool {
-		return run(ctx, "kubectl", "label", "namespace", hs.managerNamespace1, fmt.Sprintf("app.kubernetes.io/name=%s", hs.managerNamespace1)) != nil
+		return run(ctx, "kubectl", "label", "--overwrite", "namespace", hs.managerNamespace1, fmt.Sprintf("app.kubernetes.io/name=%s", hs.managerNamespace1)) == nil
 	}, 5*time.Second, time.Second)
 	hs.Eventually(func() bool {
-		return run(ctx, "kubectl", "label", "namespace", hs.appNamespace2, fmt.Sprintf("app.kubernetes.io/name=%s", hs.appNamespace2)) != nil
+		return run(ctx, "kubectl", "label", "--overwrite", "namespace", hs.appNamespace2, fmt.Sprintf("app.kubernetes.io/name=%s", hs.appNamespace2)) == nil
 	}, 5*time.Second, time.Second)
 	hs.Eventually(func() bool {
-		return run(ctx, "kubectl", "label", "namespace", hs.managerNamespace2, fmt.Sprintf("app.kubernetes.io/name=%s", hs.managerNamespace2)) != nil
+		return run(ctx, "kubectl", "label", "--overwrite", "namespace", hs.managerNamespace2, fmt.Sprintf("app.kubernetes.io/name=%s", hs.managerNamespace2)) == nil
 	}, 5*time.Second, time.Second)
 
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
@@ -1228,6 +1228,10 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 		hs.NoError(hs.helmInstall(ctx, hs.managerNamespace2, hs.appNamespace2))
 	})
 	hs.Run("Can be connected to", func() {
+		configDir := hs.T().TempDir()
+		// Needed to prevent a (harmless) message on stderr stating that there's no config to use
+		ctx, err := setDefaultConfig(ctx, configDir)
+		hs.NoError(err)
 		stdout, stderr := telepresenceContext(ctx, "connect")
 		hs.Empty(stderr)
 		hs.Contains(stdout, "Connected to context")
