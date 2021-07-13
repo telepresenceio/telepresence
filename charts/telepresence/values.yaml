@@ -112,9 +112,9 @@ managerRbac:
 
   # Whether the manager rbac should limit itself to only certain namespaces
   # Default: false
-  namespaceScoped: false
+  namespaced: false
 
-  # If namespaceScoped is true, which namespaces the managerRbac should apply to
+  # If namespaced is true, which namespaces the managerRbac should apply to
   namespaces: []
 
 

@@ -1,5 +1,5 @@
 {{- if .Values.managerRbac.create }}
-{{- if .Values.managerRbac.namespaceScoped }}
+{{- if .Values.managerRbac.namespaced }}
 
 # These configmaps will ensure that only one traffic manager can be installed
 # to manage any given namespace.

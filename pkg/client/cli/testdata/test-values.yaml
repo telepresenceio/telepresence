@@ -9,4 +9,4 @@ clientRbac:
 
 managerRbac:
   create: true
-  namespaceScoped: true
+  namespaced: true

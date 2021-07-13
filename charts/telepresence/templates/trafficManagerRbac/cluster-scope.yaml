@@ -1,6 +1,6 @@
 {{- if .Values.managerRbac.create }}
 # This file contains all cluster-scoped permissions that the traffic manager needs.
-# This will be larger if namespaceScoped: false, or smaller if it is true
+# This will be larger if namespaced: false, or smaller if it is true
 # This will also likely expand over time as we move more things from the clients
 # domain into the traffic-manager.  But the good news there is that it will
 # require less permissions in clientRbac.yaml
@@ -27,7 +27,7 @@ rules:
   verbs:
   - get
   - list
-{{- if (not .Values.managerRbac.namespaceScoped) }}
+{{- if (not .Values.managerRbac.namespaced) }}
 - apiGroups:
   - ""
   resources:

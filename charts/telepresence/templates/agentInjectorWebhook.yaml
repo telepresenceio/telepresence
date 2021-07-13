@@ -34,7 +34,7 @@ webhooks:
   name: agent-injector.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
-{{- if .Values.managerRbac.namespaceScoped }}
+{{- if .Values.managerRbac.namespaced }}
   namespaceSelector:
     matchExpressions:
       - key: app.kubernetes.io/name

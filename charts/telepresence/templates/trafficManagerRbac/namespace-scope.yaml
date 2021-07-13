@@ -4,7 +4,7 @@
 # domain into the traffic-manager.  But the good news there is that it will
 # require less permissions in clientRbac.yaml
 
-{{- if .Values.managerRbac.namespaceScoped }}
+{{- if .Values.managerRbac.namespaced }}
 
 {{- if not (has (include "telepresence.namespace" .) .Values.managerRbac.namespaces) }}
 {{- fail (printf "Namespace %s must be included in managerRbac.namespaces (managerRbac.namespaces contains: %s)" (include "telepresence.namespace" .) (join "," .Values.managerRbac.namespaces)) }}
