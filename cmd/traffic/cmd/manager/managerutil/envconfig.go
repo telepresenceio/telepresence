@@ -32,6 +32,8 @@ func LoadEnv(ctx context.Context) (context.Context, error) {
 	}
 	if env.AgentImage == "" {
 		env.AgentImage = env.AgentRegistry + "/tel2:" + strings.TrimPrefix(version.Version, "v")
+	} else {
+		env.AgentImage = env.AgentRegistry + "/" + env.AgentImage
 	}
 	return WithEnv(ctx, &env), nil
 }

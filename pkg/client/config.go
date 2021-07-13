@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,12 +24,16 @@ const configFile = "config.yml"
 type Config struct {
 	Timeouts  Timeouts  `json:"timeouts,omitempty"`
 	LogLevels LogLevels `json:"logLevels,omitempty"`
+	Images    Images    `json:"images,omitempty"`
+	Cloud     Cloud     `json:"cloud,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
+	c.Images.merge(&o.Images)
+	c.Cloud.merge(&o.Cloud)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -50,21 +55,28 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 		if err != nil {
 			return err
 		}
-		if kv == "timeouts" {
+		switch {
+		case kv == "timeouts":
 			err := ms[i+1].Decode(&c.Timeouts)
 			if err != nil {
 				return err
 			}
-			continue
-		}
-		if kv == "logLevels" {
+		case kv == "logLevels":
 			err := ms[i+1].Decode(&c.LogLevels)
 			if err != nil {
 				return err
 			}
-			continue
-		}
-		if parseContext != nil {
+		case kv == "images":
+			err := ms[i+1].Decode(&c.Images)
+			if err != nil {
+				return err
+			}
+		case kv == "cloud":
+			err := ms[i+1].Decode(&c.Cloud)
+			if err != nil {
+				return err
+			}
+		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
@@ -116,11 +128,10 @@ type timeoutContext struct {
 func (ctx timeoutContext) Err() error {
 	err := ctx.Context.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
-		dir, _ := filelocation.AppUserConfigDir(ctx)
 		err = timeoutErr{
 			timeoutID:  ctx.timeoutID,
 			timeoutVal: ctx.timeoutVal,
-			configFile: filepath.Join(dir, configFile),
+			configFile: GetConfigFile(ctx),
 			err:        err,
 		}
 	}
@@ -330,6 +341,101 @@ func (ll *LogLevels) merge(o *LogLevels) {
 	}
 }
 
+type Images struct {
+	Registry          string `json:"registry,omitempty"`
+	AgentImage        string `json:"agentImage,omitempty"`
+	WebhookRegistry   string `json:"webhookRegistry,omitempty"`
+	WebhookAgentImage string `json:"webhookAgentImage,omitempty"`
+}
+
+// UnmarshalYAML parses the images YAML
+func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("images must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		switch kv {
+		case "registry":
+			img.Registry = v.Value
+		case "agentImage":
+			img.AgentImage = v.Value
+		case "webhookRegistry":
+			img.WebhookRegistry = v.Value
+		case "webhookAgentImage":
+			img.WebhookAgentImage = v.Value
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
+func (i *Images) merge(o *Images) {
+	if o.AgentImage != "" {
+		i.AgentImage = o.AgentImage
+	}
+	if o.WebhookAgentImage != "" {
+		i.WebhookAgentImage = o.WebhookAgentImage
+	}
+	if o.Registry != "" {
+		i.Registry = o.Registry
+	}
+	if o.WebhookRegistry != "" {
+		i.WebhookRegistry = o.WebhookRegistry
+	}
+}
+
+type Cloud struct {
+	SkipLogin bool `json:"skipLogin,omitempty"`
+}
+
+// UnmarshalYAML parses the images YAML
+func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("cloud must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		switch kv {
+		case "skipLogin":
+			val, err := strconv.ParseBool(v.Value)
+			if err != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("bool expected for key %q", kv), ms[i]))
+			} else {
+				cloud.SkipLogin = val
+			}
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
+func (i *Cloud) merge(o *Cloud) {
+	if o.SkipLogin {
+		i.SkipLogin = o.SkipLogin
+	}
+}
+
 var defaultConfig = Config{
 	Timeouts: Timeouts{
 		PrivateAgentInstall:          120 * time.Second,
@@ -343,11 +449,20 @@ var defaultConfig = Config{
 	LogLevels: LogLevels{
 		UserDaemon: logrus.DebugLevel,
 		RootDaemon: logrus.InfoLevel,
+	},
+	Images: Images{
+		Registry:          "docker.io/datawire",
+		WebhookRegistry:   "docker.io/datawire",
+		AgentImage:        "",
+		WebhookAgentImage: "",
+	},
+	Cloud: Cloud{
+		SkipLogin: false,
 	}}
 
 var config *Config
 
-var configOnce = sync.Once{}
+var configOnce = new(sync.Once)
 
 var parseContext context.Context
 
@@ -375,6 +490,18 @@ func GetConfig(c context.Context) *Config {
 		}
 	})
 	return config
+}
+
+// GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir
+func GetConfigFile(c context.Context) string {
+	dir, _ := filelocation.AppUserConfigDir(c)
+	return filepath.Join(dir, configFile)
+}
+
+// ResetConfig updates configOnce with a new sync.Once. This is currently only used
+// for tests.
+func ResetConfig(c context.Context) {
+	configOnce = new(sync.Once)
 }
 
 func loadConfig(c context.Context) (*Config, error) {

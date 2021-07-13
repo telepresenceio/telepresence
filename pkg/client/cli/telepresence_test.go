@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
@@ -218,16 +218,14 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require := ts.Require()
 
 		configDir := t.TempDir()
-		config, err := os.Create(filepath.Join(configDir, "config.yml"))
-		require.NoError(err)
 
-		_, err = config.WriteString("logLevels:\n  rootDaemon: debug\n")
+		ctx := dlog.NewTestContext(t, false)
+		registry := dtest.DockerRegistry(ctx)
+		configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\n", registry)
+		ctx, err := setConfig(ctx, configDir, configYml)
 		require.NoError(err)
-		config.Close()
 
 		logDir := t.TempDir()
-		ctx := dlog.NewTestContext(t, false)
-		ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
 		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
@@ -253,7 +251,6 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		tmpDir := t.TempDir()
 		origKubeconfigFileName := os.Getenv("DTEST_KUBECONFIG")
 		kubeconfigFileName := filepath.Join(tmpDir, "kubeconfig")
-		configFileName := filepath.Join(tmpDir, "config.yml")
 
 		var cfg *api.Config
 		cfg, err := clientcmd.LoadFromFile(origKubeconfigFileName)
@@ -265,22 +262,20 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			break
 		}
 		require.NotNilf(cluster, "unable to get cluster from config")
-		cluster.Extensions = map[string]runtime.Object{"telepresence.io": &runtime.Unknown{
+		cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{
 			Raw: []byte(`{"dns":{"include-suffixes": [".org"]}}`),
 		}}
 
 		require.NoError(clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
 
-		configFile, err := os.Create(configFileName)
+		ctx := dlog.NewTestContext(t, false)
+		registry := dtest.DockerRegistry(ctx)
+		configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\n", registry)
+		ctx, err = setConfig(ctx, tmpDir, configYml)
 		require.NoError(err)
-		_, err = configFile.WriteString("logLevels:\n  rootDaemon: debug\n")
-		require.NoError(err)
-		configFile.Close()
 
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
 		os.Setenv("KUBECONFIG", kubeconfigFileName)
-		ctx := dlog.NewTestContext(t, false)
-		ctx = filelocation.WithAppUserConfigDir(ctx, tmpDir)
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
@@ -298,6 +293,56 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			hasLookup = strings.Contains(scn.Text(), `LookupHost "example.org"`)
 		}
 		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
+	})
+
+	ts.Run("Webhook Agent Image From Config", func() {
+		t := ts.T()
+		require := ts.Require()
+		uninstallTrafficManager := func() {
+			stdout, stderr := telepresence(t, "uninstall", "--everything")
+			require.Empty(stderr)
+			require.Contains(stdout, "Daemon quitting")
+		}
+		// Remove the traffic-manager since we are altering config that applies to
+		// creating the traffic-manager
+		uninstallTrafficManager()
+		stdout, stderr := telepresence(t, "uninstall", "--everything")
+		require.Empty(stderr)
+		require.Contains(stdout, "Daemon quitting")
+
+		configDir := t.TempDir()
+
+		// Use a config with agentImage and webhookAgentImage to validate that its the
+		// latter that is used in the traffic-manager
+		ctx := dlog.NewTestContext(t, false)
+		registry := dtest.DockerRegistry(ctx)
+		configYml := fmt.Sprintf("images:\n  registry: %s\n  agentImage: notUsed:0.0.1\n  webhookAgentImage: imageFromConfig:0.0.1\n  webhookRegistry: %s", registry, registry)
+		ctx, err := setConfig(ctx, configDir, configYml)
+		require.NoError(err)
+
+		_, stderr = telepresenceContext(ctx, "connect")
+		require.Empty(stderr)
+
+		// When this function ends we uninstall the manager,
+		// connect again to establish a traffic-manager without
+		// our edited config, and then quit our connection to the manager.
+		defer func() {
+			uninstallTrafficManager()
+			_, stderr = telepresence(t, "connect")
+			require.Empty(stderr)
+			_, stderr = telepresence(t, "quit")
+			require.Empty(stderr)
+		}()
+
+		image, err := ts.kubectlOut(ctx, "get",
+			"--namespace", ts.managerTestNamespace,
+			"deploy", "traffic-manager",
+			"--ignore-not-found",
+			"-o",
+			"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='TELEPRESENCE_AGENT_IMAGE')].value}")
+		require.NoError(err)
+		desiredImage := fmt.Sprintf("%s/imageFromConfig:0.0.1", registry)
+		ts.Equal(desiredImage, image)
 	})
 }
 
@@ -549,6 +594,12 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	_, err := output(ctx, "docker", "build", "-t", tag, testDir)
 	require.NoError(err)
 	abs, err := filepath.Abs(testDir)
+	require.NoError(err)
+
+	// We need to explicitly set the default config since telepresenceContext
+	// is being used below
+	configDir := cs.T().TempDir()
+	ctx, err = setDefaultConfig(ctx, configDir)
 	require.NoError(err)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
@@ -934,6 +985,9 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 	c := dlog.NewTestContext(is.T(), false)
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: hello-0-` + is.ns() + `\s+State\s*: ([^\n]+)\n`))
 
+	// Terminating is not a state, so you may want to wrap calls to this function in an eventually
+	// to give any pods that are terminating the chance to complete.
+	// https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
 	helloZeroPods := func() []string {
 		pods, err := ts.kubectlOut(c, "get", "pods", "--field-selector", "status.phase==Running", "-l", "app=hello-0", "-o", "jsonpath={.items[*].metadata.name}")
 		assert.NoError(err)
@@ -1133,7 +1187,17 @@ func output(ctx context.Context, args ...string) (string, error) {
 
 // telepresence executes the CLI command in-process
 func telepresence(t testing.TB, args ...string) (string, string) {
-	return telepresenceContext(dlog.NewTestContext(t, false), args...)
+	ctx := dlog.NewTestContext(t, false)
+
+	// Ensure the config.yml is using the dtest registry by default
+	configDir := t.TempDir()
+	ctx, err := setDefaultConfig(ctx, configDir)
+	if err != nil {
+		t.Error(err)
+	}
+
+	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+	return telepresenceContext(ctx, args...)
 }
 
 // telepresence executes the CLI command in-process
@@ -1153,4 +1217,32 @@ func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 	_ = cmd.Run()
 
 	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
+}
+
+// setDefaultConfig creates a config that has the registry set correctly.
+// This ensures that the config on the machine of whatever is running the test,
+// isn't used, which could cause conflict with the tests.
+func setDefaultConfig(ctx context.Context, configDir string) (context.Context, error) {
+	registry := dtest.DockerRegistry(ctx)
+	configYml := fmt.Sprintf("images:\n  registry: %s\n  webhookRegistry: %s\n", registry, registry)
+	return setConfig(ctx, configDir, configYml)
+}
+
+// setConfig clears the config and creates one from the configYml provided. Use this
+// if you are testing components of the config.yml, otherwise you can use setDefaultConfig.
+func setConfig(ctx context.Context, configDir, configYml string) (context.Context, error) {
+	client.ResetConfig(ctx)
+	config, err := os.Create(filepath.Join(configDir, "config.yml"))
+	if err != nil {
+		return ctx, err
+	}
+
+	_, err = config.WriteString(configYml)
+	if err != nil {
+		return ctx, err
+	}
+	config.Close()
+
+	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+	return ctx, nil
 }

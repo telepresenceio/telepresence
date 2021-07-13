@@ -19,8 +19,6 @@ type Env struct {
 	LoginClientID      string `env:"TELEPRESENCE_LOGIN_CLIENT_ID,default=telepresence-cli"`
 	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
 
-	Registry         string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
-	AgentImage       string `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 	ManagerNamespace string `env:"TELEPRESENCE_MANAGER_NAMESPACE,default=ambassador"`
 
 	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
@@ -42,10 +40,6 @@ func (env Env) Get(key string) string {
 	case "TELEPRESENCE_USER_INFO_URL":
 		return env.UserInfoURL
 
-	case "TELEPRESENCE_REGISTRY":
-		return env.Registry
-	case "TELEPRESENCE_AGENT_IMAGE":
-		return env.AgentImage
 	case "TELEPRESENCE_MANAGER_NAMESPACE":
 		return env.ManagerNamespace
 
