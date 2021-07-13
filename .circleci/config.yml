@@ -204,7 +204,7 @@ jobs:
         name: "Publish nightly macos"
         command: |
           newTag=$(go run build-aux/genversion.go nightly)
-          TELEPRESENCE_VERSION=$newTag push-executable
+          TELEPRESENCE_VERSION=$newTag make push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
 
 #  "release-finalize":
