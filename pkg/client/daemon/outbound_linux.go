@@ -73,7 +73,7 @@ func (o *outbound) shouldApplySearch(query string) bool {
 // use-case.
 func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
 	query = strings.ToLower(query)
-	query = strings.TrimSuffix(query, dotTel2SubDomain)
+	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
 	if !o.shouldDoClusterLookup(query) {
 		return nil

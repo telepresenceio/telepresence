@@ -131,7 +131,7 @@ func (o *outbound) routerServerWorker(c context.Context) (err error) {
 // in the search path declared in the Docker config. The "tel2-search" domain fills this purpose and a request for
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
-const dotTel2SubDomain = "." + tel2SubDomain + "."
+const tel2SubDomainDot = tel2SubDomain + "."
 const dotKubernetesZone = "." + kubernetesZone + "."
 
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
@@ -162,7 +162,7 @@ func (o *outbound) shouldDoClusterLookup(query string) bool {
 
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
 	query = strings.ToLower(query)
-	query = strings.TrimSuffix(query, dotTel2SubDomain)
+	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
 	if query == "localhost." {
 		// BUG(lukeshu): I have no idea why a lookup
