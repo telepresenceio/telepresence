@@ -8,6 +8,7 @@
 
 - Bugfix: Fixed and improved several error messages, to hopefully be
   more helpful.
+- Bugfix: Fixed a DNS problem on macOS causing slow DNS lookups when connecting to a local cluster.
 
 ### 2.3.4 (July 9, 2021)
 
