@@ -973,7 +973,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 5*time.Second, time.Second)
+	}, 10*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	assert.Eventually(func() bool {
