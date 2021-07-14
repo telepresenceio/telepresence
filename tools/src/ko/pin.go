@@ -2,4 +2,4 @@
 
 package ignore
 
-import "github.com/google/ko/cmd/ko"
+import "github.com/google/ko"
