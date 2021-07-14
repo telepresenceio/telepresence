@@ -74,6 +74,16 @@ Currently there is only one key and it accepts bools: `1`, `t`, `T`, `TRUE`, `tr
 |---|---|---|
 |`skipLogin`|Whether the cli should skipping login to Ambassador Cloud. If you set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster to perform selective intercepts |false|
 
+Telepresence attempts to auto-detect if the cluster is air-gapped,
+be sure to set the `skipLogin` value to `true`
+
+Reminder: To use selective intercepts, which normally require a login, you
+must have a license in your cluster and specify which agentImage should be installed,
+by also adding the following to your config.yml:
+  ```
+  images:
+    agentImage: <privateRegistry>/<agentImage>
+  ```
 
 ## Per-Cluster Configuration
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.
