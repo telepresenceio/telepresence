@@ -30,6 +30,17 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.3.5
+    date: 'TBD'
+    notes:
+      - type: feature
+        title: traffic-manager in multiple namespaces
+        body: >-
+          We now support installing multiple traffic managers in the same cluster.
+          This will allow operators to install deployments of telepresence that are
+          limited to certain namespaces.
+        image: ./telepresence-2.3.5-traffic-manager-namespaces.png
+        docs: reference/config
   - version: 2.3.4
     date: '2021-07-09'
     notes:
