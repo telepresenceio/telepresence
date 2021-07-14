@@ -19,7 +19,9 @@ nightly, Monday through Friday.
 
 The tags are formatted like so: `vX.Y.Z-nightly-$gitShortHash`.
 
-`vX.Y.Z` will be the most recent version of Telepresence released.
+`vX.Y.Z` is the most recent release of Telepresence with the patch version (Z) bumped one higher.
+For example, if our last release was 2.3.4, nightly builds would start with v2.3.5, until a new
+version of Telepresence is released.
 
 `$gitShortHash` will be the short hash of the git commit of the build.
 
