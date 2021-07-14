@@ -75,7 +75,7 @@ When using this option, it is important to include all namespaces containing ser
 
 An intercept with the flag`--local-only` can be used to control outbound connectivity to specific namespaces.
 
-When developing services that have not yet been deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service is intended to be deployed so that it can access other services in that namespace without using qualified names.
+When developing services that have not yet been deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service is intended to be deployed so that it can access other services in that namespace without using qualified names. Worth noting though, is that a local-only intercept will not cause outbound connections to originate from the intercepted namespace. Only a real intercept can do that. The reason for this is that in order to establish correct origin, the connection must be routed to a `traffic-agent`of an intercepted pod. For local-only intercepts, the outbound connections will originate from the `traffic-manager`.
 
   ```
   $ telepresence intercept <deployment name> --namespace <namespace> --local-only
