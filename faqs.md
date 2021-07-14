@@ -99,7 +99,11 @@ Running this command will also stop the local daemon running.
 
 ** How does Telepresence connect and tunnel into the Kubernetes cluster?**
 
- The connection between your laptop and cluster is established via the standard `kubectl` mechanisms and SSH tunnelling.
+The connection between your laptop and cluster is established by using
+the `kubectl port-forward` machinery (though without actually spawning
+a separate program) to establish a TCP connection to Telepresence
+Traffic Manager in the cluster, and running Telepresence's custom VPN
+protocol over that TCP connection.
 
 <a name="idps"></a>
 
