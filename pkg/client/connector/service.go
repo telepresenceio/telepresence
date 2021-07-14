@@ -28,9 +28,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -68,7 +68,7 @@ type service struct {
 
 	userNotifications broadcastqueue.BroadcastQueue
 
-	loginExecutor auth.LoginExecutor
+	loginExecutor userd_auth.LoginExecutor
 
 	// To access `cluster` or `trafficMgr`:
 	//  - writing: must hold connectMu, AND xxxFinalized must not be closed
@@ -216,7 +216,7 @@ func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, 
 func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Logout")
 	if err := s.loginExecutor.Logout(ctx); err != nil {
-		if errors.Is(err, auth.ErrNotLoggedIn) {
+		if errors.Is(err, userd_auth.ErrNotLoggedIn) {
 			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
 		}
 		return nil, err
@@ -518,7 +518,7 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
-	s.loginExecutor = auth.NewStandardLoginExecutor(env, &s.userNotifications, s.scout)
+	s.loginExecutor = userd_auth.NewStandardLoginExecutor(env, &s.userNotifications, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {
