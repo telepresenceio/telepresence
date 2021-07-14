@@ -133,7 +133,8 @@ func (tm *trafficManager) run(c context.Context) error {
 		fmt.Sprint(install.ManagerPortHTTP))
 
 	// First check. Establish connection
-	tos := &client.GetConfig(c).Timeouts
+	clientConfig := client.GetConfig(c)
+	tos := &clientConfig.Timeouts
 	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 
@@ -150,11 +151,17 @@ func (tm *trafficManager) run(c context.Context) error {
 		}
 	}()
 
-	conn, err = grpc.DialContext(tc, grpcAddr,
-		grpc.WithContextDialer(grpcDialer),
+	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
-		grpc.WithBlock())
+		grpc.WithBlock()}
+
+	if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
+		if mz, ok := mxRecvSize.AsInt64(); ok {
+			opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(int(mz))))
+		}
+	}
+	conn, err = grpc.DialContext(tc, grpcAddr, opts...)
 	if err != nil {
 		return client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))
 	}
