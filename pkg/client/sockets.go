@@ -69,15 +69,15 @@ func SocketURL(socket string) string {
 }
 
 // DialSocket dials the given unix socket and returns the resulting connection
-func DialSocket(ctx context.Context, socketName string) (*grpc.ClientConn, error) {
+func DialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, SocketURL(socketName),
+	conn, err := grpc.DialContext(ctx, SocketURL(socketName), append([]grpc.DialOption{
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.FailOnNonTempDialError(true),
-	)
+	}, opts...)...)
 	if err != nil {
 		if err == context.DeadlineExceeded {
 			// grpc.DialContext doesn't wrap context.DeadlineExceeded with any useful

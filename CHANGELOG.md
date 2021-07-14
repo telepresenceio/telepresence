@@ -10,6 +10,8 @@
   Traffic Managers in multiple namespaces. This will allow operators to
   install Traffic Managers with limited permissions that match the
   permissions restrictions that Telepresence users are subject to.
+- Feature: The maximum size of messages that the client can receive over gRPC can now be configured. The gRPC default of 4MB isn't enough
+  under some circumstances.
 - Change: `TELEPRESENCE_AGENT_IMAGE` and `TELEPRESENCE_REGISTRY` are now only configurable via config.yml.
 - Bugfix: Fixed and improved several error messages, to hopefully be
   more helpful.

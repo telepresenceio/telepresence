@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -26,6 +26,7 @@ type Config struct {
 	LogLevels LogLevels `json:"logLevels,omitempty"`
 	Images    Images    `json:"images,omitempty"`
 	Cloud     Cloud     `json:"cloud,omitempty"`
+	Grpc      Grpc      `json:"grpc,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
@@ -34,6 +35,7 @@ func (c *Config) merge(o *Config) {
 	c.LogLevels.merge(&o.LogLevels)
 	c.Images.merge(&o.Images)
 	c.Cloud.merge(&o.Cloud)
+	c.Grpc.merge(&o.Grpc)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -73,6 +75,11 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 			}
 		case kv == "cloud":
 			err := ms[i+1].Decode(&c.Cloud)
+			if err != nil {
+				return err
+			}
+		case kv == "grpc":
+			err := ms[i+1].Decode(&c.Grpc)
 			if err != nil {
 				return err
 			}
@@ -436,6 +443,49 @@ func (i *Cloud) merge(o *Cloud) {
 	}
 }
 
+type Grpc struct {
+	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
+	// Overrides the gRPC default of 4MB.
+	MaxReceiveSize *resource.Quantity `json:"maxReceiveSize,omitempty"`
+}
+
+func (g *Grpc) merge(o *Grpc) {
+	if o.MaxReceiveSize != nil {
+		g.MaxReceiveSize = o.MaxReceiveSize
+	}
+}
+
+// UnmarshalYAML parses the images YAML
+func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("grpc must be an object", node))
+	}
+
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		v := ms[i+1]
+		switch kv {
+		case "maxReceiveSize":
+			val, err := resource.ParseQuantity(v.Value)
+			if err != nil {
+				dlog.Warningf(parseContext, "unable to parse quantity %q: %v", v.Value, withLoc(err.Error(), ms[i]))
+			} else {
+				g.MaxReceiveSize = &val
+			}
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+		}
+	}
+	return nil
+}
+
 var defaultConfig = Config{
 	Timeouts: Timeouts{
 		PrivateAgentInstall:          120 * time.Second,
@@ -458,7 +508,9 @@ var defaultConfig = Config{
 	},
 	Cloud: Cloud{
 		SkipLogin: false,
-	}}
+	},
+	Grpc: Grpc{},
+}
 
 var config *Config
 

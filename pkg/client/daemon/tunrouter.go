@@ -186,12 +186,20 @@ func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo, kubeDNS chan<- net.IP) (err error) {
 	if t.managerClient == nil {
 		// First check. Establish connection
-		tos := &client.GetConfig(ctx).Timeouts
+		clientConfig := client.GetConfig(ctx)
+		tos := &clientConfig.Timeouts
 		tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		conn, err = client.DialSocket(tc, client.ConnectorSocketName)
+		var opts []grpc.DialOption
+		if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
+			if mz, ok := mxRecvSize.AsInt64(); ok {
+				opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(int(mz))))
+			}
+		}
+
+		conn, err = client.DialSocket(tc, client.ConnectorSocketName, opts...)
 		if err != nil {
 			return client.CheckTimeout(tc, err)
 		}
