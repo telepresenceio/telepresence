@@ -28,6 +28,8 @@ The complete set of subnets that the [VIF](../tun-device) will be configured wit
 #### Connection origin
 A request to connect to an IP-address that belongs to one of the subnets of the [VIF](../tun-device) will cause a connection request to be made in the cluster. As with host name lookups, the request will originate from the traffic-manager unless the client has ongoing intercepts. If it does, one of the intercepted pods will be chosen, and the request will instead originate from that pod. This is a best-effort approach. Telepresence only knows that the request originated from the workstation. It cannot know that it is intended to originate from a specific pod when multiple intercepts are active.
 
+A `--local-only` intercept will not have any effect on the connection origin because there is no pod from which the connection can originate. The intercept must be made on a workload that has been deployed in the cluster if there's a requirement for correct connection origin.
+
 There are multiple reasons for doing this. One is that it is important that the request originates from the correct namespace. Example:
 
 ```bash
