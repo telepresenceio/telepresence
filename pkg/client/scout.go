@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -154,6 +155,7 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 			BaseMetadata: map[string]interface{}{
 				"mode":     mode,
 				"trace_id": uuid.New().String(),
+				"goos":     runtime.GOOS,
 			},
 		},
 	}
