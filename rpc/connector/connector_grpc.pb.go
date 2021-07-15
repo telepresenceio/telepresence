@@ -47,7 +47,7 @@ type ConnectorClient interface {
 	// Returns a stream of messages to display to the user.  Does NOT
 	// require having called anything else first.
 	UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
-	Login(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*LoginResult, error)
+	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
@@ -160,7 +160,7 @@ func (x *connectorUserNotificationsClient) Recv() (*Notification, error) {
 	return m, nil
 }
 
-func (c *connectorClient) Login(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*LoginResult, error) {
+func (c *connectorClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error) {
 	out := new(LoginResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Login", in, out, opts...)
 	if err != nil {
@@ -245,7 +245,7 @@ type ConnectorServer interface {
 	// Returns a stream of messages to display to the user.  Does NOT
 	// require having called anything else first.
 	UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error
-	Login(context.Context, *empty.Empty) (*LoginResult, error)
+	Login(context.Context, *LoginRequest) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(context.Context, *empty.Empty) (*empty.Empty, error)
 	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
@@ -284,7 +284,7 @@ func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*Worklo
 func (UnimplementedConnectorServer) UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error {
 	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
 }
-func (UnimplementedConnectorServer) Login(context.Context, *empty.Empty) (*LoginResult, error) {
+func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
 }
 func (UnimplementedConnectorServer) Logout(context.Context, *empty.Empty) (*empty.Empty, error) {
@@ -463,7 +463,7 @@ func (x *connectorUserNotificationsServer) Send(m *Notification) error {
 }
 
 func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(LoginRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(int
 		FullMethod: "/telepresence.connector.Connector/Login",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Login(ctx, req.(*empty.Empty))
+		return srv.(ConnectorServer).Login(ctx, req.(*LoginRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

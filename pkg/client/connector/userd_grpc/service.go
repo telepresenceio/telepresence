@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync/atomic"
 
 	grpcCodes "google.golang.org/grpc/codes"
@@ -149,13 +150,27 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 	return nil
 }
 
-func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
+func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginResult, error) {
 	ctx = s.callCtx(ctx, "Login")
-	if _, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, false); err == nil {
-		return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
-	}
-	if err := s.sharedState.LoginExecutor.Login(ctx); err != nil {
-		return nil, err
+	if apikey := req.GetApiKey(); apikey != "" {
+		newLogin, err := s.sharedState.LoginExecutor.LoginAPIKey(ctx, apikey)
+		dlog.Infof(ctx, "LoginAPIKey => (%v, %v)", newLogin, err)
+		if err != nil {
+			if errors.Is(err, os.ErrPermission) {
+				err = grpcStatus.Error(grpcCodes.PermissionDenied, err.Error())
+			}
+			return nil, err
+		}
+		if !newLogin {
+			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
+		}
+	} else {
+		if _, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, false); err == nil {
+			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
+		}
+		if err := s.sharedState.LoginExecutor.Login(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}, nil
 }

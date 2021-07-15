@@ -19,7 +19,7 @@ func EnsureLoggedIn(ctx context.Context) (connector.LoginResult_Code, error) {
 	var resp *connector.LoginResult
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		resp, err = connectorClient.Login(ctx, &empty.Empty{})
+		resp, err = connectorClient.Login(ctx, &connector.LoginRequest{})
 		return err
 	})
 	return resp.GetCode(), err

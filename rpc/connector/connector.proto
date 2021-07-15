@@ -45,7 +45,7 @@ service Connector {
   // require having called anything else first.
   rpc UserNotifications(google.protobuf.Empty) returns (stream Notification);
 
-  rpc Login(google.protobuf.Empty) returns (LoginResult);
+  rpc Login(LoginRequest) returns (LoginResult);
 
   // Returns an error with code=NotFound if not currently logged in.
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -205,6 +205,10 @@ message InterceptResult {
 
 message Notification {
   string message = 1;
+}
+
+message LoginRequest {
+  string api_key = 1;
 }
 
 message LoginResult {

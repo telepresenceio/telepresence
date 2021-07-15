@@ -22,6 +22,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
@@ -70,6 +71,7 @@ type loginExecutor struct {
 type LoginExecutor interface {
 	Worker(ctx context.Context) error
 	Login(ctx context.Context) error
+	LoginAPIKey(ctx context.Context, key string) (bool, error)
 	Logout(ctx context.Context) error
 	GetAPIKey(ctx context.Context, description string) (string, error)
 	GetLicense(ctx context.Context, id string) (string, string, error)
@@ -345,11 +347,42 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	}
 }
 
+func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogin bool, err error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
+	// Fetch userinfo first, as to validate the apikey.
+	err = l.lockedRetrieveUserInfo(ctx, map[string]string{
+		"X-Ambassador-Api-Key": apikey,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	if apikey == l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] {
+		// Don't bother continuing if already logged in with this key.
+		return false, nil
+	}
+
+	if l.apikeys == nil {
+		l.apikeys = make(map[string]map[string]string)
+	}
+	l.apikeys[l.env.LoginDomain] = map[string]string{
+		a8rcloud.KeyDescRoot: apikey,
+	}
+	l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] = apikey
+	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 func (l *loginExecutor) Logout(ctx context.Context) error {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if l.tokenSource == nil {
+	if l.tokenSource == nil && l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] == "" {
 		return fmt.Errorf("Logout: %w", ErrNotLoggedIn)
 	}
 
@@ -383,18 +416,23 @@ func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
 
 // Must hold l.loginMu to call this.
 func (l *loginExecutor) lockedGetCreds() (map[string]string, error) {
-	if l.tokenSource == nil {
+	rootKey, rootKeyOK := l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot]
+	switch {
+	case rootKeyOK:
+		return map[string]string{
+			"X-Ambassador-Api-Key": rootKey,
+		}, nil
+	case l.tokenSource != nil:
+		tokenInfo, err := l.tokenSource.Token()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{
+			"Authorization": "Bearer " + tokenInfo.AccessToken,
+		}, nil
+	default:
 		return nil, ErrNotLoggedIn
 	}
-
-	tokenInfo, err := l.tokenSource.Token()
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]string{
-		"Authorization": "Bearer " + tokenInfo.AccessToken,
-	}, nil
 }
 
 func (l *loginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error) {
@@ -456,6 +494,9 @@ func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[st
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("status %v from user info endpoint: %w", resp.StatusCode, os.ErrPermission)
+		}
 		return fmt.Errorf("unexpected status %v from user info endpoint", resp.StatusCode)
 	}
 	content, err := ioutil.ReadAll(resp.Body)
