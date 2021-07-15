@@ -1,6 +1,11 @@
 # Changelog
 
-### 2.3.5 (TBD)
+### 2.3.6 (TBD)
+
+- Bugfix: Fixed an issue that could cause the user daemon to crash
+  during shutdown.
+
+### 2.3.5 (July 15, 2021)
 
 - Feature: Telepresence no longer depends on having an external
   `kubectl` binary, which might not be present for OpenShift users
@@ -16,9 +21,6 @@
 - Bugfix: Fixed and improved several error messages, to hopefully be
   more helpful.
 - Bugfix: Fixed a DNS problem on macOS causing slow DNS lookups when connecting to a local cluster.
-
-- Bugfix: Fixed an issue that could cause the user daemon to crash
-  during shutdown.
 
 ### 2.3.4 (July 9, 2021)
 

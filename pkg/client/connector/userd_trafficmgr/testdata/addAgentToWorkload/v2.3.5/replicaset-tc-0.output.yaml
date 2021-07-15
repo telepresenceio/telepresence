@@ -1,0 +1,78 @@
+replicaset:
+  apiVersion: apps/v1
+  kind: ReplicaSet
+  metadata:
+    annotations:
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"app","referenced_service_port":"80","referenced_service_port_name":"http","add_traffic_agent":{"container_port_name":"tx-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+    creationTimestamp: null
+    name: app
+  spec:
+    selector: null
+    template:
+      metadata:
+        creationTimestamp: null
+      spec:
+        containers:
+        - name: app
+          resources: {}
+        - args:
+          - agent
+          env:
+          - name: TELEPRESENCE_CONTAINER
+            value: app
+          - name: LOG_LEVEL
+            value: debug
+          - name: AGENT_NAME
+            value: app
+          - name: AGENT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: AGENT_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: APP_PORT
+            value: "8080"
+          - name: MANAGER_HOST
+            value: traffic-manager.ambassador
+          image: localhost:5000/tel2:{{.Version}}
+          name: traffic-agent
+          ports:
+          - containerPort: 9900
+            name: tx-8080
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
+          resources: {}
+          volumeMounts:
+          - mountPath: /tel_pod_info
+            name: traffic-annotations
+        volumes:
+        - downwardAPI:
+            items:
+            - fieldRef:
+                fieldPath: metadata.annotations
+              path: annotations
+          name: traffic-annotations
+  status:
+    replicas: 0
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","make_port_symbolic":{"PortName":"http","TargetPort":8080,"SymbolicName":"tx-8080"}}'
+    creationTimestamp: null
+    name: app
+  spec:
+    ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: tx-8080
+  status:
+    loadBalancer: {}

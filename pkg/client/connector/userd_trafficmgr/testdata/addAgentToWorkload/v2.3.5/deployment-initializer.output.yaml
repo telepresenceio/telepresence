@@ -1,0 +1,110 @@
+deployment:
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    annotations:
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"sample-app","referenced_service_port":"80","referenced_service_port_name":"someverylongnam","hide_container_port":{"container_name":"sample-app","port_name":"someverylongnam","hidden_name":"tm-someverylong"},"add_traffic_agent":{"container_port_name":"someverylongnam","container_port_proto":"","app_port":3000,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+    creationTimestamp: null
+    name: sample-app
+    namespace: default
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        service: sample-app
+    strategy: {}
+    template:
+      metadata:
+        annotations:
+          consul.hashicorp.com/connect-inject: "false"
+          sidecar.istio.io/inject: "false"
+        creationTimestamp: null
+        labels:
+          service: sample-app
+      spec:
+        containers:
+        - env:
+          - name: LISTEN_PORT
+            value: "3000"
+          image: gcr.io/datawire/k8s-initializer-sample-app:latest
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: tm-someverylong
+            periodSeconds: 10
+          name: sample-app
+          ports:
+          - containerPort: 3000
+            name: tm-someverylong
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: tm-someverylong
+            periodSeconds: 10
+          resources: {}
+        - args:
+          - agent
+          env:
+          - name: TEL_APP_LISTEN_PORT
+            value: "3000"
+          - name: TELEPRESENCE_CONTAINER
+            value: sample-app
+          - name: LOG_LEVEL
+            value: debug
+          - name: AGENT_NAME
+            value: sample-app
+          - name: AGENT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: AGENT_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: APP_PORT
+            value: "3000"
+          - name: MANAGER_HOST
+            value: traffic-manager.ambassador
+          image: localhost:5000/tel2:{{.Version}}
+          name: traffic-agent
+          ports:
+          - containerPort: 9900
+            name: someverylongnam
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
+          resources: {}
+          volumeMounts:
+          - mountPath: /tel_pod_info
+            name: traffic-annotations
+        restartPolicy: Always
+        securityContext:
+          runAsUser: 8888
+        volumes:
+        - downwardAPI:
+            items:
+            - fieldRef:
+                fieldPath: metadata.annotations
+              path: annotations
+          name: traffic-annotations
+  status: {}
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      service: sample-app
+    name: sample-app
+    namespace: default
+  spec:
+    ports:
+    - name: someverylongnam
+      port: 80
+      targetPort: someverylongnam
+    selector:
+      service: sample-app
+  status:
+    loadBalancer: {}
