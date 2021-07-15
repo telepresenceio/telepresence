@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -65,8 +64,15 @@ type trafficManager struct {
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
 
+	// currentAgents is the latest snapshot returned by the agent watcher
+	currentAgents     []*manager.AgentInfo
+	currentAgentsLock sync.Mutex
+
 	// activeInterceptsWaiters contains chan interceptResult keyed by intercept name
 	activeInterceptsWaiters sync.Map
+
+	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
+	agentWaiters sync.Map
 }
 
 // interceptResult is what gets written to the activeInterceptsWaiters channels
@@ -192,6 +198,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
+	g.Go("agent-watcher", tm.agentInfoWatcher)
 	return g.Wait()
 }
 
@@ -354,18 +361,7 @@ func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 			iMap[i.Spec.Agent] = i
 		}
 	}
-	var aMap map[string]*manager.AgentInfo
-	if as, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId); as != nil {
-		aMap = make(map[string]*manager.AgentInfo, len(as))
-		for _, a := range as {
-			if a.Namespace == namespace {
-				aMap[a.Name] = a
-			}
-		}
-	} else {
-		aMap = map[string]*manager.AgentInfo{}
-	}
-
+	aMap := tm.getCurrentAgentsInNamespace(namespace)
 	filter := rq.Filter
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 
@@ -436,8 +432,7 @@ func (tm *trafficManager) SetStatus(ctx context.Context, r *rpc.ConnectInfo) {
 			r.ErrorText = err.Error()
 		}
 	} else {
-		agents, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId)
-		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
+		r.Agents = &manager.AgentInfoSnapshot{Agents: tm.getCurrentAgents()}
 		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()}
 		r.SessionInfo = tm.session()
 		r.BridgeOk = true
@@ -465,7 +460,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
 	<-tm.startup
-	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
+	agents := tm.getCurrentAgents()
 
 	// Since workloads can have more than one replica, we get a slice of agents
 	// where the agent to workload mapping is 1-to-1.  This is important
