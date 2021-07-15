@@ -29,7 +29,7 @@ Telepresence currently works natively on macOS and Linux. We are working on a na
 - gRPC
 - GraphQL
 
-If you need another protocol supported, please [drop us a line](https://www.getambassador.io/feedback/) to request it.
+If you need another protocol supported, please [drop us a line](/feedback/) to request it.
 
 ** When using Telepresence to intercept a pod, are the Kubernetes cluster environment variables proxied to my local machine?**
 
@@ -113,7 +113,7 @@ protocol over that TCP connection.
 * GitLab
 * Google
 
-More authentication mechanisms and identity provider support will be added soon. Please [let us know](https://www.getambassador.io/feedback/) which providers are the most important to you and your team in order for us to prioritize those.
+More authentication mechanisms and identity provider support will be added soon. Please [let us know](/feedback/) which providers are the most important to you and your team in order for us to prioritize those.
 
 ** Is Telepresence open source?**
 
@@ -121,4 +121,4 @@ More authentication mechanisms and identity provider support will be added soon.
 
 ** How do I share my feedback on Telepresence?**
 
- Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our [feedback page](https://www.getambassador.io/feedback/), or you can [join our Slack channel](https://a8r.io/Slack) to share your thoughts.
+ Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our [feedback page](/feedback/), or you can [join our Slack channel](https://a8r.io/Slack) to share your thoughts.
