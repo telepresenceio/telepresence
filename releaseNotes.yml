@@ -31,7 +31,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 
 items:
   - version: 2.3.5
-    date: 'TBD'
+    date: '2021-07-15'
     notes:
       - type: feature
         title: traffic-manager in multiple namespaces
