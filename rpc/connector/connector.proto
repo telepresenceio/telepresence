@@ -230,6 +230,10 @@ message KeyRequest {
   string description = 2;
 }
 
+message KeyData {
+  string api_key = 1;
+}
+
 message LicenseRequest {
   string id = 1;
 }
@@ -237,8 +241,4 @@ message LicenseRequest {
 message LicenseData {
   string license = 1;
   string host_domain = 2;
-}
-
-message KeyData {
-  string api_key = 1;
 }

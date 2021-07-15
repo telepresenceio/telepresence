@@ -1199,6 +1199,53 @@ func (x *KeyRequest) GetDescription() string {
 	return ""
 }
 
+type KeyData struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ApiKey string `protobuf:"bytes,1,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+}
+
+func (x *KeyData) Reset() {
+	*x = KeyData{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_connector_connector_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *KeyData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyData) ProtoMessage() {}
+
+func (x *KeyData) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_connector_connector_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyData.ProtoReflect.Descriptor instead.
+func (*KeyData) Descriptor() ([]byte, []int) {
+	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *KeyData) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
 type LicenseRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1210,7 +1257,7 @@ type LicenseRequest struct {
 func (x *LicenseRequest) Reset() {
 	*x = LicenseRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_connector_connector_proto_msgTypes[14]
+		mi := &file_rpc_connector_connector_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1223,7 +1270,7 @@ func (x *LicenseRequest) String() string {
 func (*LicenseRequest) ProtoMessage() {}
 
 func (x *LicenseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_connector_connector_proto_msgTypes[14]
+	mi := &file_rpc_connector_connector_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1236,7 +1283,7 @@ func (x *LicenseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LicenseRequest.ProtoReflect.Descriptor instead.
 func (*LicenseRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{14}
+	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LicenseRequest) GetId() string {
@@ -1258,7 +1305,7 @@ type LicenseData struct {
 func (x *LicenseData) Reset() {
 	*x = LicenseData{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_connector_connector_proto_msgTypes[15]
+		mi := &file_rpc_connector_connector_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1271,7 +1318,7 @@ func (x *LicenseData) String() string {
 func (*LicenseData) ProtoMessage() {}
 
 func (x *LicenseData) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_connector_connector_proto_msgTypes[15]
+	mi := &file_rpc_connector_connector_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1284,7 +1331,7 @@ func (x *LicenseData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LicenseData.ProtoReflect.Descriptor instead.
 func (*LicenseData) Descriptor() ([]byte, []int) {
-	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{15}
+	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *LicenseData) GetLicense() string {
@@ -1297,53 +1344,6 @@ func (x *LicenseData) GetLicense() string {
 func (x *LicenseData) GetHostDomain() string {
 	if x != nil {
 		return x.HostDomain
-	}
-	return ""
-}
-
-type KeyData struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	ApiKey string `protobuf:"bytes,1,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
-}
-
-func (x *KeyData) Reset() {
-	*x = KeyData{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_connector_connector_proto_msgTypes[16]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *KeyData) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*KeyData) ProtoMessage() {}
-
-func (x *KeyData) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_connector_connector_proto_msgTypes[16]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use KeyData.ProtoReflect.Descriptor instead.
-func (*KeyData) Descriptor() ([]byte, []int) {
-	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *KeyData) GetApiKey() string {
-	if x != nil {
-		return x.ApiKey
 	}
 	return ""
 }
@@ -1531,16 +1531,16 @@ var file_rpc_connector_connector_proto_rawDesc = []byte{
 	0x75, 0x74, 0x6f, 0x5f, 0x6c, 0x6f, 0x67, 0x69, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52,
 	0x09, 0x61, 0x75, 0x74, 0x6f, 0x4c, 0x6f, 0x67, 0x69, 0x6e, 0x12, 0x20, 0x0a, 0x0b, 0x64, 0x65,
 	0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x20, 0x0a, 0x0e,
-	0x4c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e,
-	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22, 0x48,
-	0x0a, 0x0b, 0x4c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x44, 0x61, 0x74, 0x61, 0x12, 0x18, 0x0a,
-	0x07, 0x6c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
-	0x6c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x68, 0x6f, 0x73, 0x74, 0x5f,
-	0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x68, 0x6f,
-	0x73, 0x74, 0x44, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x22, 0x22, 0x0a, 0x07, 0x4b, 0x65, 0x79, 0x44,
-	0x61, 0x74, 0x61, 0x12, 0x17, 0x0a, 0x07, 0x61, 0x70, 0x69, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x61, 0x70, 0x69, 0x4b, 0x65, 0x79, 0x2a, 0xaf, 0x02, 0x0a,
+	0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x22, 0x0a, 0x07,
+	0x4b, 0x65, 0x79, 0x44, 0x61, 0x74, 0x61, 0x12, 0x17, 0x0a, 0x07, 0x61, 0x70, 0x69, 0x5f, 0x6b,
+	0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x61, 0x70, 0x69, 0x4b, 0x65, 0x79,
+	0x22, 0x20, 0x0a, 0x0e, 0x4c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02,
+	0x69, 0x64, 0x22, 0x48, 0x0a, 0x0b, 0x4c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x44, 0x61, 0x74,
+	0x61, 0x12, 0x18, 0x0a, 0x07, 0x6c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x07, 0x6c, 0x69, 0x63, 0x65, 0x6e, 0x73, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x68,
+	0x6f, 0x73, 0x74, 0x5f, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0a, 0x68, 0x6f, 0x73, 0x74, 0x44, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x2a, 0xaf, 0x02, 0x0a,
 	0x0e, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x63, 0x65, 0x70, 0x74, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x12,
 	0x0f, 0x0a, 0x0b, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00,
 	0x12, 0x11, 0x0a, 0x0d, 0x4e, 0x4f, 0x5f, 0x43, 0x4f, 0x4e, 0x4e, 0x45, 0x43, 0x54, 0x49, 0x4f,
@@ -1676,9 +1676,9 @@ var file_rpc_connector_connector_proto_goTypes = []interface{}{
 	(*TokenReq)(nil),                        // 16: telepresence.connector.TokenReq
 	(*TokenData)(nil),                       // 17: telepresence.connector.TokenData
 	(*KeyRequest)(nil),                      // 18: telepresence.connector.KeyRequest
-	(*LicenseRequest)(nil),                  // 19: telepresence.connector.LicenseRequest
-	(*LicenseData)(nil),                     // 20: telepresence.connector.LicenseData
-	(*KeyData)(nil),                         // 21: telepresence.connector.KeyData
+	(*KeyData)(nil),                         // 19: telepresence.connector.KeyData
+	(*LicenseRequest)(nil),                  // 20: telepresence.connector.LicenseRequest
+	(*LicenseData)(nil),                     // 21: telepresence.connector.LicenseData
 	nil,                                     // 22: telepresence.connector.ConnectRequest.KubeFlagsEntry
 	nil,                                     // 23: telepresence.connector.InterceptResult.EnvironmentEntry
 	(*manager.AgentInfoSnapshot)(nil),       // 24: telepresence.manager.AgentInfoSnapshot
@@ -1721,7 +1721,7 @@ var file_rpc_connector_connector_proto_depIdxs = []int32{
 	31, // 25: telepresence.connector.Connector.Logout:input_type -> google.protobuf.Empty
 	16, // 26: telepresence.connector.Connector.GetCloudAccessToken:input_type -> telepresence.connector.TokenReq
 	18, // 27: telepresence.connector.Connector.GetCloudAPIKey:input_type -> telepresence.connector.KeyRequest
-	19, // 28: telepresence.connector.Connector.GetCloudLicense:input_type -> telepresence.connector.LicenseRequest
+	20, // 28: telepresence.connector.Connector.GetCloudLicense:input_type -> telepresence.connector.LicenseRequest
 	31, // 29: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
 	33, // 30: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
 	6,  // 31: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
@@ -1734,8 +1734,8 @@ var file_rpc_connector_connector_proto_depIdxs = []int32{
 	15, // 38: telepresence.connector.Connector.Login:output_type -> telepresence.connector.LoginResult
 	31, // 39: telepresence.connector.Connector.Logout:output_type -> google.protobuf.Empty
 	17, // 40: telepresence.connector.Connector.GetCloudAccessToken:output_type -> telepresence.connector.TokenData
-	21, // 41: telepresence.connector.Connector.GetCloudAPIKey:output_type -> telepresence.connector.KeyData
-	20, // 42: telepresence.connector.Connector.GetCloudLicense:output_type -> telepresence.connector.LicenseData
+	19, // 41: telepresence.connector.Connector.GetCloudAPIKey:output_type -> telepresence.connector.KeyData
+	21, // 42: telepresence.connector.Connector.GetCloudLicense:output_type -> telepresence.connector.LicenseData
 	31, // 43: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
 	30, // [30:44] is the sub-list for method output_type
 	16, // [16:30] is the sub-list for method input_type
@@ -1919,7 +1919,7 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 		file_rpc_connector_connector_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*LicenseRequest); i {
+			switch v := v.(*KeyData); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1931,7 +1931,7 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 		file_rpc_connector_connector_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*LicenseData); i {
+			switch v := v.(*LicenseRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1943,7 +1943,7 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 		file_rpc_connector_connector_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*KeyData); i {
+			switch v := v.(*LicenseData); i {
 			case 0:
 				return &v.state
 			case 1:

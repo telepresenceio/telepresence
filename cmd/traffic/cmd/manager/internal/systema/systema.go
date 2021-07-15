@@ -21,7 +21,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/systema/internal/loopback"
 )
 
 // ManagerServer is the interface that you must implement for when System A talks to the Manager.
@@ -91,7 +90,7 @@ func ConnectToSystemA(ctx context.Context,
 	}
 	systemaCRUD := systema.NewSystemACRUDClient(conn)
 
-	listener, addConn := loopback.NewLoopbackListener()
+	listener, addConn := dnet.NewLoopbackListener()
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 
