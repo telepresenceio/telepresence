@@ -96,7 +96,6 @@ func TestE2E(t *testing.T) {
 
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
 		kubeconfig := dtest.Kubeconfig(ctx)
-		registry := dtest.DockerRegistry(ctx)
 
 		testVersion := fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
 		namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
@@ -105,7 +104,7 @@ func TestE2E(t *testing.T) {
 		version.Version = testVersion
 
 		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-		os.Setenv("TELEPRESENCE_REGISTRY", registry)
+		os.Setenv("DTEST_REGISTRY", dtest.DockerRegistry(ctx)) // Prevent extra calls to dtest.RegistryUp() which may panic
 
 		saveManagerNamespace, ok := os.LookupEnv("TELEPRESENCE_MANAGER_NAMESPACE")
 		defer func() {
