@@ -60,6 +60,12 @@ items:
         image: ./telepresence-2.3.5-agent-config.png
         docs: reference/config/#images
       - type: feature
+        title: Max gRPC receive size now configurable
+        body: >-
+          The default max size of messages received through gRPC (4 MB) is sometimes insufficient. It can now be configured.
+        image: ./telepresence-2.3.5-grpc-max-receive-size.png
+        docs: reference/config/#grpc
+      - type: feature
         title: CLI can be used in air-gapped environments
         body: >-
           While Telepresence will auto-detect if your cluster is in an air-gapped environment,

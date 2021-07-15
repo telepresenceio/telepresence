@@ -11,6 +11,7 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 ### Values
 
 The config file currently supports values for the `timeouts`, `logLevels`, `images` keys.
+The config file currently supports values for the `timeouts`, `logLevels`, `images`, and `grpc` keys.
 
 Here is an example configuration:
 
@@ -23,6 +24,8 @@ logLevels:
 images:
   registry: privateRepo
   agentImage: ambassador-telepresence-agent:1.8.0
+grpc:
+  maxReceiveSize: 10Mi
 ```
 
 #### Timeouts
@@ -84,6 +87,14 @@ by also adding the following to your config.yml:
   images:
     agentImage: <privateRegistry>/<agentImage>
   ```
+
+#### Grpc
+The `maxReceiveSize` determines how large a message that the workstation receives via gRPC can be. The default is 4Mi (determined by gRPC). All traffic to and from the cluster is tunneled via gRPC.
+
+The size is measured in bytes. You can express it as a plain integer or as a fixed-point number using E, G, M, or K. You can also use the power-of-two equivalents: Gi, Mi, Ki. For example, the following represent roughly the same value:
+```
+128974848, 129e6, 129M, 123Mi
+```
 
 ## Per-Cluster Configuration
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.
