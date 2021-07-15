@@ -26,7 +26,7 @@ import (
 var ErrNoDaemon = errors.New("telepresence root daemon is not running")
 
 func launchDaemon(ctx context.Context, dnsIP string) error {
-	fmt.Println("Launching Telepresence Daemon", client.DisplayVersion())
+	fmt.Println("Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
@@ -174,7 +174,7 @@ func DidLaunchDaemon(ctx context.Context) bool {
 
 func QuitDaemon(ctx context.Context) error {
 	err := WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-		fmt.Print("Telepresence Daemon quitting...")
+		fmt.Print("Telepresence Root Daemon quitting...")
 		_, err := daemonClient.Quit(ctx, &empty.Empty{})
 		return err
 	})
@@ -183,10 +183,11 @@ func QuitDaemon(ctx context.Context) error {
 	}
 	if err != nil {
 		if errors.Is(err, ErrNoDaemon) {
+			fmt.Println("Telepresence Root Daemon is already stopped")
 			return nil
 		}
 		return err
 	}
-	fmt.Println("done")
+	fmt.Println(" done")
 	return nil
 }

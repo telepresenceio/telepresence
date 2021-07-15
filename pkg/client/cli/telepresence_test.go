@@ -187,8 +187,9 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			os.Setenv("KUBECONFIG", "/dev/null")
 			stdout, stderr := telepresence(ts.T(), "connect")
 			ts.Contains(stderr, "kubeconfig has no context definition")
-			ts.Contains(stdout, "Launching Telepresence Daemon")
-			ts.Contains(stdout, "Daemon quitting")
+			ts.Contains(stdout, "Launching Telepresence Root Daemon")
+			ts.Contains(stdout, "Launching Telepresence User Daemon")
+			ts.Contains(stdout, "Telepresence Root Daemon quitting... done")
 		})
 	})
 
@@ -196,8 +197,9 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ts.Run("Reports connect error and exits", func() {
 			stdout, stderr := telepresence(ts.T(), "connect", "--context", "not-likely-to-exist")
 			ts.Contains(stderr, `"not-likely-to-exist" does not exist`)
-			ts.Contains(stdout, "Launching Telepresence Daemon")
-			ts.Contains(stdout, "Daemon quitting")
+			ts.Contains(stdout, "Launching Telepresence Root Daemon")
+			ts.Contains(stdout, "Launching Telepresence User Daemon")
+			ts.Contains(stdout, "Telepresence Root Daemon quitting... done")
 		})
 	})
 
@@ -206,11 +208,12 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			stdout, stderr := telepresence(ts.T(), "connect", "--", client.GetExe(), "status")
 			require := ts.Require()
 			require.Empty(stderr)
-			require.Contains(stdout, "Launching Telepresence Daemon")
+			require.Contains(stdout, "Launching Telepresence Root Daemon")
+			require.Contains(stdout, "Launching Telepresence User Daemon")
 			require.Contains(stdout, "Connected to context")
 			require.Contains(stdout, "Kubernetes context:")
 			require.Regexp(`Telepresence proxy:\s+ON`, stdout)
-			require.Contains(stdout, "Daemon quitting")
+			require.Contains(stdout, "Telepresence Root Daemon quitting... done")
 			ts.NoError(ts.capturePodLogs(dlog.NewTestContext(ts.T(), false), "traffic-manager", ts.managerTestNamespace))
 		})
 	})
@@ -303,14 +306,14 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		uninstallTrafficManager := func() {
 			stdout, stderr := telepresence(t, "uninstall", "--everything")
 			require.Empty(stderr)
-			require.Contains(stdout, "Daemon quitting")
+			require.Contains(stdout, "Root Daemon quitting... done")
 		}
 		// Remove the traffic-manager since we are altering config that applies to
 		// creating the traffic-manager
 		uninstallTrafficManager()
 		stdout, stderr := telepresence(t, "uninstall", "--everything")
 		require.Empty(stderr)
-		require.Contains(stdout, "Daemon quitting")
+		require.Contains(stdout, "Root Daemon quitting... done")
 
 		configDir := t.TempDir()
 
@@ -367,7 +370,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
-		require.Contains(stdout, "Daemon quitting")
+		require.Contains(stdout, "Root Daemon quitting... done")
 		require.Eventually(
 			func() bool {
 				stdout, _ := names()
