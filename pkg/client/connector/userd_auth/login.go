@@ -258,6 +258,14 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 // succeeds, the this function will then try invoking the authorization server's userinfo endpoint
 // and persisting it using l.SaveUserInfoFunc (which would usually write to user cache).
 func (l *loginExecutor) Login(ctx context.Context) (err error) {
+	// We'll be making use of l.auth2config
+	l.oauth2ConfigMu.RLock()
+	defer l.oauth2ConfigMu.RUnlock()
+
+	// Only one login action at a time
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
 	// Whatever the result is, report it to the terminal and report it to Metriton.
 	var token *oauth2.Token
 	defer func() {
@@ -277,20 +285,12 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			}
 		default:
 			fmt.Fprintln(l.stdout, "Login successful.")
-			_ = l.retrieveUserInfo(ctx, token)
+			_ = l.lockedRetrieveUserInfo(ctx, token)
 			l.scout <- scout.ScoutReport{
 				Action: "login_success",
 			}
 		}
 	}()
-
-	// We'll be making use of l.auth2config
-	l.oauth2ConfigMu.RLock()
-	defer l.oauth2ConfigMu.RUnlock()
-
-	// Only one login action at a time
-	l.loginMu.Lock()
-	defer l.loginMu.Unlock()
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
@@ -407,7 +407,8 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 	}
 }
 
-func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
+// Must hold l.loginMu to call this.
+func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
 	var userInfo authdata.UserInfo
 	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
 	if err != nil {
