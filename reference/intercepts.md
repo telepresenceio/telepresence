@@ -111,7 +111,7 @@ If you want to change which port has been intercepted, you can create a new inte
 
 ## Creating an intercept When multiple services match your workload
 
-Oftentimes, there's a 1-to-1 relationship between a service and a workload, so telepresence is able to auto-detect which service it should intercept based on the workload you are trying to intercept.  But if you use something like [Argo](https://www.getambassador.io/docs/argo/latest/), it uses two services (that use the same labels) to manage traffic between a canary and a stable service.
+Oftentimes, there's a 1-to-1 relationship between a service and a workload, so telepresence is able to auto-detect which service it should intercept based on the workload you are trying to intercept.  But if you use something like [Argo](/docs/argo/latest/), it uses two services (that use the same labels) to manage traffic between a canary and a stable service.
 
 Fortunately, if you know which service you want to use when intercepting a workload, you can use the --service flag.  So in the aforementioned demo, if you wanted to use the `echo-stable` service when intercepting your workload, your command would look like this:
 ```
