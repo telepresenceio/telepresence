@@ -33,6 +33,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
+	_ "github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
