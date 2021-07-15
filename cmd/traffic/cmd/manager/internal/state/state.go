@@ -688,6 +688,9 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 		if !ok {
 			return nil, nil, status.Errorf(codes.NotFound, "client session %q not found", clientSessionID)
 		}
+		if cs.ClientTunnelServer == nil {
+			return nil, nil, status.Errorf(codes.NotFound, "client session %q has no tunnel server", clientSessionID)
+		}
 		return as, cs, nil
 	}()
 	if err != nil {
