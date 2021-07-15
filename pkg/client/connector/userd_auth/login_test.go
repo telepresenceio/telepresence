@@ -300,7 +300,7 @@ func TestLoginFlow(t *testing.T) {
 		assert.Len(t, f.MockSaveTokenWrapper.CallArguments, 1, "one call to save the token")
 		assert.Len(t, f.MockSaveUserInfoWrapper.CallArguments, 1, "one call to save the user info")
 	})
-	t.Run("will return no error if user info retrieval fails", func(t *testing.T) {
+	t.Run("will return error if user info retrieval fails", func(t *testing.T) {
 		// given
 		t.Parallel()
 		f := setup(t)
@@ -311,14 +311,14 @@ func TestLoginFlow(t *testing.T) {
 		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
 
 		// then
-		assert.NoError(t, err, "no error running login flow")
+		assert.EqualError(t, err, "unexpected status 404 from user info endpoint")
 		defer callbackResponse.Body.Close()
 		assert.Len(t, f.MockOpenURLWrapper.CallArguments, 1, "one call to open url")
 		assert.Len(t, f.MockOauth2Server.TokenRequestFormValues, 1, "one call to the token endpoint")
 		assert.Len(t, f.MockSaveTokenWrapper.CallArguments, 1, "one call to save the token")
 		assert.Len(t, f.MockSaveUserInfoWrapper.CallArguments, 0, "no call to save the user info")
 	})
-	t.Run("will return no error if user info persistence fails", func(t *testing.T) {
+	t.Run("will return error if user info persistence fails", func(t *testing.T) {
 		// given
 		t.Parallel()
 		f := setup(t)
@@ -329,7 +329,7 @@ func TestLoginFlow(t *testing.T) {
 		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
 
 		// then
-		assert.NoError(t, err, "no error running login flow")
+		assert.EqualError(t, err, "could not save user info")
 		defer callbackResponse.Body.Close()
 		assert.Len(t, f.MockOpenURLWrapper.CallArguments, 1, "one call to open url")
 		assert.Len(t, f.MockOauth2Server.TokenRequestFormValues, 1, "one call to the token endpoint")

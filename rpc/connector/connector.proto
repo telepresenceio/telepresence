@@ -50,7 +50,7 @@ service Connector {
   // Returns an error with code=NotFound if not currently logged in.
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  rpc GetCloudAccessToken(TokenReq) returns (TokenData);
+  rpc GetCloudUserInfo(UserInfoRequest) returns (UserInfo);
 
   rpc GetCloudAPIKey(KeyRequest) returns (KeyData);
 
@@ -217,12 +217,26 @@ message LoginResult {
   Code code = 1;
 }
 
-message TokenReq {
+message UserInfoRequest {
   bool auto_login = 1;
+  bool refresh = 2;
 }
 
-message TokenData {
-  string access_token = 1;
+message UserInfo {
+  // These field names don't quite follow the usual convenctions
+  // because they need to match the JSON that Ambassador Cloud gives
+  // us, because we use the same struct for both.
+  //
+  // protolint:disable FIELD_NAMES_LOWER_SNAKE_CASE
+
+  string id = 1;
+  string name = 2;
+  string avatarUrl = 3;
+  string accountId = 4;
+  string accountName = 5;
+  string accountAvatarUrl = 6;
+
+  // protolint:disable FIELD_NAMES_LOWER_SNAKE_CASE
 }
 
 message KeyRequest {

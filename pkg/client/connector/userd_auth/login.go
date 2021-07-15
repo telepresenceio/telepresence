@@ -71,10 +71,9 @@ type LoginExecutor interface {
 	Worker(ctx context.Context) error
 	Login(ctx context.Context) error
 	Logout(ctx context.Context) error
-	GetToken(ctx context.Context) (string, error)
 	GetAPIKey(ctx context.Context, description string) (string, error)
 	GetLicense(ctx context.Context, id string) (string, string, error)
-	GetUserInfo(ctx context.Context) (*authdata.UserInfo, error)
+	GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error)
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -233,7 +232,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			select {
 			case <-l.refreshTimer.C:
 				dlog.Infoln(ctx, "refreshing access token...")
-				if token, err := l.GetToken(ctx); err != nil {
+				if token, err := l.getToken(ctx); err != nil {
 					dlog.Infof(ctx, "could not refresh assess token: %v", err)
 				} else if token != "" {
 					dlog.Infof(ctx, "got new access token")
@@ -285,7 +284,6 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			}
 		default:
 			fmt.Fprintln(l.stdout, "Login successful.")
-			_ = l.lockedRetrieveUserInfo(ctx, token)
 			l.scout <- scout.ScoutReport{
 				Action: "login_success",
 			}
@@ -334,6 +332,10 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return err
 		}
 
+		if err := l.lockedRetrieveUserInfo(ctx, token); err != nil {
+			return err
+		}
+
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -363,12 +365,12 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	return nil
 }
 
-func (l *loginExecutor) GetToken(ctx context.Context) (string, error) {
+func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
 	if l.tokenSource == nil {
-		return "", fmt.Errorf("GetToken: %w", ErrNotLoggedIn)
+		return "", fmt.Errorf("getToken: %w", ErrNotLoggedIn)
 	} else if tokenInfo, err := l.tokenSource.Token(); err != nil {
 		return "", err
 	} else {
@@ -376,10 +378,33 @@ func (l *loginExecutor) GetToken(ctx context.Context) (string, error) {
 	}
 }
 
-func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, error) {
+// Must hold l.loginMu to call this.
+func (l *loginExecutor) lockedGetCreds() (*oauth2.Token, error) {
+	if l.tokenSource == nil {
+		return nil, ErrNotLoggedIn
+	}
+
+	tokenInfo, err := l.tokenSource.Token()
+	if err != nil {
+		return nil, err
+	}
+
+	return tokenInfo, nil
+}
+
+func (l *loginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
+	if refresh {
+		creds, err := l.lockedGetCreds()
+		if err != nil {
+			return nil, fmt.Errorf("GetUserInfo: %w", err)
+		}
+		if err := l.lockedRetrieveUserInfo(ctx, creds); err != nil {
+			return nil, err
+		}
+	}
 	if l.userInfo == nil {
 		return nil, fmt.Errorf("GetUserInfo: %w", ErrNotLoggedIn)
 	}
@@ -392,19 +417,22 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 
 	if key, ok := l.apikeys[l.env.LoginDomain][description]; ok {
 		return key, nil
-	} else if l.tokenSource == nil {
-		return "", fmt.Errorf("GetAPIKey: %w", ErrNotLoggedIn)
-	} else if tokenInfo, err := l.tokenSource.Token(); err != nil {
-		return "", err
-	} else if key, err := getAPIKey(ctx, l.env, tokenInfo.AccessToken, description); err != nil {
-		return "", err
-	} else {
-		l.apikeys[l.env.LoginDomain][description] = key
-		if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
-			return "", err
-		}
-		return key, nil
 	}
+
+	creds, err := l.lockedGetCreds()
+	if err != nil {
+		return "", fmt.Errorf("GetAPIKey: %w", err)
+	}
+	key, err := getAPIKey(ctx, l.env, creds.AccessToken, description)
+	if err != nil {
+		return "", err
+	}
+
+	l.apikeys[l.env.LoginDomain][description] = key
+	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
+		return "", err
+	}
+	return key, nil
 }
 
 // Must hold l.loginMu to call this.

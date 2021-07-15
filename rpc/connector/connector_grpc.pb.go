@@ -50,7 +50,7 @@ type ConnectorClient interface {
 	Login(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
-	GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error)
+	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
 	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
 	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
 	// Quits (terminates) the connector process.
@@ -178,9 +178,9 @@ func (c *connectorClient) Logout(ctx context.Context, in *empty.Empty, opts ...g
 	return out, nil
 }
 
-func (c *connectorClient) GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error) {
-	out := new(TokenData)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetCloudAccessToken", in, out, opts...)
+func (c *connectorClient) GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error) {
+	out := new(UserInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetCloudUserInfo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ type ConnectorServer interface {
 	Login(context.Context, *empty.Empty) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(context.Context, *empty.Empty) (*empty.Empty, error)
-	GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error)
+	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
 	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
 	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
 	// Quits (terminates) the connector process.
@@ -290,8 +290,8 @@ func (UnimplementedConnectorServer) Login(context.Context, *empty.Empty) (*Login
 func (UnimplementedConnectorServer) Logout(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
 }
-func (UnimplementedConnectorServer) GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAccessToken not implemented")
+func (UnimplementedConnectorServer) GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCloudUserInfo not implemented")
 }
 func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAPIKey not implemented")
@@ -498,20 +498,20 @@ func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_GetCloudAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TokenReq)
+func _Connector_GetCloudUserInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UserInfoRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudAccessToken(ctx, in)
+		return srv.(ConnectorServer).GetCloudUserInfo(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/GetCloudAccessToken",
+		FullMethod: "/telepresence.connector.Connector/GetCloudUserInfo",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudAccessToken(ctx, req.(*TokenReq))
+		return srv.(ConnectorServer).GetCloudUserInfo(ctx, req.(*UserInfoRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -611,8 +611,8 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_Logout_Handler,
 		},
 		{
-			MethodName: "GetCloudAccessToken",
-			Handler:    _Connector_GetCloudAccessToken_Handler,
+			MethodName: "GetCloudUserInfo",
+			Handler:    _Connector_GetCloudUserInfo_Handler,
 		},
 		{
 			MethodName: "GetCloudAPIKey",
