@@ -40,7 +40,7 @@ items:
           This will allow operators to install deployments of telepresence that are
           limited to certain namespaces.
         image: ./telepresence-2.3.5-traffic-manager-namespaces.png
-        docs: reference/config
+        docs: install/helm
       - type: feature
         title: No more dependence on kubectl
         body: >-
