@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.5 (TBD)
+### 2.3.5 (July 15, 2021)
 
 - Feature: Telepresence no longer depends on having an external
   `kubectl` binary, which might not be present for OpenShift users
