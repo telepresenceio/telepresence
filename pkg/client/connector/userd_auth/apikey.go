@@ -15,9 +15,7 @@ import (
 func getAPIKey(ctx context.Context, env client.Env, accessToken, desc string) (string, error) {
 	// Build the request.
 	reqBody, err := json.Marshal(map[string]interface{}{
-		"body": map[string]interface{}{
-			"description": desc,
-		},
+		"description": desc,
 	})
 	if err != nil {
 		return "", err
