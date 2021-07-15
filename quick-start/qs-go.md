@@ -34,7 +34,15 @@ import QSCards from './qs-cards'
 </div>
 
 ## Prerequisites
-You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.
+
+You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
+and set up
+([Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#verify-kubectl-configuration) /
+ [macOS](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/#verify-kubectl-configuration) /
+ [Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/#verify-kubectl-configuration))
+to use a Kubernetes cluster, preferably an empty test cluster.  This
+document uses `kubectl` in all example commands, but OpenShift
+users should have no problem substituting in the `oc` command instead.
 
 <Alert severity="info">
     <strong>Need a cluster?</strong> We provide free demo clusters preconfigured to follow this quick start. <a href="../demo-node/">Switch over to that version of the guide here</a>.
@@ -268,26 +276,26 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 
       To create a preview URL, telepresence needs to know how cluster
       ingress works for this service.  Please Select the ingress to use.
-      
+
       1/4: What's your ingress' layer 3 (IP) address?
            You may use an IP address or a DNS name (this is usually a
            "service.namespace" DNS name).
-      
+
              [no default]: verylargejavaservice.default
-      
+
       2/4: What's your ingress' layer 4 address (TCP port number)?
-      
+
              [no default]: 8080
-      
+
       3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-      
+
              [default: n]:
-      
+
       4/4: If required by your ingress, specify a different layer 5 hostname
            (TLS-SNI, HTTP "Host" header) to access this service.
-      
+
              [default: verylargejavaservice.default]:
-      
+
       Using Deployment dataprocessingservice
       intercepted
           Intercept name  : dataprocessingservice

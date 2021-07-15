@@ -5,23 +5,23 @@ Description: "How to get Linkerd meshed services working with Telepresence"
 # Using Telepresence with Linkerd
 
 ## Introduction
-Getting started with Telepresence on Linkerd services is as simple as adding an annotation to your Deployment: 
+Getting started with Telepresence on Linkerd services is as simple as adding an annotation to your Deployment:
 
 ```yaml
 spec:
   template:
     metadata:
       annotations:
-        config.linkerd.io/skip-outbound-ports: "8081,8022,6000-7999"
+        config.linkerd.io/skip-outbound-ports: "8081"
 ```
 
-The Traffic Agent uses port 8081 for its API, 8022 for SSHFS, and 6001 for the actual tunnel between the Traffic Manager and the local system.  Telling Linkerd to skip these ports allows the Traffic Agent sidecar to fully communicate with the Traffic Manager, and therefore the rest of the Telepresence system.
+The local system and the Traffic Agent connect to the Traffic Manager using its gRPC API on port 8081. Telling Linkerd to skip that port allows the Traffic Agent sidecar to fully communicate with the Traffic Manager, and therefore the rest of the Telepresence system.
 
 ## Prerequisites
 1. [Telepresence binary](../../install)
 2. Linkerd control plane [installed to cluster](https://linkerd.io/2.10/tasks/install/)
 3. Kubectl
-4. [Working ingress controller](../../../../edge-stack/latest/howtos/linkerd2)
+4. [Working ingress controller](/docs/edge-stack/latest/howtos/linkerd2)
 
 ## Deploy
 Save and deploy the following YAML. Note the `config.linkerd.io/skip-outbound-ports` annotation in the metadata of the pod template.
