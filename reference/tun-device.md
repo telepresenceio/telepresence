@@ -11,7 +11,14 @@ The VIF is a TUN-device, which means that it communicates with the workstation i
 The TUN-device is capable of routing both TCP and UDP for outbound traffic. Earlier versions of Telepresence would only allow TCP. Future enhancements might be to also route inbound UDP, and perhaps a selection of ICMP packages (to allow for things like `ping`).
 
 ### No SSH required
-The VIF approach is somewhat similar to using `sshuttle` but without any requirements for extra software, configuration or connections.  Using the VIF means that only one single `kubectl port-forward`, that uses one single port, is needed during a Telepresence run. There is no need for `ssh` in the client nor for `sshd` in the traffic-manager. This also means that the traffic-manager container can run as the default user.
+
+The VIF approach is somewhat similar to using `sshuttle` but without
+any requirements for extra software, configuration or connections.
+Using the VIF means that only one single connection needs to be
+forwarded through the Kubernetes apiserver (à la `kubectl
+port-forward`), using only one single port.  There is no need for
+`ssh` in the client nor for `sshd` in the traffic-manager.  This also
+means that the traffic-manager container can run as the default user.
 
 #### sshfs without ssh encryption
 When a POD is intercepted, and its volumes are mounted on the local machine, this mount is performed by [sshfs](https://github.com/libfuse/sshfs). Telepresence will run `sshfs -o slave` which means that instead of using `ssh` to establish an encrypted communication to an `sshd`, which in turn terminates the encryption and forwards to `sftp`, the `sshfs` will talk `sftp` directly on its `stdin/stdout` pair. Telepresence tunnels that directly to an `sftp` in the agent using its already encrypted gRPC API. As a result, no `sshd` is needed in client nor in the traffic-agent, and the traffic-agent container can run as the default user.
