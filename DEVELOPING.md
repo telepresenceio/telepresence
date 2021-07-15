@@ -7,7 +7,6 @@
 - These registry variables should all point to the same registry for now. We'll clean this up in the near future. If you can push to `gcr.io` then that's the cheapest; otherwise something like `docker.io/ark3` will work fine. The `localhost:5000` DTest registry works fine too if you're using the DTest cluster.
   - `DEV_REGISTRY` sets things up for the tests
   - `TELEPRESENCE_REGISTRY` is used by the Tel binary to set the image it uses when adding or modifying the cluster
-  - `KO_DOCKER_REPO` is used by the image build -- this may already be unnecessary
 
 The output of `make help` shows some of this information, but not all of it, and it is not quite correct at the moment. We will improve all of this soon.
 

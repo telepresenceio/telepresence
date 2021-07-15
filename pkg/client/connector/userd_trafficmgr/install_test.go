@@ -43,7 +43,7 @@ func publishManager(t *testing.T) {
 		"TELEPRESENCE_VERSION=" + version.Version,
 		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(ctx),
 	}
-	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	includeEnv := []string{"HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
 	for _, env := range os.Environ() {
 		for _, incl := range includeEnv {
 			if strings.HasPrefix(env, incl) {
@@ -105,7 +105,6 @@ func TestE2E(t *testing.T) {
 		version.Version = testVersion
 
 		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-		os.Setenv("KO_DOCKER_REPO", registry)
 		os.Setenv("TELEPRESENCE_REGISTRY", registry)
 
 		saveManagerNamespace, ok := os.LookupEnv("TELEPRESENCE_MANAGER_NAMESPACE")
