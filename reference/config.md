@@ -10,8 +10,7 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ### Values
 
-The config file currently supports values for the `timeouts`, `logLevels`, `images` keys.
-The config file currently supports values for the `timeouts`, `logLevels`, `images`, and `grpc` keys.
+The config file currently supports values for the `timeouts`, `logLevels`, `images`, `cloud`, and `grpc` keys.
 
 Here is an example configuration:
 

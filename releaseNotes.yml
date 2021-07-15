@@ -55,8 +55,8 @@ items:
           config. This enables users whose laptop is an air-gapped environment to
           create selective intercepts without requiring a login. It also makes it easier
           for those who are developing on Telepresence to specify which agent image should
-          be used. Env vars TELEPRESENCE_AGENT_IMAGE and TELEPRESENCE_REGISTRY no longer
-          change any behavior with Telepresence.
+          be used. Env vars TELEPRESENCE_AGENT_IMAGE and TELEPRESENCE_REGISTRY are no longer
+          used.
         image: ./telepresence-2.3.5-agent-config.png
         docs: reference/config/#images
       - type: feature
@@ -70,8 +70,8 @@ items:
         body: >-
           While Telepresence will auto-detect if your cluster is in an air-gapped environment,
           we've added an option users can add to their config.yml to ensure the cli acts like it
-          is in an air-gapped environment. Some features requiring a login will not work unless a
-          license is provided in the cluster.
+          is in an air-gapped environment. Air-gapped environments require a manually installed
+          licence.
         docs: reference/cluster-config/#air-gapped-cluster
         image: ./telepresence-2.3.5-skipLogin.png
   - version: 2.3.4
