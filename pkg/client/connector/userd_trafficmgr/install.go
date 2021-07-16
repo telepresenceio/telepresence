@@ -212,6 +212,7 @@ already exist for this service`, kind, obj.GetName())
 		return "", "", errors.Wrap(err, msg)
 	}
 
+	update := true
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
@@ -245,26 +246,30 @@ already exist for this service`, kind, obj.GetName())
 		explainDo(c, aaa, obj)
 	default:
 		dlog.Debugf(c, "%s %s.%s already has an installed and up-to-date agent", kind, name, namespace)
+		update = false
 	}
 
-	if err := ki.Client().Update(c, obj, obj); err != nil {
-		return "", "", err
-	}
-	if svc != nil {
-		if err := ki.Client().Update(c, svc, svc); err != nil {
+	if update {
+		if err := ki.Client().Update(c, obj, obj); err != nil {
 			return "", "", err
 		}
-	} else {
+		if svc != nil {
+			if err := ki.Client().Update(c, svc, svc); err != nil {
+				return "", "", err
+			}
+		}
+		if err := ki.waitForApply(c, namespace, name, obj); err != nil {
+			return "", "", err
+		}
+	}
+
+	if svc == nil {
 		// If the service is still nil, that's because an agent already exists that we can reuse.
 		// So we get the service from the deployments annotation so that we can extract the UID.
 		svc, err = ki.getSvcFromObjAnnotation(c, obj)
 		if err != nil {
 			return "", "", err
 		}
-	}
-
-	if err := ki.waitForApply(c, namespace, name, obj); err != nil {
-		return "", "", err
 	}
 	return string(svc.GetUID()), kind, nil
 }
