@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	goRuntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1393,6 +1394,9 @@ func (ts *telepresenceSuite) kubectlOut(ctx context.Context, args ...string) (st
 func (ts *telepresenceSuite) publishManager() error {
 	ctx := dlog.NewTestContext(ts.T(), true)
 	cmd := dexec.CommandContext(ctx, "make", "push-image")
+	if goRuntime.GOOS == "windows" {
+		cmd = dexec.CommandContext(ctx, "winmake.bat", "push-image")
+	}
 
 	// Go sets a lot of variables that we don't want to pass on to the ko executable. If we do,
 	// then it builds for the platform indicated by those variables.
