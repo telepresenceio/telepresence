@@ -270,9 +270,18 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 }
 
 func (o *outbound) getInfo() *rpc.OutboundInfo {
-	return &rpc.OutboundInfo{
+	info := rpc.OutboundInfo{
 		Dns: o.dnsConfig,
 	}
+
+	if len(o.router.alsoProxySubnets) > 0 {
+		info.AlsoProxySubnets = make([]*manager.IPNet, len(o.router.alsoProxySubnets))
+		for i, ap := range o.router.alsoProxySubnets {
+			info.AlsoProxySubnets[i] = iputil.IPNetToRPC(ap)
+		}
+	}
+
+	return &info
 }
 
 func (o *outbound) noMoreUpdates() {
