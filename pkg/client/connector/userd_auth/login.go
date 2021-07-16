@@ -1,4 +1,4 @@
-package auth
+package userd_auth
 
 import (
 	"context"
@@ -24,8 +24,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 )
 
 const (

@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.3.6 (TBD)
+
+- Bugfix: Fixed an issue that could cause the user daemon to crash
+  during shutdown.
+
 ### 2.3.5 (July 15, 2021)
 
 - Feature: Telepresence no longer depends on having an external

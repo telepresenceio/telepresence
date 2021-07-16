@@ -400,7 +400,7 @@ func (cs *connectedSuite) SetupSuite() {
 
 	cs.Eventually(func() bool {
 		return run(c, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
-	}, 5*time.Second, time.Second)
+	}, 10*time.Second, time.Second)
 
 	stdout, stderr := telepresence(cs.T(), "connect")
 	require.Empty(stderr)
@@ -973,7 +973,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 5*time.Second, time.Second)
+	}, 10*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	assert.Eventually(func() bool {
@@ -1111,7 +1111,7 @@ func (hs *helmSuite) SetupSuite() {
 
 	hs.Eventually(func() bool {
 		return run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
-	}, 5*time.Second, time.Second)
+	}, 10*time.Second, time.Second)
 }
 
 func (hs *helmSuite) TestA_CanConnect() {

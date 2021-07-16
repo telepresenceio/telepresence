@@ -1,4 +1,4 @@
-package connector
+package userd_trafficmgr
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -25,20 +26,22 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
-type trafficManagerCallbacks struct {
-	GetAPIKey func(context.Context, string, bool) (string, error)
-	SetClient func(client manager.ManagerClient, callOptions ...grpc.CallOption)
+type Callbacks struct {
+	GetAPIKey       func(context.Context, string, bool) (string, error)
+	SetClient       func(client manager.ManagerClient, callOptions ...grpc.CallOption)
+	SetOutboundInfo func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
 	*installer // installer is also a k8sCluster
-	callbacks  trafficManagerCallbacks
+	callbacks  Callbacks
 
 	// local information
 	env         client.Env
@@ -47,8 +50,8 @@ type trafficManager struct {
 
 	// manager client
 	managerClient manager.ManagerClient
-	managerErr    error     // if managerClient is nil, why it's nil
-	startup       chan bool // gets closed when managerClient is fully initialized (or managerErr is set)
+	managerErr    error         // if managerClient is nil, why it's nil
+	startup       chan struct{} // gets closed when managerClient is fully initialized (or managerErr is set)
 	//
 	// What you should read in to the above: It isn't safe to read .managerClient or .managerErr
 	// until .startup is closed, and it isn't safe to mutate them after .startup is closed.
@@ -72,14 +75,13 @@ type interceptResult struct {
 	err       error
 }
 
-// newTrafficManager returns a TrafficManager resource for the given
-// cluster if it has a Traffic Manager service.
-func newTrafficManager(
+// New returns a TrafficManager resource for the given cluster if it has a Traffic Manager service.
+func New(
 	_ context.Context,
 	env client.Env,
-	cluster *k8sCluster,
+	cluster *userd_k8s.Cluster,
 	installID string,
-	callbacks trafficManagerCallbacks,
+	callbacks Callbacks,
 ) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
@@ -99,7 +101,7 @@ func newTrafficManager(
 		installer:   ti,
 		env:         env,
 		installID:   installID,
-		startup:     make(chan bool),
+		startup:     make(chan struct{}),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
 		callbacks:   callbacks,
 	}
@@ -107,16 +109,7 @@ func newTrafficManager(
 	return tm, nil
 }
 
-func (tm *trafficManager) waitUntilStarted(c context.Context) error {
-	select {
-	case <-c.Done():
-		return c.Err()
-	case <-tm.startup:
-		return tm.managerErr
-	}
-}
-
-func (tm *trafficManager) run(c context.Context) error {
+func (tm *trafficManager) Run(c context.Context) error {
 	err := tm.ensureManager(c, &tm.env)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
@@ -124,12 +117,12 @@ func (tm *trafficManager) run(c context.Context) error {
 		return err
 	}
 
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.configFlags, tm.client)
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.ConfigFlags, tm.Client())
 	if err != nil {
 		return err
 	}
 	grpcAddr := net.JoinHostPort(
-		"svc/traffic-manager."+tm.kubeconfigExtension.Manager.Namespace,
+		"svc/traffic-manager."+tm.GetManagerNamespace(),
 		fmt.Sprint(install.ManagerPortHTTP))
 
 	// First check. Establish connection
@@ -140,14 +133,17 @@ func (tm *trafficManager) run(c context.Context) error {
 
 	var conn *grpc.ClientConn
 	defer func() {
-		if err != nil {
-			if conn != nil {
-				conn.Close()
-			}
-			if tm.managerClient == nil {
+		if err != nil && conn != nil {
+			conn.Close()
+		}
+		select {
+		case <-tm.startup:
+			// closed, nothing to do
+		default:
+			if err != nil && tm.managerClient == nil {
 				tm.managerErr = err
-				close(tm.startup)
 			}
+			close(tm.startup)
 		}
 	}()
 
@@ -185,7 +181,7 @@ func (tm *trafficManager) run(c context.Context) error {
 	tm.callbacks.SetClient(tm.managerClient)
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.daemon.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
+	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
 		tm.managerClient = nil
 		tm.callbacks.SetClient(nil)
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
@@ -223,7 +219,7 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 	var reason string
 	switch objectKind {
 	case "Deployment":
-		dep, err := tm.findDeployment(ctx, namespace, name)
+		dep, err := tm.FindDeployment(ctx, namespace, name)
 		if err != nil {
 			// Removed from snapshot since the name slice was obtained
 			if !errors2.IsNotFound(err) {
@@ -240,7 +236,7 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 		labels = dep.Spec.Template.Labels
 
 	case "ReplicaSet":
-		rs, err := tm.findReplicaSet(ctx, namespace, name)
+		rs, err := tm.FindReplicaSet(ctx, namespace, name)
 		if err != nil {
 			// Removed from snapshot since the name slice was obtained
 			if !errors2.IsNotFound(err) {
@@ -256,7 +252,7 @@ func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, na
 		labels = rs.Spec.Template.Labels
 
 	case "StatefulSet":
-		statefulSet, err := tm.findStatefulSet(ctx, namespace, name)
+		statefulSet, err := tm.FindStatefulSet(ctx, namespace, name)
 		if err != nil {
 			// Removed from snapshot since the name slice was obtained
 			if !errors2.IsNotFound(err) {
@@ -313,7 +309,7 @@ func (tm *trafficManager) getInfosForWorkload(
 					continue
 				}
 
-				matchingSvcs, err := install.FindMatchingServices(ctx, tm.client, "", "", namespace, labels)
+				matchingSvcs, err := install.FindMatchingServices(ctx, tm.Client(), "", "", namespace, labels)
 				if err != nil {
 					continue
 				}
@@ -341,10 +337,10 @@ func (tm *trafficManager) getInfosForWorkload(
 	return workloadInfos
 }
 
-func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
+func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
-	namespace := tm.actualNamespace(rq.Namespace)
+	namespace := tm.ActualNamespace(rq.Namespace)
 	if namespace == "" {
 		// namespace is not currently mapped
 		return &rpc.WorkloadInfoSnapshot{}
@@ -376,9 +372,9 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 	// These are all the workloads we care about and their associated function
 	// to get the names of those workloads
 	workloadsToGet := map[string]func(context.Context, string) ([]string, error){
-		"Deployment":  tm.deploymentNames,
-		"ReplicaSet":  tm.replicaSetNames,
-		"StatefulSet": tm.statefulSetNames,
+		"Deployment":  tm.DeploymentNames,
+		"ReplicaSet":  tm.ReplicaSetNames,
+		"StatefulSet": tm.StatefulSetNames,
 	}
 
 	for workloadKind, namesFunc := range workloadsToGet {
@@ -392,7 +388,7 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 		workloadInfos = append(workloadInfos, newWorkloadInfos...)
 	}
 
-	for localIntercept, localNs := range tm.localIntercepts {
+	for localIntercept, localNs := range tm.LocalIntercepts {
 		if localNs == namespace {
 			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
 				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
@@ -430,7 +426,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 	}
 }
 
-func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
+func (tm *trafficManager) SetStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
@@ -469,7 +465,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 	return representativeAgents
 }
 
-func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
 	<-tm.startup
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
@@ -488,7 +484,7 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		var selectedAgents []*manager.AgentInfo
 		for _, di := range ur.Agents {
 			found := false
-			namespace := tm.actualNamespace(ur.Namespace)
+			namespace := tm.ActualNamespace(ur.Namespace)
 			if namespace != "" {
 				for _, ai := range agents {
 					if namespace == ai.Namespace && di == ai.Name {
@@ -546,4 +542,22 @@ func (tm *trafficManager) getOutboundInfo() *daemon.OutboundInfo {
 		}
 	}
 	return info
+}
+
+func (tm *trafficManager) GetClientBlocking(ctx context.Context) (manager.ManagerClient, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-tm.startup:
+		return tm.managerClient, tm.managerErr
+	}
+}
+
+func (tm *trafficManager) GetClientNonBlocking() (manager.ManagerClient, error) {
+	select {
+	case <-tm.startup:
+		return tm.managerClient, tm.managerErr
+	default:
+		return nil, nil
+	}
 }

@@ -107,8 +107,8 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 	rm -f charts/telepresence/Chart.yaml.bak
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/testdata/addAgentToWorkload/cur pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/worker_trafficmanager/testdata/addAgentToWorkload/cur pkg/client/connector/worker_trafficmanager/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/worker_trafficmanager/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
@@ -124,8 +124,8 @@ push-executable: build ## (Release) Upload the executable to S3
 		--body $(BINDIR)/telepresence
 
 .PHONY: push-chart
-push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart 
-	packaging/push_chart.sh	
+push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart
+	packaging/push_chart.sh
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload

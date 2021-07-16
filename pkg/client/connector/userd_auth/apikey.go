@@ -1,4 +1,4 @@
-package auth
+package userd_auth
 
 import (
 	"bytes"

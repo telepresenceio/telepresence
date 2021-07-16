@@ -18,7 +18,7 @@ message Chunk {
 
 // Calls from the manager to Ambassador Cloud (System A) are authenticated via API keys per
 // https://www.notion.so/datawire/Telepresence-System-A-API-Key-Integration-c13c4676e9944abfb02713b8517051e3
-// (see also: pkg/client/connector/auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
+// (see also: pkg/client/connector/userd_auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
 service SystemACRUD {
   // CreateDomain requires that the manager authenticate using an
   // end-user's API key, to perform the action on behalf of that
@@ -43,7 +43,7 @@ service SystemACRUD {
 
 // Calls from the manager to Ambassador Cloud (System A) are authenticated via API keys per
 // https://www.notion.so/datawire/Telepresence-System-A-API-Key-Integration-c13c4676e9944abfb02713b8517051e3
-// (see also: pkg/client/connector/auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
+// (see also: pkg/client/connector/userd_auth/apikey.go, cmd/traffic/cmd/manager/systema.go:systemaCredentials)."
 service SystemAProxy {
   // ReverseConnection establishes a stream that is used for System A
   // to send gRPC requests back to the manager.  This requires that
