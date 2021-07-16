@@ -57,41 +57,14 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			kind, err := ki.FindObjectKind(c, ai.Namespace, ai.Name)
+			agent, err := ki.FindWorkload(c, ai.Namespace, ai.Name)
 			if err != nil {
-				addError(err)
+				if !errors2.IsNotFound(err) {
+					addError(err)
+				}
 				return
 			}
-			var agent kates.Object
-			switch kind {
-			case "ReplicaSet":
-				agent, err = ki.FindReplicaSet(c, ai.Namespace, ai.Name)
-				if err != nil {
-					if !errors2.IsNotFound(err) {
-						addError(err)
-					}
-					return
-				}
-			case "Deployment":
-				agent, err = ki.FindDeployment(c, ai.Namespace, ai.Name)
-				if err != nil {
-					if !errors2.IsNotFound(err) {
-						addError(err)
-					}
-					return
-				}
-			case "StatefulSet":
-				agent, err = ki.FindStatefulSet(c, ai.Namespace, ai.Name)
-				if err != nil {
-					if !errors2.IsNotFound(err) {
-						addError(err)
-					}
-					return
-				}
-			default:
-				addError(fmt.Errorf("agent %q associated with unsupported workload kind %q, cannot be removed", ai.Name, kind))
-				return
-			}
+
 			// Assume that the agent was added using the mutating webhook when no actions
 			// annotation can be found in the workload.
 			ann := agent.GetAnnotations()
@@ -200,35 +173,16 @@ var agentNotFound = errors.New("no such agent")
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
 func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
-	kind, err := ki.FindObjectKind(c, namespace, name)
+	obj, err := ki.FindWorkload(c, namespace, name)
 	if err != nil {
 		return "", "", err
 	}
-	var obj kates.Object
-	switch kind {
-	case "ReplicaSet":
-		obj, err = ki.FindReplicaSet(c, namespace, name)
-		if err != nil {
-			return "", "", err
-		}
-	case "Deployment":
-		obj, err = ki.FindDeployment(c, namespace, name)
-		if err != nil {
-			return "", "", err
-		}
-	case "StatefulSet":
-		obj, err = ki.FindStatefulSet(c, namespace, name)
-		if err != nil {
-			return "", "", err
-		}
-	default:
-		return "", "", fmt.Errorf("unsupported workload kind %q, cannot ensure agent", kind)
-	}
-
 	podTemplate, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return "", "", err
 	}
+
+	kind := obj.GetObjectKind().GroupVersionKind().Kind
 
 	var svc *kates.Service
 	if a := podTemplate.ObjectMeta.Annotations; a != nil && a[install.InjectAnnotation] == "enabled" {
@@ -355,81 +309,43 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	if obj != nil {
 		origGeneration = obj.GetGeneration()
 	}
-	kind, err := ki.FindObjectKind(c, namespace, name)
-	if err != nil {
-		return err
-	}
-	switch kind {
-	case "ReplicaSet":
-		err := ki.refreshReplicaSet(c, name, namespace)
-		if err != nil {
+
+	var err error
+	if rs, ok := obj.(*kates.ReplicaSet); ok {
+		if err = ki.refreshReplicaSet(c, name, namespace, rs); err != nil {
 			return err
 		}
-		for {
-			dtime.SleepWithContext(c, time.Second)
-			if err := c.Err(); err != nil {
-				return err
-			}
-
-			rs, err := ki.FindReplicaSet(c, namespace, name)
-			if err != nil {
-				return client.CheckTimeout(c, err)
-			}
-
-			if replicaSetUpdated(rs, origGeneration) {
-				dlog.Debugf(c, "Replica Set %s.%s successfully applied", name, namespace)
-				return nil
-			}
-		}
-	case "Deployment":
-		for {
-			dtime.SleepWithContext(c, time.Second)
-			if err := c.Err(); err != nil {
-				return err
-			}
-
-			dep, err := ki.FindDeployment(c, namespace, name)
-			if err != nil {
-				return client.CheckTimeout(c, err)
-			}
-
-			if deploymentUpdated(dep, origGeneration) {
-				dlog.Debugf(c, "deployment %s.%s successfully applied", name, namespace)
-				return nil
-			}
-		}
-	case "StatefulSet":
-		for {
-			dtime.SleepWithContext(c, time.Second)
-			if err := c.Err(); err != nil {
-				return err
-			}
-
-			statefulSet, err := ki.FindStatefulSet(c, namespace, name)
-			if err != nil {
-				return client.CheckTimeout(c, err)
-			}
-
-			if statefulSetUpdated(statefulSet, origGeneration) {
-				dlog.Debugf(c, "statefulset %s.%s successfully applied", name, namespace)
-				return nil
-			}
+	}
+	for {
+		dtime.SleepWithContext(c, time.Second)
+		if err = c.Err(); err != nil {
+			return err
 		}
 
-	default:
-		return fmt.Errorf("unsupported workload kind %q, cannot wait for apply", kind)
+		if obj, err = ki.FindAgain(c, obj); err != nil {
+			return client.CheckTimeout(c, err)
+		}
+
+		updated := false
+		switch obj := obj.(type) {
+		case *kates.ReplicaSet:
+			updated = replicaSetUpdated(obj, origGeneration)
+		case *kates.Deployment:
+			updated = deploymentUpdated(obj, origGeneration)
+		case *kates.StatefulSet:
+			updated = statefulSetUpdated(obj, origGeneration)
+		}
+		if updated {
+			dlog.Debugf(c, "%s %s.%s successfully applied", obj.GetObjectKind().GroupVersionKind().Kind, name, namespace)
+			return nil
+		}
 	}
 }
 
 // refreshReplicaSet finds pods owned by a given ReplicaSet and deletes them.
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
-func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string) error {
-	rs, err := ki.FindReplicaSet(c, namespace, name)
-	if err != nil {
-		return err
-	}
-
+func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string, rs *kates.ReplicaSet) error {
 	podNames, err := ki.PodNames(c, namespace)
 	if err != nil {
 		return err

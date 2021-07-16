@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -173,6 +173,14 @@ func (kc *Cluster) FindReplicaSet(c context.Context, namespace, name string) (*k
 	return rs, nil
 }
 
+// FindAgain returns a fresh version of the given object.
+func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object, error) {
+	if err := kc.client.Get(c, obj, obj); err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
 // FindPod returns a pod with the given name in the given namespace or nil
 // if no such replica set could be found.
 func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Pod, error) {
@@ -186,13 +194,13 @@ func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Po
 	return pod, nil
 }
 
-// FindObjectKind returns a workload for the given name and namespace. We
+// FindWorkload returns a workload for the given name and namespace. We
 // search in a specific order based on how we prefer workload objects:
 // 1. Deployments
 // 2. ReplicaSets
 // 3. StatefulSets
 // And return the kind as soon as we find one that matches
-func (kc *Cluster) FindObjectKind(c context.Context, namespace, name string) (string, error) {
+func (kc *Cluster) FindWorkload(c context.Context, namespace, name string) (kates.Object, error) {
 	type workLoad struct {
 		kind string
 		obj  kates.Object
@@ -201,15 +209,15 @@ func (kc *Cluster) FindObjectKind(c context.Context, namespace, name string) (st
 		wl.obj.(schema.ObjectKind).SetGroupVersionKind(schema.GroupVersionKind{Kind: wl.kind})
 		wl.obj.SetName(name)
 		wl.obj.SetNamespace(namespace)
-		if err := kc.client.Get(c, wl.obj, nil); err != nil {
+		if err := kc.client.Get(c, wl.obj, wl.obj); err != nil {
 			if kates.IsNotFound(err) {
 				continue
 			}
-			return "", err
+			return nil, err
 		}
-		return wl.kind, nil
+		return wl.obj, nil
 	}
-	return "", fmt.Errorf("no supported Object Kind Found for %s.%s", name, namespace)
+	return nil, errors.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns
@@ -227,7 +235,7 @@ func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*kates.Se
 
 // findAllSvc finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
-func (kc *Cluster) findAllSvcByType(c context.Context, svcType v1.ServiceType) ([]*kates.Service, error) {
+func (kc *Cluster) findAllSvcByType(c context.Context, svcType corev1.ServiceType) ([]*kates.Service, error) {
 	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
 	var svcs []*kates.Service
