@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.3.7 (TBD)
+
+- Bugfix: Made `telepresence list` command faster.
+
 ### 2.3.6 (July 20, 2021)
 
 - Bugfix: Fixed a regression introduced in 2.3.5 that caused preview
