@@ -6,10 +6,10 @@ import (
 
 // API key descriptions to use when requesting API keys from Ambassador Cloud.
 const (
-	KeyDescWorkstation    = "laptop"
-	KeyDescTrafficManager = "manager"
+	KeyDescWorkstation    = "telepresence:workstation"
+	KeyDescTrafficManager = "telepresence:traffic-manager"
 )
 
 func KeyDescAgent(spec *manager.InterceptSpec) string {
-	return "agent-" + spec.Mechanism
+	return "telepresence:agent-" + spec.Mechanism
 }
