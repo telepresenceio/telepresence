@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/api/core/v1"
@@ -192,40 +193,23 @@ func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Po
 // 3. StatefulSets
 // And return the kind as soon as we find one that matches
 func (kc *Cluster) FindObjectKind(c context.Context, namespace, name string) (string, error) {
-	depNames, err := kc.DeploymentNames(c, namespace)
-	if err != nil {
-		return "", err
+	type workLoad struct {
+		kind string
+		obj  kates.Object
 	}
-	for _, depName := range depNames {
-		if depName == name {
-			return "Deployment", nil
+	for _, wl := range []workLoad{{"Deployment", &kates.Deployment{}}, {"ReplicaSet", &kates.ReplicaSet{}}, {"StatefulSet", &kates.StatefulSet{}}} {
+		wl.obj.(schema.ObjectKind).SetGroupVersionKind(schema.GroupVersionKind{Kind: wl.kind})
+		wl.obj.SetName(name)
+		wl.obj.SetNamespace(namespace)
+		if err := kc.client.Get(c, wl.obj, nil); err != nil {
+			if kates.IsNotFound(err) {
+				continue
+			}
+			return "", err
 		}
+		return wl.kind, nil
 	}
-
-	// Since Deployments manage ReplicaSets, we only look for matching
-	// ReplicaSets if no Deployment was found
-	rsNames, err := kc.ReplicaSetNames(c, namespace)
-	if err != nil {
-		return "", err
-	}
-	for _, rsName := range rsNames {
-		if rsName == name {
-			return "ReplicaSet", nil
-		}
-	}
-
-	// Like ReplicaSets, StatefulSets only manage pods so we check for
-	// them next
-	StatefulSetNames, err := kc.StatefulSetNames(c, namespace)
-	if err != nil {
-		return "", err
-	}
-	for _, statefulSetName := range StatefulSetNames {
-		if statefulSetName == name {
-			return "StatefulSet", nil
-		}
-	}
-	return "", errors.New("No supported Object Kind Found")
+	return "", fmt.Errorf("no supported Object Kind Found for %s.%s", name, namespace)
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns
