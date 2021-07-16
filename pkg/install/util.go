@@ -10,21 +10,16 @@ import (
 
 func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) {
 	var tplSpec *kates.PodTemplateSpec
-	kind := obj.GetObjectKind().GroupVersionKind().Kind
-	switch kind {
-	case "ReplicaSet":
-		rs := obj.(*kates.ReplicaSet)
-		tplSpec = &rs.Spec.Template
-	case "Deployment":
-		dep := obj.(*kates.Deployment)
-		tplSpec = &dep.Spec.Template
-	case "StatefulSet":
-		statefulSet := obj.(*kates.StatefulSet)
-		tplSpec = &statefulSet.Spec.Template
+	switch obj := obj.(type) {
+	case *kates.ReplicaSet:
+		tplSpec = &obj.Spec.Template
+	case *kates.Deployment:
+		tplSpec = &obj.Spec.Template
+	case *kates.StatefulSet:
+		tplSpec = &obj.Spec.Template
 	default:
-		return nil, ObjErrorf(obj, "unsupported workload kind %q", kind)
+		return nil, ObjErrorf(obj, "unsupported workload kind %q", obj.GetObjectKind().GroupVersionKind().Kind)
 	}
-
 	return tplSpec, nil
 }
 
