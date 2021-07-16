@@ -34,7 +34,7 @@ func previewCommand() *cobra.Command {
 
 		Short: "Create a preview domain for an existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
+			if _, err := cliutil.EnsureLoggedIn(cmd.Context(), ""); err != nil {
 				return err
 			}
 			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo) error {

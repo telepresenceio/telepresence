@@ -7,17 +7,23 @@ import (
 )
 
 func LoginCommand() *cobra.Command {
-	return &cobra.Command{
+	var args struct {
+		apikey string
+	}
+	cmd := &cobra.Command{
 		Use:  "login",
 		Args: cobra.NoArgs,
 
 		Short: "Authenticate to Ambassador Cloud",
 		Long:  "Authenticate to Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := cliutil.EnsureLoggedIn(cmd.Context())
+			_, err := cliutil.EnsureLoggedIn(cmd.Context(), args.apikey)
 			return err
 		},
 	}
+	cmd.Flags().StringVar(&args.apikey, "apikey", "",
+		"Static API key to use instead of performing an interactive login")
+	return cmd
 }
 
 func LogoutCommand() *cobra.Command {

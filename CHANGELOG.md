@@ -5,6 +5,11 @@
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
   show up in the output of the `telepresence status` command.
 
+- Feature: `telepresence login` now has an `--apikey=KEY` flag that
+  allows for non-interactive logins.  This is useful for headless
+  environments where launching a web-browser is impossible, such as
+  cloud shells, Docker containers, or CI.
+
 - Bugfix: Dialer will now close if it gets a ConnectReject. This was
   encountered when doing an intercept without a local process running
   and would result in requests hanging indefinitely.
