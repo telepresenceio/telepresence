@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
@@ -86,4 +89,62 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string) *rpc.InterceptResult {
+	svcUID, kind, err := tm.ensureAgent(c, namespace, agentName, svcName, svcPortIdentifier, agentImageName)
+	if err != nil {
+		if err == agentNotFound {
+			return &rpc.InterceptResult{
+				Error:     rpc.InterceptError_NOT_FOUND,
+				ErrorText: agentName,
+			}
+		}
+		dlog.Error(c, err)
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
+			ErrorText: err.Error(),
+		}
+	}
+
+	dlog.Infof(c, "Waiting for agent for %s %s.%s", kind, agentName, namespace)
+	agent, err := tm.waitForAgent(c, agentName, namespace)
+	if err != nil {
+		dlog.Error(c, err)
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
+			ErrorText: err.Error(),
+		}
+	}
+	dlog.Infof(c, "Agent found or created for %s %s.%s", kind, agentName, namespace)
+	return &rpc.InterceptResult{
+		Error:        rpc.InterceptError_UNSPECIFIED,
+		Environment:  agent.Environment,
+		ServiceUid:   svcUID,
+		WorkloadKind: kind,
+	}
+}
+
+func (tm *trafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
+	fullName := name + "." + namespace
+	waitCh := make(chan *manager.AgentInfo)
+	tm.agentWaiters.Store(fullName, waitCh)
+	defer tm.agentWaiters.Delete(fullName)
+
+	// Agent may already exist.
+	for _, agent := range tm.getCurrentAgentsInNamespace(namespace) {
+		if agent.Name == name {
+			return agent, nil
+		}
+	}
+
+	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutAgentInstall) // installing a new agent can take some time
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		return nil, client.CheckTimeout(ctx, fmt.Errorf("waiting for agent %q to be present", fullName))
+	case agent := <-waitCh:
+		return agent, nil
+	}
 }
