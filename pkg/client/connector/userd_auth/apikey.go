@@ -12,7 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-func getAPIKey(ctx context.Context, env client.Env, accessToken, desc string) (string, error) {
+func getAPIKey(ctx context.Context, env client.Env, creds map[string]string, desc string) (string, error) {
 	// Build the request.
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"description": desc,
@@ -26,8 +26,10 @@ func getAPIKey(ctx context.Context, env client.Env, accessToken, desc string) (s
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range creds {
+		req.Header.Set(k, v)
+	}
 
 	// Send the request.
 	resp, err := http.DefaultClient.Do(req)
