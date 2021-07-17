@@ -12,12 +12,15 @@
 #     - version: The (optional) version number of the release, if applicable.
 #     - date: The date of the release in the format YYYY-MM-DD.
 #     - notes: An array of noteworthy changes included in the release, each having the following attributes:
+#         - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
 #         - title: A short title of the noteworthy change.
-#         - body: Two or three sentences describing the change and why it is noteworthy. This is in rich text format and may contain HTML elements.
+#         - body: >-
+#             Two or three sentences describing the change and why it
+#             is noteworthy.  This is HTML, not plain text or
+#             markdown.  It is handy to use YAML's ">-" feature to
+#             allow line-wrapping.
 #         - image: The URL of an image that visually represents the noteworthy change.
 #         - docs: The path to the documentation page where additional information can be found.
-#         - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
-#
 
 docTitle: Telepresence Release Notes
 docDescription: >-
