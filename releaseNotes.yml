@@ -19,7 +19,12 @@
 #             is noteworthy.  This is HTML, not plain text or
 #             markdown.  It is handy to use YAML's ">-" feature to
 #             allow line-wrapping.
-#         - image: The URL of an image that visually represents the noteworthy change.
+#         - image: >-
+#             The URL of an image that visually represents the
+#             noteworthy change.  This path is relative to the
+#             `release-notes` directory; if this file is
+#             `FOO/releaseNotes.yml`, then the image paths are
+#             relative to `FOO/release-notes/`.
 #         - docs: The path to the documentation page where additional information can be found.
 
 docTitle: Telepresence Release Notes
