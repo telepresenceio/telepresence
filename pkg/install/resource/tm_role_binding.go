@@ -2,7 +2,6 @@ package resource
 
 import (
 	"context"
-	"fmt"
 
 	rbac "k8s.io/api/rbac/v1"
 
@@ -23,7 +22,7 @@ func (ri tmRoleBinding) roleBinding(ctx context.Context) *kates.RoleBinding {
 		APIVersion: "rbac.authorization.k8s.io/v1",
 	}
 	cr.ObjectMeta = kates.ObjectMeta{
-		Name:      fmt.Sprintf("%s-%s", install.ManagerAppName, getScope(ctx).namespace),
+		Name:      install.ManagerAppName,
 		Namespace: getScope(ctx).namespace,
 	}
 	return cr
