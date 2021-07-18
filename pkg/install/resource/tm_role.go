@@ -27,7 +27,7 @@ func (ri tmRole) role(ctx context.Context) *kates.Role {
 		APIVersion: "rbac.authorization.k8s.io/v1",
 	}
 	cr.ObjectMeta = kates.ObjectMeta{
-		Name:      fmt.Sprintf("%s-%s", install.ManagerAppName, getScope(ctx).namespace),
+		Name:      install.ManagerAppName,
 		Namespace: getScope(ctx).namespace,
 	}
 	return cr
