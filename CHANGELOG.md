@@ -4,6 +4,7 @@
 
 - Bugfix: Fixed an issue that could cause the user daemon to crash
   during shutdown.
+- Bugfix: The Traffic Manager's RoleBinding now correctly appoint the "traffic-manager" role so that service subnet discovery works correctly.
 
 ### 2.3.5 (July 15, 2021)
 

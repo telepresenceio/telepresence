@@ -15,7 +15,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: traffic-manager-{{ include "telepresence.namespace" $ }}
+  name: traffic-manager
   namespace: {{ . }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
@@ -40,14 +40,14 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: traffic-manager-{{ include "telepresence.namespace" $ }}
+  name: traffic-manager
   namespace: {{ . }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: traffic-manager-{{ include "telepresence.namespace" $ }}
+  name: traffic-manager
 subjects:
 - kind: ServiceAccount
   name: traffic-manager
@@ -61,7 +61,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: {{ include "telepresence.namespace" . }}
-  name: traffic-manager-{{ include "telepresence.namespace" . }}
+  name: traffic-manager
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 rules:
@@ -77,7 +77,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traffic-manager
-  name: traffic-manager-{{ include "telepresence.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 roleRef:
