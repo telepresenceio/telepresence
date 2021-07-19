@@ -333,10 +333,6 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		// our edited config, and then quit our connection to the manager.
 		defer func() {
 			uninstallTrafficManager()
-			_, stderr = telepresence(t, "connect")
-			require.Empty(stderr)
-			_, stderr = telepresence(t, "quit")
-			require.Empty(stderr)
 		}()
 
 		image, err := ts.kubectlOut(ctx, "get",
@@ -404,6 +400,14 @@ func (cs *connectedSuite) ns() string {
 func (cs *connectedSuite) SetupSuite() {
 	require := cs.Require()
 	c := dlog.NewTestContext(cs.T(), false)
+
+	// Connect + quit before we change contexts to ensure the
+	// traffic-manager is installed
+	_, stderr := telepresence(cs.T(), "connect")
+	require.Empty(stderr)
+	time.Sleep(time.Second) // Allow some time before we quit
+	_, stderr = telepresence(cs.T(), "quit")
+	require.Empty(stderr)
 
 	cs.Eventually(func() bool {
 		return run(c, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
