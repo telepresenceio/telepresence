@@ -93,30 +93,30 @@ func removeManager(t *testing.T, kubeconfig, managerNamespace string) {
 
 func TestE2E(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
-	kubeconfig := dtest.Kubeconfig(ctx)
-	registry := dtest.DockerRegistry(ctx)
-
-	testVersion := fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-	namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
-	managerTestNamespace := fmt.Sprintf("ambassador-%d", os.Getpid())
-
-	version.Version = testVersion
-
-	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-	os.Setenv("KO_DOCKER_REPO", registry)
-	os.Setenv("TELEPRESENCE_REGISTRY", registry)
-
-	saveManagerNamespace, ok := os.LookupEnv("TELEPRESENCE_MANAGER_NAMESPACE")
-	defer func() {
-		if !ok {
-			os.Unsetenv("TELEPRESENCE_MANAGER_NAMESPACE")
-		} else {
-			os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", saveManagerNamespace)
-		}
-	}()
-	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", managerTestNamespace)
 
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
+		kubeconfig := dtest.Kubeconfig(ctx)
+		registry := dtest.DockerRegistry(ctx)
+
+		testVersion := fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
+		namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
+		managerTestNamespace := fmt.Sprintf("ambassador-%d", os.Getpid())
+
+		version.Version = testVersion
+
+		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+		os.Setenv("KO_DOCKER_REPO", registry)
+		os.Setenv("TELEPRESENCE_REGISTRY", registry)
+
+		saveManagerNamespace, ok := os.LookupEnv("TELEPRESENCE_MANAGER_NAMESPACE")
+		defer func() {
+			if !ok {
+				os.Unsetenv("TELEPRESENCE_MANAGER_NAMESPACE")
+			} else {
+				os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", saveManagerNamespace)
+			}
+		}()
+		os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", managerTestNamespace)
 		_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace).Run()
 		defer func() {
 			_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", managerTestNamespace, "--wait=false").Run()
