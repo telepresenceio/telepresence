@@ -416,11 +416,8 @@ func (tm *trafficManager) remain(c context.Context) error {
 				Session: tm.session(),
 				ApiKey:  func() string { tok, _ := tm.callbacks.GetAPIKey(c, "manager", false); return tok }(),
 			})
-			if err != nil {
-				if c.Err() != nil {
-					err = nil
-				}
-				return err
+			if err != nil && c.Err() == nil {
+				dlog.Error(c, err)
 			}
 		}
 	}
