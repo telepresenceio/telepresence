@@ -30,24 +30,42 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+
   - version: 2.3.6
     date: '2021-07-19'
     notes:
+
       - type: bugfix
-        title: Restored root daemon logging configuration
+        title: Fix preview URLs
         body: >-
-          After the 2.3.5 release it was no longer possible to change the daemon log-level
-          from its default setting <code>info</code>. This functionality is now restored.
-        docs: reference/config/#log-levels
+          Fixed a regression introduced in 2.3.5 that caused preview
+          URLs to not work.
+
       - type: bugfix
-        title: The Traffic Manager's RoleBinding now correctly appoint the "traffic-manager" role
+        title: Fix subnet discovery
         body: >-
-          The 2.3.5 release contained a glitch that made the Traffic Manager's <code>RoleBinding</code>
-          reference a non existent <code>Role</code> which resulted in incorrect discovery of the
-          cluster's service subnet. The glitch is now fixed.
+          Fixed a regression introduced in 2.3.5 where the Traffic
+          Manager's <code>RoleBinding</code> did not correctly appoint
+          the <code>traffic-manager</code> <code>Role</code>, causing
+          subnet discovery to not be able to work correctly.
+        docs: reference/rbac/
+
       - type: bugfix
-        title: The user daemon would sometimes crash during shutdown
-        body: The connector would sometimes crash in an attempt to close a channel that wasn't open.
+        title: Fix root-user configuration loading
+        body: >-
+          Fixed a regression introduced in 2.3.5 where the root daemon
+          did not correctly read the configuration file; ignoring the
+          user's configured log levels and timeouts.
+        docs: reference/config/
+
+      - type: bugfix
+        title: Fix a user daemon crash
+        body: >-
+          Fixed an issue that could cause the user daemon to crash
+          during shutdown, as during shutdown it unconditionally
+          attempted to close a channel even though the channel might
+          already be closed.
+
   - version: 2.3.5
     date: '2021-07-15'
     notes:
