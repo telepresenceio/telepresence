@@ -1411,6 +1411,12 @@ func (ts *telepresenceSuite) setupKubeConfig(ctx context.Context) {
 	// telepresence-test-developer user later in the tests
 	err = run(ctx, "kubectl", "config", "use-context", "default")
 	ts.NoError(err)
+	go func() {
+		for ctx.Err() == nil {
+			cmd := dexec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("stern -n %s --kubeconfig %s traffic >> traffic.log", ts.managerTestNamespace, kubeconfig))
+			cmd.Run()
+		}
+	}()
 }
 
 func run(c context.Context, args ...string) error {

@@ -58,6 +58,8 @@ commands:
           command: |
             curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
             sudo install /tmp/kubectl /usr/local/bin/kubectl
+            curl -L --fail -o /tmp/stern https://github.com/wercker/stern/releases/download/1.11.0/stern_$(uname -s | tr A-Z a-z)_amd64
+            sudo install /tmp/stern /usr/local/bin/stern
 
   "install-sshfs":
     steps:
