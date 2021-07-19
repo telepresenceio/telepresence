@@ -116,7 +116,7 @@ func ConnectToSystemA(ctx context.Context,
 					return err
 				}
 				dlog.Info(ctx, "connection to System A established")
-				rconn := dnet.WrapAmbassadorCloudTunnel(rconnInner)
+				rconn := dnet.WrapAmbassadorCloudTunnelClient(rconnInner)
 				if err := addConn(rconn); err != nil {
 					return err
 				}

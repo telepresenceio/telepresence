@@ -125,7 +125,7 @@ following Free and Open Source software:
     go.opencensus.io                                                    v0.22.3                                                     Apache License 2.0
     go.starlark.net                                                     v0.0.0-20200306205701-8dd3e2ee1dd5                          3-clause BSD license
     golang.org/x/crypto                                                 v0.0.0-20210322153248-0c34fe9e7dc2                          3-clause BSD license
-    golang.org/x/net                                                    v0.0.0-20210410081132-afb366fc7cd1                          3-clause BSD license
+    golang.org/x/net                                                    v0.0.0-20210805182204-aaa1db679c0d                          3-clause BSD license
     golang.org/x/oauth2                                                 v0.0.0-20200107190931-bf48bf16ab8d                          3-clause BSD license
     golang.org/x/sync                                                   v0.0.0-20201207232520-09787c993a3a                          3-clause BSD license
     golang.org/x/sys                                                    v0.0.0-20210630005230-0f9fa26af87c                          3-clause BSD license
