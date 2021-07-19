@@ -95,7 +95,7 @@ type interceptState struct {
 
 func interceptCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:  "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
+		Use:  "intercept [fllags] <intercept_base_name> [-- <command with arguments...>]",
 		Args: cobra.MinimumNArgs(1),
 
 		Short:   "Intercept a service",
