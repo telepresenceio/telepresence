@@ -6,6 +6,7 @@
   during shutdown.
 - Bugfix: The Traffic Manager's RoleBinding now correctly appoint the "traffic-manager" role so that service subnet discovery works correctly.
 - Bugfix: Restored logging configuration for the root daemon that got broken in 2.3.5.
+- Bugfix: Preview URLs once again work correctly.
 
 ### 2.3.5 (July 15, 2021)
 
