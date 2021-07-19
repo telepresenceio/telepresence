@@ -2,11 +2,19 @@
 
 ### 2.3.6 (TBD)
 
+- Bugfix: Fixed a regression in 2.3.5 where the Traffic Manager's
+  RoleBinding did not correctly appoint the "traffic-manager" Role,
+  causing subnet discovery to not be able to work correctly.
+
+- Bugfix: Fixed a regression in 2.3.5 where the root daemon did not
+  correctly read the configuration file; ignoring the user's
+  configured log levels and timeouts.
+
+- Bugfix: Fixed a regression in 2.3.5 that caused preview URLs to not
+  work.
+
 - Bugfix: Fixed an issue that could cause the user daemon to crash
   during shutdown.
-- Bugfix: The Traffic Manager's RoleBinding now correctly appoint the "traffic-manager" role so that service subnet discovery works correctly.
-- Bugfix: Restored logging configuration for the root daemon that got broken in 2.3.5.
-- Bugfix: Preview URLs once again work correctly.
 
 ### 2.3.5 (July 15, 2021)
 
