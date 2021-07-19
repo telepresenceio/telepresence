@@ -30,6 +30,24 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.3.6
+    date: '2021-07-19'
+    notes:
+      - type: bugfix
+        title: Restored root daemon logging configuration
+        body: >-
+          After the 2.3.5 release it was no longer possible to change the daemon log-level
+          from its default setting <code>info</code>. This functionality is now restored.
+        docs: reference/config/#log-levels
+      - type: bugfix
+        title: The Traffic Manager's RoleBinding now correctly appoint the "traffic-manager" role
+        body: >-
+          The 2.3.5 release contained a glitch that made the Traffic Manager's <code>RoleBinding</code>
+          reference a non existent <code>Role</code> which resulted in incorrect discovery of the
+          cluster's service subnet. The glitch is now fixed.
+      - type: bugfix
+        title: The user daemon would sometimes crash during shutdown
+        body: The connector would sometimes crash in an attempt to close a channel that wasn't open.
   - version: 2.3.5
     date: '2021-07-15'
     notes:
