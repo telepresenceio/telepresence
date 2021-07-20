@@ -1,0 +1,160 @@
+deployment:
+  apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    annotations:
+      deployment.kubernetes.io/revision: "1"
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"with-probes","namespace":"telepresence-5759"},"spec":{"replicas":2,"selector":{"matchLabels":{"service":"with-probes"}},"template":{"metadata":{"annotations":{"consul.hashicorp.com/connect-inject":"false","sidecar.istio.io/inject":"false"},"labels":{"service":"with-probes"}},"spec":{"containers":[{"env":[{"name":"LISTEN_PORT","value":"3000"}],"image":"gcr.io/datawire/k8s-initializer-sample-app:latest","imagePullPolicy":"Always","livenessProbe":{"httpGet":{"path":"/health","port":"http"},"periodSeconds":10},"name":"sample-app","ports":[{"containerPort":3000,"name":"http"}],"readinessProbe":{"httpGet":{"path":"/health","port":"http"},"periodSeconds":10}}]}}}}
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"with-probes","referenced_service_port":"80","referenced_service_port_name":"http","hide_container_port":{"container_name":"sample-app","port_name":"http","hidden_name":"tm-http"},"add_traffic_agent":{"container_port_name":"http","container_port_proto":"TCP","app_port":3000,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
+    creationTimestamp: null
+    name: with-probes
+    namespace: telepresence-5759
+    selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/with-probes
+    uid: 50153f1e-41ca-11eb-b40f-0242ac110002
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 2
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        service: with-probes
+    strategy:
+      rollingUpdate:
+        maxSurge: 25%
+        maxUnavailable: 25%
+      type: RollingUpdate
+    template:
+      metadata:
+        annotations:
+          consul.hashicorp.com/connect-inject: "false"
+          sidecar.istio.io/inject: "false"
+        creationTimestamp: null
+        labels:
+          service: with-probes
+      spec:
+        containers:
+        - env:
+          - name: LISTEN_PORT
+            value: "3000"
+          image: gcr.io/datawire/k8s-initializer-sample-app:latest
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: tm-http
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: sample-app
+          ports:
+          - containerPort: 3000
+            name: tm-http
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: tm-http
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+        - args:
+          - agent
+          env:
+          - name: TEL_APP_LISTEN_PORT
+            value: "3000"
+          - name: TELEPRESENCE_CONTAINER
+            value: sample-app
+          - name: LOG_LEVEL
+            value: debug
+          - name: AGENT_NAME
+            value: with-probes
+          - name: AGENT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: AGENT_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: APP_PORT
+            value: "3000"
+          - name: MANAGER_HOST
+            value: traffic-manager.ambassador
+          image: localhost:5000/tel2:{{.Version}}
+          name: traffic-agent
+          ports:
+          - containerPort: 9900
+            name: http
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/stat
+              - /tmp/agent/ready
+          resources: {}
+          volumeMounts:
+          - mountPath: /tel_pod_info
+            name: traffic-annotations
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - downwardAPI:
+            items:
+            - fieldRef:
+                fieldPath: metadata.annotations
+              path: annotations
+          name: traffic-annotations
+  status:
+    availableReplicas: 2
+    conditions:
+    - lastTransitionTime: "2020-12-19T07:19:03Z"
+      lastUpdateTime: "2020-12-19T07:19:03Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2020-12-19T07:18:00Z"
+      lastUpdateTime: "2020-12-19T07:19:03Z"
+      message: ReplicaSet "with-probes-6b4bdf694c" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+    observedGeneration: 1
+    readyReplicas: 2
+    replicas: 2
+    updatedReplicas: 2
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"service":"with-probes"},"name":"with-probes","namespace":"telepresence-5759"},"spec":{"ports":[{"name":"http","port":80,"targetPort":"http"}],"selector":{"service":"with-probes"}}}
+    creationTimestamp: null
+    labels:
+      service: with-probes
+    name: with-probes
+    namespace: telepresence-5759
+    selfLink: /api/v1/namespaces/telepresence-5759/services/with-probes
+    uid: 501c39ae-41ca-11eb-b40f-0242ac110002
+  spec:
+    clusterIP: 10.43.93.209
+    ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    selector:
+      service: with-probes
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
