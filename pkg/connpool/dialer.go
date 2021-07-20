@@ -117,7 +117,7 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	case ConnectOK:
 		go h.writeLoop(ctx)
 		go h.readLoop(ctx)
-	case Disconnect:
+	case Disconnect, ConnectReject:
 		h.Close(ctx)
 		h.sendTCD(ctx, DisconnectOK)
 	case ReadClosed:
