@@ -32,7 +32,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 items:
 
   - version: 2.3.6
-    date: '2021-07-19'
+    date: '2021-07-20'
     notes:
 
       - type: bugfix
