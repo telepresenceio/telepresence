@@ -1258,6 +1258,7 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 		hs.Contains(stdout, "with-probes: intercepted")
 	})
 	hs.Run("Uninstalls successfully", func() {
+		telepresence(hs.T(), "quit")
 		hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
 		hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace2))
