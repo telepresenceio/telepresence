@@ -93,6 +93,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	os.Setenv("KO_DOCKER_REPO", registry)
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
+	os.Setenv("DTEST_REGISTRY", registry) // Prevent calls to dtest.RegistryUp() which may panic
 
 	wg.Add(1)
 	go func() {
@@ -1009,7 +1010,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 			return true
 		}
 		return false
-	}, 5*time.Second, time.Second)
+	}, 20*time.Second, 2*time.Second)
 
 	// Scale up to two pods
 	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "2"))
@@ -1032,7 +1033,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 				}
 			}
 			return true
-		}, 5*time.Second, time.Second)
+		}, 15*time.Second, time.Second)
 
 	// Verify that intercept is still active
 	assert.Eventually(func() bool {
@@ -1041,7 +1042,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 5*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 
 	// Verify response from intercepting client
 	assert.Eventually(func() bool {
@@ -1056,7 +1057,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 			return false
 		}
 		return "hello-0 from intercept at /" == string(body)
-	}, 5*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
