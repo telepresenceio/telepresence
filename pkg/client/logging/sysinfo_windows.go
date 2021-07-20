@@ -16,6 +16,14 @@ func dupToStd(_ *os.File) interface{} {
 	return errors.New("dupToStd() is not implemented on windows")
 }
 
+func dupStd() (int, int, error) {
+	return -1, -1, errors.New("dupStd() is not implemented on windows")
+}
+
+func restoreStd(int, int) error {
+	return errors.New("restoreStd() is not implemented on windows")
+}
+
 type WindowsSysInfo interface {
 	SysInfo
 	Owner() *windows.SID

@@ -6,13 +6,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -56,15 +56,18 @@ func TestInitContext(t *testing.T) {
 		// os.Stdout/os.Stdin; so they need to be backed up and restored.
 		saveStdout := os.Stdout
 		saveStderr := os.Stderr
-		stdoutFd, err := unix.Dup(1)
-		require.NoError(t, err)
-		stderrFd, err := unix.Dup(2)
-		require.NoError(t, err)
+		var stdoutFd, stderrFd int
+		if runtime.GOOS != "windows" {
+			var err error
+			stdoutFd, stderrFd, err = dupStd()
+			require.NoError(t, err)
+		}
 		t.Cleanup(func() {
 			os.Stdout = saveStdout
 			os.Stderr = saveStderr
-			_ = unix.Dup2(stdoutFd, 1)
-			_ = unix.Dup2(stderrFd, 2)
+			if runtime.GOOS != "windows" {
+				_ = restoreStd(stdoutFd, stderrFd)
+			}
 		})
 
 		return ctx, logDir, filepath.Join(logDir, logName+".log")

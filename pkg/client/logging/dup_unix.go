@@ -5,6 +5,8 @@ package logging
 import (
 	"os"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // dupToStd ensures that anything written to the file descriptor used by
@@ -20,4 +22,29 @@ func dupToStd(file *os.File) (err error) {
 		err = syscall.Dup2(int(fd), 2)
 	}
 	return err
+}
+
+func dupStd() (int, int, error) {
+	stdoutFd, err := unix.Dup(1)
+	if err != nil {
+		return -1, -1, err
+	}
+	stderrFd, err := unix.Dup(2)
+	if err != nil {
+		return -1, -1, err
+	}
+	return stdoutFd, stderrFd, err
+}
+
+func restoreStd(stdoutFd, stderrFd int) error {
+	err := unix.Dup2(stdoutFd, 1)
+	if err != nil {
+		return err
+	}
+	err = unix.Dup2(stderrFd, 2)
+	if err != nil {
+		return err
+	}
+	return nil
+
 }
