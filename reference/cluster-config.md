@@ -1,4 +1,5 @@
 import Alert from '@material-ui/lab/Alert';
+import { ClusterConfig } from '../../../../../src/components/Docs/Telepresence';
 
 # Cluster-side configuration
 
@@ -51,7 +52,7 @@ annotations on the intercepted Pods:
   (optional) names the Kubernetes Secret that contains the TLS
   client certificate to use for communicating with your application.
 
-  You will need to set this if your application expects incoming
+  You will need to set this if your application expects incoming 
   requests to speak TLS (for example, your
   code expects to handle mTLS itself instead of letting a service-mesh
   sidecar handle mTLS for it, or the port definition that Telepresence
@@ -80,8 +81,7 @@ configuration is required to acquire a license use selective intercepts.
 
 ### Create a license
 
-1. Go to [the teams setting page in Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
-select *Licenses* for the team you want to create the license for.
+1. <ClusterConfig /> 
 
 2. Generate a new license (if one doesn't already exist) by clicking *Generate New License*.
 
@@ -91,7 +91,7 @@ run this command to generate the Cluster ID:
 
   ```
   $ telepresence current-cluster-id
-
+    
     Cluster ID: <some UID>
   ```
 
@@ -105,7 +105,7 @@ run this command to generate the Cluster ID:
 
   ```
   $ telepresence license -f <downloaded-license-file>
-
+    
     apiVersion: v1
     data:
       hostDomain: <long_string>
@@ -117,21 +117,9 @@ run this command to generate the Cluster ID:
       namespace: ambassador
   ```
 
-3. Save the output as a YAML file and apply it to your
-cluster with `kubectl`.
-
-4. Ensure that you have the docker image for the Smart Agent (datawire/ambassador-telepresence-agent:1.8.0)
-pulled and in a registry your cluster can pull from.
-
-5. Have users use the `images` [config key](../config/#images) keys so telepresence uses the aforementioned image for their agent.
-
-Users will now be able to use selective intercepts with the
+3. Save the output as a YAML file and apply it to your 
+cluster with `kubectl`.  Once applied, you will be able to use selective intercepts with the
 `--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).
-
-If using Helm to install the server-side components, see the chart's [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence) to learn how to configure the image registry and license secret.
-
-Have clients use the [skipLogin](../config/#cloud) key to ensure the cli knows it is operating in an
-air-gapped environment.
 
 ## Mutating Webhook
 
