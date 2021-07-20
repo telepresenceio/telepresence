@@ -10,6 +10,9 @@
 
 version: 2.1
 
+orbs:
+  win: circleci/windows@2.2.0
+
 executors:
 
   "vm-linux":
@@ -56,8 +59,13 @@ commands:
       - run:
           name: "Install kubectl << parameters.version >>"
           command: |
-            curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
-            sudo install /tmp/kubectl /usr/local/bin/kubectl
+            if [[ $OS == Windows_NT ]]; then
+              curl -LO https://dl.k8s.io/release/v<< parameters.version >>/bin/windows/amd64/kubectl.exe
+              mv kubectl.exe /c/kubectl.exe
+            else
+              curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
+              sudo install /tmp/kubectl /usr/local/bin/kubectl
+            fi
 
   "install-sshfs":
     steps:
@@ -107,6 +115,18 @@ commands:
           destination: test-logs
 
 jobs:
+
+  "build-and-test-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+    - checkout
+    - install-go
+    - install-kubectl
+    - run:
+        command: go test -failfast ./...
+        no_output_timeout: 20m
 
   "build-and-test":
     executor: vm-linux
@@ -219,7 +239,8 @@ workflows:
 
   'Dev':
     jobs:
-      - build-and-test
+      # - build-and-test
+      - build-and-test-windows
       - lint
       - generate
 

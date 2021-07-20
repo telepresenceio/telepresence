@@ -24,7 +24,7 @@ require (
 	github.com/telepresenceio/telepresence/rpc/v2 v2.3.6
 	golang.org/x/net v0.0.0-20210410081132-afb366fc7cd1
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.zx2c4.com/wireguard v0.0.0-20210427022245-097af6e1351b
 	golang.zx2c4.com/wireguard/windows v0.3.11
@@ -49,3 +49,5 @@ replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316
+
+replace github.com/datawire/dtest => github.com/josecv/dtest v0.0.0-20210716205429-2bb6cfca40a0
