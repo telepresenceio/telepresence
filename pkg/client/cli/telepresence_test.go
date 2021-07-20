@@ -63,15 +63,15 @@ type telepresenceSuite struct {
 
 func (ts *telepresenceSuite) SetupSuite() {
 	// Check that the "ko" program exists, and adjust PATH as necessary.
-	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
-		ts.FailNow("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
-	}
+	// if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
+	// 	ts.FailNow("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
+	// }
 	require := ts.Require()
-	toolbindir, err := filepath.Abs("../../../tools/bin")
-	require.NoError(err)
+	// toolbindir, err := filepath.Abs("../../../tools/bin")
+	// require.NoError(err)
 	_ = os.Chdir("../../..")
 
-	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
+	// os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
 
 	// Remove very verbose output from DTEST initialization
 	log.SetOutput(ioutil.Discard)
@@ -94,9 +94,12 @@ func (ts *telepresenceSuite) SetupSuite() {
 	}()
 
 	_ = os.Remove(client.ConnectorSocketName)
-	err = run(ctx, "sudo", "true")
-	require.NoError(err, "acquire privileges")
 
+	var err error
+	if goRuntime.GOOS != "windows" {
+		err := run(ctx, "sudo", "true")
+		require.NoError(err, "acquire privileges")
+	}
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
 	os.Setenv("DTEST_REGISTRY", dtest.DockerRegistry(ctx)) // Prevent extra calls to dtest.RegistryUp() which may panic
 
@@ -174,11 +177,13 @@ func (ts *telepresenceSuite) TearDownSuite() {
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
-	ts.Run("Version", func() {
-		stdout, stderr := telepresence(ts.T(), "version")
-		ts.Empty(stderr)
-		ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
-	})
+	if goRuntime.GOOS != "windows" {
+		ts.Run("Version", func() {
+			stdout, stderr := telepresence(ts.T(), "version")
+			ts.Empty(stderr)
+			ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
+		})
+	}
 	ts.Run("Status", func() {
 		out, _ := telepresence(ts.T(), "status")
 		ts.Contains(out, "Root Daemon: Not running")
@@ -296,7 +301,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
-		_ = run(ctx, "curl", "--silent", "example.org")
+		_ = run(ctx, "curl", "--silent", "kubernetes.default:443")
 
 		_, stderr = telepresenceContext(ctx, "quit")
 		require.Empty(stderr)
@@ -305,9 +310,12 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		defer rootLog.Close()
 
 		hasLookup := false
+		dlog.Errorf(ctx, "GREPME: Rootlog is at %s", tmpDir)
 		scn := bufio.NewScanner(rootLog)
 		for scn.Scan() && !hasLookup {
-			hasLookup = strings.Contains(scn.Text(), `LookupHost "example.org"`)
+			text := scn.Text()
+			dlog.Infof(ctx, "GREPME: LINE: %s", text)
+			hasLookup = strings.Contains(text, `LookupHost "kubernetes.default"`)
 		}
 		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
 	})
@@ -1394,10 +1402,12 @@ func (ts *telepresenceSuite) publishManager() error {
 		"TELEPRESENCE_VERSION=" + ts.testVersion,
 		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(ctx),
 	}
-	includeEnv := []string{"HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	includeEnv := []string{"HOME=", "PATH=", "Path=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
 	for _, env := range os.Environ() {
+		dlog.Infof(ctx, "I found variable %s", env)
 		for _, incl := range includeEnv {
 			if strings.HasPrefix(env, incl) {
+				dlog.Infof(ctx, "Setting variable %s to value %s", env, os.Getenv(env))
 				cmd.Env = append(cmd.Env, env)
 				break
 			}
