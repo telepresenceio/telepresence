@@ -117,7 +117,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 		return err
 	}
 
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(tm.ConfigFlags, tm.Client())
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, tm.ConfigFlags, tm.Client())
 	if err != nil {
 		return err
 	}
