@@ -1275,6 +1275,7 @@ func (hs *helmSuite) TestG_CollidingInstalls() {
 func (hs *helmSuite) TestZ_Uninstall() {
 	ctx := dlog.NewTestContext(hs.T(), false)
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+	telepresenceContext(ctx, "quit")
 	hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace1))
 	// Make sure the RBAC was cleaned up by uninstall
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer"))
