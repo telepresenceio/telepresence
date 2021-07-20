@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -159,7 +160,13 @@ func TestInitContext(t *testing.T) {
 		ctx, logDir, _ := testSetup(t)
 		check := require.New(t)
 
-		for i := 0; i < 7; i++ {
+		maxFiles := 5
+		if me := os.Getenv("TELEPRESENCE_MAX_LOGFILES"); me != "" {
+			if mx, err := strconv.Atoi(me); err == nil && mx >= 0 {
+				maxFiles = mx
+			}
+		}
+		for i := 0; i < maxFiles+2; i++ {
 			ft.Step(24 * time.Hour)
 			c, err := InitContext(ctx, logName)
 			loggerForTest.AddHook(&dtimeHook{})
@@ -174,6 +181,6 @@ func TestInitContext(t *testing.T) {
 
 		files, err := ioutil.ReadDir(logDir)
 		check.NoError(err)
-		check.Equal(5, len(files))
+		check.Equal(maxFiles, len(files))
 	})
 }

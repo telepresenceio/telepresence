@@ -27,6 +27,7 @@ import (
 
 type k8sPortForwardDialer struct {
 	// static
+	logCtx          context.Context
 	kubeFlags       *kates.ConfigFlags
 	kubeRESTClient  *rest.RESTClient
 	kubeKatesClient *kates.Client
@@ -43,7 +44,7 @@ type k8sPortForwardDialer struct {
 // grpc.WithContextDialer) that dials to a port on a Kubernetes Pod, in the manor of `kubectl
 // port-forward`.  It returns the direct connection to the apiserver; it does not establish a local
 // port being forwarded from or otherwise pump data over the connection.
-func NewK8sPortForwardDialer(kubeFlags *kates.ConfigFlags, kubeKatesClient *kates.Client) (func(context.Context, string) (net.Conn, error), error) {
+func NewK8sPortForwardDialer(logCtx context.Context, kubeFlags *kates.ConfigFlags, kubeKatesClient *kates.Client) (func(context.Context, string) (net.Conn, error), error) {
 	kubeConfig, err := kubeFlags.ToRESTConfig()
 	if err != nil {
 		return nil, err
@@ -63,6 +64,7 @@ func NewK8sPortForwardDialer(kubeFlags *kates.ConfigFlags, kubeKatesClient *kate
 		return nil, err
 	}
 	dialer := &k8sPortForwardDialer{
+		logCtx:          logCtx,
 		kubeFlags:       kubeFlags,
 		kubeRESTClient:  kubeRESTClient,
 		kubeKatesClient: kubeKatesClient,
@@ -77,7 +79,7 @@ func NewK8sPortForwardDialer(kubeFlags *kates.ConfigFlags, kubeKatesClient *kate
 // Dial dials a port of something in the cluster.  The address format is
 // "[objkind/]objname[.objnamespace]:port".
 func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
-	dlog.Debugf(ctx, "k8sPortForwardDialer.Dial(ctx, %q)", addr)
+	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.Dial(ctx, %q)", addr)
 
 	pod, podPortNumber, err := pf.resolve(ctx, addr)
 	if err != nil {
@@ -118,8 +120,9 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kate
 			},
 		},
 	}
+	dlog.Debugf(pf.logCtx, "kates.Get(%s %s.%s)", objKind, objName, objNamespace)
 	if err := pf.kubeKatesClient.Get(ctx, objUn, objUn); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("unable to get %s %s.%s: %w", objKind, objName, objNamespace, err)
 	}
 	obj, err := kates.NewObjectFromUnstructured(objUn)
 	if err != nil {
@@ -176,7 +179,7 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kate
 	return pod, podPortNumber, nil
 }
 
-func (pf *k8sPortForwardDialer) spdyStream(ctx context.Context, pod *kates.Pod) (httpstream.Connection, error) {
+func (pf *k8sPortForwardDialer) spdyStream(pod *kates.Pod) (httpstream.Connection, error) {
 	cacheKey := pod.Name + "." + pod.Namespace
 	pf.spdyStreamsMu.Lock()
 	defer pf.spdyStreamsMu.Unlock()
@@ -199,7 +202,7 @@ func (pf *k8sPortForwardDialer) spdyStream(ctx context.Context, pod *kates.Pod) 
 	// Don't bother caching dialers in .pf, they're just statelss utility structures.
 	spdyDialer := spdy.NewDialer(pf.spdyUpgrader, &http.Client{Transport: pf.spdyTransport}, http.MethodPost, reqURL)
 
-	dlog.Debugf(ctx, "k8sPortForwardDialer.spdyDial(ctx, Pod./%s.%s)", pod.Name, pod.Namespace)
+	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.spdyDial(ctx, Pod./%s.%s)", pod.Name, pod.Namespace)
 
 	spdyStream, _, err := spdyDialer.Dial(portforward.PortForwardProtocolV1Name)
 	if err != nil {
@@ -218,13 +221,13 @@ func (pf *k8sPortForwardDialer) spdyStream(ctx context.Context, pod *kates.Pod) 
 }
 
 func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port uint16) (conn *kpfConn, err error) {
-	dlog.Debugf(ctx, "k8sPortForwardDialer.dial(ctx, %s.%s, %d)",
+	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, %s.%s, %d)",
 		pod.Name,
 		pod.Namespace,
 		port)
 
 	// All port-forwards to the same Pod get multiplexed over the same SPDY stream.
-	spdyStream, err := pf.spdyStream(ctx, pod)
+	spdyStream, err := pf.spdyStream(pod)
 	if err != nil {
 		return nil, err
 	}

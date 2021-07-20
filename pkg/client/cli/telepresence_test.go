@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datawire/dlib/dtime"
+
 	"github.com/stretchr/testify/suite"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -51,6 +53,7 @@ type telepresenceSuite struct {
 	testVersion          string
 	namespace            string
 	managerTestNamespace string
+	logCapturingPods     sync.Map
 }
 
 func (ts *telepresenceSuite) SetupSuite() {
@@ -211,6 +214,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			require.Contains(stdout, "Kubernetes context:")
 			require.Regexp(`Telepresence proxy:\s+ON`, stdout)
 			require.Contains(stdout, "Daemon quitting")
+			ts.NoError(ts.capturePodLogs(dlog.NewTestContext(ts.T(), false), "traffic-manager", ts.managerTestNamespace))
 		})
 	})
 
@@ -344,6 +348,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require.NoError(err)
 		desiredImage := fmt.Sprintf("%s/imageFromConfig:0.0.1", registry)
 		ts.Equal(desiredImage, image)
+		ts.NoError(ts.capturePodLogs(ctx, "traffic-manager", ts.managerTestNamespace))
 	})
 }
 
@@ -365,6 +370,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := names()
 		require.NoError(err)
 		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
+		ts.NoError(ts.capturePodLogs(ctx, "traffic-manager", ts.managerTestNamespace))
 
 		// The telepresence-test-developer will not be able to uninstall everything
 		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
@@ -418,6 +424,7 @@ func (cs *connectedSuite) SetupSuite() {
 		time.Second,    // polling interval
 		"Timeout waiting for network overrides to establish", // msg
 	)
+	require.NoError(cs.tpSuite.capturePodLogs(c, "traffic-manager", cs.tpSuite.managerTestNamespace))
 }
 
 func (cs *connectedSuite) TearDownSuite() {
@@ -1187,7 +1194,7 @@ func (hs *helmSuite) TestD_WebhookInjectsInManagedNamespace() {
 		hs.Empty(stderr)
 		return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
 	},
-		10*time.Second, // waitFor
+		20*time.Second, // waitFor
 		2*time.Second,  // polling interval
 	)
 }
@@ -1251,6 +1258,7 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 		hs.Contains(stdout, "with-probes: intercepted")
 	})
 	hs.Run("Uninstalls successfully", func() {
+		telepresence(hs.T(), "quit")
 		hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
 		hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace2))
@@ -1267,6 +1275,7 @@ func (hs *helmSuite) TestG_CollidingInstalls() {
 func (hs *helmSuite) TestZ_Uninstall() {
 	ctx := dlog.NewTestContext(hs.T(), false)
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+	telepresenceContext(ctx, "quit")
 	hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace1))
 	// Make sure the RBAC was cleaned up by uninstall
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer"))
@@ -1281,7 +1290,7 @@ func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, a
 	}
 	helmValues := "pkg/client/cli/testdata/test-values.yaml"
 	helmChart := "charts/telepresence"
-	return run(ctx, "helm", "install", "traffic-manager",
+	err = run(ctx, "helm", "install", "traffic-manager",
 		"-n", managerNamespace, helmChart,
 		"--set", fmt.Sprintf("clusterId=%s", clusterID),
 		"--set", fmt.Sprintf("image.registry=%s", dtest.DockerRegistry(ctx)),
@@ -1290,6 +1299,10 @@ func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, a
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"-f", helmValues,
 	)
+	if err == nil {
+		err = hs.tpSuite.capturePodLogs(ctx, "traffic-manager", managerNamespace)
+	}
+	return err
 }
 
 func (hs *helmSuite) TearDownSuite() {
@@ -1412,6 +1425,54 @@ func (ts *telepresenceSuite) setupKubeConfig(ctx context.Context) {
 	// telepresence-test-developer user later in the tests
 	err = run(ctx, "kubectl", "config", "use-context", "default")
 	ts.NoError(err)
+}
+
+func (ts *telepresenceSuite) capturePodLogs(ctx context.Context, app, ns string) error {
+	var pods string
+	for i := 0; ; i++ {
+		var err error
+		pods, err = output(ctx, "kubectl", "-n", ns, "get", "pods", "-l", "app="+app, "-o", "jsonpath={.items[*].metadata.name}")
+		if err != nil {
+			return fmt.Errorf("failed to get %s pod in namespace %s: %w", app, ns, err)
+		}
+		pods = strings.TrimSpace(pods)
+		if pods != "" || i == 5 {
+			break
+		}
+		dtime.SleepWithContext(ctx, 2*time.Second)
+	}
+	if pods == "" {
+		return fmt.Errorf("found no %s pods in namespace %s", app, ns)
+	}
+
+	// Let command die when the pod that it logs die
+	ctx = dcontext.WithoutCancel(ctx)
+
+	present := struct{}{}
+	logDir, _ := filelocation.AppUserLogDir(ctx)
+	for _, pod := range strings.Split(pods, " ") {
+		if _, ok := ts.logCapturingPods.LoadOrStore(pod, present); ok {
+			continue
+		}
+		logFile, err := os.Create(filepath.Join(logDir, pod+"-"+ns+".log"))
+		if err != nil {
+			ts.logCapturingPods.Delete(pod)
+			return err
+		}
+
+		cmd := dexec.CommandContext(ctx, "kubectl", "-n", ns, "logs", "-f", pod)
+		cmd.Stdout = logFile
+		go func(pod string) {
+			defer func() {
+				_ = logFile.Close()
+				ts.logCapturingPods.Delete(pod)
+			}()
+			if err := cmd.Run(); err != nil {
+				dlog.Error(ctx, err)
+			}
+		}(pod)
+	}
+	return nil
 }
 
 func run(c context.Context, args ...string) error {
