@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 
@@ -37,7 +38,15 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 		if err != nil {
 			return ctx, err
 		}
-		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, true, 0600, NewRotateOnce(), 5)
+		maxFiles := uint16(5)
+
+		// TODO: Also make this a configurable setting in config.yml
+		if me := os.Getenv("TELEPRESENCE_MAX_LOGFILES"); me != "" {
+			if mx, err := strconv.Atoi(me); err == nil && mx >= 0 {
+				maxFiles = uint16(mx)
+			}
+		}
+		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, true, 0600, NewRotateOnce(), maxFiles)
 		if err != nil {
 			return ctx, err
 		}

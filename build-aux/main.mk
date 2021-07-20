@@ -178,7 +178,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 
 .PHONY: check
 check: $(tools/ko) $(tools/helm) ## (QA) Run the test suite
-	go test -timeout=15m ./...
+	TELEPRESENCE_MAX_LOGFILES=10 go test -timeout=18m ./...
 
 # Install
 # =======
