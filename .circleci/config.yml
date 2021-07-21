@@ -7,6 +7,7 @@
 #     + DOCKERHUB_PASSWORD
 #     + AWS_ACCESS_KEY_ID (for S3)
 #     + AWS_SECRET_ACCESS_KEY (for S3)
+#     + TELEPRESENCE_KUBECEPTION_TOKEN
 
 version: 2.1
 
@@ -116,6 +117,19 @@ commands:
 
 jobs:
 
+  "build-dev-image":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-go
+      - run:
+          name: Docker login
+          command: |
+            docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+      - run:
+          command: |
+            TELEPRESENCE_VERSION="v2.0.0-gotest.$CIRCLE_SHA1" make push-images
+
   "build-and-test-windows":
     executor:
       name: win/default
@@ -136,8 +150,11 @@ jobs:
       - run: make build
       - install-kubectl
       - install-sshfs
+      - run: |
+          go run build-aux/create_test_cluster.go create "tp-ci-linux-${CIRCLE_SHA1}" > $HOME/kubeconfig
       - run:
-          command: make test
+          command: |
+            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
@@ -239,8 +256,13 @@ workflows:
 
   'Dev':
     jobs:
-      # - build-and-test
-      - build-and-test-windows
+      - build-dev-image:
+          context: telepresence2-release
+      - build-and-test:
+          context: telepresence2-release
+          requires:
+            - build-dev-image
+        # - build-and-test-windows
       - lint
       - generate
 
