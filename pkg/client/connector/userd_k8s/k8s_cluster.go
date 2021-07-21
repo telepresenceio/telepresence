@@ -140,17 +140,13 @@ func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]kates.Ob
 	return objs, nil
 }
 
-// PodNames returns the names of all pods found in the given Namespace
-func (kc *Cluster) PodNames(c context.Context, namespace string) ([]string, error) {
-	var objNames []objName
-	if err := kc.client.List(c, kates.Query{Kind: "Pod", Namespace: namespace}, &objNames); err != nil {
+// Pods returns all pods found in the given Namespace
+func (kc *Cluster) Pods(c context.Context, namespace string) ([]*kates.Pod, error) {
+	var pods []*kates.Pod
+	if err := kc.client.List(c, kates.Query{Kind: "Pod", Namespace: namespace}, &pods); err != nil {
 		return nil, err
 	}
-	names := make([]string, len(objNames))
-	for i, n := range objNames {
-		names[i] = n.Name
-	}
-	return names, nil
+	return pods, nil
 }
 
 // FindDeployment returns a deployment with the given name in the given namespace or nil
