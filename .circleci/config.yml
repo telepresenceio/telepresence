@@ -80,14 +80,16 @@ commands:
             sleep 10 # Give the kluster some time to start up
             export KUBECONFIG="$HOME/kubeconfig"
             KUBECTL=kubectl
+            IMAGE=/tmp/workspace/tel2-image.tar
             if [[ $OS == Windows_NT ]]; then
               KUBECTL=/c/kubectl.exe
+              IMAGE=/c/workspace/tel2-image.tar
             fi
             $KUBECTL apply -f build-aux/image-importer.yaml
             POD_NAME=$($KUBECTL get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
             $KUBECTL wait --for=condition=ready pod $POD_NAME
-            $KUBECTL cp /tmp/workspace/tel2-image.tar "$POD_NAME:/tmp/image.tar"
-            $KUBECTL exec $POD_NAME /hostbin/ctr images import /tmp/image.tar
+            $KUBECTL cp "$IMAGE" "$POD_NAME:/tmp/image.tar"
+            $KUBECTL exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar
 
   "cleanup-kluster":
     parameters:
@@ -174,11 +176,12 @@ jobs:
       - install-go
       - install-kubectl
       - attach_workspace:
-          at: /tmp/workspace
+          at: "C:\\workspace"
       - prepare-kluster:
           platform: windows
       - run:
-          command: go test -timeout=20m ./...
+          command: |
+            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" go test -timeout=20m ./...
           no_output_timeout: 25m
       - cleanup-kluster:
           platform: windows
