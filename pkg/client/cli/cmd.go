@@ -40,6 +40,25 @@ var mappedNamespaces []string
 var kubeFlags *pflag.FlagSet
 var kubeConfig *kates.ConfigFlags
 
+// RootDaemonCommand just adds the hidden daemon-foreground subcommand and avoids checks for
+// legacy commands.
+func RootDaemonCommand(ctx context.Context) *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:  "telepresence",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.SetOut(cmd.ErrOrStderr())
+			return nil
+		},
+		SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
+		SilenceUsage:  true, // our FlagErrorFunc will handle it
+	}
+	// Hidden/internal command. This is called by Telepresence itself from
+	// the correct context and execute in-place immediately.
+	rootCmd.AddCommand(daemon.Command())
+	return rootCmd
+}
+
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
 func OnlySubcommands(cmd *cobra.Command, args []string) error {
@@ -133,9 +152,8 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
-	// Hidden/internal commands. These are called by Telepresence itself from
+	// Hidden/internal command. This is called by Telepresence itself from
 	// the correct context and execute in-place immediately.
-	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
 
 	globalFlagGroups = []FlagGroup{

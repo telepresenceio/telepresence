@@ -158,29 +158,24 @@ func (c *reverseConn) RemoteAddr() net.Addr {
 
 // SetDeadline implements net.Conn.
 func (c *reverseConn) SetDeadline(t time.Time) error {
-	if isClosedChan(c.closed) {
-		return os.ErrClosed
-	}
-	c.readDeadline.set(t)
-	c.writeDeadline.set(t)
+	_ = c.SetReadDeadline(t)
+	_ = c.SetWriteDeadline(t)
 	return nil
 }
 
 // SetReadDeadline implements net.Conn.
 func (c *reverseConn) SetReadDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
-		return os.ErrClosed
+		c.readDeadline.set(t)
 	}
-	c.readDeadline.set(t)
 	return nil
 }
 
 // SetWriteDeadline implements net.Conn.
 func (c *reverseConn) SetWriteDeadline(t time.Time) error {
 	if isClosedChan(c.closed) {
-		return os.ErrClosed
+		c.writeDeadline.set(t)
 	}
-	c.writeDeadline.set(t)
 	return nil
 }
 

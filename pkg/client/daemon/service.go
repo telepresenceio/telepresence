@@ -55,7 +55,7 @@ type service struct {
 // Command returns the telepresence sub-command "daemon-foreground"
 func Command() *cobra.Command {
 	return &cobra.Command{
-		Use:    processName + "-foreground",
+		Use:    processName + "-foreground <logging dir> <config dir> <dns>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(3),
 		Hidden: true,

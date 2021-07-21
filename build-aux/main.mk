@@ -107,8 +107,8 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 	rm -f charts/telepresence/Chart.yaml.bak
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/worker_trafficmanager/testdata/addAgentToWorkload/cur pkg/client/connector/worker_trafficmanager/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/worker_trafficmanager/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/userd_trafficmgr/testdata/addAgentToWorkload/cur pkg/client/connector/userd_trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/userd_trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
@@ -178,7 +178,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 
 .PHONY: check
 check: $(tools/ko) $(tools/helm) ## (QA) Run the test suite
-	go test -timeout=15m ./...
+	TELEPRESENCE_MAX_LOGFILES=10 go test -timeout=18m ./...
 
 # Install
 # =======

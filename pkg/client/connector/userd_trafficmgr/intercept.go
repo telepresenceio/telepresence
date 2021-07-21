@@ -16,7 +16,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
@@ -359,70 +358,6 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			ii.Spec.MountPoint = ir.MountPoint
 		}
 		return result, nil
-	}
-}
-
-func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string) *rpc.InterceptResult {
-	svcUID, kind, err := tm.ensureAgent(c, namespace, agentName, svcName, svcPortIdentifier, agentImageName)
-	if err != nil {
-		if err == agentNotFound {
-			return &rpc.InterceptResult{
-				Error:     rpc.InterceptError_NOT_FOUND,
-				ErrorText: agentName,
-			}
-		}
-		dlog.Error(c, err)
-		return &rpc.InterceptResult{
-			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
-			ErrorText: err.Error(),
-		}
-	}
-
-	dlog.Infof(c, "waiting for agent for %s %q.%s", kind, agentName, namespace)
-	agent, err := tm.waitForAgent(c, agentName, namespace)
-	if err != nil {
-		dlog.Error(c, err)
-		return &rpc.InterceptResult{
-			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
-			ErrorText: err.Error(),
-		}
-	}
-	dlog.Infof(c, "agent created for %s %q.%s", kind, agentName, namespace)
-	return &rpc.InterceptResult{
-		Error:        rpc.InterceptError_UNSPECIFIED,
-		Environment:  agent.Environment,
-		ServiceUid:   svcUID,
-		WorkloadKind: kind,
-	}
-}
-
-func (tm *trafficManager) waitForAgent(ctx context.Context, name string, namespace string) (*manager.AgentInfo, error) {
-	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutAgentInstall) // installing a new agent can take some time
-	defer cancel()
-
-	waitError := func(err error) error {
-		return client.CheckTimeout(ctx, fmt.Errorf("waiting for agent %q to be present: %w", name, err))
-	}
-	<-tm.startup
-	stream, err := tm.managerClient.WatchAgents(ctx, tm.session())
-	if err != nil {
-		return nil, waitError(err)
-	}
-	for {
-		snapshot, err := stream.Recv()
-		if err != nil {
-			return nil, waitError(err)
-		}
-
-		var agentList []*manager.AgentInfo
-		for _, agent := range snapshot.Agents {
-			if agent.Name == name && agent.Namespace == namespace {
-				agentList = append(agentList, agent)
-			}
-		}
-		if managerutil.AgentsAreCompatible(agentList) {
-			return agentList[0], nil
-		}
 	}
 }
 
