@@ -8,19 +8,18 @@ option go_package = "github.com/telepresenceio/telepresence/rpc/v2/systema";
 
 // Calls from the cli to Ambassador Cloud (System A) are unauthenticated
 // This is because this rpc is (currently) only used to get messages from
-// the cloud that we want to raise to our users.
+// the cloud that we want to be able to raise to all users.
 service SystemACli {
-  // GetMessages is used by the cli to get messages from the cloud.
-  // Telepresence should cache these messages, since they won't change
-  // too frequently.
-  rpc GetMessages(google.protobuf.Empty) returns (MessageResponse);
+  // GetUnauthenticatedCommandMessages is used by the cli to get messages from
+  // Ambassador Cloud that should be raised when specified commands are ran if
+  // a user is not authenticated with Ambassador Cloud. These are messages
+  // that we want to get to users who aren't currently logged into Ambassador
+  // Cloud. Telepresence should cache these messages, since they won't change
+  // frequently.
+  rpc GetUnauthenticatedCommandMessages(google.protobuf.Empty) returns (CommandMessageResponse);
 }
 
-message MessageResponse {
-  // A map of <telepresence_cmd, message>, where message is what we want to
-  // raise to the user when they execute the aforementioned command, when
-  // the user isn't logged in.
-  // Currently we only use this for intercepts, but designing this in such
-  // a way it could be extended to other commands.
-  map<string, string> unauthenticated_user_messages = 1;  
+message CommandMessageResponse {
+  // intercept is the message to give when a user performs an intercept command.
+  string intercept = 1;
 }

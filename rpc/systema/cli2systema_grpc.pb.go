@@ -18,10 +18,13 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SystemACliClient interface {
-	// GetMessages is used by the cli to get messages from the cloud.
-	// Telepresence should cache these messages, since they won't change
-	// too frequently.
-	GetMessages(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*MessageResponse, error)
+	// GetUnauthenticatedCommandMessages is used by the cli to get messages from
+	// Ambassador Cloud that should be raised when specified commands are ran if
+	// a user is not authenticated with Ambassador Cloud. These are messages
+	// that we want to get to users who aren't currently logged into Ambassador
+	// Cloud. Telepresence should cache these messages, since they won't change
+	// frequently.
+	GetUnauthenticatedCommandMessages(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CommandMessageResponse, error)
 }
 
 type systemACliClient struct {
@@ -32,9 +35,9 @@ func NewSystemACliClient(cc grpc.ClientConnInterface) SystemACliClient {
 	return &systemACliClient{cc}
 }
 
-func (c *systemACliClient) GetMessages(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*MessageResponse, error) {
-	out := new(MessageResponse)
-	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACli/GetMessages", in, out, opts...)
+func (c *systemACliClient) GetUnauthenticatedCommandMessages(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CommandMessageResponse, error) {
+	out := new(CommandMessageResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACli/GetUnauthenticatedCommandMessages", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -45,10 +48,13 @@ func (c *systemACliClient) GetMessages(ctx context.Context, in *empty.Empty, opt
 // All implementations must embed UnimplementedSystemACliServer
 // for forward compatibility
 type SystemACliServer interface {
-	// GetMessages is used by the cli to get messages from the cloud.
-	// Telepresence should cache these messages, since they won't change
-	// too frequently.
-	GetMessages(context.Context, *empty.Empty) (*MessageResponse, error)
+	// GetUnauthenticatedCommandMessages is used by the cli to get messages from
+	// Ambassador Cloud that should be raised when specified commands are ran if
+	// a user is not authenticated with Ambassador Cloud. These are messages
+	// that we want to get to users who aren't currently logged into Ambassador
+	// Cloud. Telepresence should cache these messages, since they won't change
+	// frequently.
+	GetUnauthenticatedCommandMessages(context.Context, *empty.Empty) (*CommandMessageResponse, error)
 	mustEmbedUnimplementedSystemACliServer()
 }
 
@@ -56,8 +62,8 @@ type SystemACliServer interface {
 type UnimplementedSystemACliServer struct {
 }
 
-func (UnimplementedSystemACliServer) GetMessages(context.Context, *empty.Empty) (*MessageResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetMessages not implemented")
+func (UnimplementedSystemACliServer) GetUnauthenticatedCommandMessages(context.Context, *empty.Empty) (*CommandMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetUnauthenticatedCommandMessages not implemented")
 }
 func (UnimplementedSystemACliServer) mustEmbedUnimplementedSystemACliServer() {}
 
@@ -72,20 +78,20 @@ func RegisterSystemACliServer(s grpc.ServiceRegistrar, srv SystemACliServer) {
 	s.RegisterService(&_SystemACli_serviceDesc, srv)
 }
 
-func _SystemACli_GetMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _SystemACli_GetUnauthenticatedCommandMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SystemACliServer).GetMessages(ctx, in)
+		return srv.(SystemACliServer).GetUnauthenticatedCommandMessages(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.systema.SystemACli/GetMessages",
+		FullMethod: "/telepresence.systema.SystemACli/GetUnauthenticatedCommandMessages",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SystemACliServer).GetMessages(ctx, req.(*empty.Empty))
+		return srv.(SystemACliServer).GetUnauthenticatedCommandMessages(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -95,8 +101,8 @@ var _SystemACli_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*SystemACliServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetMessages",
-			Handler:    _SystemACli_GetMessages_Handler,
+			MethodName: "GetUnauthenticatedCommandMessages",
+			Handler:    _SystemACli_GetUnauthenticatedCommandMessages_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
