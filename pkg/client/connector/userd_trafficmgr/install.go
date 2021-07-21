@@ -317,7 +317,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 
 	var err error
 	if rs, ok := obj.(*kates.ReplicaSet); ok {
-		if err = ki.refreshReplicaSet(c, name, namespace, rs); err != nil {
+		if err = ki.refreshReplicaSet(c, namespace, rs); err != nil {
 			return err
 		}
 	}
@@ -350,36 +350,26 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 // refreshReplicaSet finds pods owned by a given ReplicaSet and deletes them.
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
-func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string, rs *kates.ReplicaSet) error {
-	podNames, err := ki.PodNames(c, namespace)
+func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *kates.ReplicaSet) error {
+	pods, err := ki.Pods(c, namespace)
 	if err != nil {
 		return err
 	}
 
-	for _, podName := range podNames {
-		// We only care about pods that are associated with the ReplicaSet
-		// so we filter them out here
-		if !strings.Contains(podName, name) {
-			continue
-		}
-		podInfo, err := ki.FindPod(c, namespace, podName)
-		if err != nil {
-			return err
-		}
-
-		for _, ownerRef := range podInfo.OwnerReferences {
+	for _, pod := range pods {
+		for _, ownerRef := range pod.OwnerReferences {
 			if ownerRef.UID == rs.UID {
-				dlog.Infof(c, "Deleting pod %s owned by rs %s", podInfo.Name, rs.Name)
+				dlog.Infof(c, "Deleting pod %s.%s owned by rs %s", pod.Name, pod.Namespace, rs.Name)
 				pod := &kates.Pod{
 					TypeMeta: kates.TypeMeta{
 						Kind: "Pod",
 					},
 					ObjectMeta: kates.ObjectMeta{
-						Namespace: podInfo.Namespace,
-						Name:      podInfo.Name,
+						Namespace: pod.Namespace,
+						Name:      pod.Name,
 					},
 				}
-				if err := ki.Client().Delete(c, pod, pod); err != nil {
+				if err = ki.Client().Delete(c, pod, nil); err != nil {
 					return err
 				}
 			}
