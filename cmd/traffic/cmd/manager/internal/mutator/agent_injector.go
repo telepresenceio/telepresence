@@ -111,6 +111,8 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	appPort := appContainer.Ports[containerPortIndex]
 
 	// Create patch operations to add the traffic-agent sidecar
+	dlog.Infof(ctx, "Injecting %s into pod %s", install.AgentContainerName, refPodName)
+
 	var patches []patchOperation
 	patches, err = addAgentContainer(ctx, svc, servicePort, appContainer, &appPort, podName, podNamespace, patches)
 	if err != nil {

@@ -9,13 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dcontext"
@@ -25,10 +22,10 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type Callbacks struct {
@@ -65,8 +62,15 @@ type trafficManager struct {
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
 
+	// currentAgents is the latest snapshot returned by the agent watcher
+	currentAgents     []*manager.AgentInfo
+	currentAgentsLock sync.Mutex
+
 	// activeInterceptsWaiters contains chan interceptResult keyed by intercept name
 	activeInterceptsWaiters sync.Map
+
+	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
+	agentWaiters sync.Map
 }
 
 // interceptResult is what gets written to the activeInterceptsWaiters channels
@@ -192,6 +196,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
+	g.Go("agent-watcher", tm.agentInfoWatcher)
 	return g.Wait()
 }
 
@@ -211,82 +216,50 @@ func (tm *trafficManager) hasOwner(obj kates.Object) bool {
 	return false
 }
 
-// getObjectAndLabels gets the object + its associated labels, as well as a reason
+// getReasonAndLabels gets the workload's associated labels, as well as a reason
 // it cannot be intercepted if that is the case.
-func (tm *trafficManager) getObjectAndLabels(ctx context.Context, objectKind, namespace, name string) (kates.Object, map[string]string, string, error) {
-	var object kates.Object
+func (tm *trafficManager) getReasonAndLabels(workload kates.Object, namespace, name string) (map[string]string, string, error) {
 	var labels map[string]string
 	var reason string
-	switch objectKind {
-	case "Deployment":
-		dep, err := tm.FindDeployment(ctx, namespace, name)
-		if err != nil {
-			// Removed from snapshot since the name slice was obtained
-			if !errors2.IsNotFound(err) {
-				dlog.Error(ctx, err)
-			}
-
-			return nil, nil, "", err
-		}
-
-		if dep.Status.Replicas == int32(0) {
+	switch workload := workload.(type) {
+	case *kates.Deployment:
+		if workload.Status.Replicas == int32(0) {
 			reason = "Has 0 replicas"
 		}
-		object = dep
-		labels = dep.Spec.Template.Labels
+		labels = workload.Spec.Template.Labels
 
-	case "ReplicaSet":
-		rs, err := tm.FindReplicaSet(ctx, namespace, name)
-		if err != nil {
-			// Removed from snapshot since the name slice was obtained
-			if !errors2.IsNotFound(err) {
-				dlog.Error(ctx, err)
-			}
-			return nil, nil, "", err
-		}
-
-		if rs.Status.Replicas == int32(0) {
+	case *kates.ReplicaSet:
+		if workload.Status.Replicas == int32(0) {
 			reason = "Has 0 replicas"
 		}
-		object = rs
-		labels = rs.Spec.Template.Labels
+		labels = workload.Spec.Template.Labels
 
-	case "StatefulSet":
-		statefulSet, err := tm.FindStatefulSet(ctx, namespace, name)
-		if err != nil {
-			// Removed from snapshot since the name slice was obtained
-			if !errors2.IsNotFound(err) {
-				dlog.Error(ctx, err)
-			}
-			return nil, nil, "", err
-		}
-
-		if statefulSet.Status.Replicas == int32(0) {
+	case *kates.StatefulSet:
+		if workload.Status.Replicas == int32(0) {
 			reason = "Has 0 replicas"
 		}
-		object = statefulSet
-		labels = statefulSet.Spec.Template.Labels
+		labels = workload.Spec.Template.Labels
 	default:
 		reason = "No workload telepresence knows how to intercept"
 	}
-	return object, labels, reason, nil
+	return labels, reason, nil
 }
 
 // getInfosForWorkload creates a WorkloadInfo for every workload in names
 // of the given objectKind.  Additionally, it uses information about the
 // filter param, which is configurable, to decide which workloads to add
 // or ignore based on the filter criteria.
-func (tm *trafficManager) getInfosForWorkload(
+func (tm *trafficManager) getInfosForWorkloads(
 	ctx context.Context,
-	names []string,
-	objectKind,
+	workloads []kates.Object,
 	namespace string,
 	iMap map[string]*manager.InterceptInfo,
 	aMap map[string]*manager.AgentInfo,
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
-	for _, name := range names {
+	for _, workload := range workloads {
+		name := workload.GetName()
 		iCept, ok := iMap[name]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
@@ -297,15 +270,16 @@ func (tm *trafficManager) getInfosForWorkload(
 		}
 		reason := ""
 		if agent == nil && iCept == nil {
-			object, labels, reason, err := tm.getObjectAndLabels(ctx, objectKind, namespace, name)
-			if err != nil {
+			var labels map[string]string
+			var err error
+			if labels, reason, err = tm.getReasonAndLabels(workload, namespace, name); err != nil {
 				continue
 			}
 			if reason == "" {
 				// If an object is owned by a higher level workload, then users should
 				// intercept that workload so we will not include it in our slice.
-				if tm.hasOwner(object) {
-					dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", object.GetName(), object.GetNamespace())
+				if tm.hasOwner(workload) {
+					dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", name, workload.GetNamespace())
 					continue
 				}
 
@@ -331,7 +305,7 @@ func (tm *trafficManager) getInfosForWorkload(
 			NotInterceptableReason: reason,
 			AgentInfo:              agent,
 			InterceptInfo:          iCept,
-			WorkloadResourceType:   objectKind,
+			WorkloadResourceType:   workload.GetObjectKind().GroupVersionKind().Kind,
 		})
 	}
 	return workloadInfos
@@ -354,37 +328,26 @@ func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 			iMap[i.Spec.Agent] = i
 		}
 	}
-	var aMap map[string]*manager.AgentInfo
-	if as, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId); as != nil {
-		aMap = make(map[string]*manager.AgentInfo, len(as))
-		for _, a := range as {
-			if a.Namespace == namespace {
-				aMap[a.Name] = a
-			}
-		}
-	} else {
-		aMap = map[string]*manager.AgentInfo{}
-	}
-
+	aMap := tm.getCurrentAgentsInNamespace(namespace)
 	filter := rq.Filter
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 
 	// These are all the workloads we care about and their associated function
 	// to get the names of those workloads
-	workloadsToGet := map[string]func(context.Context, string) ([]string, error){
-		"Deployment":  tm.DeploymentNames,
-		"ReplicaSet":  tm.ReplicaSetNames,
-		"StatefulSet": tm.StatefulSetNames,
+	workloadsToGet := map[string]func(context.Context, string) ([]kates.Object, error){
+		"Deployment":  tm.Deployments,
+		"ReplicaSet":  tm.ReplicaSets,
+		"StatefulSet": tm.StatefulSets,
 	}
 
-	for workloadKind, namesFunc := range workloadsToGet {
-		workloadNames, err := namesFunc(ctx, namespace)
+	for workloadKind, getFunc := range workloadsToGet {
+		workloads, err := getFunc(ctx, namespace)
 		if err != nil {
 			dlog.Error(ctx, err)
 			dlog.Infof(ctx, "Skipping getting info for workloads: %s", workloadKind)
 			continue
 		}
-		newWorkloadInfos := tm.getInfosForWorkload(ctx, workloadNames, workloadKind, namespace, iMap, aMap, filter)
+		newWorkloadInfos := tm.getInfosForWorkloads(ctx, workloads, namespace, iMap, aMap, filter)
 		workloadInfos = append(workloadInfos, newWorkloadInfos...)
 	}
 
@@ -436,8 +399,7 @@ func (tm *trafficManager) SetStatus(ctx context.Context, r *rpc.ConnectInfo) {
 			r.ErrorText = err.Error()
 		}
 	} else {
-		agents, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId)
-		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
+		r.Agents = &manager.AgentInfoSnapshot{Agents: tm.getCurrentAgents()}
 		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()}
 		r.SessionInfo = tm.session()
 		r.BridgeOk = true
@@ -465,7 +427,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
 	<-tm.startup
-	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
+	agents := tm.getCurrentAgents()
 
 	// Since workloads can have more than one replica, we get a slice of agents
 	// where the agent to workload mapping is 1-to-1.  This is important

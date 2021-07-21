@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -100,10 +101,49 @@ func (kc *Cluster) check(c context.Context) error {
 	return c.Err()
 }
 
-// kindNames returns the names of all objects of a specified Kind in a given Namespace
-func (kc *Cluster) kindNames(c context.Context, kind, namespace string) ([]string, error) {
+// Deployments returns all deployments found in the given Namespace
+func (kc *Cluster) Deployments(c context.Context, namespace string) ([]kates.Object, error) {
+	var deployments []*kates.Deployment
+	if err := kc.client.List(c, kates.Query{Kind: "Deployment", Namespace: namespace}, &deployments); err != nil {
+		return nil, err
+	}
+	objs := make([]kates.Object, len(deployments))
+	for i, dep := range deployments {
+		objs[i] = dep
+	}
+	return objs, nil
+}
+
+// ReplicaSets returns all replica sets found in the given Namespace
+func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]kates.Object, error) {
+	var replicaSets []*kates.ReplicaSet
+	if err := kc.client.List(c, kates.Query{Kind: "ReplicaSet", Namespace: namespace}, &replicaSets); err != nil {
+		return nil, err
+	}
+	objs := make([]kates.Object, len(replicaSets))
+	for i, rs := range replicaSets {
+		objs[i] = rs
+	}
+	return objs, nil
+}
+
+// StatefulSets returns all stateful sets found in the given Namespace
+func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]kates.Object, error) {
+	var statefulSets []*kates.StatefulSet
+	if err := kc.client.List(c, kates.Query{Kind: "StatefulSet", Namespace: namespace}, &statefulSets); err != nil {
+		return nil, err
+	}
+	objs := make([]kates.Object, len(statefulSets))
+	for i, ss := range statefulSets {
+		objs[i] = ss
+	}
+	return objs, nil
+}
+
+// PodNames returns the names of all pods found in the given Namespace
+func (kc *Cluster) PodNames(c context.Context, namespace string) ([]string, error) {
 	var objNames []objName
-	if err := kc.client.List(c, kates.Query{Kind: kind, Namespace: namespace}, &objNames); err != nil {
+	if err := kc.client.List(c, kates.Query{Kind: "Pod", Namespace: namespace}, &objNames); err != nil {
 		return nil, err
 	}
 	names := make([]string, len(objNames))
@@ -111,26 +151,6 @@ func (kc *Cluster) kindNames(c context.Context, kind, namespace string) ([]strin
 		names[i] = n.Name
 	}
 	return names, nil
-}
-
-// DeploymentNames returns the names of all deployments found in the given Namespace
-func (kc *Cluster) DeploymentNames(c context.Context, namespace string) ([]string, error) {
-	return kc.kindNames(c, "Deployment", namespace)
-}
-
-// ReplicaSetNames returns the names of all replica sets found in the given Namespace
-func (kc *Cluster) ReplicaSetNames(c context.Context, namespace string) ([]string, error) {
-	return kc.kindNames(c, "ReplicaSet", namespace)
-}
-
-// StatefulSetNames returns the names of all replica sets found in the given Namespace
-func (kc *Cluster) StatefulSetNames(c context.Context, namespace string) ([]string, error) {
-	return kc.kindNames(c, "StatefulSet", namespace)
-}
-
-// PodNames returns the names of all replica sets found in the given Namespace
-func (kc *Cluster) PodNames(c context.Context, namespace string) ([]string, error) {
-	return kc.kindNames(c, "Pod", namespace)
 }
 
 // FindDeployment returns a deployment with the given name in the given namespace or nil
@@ -146,30 +166,12 @@ func (kc *Cluster) FindDeployment(c context.Context, namespace, name string) (*k
 	return dep, nil
 }
 
-// FindStatefulSet returns a statefulSet with the given name in the given namespace or nil
-// if no such statefulSet could be found.
-func (kc *Cluster) FindStatefulSet(c context.Context, namespace, name string) (*kates.StatefulSet, error) {
-	statefulSet := &kates.StatefulSet{
-		TypeMeta:   kates.TypeMeta{Kind: "StatefulSet"},
-		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
-	}
-	if err := kc.client.Get(c, statefulSet, statefulSet); err != nil {
+// FindAgain returns a fresh version of the given object.
+func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object, error) {
+	if err := kc.client.Get(c, obj, obj); err != nil {
 		return nil, err
 	}
-	return statefulSet, nil
-}
-
-// FindReplicaSet returns a replica set with the given name in the given namespace or nil
-// if no such replica set could be found.
-func (kc *Cluster) FindReplicaSet(c context.Context, namespace, name string) (*kates.ReplicaSet, error) {
-	rs := &kates.ReplicaSet{
-		TypeMeta:   kates.TypeMeta{Kind: "ReplicaSet"},
-		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
-	}
-	if err := kc.client.Get(c, rs, rs); err != nil {
-		return nil, err
-	}
-	return rs, nil
+	return obj, nil
 }
 
 // FindPod returns a pod with the given name in the given namespace or nil
@@ -185,47 +187,30 @@ func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Po
 	return pod, nil
 }
 
-// FindObjectKind returns a workload for the given name and namespace. We
+// FindWorkload returns a workload for the given name and namespace. We
 // search in a specific order based on how we prefer workload objects:
 // 1. Deployments
 // 2. ReplicaSets
 // 3. StatefulSets
 // And return the kind as soon as we find one that matches
-func (kc *Cluster) FindObjectKind(c context.Context, namespace, name string) (string, error) {
-	depNames, err := kc.DeploymentNames(c, namespace)
-	if err != nil {
-		return "", err
+func (kc *Cluster) FindWorkload(c context.Context, namespace, name string) (kates.Object, error) {
+	type workLoad struct {
+		kind string
+		obj  kates.Object
 	}
-	for _, depName := range depNames {
-		if depName == name {
-			return "Deployment", nil
+	for _, wl := range []workLoad{{"Deployment", &kates.Deployment{}}, {"ReplicaSet", &kates.ReplicaSet{}}, {"StatefulSet", &kates.StatefulSet{}}} {
+		wl.obj.(schema.ObjectKind).SetGroupVersionKind(schema.GroupVersionKind{Kind: wl.kind})
+		wl.obj.SetName(name)
+		wl.obj.SetNamespace(namespace)
+		if err := kc.client.Get(c, wl.obj, wl.obj); err != nil {
+			if kates.IsNotFound(err) {
+				continue
+			}
+			return nil, err
 		}
+		return wl.obj, nil
 	}
-
-	// Since Deployments manage ReplicaSets, we only look for matching
-	// ReplicaSets if no Deployment was found
-	rsNames, err := kc.ReplicaSetNames(c, namespace)
-	if err != nil {
-		return "", err
-	}
-	for _, rsName := range rsNames {
-		if rsName == name {
-			return "ReplicaSet", nil
-		}
-	}
-
-	// Like ReplicaSets, StatefulSets only manage pods so we check for
-	// them next
-	StatefulSetNames, err := kc.StatefulSetNames(c, namespace)
-	if err != nil {
-		return "", err
-	}
-	for _, statefulSetName := range StatefulSetNames {
-		if statefulSetName == name {
-			return "StatefulSet", nil
-		}
-	}
-	return "", errors.New("No supported Object Kind Found")
+	return nil, errors.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns
@@ -243,7 +228,7 @@ func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*kates.Se
 
 // findAllSvc finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
-func (kc *Cluster) findAllSvcByType(c context.Context, svcType v1.ServiceType) ([]*kates.Service, error) {
+func (kc *Cluster) findAllSvcByType(c context.Context, svcType corev1.ServiceType) ([]*kates.Service, error) {
 	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
 	var svcs []*kates.Service
