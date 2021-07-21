@@ -123,12 +123,16 @@ jobs:
       - checkout
       - install-go
       - run:
-          name: Docker login
+          name: Build dev image
           command: |
-            docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
-      - run:
-          command: |
-            TELEPRESENCE_VERSION="v2.0.0-gotest.$CIRCLE_SHA1" make push-images
+            TAG="2.0.0-gotest.$CIRCLE_SHA1"
+            TELEPRESENCE_VERSION="v${TAG}" make image
+            mkdir -p /tmp/workspace
+            docker save "datawire/tel2:${TAG}" > /tmp/workspace/tel2-image.tar
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - tel2-image.tar
 
   "build-and-test-windows":
     executor:
@@ -150,8 +154,18 @@ jobs:
       - run: make build
       - install-kubectl
       - install-sshfs
-      - run: |
-          go run build-aux/create_test_cluster.go create "tp-ci-linux-${CIRCLE_SHA1}" > $HOME/kubeconfig
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Create kubeception cluster
+          command: |
+            go run build-aux/create_test_cluster.go create "tp-ci-linux-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            export KUBECONFIG="$HOME/kubeconfig"
+            kubectl apply -f build-aux/image-importer.yaml
+            POD_NAME=$(kubectl get pod --no-headers -l app=image-importer | awk '{ print $1 }')
+            kubectl wait --for=condition=ready pod $POD_NAME
+            kubectl cp /tmp/workspace/tel2-image.tar "$POD_NAME:/tmp/image.tar"
+            kubectl exec $POD_NAME /hostbin/ctr images import /tmp/image.tar
       - run:
           command: |
             DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
@@ -161,6 +175,8 @@ jobs:
           # just a bit, so `go test`'s timeout output isn't hidden.
           no_output_timeout: 20m
       - save-logs
+      - run: |
+          go run build-aux/create_test_cluster.go destroy "tp-ci-linux-${CIRCLE_SHA1}"
 
   "lint":
     executor: vm-linux
