@@ -40,7 +40,7 @@ func kubeceptionRequest(ctx context.Context, client *http.Client, httpVerb, toke
 
 func run() error {
 	if len(os.Args) != 3 {
-		return fmt.Errorf("Usage: %s <create|delete> <cluster-name>", os.Args[0])
+		return fmt.Errorf("Usage: %s <create|destroy> <cluster-name>", os.Args[0])
 	}
 	verb := os.Args[1]
 	clusterName := os.Args[2]
@@ -59,16 +59,16 @@ func run() error {
 			return err
 		}
 		fmt.Println(kubeconfig)
-	case "delete":
+	case "destroy":
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, err := kubeceptionRequest(ctx, client, "DELETE", token, clusterName, map[string]string{})
 		if err != nil {
 			return err
 		}
-		fmt.Println("Cluster deleted! Have a nice day.")
+		fmt.Println("Cluster destroyed! Have a nice day.")
 	default:
-		return fmt.Errorf("Invalid parameter %s, must be one of create or delete", verb)
+		return fmt.Errorf("Invalid parameter %s, must be one of create or destroy", verb)
 	}
 
 	return nil
