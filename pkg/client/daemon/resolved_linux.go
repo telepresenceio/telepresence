@@ -31,12 +31,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	}
 
 	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverListener, err := net.ListenPacket("udp", "127.0.0.1:")
-	if err != nil {
-		dlog.Error(c, err)
-		return errResolveDNotConfigured
-	}
-	dnsResolverAddr, err := splitToUDPAddr(dnsResolverListener.LocalAddr())
+	dnsResolverAddr, err := splitToUDPAddr(o.dnsListener.LocalAddr())
 	if err != nil {
 		dlog.Error(c, err)
 		return errResolveDNotConfigured
