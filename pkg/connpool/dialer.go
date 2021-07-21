@@ -134,7 +134,7 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 				close(h.writerClosing)
 			}
 		}
-	case WriteClosed:
+	case WriteClosed, ConnectReject:
 		h.Close(ctx)
 	case KeepAlive:
 		h.resetIdle()

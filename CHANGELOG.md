@@ -5,6 +5,10 @@
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
   show up in the output of the `telepresence status` command.
 
+- Bugfix: Dialer will now close if it gets a ConnectReject. This was 
+  encountered when doing an intercept without a local process running
+  and would result in requests hanging indefinitely.
+
 - Bugfix: Made `telepresence list` command faster.
 
 ### 2.3.6 (July 20, 2021)
