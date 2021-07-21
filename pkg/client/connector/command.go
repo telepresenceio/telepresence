@@ -333,7 +333,7 @@ func run(c context.Context) error {
 	var grpcListener net.Listener
 	defer func() {
 		if grpcListener != nil {
-			_ = os.Remove(grpcListener.Addr().String())
+			_ = client.RemoveSocket(grpcListener)
 		}
 	}()
 

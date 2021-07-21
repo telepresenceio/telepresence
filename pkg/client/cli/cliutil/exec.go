@@ -42,7 +42,7 @@ func Run(ctx context.Context, sCmd SafeCobraCommand, exe string, args []string, 
 
 	s, err := cmd.Process.Wait()
 	if err != nil {
-		return fmt.Errorf("%s: %v", logging.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", logging.ShellString(exe, args), err)
 	}
 
 	exitCode := s.ExitCode()

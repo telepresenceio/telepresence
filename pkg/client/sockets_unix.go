@@ -25,8 +25,7 @@ const (
 	DaemonSocketName = "/var/run/telepresence-daemon.socket"
 )
 
-// DialSocket dials the given unix socket and returns the resulting connection
-func DialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
@@ -63,8 +62,7 @@ func DialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 	return conn, nil
 }
 
-// ListenSocket returns a listener for the given named pipe and returns the resulting connection
-func ListenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
+func listenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
 	if proc.IsAdmin() {
 		origUmask := unix.Umask(0)
 		defer unix.Umask(origUmask)
@@ -82,8 +80,12 @@ func ListenSocket(_ context.Context, processName, socketName string) (net.Listen
 	return listener, nil
 }
 
-// SocketExists returns true if a socket is found at the given path
-func SocketExists(path string) bool {
+func removeSocket(listener net.Listener) error {
+	return os.Remove(listener.Addr().String())
+}
+
+// socketExists returns true if a socket is found at the given path
+func socketExists(path string) bool {
 	s, err := os.Stat(path)
 	return err == nil && s.Mode()&os.ModeSocket != 0
 }

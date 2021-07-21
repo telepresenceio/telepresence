@@ -150,7 +150,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	var grpcListener net.Listener
 	defer func() {
 		if grpcListener != nil {
-			_ = os.Remove(grpcListener.Addr().String())
+			_ = client.RemoveSocket(grpcListener)
 		}
 	}()
 

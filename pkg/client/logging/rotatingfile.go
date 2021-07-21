@@ -143,7 +143,11 @@ func OpenRotatingFile(
 		return nil, err
 	}
 
-	rf.birthTime = GetSysInfo(logfileDir, info).Birthtime()
+	si, err := GetSysInfo(logfileDir, info)
+	if err != nil {
+		return nil, err
+	}
+	rf.birthTime = si.BirthTime()
 	rf.size = info.Size()
 
 	// Open existing file for append
@@ -252,7 +256,11 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo) (err error) {
 			return err
 		}
 
-		if prevInfo != nil && !prevInfo.HaveSameOwnerAndGroup(GetSysInfo(rf.dirName, stat)) {
+		si, err := GetSysInfo(rf.dirName, stat)
+		if err != nil {
+			return err
+		}
+		if prevInfo != nil && !prevInfo.HaveSameOwnerAndGroup(si) {
 			if err = prevInfo.SetOwnerAndGroup(tmp); err != nil {
 				_ = os.Remove(tmp)
 				return err
@@ -338,7 +346,10 @@ func (rf *RotatingFile) rotate() (err error) {
 		if err != nil {
 			return err
 		}
-		prevInfo = GetSysInfo(filepath.Dir(rf.dirName), prevStat)
+		prevInfo, err = GetSysInfo(filepath.Dir(rf.dirName), prevStat)
+		if err != nil {
+			return err
+		}
 
 		fullPath := filepath.Join(rf.dirName, rf.fileName)
 		ex := filepath.Ext(rf.fileName)

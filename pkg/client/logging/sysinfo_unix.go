@@ -9,8 +9,8 @@ import (
 
 type unixSysInfo syscall.Stat_t
 
-func GetSysInfo(_ string, info os.FileInfo) SysInfo {
-	return (*unixSysInfo)(info.Sys().(*syscall.Stat_t))
+func GetSysInfo(_ string, info os.FileInfo) (SysInfo, error) {
+	return (*unixSysInfo)(info.Sys().(*syscall.Stat_t)), nil
 }
 
 func (u *unixSysInfo) SetOwnerAndGroup(name string) error {

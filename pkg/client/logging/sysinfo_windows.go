@@ -25,20 +25,20 @@ type WindowsSysInfo interface {
 }
 
 type windowsSysInfo struct {
-	path    string
-	data    *syscall.Win32FileAttributeData
-	owner   *windows.SID
-	group   *windows.SID
-	dacl    windows.Handle
-	sacl    windows.Handle
-	secDesc windows.Handle
+	path  string
+	data  *syscall.Win32FileAttributeData
+	owner *windows.SID
+	group *windows.SID
+	dacl  windows.Handle
+	sacl  windows.Handle
 }
 
-func GetSysInfo(dir string, info os.FileInfo) SysInfo {
+func GetSysInfo(dir string, info os.FileInfo) (SysInfo, error) {
 	wi := windowsSysInfo{
 		path: filepath.Join(dir, info.Name()),
 		data: info.Sys().(*syscall.Win32FileAttributeData),
 	}
+	var secDesc windows.Handle
 	err := api.GetNamedSecurityInfo(
 		wi.path,
 		api.SE_FILE_OBJECT,
@@ -47,12 +47,15 @@ func GetSysInfo(dir string, info os.FileInfo) SysInfo {
 		&wi.group,
 		&wi.dacl,
 		&wi.sacl,
-		&wi.secDesc,
+		&secDesc,
 	)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return &wi
+	if _, err = windows.LocalFree(secDesc); err != nil {
+		return nil, err
+	}
+	return &wi, nil
 }
 
 func (wi *windowsSysInfo) SetOwnerAndGroup(name string) error {
@@ -73,7 +76,7 @@ func (wi *windowsSysInfo) HaveSameOwnerAndGroup(s SysInfo) bool {
 	return ok && eq(wi.owner, owi.owner) && eq(wi.group, owi.group)
 }
 
-func (wi *windowsSysInfo) Birthtime() time.Time {
+func (wi *windowsSysInfo) BirthTime() time.Time {
 	return time.Unix(0, wi.data.CreationTime.Nanoseconds())
 }
 
@@ -91,8 +94,4 @@ func (wi *windowsSysInfo) DACL() windows.Handle {
 
 func (wi *windowsSysInfo) SACL() windows.Handle {
 	return wi.sacl
-}
-
-func (wi *windowsSysInfo) SecurityDescriptor() windows.Handle {
-	return wi.secDesc
 }

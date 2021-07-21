@@ -25,6 +25,7 @@ func backgroundAsRoot(ctx context.Context, exe string, args []string) error {
 
 func shellExec(_ context.Context, verb, exe string, args []string) error {
 	cwd, _ := os.Getwd()
+	// UTF16PtrFromString can only fail if the argument contains a NUL byte. That will never happen here.
 	verbPtr, _ := windows.UTF16PtrFromString(verb)
 	exePtr, _ := windows.UTF16PtrFromString(exe)
 	cwdPtr, _ := windows.UTF16PtrFromString(cwd)

@@ -5,5 +5,5 @@ import (
 )
 
 func Flush(c context.Context) {
-	// TODO
+	// Flush isn't needed here on windows. It's done by the `SetDNS()` on the TUN-device.
 }

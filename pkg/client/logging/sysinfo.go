@@ -11,7 +11,7 @@ import "time"
 // Windows:
 //  info.Sys().(*syscall.Win32FileAttributeData)
 type SysInfo interface {
-	Birthtime() time.Time
+	BirthTime() time.Time
 
 	SetOwnerAndGroup(name string) error
 
