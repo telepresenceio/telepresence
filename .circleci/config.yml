@@ -68,6 +68,37 @@ commands:
               sudo install /tmp/kubectl /usr/local/bin/kubectl
             fi
 
+  "prepare-kluster":
+    parameters:
+      platform:
+        type: string
+    steps:
+      - run:
+          name: "Create cluster"
+          command: |
+            go run build-aux/create_test_cluster.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            sleep 10 # Give the kluster some time to start up
+            export KUBECONFIG="$HOME/kubeconfig"
+            KUBECTL=kubectl
+            if [[ $OS == Windows_NT ]]; then
+              KUBECTL=/c/kubectl.exe
+            fi
+            $KUBECTL apply -f build-aux/image-importer.yaml
+            POD_NAME=$($KUBECTL get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
+            $KUBECTL wait --for=condition=ready pod $POD_NAME
+            $KUBECTL cp /tmp/workspace/tel2-image.tar "$POD_NAME:/tmp/image.tar"
+            $KUBECTL exec $POD_NAME /hostbin/ctr images import /tmp/image.tar
+
+  "cleanup-kluster":
+    parameters:
+      platform:
+        type: string
+    steps:
+      - run:
+          name: "Destroy cluster"
+          command: |
+            go run build-aux/create_test_cluster.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+
   "install-sshfs":
     steps:
       - run:
@@ -139,12 +170,18 @@ jobs:
       name: win/default
       shell: bash.exe
     steps:
-    - checkout
-    - install-go
-    - install-kubectl
-    - run:
-        command: go test -failfast ./...
-        no_output_timeout: 20m
+      - checkout
+      - install-go
+      - install-kubectl
+      - attach_workspace:
+          at: /tmp/workspace
+      - prepare-kluster:
+          platform: windows
+      - run:
+          command: go test -timeout=20m ./...
+          no_output_timeout: 25m
+      - cleanup-kluster:
+          platform: windows
 
   "build-and-test":
     executor: vm-linux
@@ -156,16 +193,8 @@ jobs:
       - install-sshfs
       - attach_workspace:
           at: /tmp/workspace
-      - run:
-          name: Create kubeception cluster
-          command: |
-            go run build-aux/create_test_cluster.go create "tp-ci-linux-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
-            export KUBECONFIG="$HOME/kubeconfig"
-            kubectl apply -f build-aux/image-importer.yaml
-            POD_NAME=$(kubectl get pod --no-headers -l app=image-importer | awk '{ print $1 }')
-            kubectl wait --for=condition=ready pod $POD_NAME
-            kubectl cp /tmp/workspace/tel2-image.tar "$POD_NAME:/tmp/image.tar"
-            kubectl exec $POD_NAME /hostbin/ctr images import /tmp/image.tar
+      - prepare-kluster:
+          platform: linux
       - run:
           command: |
             DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
@@ -175,8 +204,8 @@ jobs:
           # just a bit, so `go test`'s timeout output isn't hidden.
           no_output_timeout: 20m
       - save-logs
-      - run: |
-          go run build-aux/create_test_cluster.go destroy "tp-ci-linux-${CIRCLE_SHA1}"
+      - cleanup-kluster:
+          platform: linux
 
   "lint":
     executor: vm-linux
@@ -272,13 +301,15 @@ workflows:
 
   'Dev':
     jobs:
-      - build-dev-image:
-          context: telepresence2-release
+      - build-dev-image
       - build-and-test:
           context: telepresence2-release
           requires:
             - build-dev-image
-        # - build-and-test-windows
+      - build-and-test-windows:
+          context: telepresence2-release
+          requires:
+            - build-dev-image
       - lint
       - generate
 
