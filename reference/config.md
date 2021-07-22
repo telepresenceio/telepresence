@@ -13,7 +13,8 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 The config file currently supports values for the `timeouts`, `logLevels`, `images`, `cloud`, and `grpc` keys.
 
-Here is an example configuration:
+Here is an example configuration to show you the conventions of how Telepresence is configured:
+**note: This config shouldn't be used verbatim, since the registry `privateRepo` used doesn't exist**
 
 ```yaml
 timeouts:
@@ -22,8 +23,8 @@ timeouts:
 logLevels:
   userDaemon: debug
 images:
-  registry: privateRepo
-  agentImage: ambassador-telepresence-agent:1.8.0
+  registry: privateRepo # This overrides the default docker.io/datawire repo
+  agentImage: ambassador-telepresence-agent:1.8.0 # This overrides the agent image to inject when intercepting
 grpc:
   maxReceiveSize: 10Mi
 ```
