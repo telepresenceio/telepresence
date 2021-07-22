@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/dlib/dtime"
+
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
@@ -105,21 +106,21 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	})
 	g.Go("SanityCheck", func(c context.Context) error {
 		if _, ok := <-initDone; ok {
-			// initDonw was not closed, bail out.
+			// initDone was not closed, bail out.
 			return errResolveDNotConfigured
 		}
 
-		// Check if an attempt to resolve a DNS address reaches our DNS resolver, One second should be plenty
-
-		cmdC, cmdCancel := context.WithTimeout(c, time.Second)
+		// Check if an attempt to resolve a DNS address reaches our DNS resolver, Two seconds should be plenty
+		cmdC, cmdCancel := context.WithTimeout(c, 2*time.Second)
 		defer cmdCancel()
 		for cmdC.Err() == nil {
+			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
 			if dnsServer.RequestCount() > 0 {
 				close(o.dnsConfigured)
 				return nil
 			}
-			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
+			dns.Flush(c)
 		}
 		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured
