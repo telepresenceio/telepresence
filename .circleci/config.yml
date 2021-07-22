@@ -77,8 +77,8 @@ commands:
           name: "Create cluster"
           command: |
             go run build-aux/create_test_cluster.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
-            sleep 10 # Give the kluster some time to start up
             export KUBECONFIG="$HOME/kubeconfig"
+            go run build-aux/wait_for_cluster.go "$KUBECONFIG"
             KUBECTL=kubectl
             IMAGE=/tmp/workspace/tel2-image.tar
             if [[ $OS == Windows_NT ]]; then
