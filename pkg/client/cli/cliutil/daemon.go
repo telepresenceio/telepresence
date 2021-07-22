@@ -126,7 +126,7 @@ func QuitDaemon(ctx context.Context) error {
 		return err
 	})
 	if err == nil {
-		err = client.WaitUntilSocketVanishes("daemon", client.DaemonSocketName, 5*time.Second)
+		err = client.WaitUntilSocketVanishes("daemon", client.DaemonSocketName, 15*time.Second)
 	}
 	if err != nil {
 		if errors.Is(err, ErrNoDaemon) {
