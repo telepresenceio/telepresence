@@ -135,7 +135,6 @@ commands:
           name: "Gather logs"
           when: always
           command: |
-            rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
             for file in \
               {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence","$LOCALAPPDATA/telepresence/logs"}/*.log
             do
@@ -143,6 +142,7 @@ commands:
                 cp "$file" /tmp/test-logs
               fi
             done
+            rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
       - store_artifacts:
           name: "Store logs"
           path: /tmp/test-logs
@@ -176,6 +176,7 @@ jobs:
       - install-go
       - install-kubectl
       - run: choco install rsync
+      - run: curl -L https://www.wintun.net/builds/wintun-0.12.zip | tar -vf - -Ox wintun/bin/amd64/wintun.dll > /c/wintun.dll
       - attach_workspace:
           at: "C:\\workspace"
       - prepare-kluster:
