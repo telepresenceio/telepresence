@@ -101,6 +101,20 @@ commands:
           command: |
             go run build-aux/kubeception/main.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
 
+  "install-sshfs-win":
+    steps:
+      - run:
+          name: "Download sshfs"
+          command: |
+            curl -L -o /c/winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
+            curl -L -o /c/sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
+      - run:
+          name: "Install sshfs"
+          shell: cmd.exe
+          command: |
+            msiexec /i "C:\\winfsp.msi"
+            msiexec /i "C:\\sshfs-win.msi"
+
   "install-sshfs":
     steps:
       - run:
@@ -184,6 +198,7 @@ jobs:
       - install-go
       - install-kubectl
       - run: choco install make
+      - install-sshfs-win
       # - run: choco install rsync
       - run:
           name: Download wintun
