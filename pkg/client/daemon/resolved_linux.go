@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -84,12 +85,20 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				return errResolveDNotConfigured
 			}
 			defer func() {
-				for _, l := range listeners {
-					_ = l.Close()
+				// It's very likely that the context is cancelled here. We use it
+				// anyway, stripped from cancellation, to retain logging.
+				c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
+				defer cancel()
+				dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
+				o.setSearchPathFunc = nil
+				o.router.configureDNS(c, nil, 0, nil) // Don't route from TUN-device
+				if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
+					dlog.Error(c, err)
 				}
+
+				// No need to close listeners here. They are closed by the dnsServer
 			}()
 			dnsServer = dns.NewServer(c, listeners, nil, o.resolveInCluster)
-			o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr)
 			close(initDone)
 			return dnsServer.Run(c)
 		}
