@@ -21,13 +21,6 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 		return errResolveDNotConfigured
 	}
 
-	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverAddr, err := splitToUDPAddr(o.dnsListener.LocalAddr())
-	if err != nil {
-		dlog.Error(c, err)
-		return errResolveDNotConfigured
-	}
-
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
 		// When using systemd-resolved, we provide resolution of NAME.NAMESPACE by adding each
 		// namespace as a route (a search entry prefixed with ~)
@@ -71,14 +64,21 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 			initDone <- struct{}{}
 			return nil
 		case dnsIP := <-o.kubeDNS:
-			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
-			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
-				dlog.Error(c, err)
-				initDone <- struct{}{}
-				return errResolveDNotConfigured
-			}
 			listeners, err := o.dnsListeners(c)
 			if err != nil {
+				dlog.Error(c, err)
+				initDone <- struct{}{}
+				return err
+			}
+			// Create a new local address that the DNS resolver can listen to.
+			dnsResolverAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
+			if err != nil {
+				return err
+			}
+
+			o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr)
+			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
+			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
 				dlog.Error(c, err)
 				initDone <- struct{}{}
 				return errResolveDNotConfigured
