@@ -38,10 +38,9 @@ items:
       - type: bugfix
         title: Better UX around intercepts with no local process running
         body: >-
-          When initiating an intercept before you have a local process running,
-          it would result in requests hanging indefinitely.  This has been fixed
-          and will result in an <code>Empty reply from server</code> until you
-          start a local process.
+          Requests would hang indefinitely when initiating an intercept before you
+          had a local process running. This has been fixed and will result in an
+          <code>Empty reply from server</code> until you start a local process.
         docs: reference/intercepts
 
   - version: 2.3.6
