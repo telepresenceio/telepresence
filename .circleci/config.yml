@@ -110,10 +110,10 @@ commands:
             curl -L -o /c/sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
       - run:
           name: "Install sshfs"
-          shell: cmd.exe
+          shell: powershell.exe
           command: |
-            msiexec /i "C:\\winfsp.msi"
-            msiexec /i "C:\\sshfs-win.msi"
+            Start-Process msiexec -Wait -verb runAs -Args "/i C:\\winfsp.msi /passive /qn /L*V winfsp-install.log"
+            Start-Process msiexec -Wait -verb runAs -Args "/i C:\\sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
 
   "install-sshfs":
     steps:
@@ -211,7 +211,7 @@ jobs:
           platform: windows
       - run:
           command: |
-            DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
+            DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:/c/Program Files/SSHFS-Win/bin:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
           no_output_timeout: 25m
       - cleanup-kluster:
           platform: windows
