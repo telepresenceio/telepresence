@@ -16,16 +16,7 @@ import (
 
 func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	// Connect to ResolveD via DBUS.
-	dConn, err := dbus.NewResolveD()
-	if err != nil {
-		dlog.Error(c, err)
-		return errResolveDNotConfigured
-	}
-	defer func() {
-		_ = dConn.Close()
-	}()
-
-	if !dConn.IsRunning() {
+	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")
 		return errResolveDNotConfigured
 	}
@@ -61,7 +52,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 		o.namespaces = namespaces
 		o.search = search
 		o.domainsLock.Unlock()
-		if err := dConn.SetLinkDomains(int(dev.Index()), paths...); err != nil {
+		if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
 			dlog.Errorf(c, "failed to set link domains on %q: %v", dev.Name(), err)
 		} else {
 			dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
@@ -81,7 +72,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 			return nil
 		case dnsIP := <-o.kubeDNS:
 			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
-			if err = dConn.SetLinkDNS(int(dev.Index()), dnsIP); err != nil {
+			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
 				dlog.Error(c, err)
 				initDone <- struct{}{}
 				return errResolveDNotConfigured
