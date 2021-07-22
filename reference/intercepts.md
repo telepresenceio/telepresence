@@ -40,6 +40,17 @@ This will intercept a workload named `hello` and name the intercept `myhello`.
 
 Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../environment/) for more details.
 
+## Creating an intercept without a local process running
+
+If you are *are* logged into Ambassador Cloud, when you create an intercept the Traffic
+Agent does a GET request to your service and the process running on your local machine
+at the port specified in your intercept to determine if they support HTTP/2. This is
+required for the selective intercepts to behave correctly.
+
+If you do not have a service running locally, the Traffic Agent will use the result
+it gets from the HTTP check against your app in the cluster to configure requests
+from the local process once it has started.
+
 ## Creating an intercept Without a preview URL
 
 If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your ingress controller, so use this option carefully as to not disrupt production environments.
