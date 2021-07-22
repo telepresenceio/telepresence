@@ -42,10 +42,10 @@ Telepresence can import the environment variables from the pod that is being int
 
 ## Creating an intercept without a local process running
 
-If you are *are* logged into Ambassador Cloud, when you create an intercept the Traffic
-Agent does a GET request to your service and the process running on your local machine
-at the port specified in your intercept to determine if they support HTTP/2. This is
-required for the selective intercepts to behave correctly.
+The Traffic Agent sends a GET request to your service and the process running on your
+local machine at the port specified in your intercept to determine if they support HTTP/2,
+if you *are* logged into Ambassador Cloud. This is required for selective intercepts to
+behave correctly.
 
 If you do not have a service running locally, the Traffic Agent will use the result
 it gets from the HTTP check against your app in the cluster to configure requests
