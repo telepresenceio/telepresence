@@ -31,7 +31,7 @@ func run() error {
 	for ctx.Err() == nil && !ready {
 		ready, err = func() (bool, error) {
 			fmt.Println("Trying to connect to cluster...")
-			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 			defer cancel()
 			_, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
 			if ctx.Err() == nil && err != nil {
@@ -42,6 +42,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("Error from API request: %w", err)
 		}
+		time.Sleep(1 * time.Second)
 	}
 	return nil
 }
