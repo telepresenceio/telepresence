@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"google.golang.org/grpc"
@@ -126,7 +127,12 @@ func QuitDaemon(ctx context.Context) error {
 		return err
 	})
 	if err == nil {
-		err = client.WaitUntilSocketVanishes("daemon", client.DaemonSocketName, 15*time.Second)
+		timeout := 5 * time.Second
+		// Windows has been observed to take its sweet time with terminating the daemon
+		if runtime.GOOS == "windows" {
+			timeout = time.Minute
+		}
+		err = client.WaitUntilSocketVanishes("daemon", client.DaemonSocketName, timeout)
 	}
 	if err != nil {
 		if errors.Is(err, ErrNoDaemon) {
