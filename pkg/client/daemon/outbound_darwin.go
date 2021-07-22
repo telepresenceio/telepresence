@@ -135,7 +135,11 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
-	dnsAddr, err := splitToUDPAddr(o.dnsListener.LocalAddr())
+	listener, err := newLocalUDPListener(c)
+	if err != nil {
+		return err
+	}
+	dnsAddr, err := splitToUDPAddr(listener.LocalAddr())
 	if err != nil {
 		return err
 	}
@@ -260,12 +264,10 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case dnsIP := <-o.kubeDNS:
-			if err = o.router.configureDNS(c, dnsIP, uint16(53), o.dnsListener.LocalAddr().(*net.UDPAddr)); err != nil {
-				dlog.Error(c, err)
-			}
+			o.router.configureDNS(c, dnsIP, uint16(53), listener.LocalAddr().(*net.UDPAddr))
 		}
-		defer o.dnsListener.Close()
-		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, nil, o.resolveInCluster)
+		// Server will close the listener, so no need to close it here.
+		v := dns.NewServer(c, []net.PacketConn{listener}, nil, o.resolveInCluster)
 		return v.Run(c)
 	})
 	dns.Flush(c)

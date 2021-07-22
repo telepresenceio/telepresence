@@ -11,7 +11,11 @@
 
 - Bugfix: Made `telepresence list` command faster.
 
-- Bugfix: Mutating webhook injector correctly hides named ports.
+- Bugfix: Mutating webhook injector correctly hides named ports for probes.
+
+- Bugfix: Initialization of `systemd-resolved` based DNS is more stable and
+  failures causing telepresence to default to the overriding resolver will no
+  longer cause general DNS lookup failures.
 
 ### 2.3.6 (July 20, 2021)
 

@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/dlib/dtime"
+
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"
@@ -16,29 +18,8 @@ import (
 
 func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 	// Connect to ResolveD via DBUS.
-	dConn, err := dbus.NewResolveD()
-	if err != nil {
-		dlog.Error(c, err)
-		return errResolveDNotConfigured
-	}
-	defer func() {
-		_ = dConn.Close()
-	}()
-
-	if !dConn.IsRunning() {
+	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")
-		return errResolveDNotConfigured
-	}
-
-	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverListener, err := net.ListenPacket("udp", "127.0.0.1:")
-	if err != nil {
-		dlog.Error(c, err)
-		return errResolveDNotConfigured
-	}
-	dnsResolverAddr, err := splitToUDPAddr(dnsResolverListener.LocalAddr())
-	if err != nil {
-		dlog.Error(c, err)
 		return errResolveDNotConfigured
 	}
 
@@ -66,7 +47,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 		o.namespaces = namespaces
 		o.search = search
 		o.domainsLock.Unlock()
-		if err := dConn.SetLinkDomains(int(dev.Index()), paths...); err != nil {
+		if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
 			dlog.Errorf(c, "failed to set link domains on %q: %v", dev.Name(), err)
 		} else {
 			dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
@@ -85,39 +66,61 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 			initDone <- struct{}{}
 			return nil
 		case dnsIP := <-o.kubeDNS:
-			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
-			if err = dConn.SetLinkDNS(int(dev.Index()), dnsIP); err != nil {
-				dlog.Error(c, err)
-				initDone <- struct{}{}
-				return errResolveDNotConfigured
-			}
-			dnsServer = dns.NewServer(c, []net.PacketConn{dnsResolverListener}, nil, o.resolveInCluster)
-			if err = o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr); err != nil {
+			listeners, err := o.dnsListeners(c)
+			if err != nil {
 				dlog.Error(c, err)
 				initDone <- struct{}{}
 				return err
 			}
+			// Create a new local address that the DNS resolver can listen to.
+			dnsResolverAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
+			if err != nil {
+				return err
+			}
+
+			o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr)
+			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
+			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
+				dlog.Error(c, err)
+				initDone <- struct{}{}
+				return errResolveDNotConfigured
+			}
+			defer func() {
+				// It's very likely that the context is cancelled here. We use it
+				// anyway, stripped from cancellation, to retain logging.
+				c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
+				defer cancel()
+				dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
+				o.setSearchPathFunc = nil
+				o.router.configureDNS(c, nil, 0, nil) // Don't route from TUN-device
+				if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
+					dlog.Error(c, err)
+				}
+
+				// No need to close listeners here. They are closed by the dnsServer
+			}()
+			dnsServer = dns.NewServer(c, listeners, nil, o.resolveInCluster)
 			close(initDone)
 			return dnsServer.Run(c)
 		}
 	})
 	g.Go("SanityCheck", func(c context.Context) error {
 		if _, ok := <-initDone; ok {
-			// initDonw was not closed, bail out.
+			// initDone was not closed, bail out.
 			return errResolveDNotConfigured
 		}
 
-		// Check if an attempt to resolve a DNS address reaches our DNS resolver, One second should be plenty
-
-		cmdC, cmdCancel := context.WithTimeout(c, time.Second)
+		// Check if an attempt to resolve a DNS address reaches our DNS resolver, Two seconds should be plenty
+		cmdC, cmdCancel := context.WithTimeout(c, 2*time.Second)
 		defer cmdCancel()
 		for cmdC.Err() == nil {
+			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
 			if dnsServer.RequestCount() > 0 {
 				close(o.dnsConfigured)
 				return nil
 			}
-			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
+			dns.Flush(c)
 		}
 		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured

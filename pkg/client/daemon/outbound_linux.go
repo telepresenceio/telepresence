@@ -159,7 +159,11 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
-	listeners := []net.PacketConn{o.dnsListener}
+	listener, err := newLocalUDPListener(c)
+	if err != nil {
+		return nil, err
+	}
+	listeners := []net.PacketConn{listener}
 	if runningInDocker() {
 		// Inside docker. Don't add docker bridge
 		return listeners, nil
@@ -175,7 +179,7 @@ func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 		return listeners, nil
 	}
 
-	localAddr, err := splitToUDPAddr(o.dnsListener.LocalAddr())
+	localAddr, err := splitToUDPAddr(listener.LocalAddr())
 	if err != nil {
 		return nil, err
 	}

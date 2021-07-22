@@ -30,9 +30,8 @@ type awaitLookupResult struct {
 //
 // A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
-	dnsListener net.PacketConn
-	noSearch    bool
-	router      *tunRouter
+	noSearch bool
+	router   *tunRouter
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
@@ -72,21 +71,19 @@ func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
 	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
 }
 
+func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
+	lc := &net.ListenConfig{}
+	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
+}
+
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, error) {
-	lc := &net.ListenConfig{}
-	listener, err := lc.ListenPacket(c, "udp", "127.0.0.1:0")
-	if err != nil {
-		return nil, err
-	}
-
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
 	ret := &outbound{
-		dnsListener: listener,
 		dnsConfig: &rpc.DNSConfig{
 			LocalIp: iputil.Parse(dnsIPStr),
 		},
@@ -100,6 +97,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 		kubeDNS:       make(chan net.IP, 1),
 	}
 
+	var err error
 	if ret.router, err = newTunRouter(); err != nil {
 		return nil, err
 	}

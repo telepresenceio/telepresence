@@ -131,11 +131,10 @@ func (t *tunRouter) configured() <-chan struct{} {
 	return t.cfgComplete
 }
 
-func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) error {
+func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) {
 	t.dnsIP = dnsIP
 	t.dnsPort = dnsPort
 	t.dnsLocalAddr = dnsLocalAddr
-	return nil
 }
 
 func (t *tunRouter) refreshSubnets(ctx context.Context) error {
