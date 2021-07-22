@@ -181,7 +181,7 @@ jobs:
           platform: windows
       - run:
           command: |
-            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" go test -timeout=20m ./...
+            DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:$PATH" DTEST_REGISTRY="docker.io/datawire" go test -timeout=20m ./...
           no_output_timeout: 25m
       - cleanup-kluster:
           platform: windows
