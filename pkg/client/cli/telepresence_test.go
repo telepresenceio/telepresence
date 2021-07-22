@@ -1095,11 +1095,13 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 		hc := http.Client{Timeout: time.Second}
 		resp, err := hc.Get("http://hello-0")
 		if err != nil {
+			dlog.Infof(c, "Error getting http://hello-0 (will retry): %v", err)
 			return false
 		}
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
+			dlog.Infof(c, "Error getting http://hello-0 (will retry): %v", err)
 			return false
 		}
 		return "hello-0 from intercept at /" == string(body)
