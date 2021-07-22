@@ -197,20 +197,20 @@ func hidePorts(pod *corev1.Pod, cn *corev1.Container, portName string, patches [
 	hidePort := func(path string) {
 		patches = append(patches, patchOperation{
 			Op:    "replace",
-			Path:  fmt.Sprintf("%s/%s/name", containerPath, path),
+			Path:  fmt.Sprintf("%s/%s", containerPath, path),
 			Value: hiddenPortName,
 		})
 	}
 
 	for i, p := range cn.Ports {
 		if p.Name == portName {
-			hidePort(fmt.Sprintf("ports/%d", i))
+			hidePort(fmt.Sprintf("ports/%d/name", i))
 			break
 		}
 	}
 
 	probes := []*corev1.Probe{cn.LivenessProbe, cn.ReadinessProbe, cn.StartupProbe}
-	probeNames := []string{"/livenessProbe", "/readinessProbe", "/startupProbe"}
+	probeNames := []string{"livenessProbe/", "readinessProbe/", "startupProbe/"}
 
 	for i, probe := range probes {
 		if probe == nil {

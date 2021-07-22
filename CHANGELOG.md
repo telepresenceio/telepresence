@@ -11,6 +11,8 @@
 
 - Bugfix: Made `telepresence list` command faster.
 
+- Bugfix: Mutating webhook injector correctly hides named ports.
+
 ### 2.3.6 (July 20, 2021)
 
 - Bugfix: Fixed a regression introduced in 2.3.5 that caused preview
