@@ -76,9 +76,9 @@ commands:
       - run:
           name: "Create cluster"
           command: |
-            go run build-aux/create_test_cluster.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            go run build-aux/kubeception/main.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
             export KUBECONFIG="$HOME/kubeconfig"
-            go run build-aux/wait_for_cluster.go "$KUBECONFIG"
+            go run build-aux/wait_for_cluster/main.go "$KUBECONFIG"
             KUBECTL=kubectl
             IMAGE=/tmp/workspace/tel2-image.tar
             if [[ $OS == Windows_NT ]]; then
@@ -99,7 +99,7 @@ commands:
       - run:
           name: "Destroy cluster"
           command: |
-            go run build-aux/create_test_cluster.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            go run build-aux/kubeception/main.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
 
   "install-sshfs":
     steps:
@@ -137,7 +137,7 @@ commands:
           command: |
             rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
             for file in \
-              {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence"}/*.log
+              {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence","$LOCALAPPDATA/telepresence/logs"}/*.log
             do
               if [ -s "$file" ]; then
                 cp "$file" /tmp/test-logs
@@ -175,6 +175,7 @@ jobs:
       - checkout
       - install-go
       - install-kubectl
+      - run: choco install rsync
       - attach_workspace:
           at: "C:\\workspace"
       - prepare-kluster:
@@ -185,6 +186,7 @@ jobs:
           no_output_timeout: 25m
       - cleanup-kluster:
           platform: windows
+      - save-logs
 
   "build-and-test":
     executor: vm-linux
@@ -305,10 +307,10 @@ workflows:
   'Dev':
     jobs:
       - build-dev-image
-      - build-and-test:
-          context: telepresence2-release
-          requires:
-            - build-dev-image
+      #- build-and-test:
+          #context: telepresence2-release
+          #requires:
+            #- build-dev-image
       - build-and-test-windows:
           context: telepresence2-release
           requires:
