@@ -30,6 +30,10 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  
+  - version: 2.3.7
+    date: '2021-07-23'
+    notes:
 
   - version: 2.3.6
     date: '2021-07-20'
