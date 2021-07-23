@@ -61,8 +61,8 @@ func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %+v\n", cmd.CommandPath(), err)
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", daemonLogs)
 	if daemonLogs != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", daemonLogs)
 	}
 	if connectorLogs != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", connectorLogs)
