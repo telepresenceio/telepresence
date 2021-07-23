@@ -534,6 +534,7 @@ func (cs *connectedSuite) TestE_PodWithSubdomain() {
 		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic", "--context", "default"))
 	}()
 
+	dlog.Infof(c, "Trying to resolve in namespace %s", cs.ns())
 	cc, cancel := context.WithTimeout(c, 3*time.Second)
 	defer cancel()
 	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns())
@@ -891,6 +892,10 @@ func (is *interceptedSuite) SetupSuite() {
 	})
 
 	is.mountPoint = is.T().TempDir()
+	// TempDir() will not be a valid mount on windows -- it wants a lettered drive.
+	if goRuntime.GOOS == "windows" {
+		is.mountPoint = "T:"
+	}
 	is.Run("adding intercepts", func() {
 		// Add all `hello-N` intercepts. Let `hello-0` have a mounted volume.
 		addIntercept := func(i int, extraArgs ...string) {
@@ -937,13 +942,14 @@ func (is *interceptedSuite) TearDownSuite() {
 }
 
 func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
+	ctx := dlog.NewTestContext(is.T(), false)
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d", i)
 		expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
 		is.Require().Eventually(
 			// condition
 			func() bool {
-				is.T().Logf("trying %q...", "http://"+svc)
+				dlog.Infof(ctx, "trying %q...", "http://"+svc)
 				hc := http.Client{Timeout: time.Second}
 				resp, err := hc.Get("http://" + svc)
 				if err != nil {
@@ -951,13 +957,13 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 					return false
 				}
 				defer resp.Body.Close()
-				is.T().Logf("status code: %v", resp.StatusCode)
+				dlog.Infof(ctx, "status code: %v", resp.StatusCode)
 				body, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
 					is.T().Log(err)
 					return false
 				}
-				is.T().Logf("body: %q", body)
+				dlog.Infof(ctx, "body: %q", body)
 				return string(body) == expectedOutput
 			},
 			15*time.Second, // waitFor
