@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -45,6 +46,25 @@ func main() {
 
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
+		summarizeLogs(ctx, cmd)
 		os.Exit(1)
+	}
+}
+
+func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
+	daemonLogs, err := logging.SummarizeLog(ctx, daemon.ProcessName)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %+v\n", cmd.CommandPath(), err)
+	}
+	connectorLogs, err := logging.SummarizeLog(ctx, connector.ProcessName)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %+v\n", cmd.CommandPath(), err)
+	}
+
+	fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", daemonLogs)
+	if daemonLogs != "" {
+	}
+	if connectorLogs != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", connectorLogs)
 	}
 }

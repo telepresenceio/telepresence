@@ -1,10 +1,13 @@
 package logging
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 
@@ -62,4 +65,62 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 		logger.SetLevel(logLevels.UserDaemon)
 	}
 	return ctx, nil
+}
+
+func SummarizeLog(ctx context.Context, name string) (string, error) {
+	dir, err := filelocation.AppUserLogDir(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	filename := filepath.Join(dir, name+".log")
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	scanner := bufio.NewScanner(file)
+
+	errors := []string{}
+	tail := []string{}
+	for scanner.Scan() {
+		text := scanner.Text()
+		// XXX: is there a better way to detect error lines?
+		parts := strings.Fields(text)
+		if len(parts) > 2 && parts[2] == "error" {
+			errors = append(errors, text)
+			if len(errors) > 10 {
+				errors = errors[len(errors)-10:]
+			}
+		}
+		tail = append(tail, text)
+		if len(tail) > 10 {
+			tail = tail[len(tail)-10:]
+		}
+	}
+
+	var lines []string
+	var desc string
+	if len(errors) == 0 {
+		lines = tail
+		desc = "line"
+	} else {
+		lines = errors
+		desc = "error"
+	}
+
+	if len(lines) > 1 {
+		desc = fmt.Sprintf("%d %ss", len(lines), desc)
+	}
+
+	if len(lines) == 0 {
+		return "", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Last %s from %s:\n\n", desc, filename))
+	for _, line := range lines {
+		sb.WriteString(fmt.Sprintf("  %s\n", line))
+	}
+
+	return sb.String(), nil
 }
