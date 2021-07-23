@@ -43,6 +43,14 @@ items:
           <code>Empty reply from server</code> until you start a local process.
         docs: reference/intercepts
 
+      - type: bugfix
+        title: Improved DNS resolver for systemd-resolved
+        body: Telepresence's <code>systemd-resolved</code>-based DNS resolver is now more
+          stable and in case it fails to initialize, the <code>overriding resolver</code>
+          will no longer cause general DNS lookup failures when telepresence defaults to
+          using it.
+        docs: reference/routing#linux-systemd-resolved-resolver
+
   - version: 2.3.6
     date: '2021-07-20'
     notes:
