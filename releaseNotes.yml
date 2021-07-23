@@ -51,6 +51,12 @@ items:
           using it.
         docs: reference/routing#linux-systemd-resolved-resolver
 
+      - type: bugfix
+        title: Faster telepresence list command
+        body: The performance of <code>telepresence list</code> has been increased
+          significantly by reducing the number of calls the command makes to the cluster.
+        docs: reference/client
+
   - version: 2.3.6
     date: '2021-07-20'
     notes:
