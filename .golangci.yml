@@ -34,6 +34,12 @@ linters-settings:
       - github/datawire/dlib/dutil: "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"
       - golang.org/x/net/http2/h2c: "Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
       - github.com/kballard/go-shellquote: "Use `github.com/telepresenceio/telepresence/pkg/client/logging.ShellString` instead of `github.com/kballard/go-shellquote.Join`"
+  gomodguard:
+    blocked:
+      modules:
+        - gotest.tools:    { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
+        - gotest.tools/v2: { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
+        - gotest.tools/v3: { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
 
   gocyclo:
     min-complexity: 35
@@ -68,6 +74,7 @@ linters:
     - gocyclo
     - gofmt
     - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
+    - gomodguard
     - gosimple
     - govet
     - ineffassign
