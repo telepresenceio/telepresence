@@ -103,6 +103,8 @@ commands:
 
   "install-sshfs-win":
     steps:
+      # The version of sshfs-win on choco is _ancient_ so we instead download it from github and install it manually.
+      # This requires some wrangling of the system PATH
       - run:
           name: "Download sshfs"
           command: |
@@ -114,6 +116,7 @@ commands:
           command: |
             Start-Process msiexec -Wait -verb runAs -Args "/i C:\\winfsp.msi /passive /qn /L*V winfsp-install.log"
             Start-Process msiexec -Wait -verb runAs -Args "/i C:\\sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
+            [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
 
   "install-sshfs":
     steps:
