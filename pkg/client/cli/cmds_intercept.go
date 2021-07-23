@@ -226,7 +226,7 @@ func loginIfNeeded(ctx context.Context, args interceptArgs) error {
 					canConnect = resp.CanConnect
 				}
 				if canConnect {
-					if _, err := cliutil.EnsureLoggedIn(ctx); err != nil {
+					if _, err := cliutil.EnsureLoggedIn(ctx, ""); err != nil {
 						return err
 					}
 				}
