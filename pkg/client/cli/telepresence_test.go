@@ -931,7 +931,26 @@ func (is *interceptedSuite) TearDownSuite() {
 	time.Sleep(time.Second) // Allow some time for processes to die and intercepts to vanish
 }
 
-func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
+func (is *interceptedSuite) TestA_ListingActiveIntercepts() {
+	require := is.Require()
+	stdout, stderr := telepresence(is.T(), "--namespace", is.ns(), "list", "--intercepts")
+	require.Empty(stderr)
+	for i := 0; i < serviceCount; i++ {
+		require.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
+	}
+}
+
+func (is *interceptedSuite) TestB_MountedFilesystem() {
+	require := is.Require()
+	st, err := os.Stat(is.mountPoint)
+	require.NoError(err, "Stat on <mount point> failed")
+	require.True(st.IsDir(), "Mount point is not a directory")
+	st, err = os.Stat(filepath.Join(is.mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+func (is *interceptedSuite) TestC_VerifyingResponsesFromInterceptor() {
 	ctx := dlog.NewTestContext(is.T(), false)
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d", i)
@@ -961,25 +980,6 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 			`body of %q equals %q`, "http://"+svc, expectedOutput,
 		)
 	}
-}
-
-func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
-	require := is.Require()
-	stdout, stderr := telepresence(is.T(), "--namespace", is.ns(), "list", "--intercepts")
-	require.Empty(stderr)
-	for i := 0; i < serviceCount; i++ {
-		require.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
-	}
-}
-
-func (is *interceptedSuite) TestC_MountedFilesystem() {
-	require := is.Require()
-	st, err := os.Stat(is.mountPoint)
-	require.NoError(err, "Stat on <mount point> failed")
-	require.True(st.IsDir(), "Mount point is not a directory")
-	st, err = os.Stat(filepath.Join(is.mountPoint, "var"))
-	require.NoError(err, "Stat on <mount point>/var failed")
-	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
 func (is *interceptedSuite) TestD_RestartInterceptedPod() {
