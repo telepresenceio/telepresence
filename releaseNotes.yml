@@ -36,6 +36,14 @@ items:
     notes:
 
       - type: feature
+        title: Also-proxy in telepresence status
+        body: >-
+          An <code>also-proxy</code> entry in the Kubernetes cluster config will
+          show up in the output of the <code>telepresence status</code> command.
+        docs: reference/config
+
+      - type: feature
+        title: Non-interactive telepresence login
         body: >-
           <code>telepresence login</code> now has an
           <code>--apikey=KEY</code> flag that allows for
@@ -46,6 +54,19 @@ items:
         docs: reference/client/login/
 
       - type: bugfix
+        title: Mutating webhook injector correctly hides named ports for probes.
+        body: >-
+          The mutating webhook injector has been fixed to correctly rename named ports for liveness and readiness probes
+        docs: reference/cluster-config
+
+      - type: bugfix
+        title: telepresence current-cluster-id crash fixed
+        body: >-
+          Fixed a regression introduced in 2.3.5 that caused `telepresence current-cluster-id`
+          to crash.
+        docs: reference/cluster-config
+
+      - type: bugfix
         title: Better UX around intercepts with no local process running
         body: >-
           Requests would hang indefinitely when initiating an intercept before you
@@ -54,6 +75,7 @@ items:
         docs: reference/intercepts
 
       - type: bugfix
+        title: API keys no longer show as "no description"
         body: >-
           New API keys generated internally for communication with
           Ambassador Cloud no longer show up as "no description" in
@@ -62,6 +84,7 @@ items:
         image: telepresence-2.3.7-keydesc.png
 
       - type: bugfix
+        title: Fix corruption of user-info.json
         body: >-
           Fixed a race condition that logging in and logging out
           rapidly could cause memory corruption or corruption of the
