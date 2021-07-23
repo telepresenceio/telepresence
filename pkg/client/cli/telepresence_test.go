@@ -448,7 +448,12 @@ func (cs *connectedSuite) SetupSuite() {
 		return run(c, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
 	}, 10*time.Second, time.Second)
 
-	stdout, stderr := telepresence(cs.T(), "connect")
+	configDir := cs.T().TempDir()
+	registry := dtest.DockerRegistry(c)
+	configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\n", registry)
+	c, err := setConfig(c, configDir, configYml)
+	require.NoError(err)
+	stdout, stderr := telepresenceContext(c, "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
 
