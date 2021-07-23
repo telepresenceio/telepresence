@@ -21,7 +21,7 @@ The local system and the Traffic Agent connect to the Traffic Manager using its 
 1. [Telepresence binary](../../install)
 2. Linkerd control plane [installed to cluster](https://linkerd.io/2.10/tasks/install/)
 3. Kubectl
-4. [Working ingress controller](/docs/edge-stack/latest/howtos/linkerd2)
+4. [Working ingress controller](https://www.getambassador.io/docs/edge-stack/latest/howtos/linkerd2)
 
 ## Deploy
 Save and deploy the following YAML. Note the `config.linkerd.io/skip-outbound-ports` annotation in the metadata of the pod template.
