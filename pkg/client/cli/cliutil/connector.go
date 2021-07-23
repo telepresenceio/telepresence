@@ -30,6 +30,7 @@ import (
 var ErrNoConnector = errors.New("telepresence user daemon is not running")
 
 func launchConnector() error {
+	fmt.Println("Launching Telepresence User Daemon")
 	args := []string{client.GetExe(), "connector-foreground"}
 
 	cmd := exec.Command(args[0], args[1:]...)
@@ -150,6 +151,7 @@ func DidLaunchConnector(ctx context.Context) bool {
 
 func QuitConnector(ctx context.Context) error {
 	err := WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		fmt.Print("Telepresence User Daemon quitting...")
 		_, err := connectorClient.Quit(ctx, &empty.Empty{})
 		return err
 	})
@@ -158,9 +160,11 @@ func QuitConnector(ctx context.Context) error {
 	}
 	if err != nil {
 		if errors.Is(err, ErrNoConnector) {
+			fmt.Println("Telepresence User Daemon is already stopped")
 			return nil
 		}
 		return err
 	}
+	fmt.Println(" done")
 	return nil
 }

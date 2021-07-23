@@ -225,7 +225,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		cluster,
 		s.scoutClient.Reporter.InstallID(),
 		userd_trafficmgr.Callbacks{
-			GetAPIKey:       s.sharedState.GetCloudAPIKey,
+			GetCloudAPIKey:  s.sharedState.GetCloudAPIKey,
 			SetClient:       s.managerProxy.SetClient,
 			SetOutboundInfo: daemonClient.SetOutboundInfo,
 		})

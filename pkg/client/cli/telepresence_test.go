@@ -33,6 +33,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
+	_ "github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -92,11 +94,8 @@ func (ts *telepresenceSuite) SetupSuite() {
 	err = run(ctx, "sudo", "true")
 	require.NoError(err, "acquire privileges")
 
-	registry := dtest.DockerRegistry(ctx)
-	os.Setenv("KO_DOCKER_REPO", registry)
-	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
-	os.Setenv("DTEST_REGISTRY", registry) // Prevent calls to dtest.RegistryUp() which may panic
+	os.Setenv("DTEST_REGISTRY", dtest.DockerRegistry(ctx)) // Prevent extra calls to dtest.RegistryUp() which may panic
 
 	wg.Add(1)
 	go func() {
@@ -190,8 +189,9 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			os.Setenv("KUBECONFIG", "/dev/null")
 			stdout, stderr := telepresence(ts.T(), "connect")
 			ts.Contains(stderr, "kubeconfig has no context definition")
-			ts.Contains(stdout, "Launching Telepresence Daemon")
-			ts.Contains(stdout, "Daemon quitting")
+			ts.Contains(stdout, "Launching Telepresence Root Daemon")
+			ts.Contains(stdout, "Launching Telepresence User Daemon")
+			ts.Contains(stdout, "Telepresence Root Daemon quitting... done")
 		})
 	})
 
@@ -199,8 +199,9 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ts.Run("Reports connect error and exits", func() {
 			stdout, stderr := telepresence(ts.T(), "connect", "--context", "not-likely-to-exist")
 			ts.Contains(stderr, `"not-likely-to-exist" does not exist`)
-			ts.Contains(stdout, "Launching Telepresence Daemon")
-			ts.Contains(stdout, "Daemon quitting")
+			ts.Contains(stdout, "Launching Telepresence Root Daemon")
+			ts.Contains(stdout, "Launching Telepresence User Daemon")
+			ts.Contains(stdout, "Telepresence Root Daemon quitting... done")
 		})
 	})
 
@@ -209,11 +210,12 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			stdout, stderr := telepresence(ts.T(), "connect", "--", client.GetExe(), "status")
 			require := ts.Require()
 			require.Empty(stderr)
-			require.Contains(stdout, "Launching Telepresence Daemon")
+			require.Contains(stdout, "Launching Telepresence Root Daemon")
+			require.Contains(stdout, "Launching Telepresence User Daemon")
 			require.Contains(stdout, "Connected to context")
 			require.Contains(stdout, "Kubernetes context:")
 			require.Regexp(`Telepresence proxy:\s+ON`, stdout)
-			require.Contains(stdout, "Daemon quitting")
+			require.Contains(stdout, "Telepresence Root Daemon quitting... done")
 			ts.NoError(ts.capturePodLogs(dlog.NewTestContext(ts.T(), false), "traffic-manager", ts.managerTestNamespace))
 		})
 	})
@@ -306,14 +308,14 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		uninstallTrafficManager := func() {
 			stdout, stderr := telepresence(t, "uninstall", "--everything")
 			require.Empty(stderr)
-			require.Contains(stdout, "Daemon quitting")
+			require.Contains(stdout, "Root Daemon quitting... done")
 		}
 		// Remove the traffic-manager since we are altering config that applies to
 		// creating the traffic-manager
 		uninstallTrafficManager()
 		stdout, stderr := telepresence(t, "uninstall", "--everything")
 		require.Empty(stderr)
-		require.Contains(stdout, "Daemon quitting")
+		require.Contains(stdout, "Root Daemon quitting... done")
 
 		configDir := t.TempDir()
 
@@ -370,7 +372,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
-		require.Contains(stdout, "Daemon quitting")
+		require.Contains(stdout, "Root Daemon quitting... done")
 		require.Eventually(
 			func() bool {
 				stdout, _ := names()
@@ -1379,7 +1381,7 @@ func (ts *telepresenceSuite) publishManager() error {
 		"TELEPRESENCE_VERSION=" + ts.testVersion,
 		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(ctx),
 	}
-	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	includeEnv := []string{"HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
 	for _, env := range os.Environ() {
 		for _, incl := range includeEnv {
 			if strings.HasPrefix(env, incl) {
