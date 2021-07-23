@@ -940,17 +940,17 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 			// condition
 			func() bool {
 				dlog.Infof(ctx, "trying %q...", "http://"+svc)
-				hc := http.Client{Timeout: time.Second}
+				hc := http.Client{Timeout: 2 * time.Second}
 				resp, err := hc.Get("http://" + svc)
 				if err != nil {
-					is.T().Log(err)
+					dlog.Infof(ctx, "%v", err)
 					return false
 				}
 				defer resp.Body.Close()
 				dlog.Infof(ctx, "status code: %v", resp.StatusCode)
 				body, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					is.T().Log(err)
+					dlog.Infof(ctx, "%v", err)
 					return false
 				}
 				dlog.Infof(ctx, "body: %q", body)
@@ -1000,7 +1000,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "hello-0"`)
 		}
 		return false
-	}, 5*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is broken
 	_, err := os.Stat(filepath.Join(is.mountPoint, "var"))
@@ -1016,7 +1016,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 10*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	assert.Eventually(func() bool {
