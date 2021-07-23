@@ -254,17 +254,20 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 1. Clean up your previous intercept by removing it:
 `telepresence leave dataprocessingservice`
 
-2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
-`telepresence login`
+2. Log in to Ambassador Cloud, a web interface for managing and
+   sharing preview URLs:
 
-  This opens your browser; login with your preferred identity provider and choose your org.
+   ```console
+   $ telepresence login
+   Launching browser authentication flow...
+   <web browser opens, log in and choose your organization>
+   Login successful.
+   ```
 
-  ```
-  $ telepresence login
-    Launching browser authentication flow...
-    <browser opens, login>
-    Login successful.
-  ```
+   If you are in an environment where Telepresence cannot launch a
+   local browser for you to interact with, you will need to pass the
+   [`--apikey` flag to `telepresence
+   login`](../../reference/client/login/).
 
 3. Start the intercept again:
 `telepresence intercept dataprocessingservice --port 3000`
