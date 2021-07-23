@@ -1002,9 +1002,11 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	assert := is.Assert()
 	require := is.Require()
 	c := dlog.NewTestContext(is.T(), false)
+	dlog.Infof(c, "Scaling down deploy")
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: hello-0-` + is.ns() + `\s+State\s*: ([^\n]+)\n`))
 
 	// Scale down to zero pods
+	dlog.Infof(c, "Scaling down deploy hello-0")
 	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "0"))
 
 	// Verify that intercept remains but that no agent is found
@@ -1022,6 +1024,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
 
 	// Scale up again (start intercepted pod)
+	dlog.Infof(c, "Scaling up deploy hello-0")
 	assert.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "1"))
 
 	// Verify that intercept becomes active
