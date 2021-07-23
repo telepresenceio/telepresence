@@ -17,6 +17,10 @@
   failures causing telepresence to default to the overriding resolver will no
   longer cause general DNS lookup failures.
 
+- Bugfix: A panic is no longer raised when passing an argument to the
+  `telepresence intercept` option `--http-match` that does't contain an
+  equal sign.
+
 ### 2.3.6 (July 20, 2021)
 
 - Bugfix: Fixed a regression introduced in 2.3.5 that caused preview

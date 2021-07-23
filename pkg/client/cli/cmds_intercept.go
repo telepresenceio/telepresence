@@ -601,8 +601,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	default:
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
 			_ = is.DeactivateState(ctx)
-			_ = is.cmd.FlagError(errors.New(r.InterceptInfo.Message))
-			panic("not reached; FlagErrorFunc should call os.Exit()")
+			return false, is.cmd.FlagError(errors.New(r.InterceptInfo.Message))
 		}
 		return false, errors.New(interceptMessage(r))
 	}
