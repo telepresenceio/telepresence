@@ -46,9 +46,15 @@ func main() {
 
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-		summarizeLogs(ctx, cmd)
+		if !isBackground() {
+			summarizeLogs(ctx, cmd)
+		}
 		os.Exit(1)
 	}
+}
+
+func isBackground() bool {
+	return len(os.Args) > 1 && (os.Args[1] == "daemon-foreground" || os.Args[1] == "connector-foreground")
 }
 
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
@@ -66,5 +72,9 @@ func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
 	}
 	if connectorLogs != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", connectorLogs)
+	}
+
+	if daemonLogs != "" || connectorLogs != "" {
+		fmt.Fprintln(cmd.ErrOrStderr())
 	}
 }
