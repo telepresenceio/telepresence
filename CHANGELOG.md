@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.3.7 (TBD)
+### 2.3.7 (July 23, 2021)
 
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
   show up in the output of the `telepresence status` command.
