@@ -178,7 +178,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 
 .PHONY: check
 check: $(tools/ko) $(tools/helm) ## (QA) Run the test suite
-	TELEPRESENCE_MAX_LOGFILES=10 go test -timeout=18m ./...
+	TELEPRESENCE_MAX_LOGFILES=300 go test -timeout=18m ./...
 
 .PHONY: _login
 _login:
