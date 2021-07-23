@@ -174,6 +174,8 @@ func (tm *trafficManager) Run(c context.Context) error {
 		Product:   "telepresence",
 		Version:   client.Version(),
 		ApiKey: func() string {
+			// Discard any errors; including an apikey with this request is optional.
+			// We might not even be logged in.
 			tok, _ := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false)
 			return tok
 		}(),
@@ -382,6 +384,8 @@ func (tm *trafficManager) remain(c context.Context) error {
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session: tm.session(),
 				ApiKey: func() string {
+					// Discard any errors; including an apikey with this request
+					// is optional.  We might not even be logged in.
 					tok, _ := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false)
 					return tok
 				}(),

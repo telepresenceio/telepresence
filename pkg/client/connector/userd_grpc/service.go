@@ -188,12 +188,7 @@ func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, err
 
 func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (*rpc.UserInfo, error) {
 	ctx = s.callCtx(ctx, "GetCloudUserInfo")
-	info, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, req.GetRefresh())
-	if req.GetAutoLogin() && err != nil {
-		if _err := s.sharedState.LoginExecutor.Login(ctx); _err == nil {
-			info, err = s.sharedState.LoginExecutor.GetUserInfo(ctx, req.GetRefresh())
-		}
-	}
+	info, err := s.sharedState.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
 	if err != nil {
 		return nil, err
 	}

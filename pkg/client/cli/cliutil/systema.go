@@ -62,8 +62,8 @@ func EnsureLoggedOut(ctx context.Context) error {
 // HasLoggedIn returns true if either the user has an active login session or an expired login
 // session, and returns false if either the user has never logged in or has explicitly logged out.
 func HasLoggedIn(ctx context.Context) bool {
-	userInfo, _ := authdata.LoadUserInfoFromUserCache(ctx)
-	return userInfo != nil
+	_, err := authdata.LoadUserInfoFromUserCache(ctx)
+	return err == nil
 }
 
 func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*connector.UserInfo, error) {
