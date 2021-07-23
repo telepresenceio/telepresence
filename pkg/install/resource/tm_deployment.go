@@ -45,7 +45,7 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 	sc := getScope(ctx)
 	imgConfig := client.GetConfig(ctx).Images
 	var containerEnv = []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "LOG_LEVEL", Value: "debug"},
 		{Name: "SYSTEMA_HOST", Value: sc.env.SystemAHost},
 		{Name: "SYSTEMA_PORT", Value: sc.env.SystemAPort},
 		{Name: "CLUSTER_ID", Value: sc.clusterID},
