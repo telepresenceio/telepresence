@@ -1557,6 +1557,7 @@ func telepresence(t testing.TB, args ...string) (string, string) {
 // telepresence executes the CLI command in-process
 func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 	var stdout, stderr strings.Builder
+	dlog.Debug(ctx, args)
 
 	configDir, _ := filelocation.AppUserConfigDir(ctx)
 	logDir, _ := filelocation.AppUserLogDir(ctx)
