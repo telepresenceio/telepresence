@@ -43,6 +43,7 @@ items:
           environments where launching a web-browser is impossible,
           such as cloud shells, Docker containers, or CI.
         image: telepresence-2.3.7-newkey.png
+        docs: reference/client/login/
 
       - type: bugfix
         title: Better UX around intercepts with no local process running
