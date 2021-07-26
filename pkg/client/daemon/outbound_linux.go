@@ -75,7 +75,7 @@ func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
-	if !o.shouldDoClusterLookup(query) {
+	if !o.shouldDoClusterLookup(c, query) {
 		return nil
 	}
 
