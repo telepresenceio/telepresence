@@ -1,8 +1,11 @@
 # Changelog
 
 ### 2.3.8 (TBD)
-- Bugfix: Initialisatialisation of systemd-resolved` based DNS sets
+- Bugfix: Initialization of systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
+
+- Bugfix: A `$(NAME)` reference in the agent's environment will now be
+  interpolated correctly.
 
 ### 2.3.7 (July 23, 2021)
 

@@ -23,26 +23,26 @@ import (
 )
 
 type Config struct {
-	Name        string `env:"AGENT_NAME,required"`
-	Namespace   string `env:"AGENT_NAMESPACE,default="`
-	PodIP       string `env:"AGENT_POD_IP,default="`
-	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
-	AppMounts   string `env:"APP_MOUNTS,default=/tel_app_mounts"`
-	AppPort     int32  `env:"APP_PORT,required"`
-	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
-	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
+	Name        string `env:"_TEL_AGENT_NAME,required"`
+	Namespace   string `env:"_TEL_AGENT_NAMESPACE,default="`
+	PodIP       string `env:"_TEL_AGENT_POD_IP,default="`
+	AgentPort   int32  `env:"_TEL_AGENT_PORT,default=9900"`
+	AppMounts   string `env:"_TEL_AGENT_APP_MOUNTS,default=/tel_app_mounts"`
+	AppPort     int32  `env:"_TEL_AGENT_APP_PORT,required"`
+	ManagerHost string `env:"_TEL_AGENT_MANAGER_HOST,default=traffic-manager"`
+	ManagerPort int32  `env:"_TEL_AGENT_MANAGER_PORT,default=8081"`
 }
 
 var skipKeys = map[string]bool{
 	// Keys found in the Config
-	"AGENT_NAME":      true,
-	"AGENT_NAMESPACE": true,
-	"AGENT_POD_IP":    true,
-	"AGENT_PORT":      true,
-	"APP_MOUNTS":      true,
-	"APP_PORT":        true,
-	"MANAGER_HOST":    true,
-	"MANAGER_PORT":    true,
+	"_TEL_AGENT_NAME":         true,
+	"_TEL_AGENT_NAMESPACE":    true,
+	"_TEL_AGENT_POD_IP":       true,
+	"_TEL_AGENT_PORT":         true,
+	"_TEL_AGENT_APP_MOUNTS":   true,
+	"_TEL_AGENT_APP_PORT":     true,
+	"_TEL_AGENT_MANAGER_HOST": true,
+	"_TEL_AGENT_MANAGER_PORT": true,
 
 	// Keys that aren't useful when running on the local machine
 	"HOME":     true,
@@ -63,9 +63,7 @@ func AppEnvironment() map[string]string {
 		pair := strings.SplitN(env, "=", 2)
 		if len(pair) == 2 {
 			k := pair[0]
-			if strings.HasPrefix(k, "TEL_APP_") {
-				appEnv[k[len("TEL_APP_"):]] = pair[1]
-			} else if _, skip := skipKeys[k]; !skip {
+			if _, skip := skipKeys[k]; !skip {
 				fullEnv[k] = pair[1]
 			}
 		}
@@ -113,14 +111,14 @@ func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
 
 	// Add defaults for development work
-	user := os.Getenv("USER)")
+	user := os.Getenv("USER")
 	if user != "" {
 		dlog.Infof(ctx, "Launching in dev mode ($USER is set)")
-		if os.Getenv("AGENT_NAME") == "" {
-			os.Setenv("AGENT_NAME", "test-agent")
+		if os.Getenv("_TEL_AGENT_NAME") == "" {
+			os.Setenv("_TEL_AGENT_NAME", "test-agent")
 		}
-		if os.Getenv("APP_PORT") == "" {
-			os.Setenv("APP_PORT", "8080")
+		if os.Getenv("_TEL_AGENT_APP_PORT") == "" {
+			os.Setenv("_TEL_AGENT_APP_PORT", "8080")
 		}
 	}
 

@@ -53,38 +53,37 @@ deployment:
         - args:
           - agent
           env:
-          - name: TEL_APP_TEST_PATH
+          - name: TEST_PATH
             value: /path/to/one
-          - name: TEL_APP_TEST_TXT
+          - name: TEST_TXT
             value: some arbitrary text
-          - name: TEL_APP_TEST_FROM
+          - name: TEST_FROM
             valueFrom:
               configMapKeyRef:
                 key: some-key
                 name: some-map
           - name: TELEPRESENCE_CONTAINER
             value: echo-server
-          - name: LOG_LEVEL
+          - name: _TEL_AGENT_LOG_LEVEL
             value: debug
-          - name: AGENT_NAME
+          - name: _TEL_AGENT_NAME
             value: hello-8
-          - name: AGENT_NAMESPACE
+          - name: _TEL_AGENT_NAMESPACE
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-          - name: AGENT_POD_IP
+          - name: _TEL_AGENT_POD_IP
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
-          - name: APP_PORT
+          - name: _TEL_AGENT_APP_PORT
             value: "8080"
-          - name: MANAGER_HOST
+          - name: _TEL_AGENT_MANAGER_HOST
             value: traffic-manager.ambassador
           envFrom:
-          - prefix: TEL_APP_
-            secretRef:
+          - secretRef:
               name: test-secret
-          - prefix: TEL_APP_SC_
+          - prefix: SC_
             secretRef:
               name: test-secret2
           image: localhost:5000/tel2:{{.Version}}
