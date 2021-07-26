@@ -55,7 +55,7 @@ func run() error {
 	case "create":
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		kubeconfig, err := kubeceptionRequest(ctx, client, "PUT", token, clusterName, map[string]string{"wait": "true", "timeoutSecs": "3600", "version": "1.19"})
+		kubeconfig, err := kubeceptionRequest(ctx, client, "PUT", token, clusterName, map[string]string{"wait": "true", "timeoutSecs": "7200", "version": "1.19"})
 		if err != nil {
 			return err
 		}
