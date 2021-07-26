@@ -367,6 +367,7 @@ func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 		}
 	}
 
+	dlog.Debugf(ctx, "Sending info on %d workloads", len(workloadInfos))
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}
 }
 
