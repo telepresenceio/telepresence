@@ -14,12 +14,15 @@ import (
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if
 // login fails.  The result code will indicate if this is a new login or if it resued an existing
-// login.
-func EnsureLoggedIn(ctx context.Context) (connector.LoginResult_Code, error) {
+// login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
+// the key is used instead of performing an interactive login.
+func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
 	var resp *connector.LoginResult
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		resp, err = connectorClient.Login(ctx, &empty.Empty{})
+		resp, err = connectorClient.Login(ctx, &connector.LoginRequest{
+			ApiKey: apikey,
+		})
 		return err
 	})
 	return resp.GetCode(), err
@@ -59,23 +62,24 @@ func EnsureLoggedOut(ctx context.Context) error {
 // HasLoggedIn returns true if either the user has an active login session or an expired login
 // session, and returns false if either the user has never logged in or has explicitly logged out.
 func HasLoggedIn(ctx context.Context) bool {
-	token, _ := authdata.LoadTokenFromUserCache(ctx)
-	return token != nil
+	_, err := authdata.LoadUserInfoFromUserCache(ctx)
+	return err == nil
 }
 
-func GetCloudAccessToken(ctx context.Context, autoLogin bool) (string, error) {
-	var tokenData *connector.TokenData
+func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*connector.UserInfo, error) {
+	var userInfo *connector.UserInfo
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		tokenData, err = connectorClient.GetCloudAccessToken(ctx, &connector.TokenReq{
+		userInfo, err = connectorClient.GetCloudUserInfo(ctx, &connector.UserInfoRequest{
 			AutoLogin: autoLogin,
+			Refresh:   refresh,
 		})
 		return err
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return tokenData.GetAccessToken(), nil
+	return userInfo, nil
 }
 
 func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (string, error) {

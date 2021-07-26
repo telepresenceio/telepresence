@@ -99,6 +99,23 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 
 				// No need to close listeners here. They are closed by the dnsServer
 			}()
+			// Some installation have default DNS configured with ~. routing path.
+			// If two interfaces with DefaultRoute: yes present, the one with the
+			// routing key used and and SanityCheck fails. Hence, tel2SubDomain
+			// must be used as a routing key.
+			o.domainsLock.Lock()
+			namespaces := make(map[string]struct{})
+			namespaces[tel2SubDomain] = struct{}{}
+			o.namespaces = namespaces
+			paths := []string{"~" + tel2SubDomainDot}
+			o.search = paths
+			o.domainsLock.Unlock()
+
+			if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
+				dlog.Errorf(c, "failed to set link domains on %q: %v", dev.Name(), err)
+			} else {
+				dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
+			}
 			dnsServer = dns.NewServer(c, listeners, nil, o.resolveInCluster)
 			close(initDone)
 			return dnsServer.Run(c)

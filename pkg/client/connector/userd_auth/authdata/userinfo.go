@@ -3,19 +3,13 @@ package authdata
 import (
 	"context"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
 const userInfoFile = "user-info.json"
 
-type UserInfo struct {
-	Id               string `json:"id"`
-	Name             string `json:"name"`
-	AvatarUrl        string `json:"avatarUrl"`
-	AccountId        string `json:"accountId"`
-	AccountName      string `json:"accountName"`
-	AccountAvatarUrl string `json:"accountAvatarUrl"`
-}
+type UserInfo = connector.UserInfo
 
 // SaveUserInfoToUserCache saves the provided user info to user cache and returns an error if
 // something goes wrong while marshalling or persisting.

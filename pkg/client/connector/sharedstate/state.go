@@ -7,6 +7,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 )
 
@@ -113,9 +114,24 @@ func (s *State) GetTrafficManagerNonBlocking() TrafficManager {
 	}
 }
 
+func (s *State) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {
+	info, err := s.LoginExecutor.GetUserInfo(ctx, refresh)
+	if autoLogin && err != nil {
+		// Opportunistically log in; if it fails, don't sweat it and discard the error.
+		if _err := s.LoginExecutor.Login(ctx); _err == nil {
+			info, err = s.LoginExecutor.GetUserInfo(ctx, refresh)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
 func (s *State) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
 	key, err := s.LoginExecutor.GetAPIKey(ctx, desc)
 	if autoLogin && err != nil {
+		// Opportunistically log in; if it fails, don't sweat it and discard the error.
 		if _err := s.LoginExecutor.Login(ctx); _err == nil {
 			key, err = s.LoginExecutor.GetAPIKey(ctx, desc)
 		}

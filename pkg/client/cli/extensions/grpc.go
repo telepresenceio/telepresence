@@ -11,6 +11,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -36,7 +37,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		return "", err
 	}
 
-	apikey, err := cliutil.GetCloudAPIKey(ctx, "laptop", true)
+	apikey, err := cliutil.GetCloudAPIKey(ctx, a8rcloud.KeyDescWorkstation, true)
 	if err != nil {
 		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: login error: %w", err)
 	}

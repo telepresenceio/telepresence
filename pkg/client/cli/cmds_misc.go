@@ -71,7 +71,7 @@ func dashboardCommand() *cobra.Command {
 			}
 
 			// Ensure we're logged in
-			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context())
+			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context(), "")
 			if err != nil {
 				return err
 			}
