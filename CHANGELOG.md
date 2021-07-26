@@ -4,6 +4,9 @@
 - Bugfix: Initialisatialisation of systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
 
+- Bugfix: The `traffic-manager` will only send subnet updates to a
+  client root daemon when the subnets actually change.
+
 ### 2.3.7 (July 23, 2021)
 
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
