@@ -125,8 +125,9 @@ const dotKubernetesZone = "." + kubernetesZone + "."
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
-func (o *outbound) shouldDoClusterLookup(query string) bool {
+func (o *outbound) shouldDoClusterLookup(c context.Context, query string) bool {
 	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4 {
+		dlog.Debugf(c, "Query %q is in kubernetes zone but malformed", query)
 		return false
 	}
 
@@ -142,6 +143,7 @@ func (o *outbound) shouldDoClusterLookup(query string) bool {
 	// Skip configured excludeSuffixes
 	for _, sfx := range o.dnsConfig.ExcludeSuffixes {
 		if strings.HasSuffix(query, sfx) {
+			dlog.Debugf(c, "Query %q is in excluded suffix", query)
 			return false
 		}
 	}
@@ -151,6 +153,7 @@ func (o *outbound) shouldDoClusterLookup(query string) bool {
 func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
+	dlog.Debugf(c, "Asked about resolving %q", query)
 
 	if query == "localhost." {
 		// BUG(lukeshu): I have no idea why a lookup
@@ -166,7 +169,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		return localhostIPv4
 	}
 
-	if !o.shouldDoClusterLookup(query) {
+	if !o.shouldDoClusterLookup(c, query) {
 		return nil
 	}
 
