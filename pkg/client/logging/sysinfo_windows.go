@@ -60,7 +60,16 @@ func GetSysInfo(dir string, info os.FileInfo) (SysInfo, error) {
 }
 
 func (wi *windowsSysInfo) SetOwnerAndGroup(name string) error {
-	return api.SetNamedSecurityInfo(name, api.SE_FILE_OBJECT, api.OWNER_SECURITY_INFORMATION, wi.owner, wi.group, wi.dacl, wi.sacl)
+	err := api.SetNamedSecurityInfo(name, api.SE_FILE_OBJECT, api.OWNER_SECURITY_INFORMATION, wi.owner, wi.group, wi.dacl, wi.sacl)
+	if err != nil {
+		// On some systems it seems SetNamedSecurityInfo will return ERROR_SUCCESS on success... this is an odd violation of the principle
+		// that windows APIs return err = nil on success but okay
+		if errors.Is(err, windows.ERROR_SUCCESS) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (wi *windowsSysInfo) HaveSameOwnerAndGroup(s SysInfo) bool {
