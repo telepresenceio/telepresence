@@ -296,6 +296,10 @@ func run(c context.Context) error {
 	}
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 
+	defer func() {
+		dlog.Infof(c, "Telepresence %s %s is ending...", titleName, client.DisplayVersion())
+	}()
+
 	env, err := client.LoadEnv(c)
 	if err != nil {
 		return err

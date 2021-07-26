@@ -115,6 +115,7 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 }
 
 func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
+	dlog.Debugf(ctx, "List called")
 	haveManager := false
 	manager, _ := s.sharedState.GetTrafficManagerBlocking(ctx)
 	if manager != nil {
