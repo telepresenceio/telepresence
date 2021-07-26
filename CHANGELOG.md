@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.3.8 (TBD)
+- Bugfix: Initialisatialisation of systemd-resolved` based DNS sets
+  routing domain to improve stability in non-standard configurations.
+
 ### 2.3.7 (July 23, 2021)
 
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
