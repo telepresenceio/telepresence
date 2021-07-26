@@ -307,6 +307,9 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
+		if goRuntime.GOOS == "windows" {
+			time.Sleep(2 * time.Second)
+		}
 		_ = run(ctx, "curl", "--silent", "kubernetes.default:443")
 
 		_, stderr = telepresenceContext(ctx, "quit")
@@ -316,7 +319,6 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		defer rootLog.Close()
 
 		hasLookup := false
-		dlog.Errorf(ctx, "GREPME: Rootlog is at %s", tmpDir)
 		scn := bufio.NewScanner(rootLog)
 		for scn.Scan() && !hasLookup {
 			text := scn.Text()
