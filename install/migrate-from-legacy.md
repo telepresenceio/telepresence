@@ -54,7 +54,6 @@ are supported).
 |--------------------------------------------------|--------------------------------------------|
 | --swap-deployment $workload                      | intercept $workload                        |
 | --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
-| --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
 | --swap-deployment $workload --run-shell          | intercept $workload -- bash                |
 | --swap-deployment $workload --run $cmd           | intercept $workload -- $cmd                |
 | --swap-deployment $workload --docker-run $cmd    | intercept $workload --docker-run -- $cmd   |
