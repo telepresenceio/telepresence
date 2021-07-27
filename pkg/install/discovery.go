@@ -162,7 +162,11 @@ Please specify the Service port you want to intercept by passing the --port=loca
 				}
 			}
 		}
-		// If no container matched, then use the first container with no ports at all
+		// If no container matched, then use the first container with no ports at all. This
+		// enables intercepts of containers that indeed do listen a port but lack a matching
+		// port description in the manifest, which is what you get if you do:
+		//     kubectl create deploy my-deploy --image my-image
+		//     kubectl expose deploy my-deploy --port 80 --target-port 8080
 		if matchingContainer == nil {
 			for ci := 0; ci < len(cns); ci++ {
 				cn := &cns[ci]
