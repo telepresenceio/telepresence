@@ -51,34 +51,57 @@ func newCloudMessageCache(ctx context.Context) (*cloudMessageCache, error) {
 // For now this function will just return a fake result from the cloud
 // this will be replaced with the code to talk to Ambassador Cloud
 // via GetUnauthenticatedCommandMessages in a later commit
-func (cmc *cloudMessageCache) getCloudMessages(ctx context.Context, systemaURL string) error {
+func getCloudMessages(ctx context.Context, systemaURL string) (*systema.CommandMessageResponse, error) {
 	u, err := url.Parse(systemaURL)
 	if err != nil {
-		return err
+		return &systema.CommandMessageResponse{}, err
 	}
 	conn, err := grpc.DialContext(ctx,
 		(&url.URL{Scheme: "dns", Path: "/" + u.Host}).String(),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: u.Hostname()})))
 	if err != nil {
-		return err
+		return &systema.CommandMessageResponse{}, err
 	}
 
 	systemaClient := systema.NewSystemACliClient(conn)
-	resp, err := systemaClient.GetUnauthenticatedCommandMessages(ctx, &empty.Empty{})
-	if err != nil {
-		/*
-			we can uncomment this to 'fake' it while we wait for Ambassador Cloud
-			to implement this RPC
+	return systemaClient.GetUnauthenticatedCommandMessages(ctx, &empty.Empty{})
+}
 
-			msgResponse := systema.CommandMessageResponse{
-				Intercept: "Use `login` to connect to Ambassador Cloud and perform selective intercepts.",
-			}
-			cmc.Intercept = msgResponse.GetIntercept()
-		*/
-		return err
-	}
+func (cmc *cloudMessageCache) updateCacheMessages(ctx context.Context, resp *systema.CommandMessageResponse) {
+	// Update the messages
 	cmc.Intercept = resp.GetIntercept()
-	return nil
+
+	// Update the time to do the next check since we were successful
+	cmc.NextCheck = dtime.Now().Add(24 * 7 * time.Hour)
+
+	// We reset the messages delivered for all commands since they
+	// may have changed
+	for key := range cmc.MessagesDelivered {
+		cmc.MessagesDelivered[key] = false
+	}
+}
+
+func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed string) string {
+	// Ensure that the message hasn't already been delivered to the user
+	// if it has, then we don't want to print any output so as to not
+	// annoy the user.
+	var msg string
+	if val, ok := cmc.MessagesDelivered[cmdUsed]; ok {
+		if val {
+			return msg
+		}
+	}
+
+	// Check if we have a message for the given command
+	switch cmdUsed {
+	case "intercept":
+		msg = cmc.Intercept
+	default:
+		// We don't currently have any messages for this command
+		// so our msg will remain empty
+	}
+	cmc.MessagesDelivered[cmdUsed] = true
+	return msg
 }
 
 // raiseCloudMessage is what is called from `PostRunE` in a command and is responsible
@@ -108,41 +131,18 @@ func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		systemaURL := fmt.Sprintf("https://%s:%s", env.SystemAHost, env.SystemAPort)
-		err = cmc.getCloudMessages(ctx, systemaURL)
+		resp, err := getCloudMessages(ctx, systemaURL)
 		if err != nil {
 			// We try again in an hour since we encountered an error
 			cmc.NextCheck = dtime.Now().Add(1 * time.Hour)
 		} else {
-			// This was successful so we'll get updates in a week
-			cmc.NextCheck = dtime.Now().Add(24 * 7 * time.Hour)
-			// We reset the messages delivered for all commands since they
-			// may have changed
-			for key := range cmc.MessagesDelivered {
-				cmc.MessagesDelivered[key] = false
-			}
+			cmc.updateCacheMessages(ctx, resp)
 		}
 	}
 
-	// Ensure that the message hasn't already been delivered to the user
-	// if it has, then we don't want to print any output so as to not
-	// annoy the user.
-	if val, ok := cmc.MessagesDelivered[cmdUsed]; ok {
-		if val {
-			return nil
-		}
-	}
-
-	// Check if we have a message for the given command
-	var msg string
-	switch cmdUsed {
-	case "intercept":
-		msg = cmc.Intercept
-	default:
-		// We don't currently have any messages for this command
-		// so our msg will be empty
-	}
-	cmc.MessagesDelivered[cmdUsed] = true
-	fmt.Fprintf(cmd.OutOrStdout(), "%s", msg)
+	// Get the message from the cache that should be delivered to the user
+	msg := cmc.getMessageFromCache(ctx, cmdUsed)
+	fmt.Fprintf(cmd.OutOrStdout(), "%s\n", msg)
 	_ = cache.SaveToUserCache(ctx, cmc, messagesCacheFilename)
 
 	return nil
