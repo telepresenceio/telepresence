@@ -976,6 +976,16 @@ func (is *interceptedSuite) TestC_VerifyingResponsesFromInterceptor() {
 			is.Require().Eventually(
 				// condition
 				func() bool {
+					ip, err := net.DefaultResolver.LookupHost(ctx, svc)
+					if err != nil {
+						dlog.Infof(ctx, "%v", err)
+						return false
+					}
+					if 1 != len(ip) {
+						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
+						return false
+					}
+
 					dlog.Infof(ctx, "trying %q...", "http://"+svc)
 					hc := http.Client{Timeout: 2 * time.Second}
 					resp, err := hc.Get("http://" + svc)
@@ -993,8 +1003,8 @@ func (is *interceptedSuite) TestC_VerifyingResponsesFromInterceptor() {
 					dlog.Infof(ctx, "body: %q", body)
 					return string(body) == expectedOutput
 				},
-				15*time.Second, // waitFor
-				3*time.Second,  // polling interval
+				time.Minute,   // waitFor
+				3*time.Second, // polling interval
 				`body of %q equals %q`, "http://"+svc, expectedOutput,
 			)
 		})
