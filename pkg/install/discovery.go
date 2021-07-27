@@ -168,7 +168,7 @@ Please specify the Service port you want to intercept by passing the --port=loca
 		//     kubectl create deploy my-deploy --image my-image
 		//     kubectl expose deploy my-deploy --port 80 --target-port 8080
 		if matchingContainer == nil {
-			for ci := 0; ci < len(cns); ci++ {
+			for ci := range cns {
 				cn := &cns[ci]
 				if len(cn.Ports) == 0 {
 					matchingServicePort = port
