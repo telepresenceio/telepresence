@@ -150,7 +150,8 @@ Please specify the Service port you want to intercept by passing the --port=loca
 	} else {
 		portNum := port.TargetPort.IntVal
 		// First see if we have a container with a matching port
-		for ci := 0; ci < len(cns); ci++ {
+	containerLoop:
+		for ci := range cns {
 			cn := &cns[ci]
 			for pi := range cn.Ports {
 				if cn.Ports[pi].ContainerPort == portNum {
