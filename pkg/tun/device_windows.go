@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/tun"
@@ -19,8 +20,9 @@ import (
 // See: https://www.wintun.net/ for more info.
 type Device struct {
 	tun.Device
-	name string
-	dns  net.IP
+	name           string
+	dns            net.IP
+	interfaceIndex int
 }
 
 func openTun(ctx context.Context) (td *Device, err error) {
@@ -35,11 +37,16 @@ func openTun(ctx context.Context) (td *Device, err error) {
 	interfaceName := "tel0"
 	td = &Device{}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
-		return nil, fmt.Errorf("failed to create TUN device: %v", err)
+		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
 	if td.name, err = td.Device.Name(); err != nil {
-		return nil, fmt.Errorf("failed to get real name of TUN device: %v", err)
+		return nil, fmt.Errorf("failed to get real name of TUN device: %w", err)
 	}
+	iface, err := td.getLUID().Interface()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
+	}
+	td.interfaceIndex = int(iface.InterfaceIndex)
 	return td, nil
 }
 
@@ -103,6 +110,20 @@ func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (e
 		return err
 	}
 	_ = dexec.CommandContext(ctx, "ipconfig", "/flushdns").Run()
+
+	// On some systems, SetDNS isn't enough to allow the domains to be resolved, and the network adapter's domain has to be set explicitly.
+	// It's actually way easier to do this via powershell than any system calls that can be run from go code
+	if len(domains) > 0 {
+		domain := strings.TrimSuffix(domains[0], ".")
+		pshScript := fmt.Sprintf(`
+	$obj = Get-WmiObject Win32_NetworkAdapterConfiguration -filter "interfaceindex='%d'"
+	$obj.SetDNSDomain('%s')
+	`, t.interfaceIndex, domain)
+		err = dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript).Run()
+		if err != nil {
+			return err
+		}
+	}
 	t.dns = server
 	return nil
 }
