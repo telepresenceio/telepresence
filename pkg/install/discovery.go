@@ -149,18 +149,9 @@ Please specify the Service port you want to intercept by passing the --port=loca
 		}
 	} else {
 		portNum := port.TargetPort.IntVal
-		// Here we are using containerPortIndex <=0 instead of matchingContainer == nil because if a
-		// container has no ports, we want to use it but we don't want
-		// to break out of the loop looking at containers in case there
-		// is a better fit.  Currently, that is a container where the
-		// ContainerPort matches the targetPort in the service.
-		for ci := 0; ci < len(cns) && containerPortIndex <= 0; ci++ {
+		// First see if we have a container with a matching port
+		for ci := 0; ci < len(cns); ci++ {
 			cn := &cns[ci]
-			if len(cn.Ports) == 0 {
-				matchingServicePort = port
-				matchingContainer = cn
-				containerPortIndex = -1
-			}
 			for pi := range cn.Ports {
 				if cn.Ports[pi].ContainerPort == portNum {
 					matchingServicePort = port
@@ -168,6 +159,18 @@ Please specify the Service port you want to intercept by passing the --port=loca
 					containerPortIndex = pi
 					break
 				}
+			}
+		}
+		// If no container matched, then use the first container with no ports at all
+		if matchingContainer == nil {
+			for ci := 0; ci < len(cns); ci++ {
+				cn := &cns[ci]
+				if len(cn.Ports) == 0 {
+					matchingServicePort = port
+					matchingContainer = cn
+					containerPortIndex = -1
+					break
+				}	
 			}
 		}
 	}
