@@ -148,8 +148,8 @@ Please specify the Service port you want to intercept by passing the --port=loca
 			}
 		}
 	} else {
-		portNum := port.TargetPort.IntVal
 		// First see if we have a container with a matching port
+		portNum := port.TargetPort.IntVal
 	containerLoop:
 		for ci := range cns {
 			cn := &cns[ci]
@@ -158,7 +158,7 @@ Please specify the Service port you want to intercept by passing the --port=loca
 					matchingServicePort = port
 					matchingContainer = cn
 					containerPortIndex = pi
-					break
+					break containerLoop
 				}
 			}
 		}
@@ -175,7 +175,7 @@ Please specify the Service port you want to intercept by passing the --port=loca
 					matchingContainer = cn
 					containerPortIndex = -1
 					break
-				}	
+				}
 			}
 		}
 	}
