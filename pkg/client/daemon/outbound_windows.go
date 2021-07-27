@@ -49,6 +49,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 			o.router.configureDNS(c, dnsIP, uint16(53), addr.(*net.UDPAddr))
 			close(o.dnsConfigured)
 			v := dns.NewServer(c, []net.PacketConn{listener}, nil, o.resolveInCluster)
+			dlog.Debugf(c, "Starting DNS server...")
 			return v.Run(c)
 		}
 	})

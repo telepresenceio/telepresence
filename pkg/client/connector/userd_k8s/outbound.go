@@ -176,4 +176,5 @@ func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
 	if _, err := kc.callbacks.SetDNSSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
 		dlog.Errorf(c, "error posting search paths to %v: %v", paths, err)
 	}
+	dlog.Debugf(c, "Search paths have been updated")
 }
