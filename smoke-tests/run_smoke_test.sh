@@ -86,17 +86,35 @@ has_intercept_id() {
 }
 
 # Puts preview url in a variable
-# Not currently used bc curl doesn't work with preview url bc we need
-# cookie system A adds (I think)
 get_preview_url() {
-    local regex="Preview URL : (https://[^ >]+)"
-    if [[ $output =~ $regex ]]; then
-        # shellcheck disable=SC2034
-        previewurl="${BASH_REMATCH[1]}"
-    else
+    preview_url=$(echo "$output" | grep -Eo 'https://[^ >]+')
+    if [[ -z $preview_url ]]; then
         echo "No Preview URL found"
         exit 1
     fi
+}
+
+# Puts workstation api key in a variable
+get_workstation_apikey() {
+    local cache_file
+    uname=$(uname)
+    if [ "$uname" == "Darwin" ]; then
+        cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
+    elif [ "$uname" == "Linux" ]; then
+        if [ -n "$XDG_CONFIG_HOME" ]; then
+            cache_file="$XDG_CONFIG_HOME/telepresence/apikeys.json"
+        else
+            cache_file="$HOME/.cache/telepresence/apikeys.json"
+        fi
+    fi
+    apikey=$(grep -o -E "\"telepresence:workstation\":\"[A-Za-z0-9=]+\"" "$cache_file" | awk -F: '{print $3}')
+    if [[ -z $apikey ]]; then
+        echo "No apikey found"
+        exit 1
+    fi
+    # remove the leading and trailing "
+    apikey="${apikey%\"}"
+    apikey="${apikey#\"}"
 }
 
 # Puts intercept id in a variable
@@ -459,13 +477,19 @@ finish_step
 
 has_intercept_id true
 has_preview_url true
+
 get_intercept_id
+get_preview_url
+get_workstation_apikey
+
 output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" true
 
-# Gotta figure out how to get a cookie for this to work
-#output=$(curl $previewurl | grep 'blue')
-#verify_output_empty "${output}" false
+# Verify the preview url works
+output=$(curl "${curl_opts[@]}" -H "x-ambassador-api-key: $apikey" "$preview_url"  | grep 'blue')
+verify_output_empty "${output}" false
+
+# We probably don't need this but we also check using the intercept-id header
 output=$(curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
@@ -494,8 +518,15 @@ finish_step
 sleep 5 # avoid known agent mechanism-args race
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n')
 sleep 1
+get_preview_url
 has_intercept_id false
 has_preview_url true
+
+# Verify preview url goes to the intercepted service
+output=$(curl "${curl_opts[@]}" -H "x-ambassador-api-key: $apikey" "$preview_url"  | grep 'blue')
+verify_output_empty "${output}" false
+
+# Verify normal traffic goes to intercepted service
 output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
@@ -556,5 +587,4 @@ if [[ -n "$CLEANUP_DEMO" ]]; then
 fi
 end_time=$(date -u +%s)
 elapsed_time=$((end_time - start_time))
-echo "$TELEPRESENCE has been (mostly) smoke tested and took $elapsed_time seconds :)"
-echo "Please test a preview URL manually to ensure that is working on the system A side"
+echo "$TELEPRESENCE has been smoke tested and took $elapsed_time seconds :)"
