@@ -255,31 +255,26 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		rootLogName := filepath.Join(logDir, "daemon.log")
 		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
-		defer func() {
-			_ = rootLog.Close()
-			st, err := os.Stat(rootLogName)
-			if err != nil {
-				dlog.Errorf(ctx, "Stat on %q failed: %v", rootLogName, err)
-				return
-			}
-			sysInfo, err := logging.GetSysInfo(rootLogName, st)
-			if err != nil {
-				dlog.Errorf(ctx, "GetSysInfo on %q failed: %v", rootLogName, err)
-				return
-			}
-			if err := os.Remove(rootLogName); err != nil {
-				dlog.Errorf(ctx, "Failed to remove %q: %v", rootLogName, err)
-				dlog.Error(ctx, sysInfo)
-			}
-		}()
-
 		hasDebug := false
 		scn := bufio.NewScanner(rootLog)
 		match := regexp.MustCompile(` debug +daemon/server`)
 		for scn.Scan() && !hasDebug {
 			hasDebug = match.MatchString(scn.Text())
 		}
+
 		ts.True(hasDebug, "daemon.log does not contain expected debug statements")
+		_ = rootLog.Close()
+		st, err := os.Stat(rootLogName)
+		require.NoErrorf(err, "Stat on %q failed: %v", rootLogName, err)
+		sysInfo, err := logging.GetSysInfo(rootLogName, st)
+		require.NoErrorf(err, "GetSysInfo on %q failed: %v", rootLogName, err)
+		dlog.Infof(ctx, "SysInfo of %q is %v", rootLogName, sysInfo)
+		require.NoErrorf(os.Remove(rootLogName), "Failed to remove %q: %v", rootLogName, err)
+		files, err := os.ReadDir(logDir)
+		require.NoErrorf(err, "Failed to read directory %q", logDir)
+		for _, file := range files {
+			dlog.Infof(ctx, "DIR: %q", file)
+		}
 	})
 
 	ts.Run("DNS includes", func() {
