@@ -129,6 +129,7 @@ jobs:
     executor: vm-linux
     steps:
       - checkout
+      - install-go
       # Split prep out to reduce noise in the output, and help with
       # timeouts.
       - run: make lint-deps
