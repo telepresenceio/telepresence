@@ -1,10 +1,13 @@
 package logging
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 
@@ -62,4 +65,35 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 		logger.SetLevel(logLevels.UserDaemon)
 	}
 	return ctx, nil
+}
+
+func SummarizeLog(ctx context.Context, name string) (string, error) {
+	dir, err := filelocation.AppUserLogDir(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	filename := filepath.Join(dir, name+".log")
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	scanner := bufio.NewScanner(file)
+
+	errors := []string{}
+	for scanner.Scan() {
+		text := scanner.Text()
+		// XXX: is there a better way to detect error lines?
+		parts := strings.Fields(text)
+		if len(parts) > 2 && parts[2] == "error" {
+			errors = append(errors, text)
+		}
+	}
+
+	desc := fmt.Sprintf("%d error", len(errors))
+	if len(errors) != 1 {
+		desc += "s"
+	}
+
+	return fmt.Sprintf("See logs for details (%s found): %s", desc, filename), nil
 }

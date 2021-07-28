@@ -33,7 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-const processName = "connector"
+const ProcessName = "connector"
 const titleName = "Connector"
 
 var help = `The Telepresence ` + titleName + ` is a background component that manages a connection. It
@@ -43,7 +43,7 @@ Launch the Telepresence ` + titleName + `:
     telepresence connect
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), processName+".log") + `
+    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
 to troubleshoot problems.
 `
 
@@ -75,7 +75,7 @@ type service struct {
 // Command returns the CLI sub-command for "connector-foreground"
 func Command() *cobra.Command {
 	c := &cobra.Command{
-		Use:    processName + "-foreground",
+		Use:    ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
@@ -293,11 +293,11 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 // run is the main function when executing as the connector
 func run(c context.Context) error {
-	c, err := logging.InitContext(c, processName)
+	c, err := logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}
-	c = dgroup.WithGoroutineName(c, "/"+processName)
+	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 
 	env, err := client.LoadEnv(c)
 	if err != nil {
@@ -359,7 +359,7 @@ func run(c context.Context) error {
 		if err != nil {
 			if errors.Is(err, syscall.EADDRINUSE) {
 				return fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully",
-					client.SocketURL(client.ConnectorSocketName), processName)
+					client.SocketURL(client.ConnectorSocketName), ProcessName)
 			}
 			return err
 		}

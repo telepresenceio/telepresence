@@ -29,7 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-const processName = "daemon"
+const ProcessName = "daemon"
 const titleName = "Daemon"
 
 var help = `The Telepresence ` + titleName + ` is a long-lived background component that manages
@@ -39,7 +39,7 @@ Launch the Telepresence ` + titleName + `:
     sudo telepresence service
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), processName+".log") + `
+    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
 to troubleshoot problems.
 `
 
@@ -55,7 +55,7 @@ type service struct {
 // Command returns the telepresence sub-command "daemon-foreground"
 func Command() *cobra.Command {
 	return &cobra.Command{
-		Use:    processName + "-foreground <logging dir> <config dir> <dns>",
+		Use:    ProcessName + "-foreground <logging dir> <config dir> <dns>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(3),
 		Hidden: true,
@@ -98,7 +98,7 @@ func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, configDir, dns string) error {
 	if os.Geteuid() != 0 {
-		return fmt.Errorf("telepresence %s must run as root", processName)
+		return fmt.Errorf("telepresence %s must run as root", ProcessName)
 	}
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
@@ -106,7 +106,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
 
-	c, err := logging.InitContext(c, processName)
+	c, err := logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}
@@ -142,10 +142,10 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	})
 
 	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
-	d.cancel = func() { g.Go(processName+"-quit", d.quitAll) }
+	d.cancel = func() { g.Go(ProcessName+"-quit", d.quitAll) }
 
 	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", processName, client.DisplayVersion())
+	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
@@ -196,7 +196,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		if err != nil {
 			if errors.Is(err, syscall.EADDRINUSE) {
 				return fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully",
-					client.SocketURL(client.DaemonSocketName), processName)
+					client.SocketURL(client.DaemonSocketName), ProcessName)
 			}
 			return err
 		}
