@@ -310,7 +310,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		if goRuntime.GOOS == "windows" {
 			time.Sleep(2 * time.Second)
 		}
-		_ = run(ctx, "curl", "--silent", "kubernetes.default:443")
+		// Test with ".org" suffix that was added as an include-suffix
+		_ = run(ctx, "curl", "--silent", "example.org")
 
 		_, stderr = telepresenceContext(ctx, "quit")
 		require.Empty(stderr)
@@ -323,7 +324,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		for scn.Scan() && !hasLookup {
 			text := scn.Text()
 			dlog.Infof(ctx, "GREPME: LINE: %s", text)
-			hasLookup = strings.Contains(text, `LookupHost "kubernetes.default"`)
+			hasLookup = strings.Contains(text, `LookupHost "example.org"`)
 		}
 		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
 	})
