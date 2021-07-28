@@ -585,7 +585,7 @@ func (cs *connectedSuite) TestH_SuccessfullyInterceptsStatefulSet() {
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "ss-echo: intercepted")
-}
+}*/
 
 func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 	cs.Run("intercept can be established", func() {
@@ -623,6 +623,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 	})
 }
 
+/*
 func (cs *connectedSuite) TestJ_ListOnlyMapped() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
@@ -746,7 +747,7 @@ func (cs *connectedSuite) TestM_AutoInjectedAgent() {
 		require.Empty(stderr)
 		require.Contains(stdout, "echo-auto-inject: intercepted")
 	})
-}
+}*/
 
 func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 	defer telepresence(cs.T(), "leave", "echo-w-sidecars-"+cs.ns())
@@ -782,6 +783,7 @@ func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 	})
 }
 
+/*
 func (cs *connectedSuite) TestZ_Uninstall() {
 	cs.Run("Uninstalls agent on given deployment", func() {
 		require := cs.Require()
