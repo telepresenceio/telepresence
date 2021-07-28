@@ -1028,6 +1028,8 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	dlog.Infof(c, "Scaling down deploy hello-0")
 	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "0"))
 
+	time.Sleep(2 * time.Second)
+
 	// Verify that intercept remains but that no agent is found
 	assert.Eventually(func() bool {
 		stdout, _ := telepresence(is.T(), "--namespace", is.ns(), "list")
