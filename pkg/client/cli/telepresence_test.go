@@ -615,7 +615,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		// service can be resolve with unqualified name
 		cs.Eventually(func() bool {
 			return run(ctx, "curl", "--silent", "ss-echo") == nil
-		}, 3*time.Second, 1*time.Second)
+		}, 15*time.Second, time.Second)
 	})
 
 	cs.Run("leaving renders services unavailable using unqualified name", func() {
@@ -627,7 +627,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
 			return run(ctx, "curl", "--silent", "ss-echo") != nil
-		}, 3*time.Second, time.Second)
+		}, 15*time.Second, time.Second)
 	})
 }
 
