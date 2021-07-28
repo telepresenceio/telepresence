@@ -313,13 +313,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
 		if goRuntime.GOOS == "windows" {
-			pshScript := `
-$log = New-Object System.Diagnostics.Eventing.Reader.EventLogConfiguration 'Microsoft-Windows-DNS-Client/Operational'
-$log.IsEnabled=$true
-$log.SaveChanges()
-`
-			err := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript).Run()
-			require.NoError(err)
+			// Windows needs some time to get its bearings
+			time.Sleep(10 * time.Second)
 		}
 		// Test with ".org" suffix that was added as an include-suffix
 		_ = run(ctx, "curl", "--silent", "example.org")
@@ -338,13 +333,6 @@ $log.SaveChanges()
 			hasLookup = strings.Contains(text, `LookupHost "example.org"`)
 		}
 		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
-		if goRuntime.GOOS == "windows" {
-			pshScript := `
-get-winevent -LogName Microsoft-Windows-DNS-Client/Operational -FilterXPath 'Event[System[EventRecordID > 0]]' | format-table -auto -wrap
-`
-			err := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript).Run()
-			require.NoError(err)
-		}
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
