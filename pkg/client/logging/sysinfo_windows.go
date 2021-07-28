@@ -2,6 +2,7 @@ package logging
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -49,10 +50,10 @@ func GetSysInfo(dir string, info os.FileInfo) (SysInfo, error) {
 		&wi.sacl,
 		&secDesc,
 	)
-	if err != nil {
+	if err != nil && !errors.Is(err, windows.ERROR_SUCCESS) {
 		return nil, err
 	}
-	if _, err = windows.LocalFree(secDesc); err != nil {
+	if _, err = windows.LocalFree(secDesc); err != nil && !errors.Is(err, windows.ERROR_SUCCESS) {
 		return nil, err
 	}
 	return &wi, nil
@@ -94,4 +95,8 @@ func (wi *windowsSysInfo) DACL() windows.Handle {
 
 func (wi *windowsSysInfo) SACL() windows.Handle {
 	return wi.sacl
+}
+
+func (wi *windowsSysInfo) String() string {
+	return fmt.Sprintf("CTIME %v, UID %v, GID %v", wi.BirthTime(), wi.owner, wi.group)
 }
