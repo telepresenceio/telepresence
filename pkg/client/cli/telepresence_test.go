@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+
 	"github.com/datawire/dlib/dtime"
 
 	"github.com/stretchr/testify/suite"
@@ -238,9 +240,26 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require.Empty(stderr)
 		_, stderr = telepresenceContext(ctx, "quit")
 		require.Empty(stderr)
-		rootLog, err := os.Open(filepath.Join(logDir, "daemon.log"))
+		rootLogName := filepath.Join(logDir, "daemon.log")
+		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
-		defer rootLog.Close()
+		defer func() {
+			_ = rootLog.Close()
+			st, err := os.Stat(rootLogName)
+			if err != nil {
+				dlog.Errorf(ctx, "Stat on %q failed: %v", rootLogName, err)
+				return
+			}
+			sysInfo, err := logging.GetSysInfo(rootLogName, st)
+			if err != nil {
+				dlog.Errorf(ctx, "GetSysInfo on %q failed: %v", rootLogName, err)
+				return
+			}
+			if err := os.Remove(rootLogName); err != nil {
+				dlog.Errorf(ctx, "Failed to remove %q: %v", rootLogName, err)
+				dlog.Error(ctx, sysInfo)
+			}
+		}()
 
 		hasDebug := false
 		scn := bufio.NewScanner(rootLog)
