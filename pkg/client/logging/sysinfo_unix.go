@@ -3,6 +3,7 @@
 package logging
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 )
@@ -20,4 +21,8 @@ func (u *unixSysInfo) SetOwnerAndGroup(name string) error {
 func (u *unixSysInfo) HaveSameOwnerAndGroup(other SysInfo) bool {
 	ou := other.(*unixSysInfo)
 	return u.Uid == ou.Uid && u.Gid == ou.Gid
+}
+
+func (u *unixSysInfo) String() string {
+	return fmt.Sprintf("CTIME %v, UID %d, GID %d", u.BirthTime(), u.Uid, u.Gid)
 }

@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+
 	"github.com/datawire/dlib/dtime"
 
 	"github.com/stretchr/testify/suite"
@@ -238,17 +240,24 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require.Empty(stderr)
 		_, stderr = telepresenceContext(ctx, "quit")
 		require.Empty(stderr)
-		rootLog, err := os.Open(filepath.Join(logDir, "daemon.log"))
+		rootLogName := filepath.Join(logDir, "daemon.log")
+		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
-		defer rootLog.Close()
-
 		hasDebug := false
 		scn := bufio.NewScanner(rootLog)
 		match := regexp.MustCompile(` debug +daemon/server`)
 		for scn.Scan() && !hasDebug {
 			hasDebug = match.MatchString(scn.Text())
 		}
+
 		ts.True(hasDebug, "daemon.log does not contain expected debug statements")
+		_ = rootLog.Close()
+		st, err := os.Stat(rootLogName)
+		require.NoErrorf(err, "Stat on %q failed: %v", rootLogName, err)
+		sysInfo, err := logging.GetSysInfo(rootLogName, st)
+		require.NoErrorf(err, "GetSysInfo on %q failed: %v", rootLogName, err)
+		dlog.Infof(ctx, "SysInfo of %q is %v", rootLogName, sysInfo)
+		require.NoErrorf(os.Remove(rootLogName), "Failed to remove %q: %v", rootLogName, err)
 	})
 
 	ts.Run("DNS includes", func() {
