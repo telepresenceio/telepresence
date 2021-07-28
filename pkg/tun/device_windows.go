@@ -13,6 +13,8 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 )
 
@@ -22,7 +24,7 @@ type Device struct {
 	tun.Device
 	name           string
 	dns            net.IP
-	interfaceIndex int
+	interfaceIndex uint32
 }
 
 func openTun(ctx context.Context) (td *Device, err error) {
@@ -46,7 +48,8 @@ func openTun(ctx context.Context) (td *Device, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
 	}
-	td.interfaceIndex = int(iface.InterfaceIndex)
+	td.interfaceIndex = iface.InterfaceIndex
+
 	return td, nil
 }
 
@@ -109,21 +112,31 @@ func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (e
 	if err = luid.SetDNS(family, []net.IP{server}, domains); err != nil {
 		return err
 	}
-	_ = dexec.CommandContext(ctx, "ipconfig", "/flushdns").Run()
 
 	// On some systems, SetDNS isn't enough to allow the domains to be resolved, and the network adapter's domain has to be set explicitly.
 	// It's actually way easier to do this via powershell than any system calls that can be run from go code
+	domain := ""
 	if len(domains) > 0 {
-		domain := strings.TrimSuffix(domains[0], ".")
-		pshScript := fmt.Sprintf(`
-	$obj = Get-WmiObject Win32_NetworkAdapterConfiguration -filter "interfaceindex='%d'"
-	$obj.SetDNSDomain('%s')
-	`, t.interfaceIndex, domain)
-		err = dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript).Run()
-		if err != nil {
-			return err
-		}
+		// Quote the domain to prevent powershell injection
+		domain = logging.ShellArgsString([]string{strings.TrimSuffix(domains[0], ".")})
 	}
+	// It's apparently well known that WMI queries can hang under various conditions, so we add a timeout here to prevent hanging the daemon
+	// Fun fact: terminating the context that powershell is running in will not stop a hanging WMI call (!) perhaps because it is considered uninterruptible
+	pshScript := fmt.Sprintf(`
+$job = Get-WmiObject Win32_NetworkAdapterConfiguration -filter "interfaceindex='%d'" -AsJob | Wait-Job -Timeout 30
+if ($job.State -ne 'Completed') {
+	throw "timed out getting network adapter after 30 seconds."
+}
+$obj = $job | Receive-Job
+$obj.SetDNSDomain('%s')
+	`, t.interfaceIndex, domain)
+	err = dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript).Run()
+	if err != nil {
+		// Log the error, but don't actually fail on it: This is all just a fallback for SetDNS, so the domains might actually be working
+		dlog.Errorf(ctx, "Failed to set NetworkAdapterConfiguration DNS Domain: %v. Will proceed, but namespace mapping might not be functional.", err)
+	}
+
+	_ = dexec.CommandContext(ctx, "ipconfig", "/flushdns").Run()
 	t.dns = server
 	return nil
 }
