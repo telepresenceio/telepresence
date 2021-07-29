@@ -10,6 +10,14 @@ import (
 )
 
 func main() {
+	err := runServer()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v", err)
+		os.Exit(1)
+	}
+}
+
+func runServer() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	port := "9000"
@@ -18,9 +26,5 @@ func main() {
 			fmt.Fprintf(w, "hello from intercept at %s", r.URL.Path)
 		}),
 	}
-	err := sc.ListenAndServe(ctx, ":"+port)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v", err)
-		os.Exit(1)
-	}
+	return sc.ListenAndServe(ctx, ":"+port)
 }
