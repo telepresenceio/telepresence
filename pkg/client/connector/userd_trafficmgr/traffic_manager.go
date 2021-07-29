@@ -59,6 +59,10 @@ type trafficManager struct {
 	// Map of desired mount points for intercepts
 	mountPoints sync.Map
 
+	// Map of mutexes, so that we don't create and delete
+	// mount points concurrently
+	mountMutexes sync.Map
+
 	// currentIntercepts is the latest snapshot returned by the intercept watcher
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
