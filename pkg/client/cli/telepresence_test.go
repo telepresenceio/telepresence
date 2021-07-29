@@ -1568,6 +1568,9 @@ func telepresence(t testing.TB, args ...string) (string, string) {
 // telepresence executes the CLI command in-process
 func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 	var stdout, stderr strings.Builder
+	// The cmd object does not log with timestamps, so dump out the telepresence command here.
+	// That way we have a timestamped record of when it ran, which is useful for correlating with the daemon logs
+	dlog.Debug(ctx, "telepresence invoked with", args)
 
 	configDir, _ := filelocation.AppUserConfigDir(ctx)
 	logDir, _ := filelocation.AppUserLogDir(ctx)
