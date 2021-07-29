@@ -60,6 +60,7 @@ func terminateProcess(ctx context.Context, exe string, pid uint32, pes []*proces
 		if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
 			// ERROR_INVALID_PARAMETER means that the process no longer exists. It might
 			// have died because we killed its children.
+			dlog.Debugf(ctx, "process %q (pid %d) not found", exe, pid)
 			return nil
 		}
 		return fmt.Errorf("failed to open handle of %q: %w", exe, err)
@@ -80,9 +81,11 @@ func terminateProcess(ctx context.Context, exe string, pid uint32, pes []*proces
 				alreadyDead = !alive
 			}
 		}
-		if !alreadyDead {
-			return fmt.Errorf("failed to terminate %q: %w", exe, err)
+		if alreadyDead {
+			dlog.Debugf(ctx, "process %q (pid %d) not found", exe, pid)
+			return nil
 		}
+		return fmt.Errorf("failed to terminate %q: %w", exe, err)
 	}
 	dlog.Infof(ctx, "terminated process %q (pid %d)", exe, pid)
 	return nil

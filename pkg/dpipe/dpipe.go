@@ -7,24 +7,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 )
 
 func DPipe(ctx context.Context, cmd *dexec.Cmd, peer io.ReadWriteCloser) error {
-	cmdOut, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to establish stdout pipe: %w", err)
-	}
-	defer cmdOut.Close()
+	cmd.Stdin = peer
+	cmd.Stdout = peer
+	cmd.DisableLogging = true
 
-	cmdIn, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to establish stdin pipe: %w", err)
-	}
-	defer cmdIn.Close()
-
-	if err = cmd.Start(); err != nil {
+	dlog.Debugf(ctx, "Starting %s", logging.ShellString(cmd.Path, cmd.Args))
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start: %w", err)
 	}
 
@@ -38,19 +33,7 @@ func DPipe(ctx context.Context, cmd *dexec.Cmd, peer io.ReadWriteCloser) error {
 	}()
 
 	go waitCloseAndKill(ctx, cmd, peer, &closing, &killTimer)
-
-	go func() {
-		if _, err := io.Copy(cmdIn, peer); err != nil && atomic.LoadInt32(&closing) == 0 {
-			dlog.Errorf(ctx, "copy from sftp-server to connection failed: %v", err)
-		}
-	}()
-
-	go func() {
-		if _, err := io.Copy(peer, cmdOut); err != nil && atomic.LoadInt32(&closing) == 0 {
-			dlog.Errorf(ctx, "copy from connection to sftp-server failed: %v", err)
-		}
-	}()
-	if err = cmd.Wait(); err != nil && atomic.LoadInt32(&closing) == 0 {
+	if err := cmd.Wait(); err != nil && atomic.LoadInt32(&closing) == 0 {
 		return fmt.Errorf("execution failed: %w", err)
 	}
 	return nil
