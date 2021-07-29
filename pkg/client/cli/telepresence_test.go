@@ -1021,8 +1021,9 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	dlog.Infof(c, "Scaling down deploy hello-0")
 	require.NoError(ts.kubectl(c, "--context", "default", "scale", "deploy", "hello-0", "--replicas", "0"))
 
-	// Verify that intercept remains but that no agent is found
-	assert.Eventually(func() bool {
+	// Verify that intercept remains but that no agent is found. User require here
+	// to avoid a hanging os.Stat call unless this succeeds.
+	require.Eventually(func() bool {
 		stdout, _ := telepresence(is.T(), "--namespace", is.ns(), "list")
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			dlog.Infof(c, "Got match '%s'", match[1])
@@ -1032,6 +1033,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is broken
+	time.Sleep(time.Second) // avoid a stat just when the intercept became inactive as it sometimes causes a hang
 	_, err := os.Stat(filepath.Join(is.mountPoint, "var"))
 	assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
 
@@ -1049,6 +1051,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
+	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
 	assert.Eventually(func() bool {
 		st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
 		return err == nil && st.IsDir()
@@ -1117,7 +1120,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 	}, 15*time.Second, time.Second)
 
 	// Verify response from intercepting client
-	assert.Eventually(func() bool {
+	require.Eventually(func() bool {
 		hc := http.Client{Timeout: time.Second}
 		resp, err := hc.Get("http://hello-0")
 		if err != nil {
@@ -1127,13 +1130,14 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			dlog.Infof(c, "Error getting http://hello-0 (will retry): %v", err)
+			dlog.Infof(c, "Error getting http://hello-0 body (will retry): %v", err)
 			return false
 		}
 		return "hello-0 from intercept at /" == string(body)
 	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
+	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
 	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
