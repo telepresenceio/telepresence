@@ -419,6 +419,24 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
 
+	// The mounts performed here are synced on by podIP + sftpPort to keep track of active
+	// mounts. This is not enough in situations when a pod is deleted and another pod
+	// takes over. That is two different IPs so an additional synchronization on the actual
+	// mount point is necessary to prevent that it is established and deleted at the same
+	// time.
+	mountMutex := new(sync.Mutex)
+	mountMutex.Lock()
+	if oldMutex, loaded := tm.mountMutexes.LoadOrStore(mountPoint, mountMutex); loaded {
+		mountMutex.Unlock() // not stored, so unlock and throw away
+		mountMutex = oldMutex.(*sync.Mutex)
+		mountMutex.Lock()
+	}
+
+	defer func() {
+		tm.mountMutexes.Delete(mountPoint)
+		mountMutex.Unlock()
+	}()
+
 	// Retry mount in case it gets disconnected
 	err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
 		dl := &net.Dialer{Timeout: 3 * time.Second}
