@@ -73,7 +73,7 @@ func socketExists(name string) bool {
 		// indication that the pipe exists.
 		return err == windows.ERROR_PIPE_BUSY
 	}
-	defer windows.CloseHandle(h)
 	ft, err := windows.GetFileType(h)
+	_ = windows.CloseHandle(h)
 	return err == nil && ft|windows.FILE_TYPE_PIPE != 0
 }

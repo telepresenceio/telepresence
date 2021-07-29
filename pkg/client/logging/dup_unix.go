@@ -41,10 +41,5 @@ func restoreStd(stdoutFd, stderrFd int) error {
 	if err != nil {
 		return err
 	}
-	err = unix.Dup2(stderrFd, 2)
-	if err != nil {
-		return err
-	}
-	return nil
-
+	return unix.Dup2(stderrFd, 2)
 }
