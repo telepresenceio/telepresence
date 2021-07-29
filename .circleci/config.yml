@@ -316,6 +316,21 @@ jobs:
           TELEPRESENCE_VERSION=$newTag make push-images push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
 
+  "publish-nightly-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+    - checkout
+    - install-go
+    - run: pip3 install awscli
+    - run:
+        name: "Publish nightly windows"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag make push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
+
   "publish-nightly-macos":
     executor: vm-macos
     steps:
@@ -388,6 +403,8 @@ workflows:
       - publish-nightly-linux:
           context: telepresence2-release
       - publish-nightly-macos:
+          context: telepresence2-release
+      - publish-nightly-windows:
           context: telepresence2-release
       #- release-finalize:
       #    context: telepresence2-release
