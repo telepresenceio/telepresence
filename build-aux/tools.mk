@@ -29,6 +29,7 @@ clobber: clobber-tools
 clobber-tools:
 	rm -rf $(TOOLSBINDIR) $(TOOLSDIR)/include $(TOOLSDIR)/*.*
 
+
 # Protobuf compiler
 # =================
 #
@@ -99,4 +100,4 @@ tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc
 tools/ko                 = $(TOOLSBINDIR)/ko
 tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint
 $(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
-	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)"$$,\1,p' pin.go)
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)
