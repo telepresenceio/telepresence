@@ -272,7 +272,8 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 		sess.Cancel()
 
 		// remove it from the agentsByName index (if nescessary)
-		if agent, isAgent := s.agents.Load(sessionID); isAgent {
+		agent, isAgent := s.agents.Load(sessionID)
+		if isAgent {
 			delete(s.agentsByName[agent.Name], sessionID)
 			if len(s.agentsByName[agent.Name]) == 0 {
 				delete(s.agentsByName, agent.Name)
@@ -287,6 +288,7 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 		// GC any intercepts that relied on this session; prune any intercepts that
 		//  1. Don't have a client session (intercept.ClientSession.SessionId)
 		//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
+		// Alternatively, if the intercept is still live but has been switched over to a different agent, send it back to WAITING state
 		for interceptID, intercept := range s.intercepts.LoadAll() {
 			if intercept.ClientSession.SessionId == sessionID {
 				// Client went away:
@@ -297,6 +299,11 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 				// Tell the client, so that the client can tell us to delete it.
 				intercept.Disposition = errCode
 				intercept.Message = errMsg
+				s.intercepts.Store(interceptID, intercept)
+			} else if isAgent && agent.PodIp == intercept.PodIp {
+				// The agent whose podIP was stored by the intercept is dead, but it's not the last agent
+				// Send it back to waiting so that one of the other agents can pick it up and set their own podIP
+				intercept.Disposition = rpc.InterceptDispositionType_WAITING
 				s.intercepts.Store(interceptID, intercept)
 			}
 		}
@@ -693,7 +700,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(ctx, "Established TCP tunnel from agent %s to client %s", as.agent.Name, cs.name)
+	dlog.Debugf(ctx, "Established TCP tunnel from agent %s (%s) to client %s", as.agent.Name, as.agent.PodIp, cs.name)
 
 	// During intercept, all requests that are made to this pool, are forwarded to the intercepted
 	// agent(s)
