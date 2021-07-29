@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	goRuntime "runtime"
 	"strings"
 	"testing"
 	"text/template"
@@ -36,6 +37,9 @@ func publishManager(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
 
 	cmd := dexec.CommandContext(ctx, "make", "-C", "../../../..", "push-image")
+	if goRuntime.GOOS == "windows" {
+		cmd = dexec.CommandContext(ctx, "../../../../winmake.bat", "push-image")
+	}
 
 	// Go sets a lot of variables that we don't want to pass on to the ko executable. If we do,
 	// then it builds for the platform indicated by those variables.
