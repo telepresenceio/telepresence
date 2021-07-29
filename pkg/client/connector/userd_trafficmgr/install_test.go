@@ -451,6 +451,12 @@ func sanitizeWorkload(obj kates.Object) {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""
 		c.ImagePullPolicy = ""
+		if goRuntime.GOOS == "windows" && c.Name == "traffic-agent" {
+			for j, v := range c.VolumeMounts {
+				v.MountPath = filepath.Clean(v.MountPath)
+				c.VolumeMounts[j] = v
+			}
+		}
 		podTemplate.Spec.Containers[i] = c
 	}
 }

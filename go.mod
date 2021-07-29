@@ -17,7 +17,7 @@ require (
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pkg/errors v0.9.1
 	github.com/sethvargo/go-envconfig v0.3.2
-	github.com/sirupsen/logrus v1.7.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
