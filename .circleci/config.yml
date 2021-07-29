@@ -292,6 +292,18 @@ jobs:
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
+  "release-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+      - checkout
+      - install-go
+      - run: sudo pip3 install awscli
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+
   "release-chart":
     executor: vm-linux
     steps:
@@ -377,6 +389,13 @@ workflows:
             branches:
               ignore: /.*/
       - release-macos:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-windows:
           context: telepresence2-release
           filters:
             tags:
