@@ -7,6 +7,7 @@
 #     + DOCKERHUB_PASSWORD
 #     + AWS_ACCESS_KEY_ID (for S3)
 #     + AWS_SECRET_ACCESS_KEY (for S3)
+#     + TELEPRESENCE_KUBECEPTION_TOKEN
 
 version: 2.1
 
@@ -59,6 +60,38 @@ commands:
             curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
             sudo install /tmp/kubectl /usr/local/bin/kubectl
 
+  "prepare-kluster":
+    parameters:
+      platform:
+        type: string
+    steps:
+      - run:
+          name: "Create cluster"
+          command: |
+            go run build-aux/kubeception/main.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            export KUBECONFIG="$HOME/kubeconfig"
+            go run build-aux/wait_for_cluster/main.go "$KUBECONFIG"
+            KUBECTL=kubectl
+            if [[ $OS == Windows_NT ]]; then
+              KUBECTL=/c/kubectl.exe
+            fi
+            $KUBECTL apply -f build-aux/image-importer.yaml
+            POD_NAME=$($KUBECTL get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
+            $KUBECTL wait --for=condition=ready pod $POD_NAME
+            $KUBECTL cp /tmp/workspace/tel2-image.tar "$POD_NAME:/tmp/image.tar"
+            $KUBECTL exec $POD_NAME /hostbin/ctr images import /tmp/image.tar
+
+  "cleanup-kluster":
+    parameters:
+      platform:
+        type: string
+    steps:
+      - run:
+          name: "Destroy cluster"
+          command: |
+            # We don't allow the destroy to fail the build; if the kluster couldn't be destroyed now, it'll just be cleaned up when it times out
+            go run build-aux/kubeception/main.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig" || true
+
   "install-sshfs":
     steps:
       - run:
@@ -108,6 +141,23 @@ commands:
 
 jobs:
 
+  "build-dev-image":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-go
+      - run:
+          name: Build dev image
+          command: |
+            TAG="2.0.0-gotest.$CIRCLE_SHA1"
+            TELEPRESENCE_VERSION="v${TAG}" make image
+            mkdir -p /tmp/workspace
+            docker save "datawire/tel2:${TAG}" > /tmp/workspace/tel2-image.tar
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - tel2-image.tar
+
   "build-and-test":
     executor: vm-linux
     steps:
@@ -116,14 +166,21 @@ jobs:
       - run: make build
       - install-kubectl
       - install-sshfs
+      - attach_workspace:
+          at: /tmp/workspace
+      - prepare-kluster:
+          platform: linux
       - run:
-          command: make test
+          command: |
+            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
           # just a bit, so `go test`'s timeout output isn't hidden.
           no_output_timeout: 20m
       - save-logs
+      - cleanup-kluster:
+          platform: linux
 
   "lint":
     executor: vm-linux
@@ -220,7 +277,11 @@ workflows:
 
   'Dev':
     jobs:
-      - build-and-test
+      - build-dev-image
+      - build-and-test:
+          context: telepresence2-release
+          requires:
+            - build-dev-image
       - lint
       - generate
 

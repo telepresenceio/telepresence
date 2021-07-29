@@ -66,9 +66,13 @@ func (ts *telepresenceSuite) SetupSuite() {
 	// Remove very verbose output from DTEST initialization
 	log.SetOutput(ioutil.Discard)
 
-	ts.testVersion = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-	ts.namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
-	ts.managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
+	suffix, isCi := os.LookupEnv("CIRCLE_SHA1")
+	if !isCi {
+		suffix = strconv.Itoa(os.Getpid())
+	}
+	ts.testVersion = fmt.Sprintf("v2.0.0-gotest.%s", suffix)
+	ts.namespace = fmt.Sprintf("telepresence-%s", suffix)
+	ts.managerTestNamespace = fmt.Sprintf("ambassador-%s", suffix)
 
 	version.Version = ts.testVersion
 
@@ -93,12 +97,14 @@ func (ts *telepresenceSuite) SetupSuite() {
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
 	os.Setenv("DTEST_REGISTRY", dtest.DockerRegistry(ctx)) // Prevent extra calls to dtest.RegistryUp() which may panic
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := ts.publishManager()
-		ts.NoError(err)
-	}()
+	if !isCi {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := ts.publishManager()
+			ts.NoError(err)
+		}()
+	}
 
 	wg.Wait()
 

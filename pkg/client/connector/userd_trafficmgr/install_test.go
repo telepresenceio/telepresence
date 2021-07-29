@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	goRuntime "runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"text/template"
@@ -101,9 +102,13 @@ func TestE2E(t *testing.T) {
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
 		kubeconfig := dtest.Kubeconfig(ctx)
 
-		testVersion := fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
-		namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
-		managerTestNamespace := fmt.Sprintf("ambassador-%d", os.Getpid())
+		suffix, isCi := os.LookupEnv("CIRCLE_SHA1")
+		if !isCi {
+			suffix = strconv.Itoa(os.Getpid())
+		}
+		testVersion := fmt.Sprintf("v2.0.0-gotest.%s", suffix)
+		namespace := fmt.Sprintf("telepresence-%s", suffix)
+		managerTestNamespace := fmt.Sprintf("ambassador-%s", suffix)
 
 		version.Version = testVersion
 
@@ -152,7 +157,7 @@ func TestE2E(t *testing.T) {
 		})
 
 		t.Run("findTrafficManager_present", func(t *testing.T) {
-			findTrafficManagerPresent(t, kubeconfig, managerTestNamespace)
+			findTrafficManagerPresent(t, kubeconfig, managerTestNamespace, isCi)
 		})
 
 		t.Run("findTrafficManager_differentNamespace_present", func(t *testing.T) {
@@ -197,12 +202,14 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			findTrafficManagerPresent(t, kubeconfig, customNamespace)
+			findTrafficManagerPresent(t, kubeconfig, customNamespace, isCi)
 		})
 
 		t.Run("ensureTrafficManager_notPresent", func(t *testing.T) {
 			c := dlog.NewTestContext(t, false)
-			publishManager(t)
+			if !isCi {
+				publishManager(t)
+			}
 			defer removeManager(t, kubeconfig, managerTestNamespace)
 			env, err := client.LoadEnv(c)
 			if err != nil {
@@ -227,9 +234,11 @@ func TestE2E(t *testing.T) {
 	})
 }
 
-func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string) {
+func findTrafficManagerPresent(t *testing.T, kubeconfig, namespace string, isCi bool) {
 	c := dlog.NewTestContext(t, false)
-	publishManager(t)
+	if !isCi {
+		publishManager(t)
+	}
 	defer removeManager(t, kubeconfig, namespace)
 
 	env, err := client.LoadEnv(c)
