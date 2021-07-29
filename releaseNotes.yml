@@ -31,6 +31,10 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 
 items:
 
+  - version: 2.4.0
+    date: 'TDB'
+    notes: []
+
   - version: 2.3.7
     date: '2021-07-23'
     notes:
