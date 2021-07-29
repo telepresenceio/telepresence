@@ -118,10 +118,18 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 # to the datawire-static-files bucket.
 .PHONY: push-executable
 push-executable: build ## (Release) Upload the executable to S3
+ifeq ($(GOHOSTOS), windows)
+	packaging/windows-package.sh
+	AWS_PAGER="" aws s3api put-object \
+		--bucket datawire-static-files \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
+		--body $(BINDIR)/telepresence.zip
+else
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
+endif
 
 .PHONY: push-chart
 push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart
@@ -168,6 +176,7 @@ shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/push_chart.sh
+shellscripts += ./packaging/windows-package.sh
 .PHONY: lint
 lint: lint-deps ## (QA) Run the linters
 	GOOS=linux   $(tools/golangci-lint) run --timeout 2m ./...
