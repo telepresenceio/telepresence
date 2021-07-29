@@ -60,16 +60,8 @@ type telepresenceSuite struct {
 }
 
 func (ts *telepresenceSuite) SetupSuite() {
-	// Check that the "ko" program exists, and adjust PATH as necessary.
-	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
-		ts.FailNow("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
-	}
 	require := ts.Require()
-	toolbindir, err := filepath.Abs("../../../tools/bin")
-	require.NoError(err)
 	_ = os.Chdir("../../..")
-
-	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
 
 	// Remove very verbose output from DTEST initialization
 	log.SetOutput(ioutil.Discard)
@@ -92,9 +84,12 @@ func (ts *telepresenceSuite) SetupSuite() {
 	}()
 
 	_ = os.Remove(client.ConnectorSocketName)
-	err = run(ctx, "sudo", "true")
-	require.NoError(err, "acquire privileges")
 
+	var err error
+	if goRuntime.GOOS != "windows" {
+		err := run(ctx, "sudo", "true")
+		require.NoError(err, "acquire privileges")
+	}
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
 	os.Setenv("DTEST_REGISTRY", dtest.DockerRegistry(ctx)) // Prevent extra calls to dtest.RegistryUp() which may panic
 
@@ -172,11 +167,13 @@ func (ts *telepresenceSuite) TearDownSuite() {
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
-	ts.Run("Version", func() {
-		stdout, stderr := telepresence(ts.T(), "version")
-		ts.Empty(stderr)
-		ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
-	})
+	if goRuntime.GOOS != "windows" {
+		ts.Run("Version", func() {
+			stdout, stderr := telepresence(ts.T(), "version")
+			ts.Empty(stderr)
+			ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
+		})
+	}
 	ts.Run("Status", func() {
 		out, _ := telepresence(ts.T(), "status")
 		ts.Contains(out, "Root Daemon: Not running")
@@ -304,6 +301,11 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
+		if goRuntime.GOOS == "windows" {
+			// Windows needs some time to get its bearings
+			time.Sleep(10 * time.Second)
+		}
+		// Test with ".org" suffix that was added as an include-suffix
 		_ = run(ctx, "curl", "--silent", "example.org")
 
 		_, stderr = telepresenceContext(ctx, "quit")
@@ -313,9 +315,12 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		defer rootLog.Close()
 
 		hasLookup := false
+		dlog.Errorf(ctx, "GREPME: Rootlog is at %s", tmpDir)
 		scn := bufio.NewScanner(rootLog)
 		for scn.Scan() && !hasLookup {
-			hasLookup = strings.Contains(scn.Text(), `LookupHost "example.org"`)
+			text := scn.Text()
+			dlog.Infof(ctx, "GREPME: LINE: %s", text)
+			hasLookup = strings.Contains(text, `LookupHost "example.org"`)
 		}
 		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
 	})
@@ -432,7 +437,12 @@ func (cs *connectedSuite) SetupSuite() {
 		return run(c, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
 	}, 10*time.Second, time.Second)
 
-	stdout, stderr := telepresence(cs.T(), "connect")
+	configDir := cs.T().TempDir()
+	registry := dtest.DockerRegistry(c)
+	configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\ntimeouts:\n    intercept: 20s\n", registry)
+	c, err := setConfig(c, configDir, configYml)
+	require.NoError(err)
+	stdout, stderr := telepresenceContext(c, "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
 
@@ -518,6 +528,7 @@ func (cs *connectedSuite) TestE_PodWithSubdomain() {
 		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic", "--context", "default"))
 	}()
 
+	dlog.Infof(c, "Trying to resolve in namespace %s", cs.ns())
 	cc, cancel := context.WithTimeout(c, 3*time.Second)
 	defer cancel()
 	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns())
@@ -556,7 +567,7 @@ func (cs *connectedSuite) TestH_SuccessfullyInterceptsStatefulSet() {
 	defer telepresence(cs.T(), "leave", "ss-echo-"+cs.ns())
 
 	require := cs.Require()
-	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "ss-echo", "--port", "9091")
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "ss-echo", "--port", "9092")
 	require.Empty(stderr)
 	require.Contains(stdout, "Using StatefulSet ss-echo")
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
@@ -584,7 +595,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		// service can be resolve with unqualified name
 		cs.Eventually(func() bool {
 			return run(ctx, "curl", "--silent", "ss-echo") == nil
-		}, 3*time.Second, 1*time.Second)
+		}, 15*time.Second, time.Second)
 	})
 
 	cs.Run("leaving renders services unavailable using unqualified name", func() {
@@ -596,7 +607,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
 			return run(ctx, "curl", "--silent", "ss-echo") != nil
-		}, 3*time.Second, time.Second)
+		}, 15*time.Second, time.Second)
 	})
 }
 
@@ -620,6 +631,10 @@ func (cs *connectedSuite) TestJ_ListOnlyMapped() {
 }
 
 func (cs *connectedSuite) TestK_DockerRun() {
+	// This test only runs on linux as it requires docker, and CI can't run linux docker containers inside non-linux runners
+	if goRuntime.GOOS != "linux" {
+		return
+	}
 	require := cs.Require()
 	ctx := dlog.NewTestContext(cs.T(), false)
 
@@ -689,9 +704,16 @@ func (cs *connectedSuite) TestL_LegacySwapDeploymentDoesIntercept() {
 	require.NotContains(stderr, "Telepresence can connect to a cluster and route all outbound traffic")
 
 	// Verify that the intercept no longer exists
-	stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
-	require.Empty(stderr)
-	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+	cs.Eventually(func() bool {
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+		if stderr != "" {
+			return false
+		}
+		return strings.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+	},
+		10*time.Second,
+		1*time.Second,
+	)
 }
 
 func (cs *connectedSuite) TestM_AutoInjectedAgent() {
@@ -875,6 +897,10 @@ func (is *interceptedSuite) SetupSuite() {
 	})
 
 	is.mountPoint = is.T().TempDir()
+	// TempDir() will not be a valid mount on windows -- it wants a lettered drive.
+	if goRuntime.GOOS == "windows" {
+		is.mountPoint = "T:"
+	}
 	is.Run("adding intercepts", func() {
 		// Add all `hello-N` intercepts. Let `hello-0` have a mounted volume.
 		addIntercept := func(i int, extraArgs ...string) {
@@ -921,27 +947,28 @@ func (is *interceptedSuite) TearDownSuite() {
 }
 
 func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
+	ctx := dlog.NewTestContext(is.T(), false)
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d", i)
 		expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
 		is.Require().Eventually(
 			// condition
 			func() bool {
-				is.T().Logf("trying %q...", "http://"+svc)
-				hc := http.Client{Timeout: time.Second}
+				dlog.Infof(ctx, "trying %q...", "http://"+svc)
+				hc := http.Client{Timeout: 2 * time.Second}
 				resp, err := hc.Get("http://" + svc)
 				if err != nil {
-					is.T().Log(err)
+					dlog.Infof(ctx, "%v", err)
 					return false
 				}
 				defer resp.Body.Close()
-				is.T().Logf("status code: %v", resp.StatusCode)
+				dlog.Infof(ctx, "status code: %v", resp.StatusCode)
 				body, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					is.T().Log(err)
+					dlog.Infof(ctx, "%v", err)
 					return false
 				}
-				is.T().Logf("body: %q", body)
+				dlog.Infof(ctx, "body: %q", body)
 				return string(body) == expectedOutput
 			},
 			15*time.Second, // waitFor
@@ -988,7 +1015,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "hello-0"`)
 		}
 		return false
-	}, 5*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is broken
 	_, err := os.Stat(filepath.Join(is.mountPoint, "var"))
@@ -1004,7 +1031,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 10*time.Second, time.Second)
+	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	assert.Eventually(func() bool {
@@ -1402,10 +1429,12 @@ func (ts *telepresenceSuite) publishManager() error {
 		"TELEPRESENCE_VERSION=" + ts.testVersion,
 		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(ctx),
 	}
-	includeEnv := []string{"HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	includeEnv := []string{"HOME=", "PATH=", "Path=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
 	for _, env := range os.Environ() {
+		dlog.Infof(ctx, "I found variable %s", env)
 		for _, incl := range includeEnv {
 			if strings.HasPrefix(env, incl) {
+				dlog.Infof(ctx, "Setting variable %s to value %s", env, os.Getenv(env))
 				cmd.Env = append(cmd.Env, env)
 				break
 			}
@@ -1419,6 +1448,9 @@ func (ts *telepresenceSuite) publishManager() error {
 
 func (ts *telepresenceSuite) buildExecutable(c context.Context) (string, error) {
 	executable := filepath.Join("build-output", "bin", "/telepresence")
+	if goRuntime.GOOS == "windows" {
+		executable += ".exe"
+	}
 	return executable, run(c, "go", "build", "-ldflags",
 		fmt.Sprintf("-X=github.com/telepresenceio/telepresence/v2/pkg/version.Version=%s", ts.testVersion),
 		"-o", executable, "./cmd/telepresence")

@@ -292,7 +292,7 @@ func TestClientMap_Subscribe(t *testing.T) {
 	cancelCtx()
 	// Because the 'close' happens asynchronously when the context ends, we need to wait a
 	// moment to ensure that it's actually closed before we hit the next step.
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// Check that the writes get coalesced in to a "close".
 	snapshot, ok = <-ch
