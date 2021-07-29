@@ -108,9 +108,14 @@ func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingInte
 		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
 			mountPoint := key.(string)
 			if err := os.Remove(mountPoint); err != nil {
-				dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
+				if os.IsNotExist(err) {
+					dlog.Infof(ctx, "File system mount %q no longer exists", mountPoint)
+				} else {
+					dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
+				}
+			} else {
+				dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
 			}
-			dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
 		}
 	}
 }
