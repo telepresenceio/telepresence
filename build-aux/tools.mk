@@ -74,6 +74,11 @@ $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 # Helm
 # ====
 #
+ifeq ($(GOHOSTOS),windows)
+SUFFIX=.exe
+else
+SUFFIX=
+endif
 tools/helm = $(TOOLSBINDIR)/helm
 HELM_VERSION=3.5.4
 HELM_TGZ = https://get.helm.sh/helm-v$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
@@ -82,7 +87,7 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 	curl -sfL $(HELM_TGZ) -o $@
 %/bin/helm: %/$(notdir $(HELM_TGZ))
 	mkdir -p $(@D)
-	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm
+	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm$(SUFFIX)
 
 # `go get`-able things
 # ====================
