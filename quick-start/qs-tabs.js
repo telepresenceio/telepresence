@@ -5,7 +5,6 @@ import AppBar from '@material-ui/core/AppBar';
 import Tabs from '@material-ui/core/Tabs';
 import Tab from '@material-ui/core/Tab';
 import Box from '@material-ui/core/Box';
-import HubspotForm from 'react-hubspot-form';
 import CodeBlock from '@src/components/CodeBlock';
 import LinuxIcon from '@src/assets/icons/linux.inline.svg';
 import AppleIcon from '@src/assets/icons/apple.inline.svg';
@@ -120,7 +119,7 @@ export default function SimpleTabs() {
           '\n' +
           '# C:\\telepresence by default, but you can specify a custom path $path with -Path $path' +
           '\n' +
-          '.\install-telepresence.ps1' +
+          '.\\install-telepresence.ps1' +
           '\n \n' +
           '# 4. Remove the unzipped directory' +
           '\n' +
