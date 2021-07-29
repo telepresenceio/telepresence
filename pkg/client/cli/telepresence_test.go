@@ -961,31 +961,33 @@ func (is *interceptedSuite) TestC_VerifyingResponsesFromInterceptor() {
 	ctx := dlog.NewTestContext(is.T(), false)
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d", i)
-		expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-		is.Require().Eventually(
-			// condition
-			func() bool {
-				dlog.Infof(ctx, "trying %q...", "http://"+svc)
-				hc := http.Client{Timeout: 2 * time.Second}
-				resp, err := hc.Get("http://" + svc)
-				if err != nil {
-					dlog.Infof(ctx, "%v", err)
-					return false
-				}
-				defer resp.Body.Close()
-				dlog.Infof(ctx, "status code: %v", resp.StatusCode)
-				body, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					dlog.Infof(ctx, "%v", err)
-					return false
-				}
-				dlog.Infof(ctx, "body: %q", body)
-				return string(body) == expectedOutput
-			},
-			15*time.Second, // waitFor
-			3*time.Second,  // polling interval
-			`body of %q equals %q`, "http://"+svc, expectedOutput,
-		)
+		is.Run("Test intercept "+svc, func() {
+			expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+			is.Require().Eventually(
+				// condition
+				func() bool {
+					dlog.Infof(ctx, "trying %q...", "http://"+svc)
+					hc := http.Client{Timeout: 2 * time.Second}
+					resp, err := hc.Get("http://" + svc)
+					if err != nil {
+						dlog.Infof(ctx, "%v", err)
+						return false
+					}
+					defer resp.Body.Close()
+					dlog.Infof(ctx, "status code: %v", resp.StatusCode)
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						dlog.Infof(ctx, "%v", err)
+						return false
+					}
+					dlog.Infof(ctx, "body: %q", body)
+					return string(body) == expectedOutput
+				},
+				15*time.Second, // waitFor
+				3*time.Second,  // polling interval
+				`body of %q equals %q`, "http://"+svc, expectedOutput,
+			)
+		})
 	}
 }
 
