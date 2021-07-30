@@ -16,6 +16,9 @@
   `telepresence intercept` option `--http-match` that does't contain an
   equal sign.
 
+- Bugfix: The `traffic-manager` will only send subnet updates to a
+  client root daemon when the subnets actually change.
+
 ### 2.3.7 (July 23, 2021)
 
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
