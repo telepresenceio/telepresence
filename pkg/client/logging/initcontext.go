@@ -78,22 +78,24 @@ func SummarizeLog(ctx context.Context, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer file.Close()
 	scanner := bufio.NewScanner(file)
 
-	errors := []string{}
+	errorCount := 0
 	for scanner.Scan() {
-		text := scanner.Text()
 		// XXX: is there a better way to detect error lines?
-		parts := strings.Fields(text)
+		parts := strings.Fields(scanner.Text())
 		if len(parts) > 2 && parts[2] == "error" {
-			errors = append(errors, text)
+			errorCount++
 		}
 	}
-
-	desc := fmt.Sprintf("%d error", len(errors))
-	if len(errors) != 1 {
+	if errorCount == 0 {
+		return "", nil
+	}
+	desc := fmt.Sprintf("%d error", errorCount)
+	if errorCount > 1 {
 		desc += "s"
 	}
 
-	return fmt.Sprintf("See logs for details (%s found): %s", desc, filename), nil
+	return fmt.Sprintf("See logs for details (%s found): %q", desc, filename), nil
 }

@@ -12,6 +12,9 @@
 - Bugfix: A `$(NAME)` reference in the agent's environment will now be
   interpolated correctly.
 
+- Bugfix: Telepresence will no longer print an INFO level log message when
+  no config.yml file is found.
+
 - Bugfix: A panic is no longer raised when passing an argument to the
   `telepresence intercept` option `--http-match` that does't contain an
   equal sign.

@@ -41,6 +41,21 @@ var kubeConfig *kates.ConfigFlags
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
 func OnlySubcommands(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	err := fmt.Errorf("invalid subcommand %q", args[0])
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+		err = fmt.Errorf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
+	}
+	return cmd.FlagErrorFunc()(cmd, err)
+}
+
+// PerhapsLegacyCommands is like OnlySubcommands but performs some initial check for legacy flags
+func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 	// If a user is using a flag that is coming from telepresence 1, we try to
 	// construct the tp2 command based on their input. If the args passed to
 	// telepresence are one of the flags we recognize, we don't want to error
@@ -53,19 +68,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	if len(args) != 0 {
-		err := fmt.Errorf("invalid subcommand %q", args[0])
-
-		if cmd.SuggestionsMinimumDistance <= 0 {
-			cmd.SuggestionsMinimumDistance = 2
-		}
-		if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
-			err = fmt.Errorf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
-		}
-
-		return cmd.FlagErrorFunc()(cmd, err)
-	}
-	return nil
+	return OnlySubcommands(cmd, args)
 }
 
 // RunSubcommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
@@ -98,7 +101,7 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 func Command(ctx context.Context) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
-		Args: OnlySubcommands,
+		Args: PerhapsLegacyCommands,
 
 		Short:              "Connect your workstation to a Kubernetes cluster",
 		Long:               help,
