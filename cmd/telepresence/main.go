@@ -58,23 +58,16 @@ func isBackground() bool {
 }
 
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
-	daemonLogs, err := logging.SummarizeLog(ctx, daemon.ProcessName)
-	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %+v\n", cmd.CommandPath(), err)
-	}
-	connectorLogs, err := logging.SummarizeLog(ctx, connector.ProcessName)
-	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %+v\n", cmd.CommandPath(), err)
-	}
-
-	if daemonLogs != "" {
-		fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", daemonLogs)
-	}
-	if connectorLogs != "" {
-		fmt.Fprintf(cmd.ErrOrStderr(), "\n%s", connectorLogs)
-	}
-
-	if daemonLogs != "" || connectorLogs != "" {
-		fmt.Fprintln(cmd.ErrOrStderr())
+	w := cmd.ErrOrStderr()
+	first := true
+	for _, proc := range []string{daemon.ProcessName, connector.ProcessName} {
+		if summary, err := logging.SummarizeLog(ctx, proc); err != nil {
+			fmt.Fprintf(w, "failed to scan %s logs: %v\n", proc, err)
+		} else if summary != "" {
+			if first {
+				fmt.Fprintln(w)
+			}
+			fmt.Fprintln(w, summary)
+		}
 	}
 }
