@@ -1,13 +1,16 @@
 # Changelog
 
 ### 2.3.8 (TBD)
-- Bugfix: Initialisatialisation of systemd-resolved` based DNS sets
+- Bugfix: Initialization of systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
   
 - Bugfix: Edge case error when targeting a container by port number. 
   Before if your matching/target container was at containers list index 0, 
   but if there was a container at index 1 with no ports, then the 
   "no ports" container would end up the selected one
+
+- Bugfix: A `$(NAME)` reference in the agent's environment will now be
+  interpolated correctly.
 
 ### 2.3.7 (July 23, 2021)
 

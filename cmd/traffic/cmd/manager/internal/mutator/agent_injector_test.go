@@ -220,12 +220,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`"ports":[{"name":"http","containerPort":9900,"protocol":"TCP"}],` +
 				`"env":[` +
 				`{"name":"TELEPRESENCE_CONTAINER","value":"some-app-name"},` +
-				`{"name":"LOG_LEVEL","value":"debug"},` +
-				`{"name":"AGENT_NAME","value":"some-name"},` +
-				`{"name":"AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
-				`{"name":"AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
-				`{"name":"APP_PORT","value":"8888"},` +
-				`{"name":"MANAGER_HOST","value":"traffic-manager.default"}` +
+				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"debug"},` +
+				`{"name":"_TEL_AGENT_NAME","value":"some-name"},` +
+				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
+				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
+				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
 				`],` +
 				`"resources":{},` +
 				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
@@ -271,14 +271,14 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`"ports":[{"name":"http","containerPort":9900,"protocol":"TCP"}],` +
 				`"env":[` +
 				`{"name":"TELEPRESENCE_CONTAINER","value":"some-app-name"},` +
-				`{"name":"LOG_LEVEL","value":"debug"},` +
-				`{"name":"AGENT_NAME","value":"some-name"},` +
-				`{"name":"AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
-				`{"name":"AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
-				`{"name":"APP_PORT","value":"8888"},` +
-				`{"name":"APP_MOUNTS","value":"/tel_app_mounts"},` +
-				`{"name":"TEL_APP_TELEPRESENCE_MOUNTS","value":"/var/run/secrets/kubernetes.io/serviceaccount"},` +
-				`{"name":"MANAGER_HOST","value":"traffic-manager.default"}` +
+				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"debug"},` +
+				`{"name":"_TEL_AGENT_NAME","value":"some-name"},` +
+				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
+				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
+				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_APP_MOUNTS","value":"/tel_app_mounts"},` +
+				`{"name":"TELEPRESENCE_MOUNTS","value":"/var/run/secrets/kubernetes.io/serviceaccount"},` +
+				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
 				`],` +
 				`"resources":{},` +
 				`"volumeMounts":[` +

@@ -10,7 +10,7 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 )
 
-const envPrefix = "TEL_APP_"
+const envPrefix = "_TEL_AGENT_"
 
 func AgentContainer(
 	name string,
@@ -26,7 +26,7 @@ func AgentContainer(
 		Args:         []string{"agent"},
 		Ports:        []corev1.ContainerPort{port},
 		Env:          agentEnvironment(name, appContainer, appPort, managerNamespace),
-		EnvFrom:      agentEnvFrom(appContainer.EnvFrom),
+		EnvFrom:      appContainer.EnvFrom,
 		VolumeMounts: agentVolumeMounts(appContainer.VolumeMounts),
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -38,33 +38,21 @@ func AgentContainer(
 	}
 }
 
-func agentEnvFrom(appEF []corev1.EnvFromSource) []corev1.EnvFromSource {
-	if ln := len(appEF); ln > 0 {
-		agentEF := make([]corev1.EnvFromSource, ln)
-		for i, appE := range appEF {
-			appE.Prefix = envPrefix + appE.Prefix
-			agentEF[i] = appE
-		}
-		return agentEF
-	}
-	return appEF
-}
-
 func agentEnvironment(agentName string, appContainer *kates.Container, appPort int, managerNamespace string) []corev1.EnvVar {
 	appEnv := appEnvironment(appContainer)
 	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+7)
 	copy(env, appEnv)
 	env = append(env,
 		corev1.EnvVar{
-			Name:  "LOG_LEVEL",
+			Name:  envPrefix + "LOG_LEVEL",
 			Value: "debug",
 		},
 		corev1.EnvVar{
-			Name:  "AGENT_NAME",
+			Name:  envPrefix + "NAME",
 			Value: agentName,
 		},
 		corev1.EnvVar{
-			Name: "AGENT_NAMESPACE",
+			Name: envPrefix + "NAMESPACE",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "metadata.namespace",
@@ -72,7 +60,7 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 			},
 		},
 		corev1.EnvVar{
-			Name: "AGENT_POD_IP",
+			Name: envPrefix + "POD_IP",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "status.podIP",
@@ -80,12 +68,12 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 			},
 		},
 		corev1.EnvVar{
-			Name:  "APP_PORT",
+			Name:  envPrefix + "APP_PORT",
 			Value: strconv.Itoa(appPort),
 		})
 	if len(appContainer.VolumeMounts) > 0 {
 		env = append(env, corev1.EnvVar{
-			Name:  "APP_MOUNTS",
+			Name:  envPrefix + "APP_MOUNTS",
 			Value: TelAppMountPoint,
 		})
 
@@ -96,12 +84,12 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 			mounts[i] = appContainer.VolumeMounts[i].MountPath
 		}
 		env = append(env, corev1.EnvVar{
-			Name:  envPrefix + "TELEPRESENCE_MOUNTS",
+			Name:  "TELEPRESENCE_MOUNTS",
 			Value: strings.Join(mounts, ":"),
 		})
 	}
 	env = append(env, corev1.EnvVar{
-		Name:  "MANAGER_HOST",
+		Name:  envPrefix + "MANAGER_HOST",
 		Value: ManagerAppName + "." + managerNamespace,
 	})
 	return env
@@ -124,12 +112,11 @@ func agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 }
 
 func appEnvironment(appContainer *kates.Container) []corev1.EnvVar {
-	envCopy := make([]corev1.EnvVar, len(appContainer.Env)+1)
-	for i, ev := range appContainer.Env {
-		ev.Name = envPrefix + ev.Name
-		envCopy[i] = ev
-	}
-	envCopy[len(appContainer.Env)] = corev1.EnvVar{
+	appEnv := appContainer.Env
+	envCount := len(appEnv)
+	envCopy := make([]corev1.EnvVar, envCount+1)
+	copy(envCopy, appEnv)
+	envCopy[envCount] = corev1.EnvVar{
 		Name:  "TELEPRESENCE_CONTAINER",
 		Value: appContainer.Name,
 	}

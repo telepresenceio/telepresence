@@ -38,6 +38,13 @@ deployment:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PREFIX
+              value: $(POD_NAMESPACE)/stuff
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler

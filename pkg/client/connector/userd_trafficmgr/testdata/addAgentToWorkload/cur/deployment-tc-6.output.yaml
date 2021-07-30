@@ -31,29 +31,42 @@ deployment:
           app: hello-6
       spec:
         containers:
-        - image: jmalloc/echo-server:0.1.0
+        - env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: PREFIX
+            value: $(POD_NAMESPACE)/stuff
+          image: jmalloc/echo-server:0.1.0
           name: echo-server
           resources: {}
         - args:
           - agent
           env:
-          - name: TELEPRESENCE_CONTAINER
-            value: echo-server
-          - name: LOG_LEVEL
-            value: debug
-          - name: AGENT_NAME
-            value: hello-6
-          - name: AGENT_NAMESPACE
+          - name: POD_NAMESPACE
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-          - name: AGENT_POD_IP
+          - name: PREFIX
+            value: $(POD_NAMESPACE)/stuff
+          - name: TELEPRESENCE_CONTAINER
+            value: echo-server
+          - name: _TEL_AGENT_LOG_LEVEL
+            value: debug
+          - name: _TEL_AGENT_NAME
+            value: hello-6
+          - name: _TEL_AGENT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: _TEL_AGENT_POD_IP
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
-          - name: APP_PORT
+          - name: _TEL_AGENT_APP_PORT
             value: "8080"
-          - name: MANAGER_HOST
+          - name: _TEL_AGENT_MANAGER_HOST
             value: traffic-manager.ambassador
           image: localhost:5000/tel2:{{.Version}}
           name: traffic-agent
