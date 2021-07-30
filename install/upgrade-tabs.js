@@ -109,17 +109,22 @@ export default function SimpleTabs() {
           '\n \n' +
           '# 2. Unzip the zip file to a suitable directory + cleanup zip' +
           '\n' +
-          'Expand-Archive -Path telepresence.zip -DestinationPath C:\\telepresence' +
+          'Expand-Archive -Path telepresence.zip' +
           '\n' +
           'Remove-Item \'telepresence.zip\'' +
           '\n' +
-          'cd C:\\telepresence' +
+          'cd telepresence' +
           '\n \n' +
-          '# 3. Run the install-telepresence.ps1 to install telepresence\'s dependencies' +
+          '# 3. Run the install-telepresence.ps1 to install telepresence\'s dependencies. It will install telepresence to' +
+          '\n' +
+          '# C:\\telepresence by default, but you can specify a custom path $path with -Path $path' +
           '\n' +
           '.\\install-telepresence.ps1' +
           '\n \n' +
-          '# 4. Add C:\\telepresence to your path'
+          '# 4. Remove the unzipped directory' +
+          '\n' +
+          'cd ..' +
+          'Remove-Item telepresence'
         }
         </CodeBlock>
       </TabPanel>
