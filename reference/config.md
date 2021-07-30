@@ -5,6 +5,7 @@ Telepresence uses a `config.yml` file to store and change certain global configu
 
 * macOS: `$HOME/Library/Application Support/telepresence/config.yml`
 * Linux: `$XDG_CONFIG_HOME/telepresence/config.yml` or, if that variable is not set, `$HOME/.config/telepresence/config.yml`
+* Windows: `%APPDATA%\telepresence\config.yml`
 
 For Linux, the above paths are for a user-level configuration. For system-level configuration, use the file at `$XDG_CONFIG_DIRS/telepresence/config.yml` or, if that variable is empty, `/etc/xdg/telepresence/config.yml`.  If a file exists at both the user-level and system-level paths, the user-level path file will take precedence.
 
