@@ -2,12 +2,15 @@ package userd_trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 
 	"google.golang.org/protobuf/proto"
 
@@ -314,11 +317,12 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
 	if err != nil {
-		dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+		if !errors.Is(err, userd_auth.ErrNotLoggedIn) {
+			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+		}
 	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
-	dlog.Infof(c, "Here is the config: %#v", client.GetConfig(c))
 	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
 	defer cancel()
 	<-tm.startup
