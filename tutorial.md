@@ -12,15 +12,11 @@ In this guide you will explore some of the key features of Telepresence. First, 
 
 It is recommended to use an empty development cluster for this guide.  You must have access via RBAC to create and update deployments and services in the cluster.  You must also have [Node.js installed](https://nodejs.org/en/download/package-manager/) on your laptop to run the demo app code.
 
-Finally, you will need the Telepresence CLI.  Run the commands for
-your OS to install it and log in to Ambassador Cloud in your browser.
-Follow the prompts to log in with GitHub then select your
-organization.  You will be redirected to the Ambassador Cloud
-dashboard; later you will manage your preview URLs here.
+Finally, you will need the Telepresence CLI. Run the commands for your OS to install it and login to Ambassador Cloud in your browser. Follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
 
 ### <img class="os-logo" src="../../images/apple.png"/> macOS
 
-```shell
+```
 # 1. Download the latest binary (~60 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
 -o /usr/local/bin/telepresence
@@ -31,17 +27,12 @@ sudo chmod a+x /usr/local/bin/telepresence
 # 3. Login with the CLI:
 telepresence login
 ```
-
 <Alert severity="info" variant="outlined">If you receive an error saying the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>.  Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence login</code> command.</Alert>
 
-If you are in an environment where Telepresence cannot launch a local
-browser for you to interact with, you will need to pass the
-[`--apikey` flag to `telepresence
-login`](../../reference/client/login/).
 
 ### <img class="os-logo" src="../../images/linux.png"/> Linux
 
-```shell
+```
 # 1. Download the latest binary (~50 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
 -o /usr/local/bin/telepresence
@@ -52,11 +43,6 @@ sudo chmod a+x /usr/local/bin/telepresence
 # 3. Login with the CLI:
 telepresence login
 ```
-
-If you are in an environment where Telepresence cannot launch a local
-browser for you to interact with, you will need to pass the
-[`--apikey` flag to `telepresence
-login`](../../reference/client/login/).
 
 ## Cluster Setup
 
@@ -109,13 +95,9 @@ Second, you could run everything in a development cluster. However, the cycle of
 
 Alternatively, you can use Telepresence's `intercept` command to proxy traffic bound for a service to your laptop. This will let you test and debug services on code running locally without needing to run dependent services or redeploy code updates to your cluster on every change. It also will generate a preview URL, which loads your web app from the cluster ingress but with requests to the intercepted service proxied to your laptop.
 
-1. You started this guide by installing the Telepresence CLI and
-   logging in to Ambassador Cloud.  The Cloud dashboard is used to
-   manage your intercepts and share them with colleagues.  You must be
-   logged in to create selective intercepts as we are going to do
-   here.
+1. You started this guide by installing the Telepresence CLI and logging into Ambassador Cloud.  The Cloud dashboard is used to manage your intercepts and share them with colleagues. You must be logged in to create selective intercepts as we are going to do here.
 
-   <Alert severity="info" variant="outlined">Run <code>telepresence dashboard</code> if you are already logged in and just need to reopen the dashboard.</Alert>
+  <Alert severity="info" variant="outlined">Run <code>telepresence dashboard</code> if you are already logged in and just need to reopen the dashboard.</Alert>
 
 2. In your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../reference/#architecture) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
 

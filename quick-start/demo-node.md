@@ -1,20 +1,11 @@
 ---
-description: "Claim a remote demo cluster and learn to use Telepresence to intercept services running in a Kubernetes Cluster, speeding up local development and debugging."
+description: "Install Telepresence and learn to use it to intercept services running in your Kubernetes cluster, speeding up local development and debugging."
 ---
 
-import {DemoClusterMetadata, ExpirationDate} from '../../../../../src/components/DemoClusterMetadata';
-import { 
-    EmojivotoServicesList, 
-    DCPLink, 
-    Login, 
-    LoginCommand,   
-    DockerCommand, 
-    PreviewUrl,
-    ExternalIp
-} from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs';
 import QSCards from './qs-cards';
+import { LoginText } from '../../../../../src/components/LoginText';
 import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
 
 # Telepresence Quick Start
@@ -22,115 +13,244 @@ import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepre
 <div class="docs-article-toc">
 <h3>Contents</h3>
 
-* [1. Get a free remote cluster](#1-get-a-free-remote-cluster)
-* [2. Try the Emojivoto application](#2-try-the-emojivoto-application)
-* [3. Set up your local development environment](#3-set-up-your-local-development-environment)
-* [4. Testing our fix](#4-testing-our-fix)
-* [5. Preview URLs](#5-preview-urls)
-* [6. How/Why does this all work](#6-howwhy-does-this-all-work)
+* [1. Download the demo cluster archive](#1-download-the-demo-cluster-archive)
+* [2. Test Telepresence](#2-test-telepresence)
+* [3. Check out the sample application](#3-check-out-the-sample-application)
+* [4. Run a service on your laptop](#4-run-a-service-on-your-laptop)
+* [5. Intercept all traffic to the service](#5-intercept-all-traffic-to-the-service)
+* [6. Make a code change](#6-make-a-code-change)
+* [7. Create a preview URL](#7-create-a-preview-url)
 * [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
 
 </div>
 
-In this guide, we'll give you a hands-on tutorial with Telepresence. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
-
-If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker.
+In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally.
 
 <Alert severity="info">
-    While Telepresence works with any language, this guide uses a sample app written in Node.js and Golang. We have a version in <a href="../demo-react/">React</a> if you prefer.
+    While Telepresence works with any language, this guide uses a sample app written in Node.js. We have a version in <a href="../demo-react/">React</a> if you prefer.
 </Alert>
-
-## 1. Get a free remote cluster
-
-Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
 <Alert severity="info">
     <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
 </Alert>
 
-1. <Login/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
-2.  Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
-    <EmojivotoServicesList/>
+## 1. Download the demo cluster archive
+
+1. <a href="https://app.getambassador.io/cloud/demo-cluster-download-popup" onClick={(e) => {window.open('https://app.getambassador.io/cloud/demo-cluster-download-popup', 'ambassador-cloud-demo-cluster', 'menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,width=550,height=750'); e.preventDefault(); }} target="_blank"><LoginText /></a>  The archive contains all the tools and configurations you need to complete this guide.
+
+2.  Extract the archive file, open the `ambassador-demo-cluster` folder, and run the installer script (the commands below might vary based on where your browser saves downloaded files).
+
+  <Alert severity="info">
+    This step will also install some dependency packages onto your laptop using npm, you can see those packages at <code>ambassador-demo-cluster/edgey-corp-nodejs/DataProcessingService/package.json</code>.
+  </Alert>
+
+  ```
+  cd ~/Downloads
+  unzip ambassador-demo-cluster.zip -d ambassador-demo-cluster
+  cd ambassador-demo-cluster
+  ./install.sh
+  ```
+
+3. The demo cluster we provided already has a demo app running. List the app's services:
+  `kubectl get services`
+
+  ```
+   $ kubectl get services
+
+    NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+    kubernetes              ClusterIP   10.43.0.1       <none>        443/TCP    14h
+    dataprocessingservice   ClusterIP   10.43.159.239   <none>        3000/TCP   14h
+    verylargejavaservice    ClusterIP   10.43.223.61    <none>        8080/TCP   14h
+    verylargedatastore      ClusterIP   10.43.203.19    <none>        8080/TCP   14h
+  ```
+
+4. Confirm that the Telepresence CLI is now installed (we expect to see the daemons are not running yet):
+`telepresence status`
+
+  ```
+  $ telepresence status
+
+    Root Daemon: Not running
+    User Daemon: Not running
+  ```
+
+  <Alert severity="info">
+    <strong>macOS users:</strong> If you receive an error when running Telepresence that the developer cannot be verified, open <strong>System Preferences → Security & Privacy → General</strong>. Click <strong>Open Anyway</strong> at the bottom to bypass the security block. Then retry the <code>telepresence status</code> command.
+  </Alert>
 
 <Alert severity="success">
-   The Service Catalog gives you a consolidated view of all your services across development, staging, and production. 
+    You now have Telepresence installed on your workstation and a Kubernetes cluster configured in your terminal.
 </Alert>
 
-<ExpirationDate/>
+## 2. Test Telepresence
 
-## 2. Try the Emojivoto application
+Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-The remote cluster is running the Emojivoto application, which consists of three services. Test out the application:
+1. Connect to the cluster (this requires root privileges and will ask for your password):
+`telepresence connect`
 
-1. Go to the <ExternalIp/> and vote for some emojis.
+  ```
+  $ telepresence connect
 
-2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
-   
-<Alert severity="success">
-    <strong>Congratulations!</strong> You've successfully accessed the Emojivoto application on your remote cluster.
-</Alert>
+    Launching Telepresence Daemon
+    ...
+    Connected to context default (https://<cluster-public-IP>)
+  ```
 
-## 3. Set up your local development environment
+2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
+`curl -ik https://kubernetes.default`
 
-We'll set up a development environment locally on your workstation. We'll then use Telepresence to connect this local development environment to the remote Kubernetes cluster. To save time, the development environment we'll use is pre-packaged as a Docker container.
+  ```
+  $ curl -ik https://kubernetes.default
 
-1. Run the Docker container locally. In the command below, replace the path to the `kubeconfig.yaml` with the actual location of the `kubeconfig.yaml` you previously noted in [step 1](#1-get-a-free-remote-cluster):
+    HTTP/1.1 401 Unauthorized
+    Cache-Control: no-cache, private
+    Content-Type: application/json
+    ...
 
-    <DockerCommand/>
+  ```
 
-2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
-
-3. Vote for 🍩 on your local leaderboard, and you can see that the bug is fixed!
-
-<Alert severity="success">
-  <strong>Congratulations!</strong> You have successfully set up a local development environment, and tested the fix locally.
-</Alert>
-
-## 4. Testing our fix
-
-A common use case for Telepresence is to connect your local development environment to a remote cluster. This way, if your application is too big or complex to run locally, you can still develop locally. In this Quick Start, we're also going to show Telepresence can be used for integration testing, by testing our fix against the services in the remote cluster.
-
-1. First, log in to Telepresence using your API key:
-<LoginCommand/>
-
-2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
-    `telepresence intercept web --port 8080`
-
-   You will be asked for your ingress layer 3 address; specify the front end service: `ambassador.ambassador`
-   Then, when asked for the port, type `80`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it.
-    
-    <UserInterceptCommand/>
+  <Alert severity="info">
+    The 401 response is expected.  What's important is that you were able to contact the API.
+  </Alert>
 
 <Alert severity="success">
-    <strong>Congratulations!</strong> Traffic to the remote service is now being routed to your local laptop, and you can see how the local fix works on the remote environment!
+    <strong>Congratulations!</strong> You’ve just accessed your remote Kubernetes API server, as if you were on the same network! With Telepresence, you’re able to use any tool that you have locally to connect to any service in the cluster.
 </Alert>
 
-## 5. Preview URLs
+## 3. Check out the sample application
 
-Preview URLs enable you to safely share your development environment with anyone. For example, you may want your UX designer to take a quick look at what you're developing, before you commit the code. Preview URLs enable this easy collaboration.
+Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-2. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
-   
-1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
-   <Alert severity="success">
-        Now you're able to share your fix in your local environment with your team!
-   </Alert>
-   
-   <Alert severity="info">
-        To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
-   </Alert>
+We'll use a sample app that is already installed in your demo cluster.  Let's take a quick look at it's architecture before continuing.
 
-## 6. How/Why does this all work
+1. Use `kubectl get pods` to check the status of your pods:
 
-Telepresence works by deploying a two-way network proxy in a pod running in a Kubernetes cluster. This proxy can intercept traffic meant for the service and reroute it to a local copy, which is ready for further (local) development.
+  ```
+  $ kubectl get pods
 
-Intercepts and preview URLs are functions of Telepresence that enable easy local development from a remote Kubernetes cluster and offer a preview environment for sharing and real-time collaboration.
+    NAME                                         READY   STATUS    RESTARTS   AGE
+    verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
+    verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
+    dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
+  ```
 
-Telepresence also uses custom headers and header propagation for controllable intercepts and preview URLs. The headers facilitate the smart routing of requests either to live services in the cluster or services running locally on a developer’s machine.
+2. Since you’ve already connected Telepresence to your cluster, you can access the frontend service in your browser at http://verylargejavaservice.default:8080.
 
-Preview URLs, when created, generate an ingress request containing a custom header with a token (the context). Telepresence sends this token to Ambassador Cloud with other information about the preview. Visiting the preview URL directs the user to Ambassador Cloud, which proxies the user to the cluster ingress with the token header injected into the request. The request carrying the header is routed in the cluster to the appropriate pod (the propagation). The Traffic Agent on the service pod sees the header and intercepts the request, redirecting it to the local developer machine that ran the intercept.
+3. You should see the EdgyCorp WebApp with a <strong style="color:green">green</strong> title and <strong style="color:green">green</strong> pod in the diagram.
 
+<Alert severity="success">
+  <strong>Congratulations</strong>, you can now access services running in your cluster by name from your laptop!
+</Alert>
 
+## 4. Run a service on your laptop
+
+Now start up the DataProcessingService service on your laptop. This version of the code has the UI color set to <strong style="color:blue">blue</strong> instead of <strong style="color:green">green</strong>.
+
+1. **In a <u>new</u> terminal window**, go the demo application directory in the extracted archive folder:
+  `cd edgey-corp-nodejs/DataProcessingService`
+
+2. Start the application:
+  `npm start`
+
+  ```
+  $ npm start
+
+    ...
+    Welcome to the DataProcessingService!
+    { _: [] }
+    Server running on port 3000
+  ```
+
+4. **Back in your <u>previous</u> terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:
+`curl localhost:3000/color`
+
+  ```
+  $ curl localhost:3000/color
+
+    "blue"
+  ```
+
+<Alert severity="success">
+    <strong>Victory</strong>, your local Node server is running a-ok!
+</Alert>
+
+## 5. Intercept all traffic to the service
+Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead:
+
+1. Start the intercept with the `intercept` command, setting the service name and port:
+`telepresence intercept dataprocessingservice --port 3000`
+
+  <Alert severity="info">
+    <strong>Didn't work?</strong> Make sure you are working in the terminal window where you ran the script because it sets environment variables to access the demo cluster.  Those variables will only will apply to that terminal session.
+  </Alert>
+
+  ```
+  $ telepresence intercept dataprocessingservice --port 3000
+
+    Using deployment dataprocessingservice
+    intercepted
+        Intercept name: dataprocessingservice
+        State         : ACTIVE
+    ...
+  ```
+
+2. Go to the frontend service again in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <strong style="color:blue">blue</strong> elements in the app.
+
+<Alert severity="success">
+    The frontend’s request to DataProcessingService is being <strong>intercepted and rerouted</strong> to the Node server on your laptop!
+</Alert>
+
+## 6. Make a code change
+We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
+
+1. Open `edgey-corp-nodejs/DataProcessingService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
+
+2. Now visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the <strong style="color:orange">orange</strong> elements in the application. The frontend `verylargejavaservice` is still running on the cluster, but it's request to the `DataProcessingService` for retrieve the color to show is being proxied by Telepresence to your laptop.
+
+<Alert severity="success">
+  We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
+  <br />
+  Normally, this process would require a container build, push to registry, and deploy.
+  <br />
+  With Telepresence, these changes happen instantly.
+</Alert>
+
+## 7. Create a Preview URL
+Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
+
+1. Clean up your previous intercept by removing it:
+`telepresence leave dataprocessingservice`
+
+2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
+`telepresence login`
+
+  This opens your browser; login with your preferred identity provider and choose your org.
+
+  ```
+  $ telepresence login
+    Launching browser authentication flow...
+    <browser opens, login>
+    Login successful.
+  ```
+
+3. Start the intercept again:
+`telepresence intercept dataprocessingservice --port 3000`
+
+   You will be asked for your ingress layer 3 address; specify the front end service: `verylargejavaservice.default`
+   Then when asked for the port, type `8080`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it
+
+  <UserInterceptCommand />
+
+4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
+
+5. Now go again to [http://verylargejavaservice:8080](http://verylargejavaservice:8080), it’s still <strong style="color:green">green</strong>.
+
+Normal traffic coming to your app gets the <strong style="color:green">green</strong> cluster service, but traffic coming from the preview URL goes to your laptop and gets the <strong style="color:orange">orange</strong> local service!
+
+<Alert severity="success">
+  The <strong>Preview URL</strong> now shows exactly what is running on your local laptop -- in a way that can be securely shared with anyone you work with.
+</Alert>
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 

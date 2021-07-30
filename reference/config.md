@@ -74,7 +74,7 @@ Currently there is only one key and it accepts bools: `1`, `t`, `T`, `TRUE`, `tr
 
 |Field|Description|Default|
 |---|---|---|
-|`skipLogin`|Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts |false|
+|`skipLogin`|Whether the cli should skipping login to Ambassador Cloud. If you set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster to perform selective intercepts |false|
 
 Telepresence attempts to auto-detect if the cluster is air-gapped,
 be sure to set the `skipLogin` value to `true`
