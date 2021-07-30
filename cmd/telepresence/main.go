@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,37 +25,39 @@ func main() {
 	}
 
 	var cmd *cobra.Command
-	if len(os.Args) > 1 && os.Args[1] == "daemon-foreground" || len(os.Args) > 2 && os.Args[2] == "daemon-foreground" && os.Args[1] == "help" {
-		// Avoid the initialization of all subcommands except for daemon-foreground an
+	if isDaemon() {
+		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
 		cmd = &cobra.Command{
 			Use:  "telepresence",
-			Args: cobra.NoArgs,
+			Args: cli.OnlySubcommands,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				cmd.SetOut(cmd.ErrOrStderr())
 				return nil
 			},
 			SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 			SilenceUsage:  true, // our FlagErrorFunc will handle it
-			// BUG(lukeshu): This doesn't have FlagErrorFunc wired up
 		}
+		cmd.AddCommand(connector.Command())
 		cmd.AddCommand(daemon.Command())
+		if err := cmd.ExecuteContext(ctx); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
+			os.Exit(1)
+		}
 	} else {
 		cmd = cli.Command(ctx)
-		cmd.AddCommand(connector.Command())
-	}
-
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-		if !isBackground() {
+		if err := cmd.ExecuteContext(ctx); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			summarizeLogs(ctx, cmd)
+			os.Exit(1)
 		}
-		os.Exit(1)
 	}
 }
 
-func isBackground() bool {
-	return len(os.Args) > 1 && (os.Args[1] == "daemon-foreground" || os.Args[1] == "connector-foreground")
+func isDaemon() bool {
+	const fg = "-foreground"
+	a := os.Args
+	return len(a) > 1 && strings.HasSuffix(a[1], fg) || len(a) > 2 && strings.HasSuffix(a[2], fg) && a[1] == "help"
 }
 
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
