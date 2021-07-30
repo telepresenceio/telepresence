@@ -26,7 +26,8 @@ if [[ ! "${ZIPDIR}" ]]; then
 fi
 
 # Download sshfs-win.msi + winfsp.msi
-curl -L -o "${ZIPDIR}"/winfsp.msi "https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-${WINFSP_VERSION}.msi"
+# ${WINFSP_VERSION%.*} will remove the last `.` and everything after it
+curl -L -o "${ZIPDIR}"/winfsp.msi "https://github.com/billziss-gh/winfsp/releases/download/v${WINFSP_VERSION%.*}/winfsp-${WINFSP_VERSION}.msi"
 curl -L -o "${ZIPDIR}"/sshfs-win.msi "https://github.com/billziss-gh/sshfs-win/releases/download/v${SSHFS_WIN_VERSION}/sshfs-win-${SSHFS_WIN_VERSION}-x64.msi"
 
 # Download wintun
