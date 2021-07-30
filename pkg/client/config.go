@@ -537,7 +537,6 @@ func GetConfig(c context.Context) *Config {
 		var err error
 		config, err = loadConfig(c)
 		if err != nil {
-			dlog.Info(c, "No config found. Using default")
 			config = &defaultConfig
 		}
 	})

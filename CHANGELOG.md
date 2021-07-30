@@ -12,6 +12,8 @@
 - Bugfix: A `$(NAME)` reference in the agent's environment will now be
   interpolated correctly.
 
+- Bugfix: Telepresence will no longer print an INFO level log message when
+  no config.yml file is found.
 ### 2.3.7 (July 23, 2021)
 
 - Feature: An `also-proxy` entry in the Kubernetes cluster config will
