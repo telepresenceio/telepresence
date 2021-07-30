@@ -1,5 +1,4 @@
 import Alert from '@material-ui/lab/Alert';
-import { ClusterConfig } from '../../../../../src/components/Docs/Telepresence';
 
 # Cluster-side configuration
 
@@ -81,7 +80,8 @@ configuration is required to acquire a license use selective intercepts.
 
 ### Create a license
 
-1. <ClusterConfig /> 
+1. Go to [the teams setting page in Ambassador Cloud](https://auth.datawire.io/redirects/settings/teams) and
+select *Licenses* for the team you want to create the license for.
 
 2. Generate a new license (if one doesn't already exist) by clicking *Generate New License*.
 
@@ -91,7 +91,7 @@ run this command to generate the Cluster ID:
 
   ```
   $ telepresence current-cluster-id
-    
+
     Cluster ID: <some UID>
   ```
 
@@ -105,7 +105,7 @@ run this command to generate the Cluster ID:
 
   ```
   $ telepresence license -f <downloaded-license-file>
-    
+
     apiVersion: v1
     data:
       hostDomain: <long_string>

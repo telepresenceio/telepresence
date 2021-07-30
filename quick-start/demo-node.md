@@ -3,10 +3,8 @@ description: "Install Telepresence and learn to use it to intercept services run
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from './qs-tabs';
-import QSCards from './qs-cards';
-import { DownloadDemo } from '../../../../../src/components/Docs/DownloadDemo';
-import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
+import QSTabs from './qs-tabs'
+import QSCards from './qs-cards'
 
 # Telepresence Quick Start
 
@@ -36,7 +34,7 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
 
 ## 1. Download the demo cluster archive
 
-1. <DownloadDemo />
+1. <a href="https://app.getambassador.io/cloud/demo-cluster-download-popup" onClick={(e) => {window.open('https://app.getambassador.io/cloud/demo-cluster-download-popup', 'ambassador-cloud-demo-cluster', 'menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,width=550,height=750'); e.preventDefault(); }} target="_blank">Sign in to Ambassador Cloud to download your demo cluster archive.</a>  The archive contains all the tools and configurations you need to complete this guide.
 
 2.  Extract the archive file, open the `ambassador-demo-cluster` folder, and run the installer script (the commands below might vary based on where your browser saves downloaded files).
 
@@ -222,20 +220,17 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 1. Clean up your previous intercept by removing it:
 `telepresence leave dataprocessingservice`
 
-2. Log in to Ambassador Cloud, a web interface for managing and
-   sharing preview URLs:
+2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
+`telepresence login`
 
-   ```console
-   $ telepresence login
-   Launching browser authentication flow...
-   <web browser opens, log in and choose your organization>
-   Login successful.
-   ```
+  This opens your browser; login with your preferred identity provider and choose your org.
 
-   If you are in an environment where Telepresence cannot launch a
-   local browser for you to interact with, you will need to pass the
-   [`--apikey` flag to `telepresence
-   login`](../../reference/client/login/).
+  ```
+  $ telepresence login
+    Launching browser authentication flow...
+    <browser opens, login>
+    Login successful.
+  ```
 
 3. Start the intercept again:
 `telepresence intercept dataprocessingservice --port 3000`
@@ -243,7 +238,41 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
    You will be asked for your ingress layer 3 address; specify the front end service: `verylargejavaservice.default`
    Then when asked for the port, type `8080`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it
 
-  <UserInterceptCommand />
+  ```
+  $ telepresence intercept dataprocessingservice --port 3000
+
+    To create a preview URL, telepresence needs to know how cluster
+    ingress works for this service.  Please Select the ingress to use.
+
+    1/4: What's your ingress' layer 3 (IP) address?
+         You may use an IP address or a DNS name (this is usually a
+         "service.namespace" DNS name).
+
+           [no default]: verylargejavaservice.default
+
+    2/4: What's your ingress' layer 4 address (TCP port number)?
+
+           [no default]: 8080
+
+    3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+
+           [default: n]: n
+
+    4/4: If required by your ingress, specify a different layer 5 hostname
+         (TLS-SNI, HTTP "Host" header) to access this service.
+
+           [default: verylargejavaservice.default]:
+
+    Using deployment dataprocessingservice
+    intercepted
+        Intercept name  : dataprocessingservice
+        State           : ACTIVE
+        Destination     : 127.0.0.1:3000
+        Intercepting    : HTTP requests that match all of:
+          header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
+        Preview URL     : https://<random-subdomain>.preview.edgestack.me
+        Layer 5 Hostname: verylargejavaservice.default
+  ```
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
 

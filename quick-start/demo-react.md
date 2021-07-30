@@ -3,10 +3,8 @@ description: "Install Telepresence and learn to use it to intercept services run
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from './qs-tabs';
-import QSCards from './qs-cards';
-import { DownloadDemo } from '../../../../../src/components/Docs/DownloadDemo';
-import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
+import QSTabs from './qs-tabs'
+import QSCards from './qs-cards'
 
 # Telepresence Quick Start - React
 
@@ -38,7 +36,7 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
 
 ## 1. Download the demo cluster archive
 
-1. <DownloadDemo />
+1. <a href="https://app.getambassador.io/cloud/demo-cluster-download-popup" onClick={(e) => {window.open('https://app.getambassador.io/cloud/demo-cluster-download-popup', 'ambassador-cloud-demo-cluster', 'menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,width=550,height=750'); e.preventDefault(); }} target="_blank">Sign in to Ambassador Cloud to download your demo cluster archive.</a>  The archive contains all the tools and configurations you need to complete this guide.
 
 2.  Extract the archive file, open the `ambassador-demo-cluster` folder, and run the installer script (the commands below might vary based on where your browser saves downloaded files).
 

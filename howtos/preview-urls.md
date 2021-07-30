@@ -32,20 +32,16 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
     * If the service is in a different namespace, specify it with the `--namespace` flag
 
-2. Log in to Ambassador Cloud where you can manage and share preview
-   URLs:
+2. Login to Ambassador Cloud where you can manage and share preview URLs:
+`telepresence login`
 
-   ```console
-   $ telepresence login
-   Launching browser authentication flow...
-   <web browser opens, log in and choose your organization>
-   Login successful.
+  ```
+  $ telepresence login
+
+     Launching browser authentication flow...
+     <browser opens, login and choose your org>
+     Login successful.
    ```
-
-   If you are in an environment where Telepresence cannot launch a
-   local browser for you to interact with, you will need to pass the
-   [`--apikey` flag to `telepresence
-   login`](../../reference/client/login/).
 
 3. Start the intercept:
 `telepresence intercept <service-name> --port <TCP-port> --env-file <path-to-env-file>`
@@ -122,13 +118,7 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
 7. Share with a teammate.
 
-   You can collaborate with teammates by sending your preview URL to
-   them.  They will be asked to log in to Ambassador Cloud if they are
-   not already.  Upon login they must select the same identity
-   provider and org as you are using; that is how they are authorized
-   to access the preview URL (see the [list of supported identity
-   providers](../../faqs/#idps)).  When they visit the preview URL,
-   they will see the intercepted service running on your laptop.
+  You can collaborate with teammates by sending your preview URL to them. They will be asked to log in to Ambassador Cloud if they are not already. Upon log in they must select the same identity provider and org as you are using; that is how they are authorized to access the preview URL (see the [list of supported identity providers](../../faqs/#idps)). When they visit the preview URL, they will see the intercepted service running on your laptop.
 
 <Alert severity="success">
   <strong>Congratulations!</strong> You have now created a dev environment and shared it with a teammate!  While you and your partner work together to debug your service, the production version remains unchanged to the rest of your team until you commit your changes.
