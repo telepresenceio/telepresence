@@ -116,6 +116,13 @@ func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
 			return nil
 		}
 	}
+
+	// If the user has specified they are in an air-gapped cluster,
+	// we shouldn't try to get messages
+	if client.GetConfig(cmd.Context()).Cloud.SkipLogin {
+		return nil
+	}
+
 	// The command is the first word of cmd.Use
 	cmdUsed := strings.Split(cmd.Use, " ")[0]
 
