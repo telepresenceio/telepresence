@@ -1,12 +1,13 @@
 # Changelog
 
 ### 2.4.0 (TBD)
+
 - Feature: Telepresence can now receive messages from the cloud and raise
   them to the user when they perform certain commands.
 
-- Bugfix: Initialization of systemd-resolved` based DNS sets
+- Bugfix: Initialization of `systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
-  
+
 - Bugfix: Edge case error when targeting a container by port number. 
   Before if your matching/target container was at containers list index 0, 
   but if there was a container at index 1 with no ports, then the 
@@ -24,6 +25,10 @@
 
 - Bugfix: The `traffic-manager` will only send subnet updates to a
   client root daemon when the subnets actually change.
+
+- Bugfix: The agent uninstaller now distinguishes between recoverable
+  and unrecoverable failures, allowing uninstallation from manually changed
+  resources
 
 ### 2.3.7 (July 23, 2021)
 

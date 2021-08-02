@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver"
+	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -128,12 +129,12 @@ func (ma multiAction) IsDone(obj kates.Object) bool {
 }
 
 func (ma multiAction) Undo(ver semver.Version, obj kates.Object) error {
+	var result *multierror.Error
 	for i := len(ma) - 1; i >= 0; i-- {
-		if err := ma[i].Undo(ver, obj); err != nil {
-			return err
-		}
+		err := ma[i].Undo(ver, obj)
+		result = multierror.Append(result, err)
 	}
-	return nil
+	return result.ErrorOrNil()
 }
 
 // Internal convenience functions //////////////////////////////////////////////
@@ -207,7 +208,7 @@ func (m *makePortSymbolicAction) IsDone(svc kates.Object) bool {
 func (m *makePortSymbolicAction) Undo(ver semver.Version, svc kates.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
-		return err
+		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
 	}
 	p.TargetPort = intstr.FromInt(int(m.TargetPort))
 	return nil
@@ -257,7 +258,7 @@ func (m *addSymbolicPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
 func (m *addSymbolicPortAction) Undo(ver semver.Version, svc kates.Object) error {
 	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
-		return err
+		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
 	}
 	p.TargetPort = intstr.IntOrString{}
 	return nil
@@ -416,7 +417,7 @@ func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tp
 	}
 
 	if volumeIdx < 0 {
-		return install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName)
+		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName), "cannot delete volume")
 	}
 	if len(tplSpec.Spec.Volumes) == 1 {
 		tplSpec.Spec.Volumes = nil
@@ -440,7 +441,7 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 		}
 	}
 	if containerIdx < 0 {
-		return install.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName)
+		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName), "cannot undo agent container")
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
