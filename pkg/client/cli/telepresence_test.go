@@ -229,7 +229,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx := dlog.NewTestContext(t, false)
 		registry := dtest.DockerRegistry(ctx)
 		configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\n", registry)
-		ctx, err := setConfig(ctx, configDir, configYml)
+		ctx, err := client.SetConfig(ctx, configDir, configYml)
 		require.NoError(err)
 
 		logDir := t.TempDir()
@@ -278,7 +278,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx := dlog.NewTestContext(t, false)
 		registry := dtest.DockerRegistry(ctx)
 		configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\n", registry)
-		ctx, err = setConfig(ctx, tmpDir, configYml)
+		ctx, err = client.SetConfig(ctx, tmpDir, configYml)
 		require.NoError(err)
 
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
@@ -324,7 +324,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx := dlog.NewTestContext(t, false)
 		registry := dtest.DockerRegistry(ctx)
 		configYml := fmt.Sprintf("images:\n  registry: %s\n  agentImage: notUsed:0.0.1\n  webhookAgentImage: imageFromConfig:0.0.1\n  webhookRegistry: %s", registry, registry)
-		ctx, err := setConfig(ctx, configDir, configYml)
+		ctx, err := client.SetConfig(ctx, configDir, configYml)
 		require.NoError(err)
 
 		_, stderr = telepresenceContext(ctx, "connect")
@@ -616,7 +616,7 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	// We need to explicitly set the default config since telepresenceContext
 	// is being used below
 	configDir := cs.T().TempDir()
-	ctx, err = setDefaultConfig(ctx, configDir)
+	ctx, err = client.SetDefaultConfig(ctx, configDir)
 	require.NoError(err)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
@@ -1243,7 +1243,7 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 	hs.Run("Can be connected to", func() {
 		configDir := hs.T().TempDir()
 		// Needed to prevent a (harmless) message on stderr stating that there's no config to use
-		ctx, err := setDefaultConfig(ctx, configDir)
+		ctx, err := client.SetDefaultConfig(ctx, configDir)
 		hs.NoError(err)
 		stdout, stderr := telepresenceContext(ctx, "connect")
 		hs.Empty(stderr)
@@ -1497,7 +1497,7 @@ func telepresence(t testing.TB, args ...string) (string, string) {
 
 	// Ensure the config.yml is using the dtest registry by default
 	configDir := t.TempDir()
-	ctx, err := setDefaultConfig(ctx, configDir)
+	ctx, err := client.SetDefaultConfig(ctx, configDir)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1523,32 +1523,4 @@ func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 	_ = cmd.Run()
 
 	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
-}
-
-// setDefaultConfig creates a config that has the registry set correctly.
-// This ensures that the config on the machine of whatever is running the test,
-// isn't used, which could cause conflict with the tests.
-func setDefaultConfig(ctx context.Context, configDir string) (context.Context, error) {
-	registry := dtest.DockerRegistry(ctx)
-	configYml := fmt.Sprintf("images:\n  registry: %s\n  webhookRegistry: %s\n", registry, registry)
-	return setConfig(ctx, configDir, configYml)
-}
-
-// setConfig clears the config and creates one from the configYml provided. Use this
-// if you are testing components of the config.yml, otherwise you can use setDefaultConfig.
-func setConfig(ctx context.Context, configDir, configYml string) (context.Context, error) {
-	client.ResetConfig(ctx)
-	config, err := os.Create(filepath.Join(configDir, "config.yml"))
-	if err != nil {
-		return ctx, err
-	}
-
-	_, err = config.WriteString(configYml)
-	if err != nil {
-		return ctx, err
-	}
-	config.Close()
-
-	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-	return ctx, nil
 }

@@ -72,7 +72,8 @@ func (cmc *cloudMessageCache) updateCacheMessages(ctx context.Context, resp *sys
 	cmc.Intercept = resp.GetIntercept()
 
 	// Update the time to do the next check since we were successful
-	cmc.NextCheck = dtime.Now().Add(24 * 7 * time.Hour)
+	refreshMsgs := client.GetConfig(ctx).Cloud.RefreshMessages
+	cmc.NextCheck = dtime.Now().Add(refreshMsgs)
 
 	// We reset the messages delivered for all commands since they
 	// may have changed

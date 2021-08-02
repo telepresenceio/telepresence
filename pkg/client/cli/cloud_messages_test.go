@@ -6,6 +6,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -108,10 +109,53 @@ func Test_cloudUpdateMessages(t *testing.T) {
 	if res != newCeptMsg {
 		t.Error("error: expected", newCeptMsg, "received", res)
 	}
-
 	// Ensure the NextCheck time is sufficiently in the future
 	futureTime := time.Now().Add(time.Hour * 24 * 6)
 	if !cmc.NextCheck.After(futureTime) {
 		t.Error("error: expected nextCheck time to be greater than 6 days")
+	}
+
+	futureTime = time.Now().Add(time.Hour * 24 * 8)
+	if cmc.NextCheck.After(futureTime) {
+		t.Error("error: expected nextCheck time to be less than 8 days")
+	}
+}
+
+func Test_cloudRefreshMessagesConfig(t *testing.T) {
+	ctx := dlog.NewTestContext(t, false)
+
+	// Create a fake user cache directory + config directory
+	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
+	confDir := t.TempDir()
+
+	// Update the config to a shorter time
+	configYml := "cloud:\n  refreshMessages: 24h"
+	ctx, err := client.SetConfig(ctx, confDir, configYml)
+	if err != nil {
+		t.Error(err)
+	}
+
+	cmc, err := newCloudMessageCache(ctx)
+	if err != nil {
+		t.Error(err)
+	}
+	// Mock what we get from `GetUnauthenticatedCommandMessages`
+	ceptMessage := "Intercept message, testing config"
+	updatedMessageResponse := &systema.CommandMessageResponse{
+		Intercept: ceptMessage,
+	}
+
+	// Call updateCacheMessage to update cmc with new message + nextCheck
+	cmc.updateCacheMessages(ctx, updatedMessageResponse)
+
+	// Ensure the NextCheck time is sufficiently in the future
+	futureTime := time.Now().Add(time.Hour * 22)
+	if !cmc.NextCheck.After(futureTime) {
+		t.Error("error: expected nextCheck time to be greater than 22 hours")
+	}
+
+	futureTime = time.Now().Add(time.Hour * 26)
+	if cmc.NextCheck.After(futureTime) {
+		t.Error("error: expected nextCheck time to be less than 26 hours")
 	}
 }
