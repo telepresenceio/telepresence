@@ -103,6 +103,7 @@ export default function SimpleTabs() {
         <CodeBlock>
         {
           '# Make sure you run the following from Powershell as Administrator' +
+          '\n' +
           '# 1. Download the latest windows zip containing telepresence.exe and its dependencies (~50 MB):' +
           '\n' +
           'curl -fL https://app.getambassador.io/download/tel2/windows/amd64/latest/telepresence.zip -o telepresence.zip' +
@@ -117,13 +118,14 @@ export default function SimpleTabs() {
           '\n \n' +
           '# 3. Run the install-telepresence.ps1 to install telepresence\'s dependencies. It will install telepresence to' +
           '\n' +
-          '# C:\\telepresence by default, but you can specify a custom path $path with -Path $path' +
+          '# C:\\telepresence by default, but you can specify a custom path by passing in -Path C:\\my\\custom\\path' +
           '\n' +
           '.\\install-telepresence.ps1' +
           '\n \n' +
           '# 4. Remove the unzipped directory' +
           '\n' +
           'cd ..' +
+          '\n' +
           'Remove-Item telepresence'
         }
         </CodeBlock>
