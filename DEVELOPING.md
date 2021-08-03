@@ -53,7 +53,7 @@ The output of `make help` has a bit more information.
 The easiest thing to do to get going:
 
 ```console
-$ TELEPRESENCE_REGISTRY=docker.io/lukeshu make build # use .\winmake.bat build on windows
+$ TELEPRESENCE_REGISTRY=docker.io/lukeshu make build # use .\build-aux\winmake.bat build on windows
 [make] TELEPRESENCE_VERSION=v2.3.5-63-ga9c8c660-1626378362
 
 mkdir -p build-output/bin
@@ -224,7 +224,7 @@ See https://www.notion.so/datawire/To-Release-Telepresence-2-x-x-2752ef26968444b
 
 ### Building on Windows
 
-We do not currently support using `make` directly to build on Windows. Instead, use `winmake.bat` and pass it the same parameters you would pass to make. `winmake.bat` will run `make` from inside a Docker container, with appropriate parameters to build windows binaries.
+We do not currently support using `make` directly to build on Windows. Instead, use `build-aux\winmake.bat` and pass it the same parameters you would pass to make. `winmake.bat` will run `make` from inside a Docker container, with appropriate parameters to build windows binaries.
 
 ## Debugging and Troubleshooting
 

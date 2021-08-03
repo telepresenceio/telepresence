@@ -113,7 +113,7 @@ func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (e
 		return err
 	}
 
-	// On some systems, SetDNS isn't enough to allow the domains to be resolved, and the network adapter's domain has to be set explicitly.
+	// On some systems (e.g. CircleCI but not josecv's windows box), SetDNS isn't enough to allow the domains to be resolved, and the network adapter's domain has to be set explicitly.
 	// It's actually way easier to do this via powershell than any system calls that can be run from go code
 	domain := ""
 	if len(domains) > 0 {
@@ -122,6 +122,11 @@ func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (e
 	}
 	// It's apparently well known that WMI queries can hang under various conditions, so we add a timeout here to prevent hanging the daemon
 	// Fun fact: terminating the context that powershell is running in will not stop a hanging WMI call (!) perhaps because it is considered uninterruptible
+	// For more on WMI queries hanging, see:
+	//     * http://www.yusufozturk.info/windows-powershell/how-to-avoid-wmi-query-hangs-in-powershell.html
+	//     * https://theolddogscriptingblog.wordpress.com/2012/05/11/wmi-hangs-and-how-to-avoid-them/
+	//     * https://stackoverflow.com/questions/24294408/gwmi-query-hangs-powershell-script
+	//     * http://use-powershell.blogspot.com/2018/03/get-wmiobject-hangs.html
 	pshScript := fmt.Sprintf(`
 $job = Get-WmiObject Win32_NetworkAdapterConfiguration -filter "interfaceindex='%d'" -AsJob | Wait-Job -Timeout 30
 if ($job.State -ne 'Completed') {
