@@ -98,8 +98,9 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		Use:  "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
 		Args: cobra.MinimumNArgs(1),
 
-		Short:   "Intercept a service",
-		PreRunE: updateCheckIfDue,
+		Short:    "Intercept a service",
+		PreRunE:  updateCheckIfDue,
+		PostRunE: raiseCloudMessage,
 	}
 	args := interceptArgs{}
 	flags := cmd.Flags()

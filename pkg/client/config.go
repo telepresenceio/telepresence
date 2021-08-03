@@ -403,7 +403,8 @@ func (i *Images) merge(o *Images) {
 }
 
 type Cloud struct {
-	SkipLogin bool `json:"skipLogin,omitempty"`
+	SkipLogin       bool          `json:"skipLogin,omitempty"`
+	RefreshMessages time.Duration `json:"refreshMessages,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -428,6 +429,13 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 			} else {
 				cloud.SkipLogin = val
 			}
+		case "refreshMessages":
+			duration, err := time.ParseDuration(v.Value)
+			if err != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("duration expected for key %q", kv), ms[i]))
+			} else {
+				cloud.RefreshMessages = duration
+			}
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -440,6 +448,9 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 func (i *Cloud) merge(o *Cloud) {
 	if o.SkipLogin {
 		i.SkipLogin = o.SkipLogin
+	}
+	if o.RefreshMessages != 0 {
+		i.RefreshMessages = o.RefreshMessages
 	}
 }
 
@@ -507,7 +518,8 @@ var defaultConfig = Config{
 		WebhookAgentImage: "",
 	},
 	Cloud: Cloud{
-		SkipLogin: false,
+		SkipLogin:       false,
+		RefreshMessages: 24 * 7 * time.Hour,
 	},
 	Grpc: Grpc{},
 }
@@ -547,12 +559,6 @@ func GetConfig(c context.Context) *Config {
 func GetConfigFile(c context.Context) string {
 	dir, _ := filelocation.AppUserConfigDir(c)
 	return filepath.Join(dir, configFile)
-}
-
-// ResetConfig updates configOnce with a new sync.Once. This is currently only used
-// for tests.
-func ResetConfig(c context.Context) {
-	configOnce = new(sync.Once)
 }
 
 func loadConfig(c context.Context) (*Config, error) {

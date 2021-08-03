@@ -1,6 +1,9 @@
 # Changelog
 
-### 2.3.8 (TBD)
+### 2.4.0 (TBD)
+- Feature: Telepresence can now receive messages from the cloud and raise
+  them to the user when they perform certain commands.
+
 - Bugfix: Initialization of systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
   
