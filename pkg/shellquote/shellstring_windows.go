@@ -1,4 +1,4 @@
-package logging
+package shellquote
 
 import (
 	"strings"

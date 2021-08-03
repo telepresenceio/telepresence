@@ -13,7 +13,7 @@ import (
 	"os/exec"
 
 	"github.com/datawire/dlib/dexec"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 var signalsToForward = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
@@ -32,10 +32,10 @@ func startInBackground(args ...string) error {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %w", logging.ShellString(args[0], args[1:]), err)
+		return fmt.Errorf("%s: %w", shellquote.ShellString(args[0], args[1:]), err)
 	}
 	if err := cmd.Process.Release(); err != nil {
-		return fmt.Errorf("%s: %w", logging.ShellString(args[0], args[1:]), err)
+		return fmt.Errorf("%s: %w", shellquote.ShellString(args[0], args[1:]), err)
 	}
 
 	return nil
@@ -58,7 +58,7 @@ func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 		needPwCmd := dexec.CommandContext(ctx, "sudo", "--non-interactive", "true")
 		needPwCmd.DisableLogging = true
 		if err := needPwCmd.Run(); err != nil {
-			fmt.Printf("Need root privileges to run: %s\n", logging.ShellString(args[0], args[1:]))
+			fmt.Printf("Need root privileges to run: %s\n", shellquote.ShellString(args[0], args[1:]))
 			// `sudo` won't be able to read the password from the terminal when we run
 			// it with Setpgid=true, so do a pre-flight `sudo true` to read the
 			// password, and then enforce that being re-used by passing

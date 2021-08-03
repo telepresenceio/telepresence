@@ -10,7 +10,7 @@ import (
 	//nolint:depguard // TODO: Switch Run() over to dexec.
 	"os/exec"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 // Run will run the given executable with given args and env, wait for it to terminate, and return
@@ -28,7 +28,7 @@ func Run(ctx context.Context, exe string, args []string, env map[string]string) 
 
 	var err error
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %w", logging.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
 	}
 
 	// Ensure that signals are propagated to the child process
@@ -47,7 +47,7 @@ func Run(ctx context.Context, exe string, args []string, env map[string]string) 
 	}()
 	s, err := cmd.Process.Wait()
 	if err != nil {
-		return fmt.Errorf("%s: %w", logging.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
 	}
 
 	exitCode := s.ExitCode()

@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 var signalsToForward = []os.Signal{os.Interrupt}
@@ -31,7 +31,7 @@ func shellExec(verb, exe string, args ...string) error {
 	cwdPtr, _ := windows.UTF16PtrFromString(cwd)
 	var argPtr *uint16
 	if len(args) > 0 {
-		argsStr := logging.ShellArgsString(args)
+		argsStr := shellquote.ShellArgsString(args)
 		argPtr, _ = windows.UTF16PtrFromString(argsStr)
 	}
 	return windows.ShellExecute(0, verbPtr, exePtr, argPtr, cwdPtr, windows.SW_HIDE)
