@@ -25,6 +25,8 @@ logLevels:
 images:
   registry: privateRepo # This overrides the default docker.io/datawire repo
   agentImage: ambassador-telepresence-agent:1.8.0 # This overrides the agent image to inject when intercepting
+cloud:
+  refreshMessages: 24h # Refresh messages from cloud every 24 hours instead of the default, which is 1 week.
 grpc:
   maxReceiveSize: 10Mi
 ```
@@ -71,13 +73,13 @@ These are the valid fields for the `images` key:
 |`webhookAgentImage`|The container image that the [Traffic Manager](../cluster-config/#mutating-webhook) will use when installing the Traffic Agent in annotated pods *This value is only used if a new traffic-manager is deployed*||
 
 #### Cloud
-Values for `clouds` are listed below and their type varies, so please see the chart for the expected type for each config value.
+Values for `cloud` are listed below and their type varies, so please see the chart for the expected type for each config value.
 These fields control how the client interacts with the Cloud service.
 
 |Field|Description|Type|Default|
 |---|---|---|---|
 |`skipLogin`|Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts |bools: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F,` `FALSE`|false|
-|`refreshMessages`|How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. So you will see at most once within the duration given by this config|duration: number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`|168h|
+|`refreshMessages`|How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. You will see each message at most once within the duration given by this config|duration: number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`|168h|
 
 Telepresence attempts to auto-detect if the cluster is air-gapped,
 be sure to set the `skipLogin` value to `true`
