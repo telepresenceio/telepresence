@@ -25,7 +25,7 @@ type Device struct {
 	name string
 }
 
-func openTun() (*Device, error) {
+func openTun(_ context.Context) (*Device, error) {
 	fd, err := unix.Socket(unix.AF_SYSTEM, unix.SOCK_DGRAM, sysProtoControl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DGRAM socket: %w", err)

@@ -18,23 +18,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/dlib/dtime"
-
 	"github.com/stretchr/testify/suite"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -238,9 +238,26 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require.Empty(stderr)
 		_, stderr = telepresenceContext(ctx, "quit")
 		require.Empty(stderr)
-		rootLog, err := os.Open(filepath.Join(logDir, "daemon.log"))
+		rootLogName := filepath.Join(logDir, "daemon.log")
+		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
-		defer rootLog.Close()
+		defer func() {
+			_ = rootLog.Close()
+			st, err := os.Stat(rootLogName)
+			if err != nil {
+				dlog.Errorf(ctx, "Stat on %q failed: %v", rootLogName, err)
+				return
+			}
+			sysInfo, err := logging.GetSysInfo(rootLogName, st)
+			if err != nil {
+				dlog.Errorf(ctx, "GetSysInfo on %q failed: %v", rootLogName, err)
+				return
+			}
+			if err := os.Remove(rootLogName); err != nil {
+				dlog.Errorf(ctx, "Failed to remove %q: %v", rootLogName, err)
+				dlog.Error(ctx, sysInfo)
+			}
+		}()
 
 		hasDebug := false
 		scn := bufio.NewScanner(rootLog)

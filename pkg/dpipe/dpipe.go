@@ -4,65 +4,56 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 )
 
-func DPipe(ctx context.Context, cmd *dexec.Cmd, peer io.ReadWriteCloser) error {
-	cmdOut, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to establish stdout pipe: %v", err)
-	}
-	defer cmdOut.Close()
+func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs ...string) error {
+	cmd := dexec.CommandContext(ctx, cmdName, cmdArgs...)
+	cmd.Stdin = peer
+	cmd.Stdout = peer
+	cmd.Stderr = ioutil.Discard // Ensure error logging by passing a non nil, non *os.File here
+	cmd.DisableLogging = true   // Avoid data logging (peer is not a *os.File)
 
-	cmdIn, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to establish stdin pipe: %v", err)
-	}
-	defer cmdIn.Close()
-
-	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start: %v", err)
+	cmdLine := shellquote.ShellString(cmd.Path, cmd.Args)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start %s: %w", cmdLine, err)
 	}
 
 	var killTimer *time.Timer
 	closing := int32(0)
+
 	defer func() {
-		if atomic.LoadInt32(&closing) == 1 {
+		if killTimer != nil && atomic.LoadInt32(&closing) == 1 {
 			killTimer.Stop()
 		}
 	}()
 
-	go func() {
-		<-ctx.Done()
-		// A process is sometimes not terminated gracefully by the SIGTERM, so we give
-		// it a second to succeed and then kill it forcefully.
-		killTimer = time.AfterFunc(time.Second, func() {
-			_ = cmd.Process.Signal(unix.SIGKILL)
-		})
-		atomic.StoreInt32(&closing, 1)
-		_ = peer.Close()
-		_ = cmd.Process.Signal(unix.SIGTERM)
-	}()
+	go waitCloseAndKill(ctx, cmd, peer, &closing, &killTimer)
 
-	go func() {
-		if _, err := io.Copy(cmdIn, peer); err != nil && atomic.LoadInt32(&closing) == 0 {
-			dlog.Errorf(ctx, "copy from sftp-server to connection failed: %v", err)
+	ctx = dlog.WithField(ctx, "dexec.pid", cmd.Process.Pid)
+	dlog.Infof(ctx, "started command %s", cmdLine)
+	err := cmd.Wait()
+	how := "successfully"
+	if err != nil {
+		if cmd.ProcessState.Success() {
+			// Error is most likely "use of closed connection", which is normal for pipes
+			dlog.Debugf(ctx, "normal exit caused by: %v", err)
+			err = nil
+		} else if ctx.Err() != nil {
+			how = "by cancellation"
+			err = nil
 		}
-	}()
-
-	go func() {
-		if _, err := io.Copy(peer, cmdOut); err != nil && atomic.LoadInt32(&closing) == 0 {
-			dlog.Errorf(ctx, "copy from connection to sftp-server failed: %v", err)
-		}
-	}()
-	if err = cmd.Wait(); err != nil && atomic.LoadInt32(&closing) == 0 {
-		return fmt.Errorf("execution failed: %v", err)
 	}
-	return nil
+	if err != nil {
+		how = "with error"
+	}
+	dlog.Infof(ctx, "finished %s: %v", how, cmd.ProcessState)
+	return err
 }

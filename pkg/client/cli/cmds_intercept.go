@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 type interceptArgs struct {
@@ -263,9 +265,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
 				}
-				return start(ctx, args.cmdline[0], args.cmdline[1:], true,
-					cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
-					envPairs(is.env)...)
+				return proc.Run(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
 			})
 		})
 	})
@@ -344,7 +344,12 @@ func interceptMessage(r *connector.InterceptResult) string {
 func checkMountCapability(ctx context.Context) error {
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
-	cmd := dexec.CommandContext(ctx, "sshfs", "-V")
+	var cmd *dexec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = dexec.CommandContext(ctx, "sshfs-win", "cmd", "-V")
+	} else {
+		cmd = dexec.CommandContext(ctx, "sshfs", "-V")
+	}
 	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -433,24 +438,8 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	doMount := false
 	err = checkMountCapability(ctx)
 	if err == nil {
-		mountPoint := ""
-		doMount, err = strconv.ParseBool(is.args.mount)
-		if err != nil {
-			mountPoint = is.args.mount
-			doMount = len(mountPoint) > 0
-		}
-
-		if doMount {
-			if mountPoint == "" {
-				if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
-					return nil, err
-				}
-			} else {
-				if err = os.MkdirAll(mountPoint, 0700); err != nil {
-					return nil, err
-				}
-			}
-			ir.MountPoint = mountPoint
+		if ir.MountPoint, doMount, err = is.getMountPoint(); err != nil {
+			return nil, err
 		}
 	} else if is.args.mountSet {
 		var boolErr error
@@ -499,6 +488,17 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	return ir, nil
 }
 
+func (is *interceptState) getMountPoint() (string, bool, error) {
+	mountPoint := ""
+	doMount, err := strconv.ParseBool(is.args.mount)
+	if err != nil {
+		mountPoint = is.args.mount
+		doMount = len(mountPoint) > 0
+	}
+	mountPoint, err = prepareMount(mountPoint)
+	return mountPoint, doMount, err
+}
+
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
@@ -516,7 +516,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	if ir.MountPoint != "" {
 		defer func() {
-			if !acquired {
+			if !acquired && runtime.GOOS != "windows" {
 				// remove if empty
 				_ = os.Remove(ir.MountPoint)
 			}
@@ -681,7 +681,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return start(ctx, "docker", append(ourArgs, args...), true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	return proc.Run(ctx, nil, "docker", append(ourArgs, args...)...)
 }
 
 func (is *interceptState) writeEnvFile() error {

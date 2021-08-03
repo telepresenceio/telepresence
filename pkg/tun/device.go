@@ -3,16 +3,13 @@ package tun
 import (
 	"context"
 	"net"
-	"unsafe"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 )
 
 // OpenTun creates a new TUN device and ensures that it is up and running.
-func OpenTun() (*Device, error) {
-	return openTun()
+func OpenTun(ctx context.Context) (*Device, error) {
+	return openTun(ctx)
 }
 
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
@@ -38,6 +35,11 @@ func (t *Device) ReadPacket(into *buffer.Data) (int, error) {
 	return t.readPacket(into)
 }
 
+// SetDNS sets the DNS configuration for the device on the windows platform
+func (t *Device) SetDNS(ctx context.Context, server net.IP, domains []string) (err error) {
+	return t.setDNS(ctx, server, domains)
+}
+
 // WritePacket writes bytes from the given buffer.Data and returns the number of bytes
 // actually written.
 func (t *Device) WritePacket(from *buffer.Data) (int, error) {
@@ -46,17 +48,4 @@ func (t *Device) WritePacket(from *buffer.Data) (int, error) {
 
 func (t *Device) SetMTU(mtu int) error {
 	return t.setMTU(mtu)
-}
-
-func withSocket(domain int, f func(fd int) error) error {
-	fd, err := unix.Socket(domain, unix.SOCK_DGRAM, 0)
-	if err != nil {
-		return err
-	}
-	defer unix.Close(fd)
-	return f(fd)
-}
-
-func ioctl(socket int, request uint, requestData unsafe.Pointer) error {
-	return unix.IoctlSetInt(socket, request, int(uintptr(requestData)))
 }

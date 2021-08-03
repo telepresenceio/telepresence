@@ -1,8 +1,11 @@
 package logging
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
-// sysinfo represents the elaborate info in a FileInfo.Sys(). The implementations are
+// SysInfo represents the elaborate info in a FileInfo.Sys(). The implementations are
 // os specific.
 //
 // Unix:
@@ -10,10 +13,12 @@ import "time"
 //
 // Windows:
 //  info.Sys().(*syscall.Win32FileAttributeData)
-type sysinfo interface {
-	birthtime() time.Time
+type SysInfo interface {
+	fmt.Stringer
 
-	setOwnerAndGroup(name string) error
+	BirthTime() time.Time
 
-	haveSameOwnerAndGroup(sysinfo) bool
+	SetOwnerAndGroup(name string) error
+
+	HaveSameOwnerAndGroup(SysInfo) bool
 }

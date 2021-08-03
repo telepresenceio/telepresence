@@ -158,15 +158,21 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything nescessary to lint
+lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything necessary to lint
+
+.PHONY: build-tests
+build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
+	go list ./... | xargs -n1 go test -c -o /dev/null
 
 shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/push_chart.sh
 .PHONY: lint
-lint: lint-deps ## (QA) Run the linters (golangci-lint and protolint)
-	$(tools/golangci-lint) run --timeout 2m ./...
+lint: lint-deps ## (QA) Run the linters
+	GOOS=linux   $(tools/golangci-lint) run --timeout 2m ./...
+	GOOS=darwin  $(tools/golangci-lint) run --timeout 2m ./...
+	GOOS=windows $(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
 	$(tools/shellcheck) $(shellscripts)
 	$(tools/helm) lint charts/telepresence --set isCI=true

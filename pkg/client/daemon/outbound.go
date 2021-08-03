@@ -61,16 +61,6 @@ type outbound struct {
 	dnsConfig *rpc.DNSConfig
 }
 
-// splitToUDPAddr splits the given address into an UDPAddr. It's
-// an  error if the address is based on a hostname rather than an IP.
-func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
-	ip, port, err := iputil.SplitToIPPort(netAddr)
-	if err != nil {
-		return nil, err
-	}
-	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
-}
-
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	lc := &net.ListenConfig{}
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
@@ -98,7 +88,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 	}
 
 	var err error
-	if ret.router, err = newTunRouter(); err != nil {
+	if ret.router, err = newTunRouter(c); err != nil {
 		return nil, err
 	}
 	return ret, nil

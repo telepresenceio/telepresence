@@ -7,8 +7,8 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-	"golang.org/x/sys/unix"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
@@ -33,9 +33,9 @@ func NewPacket(ipPayloadLen int, src, dst net.IP) Packet {
 	ip.InitPacket(pkt, ipPayloadLen, src, dst)
 	ipHdr := pkt.IPHeader()
 	if ipHdr.Version() == ipv4.Version {
-		ipHdr.SetL4Protocol(unix.IPPROTO_ICMP)
+		ipHdr.SetL4Protocol(ipproto.ICMP)
 	} else {
-		ipHdr.SetL4Protocol(unix.IPPROTO_ICMPV6)
+		ipHdr.SetL4Protocol(ipproto.ICMPV6)
 	}
 	ipHdr.SetChecksum()
 	return pkt

@@ -8,12 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
-
-	//nolint:depguard // Because we won't ever .Wait() for the process and we'd turn off
-	// logging, using dexec would just be extra overhead.
-	"os/exec"
 
 	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -23,32 +18,11 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 var ErrNoConnector = errors.New("telepresence user daemon is not running")
-
-func launchConnector() error {
-	fmt.Println("Launching Telepresence User Daemon")
-	args := []string{client.GetExe(), "connector-foreground"}
-
-	cmd := exec.Command(args[0], args[1:]...)
-	// Process must live in a process group of its own to prevent
-	// getting affected by <ctrl-c> in the terminal
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %w", logging.ShellString(args[0], args[1:]), err)
-	}
-	if err := cmd.Process.Release(); err != nil {
-		return fmt.Errorf("%s: %w", logging.ShellString(args[0], args[1:]), err)
-	}
-
-	return nil
-}
 
 // WithConnector (1) ensures that the connector is running, (2) establishes a connection to it, and
 // (3) runs the given function with that connection.
@@ -89,7 +63,8 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoConnector
 			if maybeStart {
-				if err := launchConnector(); err != nil {
+				fmt.Println("Launching Telepresence User Daemon")
+				if err := proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
 					return fmt.Errorf("failed to launch the connector service: %w", err)
 				}
 

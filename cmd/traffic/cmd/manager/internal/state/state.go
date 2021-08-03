@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -272,7 +272,8 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 		sess.Cancel()
 
 		// remove it from the agentsByName index (if nescessary)
-		if agent, isAgent := s.agents.Load(sessionID); isAgent {
+		agent, isAgent := s.agents.Load(sessionID)
+		if isAgent {
 			delete(s.agentsByName[agent.Name], sessionID)
 			if len(s.agentsByName[agent.Name]) == 0 {
 				delete(s.agentsByName, agent.Name)
@@ -287,6 +288,7 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 		// GC any intercepts that relied on this session; prune any intercepts that
 		//  1. Don't have a client session (intercept.ClientSession.SessionId)
 		//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
+		// Alternatively, if the intercept is still live but has been switched over to a different agent, send it back to WAITING state
 		for interceptID, intercept := range s.intercepts.LoadAll() {
 			if intercept.ClientSession.SessionId == sessionID {
 				// Client went away:
@@ -297,6 +299,11 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 				// Tell the client, so that the client can tell us to delete it.
 				intercept.Disposition = errCode
 				intercept.Message = errMsg
+				s.intercepts.Store(interceptID, intercept)
+			} else if isAgent && agent.PodIp == intercept.PodIp {
+				// The agent whose podIP was stored by the intercept is dead, but it's not the last agent
+				// Send it back to waiting so that one of the other agents can pick it up and set their own podIP
+				intercept.Disposition = rpc.InterceptDispositionType_WAITING
 				s.intercepts.Store(interceptID, intercept)
 			}
 		}
@@ -630,7 +637,7 @@ func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunne
 			// Retrieve the connection that is tracked for the given id. Create a new one if necessary
 			h, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 				switch id.Protocol() {
-				case unix.IPPROTO_TCP, unix.IPPROTO_UDP:
+				case ipproto.TCP, ipproto.UDP:
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
 						// Dispatch directly to agent and let the dial happen there
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
@@ -693,7 +700,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(ctx, "Established TCP tunnel from agent %s to client %s", as.agent.Name, cs.name)
+	dlog.Debugf(ctx, "Established TCP tunnel from agent %s (%s) to client %s", as.agent.Name, as.agent.PodIp, cs.name)
 
 	// During intercept, all requests that are made to this pool, are forwarded to the intercepted
 	// agent(s)

@@ -1,21 +1,13 @@
-package logging
+// +build !windows
+
+package shellquote
 
 import (
 	"regexp"
 	"strings"
 )
 
-func ShellString(exe string, args []string) string {
-	b := strings.Builder{}
-	b.WriteString(quoteArg(exe))
-	for _, a := range args {
-		b.WriteByte(' ')
-		b.WriteString(quoteArg(a))
-	}
-	return b.String()
-}
-
-var escape = regexp.MustCompile(`[^\w!%+,\-./:=@^]`)
+var escape = regexp.MustCompile(`[^\w!%+,\-./:=@^']`)
 
 // quoteArg checks if the give string contains characters that have special meaning for a
 // shell. If it does, it will be quoted using single quotes. If the string itself contains

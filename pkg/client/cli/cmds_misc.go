@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 // getClusterID is a simple command that makes it easier for users to
@@ -52,7 +53,7 @@ func connectCommand() *cobra.Command {
 				})
 			}
 			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
-				return start(ctx, args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+				return proc.Run(ctx, nil, args[0], args[1:]...)
 			})
 		},
 	}

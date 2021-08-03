@@ -26,7 +26,7 @@ commands:
     parameters:
       version:
         type: string
-        default: "1.15"
+        default: "1.16"
     steps:
       - run:
           name: "Install Go << parameters.version >>"
@@ -129,14 +129,16 @@ jobs:
     executor: vm-linux
     steps:
       - checkout
+      - install-go
       # Split prep out to reduce noise in the output, and help with
       # timeouts.
       - run: make lint-deps
-      - run:
-          # Don't hold the Go compiler against golangci-lint's
-          # timeout.
-          name: "Pre-load Go build cache"
-          command: go list ./... | xargs -n1 go test -c -o /dev/null
+      # Don't hold the Go compiler against golangci-lint's timeout.
+      - run: |
+          GOOS=linux   make build-tests
+          GOOS=darwin  make build-tests
+          GOOS=windows make build-tests
+      # Run the linters.
       - run: make lint
 
   "generate":
@@ -176,7 +178,7 @@ jobs:
     - checkout
     - run: |
         [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
-  
+
   "publish-nightly-linux":
     executor: vm-linux
     steps:

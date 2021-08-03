@@ -22,7 +22,7 @@ type Device struct {
 	index int32
 }
 
-func openTun() (*Device, error) {
+func openTun(_ context.Context) (*Device, error) {
 	// https://www.kernel.org/doc/html/latest/networking/tuntap.html
 
 	fd, err := unix.Open(devicePath, unix.O_RDWR, 0)
