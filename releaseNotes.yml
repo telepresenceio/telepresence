@@ -45,6 +45,52 @@ items:
         image: telepresence-2.4.0-cloud-messages.png
         docs: reference/config#cloud
 
+      - type: bugfix
+        title: Improved stability of systemd-resolved-based DNS
+        body: >-
+          When initializing the <code>systemd-resolved</code>-based DNS, the routing domain
+          is set to improve stability in non-standard configurations. This also enables the
+          overriding resolver to do a proper take over once the DNS service ends.
+
+      - type: bugfix
+        title: Fixed an edge case when intercepting a container with multiple ports
+        body: >-
+          When specifying a port of a container to intercept, if there was a container in the
+          pod without ports, it was automatically selected. This has been fixed so we'll only
+          choose the container with "no ports" if there's no container that explicitly matches
+          the port used in your intercept.
+        docs: reference/intercepts/#creating-an-intercept-when-a-service-has-multiple-ports
+
+      - type: bugfix
+        title: $(NAME) references in agent's environments are now interpolated correctly.
+        body: >-
+          If you had an environment variable $(NAME) in your workload that referenced another, intercepts
+          would not correctly interpolate $(NAME). This has been fixed and works automatically.
+
+      - type: bugfix
+        title: Telepresence no longer prints INFO message when there is no config.yml
+        body: >-
+          Fixed a regression that printed an INFO message to the terminal when there wasn't a
+          <code>config.yml</code> present.  The config is optional, so this message has been
+          removed.
+        docs: reference/config
+
+      - type: bugfix
+        title: Telepresence no longer panics when using --http-match
+        body: >-
+          Fixed a bug where Telepresence would panic if the value passed to <code>--http-match</code>
+          didn't contain an equal sign, which has been fixed. The correct syntax is in the <code>--help</code>
+          string and looks like <code>--http-match=HTTP2_HEADER=REGEX</code>
+
+      - type: bugfix
+        title: Improved subnet updates
+        body: >-
+          The `traffic-manager` used to update subnets whenever the `Nodes` or `Pods` changed, even if
+          the underlying subnet hadn't changed, which created a lot of unnecessary traffic between the
+          client and the `traffic-manager`.  This has been fixed so we only send updates when the subnets
+          themselves actually change.
+        docs: reference/routing/#subnets
+
   - version: 2.3.7
     date: '2021-07-23'
     notes:
