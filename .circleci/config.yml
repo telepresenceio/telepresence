@@ -300,6 +300,7 @@ jobs:
       - checkout
       - install-go
       - run: pip install awscli
+      - run: choco install make
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
