@@ -221,7 +221,7 @@ jobs:
           platform: windows
       - save-logs
 
-  "build-and-test-linux":
+  "build-and-test":
     executor: vm-linux
     steps:
       - checkout
@@ -368,7 +368,7 @@ workflows:
   'Dev':
     jobs:
       - build-dev-image
-      - build-and-test-linux:
+      - build-and-test:
           context: telepresence2-release
           requires:
             - build-dev-image
