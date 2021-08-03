@@ -54,10 +54,8 @@ func Test_cloudGetMessageFromCache(t *testing.T) {
 			if tc.res != res {
 				t.Error("error: expected", tc.res, "received", res)
 			}
-			if val, ok := cmc.MessagesDelivered[tc.cmd]; !ok {
+			if _, ok := cmc.MessagesDelivered[tc.cmd]; !ok {
 				t.Error("error: expected", tc.cmd, "to be present in MessagesDelivered")
-			} else if !val {
-				t.Error(" error: expected", tc.cmd, "to be true in MessagesDelivered")
 			}
 		})
 	}
@@ -97,11 +95,9 @@ func Test_cloudUpdateMessages(t *testing.T) {
 	cmc.updateCacheMessages(ctx, updatedMessageResponse)
 
 	// Updating the messages resets `MessagesDelivered` so ensure
-	// it is now false for "intercept"
-	if val, ok := cmc.MessagesDelivered["intercept"]; !ok {
-		t.Error("error: expected", "intercept", "to be present in MessagesDelivered")
-	} else if val {
-		t.Error(" error: expected", "intercept", "to be false in MessagesDelivered")
+	// the "intercept" command is not in the map
+	if _, ok := cmc.MessagesDelivered["intercept"]; ok {
+		t.Error("error: expected", "intercept", "not to be present in MessagesDelivered")
 	}
 
 	// Ensure we get the new message

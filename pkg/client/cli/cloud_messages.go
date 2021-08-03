@@ -26,9 +26,9 @@ import (
 const messagesCacheFilename = "cloud-messages.json"
 
 type cloudMessageCache struct {
-	NextCheck         time.Time       `json:"next_check"`
-	Intercept         string          `json:"intercept"`
-	MessagesDelivered map[string]bool `json:"messagess_delivered"`
+	NextCheck         time.Time           `json:"next_check"`
+	Intercept         string              `json:"intercept"`
+	MessagesDelivered map[string]struct{} `json:"messagess_delivered"`
 }
 
 // newCloudMessageCache returns a new CloudMessageCache, initialized from the users' if it exists
@@ -40,7 +40,7 @@ func newCloudMessageCache(ctx context.Context) (*cloudMessageCache, error) {
 			return nil, err
 		}
 		cmc.NextCheck = time.Time{}
-		cmc.MessagesDelivered = make(map[string]bool)
+		cmc.MessagesDelivered = make(map[string]struct{})
 		_ = cache.SaveToUserCache(ctx, cmc, messagesCacheFilename)
 	}
 	return cmc, nil
@@ -48,9 +48,6 @@ func newCloudMessageCache(ctx context.Context) (*cloudMessageCache, error) {
 
 // getCloudMessages communicates with Ambassador Cloud and stores those messages
 // in the cloudMessageCache.
-// For now this function will just return a fake result from the cloud
-// this will be replaced with the code to talk to Ambassador Cloud
-// via GetUnauthenticatedCommandMessages in a later commit
 func getCloudMessages(ctx context.Context, systemaURL string) (*systema.CommandMessageResponse, error) {
 	u, err := url.Parse(systemaURL)
 	if err != nil {
@@ -77,9 +74,7 @@ func (cmc *cloudMessageCache) updateCacheMessages(ctx context.Context, resp *sys
 
 	// We reset the messages delivered for all commands since they
 	// may have changed
-	for key := range cmc.MessagesDelivered {
-		cmc.MessagesDelivered[key] = false
-	}
+	cmc.MessagesDelivered = make(map[string]struct{})
 }
 
 func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed string) string {
@@ -87,10 +82,8 @@ func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed s
 	// if it has, then we don't want to print any output so as to not
 	// annoy the user.
 	var msg string
-	if val, ok := cmc.MessagesDelivered[cmdUsed]; ok {
-		if val {
-			return msg
-		}
+	if _, ok := cmc.MessagesDelivered[cmdUsed]; ok {
+		return msg
 	}
 
 	// Check if we have a message for the given command
@@ -101,7 +94,7 @@ func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed s
 		// We don't currently have any messages for this command
 		// so our msg will remain empty
 	}
-	cmc.MessagesDelivered[cmdUsed] = true
+	cmc.MessagesDelivered[cmdUsed] = struct{}{}
 	return msg
 }
 
@@ -150,7 +143,9 @@ func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
 
 	// Get the message from the cache that should be delivered to the user
 	msg := cmc.getMessageFromCache(ctx, cmdUsed)
-	fmt.Fprintf(cmd.OutOrStdout(), "%s\n", msg)
+	if msg != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", msg)
+	}
 	_ = cache.SaveToUserCache(ctx, cmc, messagesCacheFilename)
 
 	return nil
