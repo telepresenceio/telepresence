@@ -35,6 +35,14 @@ items:
     date: 'TDB'
     notes:
       - type: feature
+        title: Windows Client
+        body: >-
+          There is now a native Windows client for Telepresence.
+          All the same features supported by the MacOS and Linux client are available on Windows.
+        image: telepresence-2.4.0-windows.png
+        docs: install
+
+      - type: feature
         title: CLI raises helpful messages from Ambassador Cloud
         body: >-
           Telepresence can now receive messages from Ambassador Cloud and raise
