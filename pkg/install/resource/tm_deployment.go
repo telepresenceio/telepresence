@@ -49,7 +49,6 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "SYSTEMA_HOST", Value: sc.env.SystemAHost},
 		{Name: "SYSTEMA_PORT", Value: sc.env.SystemAPort},
-		{Name: "CLUSTER_ID", Value: sc.clusterID},
 		{Name: "TELEPRESENCE_REGISTRY", Value: imgConfig.WebhookRegistry},
 
 		// Manager needs to know its own namespace so that it can propagate that when

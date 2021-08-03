@@ -22,6 +22,9 @@ import (
 type Info interface {
 	// Watch changes of an ClusterInfo and write them on the given stream
 	Watch(context.Context, rpc.Manager_WatchClusterInfoServer) error
+
+	// GetClusterID returns the ClusterID
+	GetClusterID() string
 }
 
 type info struct {
@@ -33,6 +36,8 @@ type info struct {
 
 	// podCIDRMap keeps track of the current set of pod CIDRs
 	podCIDRMap map[iputil.IPKey]int
+	// clusterID is the UID of the default namespace
+	clusterID string
 }
 
 func NewInfo(ctx context.Context) Info {
@@ -43,6 +48,22 @@ func NewInfo(ctx context.Context) Info {
 	if client == nil {
 		// running in test environment
 		return &oi
+	}
+
+	// Get the clusterID from the default namespaces
+	// We use a default clusterID because we don't want to fail if
+	// the traffic-manager doesn't have the ability to get the namespace
+	ns := &kates.Namespace{
+		TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
+		ObjectMeta: kates.ObjectMeta{Name: "default"},
+	}
+
+	if err := client.Get(ctx, ns, ns); err != nil {
+		oi.clusterID = "00000000-0000-0000-0000-000000000000"
+		dlog.Errorf(ctx, "unable to get `default` namespace: %s, using default clusterID: %s",
+			err, oi.clusterID)
+	} else {
+		oi.clusterID = string(ns.GetUID())
 	}
 
 	// places to look for the cluster's DNS service
@@ -154,6 +175,10 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 		}
 	}
 	return nil
+}
+
+func (oi *info) GetClusterID() string {
+	return oi.clusterID
 }
 
 // clusterInfo must be called with accLock locked

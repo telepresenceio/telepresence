@@ -24,7 +24,6 @@ type Instance interface {
 // during an operation that spans several resources.
 type scope struct {
 	namespace  string
-	clusterID  string
 	tmSelector map[string]string
 	client     *kates.Client
 	env        *client.Env

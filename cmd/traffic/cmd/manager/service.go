@@ -81,7 +81,7 @@ func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License,
 		return &rpc.License{}, err
 	}
 	hostDomain := string(hostDomainData)
-	return &rpc.License{License: license, Host: hostDomain, ClusterId: managerutil.GetEnv(ctx).ClusterID}, nil
+	return &rpc.License{License: license, Host: hostDomain, ClusterId: m.clusterInfo.GetClusterID()}, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable

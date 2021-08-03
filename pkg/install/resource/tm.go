@@ -26,10 +26,9 @@ func GetTrafficManagerResources() Instances {
 	}
 }
 
-func EnsureTrafficManager(ctx context.Context, client *kates.Client, namespace, clusterID string, env *cl.Env) error {
+func EnsureTrafficManager(ctx context.Context, client *kates.Client, namespace string, env *cl.Env) error {
 	ctx = withScope(ctx, &scope{
 		namespace: namespace,
-		clusterID: clusterID,
 		tmSelector: map[string]string{
 			"app":          install.ManagerAppName,
 			"telepresence": telName,
