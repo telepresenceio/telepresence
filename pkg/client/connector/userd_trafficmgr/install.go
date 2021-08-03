@@ -436,7 +436,11 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 	}
 
 	if err = actions.Undo(obj); err != nil {
-		return "", err
+		if install.IsAlreadyUndone(err) {
+			dlog.Warnf(c, "Already uninstalled: %v", err)
+		} else {
+			return "", err
+		}
 	}
 	annotations := obj.GetAnnotations()
 	delete(annotations, annTelepresenceActions)
@@ -461,7 +465,11 @@ func undoServiceMods(c context.Context, svc *kates.Service) error {
 		return err
 	}
 	if err = actions.Undo(svc); err != nil {
-		return err
+		if install.IsAlreadyUndone(err) {
+			dlog.Warnf(c, "Already uninstalled: %v", err)
+		} else {
+			return err
+		}
 	}
 	delete(svc.Annotations, annTelepresenceActions)
 	if len(svc.Annotations) == 0 {

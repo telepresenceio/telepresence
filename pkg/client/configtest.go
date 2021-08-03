@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
