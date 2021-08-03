@@ -122,7 +122,7 @@ ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
 		--body $(BINDIR)/telepresence.zip
 else
 	AWS_PAGER="" aws s3api put-object \
