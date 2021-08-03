@@ -33,7 +33,17 @@ items:
 
   - version: 2.4.0
     date: 'TDB'
-    notes: []
+    notes:
+      - type: feature
+        title: CLI raises helpful messages from Ambassador Cloud
+        body: >-
+          Telepresence can now receive messages from Ambassador Cloud and raise
+          them to the user when they perform certain commands. This enables us
+          to send you messages that may enhance your Telepresence experience when
+          using certain commands. Frequency of messages can be configured in your
+          <code>config.yml</code>.
+        image: telepresence-2.4.0-cloud-messages.png
+        docs: reference/config#cloud
 
   - version: 2.3.7
     date: '2021-07-23'
