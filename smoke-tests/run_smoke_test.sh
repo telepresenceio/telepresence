@@ -97,24 +97,23 @@ get_preview_url() {
 # Puts workstation api key in a variable
 get_workstation_apikey() {
     local cache_file
-    uname=$(uname)
-    if [ "$uname" == "Darwin" ]; then
-        cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
-    elif [ "$uname" == "Linux" ]; then
-        if [ -n "$XDG_CONFIG_HOME" ]; then
-            cache_file="$XDG_CONFIG_HOME/telepresence/apikeys.json"
-        else
-            cache_file="$HOME/.cache/telepresence/apikeys.json"
-        fi
-    fi
-    apikey=$(grep -o -E "\"telepresence:workstation\":\"[A-Za-z0-9=]+\"" "$cache_file" | awk -F: '{print $3}')
+    case "$(uname)" in
+	Darwin)
+		cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
+		;;
+	Linux)
+		cache_file="${XDG_CONFIG_HOME:-$HOME/.cache}/telepresence/apikeys.json"
+		;;
+    *)
+        echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
+        exit 1
+        ;;
+    esac
+    apikey=$(jq -r '.[]|.["telepresence:workstation"]|strings' "$cache_file")
     if [[ -z $apikey ]]; then
         echo "No apikey found"
         exit 1
     fi
-    # remove the leading and trailing "
-    apikey="${apikey%\"}"
-    apikey="${apikey#\"}"
 }
 
 # Puts intercept id in a variable
@@ -167,19 +166,18 @@ get_config() {
         exit 1
     fi
 
-    uname=$(uname)
-    if [ "$uname" == "Darwin" ]; then
+    case "$(uname)" in
+	Darwin)
         config_file="$HOME/Library/ApplicationSupport/telepresence/config.yml"
-    elif [ "$uname" == "Linux" ]; then
-        if [ -n "$XDG_CONFIG_HOME" ]; then
-            config_file="$XDG_CONFIG_HOME/telepresence/config.yml"
-        else 
-            config_file="$HOME/.config/telepresence/config.yml"
-        fi
-    else
-        echo "$uname is unknown by smoke-tests. Update get_config() to include default config location for your OS"
+		;;
+	Linux)
+		config_file="${XDG_CONFIG_HOME:-$HOME/.cache}/telepresence/config.yml"
+		;;
+    *)
+        echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
-    fi
+        ;;
+    esac
     echo "Using config_file: $config_file"
 }
 
@@ -209,6 +207,19 @@ setup_demo_app() {
     kubectl wait -n default deploy verylargedatastore --for condition=available --timeout=90s >"$output_location"
 }
 
+check_dependencies() {
+    echo "Checking dependencies..."
+    for name in jq kubectl
+    do
+        [[ $(which "$name" 2>/dev/null) ]] || { echo "\"$name\" needs to be installed";deps_errors=1; }
+    done
+    if [[ "$deps_errors" == 1 ]]; then
+        echo "Install the above and re-run smoke tests"
+        exit 1
+    fi
+    echo "OK"
+}
+
 # Deletes amb-code-quickstart-app *only* if it was created by this script
 cleanup_demo_app() {
     kubectl delete -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
@@ -220,6 +231,9 @@ cleanup_demo_app() {
 ##########################################################
 DEBUG=${DEBUG:-0}
 start_time=$(date -u +%s)
+
+check_dependencies
+
 if [ -z "$TELEPRESENCE" ]; then
     TELEPRESENCE=$(which telepresence)
 fi
