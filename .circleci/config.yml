@@ -133,7 +133,9 @@ jobs:
       # timeouts.
       - run: make lint-deps
       # Don't hold the Go compiler against golangci-lint's timeout.
-      - run: make build-tests
+      - run: |
+          GOOS=linux  make build-tests
+          GOOS=darwin make build-tests
       # Run the linters.
       - run: make lint
 
@@ -174,7 +176,7 @@ jobs:
     - checkout
     - run: |
         [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
-  
+
   "publish-nightly-linux":
     executor: vm-linux
     steps:

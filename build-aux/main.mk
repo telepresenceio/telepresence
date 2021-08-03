@@ -170,7 +170,8 @@ shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/push_chart.sh
 .PHONY: lint
 lint: lint-deps ## (QA) Run the linters (golangci-lint and protolint)
-	$(tools/golangci-lint) run --timeout 2m ./...
+	GOOS=linux  $(tools/golangci-lint) run --timeout 2m ./...
+	GOOS=darwin $(tools/golangci-lint) run --timeout 2m ./...
 	$(tools/protolint) lint rpc
 	$(tools/shellcheck) $(shellscripts)
 	$(tools/helm) lint charts/telepresence --set isCI=true
