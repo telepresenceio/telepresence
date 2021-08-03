@@ -100,26 +100,27 @@ func TestInitContext(t *testing.T) {
 	})
 
 	// This will fail on Windows
-	if runtime.GOOS != "windows" {
-		t.Run("captures output of builtin functions", func(t *testing.T) {
-			ctx, _, logFile := testSetup(t)
-			check := require.New(t)
+	t.Run("captures output of builtin functions", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.SkipNow()
+		}
+		ctx, _, logFile := testSetup(t)
+		check := require.New(t)
 
-			c, err := InitContext(ctx, logName)
-			loggerForTest.AddHook(&dtimeHook{})
-			check.NoError(err)
-			check.NotNil(c)
-			defer closeLog(t)
+		c, err := InitContext(ctx, logName)
+		loggerForTest.AddHook(&dtimeHook{})
+		check.NoError(err)
+		check.NotNil(c)
+		defer closeLog(t)
 
-			msg := "some message"
-			println(msg)
-			check.FileExists(logFile)
+		msg := "some message"
+		println(msg)
+		check.FileExists(logFile)
 
-			bs, err := ioutil.ReadFile(logFile)
-			check.NoError(err)
-			check.Equal(fmt.Sprintln(msg), string(bs))
-		})
-	}
+		bs, err := ioutil.ReadFile(logFile)
+		check.NoError(err)
+		check.Equal(fmt.Sprintln(msg), string(bs))
+	})
 
 	t.Run("next session rotates on write", func(t *testing.T) {
 		ctx, logDir, logFile := testSetup(t)

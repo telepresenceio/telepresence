@@ -12,7 +12,7 @@ if not exist .wintools\jq.exe (
     curl -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-win64.exe --output .\.wintools\jq.exe
 )
 
-docker build . -f Dockerfile.winbuild -t tel2-winbuild || exit \b
+docker build . -f .\build-aux\Dockerfile.winbuild -t tel2-winbuild || exit \b
 
 set pwd=%~dp0
 set pwd=%pwd:~3%

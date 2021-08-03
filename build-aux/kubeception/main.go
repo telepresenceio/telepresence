@@ -49,9 +49,9 @@ func run() error {
 	verb := os.Args[1]
 	clusterName := os.Args[2]
 
-	token, ok := os.LookupEnv("TELEPRESENCE_KUBECEPTION_TOKEN")
+	token, ok := os.LookupEnv("DEV_TELEPRESENCE_KUBECEPTION_TOKEN")
 	if !ok {
-		return fmt.Errorf("Please set the TELEPRESENCE_KUBECEPTION_TOKEN environment variable to a valid kubeception token")
+		return fmt.Errorf("Please set the DEV_TELEPRESENCE_KUBECEPTION_TOKEN environment variable to a valid kubeception token")
 	}
 	cli := &http.Client{}
 	switch verb {

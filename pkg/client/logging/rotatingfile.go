@@ -240,40 +240,40 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo) (err error) {
 	var newFile *os.File
 	if rf.file == nil {
 		if newFile, err = createFile(fullPath, rf.fileMode); err != nil {
-			return fmt.Errorf("Failed to createFile %s: %w", fullPath, err)
+			return fmt.Errorf("failed to createFile %s: %w", fullPath, err)
 		}
 	} else {
 		// Open file with a different name so that a tail -F on the original doesn't fail with a permission denied
 		tmp := fullPath + ".tmp"
 		var tmpFile *os.File
 		if tmpFile, err = createFile(tmp, rf.fileMode); err != nil {
-			return fmt.Errorf("Failed to createFile %s: %w", tmp, err)
+			return fmt.Errorf("failed to createFile %s: %w", tmp, err)
 		}
 
 		stat, err := tmpFile.Stat()
 		_ = tmpFile.Close()
 		if err != nil {
-			return fmt.Errorf("Failed to stat %s: %w", tmp, err)
+			return fmt.Errorf("failed to stat %s: %w", tmp, err)
 		}
 
 		si, err := GetSysInfo(rf.dirName, stat)
 		if err != nil {
-			return fmt.Errorf("Failed to GetSysInfo for %s: %w", rf.dirName, err)
+			return fmt.Errorf("failed to GetSysInfo for %s: %w", rf.dirName, err)
 		}
 		if prevInfo != nil && !prevInfo.HaveSameOwnerAndGroup(si) {
 			if err = prevInfo.SetOwnerAndGroup(tmp); err != nil {
 				_ = os.Remove(tmp)
-				return fmt.Errorf("Failed to SetOwnerAndGroup for %s: %w", tmp, err)
+				return fmt.Errorf("failed to SetOwnerAndGroup for %s: %w", tmp, err)
 			}
 		}
 
 		if err = os.Rename(tmp, fullPath); err != nil {
 			_ = os.Remove(tmp)
-			return fmt.Errorf("Failed to rename %s to %s: %w", tmp, fullPath, err)
+			return fmt.Errorf("failed to rename %s to %s: %w", tmp, fullPath, err)
 		}
 		if newFile, err = openForAppend(fullPath, rf.fileMode); err != nil {
 			_ = os.Remove(fullPath)
-			return fmt.Errorf("Failed to openForAppend %s: %w", fullPath, err)
+			return fmt.Errorf("failed to openForAppend %s: %w", fullPath, err)
 		}
 	}
 
@@ -281,7 +281,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo) (err error) {
 	rf.file = newFile
 	if oldFile != nil {
 		if err = oldFile.Close(); err != nil {
-			return fmt.Errorf("Failed to close %s: %w", oldFile.Name(), err)
+			return fmt.Errorf("failed to close %s: %w", oldFile.Name(), err)
 		}
 	}
 
@@ -344,11 +344,11 @@ func (rf *RotatingFile) rotate() (err error) {
 	if rf.maxFiles == 0 || rf.maxFiles > 1 {
 		prevStat, err := rf.file.Stat()
 		if err != nil {
-			return fmt.Errorf("Failed to stat %s: %w", rf.file.Name(), err)
+			return fmt.Errorf("failed to stat %s: %w", rf.file.Name(), err)
 		}
 		prevInfo, err = GetSysInfo(filepath.Dir(rf.dirName), prevStat)
 		if err != nil {
-			return fmt.Errorf("Failed to get sysinfo for %s: %w", rf.dirName, err)
+			return fmt.Errorf("failed to get sysinfo for %s: %w", rf.dirName, err)
 		}
 
 		fullPath := filepath.Join(rf.dirName, rf.fileName)
@@ -357,7 +357,7 @@ func (rf *RotatingFile) rotate() (err error) {
 		ts := rf.fileTime(dtime.Now()).Format(rf.timeFormat)
 		fname := fmt.Sprintf("%s-%s%s", sf, ts, ex)
 		if err = os.Rename(fullPath, fname); err != nil {
-			return fmt.Errorf("Failed to rename %s to %s: %w", fullPath, fname, err)
+			return fmt.Errorf("failed to rename %s to %s: %w", fullPath, fname, err)
 		}
 	}
 	return rf.openNew(prevInfo)

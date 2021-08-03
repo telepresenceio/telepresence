@@ -173,13 +173,11 @@ func (ts *telepresenceSuite) TearDownSuite() {
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
-	if goRuntime.GOOS != "windows" {
-		ts.Run("Version", func() {
-			stdout, stderr := telepresence(ts.T(), "version")
-			ts.Empty(stderr)
-			ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
-		})
-	}
+	ts.Run("Version", func() {
+		stdout, stderr := telepresence(ts.T(), "version")
+		ts.Empty(stderr)
+		ts.Contains(stdout, fmt.Sprintf("Client: %s", client.DisplayVersion()))
+	})
 	ts.Run("Status", func() {
 		out, _ := telepresence(ts.T(), "status")
 		ts.Contains(out, "Root Daemon: Not running")
@@ -308,7 +306,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
 		if goRuntime.GOOS == "windows" {
-			// Windows needs some time to get its bearings
+			// FIXME(josecv) Windows needs a few seconds before the DNS queries start going through the daemon
 			time.Sleep(10 * time.Second)
 		}
 		// Test with ".org" suffix that was added as an include-suffix
@@ -321,14 +319,14 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		defer rootLog.Close()
 
 		hasLookup := false
-		dlog.Errorf(ctx, "GREPME: Rootlog is at %s", tmpDir)
 		scn := bufio.NewScanner(rootLog)
+		builder := strings.Builder{}
 		for scn.Scan() && !hasLookup {
 			text := scn.Text()
-			dlog.Infof(ctx, "GREPME: LINE: %s", text)
+			builder.WriteString(text)
 			hasLookup = strings.Contains(text, `LookupHost "example.org"`)
 		}
-		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement")
+		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement\ncontents:\n"+builder.String())
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
@@ -446,7 +444,7 @@ func (cs *connectedSuite) SetupSuite() {
 	configDir := cs.T().TempDir()
 	registry := dtest.DockerRegistry(c)
 	configYml := fmt.Sprintf("logLevels:\n  rootDaemon: debug\nimages:\n  registry: %s\ntimeouts:\n    intercept: 20s\n", registry)
-	c, err := setConfig(c, configDir, configYml)
+	c, err := client.SetConfig(c, configDir, configYml)
 	require.NoError(err)
 	stdout, stderr := telepresenceContext(c, "connect")
 	require.Empty(stderr)
@@ -639,7 +637,7 @@ func (cs *connectedSuite) TestJ_ListOnlyMapped() {
 func (cs *connectedSuite) TestK_DockerRun() {
 	// This test only runs on linux as it requires docker, and CI can't run linux docker containers inside non-linux runners
 	if goRuntime.GOOS != "linux" {
-		return
+		cs.T().SkipNow()
 	}
 	require := cs.Require()
 	ctx := dlog.NewTestContext(cs.T(), false)
@@ -1453,7 +1451,6 @@ func (ts *telepresenceSuite) publishManager() error {
 	}
 	includeEnv := []string{"HOME=", "PATH=", "Path=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
 	for _, env := range os.Environ() {
-		dlog.Infof(ctx, "I found variable %s", env)
 		for _, incl := range includeEnv {
 			if strings.HasPrefix(env, incl) {
 				dlog.Infof(ctx, "Setting variable %s to value %s", env, os.Getenv(env))
