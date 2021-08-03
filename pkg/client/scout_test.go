@@ -1,9 +1,11 @@
 package client_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,6 +18,10 @@ import (
 )
 
 func TestInstallID(t *testing.T) {
+	errMsg := "is a directory"
+	if runtime.GOOS == "windows" {
+		errMsg = "The handle is invalid."
+	}
 	type testcase struct {
 		InputGOOS    string
 		InputEnv     map[string]string
@@ -112,7 +118,7 @@ func TestInstallID(t *testing.T) {
 				"other-config/telepresence/id/x":  "tp2-id",
 			},
 			ExpectedID:  "00000000-0000-0000-0000-000000000000",
-			ExpectedErr: "read $HOME/other-config/edgectl/id: is a directory",
+			ExpectedErr: fmt.Sprintf("read %s: %s", filepath.Join("$HOME", "other-config", "edgectl", "id"), errMsg),
 			ExpectedExtra: map[string]interface{}{
 				"install_id_telepresence-1":     nil,
 				"install_id_edgectl":            nil,

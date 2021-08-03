@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/tun"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
 )
 
@@ -19,8 +22,9 @@ import (
 // See: https://www.wintun.net/ for more info.
 type Device struct {
 	tun.Device
-	name string
-	dns  net.IP
+	name           string
+	dns            net.IP
+	interfaceIndex uint32
 }
 
 func openTun(ctx context.Context) (td *Device, err error) {
@@ -35,11 +39,17 @@ func openTun(ctx context.Context) (td *Device, err error) {
 	interfaceName := "tel0"
 	td = &Device{}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
-		return nil, fmt.Errorf("failed to create TUN device: %v", err)
+		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
 	if td.name, err = td.Device.Name(); err != nil {
-		return nil, fmt.Errorf("failed to get real name of TUN device: %v", err)
+		return nil, fmt.Errorf("failed to get real name of TUN device: %w", err)
 	}
+	iface, err := td.getLUID().Interface()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
+	}
+	td.interfaceIndex = iface.InterfaceIndex
+
 	return td, nil
 }
 
@@ -102,7 +112,46 @@ func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (e
 	if err = luid.SetDNS(family, []net.IP{server}, domains); err != nil {
 		return err
 	}
-	_ = dexec.CommandContext(ctx, "ipconfig", "/flushdns").Run()
+
+	// On some systems (e.g. CircleCI but not josecv's windows box), SetDNS isn't enough to allow the domains to be resolved,
+	// and the network adapter's domain has to be set explicitly.
+	// It's actually way easier to do this via powershell than any system calls that can be run from go code
+	domain := ""
+	if len(domains) > 0 {
+		// Quote the domain to prevent powershell injection
+		domain = shellquote.ShellArgsString([]string{strings.TrimSuffix(domains[0], ".")})
+	}
+	// It's apparently well known that WMI queries can hang under various conditions, so we add a timeout here to prevent hanging the daemon
+	// Fun fact: terminating the context that powershell is running in will not stop a hanging WMI call (!) perhaps because it is considered uninterruptible
+	// For more on WMI queries hanging, see:
+	//     * http://www.yusufozturk.info/windows-powershell/how-to-avoid-wmi-query-hangs-in-powershell.html
+	//     * https://theolddogscriptingblog.wordpress.com/2012/05/11/wmi-hangs-and-how-to-avoid-them/
+	//     * https://stackoverflow.com/questions/24294408/gwmi-query-hangs-powershell-script
+	//     * http://use-powershell.blogspot.com/2018/03/get-wmiobject-hangs.html
+	pshScript := fmt.Sprintf(`
+$job = Get-WmiObject Win32_NetworkAdapterConfiguration -filter "interfaceindex='%d'" -AsJob | Wait-Job -Timeout 30
+if ($job.State -ne 'Completed') {
+	throw "timed out getting network adapter after 30 seconds."
+}
+$obj = $job | Receive-Job
+$job = Invoke-WmiMethod -InputObject $obj -Name SetDNSDomain -ArgumentList "%s" -AsJob | Wait-Job -Timeout 30
+if ($job.State -ne 'Completed') {
+	throw "timed out setting network adapter DNS Domain after 30 seconds."
+}
+$job | Receive-Job
+`, t.interfaceIndex, domain)
+	cmd := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
+	cmd.DisableLogging = true // disable chatty logging
+	dlog.Debugf(ctx, "Calling powershell's SetDNSDomain %q", domain)
+	if err := cmd.Run(); err != nil {
+		// Log the error, but don't actually fail on it: This is all just a fallback for SetDNS, so the domains might actually be working
+		dlog.Errorf(ctx, "Failed to set NetworkAdapterConfiguration DNS Domain: %v. Will proceed, but namespace mapping might not be functional.", err)
+	}
+
+	dlog.Debug(ctx, "Calling ipconfig /flushdns")
+	cmd = dexec.CommandContext(ctx, "ipconfig", "/flushdns")
+	cmd.DisableLogging = true
+	_ = cmd.Run()
 	t.dns = server
 	return nil
 }

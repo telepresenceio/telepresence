@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -98,7 +99,11 @@ func TestInitContext(t *testing.T) {
 		check.Contains(string(bs), fmt.Sprintf("%s\n%s\n", infoMsg, errMsg))
 	})
 
+	// This will fail on Windows
 	t.Run("captures output of builtin functions", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.SkipNow()
+		}
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 

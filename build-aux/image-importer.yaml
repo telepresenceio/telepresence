@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: image-importer
+  name: image-importer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-importer
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: image-importer
+    spec:
+      containers:
+      - image: ubuntu
+        name: ubuntu
+        resources: {}
+        command:
+          - sleep
+          - "10000000"
+        volumeMounts:
+          - mountPath: /run/k3s
+            name: run
+          - mountPath: /var/lib/rancher
+            name: rancher
+          - mountPath: /hostbin
+            name: bin
+      volumes:
+      - name: run
+        hostPath:
+          path: /run/k3s
+      - name: rancher
+        hostPath:
+          path: /var/lib/rancher
+      - name: bin
+        hostPath:
+          path: /bin
+status: {}

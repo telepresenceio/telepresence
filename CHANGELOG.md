@@ -2,6 +2,9 @@
 
 ### 2.4.0 (TBD)
 
+- Feature: There is now a native Windows client for Telepresence.
+  All the same features supported by the MacOS and Linux client are available on Windows.
+
 - Feature: Telepresence can now receive messages from the cloud and raise
   them to the user when they perform certain commands.
 

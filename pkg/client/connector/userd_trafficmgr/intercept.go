@@ -2,12 +2,15 @@ package userd_trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 
 	"google.golang.org/protobuf/proto"
 
@@ -108,9 +111,14 @@ func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingInte
 		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
 			mountPoint := key.(string)
 			if err := os.Remove(mountPoint); err != nil {
-				dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
+				if os.IsNotExist(err) {
+					dlog.Infof(ctx, "File system mount %q no longer exists", mountPoint)
+				} else {
+					dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
+				}
+			} else {
+				dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
 			}
-			dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
 		}
 	}
 }
@@ -309,11 +317,12 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
 	if err != nil {
-		dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+		if !errors.Is(err, userd_auth.ErrNotLoggedIn) {
+			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+		}
 	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
-	dlog.Infof(c, "Here is the config: %#v", client.GetConfig(c))
 	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
 	defer cancel()
 	<-tm.startup
@@ -418,6 +427,24 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	}
 
 	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
+
+	// The mounts performed here are synced on by podIP + sftpPort to keep track of active
+	// mounts. This is not enough in situations when a pod is deleted and another pod
+	// takes over. That is two different IPs so an additional synchronization on the actual
+	// mount point is necessary to prevent that it is established and deleted at the same
+	// time.
+	mountMutex := new(sync.Mutex)
+	mountMutex.Lock()
+	if oldMutex, loaded := tm.mountMutexes.LoadOrStore(mountPoint, mountMutex); loaded {
+		mountMutex.Unlock() // not stored, so unlock and throw away
+		mountMutex = oldMutex.(*sync.Mutex)
+		mountMutex.Lock()
+	}
+
+	defer func() {
+		tm.mountMutexes.Delete(mountPoint)
+		mountMutex.Unlock()
+	}()
 
 	// Retry mount in case it gets disconnected
 	err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {

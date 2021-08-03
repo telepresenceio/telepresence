@@ -29,6 +29,7 @@ clobber: clobber-tools
 clobber-tools:
 	rm -rf $(TOOLSBINDIR) $(TOOLSDIR)/include $(TOOLSDIR)/*.*
 
+
 # Protobuf compiler
 # =================
 #
@@ -73,6 +74,11 @@ $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 # Helm
 # ====
 #
+ifeq ($(GOHOSTOS),windows)
+SUFFIX=.exe
+else
+SUFFIX=
+endif
 tools/helm = $(TOOLSBINDIR)/helm
 HELM_VERSION=3.5.4
 HELM_TGZ = https://get.helm.sh/helm-v$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
@@ -81,7 +87,7 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 	curl -sfL $(HELM_TGZ) -o $@
 %/bin/helm: %/$(notdir $(HELM_TGZ))
 	mkdir -p $(@D)
-	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm
+	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm$(SUFFIX)
 
 # `go get`-able things
 # ====================
@@ -99,4 +105,4 @@ tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc
 tools/ko                 = $(TOOLSBINDIR)/ko
 tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint
 $(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
-	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)"$$,\1,p' pin.go)
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)

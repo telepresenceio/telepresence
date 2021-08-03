@@ -7,8 +7,12 @@
 #     + DOCKERHUB_PASSWORD
 #     + AWS_ACCESS_KEY_ID (for S3)
 #     + AWS_SECRET_ACCESS_KEY (for S3)
+#     + DEV_TELEPRESENCE_KUBECEPTION_TOKEN
 
 version: 2.1
+
+orbs:
+  win: circleci/windows@2.2.0
 
 executors:
 
@@ -56,8 +60,64 @@ commands:
       - run:
           name: "Install kubectl << parameters.version >>"
           command: |
-            curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
-            sudo install /tmp/kubectl /usr/local/bin/kubectl
+            if [[ $OS == Windows_NT ]]; then
+              curl -LO https://dl.k8s.io/release/v<< parameters.version >>/bin/windows/amd64/kubectl.exe
+              mv kubectl.exe /c/kubectl.exe
+            else
+              curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
+              sudo install /tmp/kubectl /usr/local/bin/kubectl
+            fi
+
+  "prepare-kluster":
+    parameters:
+      platform:
+        type: string
+    steps:
+      - run:
+          name: "Create cluster"
+          command: |
+            go run build-aux/kubeception/main.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            export KUBECONFIG="$HOME/kubeconfig"
+            go run build-aux/wait_for_cluster/main.go "$KUBECONFIG"
+            KUBECTL=kubectl
+            IMAGE=/tmp/workspace/tel2-image.tar
+            if [[ $OS == Windows_NT ]]; then
+              KUBECTL=/c/kubectl.exe
+              IMAGE=/c/workspace/tel2-image.tar
+            fi
+            $KUBECTL apply -f build-aux/image-importer.yaml
+            POD_NAME=$($KUBECTL get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
+            $KUBECTL wait --for=condition=ready pod $POD_NAME
+            $KUBECTL cp "$IMAGE" "$POD_NAME:/tmp/image.tar"
+            $KUBECTL exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar
+
+  "cleanup-kluster":
+    parameters:
+      platform:
+        type: string
+    steps:
+      - run:
+          name: "Destroy cluster"
+          command: |
+            # We don't allow the destroy to fail the build; if the kluster couldn't be destroyed now, it'll just be cleaned up when it times out
+            go run build-aux/kubeception/main.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig" || true
+
+  "install-sshfs-win":
+    steps:
+      # The version of sshfs-win on choco is _ancient_ so we instead download it from github and install it manually.
+      # This requires some wrangling of the system PATH
+      - run:
+          name: "Download sshfs"
+          command: |
+            curl -L -o /c/winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
+            curl -L -o /c/sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
+      - run:
+          name: "Install sshfs"
+          shell: powershell.exe
+          command: |
+            Start-Process msiexec -Wait -verb runAs -Args "/i C:\\winfsp.msi /passive /qn /L*V winfsp-install.log"
+            Start-Process msiexec -Wait -verb runAs -Args "/i C:\\sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
+            [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
 
   "install-sshfs":
     steps:
@@ -93,12 +153,20 @@ commands:
           name: "Gather logs"
           when: always
           command: |
-            rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
+            LOGS=/tmp/test-logs
+            if [[ $OS == Windows_NT ]]; then
+              LOGS=/c/tmp/test-logs
+            fi
+            if [[ $OS == Windows_NT ]]; then
+              mkdir -p "$LOGS"
+            else
+              rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . "$LOGS"
+            fi
             for file in \
-              {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence"}/*.log
+              {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence","$LOCALAPPDATA/telepresence/logs"}/*.log
             do
               if [ -s "$file" ]; then
-                cp "$file" /tmp/test-logs
+                cp "$file" "$LOGS"
               fi
             done
       - store_artifacts:
@@ -108,6 +176,51 @@ commands:
 
 jobs:
 
+  "build-dev-image":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-go
+      - run:
+          name: Build dev image
+          command: |
+            TAG="2.0.0-gotest.$CIRCLE_SHA1"
+            TELEPRESENCE_VERSION="v${TAG}" make image
+            mkdir -p /tmp/workspace
+            docker save "datawire/tel2:${TAG}" > /tmp/workspace/tel2-image.tar
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - tel2-image.tar
+
+  "build-and-test-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+      - checkout
+      - install-go
+      - install-kubectl
+      - run: choco install make
+      - install-sshfs-win
+      # - run: choco install rsync
+      - run:
+          name: Download wintun
+          command: |
+            mkdir -p build-output/bin
+            curl -L https://www.wintun.net/builds/wintun-0.12.zip | tar -vf - -Ox wintun/bin/amd64/wintun.dll > "build-output/bin/wintun.dll"
+      - attach_workspace:
+          at: "C:\\workspace"
+      - prepare-kluster:
+          platform: windows
+      - run:
+          command: |
+            DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:/c/Program Files/SSHFS-Win/bin:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
+          no_output_timeout: 25m
+      - cleanup-kluster:
+          platform: windows
+      - save-logs
+
   "build-and-test":
     executor: vm-linux
     steps:
@@ -116,14 +229,21 @@ jobs:
       - run: make build
       - install-kubectl
       - install-sshfs
+      - attach_workspace:
+          at: /tmp/workspace
+      - prepare-kluster:
+          platform: linux
       - run:
-          command: make test
+          command: |
+            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
           # just a bit, so `go test`'s timeout output isn't hidden.
           no_output_timeout: 20m
       - save-logs
+      - cleanup-kluster:
+          platform: linux
 
   "lint":
     executor: vm-linux
@@ -172,6 +292,18 @@ jobs:
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
+  "release-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+      - checkout
+      - install-go
+      - run: sudo pip3 install awscli
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+
   "release-chart":
     executor: vm-linux
     steps:
@@ -194,6 +326,21 @@ jobs:
         command: |
           newTag=$(go run build-aux/genversion.go nightly)
           TELEPRESENCE_VERSION=$newTag make push-images push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
+
+  "publish-nightly-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+    - checkout
+    - install-go
+    - run: pip3 install awscli
+    - run:
+        name: "Publish nightly windows"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag make push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
 
   "publish-nightly-macos":
@@ -220,7 +367,15 @@ workflows:
 
   'Dev':
     jobs:
-      - build-and-test
+      - build-dev-image
+      - build-and-test:
+          context: telepresence2-release
+          requires:
+            - build-dev-image
+      - build-and-test-windows:
+          context: telepresence2-release
+          requires:
+            - build-dev-image
       - lint
       - generate
 
@@ -234,6 +389,13 @@ workflows:
             branches:
               ignore: /.*/
       - release-macos:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-windows:
           context: telepresence2-release
           filters:
             tags:
@@ -260,6 +422,8 @@ workflows:
       - publish-nightly-linux:
           context: telepresence2-release
       - publish-nightly-macos:
+          context: telepresence2-release
+      - publish-nightly-windows:
           context: telepresence2-release
       #- release-finalize:
       #    context: telepresence2-release

@@ -56,12 +56,12 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	// Validate traffic-agent injection preconditions.
 	refPodName := fmt.Sprintf("%s.%s", podName, podNamespace)
 	if podName == "" || podNamespace == "" {
-		dlog.Infof(ctx, "Unable to extract pod name and/or namespace (got %q); skipping", refPodName)
+		dlog.Debugf(ctx, "Unable to extract pod name and/or namespace (got %q); skipping", refPodName)
 		return nil, nil
 	}
 
 	if pod.Annotations[install.InjectAnnotation] != "enabled" {
-		dlog.Infof(ctx, `The %s pod has not enabled %s container injection through %q annotation; skipping`,
+		dlog.Debugf(ctx, `The %s pod has not enabled %s container injection through %q annotation; skipping`,
 			refPodName, install.AgentContainerName, install.InjectAnnotation)
 		return nil, nil
 	}
