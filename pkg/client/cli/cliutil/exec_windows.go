@@ -11,19 +11,19 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func background(ctx context.Context, exe string, args []string) error {
-	return shellExec(ctx, "open", exe, args)
+func background(ctx context.Context, exe string, args ...string) error {
+	return shellExec(ctx, "open", exe, args...)
 }
 
-func backgroundAsRoot(ctx context.Context, exe string, args []string) error {
+func backgroundAsRoot(ctx context.Context, exe string, args ...string) error {
 	verb := "runas"
 	if proc.IsAdmin() {
 		verb = "open"
 	}
-	return shellExec(ctx, verb, exe, args)
+	return shellExec(ctx, verb, exe, args...)
 }
 
-func shellExec(_ context.Context, verb, exe string, args []string) error {
+func shellExec(_ context.Context, verb, exe string, args ...string) error {
 	cwd, _ := os.Getwd()
 	// UTF16PtrFromString can only fail if the argument contains a NUL byte. That will never happen here.
 	verbPtr, _ := windows.UTF16PtrFromString(verb)

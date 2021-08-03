@@ -63,7 +63,7 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 			err = ErrNoConnector
 			if maybeStart {
 				fmt.Println("Launching Telepresence User Daemon")
-				if err := Background(ctx, client.GetExe(), []string{"connector-foreground"}); err != nil {
+				if err := Background(ctx, client.GetExe(), "connector-foreground"); err != nil {
 					return fmt.Errorf("failed to launch the connector service: %w", err)
 				}
 

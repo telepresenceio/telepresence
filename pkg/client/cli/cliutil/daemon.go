@@ -46,7 +46,7 @@ func launchDaemon(ctx context.Context, dnsIP string) error {
 	if err != nil {
 		return err
 	}
-	return BackgroundAsRoot(ctx, client.GetExe(), []string{"daemon-foreground", logDir, configDir, dnsIP})
+	return BackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir, dnsIP)
 }
 
 // WithDaemon (1) ensures that the daemon is running, (2) establishes a connection to it, and (3)

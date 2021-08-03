@@ -52,7 +52,7 @@ func connectCommand() *cobra.Command {
 				})
 			}
 			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
-				return cliutil.Run(ctx, cliutil.NewSafeCobraCommand(cmd), args[0], args[1:], nil)
+				return cliutil.Run(ctx, cliutil.NewSafeCobraCommand(cmd), nil, args[0], args[1:]...)
 			})
 		},
 	}

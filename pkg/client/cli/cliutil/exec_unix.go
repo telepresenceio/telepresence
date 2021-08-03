@@ -14,16 +14,14 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func background(ctx context.Context, exe string, args []string) error {
+func background(ctx context.Context, exe string, args ...string) error {
 	// The context should not kill it if cancelled
-	ctx = dcontext.WithoutCancel(ctx)
-	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd := exec.Command(exe, args...)
 
 	// Ensure that the processes uses a process group of its own to prevent
 	// it getting affected by <ctrl-c> in the terminal
@@ -38,7 +36,7 @@ func background(ctx context.Context, exe string, args []string) error {
 	return nil
 }
 
-func backgroundAsRoot(ctx context.Context, exe string, args []string) error {
+func backgroundAsRoot(ctx context.Context, exe string, args ...string) error {
 	if !proc.IsAdmin() {
 		// If we're going to be prompting for the `sudo` password, we want to first provide
 		// the user with some info about exactly what we're prompting for.  We don't want to
@@ -63,7 +61,7 @@ func backgroundAsRoot(ctx context.Context, exe string, args []string) error {
 		args = append([]string{"--non-interactive", "--preserve-env", exe}, args...)
 		exe = "sudo"
 	}
-	return Background(ctx, exe, args)
+	return Background(ctx, exe, args...)
 }
 
 func signalNotifications() chan os.Signal {
