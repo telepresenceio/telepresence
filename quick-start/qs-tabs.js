@@ -102,6 +102,8 @@ export default function SimpleTabs() {
       <TabPanel value={value} index={2}>
         <CodeBlock>
         {
+          '# Windows is in Developer Preview, here is how you can install it:' +
+          '\n' +
           '# Make sure you run the following from Powershell as Administrator' +  
           '\n' +
           '# 1. Download the latest windows zip containing telepresence.exe and its dependencies (~50 MB):' +
