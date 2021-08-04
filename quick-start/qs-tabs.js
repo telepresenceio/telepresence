@@ -5,7 +5,6 @@ import AppBar from '@material-ui/core/AppBar';
 import Tabs from '@material-ui/core/Tabs';
 import Tab from '@material-ui/core/Tab';
 import Box from '@material-ui/core/Box';
-import HubspotForm from 'react-hubspot-form';
 import CodeBlock from '@src/components/CodeBlock';
 import LinuxIcon from '@src/assets/icons/linux.inline.svg';
 import AppleIcon from '@src/assets/icons/apple.inline.svg';
@@ -101,20 +100,39 @@ export default function SimpleTabs() {
         </CodeBlock>
       </TabPanel>
       <TabPanel value={value} index={2}>
-        <div className="docs-hubspot-formwrapper">
-          <p>
-            Telepresence for Windows is coming soon! Sign up here to notified when it is available. Until then, Telepresence will work with WSL 2.
-          </p>
-          <div className="docs-hubspot-form">
-            <HubspotForm
-              portalId='485087'
-              formId='2f542f1b-3da8-4319-8057-96fed78e4c26'
-              onSubmit={() => console.log('Submit!')}
-              onReady={(form) => console.log('Form ready!')}
-              loading={<div>Loading...</div>}
-            />
-          </div>
-        </div>
+        <CodeBlock>
+        {
+          '# Windows is in Developer Preview, here is how you can install it:' +
+          '\n' +
+          '# Make sure you run the following from Powershell as Administrator' +  
+          '\n' +
+          '# 1. Download the latest windows zip containing telepresence.exe and its dependencies (~50 MB):' +
+          '\n' +
+          'curl -fL https://app.getambassador.io/download/tel2/windows/amd64/latest/telepresence.zip -o telepresence.zip' +
+          '\n \n' +
+          '# 2. Unzip the zip file to a suitable directory + cleanup zip' +
+          '\n' +
+          'Expand-Archive -Path telepresence.zip' +
+          '\n' +
+          'Remove-Item \'telepresence.zip\'' +
+          '\n' +
+          'cd telepresence' +
+          '\n \n' +
+          '# 3. Run the install-telepresence.ps1 to install telepresence\'s dependencies. It will install telepresence to' +
+          '\n' +
+          '# C:\\telepresence by default, but you can specify a custom path $path with -Path $path' +
+          '\n' +
+          '.\\install-telepresence.ps1' +
+          '\n \n' +
+          '# 4. Remove the unzipped directory' +
+          '\n' +
+          'cd ..' +
+          '\n' +
+          'Remove-Item telepresence' +
+          '\n' +
+          '# 5. Close your current Powershell and open a new one. Telepresence should now be usable as telepresence.exe'
+        }
+        </CodeBlock>
       </TabPanel>
     </div >
   );
