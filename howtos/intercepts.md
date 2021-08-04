@@ -23,7 +23,14 @@ import QSCards from '../quick-start/qs-cards'
 <Alert severity="info">For a detailed walk-though on creating intercepts using our sample app, follow the <a href="../../quick-start/qs-node/">quick start guide</a>.</Alert>
 
 ## Prerequisites
-You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [set up](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.
+You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
+and set up
+([Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#verify-kubectl-configuration) /
+ [macOS](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/#verify-kubectl-configuration) /
+ [Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/#verify-kubectl-configuration))
+to use a Kubernetes cluster, preferably an empty test cluster.  This
+document uses `kubectl` in all example commands, but OpenShift
+users should have no problem substituting in the `oc` command instead.
 
 If you have used Telepresence previously, please first reset your Telepresence deployment with:
 `telepresence uninstall --everything`.
@@ -158,24 +165,31 @@ You can now:
 
 ## 4. Create a preview URL to only intercept certain requests to your service
 
-When working on a development environment with multiple engineers, you don't want your intercepts to impact your
-teammates. Ambassador Cloud automatically generates a preview URL when creating an intercept if you are logged in. By
-doing so, Telepresence can route only the requests coming from that preview URL to your local environment; the rest will
-be routed to your cluster as usual.
+When working on a development environment with multiple engineers, you
+don't want your intercepts to impact your teammates.  If you are
+[logged in](../../reference/client/login/), then when creating an
+intercept, by default Telpresence will automatically talk to
+Ambassador Cloud to generate a preview URL.  By doing so, Telepresence
+can route only the requests coming from that preview URL to your local
+environment; the rest will be routed to your cluster as usual.
 
 1. Clean up your previous intercept by removing it:
 `telepresence leave <service name>`
 
-2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
-`telepresence login`
+2. Log in to Ambassador Cloud, a web interface for managing and
+   sharing preview URLs:
 
-  ```
-  $ telepresence login
-
-     Launching browser authentication flow...
-     <browser opens, login and choose your org>
-     Login successful.
+   ```console
+   $ telepresence login
+   Launching browser authentication flow...
+   <web browser opens, log in and choose your organization>
+   Login successful.
    ```
+
+   If you are in an environment where Telepresence cannot launch a
+   local browser for you to interact with, you will need to pass the
+   [`--apikey` flag to `telepresence
+   login`](../../reference/client/login/).
 
 3. Start the intercept again:
 `telepresence intercept <service-name> --port <local-port>[:<remote-port>] --env-file <path-to-env-file>`
@@ -187,7 +201,7 @@ be routed to your cluster as usual.
    4. **Ingress layer 5 hostname**: If your ingress controller routes traffic based on a domain name (often using the `Host` HTTP header), this is the value you would need to enter here.
 
     <Alert severity="info">
-        Telepresence supports any ingress controller, not just <a href="../../../../edge-stack/latest/tutorials/getting-started/">Ambassador Edge Stack</a>.
+        Telepresence supports any ingress controller, not just <a href="/docs/edge-stack/latest/tutorials/getting-started/">Ambassador Edge Stack</a>.
     </Alert>
 
    For the example below, you will create a preview URL that will send traffic to the `ambassador` service in the `ambassador` namespace on port `443` using TLS encryption and setting the `Host` HTTP header to `dev-environment.edgestack.me`:

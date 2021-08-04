@@ -68,14 +68,14 @@ export default function SimpleTabs() {
       <TabPanel value={value} index={0}>
         <CodeBlock>
         {
-          'https://app.getambassador.io/download/tel2/darwin/amd64/x.y.z/telepresence'
+          'https://app.getambassador.io/download/tel2/darwin/amd64/nightly/telepresence'
         }
         </CodeBlock>
       </TabPanel>
       <TabPanel value={value} index={1}>
         <CodeBlock>
         {
-          'https://app.getambassador.io/download/tel2/linux/amd64/x.y.z/telepresence'
+          'https://app.getambassador.io/download/tel2/linux/amd64/nightly/telepresence'
         }
         </CodeBlock>
       </TabPanel>

@@ -29,7 +29,7 @@ Telepresence currently works natively on macOS and Linux. We are working on a na
 - gRPC
 - GraphQL
 
-If you need another protocol supported, please [drop us a line](../../../../feedback) to request it.
+If you need another protocol supported, please [drop us a line](/feedback/) to request it.
 
 ** When using Telepresence to intercept a pod, are the Kubernetes cluster environment variables proxied to my local machine?**
 
@@ -73,7 +73,7 @@ Telepresence will discover/prompt during first use for this info and make its be
 
  Yes. The cluster has to have outbound access to the internet for the preview URLs to function correctly, but it doesn’t need to have a publicly accessible IP address.
 
-The cluster must also have access to an external registry in order to be able to download the Traffic Manager and Traffic Agent containers that are deployed when connecting with Telepresence.
+The cluster must also have access to an external registry in order to be able to download the traffic-manager and traffic-agent images that are deployed when connecting with Telepresence.
 
 ** Why does running Telepresence require sudo access for the local daemon?**
 
@@ -83,13 +83,13 @@ On Fedora, Telepresence also creates a virtual network device (a TUN network) fo
 
 ** What components get installed in the cluster when running Telepresence?**
 
- A single Traffic Manager service is deployed in the `ambassador` namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
+ A single `traffic-manager` service is deployed in the `ambassador` namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
 
 A Traffic Agent container is injected per pod that is being intercepted. The first time a workload is intercepted all pods associated with this workload will be restarted with the Traffic Agent automatically injected.
 
 ** How can I remove all of the Telepresence components installed within my cluster?**
 
- You can run the command `telepresence uninstall --everything` to remove the Traffic Manager service installed in the cluster and Traffic Agent containers injected into each pod being intercepted.
+ You can run the command `telepresence uninstall --everything` to remove the `traffic-manager` service installed in the cluster and `traffic-agent` containers injected into each pod being intercepted.
 
 Running this command will also stop the local daemon running.
 
@@ -99,7 +99,11 @@ Running this command will also stop the local daemon running.
 
 ** How does Telepresence connect and tunnel into the Kubernetes cluster?**
 
- The connection between your laptop and cluster is established via the standard `kubectl` mechanisms and SSH tunnelling.
+The connection between your laptop and cluster is established by using
+the `kubectl port-forward` machinery (though without actually spawning
+a separate program) to establish a TCP connection to Telepresence
+Traffic Manager in the cluster, and running Telepresence's custom VPN
+protocol over that TCP connection.
 
 <a name="idps"></a>
 
@@ -109,7 +113,7 @@ Running this command will also stop the local daemon running.
 * GitLab
 * Google
 
-More authentication mechanisms and identity provider support will be added soon. Please [let us know](../../../../feedback) which providers are the most important to you and your team in order for us to prioritize those.
+More authentication mechanisms and identity provider support will be added soon. Please [let us know](/feedback/) which providers are the most important to you and your team in order for us to prioritize those.
 
 ** Is Telepresence open source?**
 
@@ -117,4 +121,4 @@ More authentication mechanisms and identity provider support will be added soon.
 
 ** How do I share my feedback on Telepresence?**
 
- Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our [feedback page](../../../../feedback), or you can [join our Slack channel](https://a8r.io/Slack) to share your thoughts.
+ Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our [feedback page](/feedback/), or you can [join our Slack channel](https://a8r.io/Slack) to share your thoughts.

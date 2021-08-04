@@ -6,6 +6,8 @@
        link: install/
      - title: Upgrade
        link: install/upgrade/
+     - title: Install Traffic Manager with Helm
+       link: install/helm/
      - title: Migrate from legacy Telepresence
        link: install/migrate-from-legacy/
  - title: Core concepts
@@ -32,10 +34,11 @@
    items:
      - title: Architecture
        link: reference/architecture
-     - title: Networking through Virtual Network Interface
-       link: reference/tun-device
      - title: Client reference
        link: reference/client
+       items:
+         - title: login
+           link: reference/client/login
      - title: Laptop-side configuration
        link: reference/config
      - title: Cluster-side configuration
@@ -54,6 +57,10 @@
        link: reference/dns
      - title: RBAC
        link: reference/rbac
+     - title: Networking through Virtual Network Interface
+       link: reference/tun-device
+     - title: Connection Routing
+       link: reference/routing
      - title: Using Telepresence with Linkerd
        link: reference/linkerd
  - title: FAQs

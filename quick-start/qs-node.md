@@ -34,12 +34,15 @@ import QSCards from './qs-cards'
 </div>
 
 ## Prerequisites
-You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/#kubectl)
+
+You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
 and set up
 ([Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#verify-kubectl-configuration) /
  [macOS](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/#verify-kubectl-configuration) /
  [Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/#verify-kubectl-configuration))
-to use a Kubernetes cluster, preferably an empty test cluster.
+to use a Kubernetes cluster, preferably an empty test cluster.  This
+document uses `kubectl` in all example commands, but OpenShift
+users should have no problem substituting in the `oc` command instead.
 
 <Alert severity="info">
     <strong>Need a cluster?</strong> We provide free demo clusters preconfigured to follow this quick start. <a href="../demo-node/">Switch over to that version of the guide here</a>.
@@ -227,7 +230,7 @@ We’ve now set up a local development environment for the DataProcessingService
 
 <Alert severity="success">
   We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
-  <br / >
+  <br/>
   Normally, this process would require a container build, push to registry, and deploy.
   <br />
   With Telepresence, these changes happen instantly.
@@ -239,17 +242,20 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 1. Clean up your previous intercept by removing it:
 `telepresence leave dataprocessingservice`
 
-2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
-`telepresence login`
+2. Log in to Ambassador Cloud, a web interface for managing and
+   sharing preview URLs:
 
-  This opens your browser; login with your preferred identity provider and choose your org.
+   ```console
+   $ telepresence login
+   Launching browser authentication flow...
+   <web browser opens, log in and choose your organization>
+   Login successful.
+   ```
 
-  ```
-  $ telepresence login
-    Launching browser authentication flow...
-    <browser opens, login>
-    Login successful.
-  ```
+   If you are in an environment where Telepresence cannot launch a
+   local browser for you to interact with, you will need to pass the
+   [`--apikey` flag to `telepresence
+   login`](../../reference/client/login/).
 
 3. Start the intercept again:
 `telepresence intercept dataprocessingservice --port 3000`

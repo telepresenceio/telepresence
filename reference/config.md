@@ -10,7 +10,7 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ### Values
 
-The config file currently supports values for the `timeouts` and `logLevels` keys.
+The config file currently supports values for the `timeouts`, `logLevels`, `images`, `cloud`, and `grpc` keys.
 
 Here is an example configuration:
 
@@ -20,6 +20,11 @@ timeouts:
   intercept: 10s
 logLevels:
   userDaemon: debug
+images:
+  registry: privateRepo
+  agentImage: ambassador-telepresence-agent:1.8.0
+grpc:
+  maxReceiveSize: 10Mi
 ```
 
 #### Timeouts
@@ -46,11 +51,55 @@ These are the valid fields for the `logLevels` key:
 |`userDaemon`|Logging level to be used by the User Daemon (logs to connector.log)|debug|
 |`rootDaemon`|Logging level to be used for the Root Daemon (logs to daemon.log)|info|
 
+#### Images
+Values for `images` are strings. These values affect the objects that are deployed in the cluster,
+so it's important to ensure users have the same configuration.
+
+Additionally, you can deploy the server-side components with [Helm](../../install/helm), to prevent them
+from being overridden by a client's config and use the [mutating-webhook](../clusterpconfig/#mutating-webhook)
+to handle installation of the `traffic-agents`.
+
+These are the valid fields for the `images` key:
+
+|Field|Description|Default|
+|---|---|---|
+|`registry`|Docker registry to be used for installing the Traffic Manager and default Traffic Agent. If not using a helm chart to deploy server-side objects, changing this value will create a new traffic-manager deployment when using Telepresence commands. Additionally, changing this value will update installed default `traffic-agents` to use the new registry when creating a new intercept.|docker.io/datawire|
+|`agentImage`|$registry/$imageName:$imageTag to use when installing the Traffic Agent. Changing this value will update pre-existing `traffic-agents` to use this new image. * the `registry` value is not used for the `traffic-agent` if you have this value set *||
+|`webhookRegistry`|The container $registry that the [Traffic Manager](../cluster-config/#mutating-webhook) will use with the `webhookAgentImage` *This value is only used if a new traffic-manager is deployed*||
+|`webhookAgentImage`|The container image that the [Traffic Manager](../cluster-config/#mutating-webhook) will use when installing the Traffic Agent in annotated pods *This value is only used if a new traffic-manager is deployed*||
+
+#### Cloud
+These fields control how the client interacts with the Cloud service.
+Currently there is only one key and it accepts bools: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F,` `FALSE`
+
+|Field|Description|Default|
+|---|---|---|
+|`skipLogin`|Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts |false|
+
+Telepresence attempts to auto-detect if the cluster is air-gapped,
+be sure to set the `skipLogin` value to `true`
+
+Reminder: To use selective intercepts, which normally require a login, you
+must have a license in your cluster and specify which agentImage should be installed,
+by also adding the following to your config.yml:
+  ```
+  images:
+    agentImage: <privateRegistry>/<agentImage>
+  ```
+
+#### Grpc
+The `maxReceiveSize` determines how large a message that the workstation receives via gRPC can be. The default is 4Mi (determined by gRPC). All traffic to and from the cluster is tunneled via gRPC.
+
+The size is measured in bytes. You can express it as a plain integer or as a fixed-point number using E, G, M, or K. You can also use the power-of-two equivalents: Gi, Mi, Ki. For example, the following represent roughly the same value:
+```
+128974848, 129e6, 129M, 123Mi
+```
+
 ## Per-Cluster Configuration
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.
 
 ### Values
-The current per-cluster configuration supports `dns` and `alsoProxy` keys.
+The current per-cluster configuration supports `dns`, `alsoProxy`, and `manager` keys.
 To add configuration, simply add a `telepresence.io` entry to the cluster in your kubeconfig like so:
 
 ```
@@ -63,6 +112,7 @@ clusters:
       extension:
         dns:
         also-proxy:
+        manager:
   name: example-cluster
 ```
 #### DNS
@@ -108,5 +158,24 @@ clusters:
       extension:
         also-proxy:
         - 1.2.3.4/32
+  name: example-cluster
+```
+
+#### Manager
+
+The `manager` key contains configuration for finding the `traffic-manager` that telepresence will connect to. It supports one key, `namespace`, indicating the namespace where the traffic manager is to be found
+
+Here is an example kubeconfig that will instruct telepresence to connect to a manager in namespace `staging`:
+
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    server: https://127.0.0.1
+    extensions:
+    - name: telepresence.io
+      extension:
+        manager:
+          namespace: staging
   name: example-cluster
 ```

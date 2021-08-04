@@ -1,6 +1,6 @@
 # Migrate from legacy Telepresence
 
-Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence 1](/docs/v1/) when working with local instances of your services.
+Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence 1](https://www.telepresence.io/docs/v1/) when working with local instances of your services.
 
 In legacy Telepresence, a pod running a service was swapped with a pod running the Telepresence proxy. This proxy received traffic intended for the service, and sent the traffic onward to the target workstation or laptop. We called this mechanism "swap-deployment".
 
@@ -76,7 +76,7 @@ by [creating an issue](https://github.com/telepresenceio/telepresence/issues) an
 
 ## Telepresence changes
 
-Telepresence installs a Traffic Manager in the cluster and Traffic Agents alongside workloads when performing intercepts (including
+Telepresence installs a traffic-manager in the cluster and Traffic Agents alongside workloads when performing intercepts (including
 with `--swap-deployment`) and leaves them.  If you use `--swap-deployment`, the intercept will be left once the process
 dies, but the agent will remain. There's no harm in leaving the agent running alongside your service, but when you
 want to remove them from the cluster, the following Telepresence command will help:
@@ -95,5 +95,5 @@ Flags:
   -n, --namespace string   If present, the namespace scope for this CLI request
 ```
 
-Since the new architecture deploys a Traffic Manager into the Ambassador namespace, please take a look at
+Since the new architecture deploys a traffic-manager into the Ambassador namespace, please take a look at
 our [rbac guide](../../reference/rbac) if you run into any issues with permissions while upgrading to Telepresence.
