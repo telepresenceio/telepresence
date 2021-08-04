@@ -54,7 +54,6 @@ are supported).
 |--------------------------------------------------|--------------------------------------------|
 | --swap-deployment $workload                      | intercept $workload                        |
 | --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
-| --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
 | --swap-deployment $workload --run-shell          | intercept $workload -- bash                |
 | --swap-deployment $workload --run $cmd           | intercept $workload -- $cmd                |
 | --swap-deployment $workload --docker-run $cmd    | intercept $workload --docker-run -- $cmd   |
@@ -76,7 +75,7 @@ by [creating an issue](https://github.com/telepresenceio/telepresence/issues) an
 
 ## Telepresence changes
 
-Telepresence installs a traffic-manager in the cluster and Traffic Agents alongside workloads when performing intercepts (including
+Telepresence installs a Traffic Manager in the cluster and Traffic Agents alongside workloads when performing intercepts (including
 with `--swap-deployment`) and leaves them.  If you use `--swap-deployment`, the intercept will be left once the process
 dies, but the agent will remain. There's no harm in leaving the agent running alongside your service, but when you
 want to remove them from the cluster, the following Telepresence command will help:
@@ -95,5 +94,5 @@ Flags:
   -n, --namespace string   If present, the namespace scope for this CLI request
 ```
 
-Since the new architecture deploys a traffic-manager into the Ambassador namespace, please take a look at
+Since the new architecture deploys a Traffic Manager into the Ambassador namespace, please take a look at
 our [rbac guide](../../reference/rbac) if you run into any issues with permissions while upgrading to Telepresence.

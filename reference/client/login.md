@@ -34,14 +34,14 @@ login` with the `--apikey` flag.
 1. Log in to Ambassador Cloud at https://app.getambassador.io/ .
 
 2. Click on your profile icon in the upper-left: ![Screenshot with the
-   mouse pointer over the upper-left profile icon](../../../images/apikey-2.png)
+   mouse pointer over the upper-left profile icon](./apikey-2.png)
 
 3. Click on the "API Keys" menu button: ![Screenshot with the mouse
-   pointer over the "API Keys" menu button](../../../images/apikey-3.png)
+   pointer over the "API Keys" menu button](./apikey-3.png)
 
 4. Click on the "generate new key" button in the upper-right:
    ![Screenshot with the mouse pointer over the "generate new key"
-   button](../../../images/apikey-4.png)
+   button](./apikey-4.png)
 
 5. Enter a description for the key (perhaps the name of your laptop,
    or perhaps the "CI"), and click "generate api key" to create it.

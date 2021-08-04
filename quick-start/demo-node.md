@@ -11,7 +11,8 @@ import {
     DockerCommand, 
     PreviewUrl,
     DemoClusterMetadataError,
-    ExternalIp
+    ExternalIp,
+    InterceptsLink,
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs';
@@ -28,7 +29,8 @@ import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepre
 * [3. Set up your local development environment](#3-set-up-your-local-development-environment)
 * [4. Testing our fix](#4-testing-our-fix)
 * [5. Preview URLs](#5-preview-urls)
-* [6. How/Why does this all work](#6-howwhy-does-this-all-work)
+* [6. Go to see your intercepts](#6-go-to-see-your-intercepts)
+* [7. How/Why does this all work](#7-howwhy-does-this-all-work)
 * [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
 
 </div>
@@ -51,9 +53,6 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 
 1. <Login/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
 <DemoClusterMetadataError/> 
-2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
-    <EmojivotoServicesList/>
-
 <Alert severity="success">
    The Service Catalog gives you a consolidated view of all your services across development, staging, and production. 
 </Alert>
@@ -122,9 +121,11 @@ Preview URLs enable you to safely share your development environment with anyone
         To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
    </Alert>
 
-## 6. 
+## 6. Visualize and manage your Preview URLs and intercepts
 
-## 6. How/Why does this all work
+1. The Developer Control Plane lets you manage & visualize important information about your intercepts. Visit the <InterceptsLink>Developer Control Plane UI</InterceptsLink> to see who's acceced your preview URL.
+
+## 7. How/Why does this all work
 
 Telepresence works by deploying a two-way network proxy in a pod running in a Kubernetes cluster. This proxy can intercept traffic meant for the service and reroute it to a local copy, which is ready for further (local) development.
 

@@ -91,7 +91,7 @@ run this command to generate the Cluster ID:
 
   ```
   $ telepresence current-cluster-id
-    
+
     Cluster ID: <some UID>
   ```
 
@@ -105,7 +105,7 @@ run this command to generate the Cluster ID:
 
   ```
   $ telepresence license -f <downloaded-license-file>
-    
+
     apiVersion: v1
     data:
       hostDomain: <long_string>
