@@ -1,5 +1,5 @@
 ---
-Description: "CLI options for Telepresence to intercept traffic from your Kubernetes cluster to code running on your laptop."
+description: "CLI options for Telepresence to intercept traffic from your Kubernetes cluster to code running on your laptop."
 ---
 
 # Client Reference
