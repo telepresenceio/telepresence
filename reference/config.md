@@ -5,6 +5,7 @@ Telepresence uses a `config.yml` file to store and change certain global configu
 
 * macOS: `$HOME/Library/Application Support/telepresence/config.yml`
 * Linux: `$XDG_CONFIG_HOME/telepresence/config.yml` or, if that variable is not set, `$HOME/.config/telepresence/config.yml`
+* Windows: `%APPDATA%\telepresence\config.yml`
 
 For Linux, the above paths are for a user-level configuration. For system-level configuration, use the file at `$XDG_CONFIG_DIRS/telepresence/config.yml` or, if that variable is empty, `/etc/xdg/telepresence/config.yml`.  If a file exists at both the user-level and system-level paths, the user-level path file will take precedence.
 
@@ -12,7 +13,8 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 The config file currently supports values for the `timeouts`, `logLevels`, `images`, `cloud`, and `grpc` keys.
 
-Here is an example configuration:
+Here is an example configuration to show you the conventions of how Telepresence is configured:
+**note: This config shouldn't be used verbatim, since the registry `privateRepo` used doesn't exist**
 
 ```yaml
 timeouts:
@@ -21,8 +23,10 @@ timeouts:
 logLevels:
   userDaemon: debug
 images:
-  registry: privateRepo
-  agentImage: ambassador-telepresence-agent:1.8.0
+  registry: privateRepo # This overrides the default docker.io/datawire repo
+  agentImage: ambassador-telepresence-agent:1.8.0 # This overrides the agent image to inject when intercepting
+cloud:
+  refreshMessages: 24h # Refresh messages from cloud every 24 hours instead of the default, which is 1 week.
 grpc:
   maxReceiveSize: 10Mi
 ```
@@ -69,12 +73,13 @@ These are the valid fields for the `images` key:
 |`webhookAgentImage`|The container image that the [Traffic Manager](../cluster-config/#mutating-webhook) will use when installing the Traffic Agent in annotated pods *This value is only used if a new traffic-manager is deployed*||
 
 #### Cloud
+Values for `cloud` are listed below and their type varies, so please see the chart for the expected type for each config value.
 These fields control how the client interacts with the Cloud service.
-Currently there is only one key and it accepts bools: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F,` `FALSE`
 
-|Field|Description|Default|
-|---|---|---|
-|`skipLogin`|Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts |false|
+|Field|Description|Type|Default|
+|---|---|---|---|
+|`skipLogin`|Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts |bools: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F,` `FALSE`|false|
+|`refreshMessages`|How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. You will see each message at most once within the duration given by this config|duration: number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`|168h|
 
 Telepresence attempts to auto-detect if the cluster is air-gapped,
 be sure to set the `skipLogin` value to `true`
