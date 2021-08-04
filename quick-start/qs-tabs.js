@@ -125,7 +125,9 @@ export default function SimpleTabs() {
           '\n' +
           'cd ..' +
           '\n' +
-          'Remove-Item telepresence'
+          'Remove-Item telepresence' +
+          '\n' +
+          '# 5. Close your current Powershell and open a new one. Telepresence should now be usable as telepresence.exe'
         }
         </CodeBlock>
       </TabPanel>
