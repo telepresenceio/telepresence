@@ -41,7 +41,7 @@ Yes. After you have successfully connected to your cluster via `telepresence con
 
 This means you can curl endpoints directly e.g. `curl <my_service_name>.<my_service_namespace>:8080/mypath`.
 
-If you create an intercept for a service in a namespace, you will be able to use the service name directly. 
+If you create an intercept for a service in a namespace, you will be able to use the service name directly.
 
 This means if you `telepresence intercept <my_service_name> -n <my_service_namespace>`, you will be able to resolve just the `<my_service_name>` DNS record.
 

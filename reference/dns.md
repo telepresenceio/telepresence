@@ -10,29 +10,29 @@ See this demonstrated below, using the [quick start's](../../quick-start/) sampl
 
 No intercepts are currently running, we'll connect to the cluster and list the services that can be intercepted.
 
-```  
+```
 $ telepresence connect
-  
+
   Connecting to traffic manager...
   Connected to context default (https://<cluster-public-IP>)
-  
+
 $ telepresence list
-  
+
   verylargejavaservice : ready to intercept (traffic-agent not yet installed)
   dataprocessingservice: ready to intercept (traffic-agent not yet installed)
   verylargedatastore   : ready to intercept (traffic-agent not yet installed)
-  
+
 $ curl verylargejavaservice:8080
-  
+
   curl: (6) Could not resolve host: verylargejavaservice
-  
+
 ```
 
 This is expected as Telepresence cannot reach the service yet by short name without an active intercept in that namespace.
-  
+
 ```
 $ curl verylargejavaservice.default:8080
-  
+
   <!DOCTYPE HTML>
   <html>
   <head>
@@ -40,18 +40,18 @@ $ curl verylargejavaservice.default:8080
   ...
 ```
 
-Using the namespaced qualified DNS name though does work.  
+Using the namespaced qualified DNS name though does work.
 Now we'll start an intercept against another service in the same namespace. Remember, `--namespace default` is implied since it is not specified.
 
 ```
 $ telepresence intercept dataprocessingservice --port 3000
-  
+
   Using deployment dataprocessingservice
   intercepted
       State       : ACTIVE
       Destination : 127.0.0.1:3000
       Intercepting: all connections
-  
+
 $ curl verylargejavaservice:8080
 
   <!DOCTYPE HTML>

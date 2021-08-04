@@ -6,7 +6,7 @@ import Alert from '@material-ui/lab/Alert';
 
 # Telepresence Quick Start
 
-In this guide you will explore some of the key features of Telepresence. First, you will install the Telepresence CLI and set up a test cluster with a demo web app. Then, you will run one of the app's services on your laptop, using Telepresence to intercept requests to the service on the cluster and see your changes live via a preview URL. 
+In this guide you will explore some of the key features of Telepresence. First, you will install the Telepresence CLI and set up a test cluster with a demo web app. Then, you will run one of the app's services on your laptop, using Telepresence to intercept requests to the service on the cluster and see your changes live via a preview URL.
 
 ## Prerequisites
 
@@ -20,10 +20,10 @@ Finally, you will need the Telepresence CLI. Run the commands for your OS to ins
 # 1. Download the latest binary (~60 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
 -o /usr/local/bin/telepresence
- 
+
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
- 
+
 # 3. Login with the CLI:
 telepresence login
 ```
@@ -36,10 +36,10 @@ telepresence login
 # 1. Download the latest binary (~50 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
 -o /usr/local/bin/telepresence
- 
+
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
- 
+
 # 3. Login with the CLI:
 telepresence login
 ```
@@ -93,7 +93,7 @@ Second, you could run everything in a development cluster. However, the cycle of
 
 ## Intercepting a Service
 
-Alternatively, you can use Telepresence's `intercept` command to proxy traffic bound for a service to your laptop. This will let you test and debug services on code running locally without needing to run dependent services or redeploy code updates to your cluster on every change. It also will generate a preview URL, which loads your web app from the cluster ingress but with requests to the intercepted service proxied to your laptop. 
+Alternatively, you can use Telepresence's `intercept` command to proxy traffic bound for a service to your laptop. This will let you test and debug services on code running locally without needing to run dependent services or redeploy code updates to your cluster on every change. It also will generate a preview URL, which loads your web app from the cluster ingress but with requests to the intercepted service proxied to your laptop.
 
 1. You started this guide by installing the Telepresence CLI and logging into Ambassador Cloud.  The Cloud dashboard is used to manage your intercepts and share them with colleagues. You must be logged in to create selective intercepts as we are going to do here.
 
@@ -111,14 +111,14 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 
 4. In a new terminal window start the intercept with the command below. This will proxy requests to the `DataProcessingNodeService` service to your laptop.  It will also generate a preview URL, which will let you view the app with the intercepted service in your browser.
 
-  The intercept requires you specify the name of the deployment to be intercepted and the port to proxy. 
+  The intercept requires you specify the name of the deployment to be intercepted and the port to proxy.
 
   ```
   telepresence intercept dataprocessingnodeservice --port 3000
   ```
 
   You will be prompted with a few options. Telepresence tries to intelligently determine the deployment and namespace of your ingress controller.  Hit `enter` to accept the default value of `ambassador.ambassador` for `Ingress`.  For simplicity's sake, our app uses 80 for the port and does *not* use TLS, so use those options when prompted for the `port` and `TLS` settings. Your output should be similar to this:
-  
+
   ```
   $ telepresence intercept dataprocessingnodeservice --port 3000
   Confirm the ingress to use for preview URL access
@@ -148,9 +148,9 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 </tr>
 </table>
 
-This diagram demonstrates the flow of requests using the intercept.  The laptop on the left visits the preview URL, the request is redirected to the cluster ingress, and requests to and from the `DataProcessingNodeService` by other pods are proxied to the developer laptop running Telepresence.  
+This diagram demonstrates the flow of requests using the intercept.  The laptop on the left visits the preview URL, the request is redirected to the cluster ingress, and requests to and from the `DataProcessingNodeService` by other pods are proxied to the developer laptop running Telepresence.
 
-![Intercept Architecture](../../images/tp-tutorial-4.png) 
+![Intercept Architecture](../../images/tp-tutorial-4.png)
 
 7. Clean up your environment by first typing `Ctrl+C` in the terminal running Node. Then stop the intercept with the `leave` command and `quit` to stop the daemon.  Finally, use `uninstall --everything` to remove the Traffic Manager and Agents from your cluster.
 
