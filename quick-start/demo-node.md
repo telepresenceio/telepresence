@@ -10,6 +10,7 @@ import {
     LoginCommand,   
     DockerCommand, 
     PreviewUrl,
+    DemoClusterMetadataError,
     ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
@@ -49,7 +50,8 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 </Alert>
 
 1. <Login/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
-2.  Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
+<DemoClusterMetadataError/> 
+2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
     <EmojivotoServicesList/>
 
 <Alert severity="success">
@@ -119,6 +121,8 @@ Preview URLs enable you to safely share your development environment with anyone
    <Alert severity="info">
         To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
    </Alert>
+
+## 6. 
 
 ## 6. How/Why does this all work
 
