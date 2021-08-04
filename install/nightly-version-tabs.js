@@ -63,6 +63,7 @@ export default function SimpleTabs() {
         <Tabs value={value} onChange={handleChange} aria-label="operating system tabs">
           <Tab icon={<AppleIcon />} label="macOS" {...a11yProps(0)} style={{ minWidth: "10%", textTransform: 'none' }} />
           <Tab icon={<LinuxIcon />} label="Linux" {...a11yProps(1)} style={{ minWidth: "10%", textTransform: 'none' }} />
+          <Tab icon={<WindowsIcon />} label="Windows" {...a11yProps(2)} style={{ minWidth: "10%", textTransform: 'none' }} />
         </Tabs>
       </AppBar>
       <TabPanel value={value} index={0}>
@@ -76,6 +77,13 @@ export default function SimpleTabs() {
         <CodeBlock>
         {
           'https://app.getambassador.io/download/tel2/linux/amd64/nightly/telepresence'
+        }
+        </CodeBlock>
+      </TabPanel>
+      <TabPanel value={value} index={2}>
+        <CodeBlock>
+        {
+          'https://app.getambassador.io/download/tel2/windows/amd64/nightly/telepresence'
         }
         </CodeBlock>
       </TabPanel>
