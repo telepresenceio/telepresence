@@ -299,7 +299,8 @@ jobs:
     steps:
       - checkout
       - install-go
-      - run: sudo pip3 install awscli
+      - run: pip install awscli
+      - run: choco install make zip
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable

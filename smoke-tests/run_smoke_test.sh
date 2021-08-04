@@ -48,7 +48,7 @@ verify_logout() {
     local output
     output=$($TELEPRESENCE logout 2>&1)
     if [[ $output != *"not logged in"* ]]; then
-        echo "Login Failed in step: ${STEP}"
+        echo "Logout Failed in step: ${STEP}"
         exit 1
     fi
 }
@@ -102,14 +102,14 @@ get_workstation_apikey() {
 		cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
 		;;
 	Linux)
-		cache_file="${XDG_CONFIG_HOME:-$HOME/.cache}/telepresence/apikeys.json"
+		cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/apikeys.json"
 		;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
         ;;
     esac
-    apikey=$(jq -r '.[]|.["telepresence:workstation"]|strings' "$cache_file")
+    apikey=$(jq -r '.[]|.["telepresence:agent-http"]|strings' "$cache_file")
     if [[ -z $apikey ]]; then
         echo "No apikey found"
         exit 1
@@ -448,7 +448,7 @@ finish_step
 #### Step 6 - Verify login prompted        ####
 ###############################################
 
-if [ -f "$config_file" ]; then 
+if [ -f "$config_file" ]; then
     restore_config
     trap - EXIT
     echo "Using the following config for remainder of tests:"

@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.0 (TBD)
+### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
   All the same features supported by the MacOS and Linux client are available on Windows.
