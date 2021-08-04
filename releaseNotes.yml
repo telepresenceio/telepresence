@@ -59,6 +59,7 @@ items:
           When initializing the <code>systemd-resolved</code>-based DNS, the routing domain
           is set to improve stability in non-standard configurations. This also enables the
           overriding resolver to do a proper take over once the DNS service ends.
+        docs: reference/routing#linux-systemd-resolved-resolver
 
       - type: bugfix
         title: Fixed an edge case when intercepting a container with multiple ports
@@ -89,6 +90,7 @@ items:
           Fixed a bug where Telepresence would panic if the value passed to <code>--http-match</code>
           didn't contain an equal sign, which has been fixed. The correct syntax is in the <code>--help</code>
           string and looks like <code>--http-match=HTTP2_HEADER=REGEX</code>
+        docs: reference/intercepts/#intercept-behavior-when-logged-in-to-ambassador-cloud
 
       - type: bugfix
         title: Improved subnet updates
