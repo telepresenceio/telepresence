@@ -120,9 +120,9 @@ Preview URLs enable you to safely share your development environment with anyone
         To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
    </Alert>
 
-## 6. Go to see your intercepts
+## 6. Visualize and manage your Preview URLs and intercepts
 
-1. Now you have a intercepted service, go to DCP and see more information of your <InterceptsLink>preview URL.</InterceptsLink>
+1. The Developer Control Plane lets you manage & visualize important information about your intercepts. Visit the <InterceptsLink>Developer Control Plane UI</InterceptsLink> to see who's acceced your preview URL.
 
 ## 7. How/Why does this all work
 
