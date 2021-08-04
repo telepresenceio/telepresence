@@ -52,7 +52,9 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 </Alert>
 
 1. <Login/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
-<DemoClusterMetadataError/> 
+
+<DemoClusterMetadataError/>
+
 <Alert severity="success">
    The Service Catalog gives you a consolidated view of all your services across development, staging, and production. 
 </Alert>
