@@ -336,7 +336,8 @@ jobs:
     steps:
     - checkout
     - install-go
-    - run: pip3 install awscli
+    - run: pip install awscli
+    - run: choco install make zip
     - run:
         name: "Publish nightly windows"
         command: |
