@@ -238,7 +238,7 @@ We’ve now set up a local development environment for the DataProcessingService
 
 <Alert severity="success">
   We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
-  <br/>
+  <br />
   Normally, this process would require a container build, push to registry, and deploy.
   <br />
   With Telepresence, these changes happen instantly.
