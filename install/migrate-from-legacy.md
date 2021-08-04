@@ -1,6 +1,6 @@
 # Migrate from legacy Telepresence
 
-Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence 1](/docs/v1/) when working with local instances of your services.
+Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence 1](https://www.telepresence.io/docs/v1/) when working with local instances of your services.
 
 In legacy Telepresence, a pod running a service was swapped with a pod running the Telepresence proxy. This proxy received traffic intended for the service, and sent the traffic onward to the target workstation or laptop. We called this mechanism "swap-deployment".
 
