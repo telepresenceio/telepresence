@@ -17,4 +17,4 @@ Copy-Item "telepresence.exe" -Destination "$Path" -Force
 Copy-Item "wintun.dll" -Destination "$Path" -Force
 
 # We update the PATH to include telepresence and its dependency, sshfs-win
-[Environment]::SetEnvironmentVariable("Path", "C:\$Path;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path")
+[Environment]::SetEnvironmentVariable("Path", "$Path;C:\Program Files\SSHFS-Win\bin;$ENV:Path", "Machine")
