@@ -32,7 +32,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 items:
 
   - version: 2.4.0
-    date: 'TDB'
+    date: '2021-08-04'
     notes:
       - type: feature
         title: Windows Client Developer Preview
