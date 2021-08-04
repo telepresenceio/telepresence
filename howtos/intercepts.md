@@ -201,7 +201,7 @@ environment; the rest will be routed to your cluster as usual.
    4. **Ingress layer 5 hostname**: If your ingress controller routes traffic based on a domain name (often using the `Host` HTTP header), this is the value you would need to enter here.
 
     <Alert severity="info">
-        Telepresence supports any ingress controller, not just <a href="https://www.getambassador.io/docs/edge-stack/latest/tutorials/getting-started/">Ambassador Edge Stack</a>.
+        Telepresence supports any ingress controller, not just <a href="/docs/edge-stack/latest/tutorials/getting-started/">Ambassador Edge Stack</a>.
     </Alert>
 
    For the example below, you will create a preview URL that will send traffic to the `ambassador` service in the `ambassador` namespace on port `443` using TLS encryption and setting the `Host` HTTP header to `dev-environment.edgestack.me`:
