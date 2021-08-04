@@ -5,7 +5,7 @@ Description: "How to get Linkerd meshed services working with Telepresence"
 # Using Telepresence with Linkerd
 
 ## Introduction
-Getting started with Telepresence on Linkerd services is as simple as adding an annotation to your Deployment: 
+Getting started with Telepresence on Linkerd services is as simple as adding an annotation to your Deployment:
 
 ```yaml
 spec:

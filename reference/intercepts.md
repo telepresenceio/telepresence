@@ -1,4 +1,6 @@
-# Intercepts 
+import Alert from '@material-ui/lab/Alert';
+
+# Intercepts
 
 ## Intercept behavior when logged into Ambassador Cloud
 
