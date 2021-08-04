@@ -124,6 +124,7 @@ export default function SimpleTabs() {
           '# 4. Remove the unzipped directory' +
           '\n' +
           'cd ..' +
+          '\n' +
           'Remove-Item telepresence'
         }
         </CodeBlock>
