@@ -48,7 +48,7 @@ verify_logout() {
     local output
     output=$($TELEPRESENCE logout 2>&1)
     if [[ $output != *"not logged in"* ]]; then
-        echo "Login Failed in step: ${STEP}"
+        echo "Logout Failed in step: ${STEP}"
         exit 1
     fi
 }
