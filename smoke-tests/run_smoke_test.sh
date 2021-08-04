@@ -109,7 +109,7 @@ get_workstation_apikey() {
         exit 1
         ;;
     esac
-    apikey=$(jq -r '.[]|.["telepresence:workstation"]|strings' "$cache_file")
+    apikey=$(jq -r '.[]|.["telepresence:agent-http"]|strings' "$cache_file")
     if [[ -z $apikey ]]; then
         echo "No apikey found"
         exit 1
