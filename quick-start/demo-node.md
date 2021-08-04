@@ -23,7 +23,7 @@ import QSCards from './qs-cards'
 
 </div>
 
-In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally. 
+In this guide we'll give you **everything you need in a preconfigured demo cluster:** the Telepresence CLI, a config file for connecting to your demo cluster, and code to run a cluster service locally.
 
 <Alert severity="info">
     <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
@@ -45,13 +45,13 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
   cd ambassador-demo-cluster
   ./install.sh
   ```
- 
-3. The demo cluster we provided already has a demo app running. List the app's services:  
+
+3. The demo cluster we provided already has a demo app running. List the app's services:
   `kubectl get services`
 
   ```
    $ kubectl get services
-    
+
     NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
     kubernetes              ClusterIP   10.43.0.1       <none>        443/TCP    14h
     dataprocessingservice   ClusterIP   10.43.159.239   <none>        3000/TCP   14h
@@ -59,12 +59,12 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
     verylargedatastore      ClusterIP   10.43.203.19    <none>        8080/TCP   14h
   ```
 
-4. Confirm that the Telepresence CLI is now installed, we expect to see that the daemons are not yet running:  
+4. Confirm that the Telepresence CLI is now installed, we expect to see that the daemons are not yet running:
 `telepresence status`
 
   ```
   $ telepresence status
-    
+
     Root Daemon: Not running
     User Daemon: Not running
   ```
@@ -81,23 +81,23 @@ In this guide we'll give you **everything you need in a preconfigured demo clust
 
 Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-1. Connect to the cluster (this requires root privileges and will ask for your password):  
+1. Connect to the cluster (this requires root privileges and will ask for your password):
 `telepresence connect`
 
   ```
   $ telepresence connect
-    
+
     Launching Telepresence Daemon
     ...
     Connected to context default (https://<cluster-public-IP>)
   ```
 
-2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
+2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
 `curl -ik https://kubernetes.default`
 
   ```
   $ curl -ik https://kubernetes.default
-    
+
     HTTP/1.1 401 Unauthorized
     Cache-Control: no-cache, private
     Content-Type: application/json
@@ -127,7 +127,7 @@ We'll use a sample app that is already installed in your demo cluster.  Let's ta
 
   ```
   $ kubectl get pods
-    
+
     NAME                                         READY   STATUS    RESTARTS   AGE
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
@@ -154,19 +154,19 @@ Now start up the DataProcessingService service on your laptop. This version of t
 
   ```
   $ npm start
-    
+
     ...
     Welcome to the DataProcessingService!
     { _: [] }
     Server running on port 3000
   ```
 
-4. **Back in your <u>previous</u> terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:  
+4. **Back in your <u>previous</u> terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:
 `curl localhost:3000/color`
 
   ```
   $ curl localhost:3000/color
-    
+
     "blue"
   ```
 
@@ -177,7 +177,7 @@ Now start up the DataProcessingService service on your laptop. This version of t
 ## 5. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead:
 
-1. Start the intercept with the `intercept` command, setting the service name and port:  
+1. Start the intercept with the `intercept` command, setting the service name and port:
 `telepresence intercept dataprocessingservice --port 3000`
 
   <Alert severity="info">
@@ -186,7 +186,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 
   ```
   $ telepresence intercept dataprocessingservice --port 3000
-    
+
     Using deployment dataprocessingservice
     intercepted
         Intercept name: dataprocessingservice
@@ -218,7 +218,7 @@ We’ve now set up a local development environment for the DataProcessingService
 ## 7. Create a Preview URL
 Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
 
-1. Clean up your previous intercept by removing it:  
+1. Clean up your previous intercept by removing it:
 `telepresence leave dataprocessingservice`
 
 2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
@@ -233,7 +233,7 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
     Login successful.
   ```
 
-3. Start the intercept again:  
+3. Start the intercept again:
 `telepresence intercept dataprocessingservice --port 3000`
 
    You will be asked for your ingress layer 3 address; specify the front end service: `verylargejavaservice.default`
@@ -241,29 +241,29 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 
   ```
   $ telepresence intercept dataprocessingservice --port 3000
-    
+
     To create a preview URL, telepresence needs to know how cluster
     ingress works for this service.  Please Select the ingress to use.
-    
+
     1/4: What's your ingress' layer 3 (IP) address?
          You may use an IP address or a DNS name (this is usually a
          "service.namespace" DNS name).
-    
+
            [no default]: verylargejavaservice.default
-    
+
     2/4: What's your ingress' layer 4 address (TCP port number)?
-    
+
            [no default]: 8080
-    
+
     3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-    
+
            [default: n]: n
-    
+
     4/4: If required by your ingress, specify a different layer 5 hostname
          (TLS-SNI, HTTP "Host" header) to access this service.
-    
+
            [default: verylargejavaservice.default]:
-    
+
     Using deployment dataprocessingservice
     intercepted
         Intercept name  : dataprocessingservice

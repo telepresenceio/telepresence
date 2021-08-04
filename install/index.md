@@ -1,4 +1,3 @@
-import Alert from '@material-ui/lab/Alert';
 import QSTabs from '../quick-start/qs-tabs'
 
 # Install Telepresence

@@ -31,12 +31,12 @@ Use these URLs to download an older version for your OS, replacing `x.x.x` with 
 
 ## Migrating from Telepresence 1 to Telepresence 2
 
-Telepresence 2 (the current major version) has different mechanics and requires a different mental model from [Telepresence 1](https://www.telepresence.io/) when working with local instances of your services.
+Telepresence 2 (the current major version) has different mechanics and requires a different mental model from [Telepresence 1](https://www.telepresence.io/docs/v1/) when working with local instances of your services.
 
-In Telepresence 1, a pod running a service is swapped with a pod running the Telepresence proxy. This proxy receives traffic intended for the service, and sends the traffic onward to the target workstation or laptop. We called this mechanism "swap-deployment". 
+In Telepresence 1, a pod running a service is swapped with a pod running the Telepresence proxy. This proxy receives traffic intended for the service, and sends the traffic onward to the target workstation or laptop. We called this mechanism "swap-deployment".
 
 In practice, this mechanism, while simple in concept, had some challenges. Losing the connection to the cluster would leave the deployment in an inconsistent state. Swapping the pods would take time.
 
 Telepresence 2 introduces a [new architecture](../../reference/architecture/) built around "intercepts" that addresses this problem. With Telepresence 2, a sidecar proxy is injected onto the pod. The proxy then intercepts traffic intended for the pod and routes it to the workstation/laptop. The advantage of this approach is that the service is running at all times, and no swapping is used. By using the proxy approach, we can also do selective intercepts, where certain types of traffic get routed to the service while other traffic gets routed to your laptop/workstation.
 
-Please see [the Telepresence quick start](../../quick-start/) for an introduction to running intercepts and [the intercept reference doc](../../reference/intercepts/) for a deep dive into intercepts. 
+Please see [the Telepresence quick start](../../quick-start/) for an introduction to running intercepts and [the intercept reference doc](../../reference/intercepts/) for a deep dive into intercepts.
