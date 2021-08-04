@@ -35,9 +35,9 @@ items:
     date: 'TDB'
     notes:
       - type: feature
-        title: Windows Client
+        title: Windows Client Developer Preview
         body: >-
-          There is now a native Windows client for Telepresence.
+          There is now a native Windows client for Telepresence that is being released as a Developer Preview.
           All the same features supported by the MacOS and Linux client are available on Windows.
         image: telepresence-2.4.0-windows.png
         docs: install
