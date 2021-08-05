@@ -43,6 +43,10 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
     While Telepresence works with any language, this guide uses a sample app written in Node.js and Golang. We have a version in <a href="../demo-react/">React</a> if you prefer.
 </Alert>
 
+<Alert severity="info"> 
+    Note: This documentation will dynamically update with values once you authenticate to Ambassador Cloud in step one below. If you need help, please join the #telepresence <a href="https://a8r.io/Slack">Slack channel</a>.
+</Alert>
+
 ## 1. Get a free remote cluster
 
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
