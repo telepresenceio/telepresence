@@ -44,7 +44,7 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 </Alert>
 
 <Alert severity="info"> 
-    Note: This documentation will dynamically update with values once you authenticate to Ambassador Cloud in step one below. If you need help, please join the #telepresence <a href="https://a8r.io/Slack">Slack channel</a>.
+    Note: This documentation will dynamically update with values once you authenticate to Ambassador Cloud in step one below. If you need help, please join the <strong>#telepresence</strong> <a href="https://a8r.io/Slack">Slack channel</a>.
 </Alert>
 
 ## 1. Get a free remote cluster
