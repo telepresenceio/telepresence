@@ -2,9 +2,13 @@ import Alert from '@material-ui/lab/Alert';
 
 # Intercepts
 
-## Intercept behavior when logged into Ambassador Cloud
+## Intercept behavior when logged in to Ambassador Cloud
 
-After logging into Ambassador Cloud (with `telepresence login`), Telepresence will default to `--preview-url=true`, which will use Ambassador Cloud to create a sharable preview URL for this intercept. (Creating an intercept without logging in will default to `--preview-url=false`).
+After logging in to Ambassador Cloud (with [`telepresence
+login`](../client/login/)), Telepresence will default to
+`--preview-url=true`, which will use Ambassador Cloud to create a
+sharable preview URL for this intercept.  (Creating an intercept
+without logging in defaults to `--preview-url=false`.)
 
 In order to do this, it will prompt you for four options.  For the first, `Ingress`, Telepresence tries to intelligently determine the ingress controller deployment and namespace for you.  If they are correct, you can hit `enter` to accept the defaults.  Set the next two options, `TLS` and `Port`, appropriately based on your ingress service. The fourth is a hostname for the service, if required by your ingress.
 
@@ -40,15 +44,32 @@ This will intercept a workload named `hello` and name the intercept `myhello`.
 
 Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../environment/) for more details.
 
+## Creating an intercept without a local process running
+
+When creating an intercept that is selective (the default if you are
+logged in to Ambassador Cloud), the Traffic Agent sends a GET `/`
+request to your service and the process running on your local machine
+at the port specified in your intercept to determine if they support
+HTTP/2. This is required for selective intercepts to behave correctly.
+
+If you do not have a service running locally, the Traffic Agent will use the result
+it gets from the HTTP check against your app in the cluster to configure requests
+from the local process once it has started.
+
 ## Creating an intercept Without a preview URL
 
-If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your ingress controller, so use this option carefully as to not disrupt production environments.
+If you *are not* logged in to Ambassador Cloud, the following command
+will intercept all traffic bound to the service and proxy it to your
+laptop. This includes traffic coming through your ingress controller,
+so use this option carefully as to not disrupt production
+environments.
 
 ```
 telepresence intercept <deployment name> --port=<TCP port>
 ```
 
-If you *are* logged into Ambassador Cloud, setting the `preview-url` flag to `false` is necessary.
+If you *are* logged in to Ambassador Cloud, setting the
+`--preview-url` flag to `false` is necessary.
 
 ```
 telepresence intercept <deployment name>  --port=<TCP port> --preview-url=false
@@ -111,7 +132,7 @@ If you want to change which port has been intercepted, you can create a new inte
 
 ## Creating an intercept When multiple services match your workload
 
-Oftentimes, there's a 1-to-1 relationship between a service and a workload, so telepresence is able to auto-detect which service it should intercept based on the workload you are trying to intercept.  But if you use something like [Argo](/docs/argo/latest/), it uses two services (that use the same labels) to manage traffic between a canary and a stable service.
+Oftentimes, there's a 1-to-1 relationship between a service and a workload, so telepresence is able to auto-detect which service it should intercept based on the workload you are trying to intercept.  But if you use something like [Argo](https://www.getambassador.io/docs/argo/latest/), it uses two services (that use the same labels) to manage traffic between a canary and a stable service.
 
 Fortunately, if you know which service you want to use when intercepting a workload, you can use the --service flag.  So in the aforementioned demo, if you wanted to use the `echo-stable` service when intercepting your workload, your command would look like this:
 ```

@@ -5,9 +5,10 @@ import AppBar from '@material-ui/core/AppBar';
 import Tabs from '@material-ui/core/Tabs';
 import Tab from '@material-ui/core/Tab';
 import Box from '@material-ui/core/Box';
-import CodeBlock from '../../../../../src/components/CodeBlock';
-import LinuxIcon from '../../../../../src/assets/icons/linux.inline.svg';
-import AppleIcon from '../../../../../src/assets/icons/apple.inline.svg';
+import CodeBlock from '@src/components/CodeBlock';
+import LinuxIcon from '@src/assets/icons/linux.inline.svg';
+import AppleIcon from '@src/assets/icons/apple.inline.svg';
+import WindowsIcon from '@src/assets/icons/windows.inline.svg';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -63,6 +64,7 @@ export default function SimpleTabs() {
         <Tabs value={value} onChange={handleChange} aria-label="operating system tabs">
           <Tab icon={<AppleIcon />} label="macOS" {...a11yProps(0)} style={{ minWidth: "10%", textTransform: 'none' }} />
           <Tab icon={<LinuxIcon />} label="Linux" {...a11yProps(1)} style={{ minWidth: "10%", textTransform: 'none' }} />
+          <Tab icon={<WindowsIcon />} label="Windows" {...a11yProps(1)} style={{ minWidth: "10%", textTransform: 'none' }} />
         </Tabs>
       </AppBar>
       <TabPanel value={value} index={0}>
@@ -94,6 +96,41 @@ export default function SimpleTabs() {
           '# 2. Make the binary executable:' +
           '\n' +
           'sudo chmod a+x /usr/local/bin/telepresence'
+        }
+        </CodeBlock>
+      </TabPanel>
+      <TabPanel value={value} index={2}>
+        <CodeBlock>
+        {
+          '# Windows is in Developer Preview, here is how you can install it:' +
+          '\n' +
+          '# Make sure you run the following from Powershell as Administrator' +
+          '\n' +
+          '# 1. Download the latest windows zip containing telepresence.exe and its dependencies (~50 MB):' +
+          '\n' +
+          'curl -fL https://app.getambassador.io/download/tel2/windows/amd64/latest/telepresence.zip -o telepresence.zip' +
+          '\n \n' +
+          '# 2. Unzip the zip file to a suitable directory + cleanup zip' +
+          '\n' +
+          'Expand-Archive -Path telepresence.zip' +
+          '\n' +
+          'Remove-Item \'telepresence.zip\'' +
+          '\n' +
+          'cd telepresence' +
+          '\n \n' +
+          '# 3. Run the install-telepresence.ps1 to install telepresence\'s dependencies. It will install telepresence to' +
+          '\n' +
+          '# C:\\telepresence by default, but you can specify a custom path by passing in -Path C:\\my\\custom\\path' +
+          '\n' +
+          '.\\install-telepresence.ps1' +
+          '\n \n' +
+          '# 4. Remove the unzipped directory' +
+          '\n' +
+          'cd ..' +
+          '\n' +
+          'Remove-Item telepresence' +
+          '\n' +
+          '# 5. Close your current Powershell and open a new one. Telepresence should now be usable as telepresence.exe'
         }
         </CodeBlock>
       </TabPanel>
