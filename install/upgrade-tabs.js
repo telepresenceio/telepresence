@@ -122,6 +122,8 @@ export default function SimpleTabs() {
           '\n' +
           '# C:\\telepresence by default, but you can specify a custom path by passing in -Path C:\\my\\custom\\path' +
           '\n' +
+          'Set-ExecutionPolicy Bypass -Scope Process' +
+          '\n' +
           '.\\install-telepresence.ps1' +
           '\n \n' +
           '# 4. Remove the unzipped directory' +
