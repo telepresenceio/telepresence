@@ -18,27 +18,25 @@ $ telepresence connect
 
 $ telepresence list
 
-  web-app-5d568ccc6b   : ready to intercept (traffic-agent not yet installed)
-  emoji                : ready to intercept (traffic-agent not yet installed)
-  web                  : ready to intercept (traffic-agent not yet installed)
-  web-app-5d568ccc6b   : ready to intercept (traffic-agent not yet installed)
+  verylargejavaservice : ready to intercept (traffic-agent not yet installed)
+  dataprocessingservice: ready to intercept (traffic-agent not yet installed)
+  verylargedatastore   : ready to intercept (traffic-agent not yet installed)
 
-$ curl web-app:80
+$ curl verylargejavaservice:8080
 
-  curl: (6) Could not resolve host: web-app
+  curl: (6) Could not resolve host: verylargejavaservice
 
 ```
 
 This is expected as Telepresence cannot reach the service yet by short name without an active intercept in that namespace.
 
 ```
-$ curl web-app.emojivoto:80
+$ curl verylargejavaservice.default:8080
 
-  <!DOCTYPE html>
+  <!DOCTYPE HTML>
   <html>
   <head>
-      <meta charset="UTF-8">
-      <title>Emoji Vote</title>
+      <title>Welcome to the EdgyCorp WebApp</title>
   ...
 ```
 
@@ -46,25 +44,22 @@ Using the namespaced qualified DNS name though does work.
 Now we'll start an intercept against another service in the same namespace. Remember, `--namespace default` is implied since it is not specified.
 
 ```
-$ telepresence intercept web --port 8080
+$ telepresence intercept dataprocessingservice --port 3000
 
-  Using Deployment web
+  Using Deployment dataprocessingservice
   intercepted
-      Intercept name    : web
-      State             : ACTIVE
-      Workload kind     : Deployment
-      Destination       : 127.0.0.1:8080
-      Volume Mount Point: /tmp/telfs-166119801
-      Intercepting      : HTTP requests that match all headers:
-        'x-telepresence-intercept-id: 8eac04e3-bf24-4d62-b3ba-35297c16f5cd:web'
+      Intercept name: dataprocessingservice
+      State         : ACTIVE
+      Workload kind : Deployment
+      Destination   : 127.0.0.1:3000
+      Intercepting  : all TCP connections
 
-$ curl webapp:80
+$ curl verylargejavaservice:8080
 
-  <!DOCTYPE html>
+  <!DOCTYPE HTML>
   <html>
   <head>
-      <meta charset="UTF-8">
-      <title>Emoji Vote</title>
+      <title>Welcome to the EdgyCorp WebApp</title>
   ...
 ```
 
