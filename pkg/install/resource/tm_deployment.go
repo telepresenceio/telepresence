@@ -43,7 +43,8 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 	replicas := int32(1)
 
 	sc := getScope(ctx)
-	imgConfig := client.GetConfig(ctx).Images
+	clientConfig := client.GetConfig(ctx)
+	imgConfig := clientConfig.Images
 	var containerEnv = []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "SYSTEMA_HOST", Value: sc.env.SystemAHost},
@@ -65,6 +66,12 @@ func (ri *tmDeployment) desiredDeployment(ctx context.Context) *kates.Deployment
 	if imgConfig.WebhookAgentImage != "" {
 		image := fmt.Sprintf("%s/%s", imgConfig.WebhookRegistry, imgConfig.WebhookAgentImage)
 		containerEnv = append(containerEnv, corev1.EnvVar{Name: "TELEPRESENCE_AGENT_IMAGE", Value: image})
+	}
+	if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
+		containerEnv = append(containerEnv, corev1.EnvVar{
+			Name:  "TELEPRESENCE_MAX_RECEIVE_SIZE",
+			Value: mxRecvSize.String(),
+		})
 	}
 
 	optional := true

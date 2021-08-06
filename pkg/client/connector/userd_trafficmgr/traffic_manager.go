@@ -161,11 +161,6 @@ func (tm *trafficManager) Run(c context.Context) error {
 		grpc.WithNoProxy(),
 		grpc.WithBlock()}
 
-	if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
-		if mz, ok := mxRecvSize.AsInt64(); ok {
-			opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(int(mz))))
-		}
-	}
 	conn, err = grpc.DialContext(tc, grpcAddr, opts...)
 	if err != nil {
 		return client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))

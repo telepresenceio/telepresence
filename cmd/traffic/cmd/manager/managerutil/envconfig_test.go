@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -28,14 +29,15 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := managerutil.Env{
-		User:          "",
-		ServerHost:    "",
-		ServerPort:    "8081",
-		SystemAHost:   "app.getambassador.io",
-		SystemAPort:   "443",
-		AgentRegistry: "docker.io/datawire",
-		AgentImage:    "docker.io/datawire/tel2:" + strings.TrimPrefix(version.Version, "v"),
-		AgentPort:     9900,
+		User:           "",
+		ServerHost:     "",
+		ServerPort:     "8081",
+		SystemAHost:    "app.getambassador.io",
+		SystemAPort:    "443",
+		AgentRegistry:  "docker.io/datawire",
+		AgentImage:     "docker.io/datawire/tel2:" + strings.TrimPrefix(version.Version, "v"),
+		AgentPort:      9900,
+		MaxReceiveSize: resource.MustParse("4Mi"),
 	}
 
 	testcases := map[string]struct {

@@ -28,13 +28,13 @@ func Main(ctx context.Context, args ...string) error {
 
 	ctx, err := managerutil.LoadEnv(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
 
 	// Make the kates client available in the context
 	client, err := kates.NewClient(kates.ClientConfig{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new kates client: %w", err)
 	}
 	ctx = managerutil.WithKatesClient(ctx, client)
 
@@ -48,8 +48,12 @@ func Main(ctx context.Context, args ...string) error {
 		env := managerutil.GetEnv(ctx)
 		host := env.ServerHost
 		port := env.ServerPort
+		opts := []grpc.ServerOption{}
+		if mz, ok := env.MaxReceiveSize.AsInt64(); ok {
+			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+		}
 
-		grpcHandler := grpc.NewServer()
+		grpcHandler := grpc.NewServer(opts...)
 		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
 		}))
