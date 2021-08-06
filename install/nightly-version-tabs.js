@@ -8,6 +8,7 @@ import Box from '@material-ui/core/Box';
 import CodeBlock from '@src/components/CodeBlock';
 import LinuxIcon from '@src/assets/icons/linux.inline.svg';
 import AppleIcon from '@src/assets/icons/apple.inline.svg';
+import WindowsIcon from '@src/assets/icons/windows.inline.svg';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -83,7 +84,7 @@ export default function SimpleTabs() {
       <TabPanel value={value} index={2}>
         <CodeBlock>
         {
-          'https://app.getambassador.io/download/tel2/windows/amd64/nightly/telepresence'
+          'https://app.getambassador.io/download/tel2/windows/amd64/nightly/telepresence.zip'
         }
         </CodeBlock>
       </TabPanel>
