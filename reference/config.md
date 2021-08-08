@@ -92,19 +92,26 @@ These fields control how the client interacts with the Cloud service.
 
 | Field             | Description                                                                                                                                                                                                                                | Type                                       | Default |
 |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------|---------|
-| `skipLogin`       | Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts             | [bool][yaml-bool]                          | false   |
+| `skipLogin`       | Whether the CLI should skip automatic login to Ambassador Cloud.  If set to true, in order to perform personal intercepts you must have a [license key](../cluster-config/#air-gapped-cluster) installed in the cluster.                   | [bool][yaml-bool]                          | false   |
 | `refreshMessages` | How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. You will see each message at most once within the duration given by this config | [duration][go-duration] [string][yaml-str] | 168h    |
 
-Telepresence attempts to auto-detect if the cluster is air-gapped,
-be sure to set the `skipLogin` value to `true`
+Telepresence attempts to auto-detect if the cluster is capable of
+communication with Ambassador Cloud, but may still prompt you to log
+in in cases where only the on-laptop client wishes to communicate with
+Ambassador Cloud.  If you want those auto-login points to be disabled
+as well, or would like it to not attempt to communicate with
+Ambassador Cloud at all (even for the auto-detection), then be sure to
+set the `skipLogin` value to `true`.
 
-Reminder: To use selective intercepts, which normally require a login, you
-must have a license in your cluster and specify which agentImage should be installed,
-by also adding the following to your config.yml:
-  ```
-  images:
-    agentImage: <privateRegistry>/<agentImage>
-  ```
+Reminder: To use personal intercepts, which normally require a login,
+you must have a license key in your cluster and specify which
+`agentImage` should be installed by also adding the following to your
+`config.yml`:
+
+```yaml
+images:
+  agentImage: <privateRegistry>/<agentImage>
+```
 
 #### Grpc
 The `maxReceiveSize` determines how large a message that the workstation receives via gRPC can be. The default is 4Mi (determined by gRPC). All traffic to and from the cluster is tunneled via gRPC.
