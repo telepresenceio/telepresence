@@ -21,7 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/resource"
+	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 )
 
 type installer struct {
@@ -88,7 +88,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 
 	if !agentsOnly && len(errs) == 0 {
 		// agent removal succeeded. Remove the manager resources
-		if err := resource.DeleteTrafficManager(c, ki.Client(), ki.GetManagerNamespace(), env); err != nil {
+		if err := helm.DeleteTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), env); err != nil {
 			addError(err)
 		}
 	}
@@ -657,5 +657,5 @@ func addAgentToWorkload(
 }
 
 func (ki *installer) ensureManager(c context.Context, env *client.Env) error {
-	return resource.EnsureTrafficManager(c, ki.Client(), ki.GetManagerNamespace(), env)
+	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), ki.GetClusterId(c), env)
 }

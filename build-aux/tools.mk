@@ -80,8 +80,8 @@ else
 SUFFIX=
 endif
 tools/helm = $(TOOLSBINDIR)/helm
-HELM_VERSION=3.5.4
-HELM_TGZ = https://get.helm.sh/helm-v$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
+HELM_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select (.Path == "helm.sh/helm/v3") | .Version')
+HELM_TGZ = https://get.helm.sh/helm-$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
 $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 	mkdir -p $(@D)
 	curl -sfL $(HELM_TGZ) -o $@

@@ -371,8 +371,15 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			"-o",
 			"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='TELEPRESENCE_AGENT_IMAGE')].value}")
 		require.NoError(err)
-		desiredImage := fmt.Sprintf("%s/imageFromConfig:0.0.1", registry)
-		ts.Equal(desiredImage, image)
+		actualRegistry, err := ts.kubectlOut(ctx, "get",
+			"--namespace", ts.managerTestNamespace,
+			"deploy", "traffic-manager",
+			"--ignore-not-found",
+			"-o",
+			"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='TELEPRESENCE_REGISTRY')].value}")
+		require.NoError(err)
+		ts.Equal("imageFromConfig:0.0.1", image)
+		ts.Equal(registry, actualRegistry)
 		ts.NoError(ts.capturePodLogs(ctx, "traffic-manager", ts.managerTestNamespace))
 	})
 }

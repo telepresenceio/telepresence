@@ -63,6 +63,12 @@ helm.sh/chart: {{ include "telepresence.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{/* This value is intentionally undocumented -- it's used by the telepresence binary to determine ownership of the release */}}
+{{- if .Values.createdBy }}
+app.kubernetes.io/created-by: {{ .Values.createdBy }}
+{{- else }}
+app.kubernetes.io/created-by: {{ .Release.Service }}
+{{- end }}
 {{- end }}
 
 {{/*
