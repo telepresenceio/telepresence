@@ -3,6 +3,8 @@ param
     $Path = "C:\telepresence"
 )
 
+$current_directory = (Get-Location).path
+
 echo "Installing telepresence to $Path"
 
 Start-Process msiexec -Wait -verb runAs -Args "/i $current_directory\winfsp.msi /passive /qn /L*V winfsp-install.log"
