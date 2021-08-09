@@ -9,10 +9,16 @@ fi
 
 VERSION=$1
 
-BINDIR="${BINDIR:-./build-output/bin}"
+WORK_DIR="$(mktemp -d)"
+echo "Working in ${WORK_DIR}"
+
+# We should only be updating homebrew with a version of telepresence that
+# already exists, so let's download it
+curl -fL "https://app.getambassador.io/download/tel2/darwin/amd64/${VERSION}/telepresence" -o "${WORK_DIR}/telepresence"
+
 
 # Clone blackbird-homebrew:
-BUILD_HOMEBREW_DIR=$(mktemp -d)
+BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
 echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
 git clone git@github.com:datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
 FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
@@ -20,7 +26,7 @@ FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 # Update recipe
 cp packaging/homebrew-formula.rb "$FORMULA"
 sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "$FORMULA"
-TARBALL_HASH=$(shasum -a 256 "$BINDIR/telepresence" | cut -f 1 -d " ")
+TARBALL_HASH=$(shasum -a 256 "$WORK_DIR/telepresence" | cut -f 1 -d " ")
 
 # We don't want to update our homebrew formula if there
 # isn't a hash, so exit early if that's the case.
@@ -36,7 +42,7 @@ cd "${BUILD_HOMEBREW_DIR}"
 
 # Use the correct machine user for committing
 git config user.email "services@datawire.io"
-git config --global user.name "d6e automaton"
+git config user.name "d6e automaton"
 
 git add "$FORMULA"
 git commit -m "Release ${VERSION}"
@@ -47,3 +53,6 @@ git commit -m "Release ${VERSION}"
 # remove it.
 cat "${FORMULA}"
 git push origin master
+
+# Clean up the working directory
+rm -rf "${WORK_DIR}"
