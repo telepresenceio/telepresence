@@ -71,6 +71,13 @@ logLevel: debug
 # Default: ""
 clusterID: ""
 
+# GRPC configuration for the Traffic Manager.
+# This is identical to the grpc configuration for local clients.
+# See https://www.telepresence.io/docs/latest/reference/config/#grpc for more info
+grpc: {}
+  # maxReceiveSize configures the maximum message size that the traffic manager will service.
+  # maxReceiveSize: 4Mi
+
 # Telepresence requires a license key for creating selective intercepts. In
 # normal clusters with access to the public internet, this license is managed
 # automatically by the Ambassador Cloud. In air-gapped environments however, 

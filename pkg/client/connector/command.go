@@ -366,7 +366,13 @@ func run(c context.Context) error {
 			}
 		}()
 
-		svc := grpc.NewServer()
+		opts := []grpc.ServerOption{}
+		if mxRecvSize := client.GetConfig(c).Grpc.MaxReceiveSize; mxRecvSize != nil {
+			if mz, ok := mxRecvSize.AsInt64(); ok {
+				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+			}
+		}
+		svc := grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(svc, userd_grpc.NewGRPCService(
 			userd_grpc.Callbacks{
 				InterceptStatus: s.interceptStatus,

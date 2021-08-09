@@ -202,7 +202,13 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			}
 		}()
 
-		svc := grpc.NewServer()
+		opts := []grpc.ServerOption{}
+		if mxRecvSize := client.GetConfig(c).Grpc.MaxReceiveSize; mxRecvSize != nil {
+			if mz, ok := mxRecvSize.AsInt64(); ok {
+				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+			}
+		}
+		svc := grpc.NewServer(opts...)
 		rpc.RegisterDaemonServer(svc, d)
 
 		sc := &dhttp.ServerConfig{

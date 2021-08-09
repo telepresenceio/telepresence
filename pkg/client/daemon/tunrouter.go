@@ -191,14 +191,8 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		defer cancel()
 
 		var conn *grpc.ClientConn
-		var opts []grpc.DialOption
-		if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
-			if mz, ok := mxRecvSize.AsInt64(); ok {
-				opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(int(mz))))
-			}
-		}
 
-		conn, err = client.DialSocket(tc, client.ConnectorSocketName, opts...)
+		conn, err = client.DialSocket(tc, client.ConnectorSocketName)
 		if err != nil {
 			return client.CheckTimeout(tc, err)
 		}

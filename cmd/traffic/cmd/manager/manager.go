@@ -23,18 +23,19 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+// Main starts up the traffic manager and blocks until it ends
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
 	ctx, err := managerutil.LoadEnv(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
 
 	// Make the kates client available in the context
 	client, err := kates.NewClient(kates.ClientConfig{})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new kates client: %w", err)
 	}
 	ctx = managerutil.WithKatesClient(ctx, client)
 
@@ -44,93 +45,103 @@ func Main(ctx context.Context, args ...string) error {
 	mgr := NewManager(ctx)
 
 	// Serve HTTP (including gRPC)
-	g.Go("httpd", func(ctx context.Context) error {
-		env := managerutil.GetEnv(ctx)
-		host := env.ServerHost
-		port := env.ServerPort
-
-		grpcHandler := grpc.NewServer()
-		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
-		}))
-		sc := &dhttp.ServerConfig{
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-					grpcHandler.ServeHTTP(w, r)
-				} else {
-					httpHandler.ServeHTTP(w, r)
-				}
-			}),
-		}
-
-		rpc.RegisterManagerServer(grpcHandler, mgr)
-		grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
-
-		return sc.ListenAndServe(ctx, host+":"+port)
-	})
+	g.Go("httpd", mgr.serveHTTP)
 
 	g.Go("agent-injector", mutator.ServeMutator)
 
-	g.Go("intercept-gc", func(ctx context.Context) error {
-		// Loop calling Expire
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				mgr.expire()
-			case <-ctx.Done():
-				return nil
-			}
-		}
-	})
+	g.Go("intercept-gc", mgr.runInterceptGCLoop)
 
 	// This goroutine is responsible for informing System A of intercepts (and
 	// relevant metadata like domains) that have been garbage collected. This
 	// ensures System A doesn't list preview URLs + intercepts that no longer
 	// exist.
-	g.Go("systema-gc", func(ctx context.Context) error {
-		for snapshot := range mgr.state.WatchIntercepts(ctx, nil) {
-			for _, update := range snapshot.Updates {
-				// Since all intercepts with a domain require a login, we can use
-				// presence of the ApiKey in the interceptInfo to determine all
-				// intercepts that we need to inform System A of their deletion
-				if update.Delete && update.Value.ApiKey != "" {
-					if sa, err := mgr.systema.Get(); err != nil {
-						dlog.Errorln(ctx, "systema: acquire connection:", err)
-					} else {
-						// First we remove the PreviewDomain if it exists
-						if update.Value.PreviewDomain != "" {
-							err = mgr.reapDomain(ctx, sa, update)
-							if err != nil {
-								dlog.Errorln(ctx, "systema: remove domain:", err)
-							}
-						}
-						// Now we inform SystemA of the intercepts removal
-						dlog.Debugf(ctx, "systema: remove intercept: %q", update.Value.Id)
-						err = mgr.reapIntercept(ctx, sa, update)
-						if err != nil {
-							dlog.Errorln(ctx, "systema: remove intercept:", err)
-						}
-
-						// Release the connection we got to delete the domain + intercept
-						if err := mgr.systema.Done(); err != nil {
-							dlog.Errorln(ctx, "systema: release management connection:", err)
-						}
-					}
-					// Release the refcount on the proxy connection
-					if err := mgr.systema.Done(); err != nil {
-						dlog.Errorln(ctx, "systema: release proxy connection:", err)
-					}
-				}
-			}
-		}
-		return nil
-	})
+	g.Go("systema-gc", mgr.runSystemAGCLoop)
 
 	// Wait for exit
 	return g.Wait()
+}
+
+func (m *Manager) serveHTTP(ctx context.Context) error {
+	env := managerutil.GetEnv(ctx)
+	host := env.ServerHost
+	port := env.ServerPort
+	opts := []grpc.ServerOption{}
+	if mz, ok := env.MaxReceiveSize.AsInt64(); ok {
+		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+	}
+
+	grpcHandler := grpc.NewServer(opts...)
+	httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
+	}))
+	sc := &dhttp.ServerConfig{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+				grpcHandler.ServeHTTP(w, r)
+			} else {
+				httpHandler.ServeHTTP(w, r)
+			}
+		}),
+	}
+
+	rpc.RegisterManagerServer(grpcHandler, m)
+	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
+
+	return sc.ListenAndServe(ctx, host+":"+port)
+}
+
+func (m *Manager) runInterceptGCLoop(ctx context.Context) error {
+	// Loop calling Expire
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.expire()
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
+	for snapshot := range m.state.WatchIntercepts(ctx, nil) {
+		for _, update := range snapshot.Updates {
+			// Since all intercepts with a domain require a login, we can use
+			// presence of the ApiKey in the interceptInfo to determine all
+			// intercepts that we need to inform System A of their deletion
+			if update.Delete && update.Value.ApiKey != "" {
+				if sa, err := m.systema.Get(); err != nil {
+					dlog.Errorln(ctx, "systema: acquire connection:", err)
+				} else {
+					// First we remove the PreviewDomain if it exists
+					if update.Value.PreviewDomain != "" {
+						err = m.reapDomain(ctx, sa, update)
+						if err != nil {
+							dlog.Errorln(ctx, "systema: remove domain:", err)
+						}
+					}
+					// Now we inform SystemA of the intercepts removal
+					dlog.Debugf(ctx, "systema: remove intercept: %q", update.Value.Id)
+					err = m.reapIntercept(ctx, sa, update)
+					if err != nil {
+						dlog.Errorln(ctx, "systema: remove intercept:", err)
+					}
+
+					// Release the connection we got to delete the domain + intercept
+					if err := m.systema.Done(); err != nil {
+						dlog.Errorln(ctx, "systema: release management connection:", err)
+					}
+				}
+				// Release the refcount on the proxy connection
+				if err := m.systema.Done(); err != nil {
+					dlog.Errorln(ctx, "systema: release proxy connection:", err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // reapDomain informs SystemA that an intercept with a domain has been garbage collected

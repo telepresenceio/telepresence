@@ -43,6 +43,12 @@ spec:
             value: {{ .Values.clusterID }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.image.registry }}
+          {{- if .Values.grpc }}
+          {{- if .Values.grpc.maxReceiveSize }}
+          - name: TELEPRESENCE_MAX_RECEIVE_SIZE
+            value: {{ .Values.grpc.maxReceiveSize }}
+          {{- end }}
+          {{- end }}
           - name: MANAGER_NAMESPACE
             valueFrom:
               fieldRef:

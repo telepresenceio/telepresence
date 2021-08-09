@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.4.1 (TBD)
+
+- Bugfix: The grpc.maxReceiveSize setting is now correctly propagated to all grpc servers.
+  This allows users to mitigate a root daemon crash when sending a message over the default maximum size.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
