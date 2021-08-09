@@ -237,7 +237,10 @@ We’ve now set up a local development environment for the DataProcessingService
 </Alert>
 
 ## 7. Create a Preview URL
-Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
+
+Create a personal intercept with a preview URL; meaning that only
+traffic coming from the preview URL will be intercepted, so you can
+easily share the services you’re working on with your teammates.
 
 1. Clean up your previous intercept by removing it:
 `telepresence leave dataprocessingservice`
