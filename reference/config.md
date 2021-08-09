@@ -32,28 +32,42 @@ grpc:
 ```
 
 #### Timeouts
-Values for `timeouts` are all durations either as a number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings can be fractional (`1.5h`) or combined (`2h45m`).
+
+Values for `timeouts` are all durations either as a number of seconds
+or as a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings
+can be fractional (`1.5h`) or combined (`2h45m`).
 
 These are the valid fields for the `timeouts` key:
 
-|Field|Description|Default|
-|---|---|---|
-|`agentInstall`|Waiting for Traffic Agent to be installed|2 minutes|
-|`apply`|Waiting for a Kubernetes manifest to be applied|1 minute|
-|`clusterConnect`|Waiting for cluster to be connected|20 seconds|
-|`intercept`|Waiting for an intercept to become active|5 seconds|
-|`proxyDial`|Waiting for an outbound connection to be established|5 seconds|
-|`trafficManagerConnect`|Waiting for the Traffic Manager API to connect for port fowards|20 seconds|
-|`trafficManagerAPI`|Waiting for connection to the gPRC API after `trafficManagerConnect` is successful|15 seconds|
+| Field                   | Description                                                                        | Type                                                                                                    | Default    |
+|-------------------------|------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|------------|
+| `agentInstall`          | Waiting for Traffic Agent to be installed                                          | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 2 minutes  |
+| `apply`                 | Waiting for a Kubernetes manifest to be applied                                    | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 1 minute   |
+| `clusterConnect`        | Waiting for cluster to be connected                                                | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 20 seconds |
+| `intercept`             | Waiting for an intercept to become active                                          | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 5 seconds  |
+| `proxyDial`             | Waiting for an outbound connection to be established                               | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 5 seconds  |
+| `trafficManagerConnect` | Waiting for the Traffic Manager API to connect for port fowards                    | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 20 seconds |
+| `trafficManagerAPI`     | Waiting for connection to the gPRC API after `trafficManagerConnect` is successful | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 15 seconds |
 
 #### Log Levels
-Values for `logLevels` are one of the following strings: `trace`, `debug`, `info`, `warning`, `error`, `fatal` and `panic`.
+
+Values for the `logLevels` fields are one of the following strings,
+case insensitive:
+
+ - `trace`
+ - `debug`
+ - `info`
+ - `warning` or `warn`
+ - `error`
+ - `fatal`
+ - `panic`
+
 These are the valid fields for the `logLevels` key:
 
-|Field|Description|Default|
-|---|---|---|
-|`userDaemon`|Logging level to be used by the User Daemon (logs to connector.log)|debug|
-|`rootDaemon`|Logging level to be used for the Root Daemon (logs to daemon.log)|info|
+| Field        | Description                                                         | Type                                        | Default |
+|--------------|---------------------------------------------------------------------|---------------------------------------------|---------|
+| `userDaemon` | Logging level to be used by the User Daemon (logs to connector.log) | [loglevel][logrus-level] [string][yaml-str] | debug   |
+| `rootDaemon` | Logging level to be used for the Root Daemon (logs to daemon.log)   | [loglevel][logrus-level] [string][yaml-str] | info    |
 
 #### Images
 Values for `images` are strings. These values affect the objects that are deployed in the cluster,
@@ -65,21 +79,21 @@ to handle installation of the `traffic-agents`.
 
 These are the valid fields for the `images` key:
 
-|Field|Description|Default|
-|---|---|---|
-|`registry`|Docker registry to be used for installing the Traffic Manager and default Traffic Agent. If not using a helm chart to deploy server-side objects, changing this value will create a new traffic-manager deployment when using Telepresence commands. Additionally, changing this value will update installed default `traffic-agents` to use the new registry when creating a new intercept.|docker.io/datawire|
-|`agentImage`|$registry/$imageName:$imageTag to use when installing the Traffic Agent. Changing this value will update pre-existing `traffic-agents` to use this new image. * the `registry` value is not used for the `traffic-agent` if you have this value set *||
-|`webhookRegistry`|The container $registry that the [Traffic Manager](../cluster-config/#mutating-webhook) will use with the `webhookAgentImage` *This value is only used if a new traffic-manager is deployed*||
-|`webhookAgentImage`|The container image that the [Traffic Manager](../cluster-config/#mutating-webhook) will use when installing the Traffic Agent in annotated pods *This value is only used if a new traffic-manager is deployed*||
+| Field               | Description                                                                                                                                                                                                                                                                                                                                                                                    | Default              |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------|
+| `registry`          | Docker registry to be used for installing the Traffic Manager and default Traffic Agent.  If not using a helm chart to deploy server-side objects, changing this value will create a new traffic-manager deployment when using Telepresence commands.  Additionally, changing this value will update installed default `traffic-agents` to use the new registry when creating a new intercept. | `docker.io/datawire` |
+| `agentImage`        | `$registry/$imageName:$imageTag` to use when installing the Traffic Agent.  Changing this value will update pre-existing `traffic-agents` to use this new image.  *The `registry` value is not used for the `traffic-agent` if you have this value set.*                                                                                                                                       | (unset)              |
+| `webhookRegistry`   | The container `$registry` that the [Traffic Manager](../cluster-config/#mutating-webhook) will use with the `webhookAgentImage` *This value is only used if a new `traffic-manager` is deployed*                                                                                                                                                                                               | `docker.io/datawire` |
+| `webhookAgentImage` | The container image that the [Traffic Manager](../cluster-config/#mutating-webhook) will use when installing the Traffic Agent in annotated pods *This value is only used if a new `traffic-manager` is deployed*                                                                                                                                                                              | (unset)              |
 
 #### Cloud
 Values for `cloud` are listed below and their type varies, so please see the chart for the expected type for each config value.
 These fields control how the client interacts with the Cloud service.
 
-|Field|Description|Type|Default|
-|---|---|---|---|
-|`skipLogin`|Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts |bools: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F,` `FALSE`|false|
-|`refreshMessages`|How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. You will see each message at most once within the duration given by this config|duration: number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`|168h|
+| Field             | Description                                                                                                                                                                                                                                | Type                                       | Default |
+|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------|---------|
+| `skipLogin`       | Whether the cli should skip automatic login to Ambassador Cloud. If set to true, you must have a [license](../cluster-config/#air-gapped-cluster) installed in the cluster in order to be able to perform selective intercepts             | [bool][yaml-bool]                          | false   |
+| `refreshMessages` | How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. You will see each message at most once within the duration given by this config | [duration][go-duration] [string][yaml-str] | 168h    |
 
 Telepresence attempts to auto-detect if the cluster is air-gapped,
 be sure to set the `skipLogin` value to `true`
@@ -123,13 +137,13 @@ clusters:
 #### DNS
 The fields for `dns` are: local-ip, remote-ip, exclude-suffixes, include-suffixes, and lookup-timeout.
 
-|Field|Description|Type|Default|
-|---|---|---|---|
-|`local-ip`|The address of the local DNS server. This entry is only used on Linux system that are not configured to use systemd.resolved|ip|first line of /etc/resolv.conf|
-|`remote-ip`|the address of the cluster's DNS service|ip|IP of the kube-dns.kube-system or the dns-default.openshift-dns service|
-|`exclude-suffixes`|suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver)|list||
-|`include-suffixes`|suffixes for which the DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes.|list||
-|`lookup-timeout`|maximum time to wait for a cluster side host lookup|duration||
+| Field              | Description                                                                                                                     | Type                                        | Default                                                                     |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|-----------------------------------------------------------------------------|
+| `local-ip`         | The address of the local DNS server.  This entry is only used on Linux systems that are not configured to use systemd-resolved. | IP address [string][yaml-str]               | first `nameserver` mentioned in `/etc/resolv.conf`                          |
+| `remote-ip`        | The address of the cluster's DNS service.                                                                                       | IP address [string][yaml-str]               | IP of the `kube-dns.kube-system` or the `dns-default.openshift-dns` service |
+| `exclude-suffixes` | Suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver)                           | [sequence][yaml-seq] of [strings][yaml-str] | `[".arpa", ".com", ".io", ".net", ".org", ".ru"]`                           |
+| `include-suffixes` | Suffixes for which the DNS resolver will always attempt to do a lookup.  Includes have higher priority than excludes.           | [sequence][yaml-seq] of [strings][yaml-str] | `[]`                                                                        |
+| `lookup-timeout`   | Maximum time to wait for a cluster side host lookup.                                                                            | [duration][go-duration] [string][yaml-str]  | 4 seconds                                                                   |
 
 Here is an example kubeconfig:
 ```
@@ -184,3 +198,11 @@ clusters:
           namespace: staging
   name: example-cluster
 ```
+
+[yaml-bool]: https://yaml.org/type/bool.html
+[yaml-float]: https://yaml.org/type/float.html
+[yaml-int]: https://yaml.org/type/int.html
+[yaml-seq]: https://yaml.org/type/seq.html
+[yaml-str]: https://yaml.org/type/str.html
+[go-duration]: https://pkg.go.dev/time#ParseDuration
+[logrus-level]: https://github.com/sirupsen/logrus/blob/v1.8.1/logrus.go#L25-L45
