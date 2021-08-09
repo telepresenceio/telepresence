@@ -5,6 +5,9 @@
 - Bugfix: The grpc.maxReceiveSize setting is now correctly propagated to all grpc servers.
   This allows users to mitigate a root daemon crash when sending a message over the default maximum size.
 
+- Bugfix: Some slight fixes to the `homebrew-package.sh` script which will enable us to run
+  it manually if we ever need to make homebrew point at an older version.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
