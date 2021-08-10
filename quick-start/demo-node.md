@@ -3,17 +3,16 @@ description: "Claim a remote demo cluster and learn to use Telepresence to inter
 ---
 
 import {DemoClusterMetadata, ExpirationDate} from '../../../../../src/components/DemoClusterMetadata';
-import { 
-    EmojivotoServicesList, 
-    DCPLink, 
-    Login, 
-    LoginCommand,   
-    DockerCommand, 
+import {
+    EmojivotoServicesList,
+    DCPLink,
+    Login,
+    LoginCommand,
+    DockerCommand,
     PreviewUrl,
     ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from './qs-tabs';
 import QSCards from './qs-cards';
 import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
 
@@ -53,7 +52,7 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
     <EmojivotoServicesList/>
 
 <Alert severity="success">
-   The Service Catalog gives you a consolidated view of all your services across development, staging, and production. 
+   The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
 </Alert>
 
 <ExpirationDate/>
@@ -65,7 +64,7 @@ The remote cluster is running the Emojivoto application, which consists of three
 1. Go to the <ExternalIp/> and vote for some emojis.
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
-   
+
 <Alert severity="success">
     <strong>Congratulations!</strong> You've successfully accessed the Emojivoto application on your remote cluster.
 </Alert>
@@ -98,7 +97,7 @@ A common use case for Telepresence is to connect your local development environm
 
    You will be asked for your ingress layer 3 address; specify the front end service: `ambassador.ambassador`
    Then, when asked for the port, type `80`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it.
-    
+
     <UserInterceptCommand/>
 
 <Alert severity="success">
@@ -110,12 +109,12 @@ A common use case for Telepresence is to connect your local development environm
 Preview URLs enable you to safely share your development environment with anyone. For example, you may want your UX designer to take a quick look at what you're developing, before you commit the code. Preview URLs enable this easy collaboration.
 
 2. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
-   
+
 1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
    <Alert severity="success">
         Now you're able to share your fix in your local environment with your team!
    </Alert>
-   
+
    <Alert severity="info">
         To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
    </Alert>
