@@ -374,10 +374,18 @@ workflows:
           context: telepresence2-release
           requires:
             - build-dev-image
+          filters:
+            branches:
+              # Forked pull requests have CIRCLE_BRANCH set to pull/#
+              ignore: /pull\/[0-9]+/
       - build-and-test-windows:
           context: telepresence2-release
           requires:
             - build-dev-image
+          filters:
+            branches:
+              # Forked pull requests have CIRCLE_BRANCH set to pull/#
+              ignore: /pull\/[0-9]+/
       - lint
       - generate
 
