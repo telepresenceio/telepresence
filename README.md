@@ -308,3 +308,4 @@ Telepresence installs the Traffic Manager in your cluster if it is not already p
 Telepresence installs the Traffic Agent as an additional container in any deployment you intercept, and modifies any associated services it finds to route traffic through the agent. This modification persists unless you uninstall it.
 
 You can launch other Telepresence sessions to the same cluster while an existing session is running, letting you intercept other deployments.
+
