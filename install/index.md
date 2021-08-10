@@ -1,4 +1,4 @@
-import QSTabs from '../quick-start/qs-tabs'
+import Platform from '@src/components/Platform';
 import OldVersionTabs from './old-version-tabs'
 import NightlyVersionTabs from './nightly-version-tabs'
 
@@ -6,7 +6,34 @@ import NightlyVersionTabs from './nightly-version-tabs'
 
 Install Telepresence by running the commands below for your OS.
 
-<QSTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```shell
+# Install via brew:
+brew install datawire/blackbird/telepresence
+
+# OR install manually:
+# 1. Download the latest binary (~60 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```shell
+# 1. Download the latest binary (~50 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+```
+
+</Platform.GNULinuxTab>
+</Platform.TabGroup>
 
 ## <img class="os-logo" src="../images/logo.png"/> What's Next?
 
