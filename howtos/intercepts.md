@@ -3,7 +3,7 @@ description: "Start using Telepresence in your own environment. Follow these ste
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from '../quick-start/qs-tabs'
+import Platform from '@src/components/Platform';
 import QSCards from '../quick-start/qs-cards'
 
 # Intercept a Service in Your Own Environment
@@ -32,7 +32,30 @@ This guide assumes you have a Kubernetes deployment and service accessible publi
 
 ## 1. Install the Telepresence CLI
 
-<QSTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```shell
+# 1. Download the latest binary (~60 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```shell
+# 1. Download the latest binary (~50 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+```
+
+</Platform.GNULinuxTab>
+</Platform.TabGroup>
 
 ## 2. Test Telepresence
 
