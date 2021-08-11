@@ -313,14 +313,17 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 // writeToTunLoop sends the packages read from the fromMgr channel to the TUN device
 func (h *handler) writeToTunLoop(ctx context.Context) {
 	defer close(h.readyToFin)
-	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		var cm connpool.Message
 		select {
+		// FIXME(josecv): Prioritize draining the fromMgr queue over terminating; there's a subtle race
+		// condition in which fromMgr might still be written to after a disconnect. In those
+		// cases, the send on fromMgr will block forever. This acts as a workaround to prevent
+		// that.
+		case cm = <-h.fromMgr:
 		case <-ctx.Done():
 			return
-		case cm = <-h.fromMgr:
-		case <-ticker.C:
+		case <-time.After(500 * time.Millisecond):
 			if atomic.LoadInt32(&h.isClosing) > 0 {
 				return
 			}
