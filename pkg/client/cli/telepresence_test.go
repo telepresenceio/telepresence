@@ -438,7 +438,8 @@ func (cs *connectedSuite) SetupSuite() {
 logLevels:
   rootDaemon: debug
 images:
-  registry: %s
+  registry: %[1]s
+  webhookRegistry: %[1]s
 timeouts:
   intercept: 20s
   trafficManagerAPI: 120s
