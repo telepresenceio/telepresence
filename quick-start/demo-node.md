@@ -94,7 +94,7 @@ A common use case for Telepresence is to connect your local development environm
 <LoginCommand/>
 
 2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
-    `telepresence intercept web --port 8080`
+    `telepresence intercept web-demo-frontend --port 8080`
 
    You will be asked for your ingress layer 3 address; specify the front end service: `ambassador.ambassador`
    Then, when asked for the port, type `80`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it.
