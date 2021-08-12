@@ -139,6 +139,8 @@ agentInjector:
       targetPort: https
   secret:
     name: mutator-webhook-tls
+  certificate:
+    regenerate: false
   webhook:
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]

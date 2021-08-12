@@ -8,6 +8,10 @@
 - Bugfix: Some slight fixes to the `homebrew-package.sh` script which will enable us to run
   it manually if we ever need to make homebrew point at an older version.
 
+- Feature: Helm chart has now feature to on demand regenerate certificate used for mutating webhook by setting value.
+`agentInjector.certificate.regenerate`
+
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
