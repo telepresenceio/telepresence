@@ -265,6 +265,7 @@ jobs:
     executor: vm-linux
     steps:
       - checkout
+      - install-go
       - run: make generate
       - dirty-check
 
