@@ -5,6 +5,9 @@
 - Bugfix: The grpc.maxReceiveSize setting is now correctly propagated to all grpc servers.
   This allows users to mitigate a root daemon crash when sending a message over the default maximum size.
 
+- Feature: Helm chart has now feature to on demand regenerate certificate used for mutating webhook by setting value.
+`agentInjector.certificate.regenerate`
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
