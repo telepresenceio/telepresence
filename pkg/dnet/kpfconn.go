@@ -85,7 +85,11 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 	if err != nil {
 		return nil, err
 	}
-	return pf.dial(ctx, pod, podPortNumber)
+	conn, err = pf.dial(ctx, pod, podPortNumber)
+	if err != nil {
+		dlog.Errorf(ctx, "Error with k8sPortForwardDialder Dial: %s", err)
+	}
+	return conn, err
 }
 
 func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kates.Pod, uint16, error) {
@@ -230,6 +234,7 @@ func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port u
 	// All port-forwards to the same Pod get multiplexed over the same SPDY stream.
 	spdyStream, err := pf.spdyStream(pod)
 	if err != nil {
+		dlog.Errorf(pf.logCtx, "Error getting spdyStream: %s", err)
 		return nil, err
 	}
 	defer func() {
