@@ -123,6 +123,10 @@ managerRbac:
 agentInjector:
   create: true
   name: agent-injector
+  agentImage:
+    registry: docker.io/datawire
+    name: tel2
+    tag: ""
   service:
     type: ClusterIP
     ports:

@@ -39,13 +39,24 @@ spec:
             value: app.getambassador.io
           - name: SYSTEMA_PORT
             value: "443"
+          - name: CLUSTER_ID
+            value: {{ .Values.clusterID }}
+          {{- if (and .Values.agentInjector.create .Values.agentInjector.agentImage.registry) }}
+          - name: TELEPRESENCE_REGISTRY
+            value: {{ .Values.agentInjector.agentImage.registry }}
+          {{- else }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.image.registry }}
+          {{- end }}
           {{- if .Values.grpc }}
           {{- if .Values.grpc.maxReceiveSize }}
           - name: TELEPRESENCE_MAX_RECEIVE_SIZE
             value: {{ .Values.grpc.maxReceiveSize }}
           {{- end }}
+          {{- end }}
+          {{- if .Values.agentInjector.create }}
+          - name: TELEPRESENCE_AGENT_IMAGE
+            value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
           {{- end }}
           - name: MANAGER_NAMESPACE
             valueFrom:
