@@ -1,5 +1,4 @@
 import Platform from '@src/components/Platform';
-import OldVersionTabs from './old-version-tabs'
 
 # Install
 
@@ -38,4 +37,19 @@ Follow one of our [quick start guides](../quick-start/) to start using Teleprese
 
 Use these URLs to download an older version for your OS, replacing `x.y.z` with the versions you want.
 
-<OldVersionTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```
+https://app.getambassador.io/download/tel2/darwin/amd64/x.y.z/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```
+https://app.getambassador.io/download/tel2/linux/amd64/x.y.z/telepresence
+```
+
+</Platform.GNULinuxTab>
+</Platform.TabGroup>
