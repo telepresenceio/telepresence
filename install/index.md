@@ -1,5 +1,4 @@
 import Platform from '@src/components/Platform';
-import NightlyVersionTabs from './nightly-version-tabs'
 
 # Install
 
@@ -78,7 +77,22 @@ version of Telepresence is released.
 
 Use these URLs to download the most recent nightly build.
 
-<NightlyVersionTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```
+https://app.getambassador.io/download/tel2/darwin/amd64/nightly/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```
+https://app.getambassador.io/download/tel2/linux/amd64/nightly/telepresence
+```
+
+</Platform.GNULinuxTab>
+</Platform.TabGroup>
 
 ## Installing older versions of Telepresence
 
