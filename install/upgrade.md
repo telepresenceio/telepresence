@@ -3,7 +3,6 @@ description: "How to upgrade your installation of Telepresence and install previ
 ---
 
 import Platform from '@src/components/Platform';
-import OldVersionTabs from './old-version-tabs'
 
 # Upgrade Telepresence
 
@@ -50,7 +49,22 @@ After upgrading your CLI, the Traffic Manager **must be uninstalled** from your 
 
 Use these URLs to download an older version for your OS, replacing `x.x.x` with the version you want.
 
-<OldVersionTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```
+https://app.getambassador.io/download/tel2/darwin/amd64/x.y.z/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```
+https://app.getambassador.io/download/tel2/linux/amd64/x.y.z/telepresence
+```
+
+</Platform.GNULinuxTab>
+</Platform.TabGroup>
 
 ## Migrating from Telepresence 1 to Telepresence 2
 
