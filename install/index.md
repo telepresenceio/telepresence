@@ -1,5 +1,4 @@
 import Platform from '@src/components/Platform';
-import OldVersionTabs from './old-version-tabs'
 import NightlyVersionTabs from './nightly-version-tabs'
 
 # Install
@@ -85,4 +84,26 @@ Use these URLs to download the most recent nightly build.
 
 Use these URLs to download an older version for your OS (including older nightly builds), replacing `x.y.z` with the versions you want.
 
-<OldVersionTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```
+https://app.getambassador.io/download/tel2/darwin/amd64/x.y.z/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```
+https://app.getambassador.io/download/tel2/linux/amd64/x.y.z/telepresence
+```
+
+</Platform.GNULinuxTab>
+<Platform.WindowsTab>
+
+```
+https://app.getambassador.io/download/tel2/windows/amd64/x.y.z/telepresence
+```
+
+</Platform.WindowsTab>
+</Platform.TabGroup>
