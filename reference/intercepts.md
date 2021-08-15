@@ -66,6 +66,7 @@ for four settings about how your cluster's ingress is configured.  For
 each, Telepresence tries to intelligently detect the correct value for
 your cluster; if it detects it correctly, may simply press "enter" and
 accept the default, otherwise you must tell Telepresence the correct
+value.
 
 When creating an intercept with the `http` mechanism, the
 traffic-agent sends a `GET /telepresence-http2-check` request to your
