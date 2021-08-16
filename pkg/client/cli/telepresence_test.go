@@ -448,7 +448,11 @@ grpc:
 	configYml = strings.TrimSpace(configYml)
 	c, err := client.SetConfig(c, configDir, configYml)
 
-	_, stderr := telepresenceContext(c, "connect")
+	// Uninstall and re-install to make sure the traffic-manager is installed with the right config
+	_, stderr := telepresenceContext(c, "uninstall", "-e")
+	require.Empty(stderr)
+
+	_, stderr = telepresenceContext(c, "connect")
 	require.Empty(stderr)
 	time.Sleep(time.Second) // Allow some time before we quit
 	_, stderr = telepresenceContext(c, "quit")
