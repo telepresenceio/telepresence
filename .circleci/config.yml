@@ -129,6 +129,16 @@ commands:
             sudo apt-get install -y sshfs
             sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
 
+  "install-sshfs-macos":
+    steps:
+      - run:
+          name: "Brew install macfuse"
+          command: |
+            brew update
+            brew install --cask macfuse
+            brew install gromgit/fuse/sshfs-mac
+            brew link --overwrite sshfs-mac
+
   "dirty-check":
     steps:
       - run:
@@ -223,6 +233,33 @@ jobs:
           no_output_timeout: 27m
       - cleanup-kluster:
           platform: windows
+      - save-logs
+
+  "build-and-test-macos":
+    executor: vm-macos
+    steps:
+      - checkout
+      - install-go
+      - run: make build
+      - install-kubectl
+      - install-sshfs-macos
+      - attach_workspace:
+          at: /tmp/workspace
+      - prepare-kluster:
+          platform: macos
+      - run:
+          command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
+          # Both CircleCI and `go test` itself time out after 10m by
+          # default.  `go test` gives us helpful output when that
+          # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
+          # just a bit, so `go test`'s timeout output isn't hidden.
+          no_output_timeout: 25m
+      - cleanup-kluster:
+          platform: macos
       - save-logs
 
   "build-and-test":
@@ -389,6 +426,10 @@ workflows:
           requires:
             - build-dev-image
       - build-and-test-windows:
+          context: telepresence2-release
+          requires:
+            - build-dev-image
+      - build-and-test-macos:
           context: telepresence2-release
           requires:
             - build-dev-image
