@@ -215,8 +215,6 @@ github.com/datawire/dlib v1.1.0/go.mod h1:aCzh74rJ3kOireYbg4gH0CuD48/xA4G+LuHhkp
 github.com/datawire/dlib v1.2.0/go.mod h1:t0upKFHApJskdVFH/gyksG5+vMCl0GCKeEZIEJBBv4g=
 github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8 h1:WqvO+Sa8l7ydURsEYNrpCKTKv6ps67rb39NmYGg13ek=
 github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8/go.mod h1:OdrErY06tawcmEkhTLeb1k3IN2HyzT3zcW4DsqQsJOM=
-github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448 h1:FjlIH+QkeTQ6jW4G2xeO6udD2ZhLtdPyBIDMHa64Z0E=
-github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448/go.mod h1:D/jb71PHlfUjfNSUVpXQAscXsXy3x+CY+c52lPnW2qU=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316 h1:XAaJXdJB3rus/iErfsOIz5S8bv/Yp5s/ZXnpAzcfVxI=
 github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316/go.mod h1:NREThFqKR1f3iQ6oBuvc5LadQuXVGo9rkm5ZGrQdJfM=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a/go.mod h1:H8uUmE8qqo7z9u30MYB9riLyRckPHOPBk9ZdCuH+dQQ=
@@ -253,6 +251,8 @@ github.com/docker/libtrust v0.0.0-20150114040149-fa567046d9b1 h1:ZClxb8laGDf5arX
 github.com/docker/libtrust v0.0.0-20150114040149-fa567046d9b1/go.mod h1:cyGadeNEkKy96OOhEzfZl+yxihPEzKnqJwvfuSUqbZE=
 github.com/docker/spdystream v0.0.0-20160310174837-449fdfce4d96/go.mod h1:Qh8CwZgvJUkLughtfhJv5dyTYa91l1fOUCrgjqmcifM=
 github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815/go.mod h1:WwZ+bS3ebgob9U8Nd0kOddGdZWjyMGR8Wziv+TBNwSE=
+github.com/donnyyung/dtest v0.0.0-20210817132025-a9b408f68d4a h1:5cUOygHiy/mTJtrW1vkZN7oc7qG7tKB+WtueByr+vt4=
+github.com/donnyyung/dtest v0.0.0-20210817132025-a9b408f68d4a/go.mod h1:D/jb71PHlfUjfNSUVpXQAscXsXy3x+CY+c52lPnW2qU=
 github.com/dsnet/compress v0.0.1/go.mod h1:Aw8dCMJ7RioblQeTqt88akK31OvO8Dhf5JflhBbQEHo=
 github.com/dsnet/golib v0.0.0-20171103203638-1ea166775780/go.mod h1:Lj+Z9rebOhdfkVLjJ8T6VcRQv3SXugXy999NBtR9aFY=
 github.com/dustin/go-humanize v0.0.0-20171111073723-bb3d318650d4/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=

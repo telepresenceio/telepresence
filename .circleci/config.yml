@@ -245,6 +245,23 @@ jobs:
       - cleanup-kluster:
           platform: linux
 
+  "build-and-test-airgap":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-go
+      - run: make build
+      - install-kubectl
+      - install-sshfs
+      - run:
+          command: make test
+          # Both CircleCI and `go test` itself time out after 10m by
+          # default.  `go test` gives us helpful output when that
+          # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
+          # just a bit, so `go test`'s timeout output isn't hidden.
+          no_output_timeout: 20m
+      - save-logs
+
   "lint":
     executor: vm-linux
     steps:
@@ -370,15 +387,16 @@ workflows:
 
   'Dev':
     jobs:
-      - build-dev-image
-      - build-and-test:
-          context: telepresence2-release
-          requires:
-            - build-dev-image
-      - build-and-test-windows:
-          context: telepresence2-release
-          requires:
-            - build-dev-image
+        #- build-dev-image
+      - build-and-test-airgap
+        #- build-and-test:
+        # context: telepresence2-release
+        #  requires:
+        #    - build-dev-image
+        #- build-and-test-windows:
+        # context: telepresence2-release
+        # requires:
+        #   - build-dev-image
       - lint
       - generate
 
