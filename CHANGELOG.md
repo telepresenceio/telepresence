@@ -11,6 +11,7 @@
 - Feature: Helm chart has now feature to on demand regenerate certificate used for mutating webhook by setting value.
 `agentInjector.certificate.regenerate`
 
+- Bugfix: Telepresence will initialize the default namespace from the kubeconfig on each call instead of just doing it when connecting.
 
 ### 2.4.0 (August 4, 2021)
 
