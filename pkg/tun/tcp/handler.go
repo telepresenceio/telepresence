@@ -313,14 +313,24 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 // writeToTunLoop sends the packages read from the fromMgr channel to the TUN device
 func (h *handler) writeToTunLoop(ctx context.Context) {
 	defer close(h.readyToFin)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	// We use a timer that we reset on each iteration instead of a ticker to prevent drift between
+	// the select loop and the ticker's interval. Otherwise, suppose we spend 499ms processing
+	// a message from fromMgr, a ticker would only give us a 1ms wait before checking h.isClosing
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
 	for {
 		var cm connpool.Message
+		timer.Stop()
+		select {
+		case <-timer.C:
+		default:
+		}
+		timer.Reset(500 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			return
 		case cm = <-h.fromMgr:
-		case <-ticker.C:
+		case <-timer.C:
 			if atomic.LoadInt32(&h.isClosing) > 0 {
 				return
 			}
