@@ -93,16 +93,10 @@ func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, namespace, clusterID string, env *cl.Env) error {
-	// TODO Upgrade path!
+func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, client *kates.Client, namespace, clusterID string, env *cl.Env) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
-	}
-
-	chrt, err := loadChart()
-	if err != nil {
-		return fmt.Errorf("unable to load built-in helm chart: %w", err)
 	}
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
@@ -114,7 +108,20 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, n
 		dlog.Errorf(ctx, "Unable to look for existing helm release: %v. Assuming it's there and continuing...", err)
 		return nil
 	}
+
+	chrt, err := loadChart()
+	if err != nil {
+		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	}
 	if existing == nil {
+		err := importLegacy(ctx, namespace, client)
+		if err != nil {
+			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
+			// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
+			dlog.Errorf(ctx, "Unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...", err)
+			return nil
+		}
+
 		return installNew(ctx, chrt, helmConfig, namespace, clusterID)
 	}
 	if shouldManageRelease(ctx, existing) && shouldUpgradeRelease(ctx, existing) {
