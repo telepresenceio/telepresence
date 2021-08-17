@@ -122,10 +122,22 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 			return nil
 		}
 
-		return installNew(ctx, chrt, helmConfig, namespace, clusterID)
+		err = installNew(ctx, chrt, helmConfig, namespace, clusterID)
+		if err != nil {
+			return err
+		}
+		// We've just modified the resources totally outside of the kates client, so invalidate the cache to make sure
+		// it'll return fresh resources
+		client.InvalidateCache()
+		return nil
 	}
 	if shouldManageRelease(ctx, existing) && shouldUpgradeRelease(ctx, existing) {
-		return upgradeExisting(ctx, chrt, helmConfig, namespace, clusterID)
+		err = upgradeExisting(ctx, chrt, helmConfig, namespace, clusterID)
+		if err != nil {
+			return err
+		}
+		client.InvalidateCache()
+		return nil
 	}
 	dlog.Info(ctx, "Existing Traffic Manager not owned by cli or does not need upgrade, will not modify")
 	return nil

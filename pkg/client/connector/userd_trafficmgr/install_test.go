@@ -76,11 +76,11 @@ func (is *installSuite) removeManager(namespace string) {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
 
-	// Remove service and deployment
-	cmd := dexec.CommandContext(ctx, "kubectl", "--kubeconfig", is.kubeConfig, "--namespace", namespace, "delete", "svc,deployment", "traffic-manager")
+	// Run a helm uninstall
+	cmd := dexec.CommandContext(ctx, "../../../../tools/bin/helm", "--kubeconfig", is.kubeConfig, "--namespace", namespace, "uninstall", "traffic-manager")
 	_, _ = cmd.Output()
 
-	// Wait until getting them fails
+	// Wait until getting the resources fails
 	require.Eventually(func() bool {
 		cmd = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", is.kubeConfig, "--namespace", namespace, "get", "deployment", "traffic-manager")
 		return cmd.Run() != nil
@@ -119,6 +119,10 @@ func (is *installSuite) SetupSuite() {
 	is.saveManagerNamespace = os.Getenv("TELEPRESENCE_MANAGER_NAMESPACE")
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", is.managerNamespace)
 	_ = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", is.kubeConfig, "create", "namespace", is.namespace).Run()
+
+	if !is.isCI {
+		is.publishManager()
+	}
 }
 
 func (is *installSuite) TearDownSuite() {
@@ -148,6 +152,63 @@ func (is *installSuite) Test_findTrafficManager_notPresent() {
 	defer func() { version.Version = is.testVersion }()
 	_, err = ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
 	is.Error(err, "expected find to not find deployment")
+}
+
+func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+
+	f, err := ioutil.ReadFile("testdata/legacyManifests/manifests.yml")
+	require.NoError(err)
+	manifest := string(f)
+	manifest = strings.ReplaceAll(manifest, "NAMESPACE", is.managerNamespace)
+	cmd := dexec.CommandContext(ctx, "kubectl", "--kubeconfig", is.kubeConfig, "-n", is.managerNamespace, "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(manifest)
+
+	err = cmd.Run()
+	require.NoError(err)
+
+	is.findTrafficManagerPresent(is.managerNamespace)
+}
+
+func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up
+	// 2.4.0 was the latest release at the time that testdata/telepresence-1.9.9.tgz was packaged
+	err = dexec.CommandContext(ctx,
+		"../../../../tools/bin/helm",
+		"--kubeconfig", is.kubeConfig, "-n", is.managerNamespace,
+		"install", "traffic-manager", "testdata/telepresence-1.9.9.tgz",
+		"--create-namespace",
+		"--atomic",
+		"--set", "clusterID="+kc.GetClusterId(ctx),
+		"--set", "image.tag=2.4.0",
+	).Run()
+	require.NoError(err)
+
+	defer is.removeManager(is.managerNamespace)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+
+	kc.Client().InvalidateCache()
+	dep, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
+	require.NoError(err)
+	require.NotNil(dep)
+	require.Contains(dep.Spec.Template.Spec.Containers[0].Image, "2.4.0")
+	require.Equal(dep.Labels["helm.sh/chart"], "telepresence-1.9.9")
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
@@ -185,9 +246,6 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
-	if !is.isCI {
-		is.publishManager()
-	}
 	defer is.removeManager(is.managerNamespace)
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
@@ -203,9 +261,6 @@ func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	require := is.Require()
 	c := dlog.NewTestContext(is.T(), false)
-	if !is.isCI {
-		is.publishManager()
-	}
 	defer is.removeManager(namespace)
 
 	env, err := client.LoadEnv(c)
@@ -235,7 +290,9 @@ func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	require.NoError(ti.ensureManager(c, &env))
 	require.Eventually(func() bool {
 		dep, err := ti.FindDeployment(c, namespace, install.ManagerAppName)
-		return err == nil && dep != nil
+		v := strings.TrimPrefix(version.Version, "v")
+		img := dep.Spec.Template.Spec.Containers[0].Image
+		return err == nil && dep != nil && strings.Contains(img, v)
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
 }
 
