@@ -241,7 +241,7 @@ items:
         body: >-
           We now support configuring which agent image + registry to use in the
           config. This enables users whose laptop is an air-gapped environment to
-          create selective intercepts without requiring a login. It also makes it easier
+          create personal intercepts without requiring a login. It also makes it easier
           for those who are developing on Telepresence to specify which agent image should
           be used. Env vars TELEPRESENCE_AGENT_IMAGE and TELEPRESENCE_REGISTRY are no longer
           used.
