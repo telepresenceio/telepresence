@@ -16,7 +16,8 @@ import (
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
 // reading or writing any messages. The dialer is normally closed by one of the peers.
-const connTTL = time.Minute
+const tcpConnTTL = 2 * time.Hour // Default tcp_keepalive_time on Linux
+const udpConnTTL = 1 * time.Minute
 const dialTimeout = 30 * time.Second
 
 const (
@@ -74,7 +75,7 @@ func HandlerFromConn(connID ConnID, bidiStream TunnelStream, release func(), con
 
 func (h *dialer) Start(ctx context.Context) {
 	// Set up the idle timer to close and release this handler when it's been idle for a while.
-	h.idleTimer = time.NewTimer(connTTL)
+	h.idleTimer = time.NewTimer(h.getTTL())
 
 	switch h.connected {
 	case notConnected:
@@ -87,6 +88,13 @@ func (h *dialer) Start(ctx context.Context) {
 		h.connected = connected
 		h.sendTCD(ctx, Connect)
 	}
+}
+
+func (h *dialer) getTTL() time.Duration {
+	if h.id.Protocol() == ipproto.UDP {
+		return udpConnTTL
+	}
+	return tcpConnTTL
 }
 
 func (h *dialer) open(ctx context.Context) ControlCode {
@@ -253,7 +261,7 @@ func (h *dialer) resetIdle() bool {
 	h.idleLock.Lock()
 	stopped := h.idleTimer.Stop()
 	if stopped {
-		h.idleTimer.Reset(connTTL)
+		h.idleTimer.Reset(h.getTTL())
 	}
 	h.idleLock.Unlock()
 	return stopped
