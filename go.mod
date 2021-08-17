@@ -49,7 +49,5 @@ replace (
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
-replace github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448 => github.com/donnyyung/dtest v0.0.0-20210817132025-a9b408f68d4a
-
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316

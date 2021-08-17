@@ -254,7 +254,11 @@ jobs:
       - install-kubectl
       - install-sshfs
       - run:
-          command: make test
+          command: |
+            echo "127.0.0.1 beta-app.datawire.io" | sudo tee -a /etc/hosts
+            echo "127.0.0.1 app.getambassador.io" | sudo tee -a /etc/hosts
+            echo "127.0.0.1 getambassador.io" | sudo tee -a /etc/hosts
+            make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
