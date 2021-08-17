@@ -147,9 +147,9 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 	return k, nil
 }
 
-// Equals determines if this instance is equal to the given instance with respect to everything but
-// Namespace.
-func (kf *Config) Equals(okf *Config) bool {
+// ContextServiceAndFlagsEqual determines if this instance is equal to the given instance with respect to context,
+// server, and flag arguments.
+func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
