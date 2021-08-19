@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,9 +84,9 @@ func TestDialSocket(t *testing.T) {
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)
-		assert.ErrorIs(t, err, syscall.ECONNREFUSED)
+		assert.ErrorIs(t, err, os.ErrNotExist)
 		assert.Contains(t, err.Error(), "dial unix "+sockname)
-		assert.Contains(t, err.Error(), "this usually means that the process has terminated ungracefully")
+		assert.Contains(t, err.Error(), "this usually means that the process is not running")
 	})
 	t.Run("NotExist", func(t *testing.T) {
 		ctx := dlog.NewTestContext(t, false)

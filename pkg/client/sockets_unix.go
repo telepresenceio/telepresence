@@ -28,13 +28,26 @@ const (
 func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
-		grpc.WithInsecure(),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true),
-	}, opts...)...)
-	if err != nil {
+	for firstTry := true; ; firstTry = false {
+		conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
+			grpc.WithInsecure(),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true),
+		}, opts...)...)
+		if err == nil {
+			return conn, nil
+		}
+
+		if firstTry && errors.Is(err, syscall.ECONNREFUSED) {
+			// Socket exists but doesn't accept connections. This usually means that the process
+			// terminated ungracefully. To remedy this, we make an attempt to remove the socket
+			// and dial again.
+			if rmErr := os.Remove(socketName); rmErr == nil {
+				continue
+			}
+		}
+
 		if err == context.DeadlineExceeded {
 			// grpc.DialContext doesn't wrap context.DeadlineExceeded with any useful
 			// information at all.  Fix that.
@@ -59,7 +72,6 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 		}
 		return nil, err
 	}
-	return conn, nil
 }
 
 func listenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
