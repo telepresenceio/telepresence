@@ -14,6 +14,10 @@
 - Change: The traffic-manager now requires `get` namespace permissions to get the cluster ID instead of that value being
   passed in as an environment variable to the traffic-manager's deployment.
 
+- Change: The traffic-manager is now installed via an embedded version of the Helm chart when `telepresence connect` is first performed on a cluster.
+  This change is transparent to the user.
+  A new configuration flag, `timeouts.helm` sets the timeouts for all helm operations performed by the Telepresence binary.
+
 - Bugfix: Telepresence will initialize the default namespace from the kubeconfig on each call instead of just doing it when connecting.
 
 - Bugfix: The timeout to keep idle outbound TCP connections alive was increased from 60 to 7200 seconds which is the same as

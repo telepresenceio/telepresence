@@ -27,7 +27,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ include "telepresence.fullname" . }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -40,12 +40,16 @@ spec:
           - name: SYSTEMA_PORT
             value: "443"
           - name: TELEPRESENCE_REGISTRY
-            value: {{ .Values.image.registry }}
+            value: {{ .Values.agentInjector.agentImage.registry }}
           {{- if .Values.grpc }}
           {{- if .Values.grpc.maxReceiveSize }}
           - name: TELEPRESENCE_MAX_RECEIVE_SIZE
             value: {{ .Values.grpc.maxReceiveSize }}
           {{- end }}
+          {{- end }}
+          {{- if .Values.agentInjector.create }}
+          - name: TELEPRESENCE_AGENT_IMAGE
+            value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
           {{- end }}
           - name: MANAGER_NAMESPACE
             valueFrom:

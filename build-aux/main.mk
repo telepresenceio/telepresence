@@ -27,6 +27,14 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
+
+# This has to be a phony target so that it will be rebuilt on changes to TELEPRESENCE_VERSION
+.PHONY: pkg/install/helm/telepresence-chart.tgz
+pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence
+	$(tools/helm) package charts/telepresence --version=$(TELEPRESENCE_VERSION)
+	mv telepresence-$(TELEPRESENCE_VERSION).tgz $@
+
+
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
@@ -70,7 +78,7 @@ base-image: base-image/Dockerfile # Intentionally not in 'make help'
 PKG_VERSION = $(shell go list ./pkg/version)
 
 .PHONY: build
-build: ## (Build) Build all the source code
+build: pkg/install/helm/telepresence-chart.tgz ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
 	CGO_ENABLED=0 go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
@@ -87,7 +95,7 @@ push-image: image ## (Build) Push the manager/agent container image to $(TELEPRE
 
 .PHONY: clean
 clean: ## (Build) Remove all build artifacts
-	rm -rf $(BUILDDIR)
+	rm -rf $(BUILDDIR) pkg/install/helm/telepresence-chart.tgz
 
 .PHONY: clobber
 clobber: clean ## (Build) Remove all build artifacts and tools
@@ -96,7 +104,7 @@ clobber: clean ## (Build) Remove all build artifacts and tools
 # ===========================================================
 
 .PHONY: prepare-release
-prepare-release: ## (Release) Update nescessary files and tag the release (does not push)
+prepare-release: generate ## (Release) Update nescessary files and tag the release (does not push)
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
@@ -169,7 +177,7 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything necessary to lint
 
 .PHONY: build-tests
-build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
+build-tests: pkg/install/helm/telepresence-chart.tgz ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
 	go list ./... | xargs -n1 go test -c -o /dev/null
 
 shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
@@ -192,7 +200,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check
-check: $(tools/ko) $(tools/helm) ## (QA) Run the test suite
+check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=300 go test -timeout=18m ./...
 
 .PHONY: _login
