@@ -269,6 +269,14 @@ func TestConnect(t *testing.T) {
 		Name:    spec.Name,  // doesn't matter...
 	})
 	a.Error(err)
+	_, err = client.Depart(ctx, aliceSess2)
+	a.NoError(err)
+	_, err = client.Depart(ctx, helloSess)
+	a.NoError(err)
+	_, err = client.Depart(ctx, demo1Sess)
+	a.NoError(err)
+	_, err = client.Depart(ctx, demo2Sess)
+	a.NoError(err)
 }
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {
