@@ -438,7 +438,8 @@ func (cs *connectedSuite) SetupSuite() {
 logLevels:
   rootDaemon: debug
 images:
-  registry: %s
+  registry: %[1]s
+  webhookRegistry: %[1]s
 timeouts:
   intercept: 20s
   trafficManagerAPI: 120s
@@ -1412,15 +1413,10 @@ func (hs *helmSuite) TestZ_Uninstall() {
 }
 
 func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, appNamespaces ...string) error {
-	clusterID, err := hs.tpSuite.kubectlOut(ctx, "get", "ns", hs.appNamespace1, "-o", "jsonpath={.metadata.uid}")
-	if err != nil {
-		return err
-	}
 	helmValues := "pkg/client/cli/testdata/test-values.yaml"
 	helmChart := "charts/telepresence"
-	err = run(ctx, "helm", "install", "traffic-manager",
+	err := run(ctx, "helm", "install", "traffic-manager",
 		"-n", managerNamespace, helmChart,
-		"--set", fmt.Sprintf("clusterId=%s", clusterID),
 		"--set", fmt.Sprintf("image.registry=%s", dtest.DockerRegistry(ctx)),
 		"--set", fmt.Sprintf("image.tag=%s", hs.tpSuite.testVersion[1:]),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),

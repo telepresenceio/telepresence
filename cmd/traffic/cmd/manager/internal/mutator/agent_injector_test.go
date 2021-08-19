@@ -60,7 +60,6 @@ func TestTrafficAgentInjector(t *testing.T) {
 		ServerPort:  "80",
 		SystemAHost: "",
 		SystemAPort: "",
-		ClusterID:   "",
 
 		ManagerNamespace: "default",
 		AgentImage:       "docker.io/datawire/tel2:2.3.1",

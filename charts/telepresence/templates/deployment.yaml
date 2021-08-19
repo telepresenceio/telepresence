@@ -39,8 +39,6 @@ spec:
             value: app.getambassador.io
           - name: SYSTEMA_PORT
             value: "443"
-          - name: CLUSTER_ID
-            value: {{ .Values.clusterID }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.image.registry }}
           {{- if .Values.grpc }}

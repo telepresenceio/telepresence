@@ -9,7 +9,10 @@
   it manually if we ever need to make homebrew point at an older version.
 
 - Feature: Helm chart has now feature to on demand regenerate certificate used for mutating webhook by setting value.
-`agentInjector.certificate.regenerate`
+  `agentInjector.certificate.regenerate`
+
+- Change: The traffic-manager now requires `get` namespace permissions to get the cluster ID instead of that value being
+  passed in as an environment variable to the traffic-manager's deployment.
 
 - Bugfix: Telepresence will initialize the default namespace from the kubeconfig on each call instead of just doing it when connecting.
 

@@ -38,7 +38,7 @@ func (ri tmClusterRole) desiredClusterRole(ctx context.Context) *kates.ClusterRo
 		{
 			Verbs:     []string{"get", "list"},
 			APIGroups: []string{""},
-			Resources: []string{"services"},
+			Resources: []string{"services", "namespaces"},
 		},
 		{
 			Verbs:     []string{"list", "get", "watch"},

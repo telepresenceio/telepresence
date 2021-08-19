@@ -63,14 +63,6 @@ service:
 # Default: debug
 logLevel: debug
 
-# Telepresence requires a clusterID for identifying itself.
-# This cluster ID is just the UID of the default namespace. You can get this by
-# running `kubectl get ns default -o jsonpath='{.metadata.uid}'`
-# Telepresence will not be able to request a license without this.
-#
-# Default: ""
-clusterID: ""
-
 # GRPC configuration for the Traffic Manager.
 # This is identical to the grpc configuration for local clients.
 # See https://www.telepresence.io/docs/latest/reference/config/#grpc for more info

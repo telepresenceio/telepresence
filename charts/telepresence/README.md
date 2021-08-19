@@ -14,7 +14,6 @@ their services.
 helm repo add datawire https://getambassador.io
 helm install traffic-manager -n ambassador datawire/telepresence \
 --create-namespace \
---set clusterID=$(kubectl get ns default -o jsonpath='{.metadata.uid}')
 ```
 
 ## Changelog
@@ -41,7 +40,6 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | service.type             | The type of `Service` for the Traffic Manager.                                                                          | `ClusterIP`                                                                                       |
 | resources                | Define resource requests and limits for the Traffic Manger.                                                             | `{}`                                                                                              |
 | logLevel                 | Define the logging level of the Traffic Manager                                                                         | `debug`                                                                                           |
-| clusterID                | The ID the Traffic Manager uses to identify itself. This is just the UID of the default namespace.                      | `""`                                                                                              |
 | licenseKey.create        | Create the license key `volume` and `volumeMount`. **Only required for clusters without access to the internet.**       | `false`                                                                                           |
 | licenseKey.value         | The value of the license key.                                                                                           | `""`                                                                                              |
 | licenseKey.secret.create | Define whether you want the license key `Secret` to be managed by the release or not.                                   | `true`                                                                                            |
