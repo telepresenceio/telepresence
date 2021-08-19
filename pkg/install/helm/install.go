@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -32,13 +31,12 @@ func getHelmConfig(ctx context.Context, configFlags *kates.ConfigFlags, namespac
 	return helmConfig, nil
 }
 
-func getValues(ctx context.Context, clusterID string) map[string]interface{} {
+func getValues(ctx context.Context) map[string]interface{} {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
 	imageRegistry := imgConfig.Registry
 	imageTag := strings.TrimPrefix(client.Version(), "v")
 	values := map[string]interface{}{
-		"clusterID": clusterID,
 		"image": map[string]interface{}{
 			"registry": imageRegistry,
 			"tag":      imageTag,
@@ -70,30 +68,30 @@ func getValues(ctx context.Context, clusterID string) map[string]interface{} {
 	return values
 }
 
-func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace, clusterID string) error {
+func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
 	dlog.Info(ctx, "No existing Traffic Manager found, installing...")
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
-	install.Timeout = 2 * time.Minute
+	install.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	install.Atomic = true
 	install.CreateNamespace = true
-	_, err := install.Run(chrt, getValues(ctx, clusterID))
+	_, err := install.Run(chrt, getValues(ctx))
 	return err
 }
 
-func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace, clusterID string) error {
+func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
 	dlog.Info(ctx, "Existing Traffic Manager found, upgrading...")
 	upgrade := action.NewUpgrade(helmConfig)
-	upgrade.Timeout = 2 * time.Minute
+	upgrade.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
-	_, err := upgrade.Run(releaseName, chrt, getValues(ctx, clusterID))
+	_, err := upgrade.Run(releaseName, chrt, getValues(ctx))
 	return err
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, client *kates.Client, namespace, clusterID string, env *cl.Env) error {
+func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, client *kates.Client, namespace string, env *cl.Env) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
@@ -122,7 +120,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 			return nil
 		}
 
-		err = installNew(ctx, chrt, helmConfig, namespace, clusterID)
+		err = installNew(ctx, chrt, helmConfig, namespace)
 		if err != nil {
 			return err
 		}
@@ -132,7 +130,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 		return nil
 	}
 	if shouldManageRelease(ctx, existing) && shouldUpgradeRelease(ctx, existing) {
-		err = upgradeExisting(ctx, chrt, helmConfig, namespace, clusterID)
+		err = upgradeExisting(ctx, chrt, helmConfig, namespace)
 		if err != nil {
 			return err
 		}
@@ -160,7 +158,7 @@ func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, n
 	}
 	dlog.Info(ctx, "Uninstalling Traffic Manager")
 	uninstall := action.NewUninstall(helmConfig)
-	uninstall.Timeout = 2 * time.Minute
+	uninstall.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	_, err = uninstall.Run(releaseName)
 	return err
 }

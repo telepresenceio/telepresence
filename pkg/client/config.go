@@ -21,6 +21,7 @@ import (
 
 const configFile = "config.yml"
 
+// Config contains all configuration values for the telepresence CLI
 type Config struct {
 	Timeouts  Timeouts  `json:"timeouts,omitempty"`
 	LogLevels LogLevels `json:"logLevels,omitempty"`
@@ -97,6 +98,7 @@ type Timeouts struct {
 	// grab it, but we want it to be clear that this is "bad".  We should probably (TODO) get
 	// rid of those later cases, but let's not spend time doing that right now; and instead just
 	// make them easy to grep for (`grep Private`) later.
+	// The exception is the helm timeout, since Helm APIs do not accept contexts.
 
 	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
 	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty"`
@@ -112,6 +114,8 @@ type Timeouts struct {
 	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
+	// Helm is how long to wait for any helm operations.
+	Helm time.Duration `json:"helm,omitempty"`
 }
 
 type TimeoutID int
@@ -251,6 +255,8 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			dp = &d.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
 			dp = &d.PrivateTrafficManagerConnect
+		case "helm":
+			dp = &d.Helm
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -299,6 +305,9 @@ func (d *Timeouts) merge(o *Timeouts) {
 	}
 	if o.PrivateTrafficManagerConnect != 0 {
 		d.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
+	}
+	if o.Helm != 0 {
+		d.Helm = o.Helm
 	}
 }
 
@@ -506,6 +515,7 @@ var defaultConfig = Config{
 		PrivateProxyDial:             5 * time.Second,
 		PrivateTrafficManagerAPI:     15 * time.Second,
 		PrivateTrafficManagerConnect: 60 * time.Second,
+		Helm:                         120 * time.Second,
 	},
 	LogLevels: LogLevels{
 		UserDaemon: logrus.DebugLevel,

@@ -657,5 +657,5 @@ func addAgentToWorkload(
 }
 
 func (ki *installer) ensureManager(c context.Context, env *client.Env) error {
-	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.Client(), ki.GetManagerNamespace(), ki.GetClusterId(c), env)
+	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.Client(), ki.GetManagerNamespace(), env)
 }
