@@ -30,7 +30,16 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
-
+  - version: 2.4.1
+    date: 'TBD'
+    notes:
+      - type: change
+        title: Traffic Manager installed via helm
+        body: >-
+          The traffic-manager is now installed via an embedded version of the Helm chart when <code>telepresence connect</code> is first performed on a cluster.
+          This change is transparent to the user.
+          A new configuration flag, <code>timeouts.helm</code> sets the timeouts for all helm operations performed by the Telepresence binary.
+        docs: reference/config#timeouts
   - version: 2.4.0
     date: '2021-08-04'
     notes:
