@@ -26,6 +26,8 @@
 - Bugfix: Telepresence will now remove a socket that is the result of an ungraceful termination and retry instead of printing
   an error saying "this usually means that the process has terminated ungracefully"
 
+- Change: Failure to report metrics is logged using loglevel info rather than error.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.

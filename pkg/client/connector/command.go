@@ -454,10 +454,7 @@ func run(c context.Context) error {
 					Value: v,
 				})
 			}
-			if err := s.scoutClient.Report(c, report.Action, metadata...); err != nil {
-				// error is logged and is not fatal
-				dlog.Errorf(c, "report failed: %+v", err)
-			}
+			s.scoutClient.Report(c, report.Action, metadata...)
 		}
 		return nil
 	})
