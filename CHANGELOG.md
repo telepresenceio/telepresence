@@ -19,6 +19,8 @@
 - Bugfix: The timeout to keep idle outbound TCP connections alive was increased from 60 to 7200 seconds which is the same as
   the Linux `tcp_keepalive_time` default.
 
+- Change: Failure to report metrics is logged using loglevel info rather than error.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.

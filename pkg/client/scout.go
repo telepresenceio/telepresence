@@ -9,9 +9,9 @@ import (
 	"runtime"
 
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -176,7 +176,7 @@ func (s *Scout) SetMetadatum(key string, value interface{}) {
 // call. It also includes and increments the index, which can be used to
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
-func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) error {
+func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) {
 	s.index++
 	metadata := map[string]interface{}{
 		"action": action,
@@ -193,10 +193,6 @@ func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) er
 
 	_, err = s.Reporter.Report(ctx, metadata)
 	if err != nil && ctx.Err() == nil {
-		return errors.Wrap(err, "scout report")
+		dlog.Infof(ctx, "scout report %q failed: %v", action, err)
 	}
-	// TODO: Do something useful (alert the user if there's an available
-	// upgrade?) with the response (discarded as "_" above)?
-
-	return nil
 }
