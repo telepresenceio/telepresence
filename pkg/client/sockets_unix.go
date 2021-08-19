@@ -43,7 +43,9 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 			// Socket exists but doesn't accept connections. This usually means that the process
 			// terminated ungracefully. To remedy this, we make an attempt to remove the socket
 			// and dial again.
-			if rmErr := os.Remove(socketName); rmErr == nil {
+			if rmErr := os.Remove(socketName); rmErr != nil {
+				err = fmt.Errorf("%w (socket rm failed with %v)", err, rmErr)
+			} else {
 				continue
 			}
 		}
