@@ -35,13 +35,16 @@ func getValues(ctx context.Context) map[string]interface{} {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
 	imageRegistry := imgConfig.Registry
+	cloudConfig := clientConfig.Cloud
 	imageTag := strings.TrimPrefix(client.Version(), "v")
 	values := map[string]interface{}{
 		"image": map[string]interface{}{
 			"registry": imageRegistry,
 			"tag":      imageTag,
 		},
-		"createdBy": releaseOwner,
+		"systemaHost": cloudConfig.SystemaHost,
+		"systemaPort": cloudConfig.SystemaPort,
+		"createdBy":   releaseOwner,
 	}
 	if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
 		values["grpc"] = map[string]interface{}{
