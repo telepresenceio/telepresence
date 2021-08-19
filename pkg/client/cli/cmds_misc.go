@@ -66,10 +66,7 @@ func dashboardCommand() *cobra.Command {
 
 		Short: "Open the dashboard in a web page",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			env, err := client.LoadEnv(cmd.Context())
-			if err != nil {
-				return err
-			}
+			cloudCfg := client.GetConfig(cmd.Context()).Cloud
 
 			// Ensure we're logged in
 			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context(), "")
@@ -81,7 +78,7 @@ func dashboardCommand() *cobra.Command {
 				// The LoginFlow takes the user to the dashboard, so we only need to
 				// explicitly take the user to the dashboard if they were already
 				// logged in.
-				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost)); err != nil {
+				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", cloudCfg.SystemaHost)); err != nil {
 					return err
 				}
 			}

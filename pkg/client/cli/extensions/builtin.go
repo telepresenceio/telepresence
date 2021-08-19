@@ -12,9 +12,13 @@ import (
 // builtinExtensions is a function instead of a would-be-const var because its result includes the
 // CLI version number, which might not be initialized yet at init-time (esp. during `go test`).
 func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
-	registry := client.GetConfig(ctx).Images.Registry
+	cfg := client.GetConfig(ctx)
+	registry := cfg.Images.Registry
+	cloud := cfg.Cloud
 	version := strings.TrimPrefix(client.Version(), "v")
 	image := fmt.Sprintf("%s/tel2:%s", registry, version)
+	// XXX: not using net.JoinHostPort means that setting cloud.SystemaHost to an IPv6 address won't work
+	extImage := fmt.Sprintf("grpc+https://%s:%s", cloud.SystemaHost, cloud.SystemaPort)
 	return map[string]ExtensionInfo{
 		// Real extensions won't have a "/" in the extname, by putting one builtin extension names
 		// we can avoid clashes.
@@ -28,7 +32,7 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 		// extension, but we don't yet have an installer to install the extension file; so this
 		// metadata here is fine in the mean-time.
 		"/builtin/ambassador": {
-			Image:                   "grpc+https://${SYSTEMA_HOST}:${SYSTEMA_PORT}", // XXX: not using net.JoinHostPort means that setting SYSTEMA_HOST to an IPv6 address won't work
+			Image:                   extImage,
 			RequiresAPIKeyOrLicense: true,
 			Mechanisms: map[string]MechanismInfo{
 				"http": {

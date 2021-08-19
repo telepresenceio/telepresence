@@ -58,11 +58,8 @@ func forcedUpdateCheck(cmd *cobra.Command, _ []string) error {
 //   cmd:         the command that provides Context and stout/stderr
 //   forcedCheck: if true, perform check regardless of if it's due or not
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
-	env, err := client.LoadEnv(cmd.Context())
-	if err != nil {
-		return err
-	}
-	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
+	cloudCfg := client.GetConfig(cmd.Context()).Cloud
+	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}
