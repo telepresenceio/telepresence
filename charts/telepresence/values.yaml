@@ -70,6 +70,17 @@ grpc: {}
   # maxReceiveSize configures the maximum message size that the traffic manager will service.
   # maxReceiveSize: 4Mi
 
+# systemaHost is used by the traffic-manager when using an extension
+# or features that require a specific extension.
+#
+# Default: app.getambassador.io
+systemaHost: "app.getambassador.io"
+
+# systemaPort is the port used with systemaHost
+#
+# Default: 443
+systemaPort: "443"
+
 # Telepresence requires a license key for creating selective intercepts. In
 # normal clusters with access to the public internet, this license is managed
 # automatically by the Ambassador Cloud. In air-gapped environments however, 
