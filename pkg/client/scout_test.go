@@ -270,6 +270,11 @@ func TestInstallID(t *testing.T) {
 			ctx = filelocation.WithGOOS(ctx, tcData.InputGOOS)
 			os.Clearenv()
 			os.Setenv("HOME", homedir)
+			if tcData.InputGOOS == "windows" {
+				os.Setenv("USERPROFILE", homedir)
+			} else {
+				os.Setenv("HOME", homedir)
+			}
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, os.ExpandEnv(v))
 			}

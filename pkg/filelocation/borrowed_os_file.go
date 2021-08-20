@@ -14,7 +14,9 @@ package filelocation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // UserHomeDir returns the current user's home directory.
@@ -82,7 +84,11 @@ func userCacheDir(ctx context.Context) (string, error) {
 		}
 		dir = os.Getenv("LocalAppData")
 		if dir == "" {
-			return "", errors.New("%LocalAppData% is not defined")
+			home, err := UserHomeDir(ctx)
+			if err != nil {
+				return "", fmt.Errorf("%%LocalAppData%% is not defined and %w", err)
+			}
+			return filepath.Join(home, `\AppData\Local`), nil
 		}
 
 	case "darwin":
@@ -142,7 +148,11 @@ func UserConfigDir(ctx context.Context) (string, error) {
 		}
 		dir = os.Getenv("AppData")
 		if dir == "" {
-			return "", errors.New("%AppData% is not defined")
+			home, err := UserHomeDir(ctx)
+			if err != nil {
+				return "", fmt.Errorf("%%AppData%% is not defined and %w", err)
+			}
+			return filepath.Join(home, `\AppData\Roaming`), nil
 		}
 
 	case "darwin":
