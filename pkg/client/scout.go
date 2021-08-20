@@ -28,7 +28,7 @@ type ScoutMeta struct {
 	Value interface{}
 }
 
-// getInstallIDFromFilesystem returns the telepresence2 install ID, and also sets the reporter base
+// getInstallIDFromFilesystem returns the telepresence install ID, and also sets the reporter base
 // metadata to include any conflicting install IDs written by old versions of the product.
 func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter) (string, error) {
 	type filecacheEntry struct {
@@ -47,51 +47,37 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 		return filecache[filename].Body, filecache[filename].Err
 	}
 
-	// We'll use this (and justify overriding GOOS=linux) below.
-	xdgConfigHome, err := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
-	if err != nil {
-		return "", err
-	}
-
 	// Do these in order of precedence when there are multiple install IDs.
 	var retID string
 	allIDs := make(map[string]string)
 
-	// Similarly to Telepresence-1 (below), edgectl always used the XDG filepath, but unlike
-	// Telepresence-1 it did obey $XDG_CONFIG_HOME.
-	if id, err := readFile(filepath.Join(xdgConfigHome, "edgectl", "id")); err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
+	if runtime.GOOS != "windows" { // won't find any legacy on windows
+		// We'll use this (and justify overriding GOOS=linux) below.
+		xdgConfigHome, err := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
+		if err == nil {
+			// Similarly to Telepresence-1 (below), edgectl always used the XDG filepath, but unlike
+			// Telepresence-1 it did obey $XDG_CONFIG_HOME.
+			if id, err := readFile(filepath.Join(xdgConfigHome, "edgectl", "id")); err == nil {
+				allIDs["edgectl"] = id
+				retID = id
+			}
 		}
-	} else {
-		allIDs["edgectl"] = id
-		retID = id
-	}
 
-	// Telepresence-1 used "$HOME/.config/telepresence/id" always, even on macOS (where ~/.config
-	// isn't a thing) or when $XDG_CONFIG_HOME is something different than "$HOME/.config".
-	homeDir, err := filelocation.UserHomeDir(ctx)
-	if err != nil {
-		return "", err
-	}
-	if id, err := readFile(filepath.Join(homeDir, ".config", "telepresence", "id")); err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
+		// Telepresence-1 used "$HOME/.config/telepresence/id" always, even on macOS (where ~/.config
+		// isn't a thing) or when $XDG_CONFIG_HOME is something different than "$HOME/.config".
+		if homeDir, err := filelocation.UserHomeDir(ctx); err == nil {
+			if id, err := readFile(filepath.Join(homeDir, ".config", "telepresence", "id")); err == nil {
+				allIDs["telepresence-1"] = id
+				retID = id
+			}
 		}
-	} else {
-		allIDs["telepresence-1"] = id
-		retID = id
-	}
 
-	// Telepresence-2 prior to 2.1.0 did the exact same thing as edgectl, but with
-	// "telepresence2" in the path instead of "edgectl".
-	if id, err := readFile(filepath.Join(xdgConfigHome, "telepresence2", "id")); err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
+		// Telepresence-2 prior to 2.1.0 did the exact same thing as edgectl, but with
+		// "telepresence2" in the path instead of "edgectl".
+		if id, err := readFile(filepath.Join(xdgConfigHome, "telepresence2", "id")); err == nil {
+			allIDs["telepresence-2<2.1"] = id
+			retID = id
 		}
-	} else {
-		allIDs["telepresence-2<2.1"] = id
-		retID = id
 	}
 
 	// Current.  Telepresence-2 now uses the most appropriate directory for the platform, and
