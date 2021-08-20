@@ -215,6 +215,9 @@ jobs:
           platform: windows
       - run:
           command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:/c/Program Files/SSHFS-Win/bin:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
           no_output_timeout: 25m
       - cleanup-kluster:
@@ -235,6 +238,9 @@ jobs:
           platform: linux
       - run:
           command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that

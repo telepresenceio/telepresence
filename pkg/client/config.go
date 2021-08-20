@@ -414,6 +414,8 @@ func (i *Images) merge(o *Images) {
 type Cloud struct {
 	SkipLogin       bool          `json:"skipLogin,omitempty"`
 	RefreshMessages time.Duration `json:"refreshMessages,omitempty"`
+	SystemaHost     string        `json:"systemaHost,omitempty"`
+	SystemaPort     string        `json:"systemaPort,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -445,6 +447,10 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 			} else {
 				cloud.RefreshMessages = duration
 			}
+		case "systemaHost":
+			cloud.SystemaHost = v.Value
+		case "systemaPort":
+			cloud.SystemaPort = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -460,6 +466,12 @@ func (i *Cloud) merge(o *Cloud) {
 	}
 	if o.RefreshMessages != 0 {
 		i.RefreshMessages = o.RefreshMessages
+	}
+	if o.SystemaHost != "" {
+		i.SystemaHost = o.SystemaHost
+	}
+	if o.SystemaPort != "" {
+		i.SystemaPort = o.SystemaPort
 	}
 }
 
@@ -530,6 +542,8 @@ var defaultConfig = Config{
 	Cloud: Cloud{
 		SkipLogin:       false,
 		RefreshMessages: 24 * 7 * time.Hour,
+		SystemaHost:     "app.getambassador.io",
+		SystemaPort:     "443",
 	},
 	Grpc: Grpc{},
 }

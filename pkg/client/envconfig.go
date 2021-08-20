@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/sethvargo/go-envconfig"
@@ -20,9 +21,6 @@ type Env struct {
 	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
 
 	ManagerNamespace string `env:"TELEPRESENCE_MANAGER_NAMESPACE,default=ambassador"`
-
-	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
-	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
 }
 
 func (env Env) Get(key string) string {
@@ -43,11 +41,6 @@ func (env Env) Get(key string) string {
 	case "TELEPRESENCE_MANAGER_NAMESPACE":
 		return env.ManagerNamespace
 
-	case "SYSTEMA_HOST":
-		return env.SystemAHost
-	case "SYSTEMA_PORT":
-		return env.SystemAPort
-
 	default:
 		return os.Getenv(key)
 	}
@@ -60,15 +53,24 @@ func maybeSetEnv(key, val string) {
 }
 
 func LoadEnv(ctx context.Context) (Env, error) {
+	cloudCfg := GetConfig(ctx).Cloud
+	var env Env
 	switch os.Getenv("SYSTEMA_ENV") {
 	case "staging":
+		// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
+		// to the config.yml and get rid of that env var and all the related ones.
+		// But I (donnyyung) am about to be on vacation for a week so don't want
+		// to make such a huge change and then leave, so I will take care of
+		// cleaning this up once I'm back.
+		if cloudCfg.SystemaHost != "beta-app.datawire.io" {
+			err := fmt.Errorf("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+			return env, err
+		}
 		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "beta-auth.datawire.io")
-		maybeSetEnv("SYSTEMA_HOST", "beta-app.datawire.io")
 	default:
 		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "auth.datawire.io")
 	}
 
-	var env Env
 	err := envconfig.Process(ctx, &env)
 	return env, err
 }

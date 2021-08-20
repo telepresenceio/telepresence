@@ -201,7 +201,10 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 
 .PHONY: check
 check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
-	TELEPRESENCE_MAX_LOGFILES=300 go test -timeout=18m ./...
+	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
+	# is only used for extensions. Therefore, we want to validate that our tests, and
+	# telepresence, run without requiring any outside dependencies.
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=18m ./...
 
 .PHONY: _login
 _login:

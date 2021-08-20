@@ -36,9 +36,9 @@ spec:
           - name: LOG_LEVEL
             value: {{ .Values.logLevel }}
           - name: SYSTEMA_HOST
-            value: app.getambassador.io
+            value: {{ .Values.systemaHost }}
           - name: SYSTEMA_PORT
-            value: "443"
+            value: {{ .Values.systemaPort | quote }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.agentInjector.agentImage.registry }}
           {{- if .Values.grpc }}

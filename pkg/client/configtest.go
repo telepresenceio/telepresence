@@ -22,7 +22,13 @@ func ResetConfig(c context.Context) {
 // isn't used, which could cause conflict with the tests.
 func SetDefaultConfig(ctx context.Context, configDir string) (context.Context, error) {
 	registry := dtest.DockerRegistry(ctx)
-	configYml := fmt.Sprintf("images:\n  registry: %s\n  webhookRegistry: %s\n", registry, registry)
+	configYml := fmt.Sprintf(`
+images:
+  registry: %[1]s
+  webhookRegistry: %[1]s
+cloud:
+  systemaHost: 127.0.0.1
+`, registry)
 	return SetConfig(ctx, configDir, configYml)
 }
 
