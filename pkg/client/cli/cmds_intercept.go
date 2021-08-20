@@ -566,7 +566,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 				},
 			})
 			if err != nil {
-				is.Scout.Report(ctx, "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+				_ = is.Scout.Report(ctx, "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
@@ -594,7 +594,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			volumeMountProblem = checkMountCapability(ctx)
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
-		is.Scout.Report(ctx, "intercept_success")
+		_ = is.Scout.Report(ctx, "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))

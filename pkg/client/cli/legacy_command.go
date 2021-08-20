@@ -232,7 +232,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if lc.unsupportedFlags != nil {
 		scout.SetMetadatum("unsupported_flags", lc.unsupportedFlags)
 	}
-	scout.Report(cmd.Context(), "Used legacy syntax")
+	_ = scout.Report(cmd.Context(), "Used legacy syntax")
 
 	// Generate output to user letting them know legacy Telepresence was used,
 	// what the Telepresence command is, and runs it.
