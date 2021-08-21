@@ -77,57 +77,67 @@ const tpMountsEnv = "TELEPRESENCE_MOUNTS"
 
 func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) bool {
 	tpMounts := env[tpMountsEnv]
-	retVal := false
-	split := strings.Split(tpMounts, ":")
-	for _, itemPath := range split {
-		dlog.Debugf(ctx, "agent mount path: %s", itemPath)
-		retVal = true
+	if tpMounts != "" {
+		dlog.Debugf(ctx, "agent mount paths: %s", tpMounts)
+		return true
 	}
-	return retVal
+	return false
 }
 
 // Add any token-rotating system secrets directories if they exist
 // e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
 func (cfg *Config) addSecretsMounts(ctx context.Context, env map[string]string) error {
-	var retErr error = nil
 	tpMounts := env[tpMountsEnv]
 
 	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
-	if secretsDir, retErr := os.Open("/var/run/secrets"); retErr == nil {
-		if fileInfo, retErr := secretsDir.Readdir(-1); retErr == nil {
-			secretsDir.Close()
-			for _, file := range fileInfo {
-				// Files that rotate, such as tokens found in /var/run/secrets, we need to symlink to the original
-				// (Stops at the first error found.)
-				if retErr == nil && file.IsDir() {
-					dirPath := "/var/run/secrets/" + file.Name()
-					dlog.Debugf(ctx, "checking agent secrets mount path: %s", dirPath)
-					if stat, retErr := os.Stat(dirPath); retErr == nil && stat.IsDir() {
-						dlog.Debugf(ctx, "discovered directory: %s", dirPath)
-						// Create this in shared mounts if not already provided
-						appMountsPath := filepath.Join(cfg.AppMounts, dirPath)
-						if _, retErr = os.Stat(appMountsPath); retErr != nil {
-							dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
-							// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
-							if retErr = os.MkdirAll(filepath.Dir(appMountsPath), 0700); retErr == nil {
-								dlog.Debugf(ctx, "create appmounts symlink: %s %s", dirPath, appMountsPath)
-								if retErr = os.Symlink(dirPath, appMountsPath); retErr == nil {
-									dlog.Infof(ctx, "new agent secrets mount path: %s", dirPath)
-									if tpMounts == "" {
-										tpMounts = dirPath
-									} else {
-										tpMounts += ":" + dirPath
-									}
-								}
-							}
-						}
-					}
+	secretsDir, err := os.Open("/var/run/secrets")
+	if err != nil {
+		return err
+	}
+	fileInfo, err := secretsDir.Readdir(-1)
+	if err != nil {
+		return err
+	}
+	secretsDir.Close()
+	for _, file := range fileInfo {
+		// Directories found in /var/run/secrets get a symlink in appmounts
+		if file.IsDir() {
+			dirPath := filepath.Join("/var/run/secrets/", file.Name())
+			dlog.Debugf(ctx, "checking agent secrets mount path: %s", dirPath)
+			stat, err := os.Stat(dirPath)
+			if err != nil {
+				return err
+			}
+			if stat.IsDir() {
+				appMountsPath := filepath.Join(cfg.AppMounts, dirPath)
+				dlog.Debugf(ctx, "checking appmounts directory: %s", dirPath)
+				// Make sure the path doesn't already exist
+				_, err = os.Stat(appMountsPath)
+				if err == nil {
+					return fmt.Errorf("appmounts '%s' already exists", appMountsPath)
+				}
+				dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
+				// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
+				err = os.MkdirAll(filepath.Dir(appMountsPath), 0700)
+				if err != nil {
+					return err
+				}
+				dlog.Debugf(ctx, "create appmounts symlink: %s %s", dirPath, appMountsPath)
+				err = os.Symlink(dirPath, appMountsPath)
+				if err != nil {
+					return err
+				}
+				dlog.Infof(ctx, "new agent secrets mount path: %s", dirPath)
+				if tpMounts == "" {
+					tpMounts = dirPath
+				} else {
+					tpMounts += ":" + dirPath
 				}
 			}
 		}
 	}
 	env[tpMountsEnv] = tpMounts
-	return retErr
+	return nil
 }
 
 func Main(ctx context.Context, args ...string) error {
