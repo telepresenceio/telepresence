@@ -2,6 +2,9 @@
 
 ### 2.4.1 (TBD)
 
+- Change: Restore v1 behavior of mounting all directories from `/var/run/secrets`.
+  This allows the mounting of more secrets directories such as eks.amazonaws.com (for IRSA tokens)
+
 - Bugfix: The grpc.maxReceiveSize setting is now correctly propagated to all grpc servers.
   This allows users to mitigate a root daemon crash when sending a message over the default maximum size.
 
@@ -39,9 +42,9 @@
 - Bugfix: Initialization of `systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
 
-- Bugfix: Edge case error when targeting a container by port number. 
-  Before if your matching/target container was at containers list index 0, 
-  but if there was a container at index 1 with no ports, then the 
+- Bugfix: Edge case error when targeting a container by port number.
+  Before if your matching/target container was at containers list index 0,
+  but if there was a container at index 1 with no ports, then the
   "no ports" container would end up the selected one
 
 - Bugfix: A `$(NAME)` reference in the agent's environment will now be

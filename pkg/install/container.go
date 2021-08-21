@@ -99,7 +99,7 @@ func agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 	agentMounts := make([]corev1.VolumeMount, len(mounts)+1)
 	for i, mount := range mounts {
 		// Keep the ServiceAccount mount unaltered or a new one will be generated
-		if mount.MountPath != "/var/run/secrets/kubernetes.io/serviceaccount" {
+		if !strings.HasPrefix(mount.MountPath, "/var/run/secrets") {
 			mount.MountPath = filepath.Join(TelAppMountPoint, mount.MountPath)
 		}
 		agentMounts[i] = mount
