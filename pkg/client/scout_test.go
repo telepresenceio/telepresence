@@ -18,10 +18,6 @@ import (
 )
 
 func TestInstallID(t *testing.T) {
-	errMsg := "is a directory"
-	if runtime.GOOS == "windows" {
-		errMsg = "The handle is invalid."
-	}
 	type testcase struct {
 		InputGOOS    string
 		InputEnv     map[string]string
@@ -32,189 +28,226 @@ func TestInstallID(t *testing.T) {
 		ExpectedExtra   map[string]interface{}
 		ExpectedHomeDir map[string]string
 	}
-	testcases := map[string]testcase{
-		"linux-xdg": {
-			InputGOOS: "linux",
-			InputEnv: map[string]string{
-				"XDG_CONFIG_HOME": "$HOME/other-config",
+	var testcases map[string]testcase
+	if runtime.GOOS == "windows" {
+		testcases = map[string]testcase{
+			"fresh-install": {
+				InputGOOS: "windows",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   true,
+				},
+				ExpectedHomeDir: map[string]string{
+					`AppData\Roaming\telepresence\id`: "${id}",
+				},
 			},
-			InputHomeDir: map[string]string{
-				".config/telepresence/id":       "tp1-id",
-				"other-config/edgectl/id":       "edgectl-id",
-				"other-config/telepresence2/id": "tp2.1-id",
-				"other-config/telepresence/id":  "tp2-id",
+			"upgrade-tp2.1": {
+				InputGOOS: "windows",
+				InputHomeDir: map[string]string{
+					`AppData\Roaming\telepresence\id`: "tp2.1-id",
+				},
+				ExpectedID: "tp2.1-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
+				ExpectedHomeDir: map[string]string{
+					`AppData\Roaming\telepresence\id`: "tp2.1-id",
+				},
 			},
-			ExpectedID: "tp2-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     "tp1-id",
-				"install_id_edgectl":            "edgectl-id",
-				"install_id_telepresence-2<2.1": "tp2.1-id",
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
+		}
+	} else {
+		errMsg := "is a directory"
+		testcases = map[string]testcase{
+			"linux-xdg": {
+				InputGOOS: "linux",
+				InputEnv: map[string]string{
+					"XDG_CONFIG_HOME": "$HOME/other-config",
+				},
+				InputHomeDir: map[string]string{
+					".config/telepresence/id":       "tp1-id",
+					"other-config/edgectl/id":       "edgectl-id",
+					"other-config/telepresence2/id": "tp2.1-id",
+					"other-config/telepresence/id":  "tp2-id",
+				},
+				ExpectedID: "tp2-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     "tp1-id",
+					"install_id_edgectl":            "edgectl-id",
+					"install_id_telepresence-2<2.1": "tp2.1-id",
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
 			},
-		},
-		"linux": {
-			InputGOOS: "linux",
-			InputHomeDir: map[string]string{
-				".config/edgectl/id":       "edgectl-id",
-				".config/telepresence2/id": "tp2.1-id",
-				".config/telepresence/id":  "tp-id",
+			"linux": {
+				InputGOOS: "linux",
+				InputHomeDir: map[string]string{
+					".config/edgectl/id":       "edgectl-id",
+					".config/telepresence2/id": "tp2.1-id",
+					".config/telepresence/id":  "tp-id",
+				},
+				ExpectedID: "tp-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            "edgectl-id",
+					"install_id_telepresence-2<2.1": "tp2.1-id",
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
 			},
-			ExpectedID: "tp-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            "edgectl-id",
-				"install_id_telepresence-2<2.1": "tp2.1-id",
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
+			"darwin-xdg": {
+				InputGOOS: "darwin",
+				InputEnv: map[string]string{
+					"XDG_CONFIG_HOME": "$HOME/other-config",
+				},
+				InputHomeDir: map[string]string{
+					".config/telepresence/id":                     "tp1-id",
+					"other-config/edgectl/id":                     "edgectl-id",
+					"other-config/telepresence2/id":               "tp2.1-id",
+					"Library/Application Support/telepresence/id": "tp2-id",
+				},
+				ExpectedID: "tp2-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     "tp1-id",
+					"install_id_edgectl":            "edgectl-id",
+					"install_id_telepresence-2<2.1": "tp2.1-id",
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
 			},
-		},
-		"darwin-xdg": {
-			InputGOOS: "darwin",
-			InputEnv: map[string]string{
-				"XDG_CONFIG_HOME": "$HOME/other-config",
+			"darwin": {
+				InputGOOS: "darwin",
+				InputHomeDir: map[string]string{
+					".config/telepresence/id":                     "tp1-id",
+					".config/edgectl/id":                          "edgectl-id",
+					".config/telepresence2/id":                    "tp2.1-id",
+					"Library/Application Support/telepresence/id": "tp2-id",
+				},
+				ExpectedID: "tp2-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     "tp1-id",
+					"install_id_edgectl":            "edgectl-id",
+					"install_id_telepresence-2<2.1": "tp2.1-id",
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
 			},
-			InputHomeDir: map[string]string{
-				".config/telepresence/id":                     "tp1-id",
-				"other-config/edgectl/id":                     "edgectl-id",
-				"other-config/telepresence2/id":               "tp2.1-id",
-				"Library/Application Support/telepresence/id": "tp2-id",
+			"badfiles": {
+				InputGOOS: "linux",
+				InputEnv: map[string]string{
+					"XDG_CONFIG_HOME": "$HOME/other-config",
+				},
+				InputHomeDir: map[string]string{
+					".config/telepresence/id/x":       "tp1-id",
+					"other-config/edgectl/id/x":       "edgectl-id",
+					"other-config/telepresence2/id/x": "tp2.1-id",
+					"other-config/telepresence/id/x":  "tp2-id",
+				},
+				ExpectedID:  "00000000-0000-0000-0000-000000000000",
+				ExpectedErr: fmt.Sprintf("read %s: %s", filepath.Join("$HOME", "other-config", "telepresence", "id"), errMsg),
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   true,
+				},
 			},
-			ExpectedID: "tp2-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     "tp1-id",
-				"install_id_edgectl":            "edgectl-id",
-				"install_id_telepresence-2<2.1": "tp2.1-id",
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
+			"upgrade-tp1": {
+				InputGOOS: "linux",
+				InputEnv: map[string]string{
+					"XDG_CONFIG_HOME": "$HOME/other-config",
+				},
+				InputHomeDir: map[string]string{
+					".config/telepresence/id": "tp1-id",
+				},
+				ExpectedID: "tp1-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
+				ExpectedHomeDir: map[string]string{
+					"other-config/telepresence/id": "tp1-id",
+				},
 			},
-		},
-		"darwin": {
-			InputGOOS: "darwin",
-			InputHomeDir: map[string]string{
-				".config/telepresence/id":                     "tp1-id",
-				".config/edgectl/id":                          "edgectl-id",
-				".config/telepresence2/id":                    "tp2.1-id",
-				"Library/Application Support/telepresence/id": "tp2-id",
+			"upgrade-edgectl": {
+				InputGOOS: "linux",
+				InputHomeDir: map[string]string{
+					".config/edgectl/id": "edge-id",
+				},
+				ExpectedID: "edge-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
+				ExpectedHomeDir: map[string]string{
+					".config/telepresence/id": "edge-id",
+				},
 			},
-			ExpectedID: "tp2-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     "tp1-id",
-				"install_id_edgectl":            "edgectl-id",
-				"install_id_telepresence-2<2.1": "tp2.1-id",
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
+			"upgrade-tp1-and-edgectl": {
+				InputGOOS: "linux",
+				InputEnv: map[string]string{
+					"XDG_CONFIG_HOME": "$HOME/other-config",
+				},
+				InputHomeDir: map[string]string{
+					".config/telepresence/id": "tp1-id",
+					"other-config/edgectl/id": "edge-id",
+				},
+				ExpectedID: "tp1-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            "edge-id",
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
+				ExpectedHomeDir: map[string]string{
+					"other-config/telepresence/id": "tp1-id",
+				},
 			},
-		},
-		"badfiles": {
-			InputGOOS: "linux",
-			InputEnv: map[string]string{
-				"XDG_CONFIG_HOME": "$HOME/other-config",
+			"upgrade-tp2.1": {
+				InputGOOS: "darwin",
+				InputHomeDir: map[string]string{
+					".config/telepresence2/id": "tp2.1-id",
+				},
+				ExpectedID: "tp2.1-id",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   false,
+				},
+				ExpectedHomeDir: map[string]string{
+					"Library/Application Support/telepresence/id": "tp2.1-id",
+				},
 			},
-			InputHomeDir: map[string]string{
-				".config/telepresence/id/x":       "tp1-id",
-				"other-config/edgectl/id/x":       "edgectl-id",
-				"other-config/telepresence2/id/x": "tp2.1-id",
-				"other-config/telepresence/id/x":  "tp2-id",
+			"fresh-install": {
+				InputGOOS: "darwin",
+				ExpectedExtra: map[string]interface{}{
+					"install_id_telepresence-1":     nil,
+					"install_id_edgectl":            nil,
+					"install_id_telepresence-2<2.1": nil,
+					"install_id_telepresence-2":     nil,
+					"new_install":                   true,
+				},
+				ExpectedHomeDir: map[string]string{
+					"Library/Application Support/telepresence/id": "${id}",
+				},
 			},
-			ExpectedID:  "00000000-0000-0000-0000-000000000000",
-			ExpectedErr: fmt.Sprintf("read %s: %s", filepath.Join("$HOME", "other-config", "edgectl", "id"), errMsg),
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            nil,
-				"install_id_telepresence-2<2.1": nil,
-				"install_id_telepresence-2":     nil,
-				"new_install":                   true,
-			},
-		},
-		"upgrade-tp1": {
-			InputGOOS: "linux",
-			InputEnv: map[string]string{
-				"XDG_CONFIG_HOME": "$HOME/other-config",
-			},
-			InputHomeDir: map[string]string{
-				".config/telepresence/id": "tp1-id",
-			},
-			ExpectedID: "tp1-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            nil,
-				"install_id_telepresence-2<2.1": nil,
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
-			},
-			ExpectedHomeDir: map[string]string{
-				"other-config/telepresence/id": "tp1-id",
-			},
-		},
-		"upgrade-edgectl": {
-			InputGOOS: "linux",
-			InputHomeDir: map[string]string{
-				".config/edgectl/id": "edge-id",
-			},
-			ExpectedID: "edge-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            nil,
-				"install_id_telepresence-2<2.1": nil,
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
-			},
-			ExpectedHomeDir: map[string]string{
-				".config/telepresence/id": "edge-id",
-			},
-		},
-		"upgrade-tp1-and-edgectl": {
-			InputGOOS: "linux",
-			InputEnv: map[string]string{
-				"XDG_CONFIG_HOME": "$HOME/other-config",
-			},
-			InputHomeDir: map[string]string{
-				".config/telepresence/id": "tp1-id",
-				"other-config/edgectl/id": "edge-id",
-			},
-			ExpectedID: "tp1-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            "edge-id",
-				"install_id_telepresence-2<2.1": nil,
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
-			},
-			ExpectedHomeDir: map[string]string{
-				"other-config/telepresence/id": "tp1-id",
-			},
-		},
-		"upgrade-tp2.1": {
-			InputGOOS: "darwin",
-			InputHomeDir: map[string]string{
-				".config/telepresence2/id": "tp2.1-id",
-			},
-			ExpectedID: "tp2.1-id",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            nil,
-				"install_id_telepresence-2<2.1": nil,
-				"install_id_telepresence-2":     nil,
-				"new_install":                   false,
-			},
-			ExpectedHomeDir: map[string]string{
-				"Library/Application Support/telepresence/id": "tp2.1-id",
-			},
-		},
-		"fresh-install": {
-			InputGOOS: "darwin",
-			ExpectedExtra: map[string]interface{}{
-				"install_id_telepresence-1":     nil,
-				"install_id_edgectl":            nil,
-				"install_id_telepresence-2<2.1": nil,
-				"install_id_telepresence-2":     nil,
-				"new_install":                   true,
-			},
-			ExpectedHomeDir: map[string]string{
-				"Library/Application Support/telepresence/id": "${id}",
-			},
-		},
+		}
 	}
 	origEnv := os.Environ()
 	for tcName, tcData := range testcases {
@@ -237,6 +270,11 @@ func TestInstallID(t *testing.T) {
 			ctx = filelocation.WithGOOS(ctx, tcData.InputGOOS)
 			os.Clearenv()
 			os.Setenv("HOME", homedir)
+			if tcData.InputGOOS == "windows" {
+				os.Setenv("USERPROFILE", homedir)
+			} else {
+				os.Setenv("HOME", homedir)
+			}
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, os.ExpandEnv(v))
 			}
