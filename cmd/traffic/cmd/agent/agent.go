@@ -73,37 +73,61 @@ func AppEnvironment() map[string]string {
 	return fullEnv
 }
 
-// svcAccPath is the path where the ServiceAccount Admission Controller automatically provides its secrets.
-const svcAccPath = "/var/run/secrets/kubernetes.io"
 const tpMountsEnv = "TELEPRESENCE_MOUNTS"
 
-func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) (bool, error) {
+func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) bool {
 	tpMounts := env[tpMountsEnv]
-	stat, err := os.Stat(svcAccPath)
-	if err != nil || !stat.IsDir() {
-		return tpMounts != "", nil
+	retVal := false
+	split := strings.Split(tpMounts, ":")
+	for _, itemPath := range split {
+		dlog.Debugf(ctx, "agent mount path: %s", itemPath)
+		retVal = true
 	}
+	return retVal
+}
 
-	// This must be included in the shared mounts unless it's already provided
-	svcAccLink := filepath.Join(cfg.AppMounts, svcAccPath)
-	if stat, err = os.Stat(svcAccLink); err == nil && stat.IsDir() {
-		return true, nil
-	}
+// Add any token-rotating system secrets directories if they exist
+// e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
+func (cfg *Config) addSecretsMounts(ctx context.Context, env map[string]string) error {
+	var retErr error = nil
+	tpMounts := env[tpMountsEnv]
 
-	// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
-	if err = os.MkdirAll(filepath.Dir(svcAccLink), 0700); err != nil {
-		return false, err
-	}
-	if err = os.Symlink(svcAccPath, svcAccLink); err != nil {
-		return false, err
-	}
-	if tpMounts == "" {
-		tpMounts = svcAccPath
-	} else {
-		tpMounts += ":" + svcAccPath
+	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
+	if secretsDir, retErr := os.Open("/var/run/secrets"); retErr == nil {
+		if fileInfo, retErr := secretsDir.Readdir(-1); retErr == nil {
+			secretsDir.Close()
+			for _, file := range fileInfo {
+				// Files that rotate, such as tokens found in /var/run/secrets, we need to symlink to the original
+				// (Stops at the first error found.)
+				if retErr == nil && file.IsDir() {
+					dirPath := "/var/run/secrets/" + file.Name()
+					dlog.Debugf(ctx, "checking agent secrets mount path: %s", dirPath)
+					if stat, retErr := os.Stat(dirPath); retErr == nil && stat.IsDir() {
+						dlog.Debugf(ctx, "discovered directory: %s", dirPath)
+						// Create this in shared mounts if not already provided
+						appMountsPath := filepath.Join(cfg.AppMounts, dirPath)
+						if _, retErr = os.Stat(appMountsPath); retErr != nil {
+							dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
+							// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
+							if retErr = os.MkdirAll(filepath.Dir(appMountsPath), 0700); retErr == nil {
+								dlog.Debugf(ctx, "create appmounts symlink: %s %s", dirPath, appMountsPath)
+								if retErr = os.Symlink(dirPath, appMountsPath); retErr == nil {
+									dlog.Infof(ctx, "new agent secrets mount path: %s", dirPath)
+									if tpMounts == "" {
+										tpMounts = dirPath
+									} else {
+										tpMounts += ":" + dirPath
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	env[tpMountsEnv] = tpMounts
-	return true, nil
+	return retErr
 }
 
 func Main(ctx context.Context, args ...string) error {
@@ -151,13 +175,12 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	hasMounts, err := config.HasMounts(ctx, info.Environment)
-	if err != nil {
-		dlog.Errorf(ctx, "Unable to determine if agent has mounts: %v", err)
+	if err := config.addSecretsMounts(ctx, info.Environment); err != nil {
+		dlog.Errorf(ctx, "There was a problem with agent mounts: %v", err)
 	}
 
 	sftpPortCh := make(chan int32)
-	if hasMounts && user == "" {
+	if config.HasMounts(ctx, info.Environment) && user == "" {
 		g.Go("sftp-server", func(ctx context.Context) error {
 			defer close(sftpPortCh)
 
