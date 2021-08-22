@@ -2,8 +2,8 @@
 
 ### 2.4.1 (TBD)
 
-- Change: Restore v1 behavior of mounting all directories from `/var/run/secrets`.
-  This allows the mounting of more secrets directories such as eks.amazonaws.com (for IRSA tokens)
+- Bugfix: Telepresence will now mount all directories from `/var/run/secrets`, not just the kubernetes.io ones.
+  This allows the mounting of secrets directories such as eks.amazonaws.com (for IRSA tokens)
 
 - Bugfix: The grpc.maxReceiveSize setting is now correctly propagated to all grpc servers.
   This allows users to mitigate a root daemon crash when sending a message over the default maximum size.
