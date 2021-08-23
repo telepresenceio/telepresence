@@ -84,9 +84,10 @@ func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) bool {
 	return false
 }
 
-// Add any token-rotating system secrets directories if they exist
+// AddSecretsMounts adds any token-rotating system secrets directories if they exist
 // e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
-func (cfg *Config) addSecretsMounts(ctx context.Context, env map[string]string) error {
+// to the TELEPRESENCE_MOUNTS environment variable
+func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) error {
 	tpMounts := env[tpMountsEnv]
 
 	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
@@ -185,7 +186,7 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	if err := config.addSecretsMounts(ctx, info.Environment); err != nil {
+	if err := config.AddSecretsMounts(ctx, info.Environment); err != nil {
 		dlog.Errorf(ctx, "There was a problem with agent mounts: %v", err)
 	}
 
