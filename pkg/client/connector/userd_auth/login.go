@@ -99,8 +99,13 @@ func NewLoginExecutor(
 		// AFAICT, it's not possible to create a timer in a stopped state.  So we create it
 		// in a running state with 1 minute left, and then immediately stop it below with
 		// resetRefreshTimerUnlocked.
-		refreshTimer:      time.NewTimer(1 * time.Minute),
-		refreshTimerReset: make(chan time.Duration),
+		refreshTimer: time.NewTimer(1 * time.Minute),
+
+		// The refreshTimerReset channel must have a small buffer because it is potentially
+		// written and read by the same select. Deadlocks will happen if it is unbuffered.
+		// 3 slots should be plenty given that the writes are controlled by the above
+		// refreshTimer.
+		refreshTimerReset: make(chan time.Duration, 3),
 	}
 	ret.oauth2ConfigMu.Lock()
 	ret.loginMu.Lock()
