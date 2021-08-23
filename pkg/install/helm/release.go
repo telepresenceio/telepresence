@@ -2,9 +2,14 @@ package helm
 
 import (
 	"context"
+	"strings"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
+
+	"github.com/blang/semver"
+
+	"github.com/datawire/dlib/dlog"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
@@ -34,5 +39,17 @@ func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
 }
 
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
-	return rel.Chart.Metadata.Version == client.Version()
+	chartVersion, err := semver.Parse(strings.TrimPrefix(rel.Chart.Metadata.Version, "v"))
+	if err != nil {
+		dlog.Errorf(ctx, "Could not parse version %s for chart: %v", rel.Chart.Metadata.Version, err)
+		return false
+	}
+	cliVersion := client.Semver()
+	if chartVersion.GT(cliVersion) {
+		dlog.Warnf(ctx, "You are using Telepresence v%s, but Traffic Manager v%s is installed on the cluster.", cliVersion, chartVersion)
+		return false
+	}
+	// At this point we could also do chartVersion != cliVersion, since chartVersion <= cliVersion
+	// But this makes it really clear that we're only doing the upgrade if chartVersion < cliVersion
+	return chartVersion.LT(cliVersion)
 }

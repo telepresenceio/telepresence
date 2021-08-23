@@ -163,5 +163,6 @@ func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, n
 	uninstall := action.NewUninstall(helmConfig)
 	uninstall.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	_, err = uninstall.Run(releaseName)
+	dlog.Info(ctx, "Traffic Manager uninstalled")
 	return err
 }
