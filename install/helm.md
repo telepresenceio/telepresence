@@ -2,6 +2,8 @@
 
 [Helm](https://helm.sh) is a package manager for Kubernetes that automates the release and management of software on Kubernetes. The Telepresence Traffic Manager can be installed via a Helm chart with a few simple steps.
 
+**Note** that installing the Traffic Manager through Helm will prevent `telepresence connect` from ever upgrading it. If you wish to upgrade a Traffic Manager that was installed via the Helm chart, please see the steps [below](#upgrading-the-traffic-manager)
+
 ## Before you begin
 
 The Telepresence Helm chart is hosted by Ambassador Labs and published at `https://app.getambassador.io`.
@@ -40,7 +42,7 @@ For example, if you wanted to deploy the traffic manager to the `staging` namesp
 helm install traffic-manager --namespace staging datawire/telepresence
 ```
 
-Note that users of telepresence will need to configure their kubeconfig to find this installation of the traffic manager:
+Note that users of Telepresence will need to configure their kubeconfig to find this installation of the Traffic Manager:
 
 ```yaml
 apiVersion: v1
@@ -56,6 +58,24 @@ clusters:
 ```
 
 See [the kubeconfig documentation](../reference/config#manager) for more information.
+
+### Upgrading the Traffic Manager.
+
+Versions of the Traffic Manager Helm chart are coupled to the versions of the Telepresence CLI that they are intended for.
+Thus, for example, if you wish to use Telepresence `v2.4.0`, you'll need to install version `v2.4.0` of the Traffic Manager Helm chart.
+
+Upgrading the Traffic Manager is the same as upgrading any other Helm chart; for example, if you installed the release into the `ambassador` namespace, and you just wished to upgrade it to the latest version without changing any configuration values:
+
+```shell
+helm repo up
+helm upgrade ambassador datawire/telepresence --reuse-values --namespace traffic-manager
+```
+
+Alternatively, if you wished to upgrade it, say, to `v2.4.1`:
+```shell
+helm repo up
+helm upgrade ambassador datawire/telepresence --reuse-values --namespace traffic-manager --version v2.4.1
+```
 
 ## RBAC
 
