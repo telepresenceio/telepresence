@@ -31,6 +31,9 @@
 
 - Change: Failure to report metrics is logged using loglevel info rather than error.
 
+- Feature: The scout reports will now include additional metadata coming from environment variables starting with
+  `TELEPRESENCE_REPORT_`.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
