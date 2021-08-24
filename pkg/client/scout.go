@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
+
+// Environment variable prefix for additional metadata to be reported
+const environmentMetadataPrefix = "TELEPRESENCE_REPORT_"
 
 // Scout is a Metriton reported
 type Scout struct {
@@ -164,10 +168,9 @@ func (s *Scout) SetMetadatum(key string, value interface{}) {
 // attempt (correlated by the trace_id set at the start).
 func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) {
 	s.index++
-	metadata := map[string]interface{}{
-		"action": action,
-		"index":  s.index,
-	}
+	metadata := getDefaultEnvironmentMetadata()
+	metadata["action"] = action
+	metadata["index"] = s.index
 	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
@@ -181,4 +184,17 @@ func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) {
 	if err != nil && ctx.Err() == nil {
 		dlog.Infof(ctx, "scout report %q failed: %v", action, err)
 	}
+}
+
+// Returns a metadata map containing all the additional environment variables to be reported
+func getDefaultEnvironmentMetadata() map[string]interface{} {
+	metadata := map[string]interface{}{}
+	for _, e := range os.Environ() {
+		pair := strings.SplitN(e, "=", 2)
+		if strings.HasPrefix(pair[0], environmentMetadataPrefix) {
+			key := strings.ToLower(strings.TrimPrefix(pair[0], environmentMetadataPrefix))
+			metadata[key] = pair[1]
+		}
+	}
+	return metadata
 }
