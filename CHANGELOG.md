@@ -31,6 +31,9 @@
 
 - Change: Failure to report metrics is logged using loglevel info rather than error.
 
+- Bugfix: A potential deadlock situation is fixed that sometimes caused the user daemon to hang when the user
+  was logged in. 
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
