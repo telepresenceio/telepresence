@@ -28,6 +28,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -173,6 +174,64 @@ func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	require.NoError(err)
 
 	is.findTrafficManagerPresent(is.managerNamespace)
+}
+
+func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	version.Version = "v0.0.0-bogus"
+
+	restoreVersion := func() { version.Version = is.testVersion }
+
+	// We'll call this further down, but defer it to prevent polluting other tests if we don't leave this function gracefully
+	defer restoreVersion()
+
+	defer is.removeManager(is.managerNamespace)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.Error(ti.ensureManager(ctx, &env))
+	restoreVersion()
+
+	require.NoError(ti.ensureManager(ctx, &env))
+}
+
+func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+
+	require.NoError(ti.ensureManager(ctx, &env))
+
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {

@@ -72,7 +72,7 @@ func getValues(ctx context.Context) map[string]interface{} {
 }
 
 func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Info(ctx, "No existing Traffic Manager found, installing...")
+	dlog.Infof(ctx, "No existing Traffic Manager found, installing %s...", client.Version())
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -84,7 +84,7 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 }
 
 func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Info(ctx, "Existing Traffic Manager found, upgrading...")
+	dlog.Infof(ctx, "Existing Traffic Manager found, upgrading to %s...", client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	upgrade.Atomic = true
