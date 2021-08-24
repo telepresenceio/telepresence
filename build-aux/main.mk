@@ -31,8 +31,7 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # This has to be a phony target so that it will be rebuilt on changes to TELEPRESENCE_VERSION
 .PHONY: pkg/install/helm/telepresence-chart.tgz
 pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence
-	$(tools/helm) package charts/telepresence --version=$(TELEPRESENCE_VERSION)
-	mv telepresence-$(TELEPRESENCE_VERSION).tgz $@
+	GOOS=$(GOHOSTOS) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
 
 
 .PHONY: generate

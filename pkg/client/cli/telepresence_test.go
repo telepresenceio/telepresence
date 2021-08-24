@@ -1555,6 +1555,10 @@ func (ts *telepresenceSuite) publishManager() error {
 }
 
 func (ts *telepresenceSuite) buildExecutable(c context.Context) (string, error) {
+	err := run(c, "go", "run", "build-aux/package_embedded_chart/main.go", ts.testVersion)
+	if err != nil {
+		return "", fmt.Errorf("unable to build embedded helm chart: %w", err)
+	}
 	executable := filepath.Join("build-output", "bin", "/telepresence")
 	if goRuntime.GOOS == "windows" {
 		executable += ".exe"
