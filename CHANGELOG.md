@@ -37,6 +37,8 @@
 - Feature: The scout reports will now include additional metadata coming from environment variables starting with
   `TELEPRESENCE_REPORT_`.
 
+- Bugfix: The config setting `images.agentImage` is no longer required to contain the repository. The repository is
+  instead picked from `images.repository`.
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
