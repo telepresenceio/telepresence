@@ -208,6 +208,38 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
 	require.NoError(ti.ensureManager(ctx, &env))
 }
 
+func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+	defer is.removeManager(is.managerNamespace)
+	err = dexec.CommandContext(ctx, "../../../../tools/bin/helm", "--kubeconfig", is.kubeConfig, "--namespace", is.managerNamespace, "uninstall", "--keep-history", "traffic-manager").Run()
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+	require.Eventually(func() bool {
+		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
+		if err != nil {
+			return false
+		}
+		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
+	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
+}
+
 func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
@@ -226,12 +258,48 @@ func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
 	require.NoError(err)
 
 	require.NoError(ti.ensureManager(ctx, &env))
-
 	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+}
+
+func (is *installSuite) Test_ensureTrafficManager_upgrades() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
 
 	require.NoError(ti.ensureManager(ctx, &env))
+	defer is.removeManager(is.managerNamespace)
+	require.NoError(ti.ensureManager(ctx, &env))
 
-	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+	version.Version = "v3.0.0-bogus"
+	restoreVersion := func() { version.Version = is.testVersion }
+	defer restoreVersion()
+
+	require.Error(ti.ensureManager(ctx, &env))
+
+	require.Eventually(func() bool {
+		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
+		if err != nil {
+			return false
+		}
+		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
+	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
+
+	restoreVersion()
+	require.NoError(ti.ensureManager(ctx, &env))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {

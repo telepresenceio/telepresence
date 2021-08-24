@@ -17,6 +17,12 @@ import (
 // getHelmRelease gets the traffic-manager helm release; if it is not found, it will return nil
 func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*release.Release, error) {
 	list := action.NewList(helmConfig)
+	list.Deployed = true
+	list.Failed = true
+	list.Pending = true
+	list.Uninstalled = true
+	list.Uninstalling = true
+	list.SetStateMask()
 	releases, err := list.Run()
 	if err != nil {
 		return nil, err
@@ -36,6 +42,11 @@ func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
 		return owner == releaseOwner
 	}
 	return false
+}
+
+func releaseNeedsCleanup(ctx context.Context, rel *release.Release) bool {
+	dlog.Debugf(ctx, "Traffic Manager release was found to be in status %s", rel.Info.Status)
+	return rel.Info.Status != release.StatusDeployed
 }
 
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
