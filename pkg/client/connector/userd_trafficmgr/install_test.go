@@ -139,6 +139,8 @@ func (is *installSuite) TearDownSuite() {
 func (is *installSuite) Test_findTrafficManager_notPresent() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
 	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.namespace}, env)
@@ -157,6 +159,8 @@ func (is *installSuite) Test_findTrafficManager_notPresent() {
 func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 
 	f, err := ioutil.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
@@ -174,6 +178,8 @@ func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
@@ -183,7 +189,7 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
 
-	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up
+	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up.
 	// 2.4.0 was the latest release at the time that testdata/telepresence-1.9.9.tgz was packaged
 	err = dexec.CommandContext(ctx,
 		"../../../../tools/bin/helm",
@@ -214,6 +220,8 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 	oldCfg, err := clientcmd.LoadFromFile(is.kubeConfig)
 	require.NoError(err)
 	defer func() {
@@ -246,6 +254,8 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 	defer is.removeManager(is.managerNamespace)
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
@@ -261,6 +271,8 @@ func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	require := is.Require()
 	c := dlog.NewTestContext(is.T(), false)
+	c, err := client.SetDefaultConfig(c, is.T().TempDir())
+	require.NoError(err)
 	defer is.removeManager(namespace)
 
 	env, err := client.LoadEnv(c)
