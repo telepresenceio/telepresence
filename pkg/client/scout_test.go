@@ -1,8 +1,11 @@
 package client_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -309,6 +312,156 @@ func TestInstallID(t *testing.T) {
 				fileBytes, err := ioutil.ReadFile(filepath.Join(homedir, filename))
 				assert.NoError(t, err)
 				assert.Equal(t, os.ExpandEnv(expectedFilebody), string(fileBytes), filename)
+			}
+		})
+	}
+}
+
+func TestReport(t *testing.T) {
+	const (
+		mockVersion     = "v2.0.0-test"
+		mockApplication = "telepresence2"
+		mockInstallID   = "00000000-1111-2222-3333-444444444444"
+		mockMode        = "test-mode"
+		mockOS          = "linux"
+		mockAction      = "test-action"
+	)
+	type testcase struct {
+		InputEnv         map[string]string
+		InputMeta        []client.ScoutMeta
+		ExpectedMetadata map[string]string
+	}
+	testcases := map[string]testcase{
+		"without-additional-meta": {
+			ExpectedMetadata: map[string]string{
+				"action": mockAction,
+				"mode":   mockMode,
+				"goos":   mockOS,
+			},
+		},
+		"with-additional-scout-meta": {
+			InputMeta: []client.ScoutMeta{
+				{
+					Key:   "extra_field_1",
+					Value: "extra value 1",
+				},
+				{
+					Key:   "extra_field_2",
+					Value: "extra value 2",
+				},
+			},
+			ExpectedMetadata: map[string]string{
+				"action":        mockAction,
+				"mode":          mockMode,
+				"goos":          mockOS,
+				"extra_field_1": "extra value 1",
+				"extra_field_2": "extra value 2",
+			},
+		},
+		"with-additional-env-meta": {
+			InputEnv: map[string]string{
+				"TELEPRESENCE_REPORT_EXTRA_FIELD_1": "extra value 1",
+				"TELEPRESENCE_REPORT_EXTRA_FIELD_2": "extra value 2",
+			},
+			ExpectedMetadata: map[string]string{
+				"action":        mockAction,
+				"mode":          mockMode,
+				"goos":          mockOS,
+				"extra_field_1": "extra value 1",
+				"extra_field_2": "extra value 2",
+			},
+		},
+		"with-additional-env-meta-overridden-by-default-and-scout-meta": {
+			InputEnv: map[string]string{
+				"TELEPRESENCE_REPORT_ACTION":        "should be overridden",
+				"TELEPRESENCE_REPORT_EXTRA_FIELD_1": "should also be overridden",
+			},
+			InputMeta: []client.ScoutMeta{
+				{
+					Key:   "extra_field_1",
+					Value: "extra value 1",
+				},
+			},
+			ExpectedMetadata: map[string]string{
+				"action":        mockAction,
+				"mode":          mockMode,
+				"goos":          mockOS,
+				"extra_field_1": "extra value 1",
+			},
+		},
+		"with-scout-meta-overriding-default-meta": {
+			InputMeta: []client.ScoutMeta{
+				{
+					Key:   "mode",
+					Value: "overridden mode",
+				},
+			},
+			ExpectedMetadata: map[string]string{
+				"action": mockAction,
+				"mode":   "overridden mode",
+				"goos":   mockOS,
+			},
+		},
+	}
+	for tcName, tcData := range testcases {
+		tcData := tcData
+		t.Run(tcName, func(t *testing.T) {
+			ctx := dlog.NewTestContext(t, true)
+			origEnv := os.Environ()
+			defer func() {
+				os.Clearenv()
+				for _, kv := range origEnv {
+					parts := strings.SplitN(kv, "=", 2)
+					if len(parts) != 2 {
+						continue
+					}
+					os.Setenv(parts[0], parts[1])
+				}
+			}()
+
+			// Mock server capturing reports
+			var capturedRequestBodies []map[string]interface{}
+			testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				var body map[string]interface{}
+				bodyBytes, err := ioutil.ReadAll(request.Body)
+				if err != nil {
+					t.Fatalf("Could not read request body: %v", err)
+				}
+				err = json.Unmarshal(bodyBytes, &body)
+				if err != nil {
+					t.Fatalf("Could not unmarshal request body: %v", err)
+				}
+				capturedRequestBodies = append(capturedRequestBodies, body)
+			}))
+
+			// Given...
+			for k, v := range tcData.InputEnv {
+				os.Setenv(k, v)
+			}
+			scout := &client.Scout{
+				Reporter: &metriton.Reporter{
+					Application: mockApplication,
+					Version:     mockVersion,
+					GetInstallID: func(r *metriton.Reporter) (string, error) {
+						return mockInstallID, nil
+					},
+					// Fixed (growing) metadata passed with every report
+					BaseMetadata: map[string]interface{}{
+						"mode": mockMode,
+						"goos": mockOS,
+					},
+					Endpoint: testServer.URL,
+				},
+			}
+
+			// Then do...
+			scout.Report(ctx, mockAction, tcData.InputMeta...)
+
+			// And expect...
+			assert.Len(t, capturedRequestBodies, 1)
+			metadata := capturedRequestBodies[0]["metadata"].(map[string]interface{})
+			for expectedKey, expectedValue := range tcData.ExpectedMetadata {
+				assert.Equal(t, expectedValue, metadata[expectedKey])
 			}
 		})
 	}
