@@ -191,6 +191,10 @@ func TestLoginFlow(t *testing.T) {
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
 		ctx := dlog.NewTestContext(t, false)
+		cfg, err := client.LoadConfig(ctx)
+		require.NoError(t, err)
+		ctx = client.WithConfig(ctx, cfg)
+
 		stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
 		scout := make(chan scout.ScoutReport)
 		t.Cleanup(func() { close(scout) })

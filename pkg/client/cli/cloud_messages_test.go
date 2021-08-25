@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,11 +11,21 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func Test_cloudGetMessageFromCache(t *testing.T) {
+func newTestContext(t *testing.T) context.Context {
 	ctx := dlog.NewTestContext(t, false)
-
 	// Create a fake user cache directory
 	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
+
+	// Load config (will be default since home dir is fake)
+	cfg, err := client.LoadConfig(ctx)
+	if err != nil {
+		t.Error(err)
+	}
+	return client.WithConfig(ctx, cfg)
+}
+
+func Test_cloudGetMessageFromCache(t *testing.T) {
+	ctx := newTestContext(t)
 
 	// Pre-load cmc with a message for intercept
 	cmc, err := newCloudMessageCache(ctx)
@@ -62,10 +73,7 @@ func Test_cloudGetMessageFromCache(t *testing.T) {
 }
 
 func Test_cloudUpdateMessages(t *testing.T) {
-	ctx := dlog.NewTestContext(t, false)
-
-	// Create a fake user cache directory
-	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
+	ctx := newTestContext(t)
 
 	// Pre-load cmc with a message for intercept
 	cmc, err := newCloudMessageCache(ctx)

@@ -108,8 +108,13 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
+	cfg, err := client.LoadConfig(c)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	c = client.WithConfig(c, cfg)
 
-	c, err := logging.InitContext(c, ProcessName)
+	c, err = logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}

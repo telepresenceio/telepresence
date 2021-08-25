@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -289,7 +290,12 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 // run is the main function when executing as the connector
 func run(c context.Context) error {
-	c, err := logging.InitContext(c, ProcessName)
+	cfg, err := client.LoadConfig(c)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	c = client.WithConfig(c, cfg)
+	c, err = logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}

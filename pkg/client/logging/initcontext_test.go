@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
@@ -42,6 +44,10 @@ func TestInitContext(t *testing.T) {
 		// Ensure that we use a temporary log dir
 		logDir = t.TempDir()
 		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
+
+		cfg, err := client.LoadConfig(ctx)
+		require.NoError(t, err)
+		ctx = client.WithConfig(ctx, cfg)
 
 		// Ensure that we never consider Stdout to be a terminal
 		saveIsTerminal := IsTerminal

@@ -53,6 +53,12 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
+		cfg, err := client.LoadConfig(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load config: %v", err)
+			os.Exit(1)
+		}
+		ctx = client.WithConfig(ctx, cfg)
 		cmd = cli.Command(ctx)
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)

@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/sethvargo/go-envconfig"
@@ -46,12 +45,6 @@ func (env Env) Get(key string) string {
 	}
 }
 
-func maybeSetEnv(key, val string) {
-	if os.Getenv(key) == "" {
-		os.Setenv(key, val)
-	}
-}
-
 type envKey struct{}
 
 // WithEnv returns a context with the given Env
@@ -68,24 +61,22 @@ func GetEnv(ctx context.Context) *Env {
 }
 
 func LoadEnv(ctx context.Context) (*Env, error) {
-	cloudCfg := GetConfig(ctx).Cloud
-	var env Env
-	switch os.Getenv("SYSTEMA_ENV") {
-	case "staging":
-		// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
-		// to the config.yml and get rid of that env var and all the related ones.
-		// But I (donnyyung) am about to be on vacation for a week so don't want
-		// to make such a huge change and then leave, so I will take care of
-		// cleaning this up once I'm back.
-		if cloudCfg.SystemaHost != "beta-app.datawire.io" {
-			err := fmt.Errorf("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
-			return nil, err
+	if os.Getenv("TELEPRESENCE_LOGIN_DOMAIN") == "" {
+		loginDomain := "auth.datawire.io"
+		if os.Getenv("SYSTEMA_ENV") == "staging" {
+			// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
+			// to the config.yml and get rid of that env var and all the related ones.
+			// But I (donnyyung) am about to be on vacation for a week so don't want
+			// to make such a huge change and then leave, so I will take care of
+			// cleaning this up once I'm back.
+			loginDomain = "beta-auth.datawire.io"
 		}
-		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "beta-auth.datawire.io")
-	default:
-		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "auth.datawire.io")
+		os.Setenv("TELEPRESENCE_LOGIN_DOMAIN", loginDomain)
 	}
 
-	err := envconfig.Process(ctx, &env)
-	return &env, err
+	var env Env
+	if err := envconfig.Process(ctx, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
 }
