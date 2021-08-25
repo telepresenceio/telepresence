@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,6 +24,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -48,6 +50,9 @@ type service struct {
 	hClient  *http.Client
 	outbound *outbound
 	cancel   context.CancelFunc
+
+	scoutClient *scout.Scout           // don't use this directly; use the 'scout' chan instead
+	scout       chan scout.ScoutReport // any-of-scoutUsers -> background-metriton
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -124,9 +129,11 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 				DisableKeepAlives: true,
 			},
 		},
+		scoutClient: scout.NewScout(c, "daemon"),
+		scout:       make(chan scout.ScoutReport),
 	}
 
-	d.outbound, err = newOutbound(c, dns, false)
+	d.outbound, err = newOutbound(c, dns, false, d.scout)
 	if err != nil {
 		return err
 	}
@@ -142,6 +149,8 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
 	d.cancel = func() { g.Go(ProcessName+"-quit", d.quitAll) }
 
+	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.outbound are liable to do this, as it's passed into it.
+
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
@@ -156,7 +165,9 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
+	scoutUsers.Add(1)
 	g.Go("server-dns", func(ctx context.Context) error {
+		defer scoutUsers.Done()
 		select {
 		case <-ctx.Done():
 			return nil
@@ -168,14 +179,18 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// The 'Update' gRPC (below) call puts updates in to a work queue;
 	// server-router is the worker process starts the router and continuously configures
 	// it based on what is read from that work queue.
+	scoutUsers.Add(1)
 	g.Go("server-router", func(ctx context.Context) error {
+		defer scoutUsers.Done()
 		return d.outbound.routerServerWorker(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
 	// from the connector and from the CLI.
+	scoutUsers.Add(1)
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		defer func() {
+			scoutUsers.Done()
 			// Error recovery.
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
@@ -216,6 +231,30 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		}
 		return sc.Serve(c, grpcListener)
 	})
+
+	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
+	// metriton don't block the functional goroutines.
+	g.Go("background-metriton", func(c context.Context) error {
+		for report := range d.scout {
+			for k, v := range report.PersistentMetadata {
+				d.scoutClient.SetMetadatum(k, v)
+			}
+
+			var metadata []scout.ScoutMeta
+			for k, v := range report.Metadata {
+				metadata = append(metadata, scout.ScoutMeta{
+					Key:   k,
+					Value: v,
+				})
+			}
+			d.scoutClient.Report(c, report.Action, metadata...)
+		}
+		return nil
+	})
+	go func() {
+		scoutUsers.Wait()
+		close(d.scout)
+	}()
 
 	err = g.Wait()
 	if err != nil {

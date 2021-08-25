@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -59,6 +60,8 @@ type outbound struct {
 	dnsQueriesLock sync.Mutex
 
 	dnsConfig *rpc.DNSConfig
+
+	scout chan scout.ScoutReport
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -69,7 +72,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, error) {
+func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan scout.ScoutReport) (*outbound, error) {
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
@@ -85,6 +88,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool) (*outbound, 
 		work:          make(chan func(context.Context) error),
 		dnsConfigured: make(chan struct{}),
 		kubeDNS:       make(chan net.IP, 1),
+		scout:         scout,
 	}
 
 	var err error
@@ -148,7 +152,7 @@ func (o *outbound) shouldDoClusterLookup(query string) bool {
 	return true
 }
 
-func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) []net.IP {
+func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) (results []net.IP) {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -169,6 +173,15 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 	if !o.shouldDoClusterLookup(query) {
 		return nil
 	}
+	// Don't report queries that won't be resolved in-cluster, since that'll report every single DNS query on the user's machine
+	defer func() {
+		o.scout <- scout.ScoutReport{
+			Action: "incluster_dns_query",
+			Metadata: map[string]interface{}{
+				"had_results": results != nil,
+			},
+		}
+	}()
 
 	var firstLookupResult *awaitLookupResult
 	o.dnsQueriesLock.Lock()
