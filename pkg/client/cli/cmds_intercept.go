@@ -502,6 +502,22 @@ func (is *interceptState) getMountPoint() (string, bool, error) {
 }
 
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+	// Add whatever metadata we already have to scout
+	is.Scout.SetMetadatum("service_name", is.args.agentName)
+	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
+	mechanism, _ := is.args.extState.Mechanism()
+	mechanismArgs, _ := is.args.extState.MechanismArgs()
+	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
+	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
+
+	defer func() {
+		if err != nil {
+			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+		} else {
+			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_success")
+		}
+	}()
+
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
 		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo)
@@ -550,15 +566,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		// if it wasn't given on the cli by the user
 		is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 
-		// Add metadata to scout
-		is.Scout.SetMetadatum("service_name", is.args.agentName)
-		is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
-
-		mechanism, _ := is.args.extState.Mechanism()
-		mechanismArgs, _ := is.args.extState.MechanismArgs()
-		is.Scout.SetMetadatum("intercept_mechanism", mechanism)
-		is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
-
 		if is.args.previewEnabled {
 			intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 				Session: is.connInfo.SessionInfo,
@@ -596,7 +603,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			volumeMountProblem = checkMountCapability(ctx)
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
-		is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
