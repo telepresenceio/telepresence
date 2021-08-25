@@ -1,4 +1,4 @@
-package client_test
+package scout_test
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -292,7 +292,7 @@ func TestInstallID(t *testing.T) {
 			}
 
 			// Then do...
-			scout := client.NewScout(ctx, "go-test")
+			scout := scout.NewScout(ctx, "go-test")
 			scout.Reporter.Endpoint = metriton.BetaEndpoint
 			actualID := scout.Reporter.InstallID()
 			actualErr, _ := scout.Reporter.BaseMetadata["install_id_error"].(string)
@@ -328,7 +328,7 @@ func TestReport(t *testing.T) {
 	)
 	type testcase struct {
 		InputEnv         map[string]string
-		InputMeta        []client.ScoutMeta
+		InputMeta        []scout.ScoutMeta
 		ExpectedMetadata map[string]string
 	}
 	testcases := map[string]testcase{
@@ -340,7 +340,7 @@ func TestReport(t *testing.T) {
 			},
 		},
 		"with-additional-scout-meta": {
-			InputMeta: []client.ScoutMeta{
+			InputMeta: []scout.ScoutMeta{
 				{
 					Key:   "extra_field_1",
 					Value: "extra value 1",
@@ -376,7 +376,7 @@ func TestReport(t *testing.T) {
 				"TELEPRESENCE_REPORT_ACTION":        "should be overridden",
 				"TELEPRESENCE_REPORT_EXTRA_FIELD_1": "should also be overridden",
 			},
-			InputMeta: []client.ScoutMeta{
+			InputMeta: []scout.ScoutMeta{
 				{
 					Key:   "extra_field_1",
 					Value: "extra value 1",
@@ -390,7 +390,7 @@ func TestReport(t *testing.T) {
 			},
 		},
 		"with-scout-meta-overriding-default-meta": {
-			InputMeta: []client.ScoutMeta{
+			InputMeta: []scout.ScoutMeta{
 				{
 					Key:   "mode",
 					Value: "overridden mode",
@@ -438,7 +438,7 @@ func TestReport(t *testing.T) {
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, v)
 			}
-			scout := &client.Scout{
+			scout := &scout.Scout{
 				Reporter: &metriton.Reporter{
 					Application: mockApplication,
 					Version:     mockVersion,

@@ -1,4 +1,4 @@
-package client
+package scout
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -131,7 +132,7 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence2",
-			Version:     Version(),
+			Version:     client.Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
 				id, err := getInstallIDFromFilesystem(ctx, r)
 				if err != nil {

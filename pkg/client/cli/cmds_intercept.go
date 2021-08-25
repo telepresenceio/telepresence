@@ -30,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -82,7 +83,7 @@ type interceptState struct {
 	cmd  safeCobraCommand
 	args interceptArgs
 
-	Scout *client.Scout
+	Scout *scout.Scout
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
@@ -285,7 +286,7 @@ func newInterceptState(
 		cmd:  cmd,
 		args: args,
 
-		Scout: client.NewScout(ctx, "cli"),
+		Scout: scout.NewScout(ctx, "cli"),
 
 		connectorClient: connectorClient,
 		managerClient:   managerClient,
@@ -512,7 +513,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	defer func() {
 		if err != nil {
-			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 		} else {
 			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_success")
 		}
@@ -575,7 +576,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 				},
 			})
 			if err != nil {
-				is.Scout.Report(logging.WithDiscardingLogger(ctx), "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+				is.Scout.Report(logging.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
