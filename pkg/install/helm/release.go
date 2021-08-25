@@ -4,13 +4,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/blang/semver"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
 
-	"github.com/blang/semver"
-
 	"github.com/datawire/dlib/dlog"
-
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 

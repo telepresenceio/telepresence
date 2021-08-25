@@ -259,7 +259,10 @@ func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
 
 	require.NoError(ti.ensureManager(ctx, &env))
 	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+	// We want to make sure that we can re-install the agent after it's been uninstalled,
+	// so try to ensureManager again.
 	require.NoError(ti.ensureManager(ctx, &env))
+	// Uninstall the agent one last time -- this should behave the same way as the previous uninstall
 	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
 }
 
@@ -282,7 +285,6 @@ func (is *installSuite) Test_ensureTrafficManager_upgrades() {
 
 	require.NoError(ti.ensureManager(ctx, &env))
 	defer is.removeManager(is.managerNamespace)
-	require.NoError(ti.ensureManager(ctx, &env))
 
 	version.Version = "v3.0.0-bogus"
 	restoreVersion := func() { version.Version = is.testVersion }

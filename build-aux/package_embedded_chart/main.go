@@ -51,6 +51,4 @@ func main() {
 		fmt.Printf("failed: %v\n", err)
 		os.Exit(1)
 	}
-	//$(tools/helm) package charts/telepresence --version=$(TELEPRESENCE_VERSION)
-	//mv telepresence-$(TELEPRESENCE_VERSION).tgz $@
 }
