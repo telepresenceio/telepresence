@@ -75,7 +75,7 @@ We'll set up a development environment locally on your workstation. We'll then u
 
 1. Run the Docker container locally. In the command below, replace the path to the `kubeconfig.yaml` with the actual location of the `kubeconfig.yaml` you previously noted in [step 1](#1-get-a-free-remote-cluster):
 
-<DockerCommand/>
+    <DockerCommand/>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
@@ -90,7 +90,7 @@ We'll set up a development environment locally on your workstation. We'll then u
 A common use case for Telepresence is to connect your local development environment to a remote cluster. This way, if your application is too big or complex to run locally, you can still develop locally. In this Quick Start, we're also going to show Telepresence can be used for integration testing, by testing our fix against the services in the remote cluster.
 
 1. First, log in to Telepresence using your API key:
-   <LoginCommand/>
+    <LoginCommand/>
 
 2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
    `telepresence intercept web --port 8080`
