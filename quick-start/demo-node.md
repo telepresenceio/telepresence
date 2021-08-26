@@ -4,13 +4,13 @@ description: "Claim a remote demo cluster and learn to use Telepresence to inter
 
 import {DemoClusterMetadata, ExpirationDate} from '../../../../../src/components/DemoClusterMetadata';
 import {
-    EmojivotoServicesList,
-    DCPLink,
-    Login,
-    LoginCommand,
-    DockerCommand,
-    PreviewUrl,
-    ExternalIp
+EmojivotoServicesList,
+DCPLink,
+Login,
+LoginCommand,
+DockerCommand,
+PreviewUrl,
+ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSCards from './qs-cards';
@@ -43,23 +43,23 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
-<Alert severity="info">
-    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
-</Alert>
-
-1. <Login/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
-2.  Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
-    <EmojivotoServicesList/>
+1. <Login urlParams="docs_source=telepresence-quick-start"/> <br/>Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
+2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
+   <EmojivotoServicesList/>
 
 <Alert severity="success">
    The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
+</Alert>
+
+<Alert severity="info">
+    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
 </Alert>
 
 <ExpirationDate/>
 
 ## 2. Try the Emojivoto application
 
-The remote cluster is running the Emojivoto application, which consists of three services. Test out the application:
+The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
 
 1. Go to the <ExternalIp/> and vote for some emojis.
 
@@ -90,13 +90,13 @@ We'll set up a development environment locally on your workstation. We'll then u
 A common use case for Telepresence is to connect your local development environment to a remote cluster. This way, if your application is too big or complex to run locally, you can still develop locally. In this Quick Start, we're also going to show Telepresence can be used for integration testing, by testing our fix against the services in the remote cluster.
 
 1. First, log in to Telepresence using your API key:
-<LoginCommand/>
+    <LoginCommand/>
 
 2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
-    `telepresence intercept web --port 8080`
+   `telepresence intercept web --port 8080`
 
    You will be asked for your ingress layer 3 address; specify the front end service: `ambassador.ambassador`
-   Then, when asked for the port, type `80`, for "use TLS", type `n`.  The default for the fourth value is correct so hit enter to accept it.
+   Then, when asked for the port, type `80`, for "use TLS", type `n`. The default for the fourth value is correct so hit enter to accept it.
 
     <UserInterceptCommand/>
 
@@ -112,7 +112,7 @@ Preview URLs enable you to safely share your development environment with anyone
 
 1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
    <Alert severity="success">
-        Now you're able to share your fix in your local environment with your team!
+   Now you're able to share your fix in your local environment with your team!
    </Alert>
 
    <Alert severity="info">
@@ -128,8 +128,6 @@ Intercepts and preview URLs are functions of Telepresence that enable easy local
 Telepresence also uses custom headers and header propagation for controllable intercepts and preview URLs. The headers facilitate the smart routing of requests either to live services in the cluster or services running locally on a developer’s machine.
 
 Preview URLs, when created, generate an ingress request containing a custom header with a token (the context). Telepresence sends this token to Ambassador Cloud with other information about the preview. Visiting the preview URL directs the user to Ambassador Cloud, which proxies the user to the cluster ingress with the token header injected into the request. The request carrying the header is routed in the cluster to the appropriate pod (the propagation). The Traffic Agent on the service pod sees the header and intercepts the request, redirecting it to the local developer machine that ran the intercept.
-
-
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
