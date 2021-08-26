@@ -20,7 +20,7 @@ import QSCards from '../quick-start/qs-cards'
 
 </div>
 
-<Alert severity="info">For a detailed walk-though on creating intercepts using our sample app, follow the <a href="../../quick-start/qs-node/">quick start guide</a>.</Alert>
+<Alert severity="info">For a detailed walk-though on creating intercepts using our sample app, follow the <a href="../../quick-start/demo-node/">quick start guide</a>.</Alert>
 
 ## Prerequisites
 You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
