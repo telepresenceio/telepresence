@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/datawire/dlib/dlog"
@@ -59,6 +61,7 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 	} else if name == "connector" {
 		logger.SetLevel(logLevels.UserDaemon)
 	}
+	ctx = log.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }
 

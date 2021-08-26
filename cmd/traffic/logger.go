@@ -1,42 +1,28 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/datawire/dlib/dlog"
 )
 
-func makeBaseLogger() dlog.Logger {
+func makeBaseLogger(ctx context.Context) context.Context {
 	logrusLogger := logrus.New()
 	logrusFormatter := &logrus.TextFormatter{
 		TimestampFormat: "2006-01-02 15:04:05.0000",
 		FullTimestamp:   true,
 	}
 	logrusLogger.SetFormatter(logrusFormatter)
-	logrusLogger.SetReportCaller(true)
 
-	const defaultLogLevel = logrus.InfoLevel
+	log.SetLogrusLevel(logrusLogger, os.Getenv("LOG_LEVEL"))
 
-	logLevelMessage := "Logging at this level"
-	logLevelStr := os.Getenv("LOG_LEVEL")
-	logLevel, err := logrus.ParseLevel(logLevelStr)
-
-	switch {
-	case logLevelStr == "": // not specified -> use default
-		logLevel = defaultLogLevel
-		logLevelMessage += " (default)"
-	case err != nil: // Didn't parse -> use default and show error
-		logLevel = defaultLogLevel
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q -> %v)", logLevelStr, err)
-	default: // parsed successfully -> use that level
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q)", logLevelStr)
-	}
-
-	logrusLogger.SetLevel(logLevel)
-	logrusLogger.Log(logLevel, logLevelMessage)
-
-	return dlog.WrapLogrus(logrusLogger)
+	logger := dlog.WrapLogrus(logrusLogger)
+	dlog.SetFallbackLogger(logger)
+	ctx = dlog.WithLogger(ctx, logger)
+	return log.WithLevelSetter(ctx, logrusLogger)
 }

@@ -12,9 +12,7 @@ import (
 )
 
 func doMain(fn func(ctx context.Context, args ...string) error, args ...string) {
-	logger := makeBaseLogger()
-	dlog.SetFallbackLogger(logger)
-	ctx := dlog.WithLogger(context.Background(), logger)
+	ctx := makeBaseLogger(context.Background())
 
 	if err := fn(ctx, args...); err != nil {
 		dlog.Errorf(ctx, "quit: %v", err)
