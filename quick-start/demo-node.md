@@ -52,7 +52,7 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
 <Alert severity="info">
-    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
+    <strong>Already have a cluster?</strong> Switch over to a <a href="../../howtos/intercepts">version of this guide</a> that takes you though the same steps using your own cluster.
 </Alert>
 
 1. <Login/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
