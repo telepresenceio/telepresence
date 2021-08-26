@@ -299,10 +299,12 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 	return false
 }
 
+// AgentImage returns the repository/name combination that will be assigned to the container
+// image attribute.
 func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if cfg.Images.AgentImage != "" {
-		return cfg.Images.AgentImage, nil
+		return fmt.Sprintf("%s/%s", cfg.Images.Registry, cfg.Images.AgentImage), nil
 	}
 	if es.cachedImage.Image != "" || es.cachedImage.Err != nil {
 		return es.cachedImage.Image, es.cachedImage.Err
