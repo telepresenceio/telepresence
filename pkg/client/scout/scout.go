@@ -129,6 +129,10 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 // NewScout creates a new initialized Scout instance that can be used to
 // send telepresence reports to Metriton
 func NewScout(ctx context.Context, mode string) (s *Scout) {
+	baseMeta := getOsMetadata(ctx)
+	baseMeta["mode"] = mode
+	baseMeta["trace_id"] = uuid.New()
+	baseMeta["goos"] = runtime.GOOS
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence2",
@@ -143,11 +147,7 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 				return id, nil
 			},
 			// Fixed (growing) metadata passed with every report
-			BaseMetadata: map[string]interface{}{
-				"mode":     mode,
-				"trace_id": uuid.New().String(),
-				"goos":     runtime.GOOS,
-			},
+			BaseMetadata: baseMeta,
 		},
 	}
 }
