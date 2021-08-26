@@ -555,6 +555,11 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
+func (m *Manager) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
+	m.state.SetTempLogLevel(ctx, request)
+	return &empty.Empty{}, nil
+}
+
 func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_WatchClusterInfoServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchClusterInfo called")

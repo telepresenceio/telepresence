@@ -38,6 +38,9 @@ type ManagerClient interface {
 	Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Depart terminates a session.
 	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	// SetLogLevel will temporarily set the log-level for the traffic-manager and all
+	// traffic-agents for a duration that is determined b the request.
+	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -157,6 +160,15 @@ func (c *managerClient) Remain(ctx context.Context, in *RemainRequest, opts ...g
 func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Depart", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/SetLogLevel", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -431,6 +443,9 @@ type ManagerServer interface {
 	Remain(context.Context, *RemainRequest) (*empty.Empty, error)
 	// Depart terminates a session.
 	Depart(context.Context, *SessionInfo) (*empty.Empty, error)
+	// SetLogLevel will temporarily set the log-level for the traffic-manager and all
+	// traffic-agents for a duration that is determined b the request.
+	SetLogLevel(context.Context, *LogLevelRequest) (*empty.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -504,6 +519,9 @@ func (UnimplementedManagerServer) Remain(context.Context, *RemainRequest) (*empt
 }
 func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Depart not implemented")
+}
+func (UnimplementedManagerServer) SetLogLevel(context.Context, *LogLevelRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgents not implemented")
@@ -694,6 +712,24 @@ func _Manager_Depart_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Depart(ctx, req.(*SessionInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogLevelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).SetLogLevel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/SetLogLevel",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).SetLogLevel(ctx, req.(*LogLevelRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -977,6 +1013,10 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Depart",
 			Handler:    _Manager_Depart_Handler,
+		},
+		{
+			MethodName: "SetLogLevel",
+			Handler:    _Manager_SetLogLevel_Handler,
 		},
 		{
 			MethodName: "CreateIntercept",

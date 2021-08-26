@@ -3,15 +3,14 @@ package state
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
-	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
@@ -21,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type SessionState interface {
@@ -159,6 +159,7 @@ type State struct {
 	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
 	listeners        map[string]connpool.Handler          // listeners for all intercepts
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	timedLogLevel    log.TimedLevel
 }
 
 func NewState(ctx context.Context) *State {
@@ -168,6 +169,7 @@ func NewState(ctx context.Context) *State {
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
 		listeners:        make(map[string]connpool.Handler),
+		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
 	}
 }
 
@@ -502,7 +504,7 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	}
 
 	if _, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
-		return nil, grpcStatus.Errorf(grpcCodes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
 	}
 
 	return cept, nil
@@ -871,4 +873,15 @@ func (s *State) WatchLookupHost(agentSessionID string) <-chan *rpc.LookupHostReq
 		return nil
 	}
 	return ss.(*agentSessionState).lookups
+}
+
+// SetTempLogLevel sets the temporary log-level for the traffic-manager and all agents and,
+// if a duration is given, it also starts a timer that will reset the log-level once it
+// fires.
+func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLevelRequest) {
+	duration := time.Duration(0)
+	if gd := logLevelRequest.Duration; gd != nil {
+		duration = gd.AsDuration()
+	}
+	s.timedLogLevel.Set(ctx, logLevelRequest.LogLevel, duration)
 }
