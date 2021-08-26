@@ -52,7 +52,22 @@ func maybeSetEnv(key, val string) {
 	}
 }
 
-func LoadEnv(ctx context.Context) (Env, error) {
+type envKey struct{}
+
+// WithEnv returns a context with the given Env
+func WithEnv(ctx context.Context, env *Env) context.Context {
+	return context.WithValue(ctx, envKey{}, env)
+}
+
+func GetEnv(ctx context.Context) *Env {
+	env, ok := ctx.Value(envKey{}).(*Env)
+	if !ok {
+		return nil
+	}
+	return env
+}
+
+func LoadEnv(ctx context.Context) (*Env, error) {
 	cloudCfg := GetConfig(ctx).Cloud
 	var env Env
 	switch os.Getenv("SYSTEMA_ENV") {
@@ -64,7 +79,7 @@ func LoadEnv(ctx context.Context) (Env, error) {
 		// cleaning this up once I'm back.
 		if cloudCfg.SystemaHost != "beta-app.datawire.io" {
 			err := fmt.Errorf("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
-			return env, err
+			return nil, err
 		}
 		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "beta-auth.datawire.io")
 	default:
@@ -72,5 +87,5 @@ func LoadEnv(ctx context.Context) (Env, error) {
 	}
 
 	err := envconfig.Process(ctx, &env)
-	return env, err
+	return &env, err
 }

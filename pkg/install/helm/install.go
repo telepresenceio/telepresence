@@ -11,9 +11,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
-
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	cl "github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 const helmDriver = "secrets"
@@ -130,7 +128,7 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, client *kates.Client, namespace string, env *cl.Env) error {
+func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, client *kates.Client, namespace string) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
@@ -190,7 +188,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 }
 
 // DeleteTrafficManager deletes the traffic manager
-func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, namespace string, env *cl.Env) error {
+func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, namespace string) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)

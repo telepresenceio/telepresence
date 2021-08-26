@@ -301,7 +301,7 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 
 // AgentImage returns the repository/name combination that will be assigned to the container
 // image attribute.
-func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (string, error) {
+func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if cfg.Images.AgentImage != "" {
 		return fmt.Sprintf("%s/%s", cfg.Images.Registry, cfg.Images.AgentImage), nil
@@ -313,7 +313,7 @@ func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (stri
 	if err != nil {
 		return "", err
 	}
-	image := os.Expand(es.exts[es.mech2ext[mechname]].Image, env.Get)
+	image := os.Expand(es.exts[es.mech2ext[mechname]].Image, client.GetEnv(ctx).Get)
 	if cfg.Cloud.SkipLogin {
 		msg := fmt.Sprintf(
 			`images.agentImage must be set with cloud.skipLogin in

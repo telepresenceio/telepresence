@@ -53,7 +53,6 @@ type ScoutReport = scout.ScoutReport
 
 // service represents the state of the Telepresence Connector
 type service struct {
-	env         client.Env
 	scoutClient *scout.Scout // don't use this directly; use the 'scout' chan instead
 
 	managerProxy userd_grpc.MgrProxy
@@ -89,7 +88,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	config, err := userd_k8s.NewConfig(cr.KubeFlags, s.env)
+	config, err := userd_k8s.NewConfig(c, cr.KubeFlags)
 	if err != nil && !dryRun {
 		return &rpc.ConnectInfo{
 			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
@@ -219,7 +218,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := userd_trafficmgr.New(c,
-		s.env,
 		cluster,
 		s.scoutClient.Reporter.InstallID(),
 		userd_trafficmgr.Callbacks{
@@ -297,13 +295,7 @@ func run(c context.Context) error {
 	}
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 
-	env, err := client.LoadEnv(c)
-	if err != nil {
-		return err
-	}
-
 	s := &service{
-		env:         env,
 		scoutClient: scout.NewScout(c, "connector"),
 
 		sharedState: sharedstate.NewState(),
@@ -318,7 +310,7 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
-	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(env, &s.sharedState.UserNotifications, s.scout)
+	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(&s.sharedState.UserNotifications, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {

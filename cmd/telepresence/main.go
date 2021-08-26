@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
@@ -23,6 +24,13 @@ func main() {
 	if dir := os.Getenv("DEV_TELEPRESENCE_LOG_DIR"); dir != "" {
 		ctx = filelocation.WithAppUserLogDir(ctx, dir)
 	}
+
+	env, err := client.LoadEnv(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
+		os.Exit(1)
+	}
+	ctx = client.WithEnv(ctx, env)
 
 	var cmd *cobra.Command
 	if isDaemon() {

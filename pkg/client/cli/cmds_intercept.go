@@ -479,12 +479,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 		return nil, err
 	}
 
-	var env client.Env
-	env, err = client.LoadEnv(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx, env)
+	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
 	if err != nil {
 		return nil, err
 	}

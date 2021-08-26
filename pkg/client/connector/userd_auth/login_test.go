@@ -162,6 +162,7 @@ func (s *MockOauth2Server) HandleUserInfo() http.Handler {
 
 func TestLoginFlow(t *testing.T) {
 	type fixture struct {
+		Context                 context.Context
 		MockSaveTokenWrapper    *MockSaveTokenWrapper
 		MockSaveUserInfoWrapper *MockSaveUserInfoWrapper
 		MockOpenURLWrapper      *MockOpenURLWrapper
@@ -198,19 +199,20 @@ func TestLoginFlow(t *testing.T) {
 			}
 		}()
 		return &fixture{
+			Context: client.WithEnv(ctx,
+				&client.Env{
+					LoginAuthURL:       mockOauth2Server.AuthUrl(),
+					LoginTokenURL:      mockOauth2Server.TokenUrl(),
+					LoginClientID:      "",
+					LoginCompletionURL: mockCompletionUrl,
+					UserInfoURL:        mockOauth2Server.UserInfoUrl(),
+				}),
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,
 			MockSaveUserInfoWrapper: mockSaveUserInfoWrapper,
 			MockOpenURLWrapper:      mockOpenURLWrapper,
 			MockOauth2Server:        mockOauth2Server,
 			OpenedUrls:              openUrlChan,
 			Runner: userd_auth.NewLoginExecutor(
-				client.Env{
-					LoginAuthURL:       mockOauth2Server.AuthUrl(),
-					LoginTokenURL:      mockOauth2Server.TokenUrl(),
-					LoginClientID:      "",
-					LoginCompletionURL: mockCompletionUrl,
-					UserInfoURL:        mockOauth2Server.UserInfoUrl(),
-				},
 				saveToken,
 				saveUserInfo,
 				func(url string) error {
@@ -226,7 +228,7 @@ func TestLoginFlow(t *testing.T) {
 		return setupWithCacheFuncs(t, nil, nil)
 	}
 	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
-		grp := dgroup.NewGroup(dlog.NewTestContext(t, false), dgroup.GroupConfig{
+		grp := dgroup.NewGroup(f.Context, dgroup.GroupConfig{
 			EnableWithSoftness: true,
 			ShutdownOnNonError: true,
 		})
@@ -399,12 +401,11 @@ func TestLoginFlow(t *testing.T) {
 
 	t.Run("will remove token and user info from user cache dir when logging out", func(t *testing.T) {
 		// given
-		ctx := dlog.NewTestContext(t, false)
 		f := setupWithCacheFuncs(t, authdata.SaveTokenToUserCache, authdata.SaveUserInfoToUserCache)
 		defer f.MockOauth2Server.TearDown(t)
 
 		// a fake user cache directory
-		ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
+		ctx := filelocation.WithUserHomeDir(f.Context, t.TempDir())
 
 		// when
 		ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
