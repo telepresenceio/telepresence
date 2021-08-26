@@ -91,69 +91,25 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		}
 	}()
 
-	// Call WatchIntercepts
-	stream, err := manager.WatchIntercepts(ctx, session)
-	if err != nil {
-		return err
-	}
-
-	snapshots := make(chan *rpc.InterceptInfoSnapshot)
-	go func() {
-		defer cancel() // Drop the gRPC connection if we leave this function
-
-		for {
-			snapshot, err := stream.Recv()
-			if err != nil {
-				dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
-				return
-			}
-			snapshots <- snapshot
-		}
-	}()
-
 	// Deal with host lookups dispatched to this agent during intercepts
 	lrStream, err := manager.WatchLookupHost(ctx, session)
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		for ctx.Err() == nil {
-			lr, err := lrStream.Recv()
-			if err != nil {
-				if ctx.Err() == nil {
-					dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
-				}
-				return
-			}
-			dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
-			addrs, err := net.LookupHost(lr.Host)
-			r := rpc.LookupHostResponse{}
-			if err == nil {
-				ips := make(iputil.IPs, len(addrs))
-				for i, addr := range addrs {
-					ips[i] = iputil.Parse(addr)
-				}
-				dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
-				r.Ips = ips.BytesSlice()
-			}
-			response := rpc.LookupHostAgentResponse{
-				Session:  session,
-				Request:  lr,
-				Response: &r,
-			}
-			if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
-				if ctx.Err() == nil {
-					dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
-				}
-				return
-			}
-		}
-	}()
+	go lookupHostWaitLoop(ctx, manager, session, lrStream)
 
 	// Loop calling Remain
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+
+	snapshots := make(chan *rpc.InterceptInfoSnapshot)
+
+	// Call WatchIntercepts
+	stream, err := manager.WatchIntercepts(ctx, session)
+	if err != nil {
+		return err
+	}
+	go interceptWaitLoop(ctx, cancel, snapshots, stream)
 
 	for {
 		select {
@@ -172,6 +128,52 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 
 		if _, err := manager.Remain(ctx, &rpc.RemainRequest{Session: session}); err != nil {
 			return err
+		}
+	}
+}
+
+func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots chan<- *rpc.InterceptInfoSnapshot, stream rpc.Manager_WatchInterceptsClient) {
+	defer cancel() // Drop the gRPC connection if we leave this function
+	for {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
+			return
+		}
+		snapshots <- snapshot
+	}
+}
+
+func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lookupHostStream rpc.Manager_WatchLookupHostClient) {
+	for ctx.Err() == nil {
+		lr, err := lookupHostStream.Recv()
+		if err != nil {
+			if ctx.Err() == nil {
+				dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
+			}
+			return
+		}
+		dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
+		addrs, err := net.LookupHost(lr.Host)
+		r := rpc.LookupHostResponse{}
+		if err == nil {
+			ips := make(iputil.IPs, len(addrs))
+			for i, addr := range addrs {
+				ips[i] = iputil.Parse(addr)
+			}
+			dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
+			r.Ips = ips.BytesSlice()
+		}
+		response := rpc.LookupHostAgentResponse{
+			Session:  session,
+			Request:  lr,
+			Response: &r,
+		}
+		if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
+			if ctx.Err() == nil {
+				dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
+			}
+			return
 		}
 	}
 }
