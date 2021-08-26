@@ -28,6 +28,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -139,6 +140,8 @@ func (is *installSuite) TearDownSuite() {
 func (is *installSuite) Test_findTrafficManager_notPresent() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
 	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.namespace}, env)
@@ -157,6 +160,8 @@ func (is *installSuite) Test_findTrafficManager_notPresent() {
 func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 
 	f, err := ioutil.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
@@ -171,9 +176,11 @@ func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	is.findTrafficManagerPresent(is.managerNamespace)
 }
 
-func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
+func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
@@ -183,7 +190,135 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
 
-	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up
+	version.Version = "v0.0.0-bogus"
+
+	restoreVersion := func() { version.Version = is.testVersion }
+
+	// We'll call this further down, but defer it to prevent polluting other tests if we don't leave this function gracefully
+	defer restoreVersion()
+
+	defer is.removeManager(is.managerNamespace)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.Error(ti.ensureManager(ctx, &env))
+	restoreVersion()
+
+	require.NoError(ti.ensureManager(ctx, &env))
+}
+
+func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+	defer is.removeManager(is.managerNamespace)
+	err = dexec.CommandContext(ctx, "../../../../tools/bin/helm", "--kubeconfig", is.kubeConfig, "--namespace", is.managerNamespace, "uninstall", "--keep-history", "traffic-manager").Run()
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+	require.Eventually(func() bool {
+		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
+		if err != nil {
+			return false
+		}
+		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
+	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
+}
+
+func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+	// We want to make sure that we can re-install the agent after it's been uninstalled,
+	// so try to ensureManager again.
+	require.NoError(ti.ensureManager(ctx, &env))
+	// Uninstall the agent one last time -- this should behave the same way as the previous uninstall
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+}
+
+func (is *installSuite) Test_ensureTrafficManager_upgrades() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	ti, err := newTrafficManagerInstaller(kc)
+	require.NoError(err)
+
+	require.NoError(ti.ensureManager(ctx, &env))
+	defer is.removeManager(is.managerNamespace)
+
+	version.Version = "v3.0.0-bogus"
+	restoreVersion := func() { version.Version = is.testVersion }
+	defer restoreVersion()
+
+	require.Error(ti.ensureManager(ctx, &env))
+
+	require.Eventually(func() bool {
+		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
+		if err != nil {
+			return false
+		}
+		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
+	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
+
+	restoreVersion()
+	require.NoError(ti.ensureManager(ctx, &env))
+}
+
+func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+
+	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	require.NoError(err)
+	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	require.NoError(err)
+
+	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up.
 	// 2.4.0 was the latest release at the time that testdata/telepresence-1.9.9.tgz was packaged
 	err = dexec.CommandContext(ctx,
 		"../../../../tools/bin/helm",
@@ -214,6 +349,8 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 	oldCfg, err := clientcmd.LoadFromFile(is.kubeConfig)
 	require.NoError(err)
 	defer func() {
@@ -246,6 +383,8 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 	require := is.Require()
 	ctx := dlog.NewTestContext(is.T(), false)
+	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
 	defer is.removeManager(is.managerNamespace)
 	env, err := client.LoadEnv(ctx)
 	require.NoError(err)
@@ -261,6 +400,8 @@ func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	require := is.Require()
 	c := dlog.NewTestContext(is.T(), false)
+	c, err := client.SetDefaultConfig(c, is.T().TempDir())
+	require.NoError(err)
 	defer is.removeManager(namespace)
 
 	env, err := client.LoadEnv(c)

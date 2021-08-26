@@ -72,7 +72,7 @@ func getValues(ctx context.Context) map[string]interface{} {
 }
 
 func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Info(ctx, "No existing Traffic Manager found, installing...")
+	dlog.Infof(ctx, "No existing Traffic Manager found, installing %s...", client.Version())
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -84,12 +84,20 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 }
 
 func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Info(ctx, "Existing Traffic Manager found, upgrading...")
+	dlog.Infof(ctx, "Existing Traffic Manager found, upgrading to %s...", client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
 	_, err := upgrade.Run(releaseName, chrt, getValues(ctx))
+	return err
+}
+
+func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, namespace string) error {
+	dlog.Info(ctx, "Uninstalling Traffic Manager")
+	uninstall := action.NewUninstall(helmConfig)
+	uninstall.Timeout = client.GetConfig(ctx).Timeouts.Helm
+	_, err := uninstall.Run(releaseName)
 	return err
 }
 
@@ -113,6 +121,15 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 	chrt, err := loadChart()
 	if err != nil {
 		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	}
+	// Under various conditions, helm can leave the release history hanging around after the release is gone.
+	// In those cases, an uninstall should clean everything up and leave us ready to install again
+	if existing != nil && shouldManageRelease(ctx, existing) && releaseNeedsCleanup(ctx, existing) {
+		err := uninstallExisting(ctx, helmConfig, namespace)
+		if err != nil {
+			return fmt.Errorf("failed to clean up leftover release history: %w", err)
+		}
+		existing = nil
 	}
 	if existing == nil {
 		err := importLegacy(ctx, namespace, client)
@@ -159,9 +176,5 @@ func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, n
 		dlog.Info(ctx, "Traffic Manager already deleted or not owned by cli, will not uninstall")
 		return nil
 	}
-	dlog.Info(ctx, "Uninstalling Traffic Manager")
-	uninstall := action.NewUninstall(helmConfig)
-	uninstall.Timeout = client.GetConfig(ctx).Timeouts.Helm
-	_, err = uninstall.Run(releaseName)
-	return err
+	return uninstallExisting(ctx, helmConfig, namespace)
 }

@@ -2,16 +2,25 @@ package helm
 
 import (
 	"context"
+	"strings"
 
+	"github.com/blang/semver"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // getHelmRelease gets the traffic-manager helm release; if it is not found, it will return nil
 func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*release.Release, error) {
 	list := action.NewList(helmConfig)
+	list.Deployed = true
+	list.Failed = true
+	list.Pending = true
+	list.Uninstalled = true
+	list.Uninstalling = true
+	list.SetStateMask()
 	releases, err := list.Run()
 	if err != nil {
 		return nil, err
@@ -33,6 +42,23 @@ func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
 	return false
 }
 
+func releaseNeedsCleanup(ctx context.Context, rel *release.Release) bool {
+	dlog.Debugf(ctx, "Traffic Manager release was found to be in status %s", rel.Info.Status)
+	return rel.Info.Status != release.StatusDeployed
+}
+
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
-	return rel.Chart.Metadata.Version == client.Version()
+	chartVersion, err := semver.Parse(strings.TrimPrefix(rel.Chart.Metadata.Version, "v"))
+	if err != nil {
+		dlog.Errorf(ctx, "Could not parse version %s for chart: %v", rel.Chart.Metadata.Version, err)
+		return false
+	}
+	cliVersion := client.Semver()
+	if chartVersion.GT(cliVersion) {
+		dlog.Warnf(ctx, "You are using Telepresence v%s, but Traffic Manager v%s is installed on the cluster.", cliVersion, chartVersion)
+		return false
+	}
+	// At this point we could also do chartVersion != cliVersion, since chartVersion <= cliVersion
+	// But this makes it really clear that we're only doing the upgrade if chartVersion < cliVersion
+	return chartVersion.LT(cliVersion)
 }
