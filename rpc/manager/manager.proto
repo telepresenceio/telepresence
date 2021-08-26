@@ -429,4 +429,7 @@ service Manager {
 
   // WatchLookupHost lets an agent receive lookup requests
   rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
+
+  // WatchLogLevel lets an agent receive log-level updates
+  rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);
 }

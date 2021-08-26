@@ -84,6 +84,8 @@ type ManagerClient interface {
 	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*empty.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
 	WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error)
+	// WatchLogLevel lets an agent receive log-level updates
+	WatchLogLevel(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error)
 }
 
 type managerClient struct {
@@ -419,6 +421,38 @@ func (x *managerWatchLookupHostClient) Recv() (*LookupHostRequest, error) {
 	return m, nil
 }
 
+func (c *managerClient) WatchLogLevel(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[6], "/telepresence.manager.Manager/WatchLogLevel", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchLogLevelClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchLogLevelClient interface {
+	Recv() (*LogLevelRequest, error)
+	grpc.ClientStream
+}
+
+type managerWatchLogLevelClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
+	m := new(LogLevelRequest)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ManagerServer is the server API for Manager service.
 // All implementations must embed UnimplementedManagerServer
 // for forward compatibility
@@ -489,6 +523,8 @@ type ManagerServer interface {
 	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*empty.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
 	WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error
+	// WatchLogLevel lets an agent receive log-level updates
+	WatchLogLevel(*empty.Empty, Manager_WatchLogLevelServer) error
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -558,6 +594,9 @@ func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *Look
 }
 func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLookupHost not implemented")
+}
+func (UnimplementedManagerServer) WatchLogLevel(*empty.Empty, Manager_WatchLogLevelServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchLogLevel not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
 
@@ -978,6 +1017,27 @@ func (x *managerWatchLookupHostServer) Send(m *LookupHostRequest) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Manager_WatchLogLevel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(empty.Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchLogLevel(m, &managerWatchLogLevelServer{stream})
+}
+
+type Manager_WatchLogLevelServer interface {
+	Send(*LogLevelRequest) error
+	grpc.ServerStream
+}
+
+type managerWatchLogLevelServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchLogLevelServer) Send(m *LogLevelRequest) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _Manager_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
@@ -1074,6 +1134,11 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchLookupHost",
 			Handler:       _Manager_WatchLookupHost_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchLogLevel",
+			Handler:       _Manager_WatchLogLevel_Handler,
 			ServerStreams: true,
 		},
 	},

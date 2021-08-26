@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
@@ -98,6 +99,13 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	}
 	go lookupHostWaitLoop(ctx, manager, session, lrStream)
 
+	// Deal with log-level changes
+	logLevelStream, err := manager.WatchLogLevel(ctx, &empty.Empty{})
+	if err != nil {
+		return err
+	}
+	go logLevelWaitLoop(ctx, logLevelStream)
+
 	// Loop calling Remain
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -175,5 +183,23 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 			}
 			return
 		}
+	}
+}
+
+func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
+	timedLevel := log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel)
+	for ctx.Err() == nil {
+		ll, err := logLevelStream.Recv()
+		if err != nil {
+			if ctx.Err() == nil {
+				dlog.Debugf(ctx, "log-level stream recv: %+v", err) // May be io.EOF
+			}
+			return
+		}
+		duration := time.Duration(0)
+		if ll.Duration != nil {
+			duration = ll.Duration.AsDuration()
+		}
+		timedLevel.Set(ctx, ll.LogLevel, duration)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -160,6 +161,7 @@ type State struct {
 	listeners        map[string]connpool.Handler          // listeners for all intercepts
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
+	logLevelCond     sync.Cond
 }
 
 func NewState(ctx context.Context) *State {
@@ -170,6 +172,7 @@ func NewState(ctx context.Context) *State {
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
 		listeners:        make(map[string]connpool.Handler),
 		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
+		logLevelCond:     sync.Cond{L: &sync.Mutex{}},
 	}
 }
 
@@ -239,7 +242,7 @@ func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 
 // Sessions: common ////////////////////////////////////////////////////////////////////////////////
 
-// Mark a session as being present at the indicated time.  Returns true if everything goes OK,
+// MarkSession marks a session as being present at the indicated time.  Returns true if everything goes OK,
 // returns false if the given session ID does not exist.
 func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	s.mu.Lock()
@@ -260,7 +263,7 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	return false
 }
 
-// Remove a session from the set of present session IDs.
+// RemoveSession removes a session from the set of present session IDs.
 func (s *State) RemoveSession(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -884,4 +887,28 @@ func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLev
 		duration = gd.AsDuration()
 	}
 	s.timedLogLevel.Set(ctx, logLevelRequest.LogLevel, duration)
+	s.logLevelCond.Broadcast()
+}
+
+// InitialTempLogLevel returns the temporary log-level if it exists, along with the remaining
+// duration for it, which might be zero, in which case the log-level is valid until a new
+// level is requested.
+func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
+	level, duration := s.timedLogLevel.Get()
+	if level == "" {
+		return nil
+	}
+	return &rpc.LogLevelRequest{
+		LogLevel: level,
+		Duration: durationpb.New(duration),
+	}
+}
+
+// WaitForTempLogLevel waits for a new temporary log-level request. It returns the values
+// of the last request that was made.
+func (s *State) WaitForTempLogLevel() *rpc.LogLevelRequest {
+	s.logLevelCond.L.Lock()
+	defer s.logLevelCond.L.Unlock()
+	s.logLevelCond.Wait()
+	return s.InitialTempLogLevel()
 }
