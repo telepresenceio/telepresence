@@ -62,7 +62,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		SystemAPort: "",
 
 		ManagerNamespace: "default",
-		AgentImage:       "docker.io/datawire/tel2:2.3.1",
+		AgentRegistry:    "docker.io/datawire",
+		AgentImage:       "tel2:2.3.1",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)

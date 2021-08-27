@@ -35,7 +35,7 @@ func TestEnvconfig(t *testing.T) {
 		SystemAHost:    "app.getambassador.io",
 		SystemAPort:    "443",
 		AgentRegistry:  "docker.io/datawire",
-		AgentImage:     "docker.io/datawire/tel2:" + strings.TrimPrefix(version.Version, "v"),
+		AgentImage:     "tel2:" + strings.TrimPrefix(version.Version, "v"),
 		AgentPort:      9900,
 		MaxReceiveSize: resource.MustParse("4Mi"),
 	}
