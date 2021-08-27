@@ -41,7 +41,7 @@ spec:
               containerPort: 9900
           env:
             - name: LOG_LEVEL
-              value: debug
+              value: info
             - name: AGENT_NAME
               value: echo-w-agent
             - name: APP_PORT

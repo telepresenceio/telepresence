@@ -575,7 +575,7 @@ func GetDefaultConfig(c context.Context) Config {
 			PrivateHelm:                  12 * time.Second,
 		},
 		LogLevels: LogLevels{
-			UserDaemon: logrus.DebugLevel,
+			UserDaemon: logrus.InfoLevel,
 			RootDaemon: logrus.InfoLevel,
 		},
 		Cloud: Cloud{
