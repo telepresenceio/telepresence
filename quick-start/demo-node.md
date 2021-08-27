@@ -52,7 +52,7 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 </Alert>
 
 <Alert severity="info">
-    <strong>Already have a cluster?</strong> Switch over to a <a href="../qs-node">version of this guide</a> that takes you though the same steps using your own cluster.
+    <strong>Already have a cluster?</strong> Switch over to a <a href="../../howtos/intercepts">version of this guide</a> that takes you though the same steps using your own cluster.
 </Alert>
 
 <ExpirationDate/>
