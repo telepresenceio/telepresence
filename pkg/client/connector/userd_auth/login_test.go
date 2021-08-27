@@ -21,9 +21,9 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 

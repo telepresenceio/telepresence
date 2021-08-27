@@ -20,13 +20,13 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -54,7 +54,7 @@ type ScoutReport = scout.ScoutReport
 // service represents the state of the Telepresence Connector
 type service struct {
 	env         client.Env
-	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
+	scoutClient *scout.Scout // don't use this directly; use the 'scout' chan instead
 
 	managerProxy userd_grpc.MgrProxy
 	cancel       func()
@@ -304,7 +304,7 @@ func run(c context.Context) error {
 
 	s := &service{
 		env:         env,
-		scoutClient: client.NewScout(c, "connector"),
+		scoutClient: scout.NewScout(c, "connector"),
 
 		sharedState: sharedstate.NewState(),
 
@@ -447,9 +447,9 @@ func run(c context.Context) error {
 				s.scoutClient.SetMetadatum(k, v)
 			}
 
-			var metadata []client.ScoutMeta
+			var metadata []scout.ScoutMeta
 			for k, v := range report.Metadata {
-				metadata = append(metadata, client.ScoutMeta{
+				metadata = append(metadata, scout.ScoutMeta{
 					Key:   k,
 					Value: v,
 				})

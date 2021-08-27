@@ -30,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -82,7 +83,7 @@ type interceptState struct {
 	cmd  safeCobraCommand
 	args interceptArgs
 
-	Scout *client.Scout
+	Scout *scout.Scout
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
@@ -285,7 +286,7 @@ func newInterceptState(
 		cmd:  cmd,
 		args: args,
 
-		Scout: client.NewScout(ctx, "cli"),
+		Scout: scout.NewScout(ctx, "cli"),
 
 		connectorClient: connectorClient,
 		managerClient:   managerClient,
@@ -502,6 +503,22 @@ func (is *interceptState) getMountPoint() (string, bool, error) {
 }
 
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+	// Add whatever metadata we already have to scout
+	is.Scout.SetMetadatum("service_name", is.args.agentName)
+	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
+	mechanism, _ := is.args.extState.Mechanism()
+	mechanismArgs, _ := is.args.extState.MechanismArgs()
+	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
+	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
+
+	defer func() {
+		if err != nil {
+			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+		} else {
+			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_success")
+		}
+	}()
+
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
 		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo)
@@ -550,15 +567,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		// if it wasn't given on the cli by the user
 		is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 
-		// Add metadata to scout
-		is.Scout.SetMetadatum("service_name", is.args.agentName)
-		is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
-
-		mechanism, _ := is.args.extState.Mechanism()
-		mechanismArgs, _ := is.args.extState.MechanismArgs()
-		is.Scout.SetMetadatum("intercept_mechanism", mechanism)
-		is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
-
 		if is.args.previewEnabled {
 			intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 				Session: is.connInfo.SessionInfo,
@@ -568,7 +576,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 				},
 			})
 			if err != nil {
-				is.Scout.Report(logging.WithDiscardingLogger(ctx), "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+				is.Scout.Report(logging.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
@@ -596,7 +604,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			volumeMountProblem = checkMountCapability(ctx)
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
-		is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))

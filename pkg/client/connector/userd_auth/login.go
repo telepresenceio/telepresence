@@ -25,8 +25,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
 const (

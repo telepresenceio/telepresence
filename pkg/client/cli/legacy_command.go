@@ -5,13 +5,12 @@ import (
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 
 	"github.com/datawire/dlib/dlog"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // Here we handle parsing legacy commands, as well as generating Telepresence
@@ -218,7 +217,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	dlog.WithLogger(cmd.Context(), nil)
-	scout := client.NewScout(cmd.Context(), "cli")
+	scout := scout.NewScout(cmd.Context(), "cli")
 
 	// Add metadata for the main legacy Telepresence commands so we can
 	// track usage and see what legacy commands people are still using.
