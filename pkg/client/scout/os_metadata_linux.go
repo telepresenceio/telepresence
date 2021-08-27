@@ -34,8 +34,11 @@ func getOsMetadata(ctx context.Context) map[string]interface{} {
 	osMeta["os_docker"] = isDocker(ctx)
 	osMeta["os_wsl"] = isWSL(ctx)
 	f, err := os.Open("/etc/os-release")
+	if os.IsNotExist(err) {
+		f, err = os.Open("/usr/lib/os-release")
+	}
 	if err != nil {
-		dlog.Warnf(ctx, "Unable to open /etc/os-release: %v", err)
+		dlog.Warnf(ctx, "Unable to open /etc/os-release or /usr/lib/os-release: %v", err)
 		return osMeta
 	}
 	scanner := bufio.NewScanner(f)
