@@ -43,7 +43,7 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
-1. <Login urlParams="docs_source=telepresence-quick-start"/> <br/>Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
+1. <Login urlParams="docs_source=telepresence-quick-start"/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
 2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
    <EmojivotoServicesList/>
 
