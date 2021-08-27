@@ -19,7 +19,7 @@ Preview URLs are protected behind authentication via Ambassador Cloud, ensuring 
 * You will need a service running in your cluster that you would like to intercept.
 
 <Alert severity="info">
-Need a sample app to try with preview URLs?  Check out the <a href="../../quick-start/qs-node/">quick start</a>. It has a multi-service app to install in your cluster with instructions to create a preview URL for that app.
+Need a sample app to try with preview URLs?  Check out the <a href="../../quick-start/demo-node/">quick start</a>. It has a multi-service app to install in your cluster with instructions to create a preview URL for that app.
 </Alert>
 
 ## Creating a preview URL
