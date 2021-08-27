@@ -8,7 +8,7 @@ import Alert from '@material-ui/lab/Alert';
 
 While preview URLs are a powerful feature, there are other options to use Telepresence for proxying traffic between your laptop and the cluster.
 
-<Alert severity="info"> We'll assume below that you have the <a href="../../quick-start/qs-node/">quick start</a> sample web app running in your cluster so that we can test accessing the <code>web-app</code> service. That service can be substituted however for any service you are running.</Alert>
+<Alert severity="info"> We'll assume below that you have the <a href="../../quick-start/demo-node/">quick start</a> sample web app running in your cluster so that we can test accessing the <code>web-app</code> service. That service can be substituted however for any service you are running.</Alert>
 
 ## Proxying outbound traffic
 
