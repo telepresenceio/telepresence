@@ -1656,7 +1656,7 @@ func output(ctx context.Context, args ...string) (string, error) {
 	return string(out), client.RunError(err)
 }
 
-// telepresence executes the CLI command in-process
+// telepresence executes the CLI command
 func telepresence(t testing.TB, args ...string) (string, string) {
 	ctx := dlog.NewTestContext(t, false)
 

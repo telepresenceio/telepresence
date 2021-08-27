@@ -154,9 +154,7 @@ func (is *installSuite) Test_findTrafficManager_notPresent() {
 
 func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 
 	f, err := ioutil.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
@@ -317,9 +315,7 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 	oldCfg, err := clientcmd.LoadFromFile(is.kubeConfig)
 	require.NoError(err)
 	defer func() {
@@ -493,7 +489,18 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 			t.Run(tcName+"/install", func(t *testing.T) {
 				ctx := dlog.NewTestContext(t, true)
+				env, err := client.LoadEnv(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx = client.WithEnv(ctx, env)
 				ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+				cfg, err = client.LoadConfig(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx = client.WithConfig(ctx, cfg)
+
 				version.Version = tc.InputVersion
 
 				expectedWrk := deepCopyObject(tc.OutputWorkload)

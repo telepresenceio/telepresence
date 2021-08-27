@@ -20,6 +20,12 @@ type Env struct {
 	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
 
 	ManagerNamespace string `env:"TELEPRESENCE_MANAGER_NAMESPACE,default=ambassador"`
+
+	// This environment variable becomes the default for the images.registry and images.webhookRegistry
+	Registry string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+
+	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
+	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 }
 
 func (env Env) Get(key string) string {

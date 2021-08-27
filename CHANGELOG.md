@@ -44,6 +44,10 @@
 
 - Bugfix: The config setting `images.agentImage` is no longer required to contain the repository. The repository is
   instead picked from `images.repository`.
+
+- Change: The `registry`, `webhookRegistry`, `agentImage` and `webhookAgentImage` settings in the `images` group of the `config.yml`
+  now get their defaults from `TELEPRESENCE_AGENT_IMAGE` and `TELEPRESENCE_REGISTRY`.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.

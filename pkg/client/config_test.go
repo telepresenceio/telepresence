@@ -56,6 +56,9 @@ images:
 	c := dlog.NewTestContext(t, false)
 	c = filelocation.WithAppSystemConfigDirs(c, []string{sys1, sys2})
 	c = filelocation.WithAppUserConfigDir(c, user)
+	env, err := LoadEnv(c)
+	require.NoError(t, err)
+	c = WithEnv(c, env)
 
 	cfg, err := LoadConfig(c)
 	require.NoError(t, err)

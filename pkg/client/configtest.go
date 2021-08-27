@@ -25,8 +25,8 @@ cloud:
 	return SetConfig(ctx, configDir, configYml)
 }
 
-// SetConfig clears the config and creates one from the configYml provided. Use this
-// if you are testing components of the config.yml, otherwise you can use setDefaultConfig.
+// SetConfig creates a config from the configYml provided and assigns it to a new context which
+// is returned. Use this if you are testing components of the config.yml, otherwise you can use setDefaultConfig.
 func SetConfig(ctx context.Context, configDir, configYml string) (context.Context, error) {
 	config, err := os.Create(filepath.Join(configDir, "config.yml"))
 	if err != nil {
@@ -39,7 +39,16 @@ func SetConfig(ctx context.Context, configDir, configYml string) (context.Contex
 	}
 	config.Close()
 
+	// Load env if it isn't loaded already
 	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+	if env := GetEnv(ctx); env == nil {
+		env, err = LoadEnv(ctx)
+		if err != nil {
+			return ctx, err
+		}
+		ctx = WithEnv(ctx, env)
+	}
+
 	cfg, err := LoadConfig(ctx)
 	if err != nil {
 		return ctx, err

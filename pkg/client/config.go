@@ -562,8 +562,8 @@ func GetConfigFile(c context.Context) string {
 }
 
 // GetDefaultConfig returns the default configuration settings
-func GetDefaultConfig() Config {
-	return Config{
+func GetDefaultConfig(c context.Context) Config {
+	cfg := Config{
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          120 * time.Second,
 			PrivateApply:                 1 * time.Minute,
@@ -578,12 +578,6 @@ func GetDefaultConfig() Config {
 			UserDaemon: logrus.DebugLevel,
 			RootDaemon: logrus.InfoLevel,
 		},
-		Images: Images{
-			Registry:          "docker.io/datawire",
-			WebhookRegistry:   "docker.io/datawire",
-			AgentImage:        "",
-			WebhookAgentImage: "",
-		},
 		Cloud: Cloud{
 			SkipLogin:       false,
 			RefreshMessages: 24 * 7 * time.Hour,
@@ -592,6 +586,12 @@ func GetDefaultConfig() Config {
 		},
 		Grpc: Grpc{},
 	}
+	env := GetEnv(c)
+	cfg.Images.Registry = env.Registry
+	cfg.Images.WebhookRegistry = env.Registry
+	cfg.Images.AgentImage = env.AgentImage
+	cfg.Images.WebhookAgentImage = env.AgentImage
+	return cfg
 }
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
@@ -602,7 +602,7 @@ func LoadConfig(c context.Context) (*Config, error) {
 		return nil, err
 	}
 
-	cfg := GetDefaultConfig()
+	cfg := GetDefaultConfig(c)
 	readMerge := func(dir string) error {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil

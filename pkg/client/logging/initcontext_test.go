@@ -40,6 +40,11 @@ func TestInitContext(t *testing.T) {
 	testSetup := func(t *testing.T) (ctx context.Context, logDir, logFile string) {
 		t.Helper()
 		ctx = dlog.NewTestContext(t, false)
+		env, err := client.LoadEnv(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx = client.WithEnv(ctx, env)
 
 		// Ensure that we use a temporary log dir
 		logDir = t.TempDir()

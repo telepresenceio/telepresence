@@ -191,9 +191,6 @@ func TestLoginFlow(t *testing.T) {
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
 		ctx := dlog.NewTestContext(t, false)
-		cfg, err := client.LoadConfig(ctx)
-		require.NoError(t, err)
-		ctx = client.WithConfig(ctx, cfg)
 
 		stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
 		scout := make(chan scout.ScoutReport)
@@ -202,15 +199,21 @@ func TestLoginFlow(t *testing.T) {
 			for range scout {
 			}
 		}()
+		ctx = client.WithEnv(ctx,
+			&client.Env{
+				LoginAuthURL:       mockOauth2Server.AuthUrl(),
+				LoginTokenURL:      mockOauth2Server.TokenUrl(),
+				LoginClientID:      "",
+				LoginCompletionURL: mockCompletionUrl,
+				UserInfoURL:        mockOauth2Server.UserInfoUrl(),
+			})
+
+		cfg, err := client.LoadConfig(ctx)
+		require.NoError(t, err)
+		ctx = client.WithConfig(ctx, cfg)
+
 		return &fixture{
-			Context: client.WithEnv(ctx,
-				&client.Env{
-					LoginAuthURL:       mockOauth2Server.AuthUrl(),
-					LoginTokenURL:      mockOauth2Server.TokenUrl(),
-					LoginClientID:      "",
-					LoginCompletionURL: mockCompletionUrl,
-					UserInfoURL:        mockOauth2Server.UserInfoUrl(),
-				}),
+			Context:                 ctx,
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,
 			MockSaveUserInfoWrapper: mockSaveUserInfoWrapper,
 			MockOpenURLWrapper:      mockOpenURLWrapper,
