@@ -40,6 +40,16 @@ items:
           This change is transparent to the user.
           A new configuration flag, <code>timeouts.helm</code> sets the timeouts for all helm operations performed by the Telepresence binary.
         docs: reference/config#timeouts
+
+      - type: change
+        title: traffic-manager gets cluster ID itself instead of via environment variable
+        body: >-
+          The traffic-manager used to get the cluster ID as an environment variable when running
+          <code>telepresence connnect</code> or via adding the value in the helm chart. This was
+          clunky so now the traffic-manager gets the value itself as long as it has permissions
+          to "get" and "list" namespaces (this has been updated in the helm chart).
+        docs: install/helm
+
   - version: 2.4.0
     date: '2021-08-04'
     notes:
