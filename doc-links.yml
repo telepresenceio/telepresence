@@ -20,6 +20,8 @@
        link: concepts/faster
      - title: Context propagation
        link: concepts/context-prop
+     - title: Types of intercepts
+       link: concepts/intercepts
  - title: How do I...
    items:
      - title: Intercept a service in your own environment
