@@ -33,6 +33,18 @@ items:
   - version: 2.4.1
     date: 'TBD'
     notes:
+      - type: feature
+        title: External cloud variables are now configurable
+        body: >-
+          We now support configuring the host and port for the cloud in your <code>config.yml</code>. These
+          are used when logging in to utilize features provided by an extension, and are also passed
+          along as environment variables when installing the `traffic-manager`. Additionally, we
+          now run our testsuite with these variables set to localhost to continue to ensure Telepresence
+          is fully fuctional without depeneding on an external service. The SYSTEMA_HOST and SYSTEMA_PORT
+          environment variables are no longer used.
+        image: telepresence-2.4.1-systema-vars.png
+        docs: reference/config/#cloud
+
       - type: change
         title: Traffic Manager installed via helm
         body: >-
