@@ -17,8 +17,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -31,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -508,9 +507,9 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	defer func() {
 		if err != nil {
-			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 		} else {
-			is.Scout.Report(logging.WithDiscardingLogger(ctx), "intercept_success")
+			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
 		}
 	}()
 
@@ -571,7 +570,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 				},
 			})
 			if err != nil {
-				is.Scout.Report(logging.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+				is.Scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}

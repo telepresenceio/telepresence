@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-
-	"github.com/datawire/dlib/dlog"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 // Here we handle parsing legacy commands, as well as generating Telepresence
@@ -236,7 +235,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if lc.unsupportedFlags != nil {
 		scout.SetMetadatum("unsupported_flags", lc.unsupportedFlags)
 	}
-	scout.Report(logging.WithDiscardingLogger(cmd.Context()), "Used legacy syntax")
+	scout.Report(log.WithDiscardingLogger(cmd.Context()), "Used legacy syntax")
 
 	// Generate output to user letting them know legacy Telepresence was used,
 	// what the Telepresence command is, and runs it.

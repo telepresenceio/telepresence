@@ -1,4 +1,4 @@
-package logging
+package log
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 
 const thisModule = "github.com/telepresenceio/telepresence/v2"
 
-// Formatter formats log messages for Telepresence client
+// Formatter formats log messages for Telepresence.
 type Formatter struct {
 	timestampFormat string
 }
