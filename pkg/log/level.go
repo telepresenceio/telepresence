@@ -2,7 +2,6 @@ package log
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/sirupsen/logrus"
 )
@@ -27,20 +26,15 @@ func WithLevelSetter(ctx context.Context, logrusLogger *logrus.Logger) context.C
 // SetLogrusLevel sets the log-level of the given logger from logLevelStr and logs that to the logger.
 func SetLogrusLevel(logrusLogger *logrus.Logger, logLevelStr string) {
 	const defaultLogLevel = logrus.InfoLevel
-	logLevelMessage := "Logging at this level"
-	logLevel, err := logrus.ParseLevel(logLevelStr)
-
-	switch {
-	case logLevelStr == "": // not specified -> use default
-		logLevel = defaultLogLevel
-		logLevelMessage += " (default)"
-	case err != nil: // Didn't parse -> use default and show error
-		logLevel = defaultLogLevel
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q -> %v)", logLevelStr, err)
-	default: // parsed successfully -> use that level
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q)", logLevelStr)
+	logLevel := defaultLogLevel
+	var err error
+	if logLevelStr != "" {
+		if logLevel, err = logrus.ParseLevel(logLevelStr); err != nil {
+			logLevel = defaultLogLevel
+			logrusLogger.Errorf("%v, falling back to default %q", err, logLevel)
+		}
 	}
 	logrusLogger.SetLevel(logLevel)
 	logrusLogger.SetReportCaller(logLevel >= logrus.TraceLevel)
-	logrusLogger.Log(logLevel, logLevelMessage)
+	logrusLogger.Logf(logLevel, "Logging at this level %q", logLevel)
 }

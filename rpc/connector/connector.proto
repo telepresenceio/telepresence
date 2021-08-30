@@ -56,6 +56,9 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
+  // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
+  rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
+
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }

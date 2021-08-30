@@ -55,11 +55,13 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 
 	// Read the config and set the configured level.
 	logLevels := client.GetConfig(ctx).LogLevels
+	level := logrus.InfoLevel
 	if name == "daemon" {
-		logger.SetLevel(logLevels.RootDaemon)
+		level = logLevels.RootDaemon
 	} else if name == "connector" {
-		logger.SetLevel(logLevels.UserDaemon)
+		level = logLevels.UserDaemon
 	}
+	log.SetLogrusLevel(logger, level.String())
 	ctx = log.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }

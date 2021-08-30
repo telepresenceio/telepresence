@@ -6,6 +6,7 @@ import (
 	context "context"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
+	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -29,6 +30,8 @@ type DaemonClient interface {
 	SetOutboundInfo(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error)
+	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
+	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type daemonClient struct {
@@ -84,6 +87,15 @@ func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...
 	return out, nil
 }
 
+func (c *daemonClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetLogLevel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility
@@ -98,6 +110,8 @@ type DaemonServer interface {
 	SetOutboundInfo(context.Context, *OutboundInfo) (*empty.Empty, error)
 	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error)
+	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
+	SetLogLevel(context.Context, *manager.LogLevelRequest) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -119,6 +133,9 @@ func (UnimplementedDaemonServer) SetOutboundInfo(context.Context, *OutboundInfo)
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
+}
+func (UnimplementedDaemonServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 
@@ -223,6 +240,24 @@ func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.LogLevelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetLogLevel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.daemon.Daemon/SetLogLevel",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetLogLevel(ctx, req.(*manager.LogLevelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Daemon_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.daemon.Daemon",
 	HandlerType: (*DaemonServer)(nil),
@@ -246,6 +281,10 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetDnsSearchPath",
 			Handler:    _Daemon_SetDnsSearchPath_Handler,
+		},
+		{
+			MethodName: "SetLogLevel",
+			Handler:    _Daemon_SetLogLevel_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

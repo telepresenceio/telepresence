@@ -53,6 +53,8 @@ type ConnectorClient interface {
 	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
 	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
 	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
+	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
+	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -205,6 +207,15 @@ func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseReques
 	return out, nil
 }
 
+func (c *connectorClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/SetLogLevel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Quit", in, out, opts...)
@@ -251,6 +262,8 @@ type ConnectorServer interface {
 	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
 	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
 	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
+	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
+	SetLogLevel(context.Context, *manager.LogLevelRequest) (*empty.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -298,6 +311,9 @@ func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest)
 }
 func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
+}
+func (UnimplementedConnectorServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -552,6 +568,24 @@ func _Connector_GetCloudLicense_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.LogLevelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).SetLogLevel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/SetLogLevel",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).SetLogLevel(ctx, req.(*manager.LogLevelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
@@ -621,6 +655,10 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCloudLicense",
 			Handler:    _Connector_GetCloudLicense_Handler,
+		},
+		{
+			MethodName: "SetLogLevel",
+			Handler:    _Connector_SetLogLevel_Handler,
 		},
 		{
 			MethodName: "Quit",

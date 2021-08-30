@@ -304,11 +304,12 @@ func run(c context.Context) error {
 	s := &service{
 		scoutClient: scout.NewScout(c, "connector"),
 
-		sharedState: sharedstate.NewState(),
-
 		scout:           make(chan ScoutReport, 10),
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
+	}
+	if s.sharedState, err = sharedstate.NewState(c, ProcessName); err != nil {
+		return err
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,

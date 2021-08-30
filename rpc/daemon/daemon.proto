@@ -25,6 +25,9 @@ service Daemon {
 
   // SetDnsSearchPath sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
+
+  // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
+  rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
 }
 
 message DaemonStatus {
