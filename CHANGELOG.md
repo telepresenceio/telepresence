@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.1 (TBD)
+### 2.4.1 (August 30, 2021)
 
 - Bugfix: Telepresence will now mount all directories from `/var/run/secrets`, not just the kubernetes.io ones.
   This allows the mounting of secrets directories such as eks.amazonaws.com (for IRSA tokens)
