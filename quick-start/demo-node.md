@@ -131,4 +131,4 @@ Preview URLs, when created, generate an ingress request containing a custom head
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-<QSCards/>
+You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
