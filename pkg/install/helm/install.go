@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -71,34 +72,61 @@ func getValues(ctx context.Context) map[string]interface{} {
 	return values
 }
 
+func timedRun(ctx context.Context, run func(time.Duration) error) error {
+	timeouts := client.GetConfig(ctx).Timeouts
+	ctx, cancel := timeouts.TimeoutContext(ctx, client.TimeoutHelm)
+	defer cancel()
+
+	runResult := make(chan error)
+	go func() {
+		runResult <- run(timeouts.Get(client.TimeoutHelm))
+	}()
+
+	select {
+	case <-ctx.Done():
+		return client.CheckTimeout(ctx, ctx.Err())
+	case err := <-runResult:
+		if err != nil {
+			err = client.CheckTimeout(ctx, err)
+		}
+		return err
+	}
+}
+
 func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
 	dlog.Infof(ctx, "No existing Traffic Manager found, installing %s...", client.Version())
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
-	install.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	install.Atomic = true
 	install.CreateNamespace = true
-	_, err := install.Run(chrt, getValues(ctx))
-	return err
+	return timedRun(ctx, func(timeout time.Duration) error {
+		install.Timeout = timeout
+		_, err := install.Run(chrt, getValues(ctx))
+		return err
+	})
 }
 
 func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
 	dlog.Infof(ctx, "Existing Traffic Manager found, upgrading to %s...", client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
-	upgrade.Timeout = client.GetConfig(ctx).Timeouts.Helm
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
-	_, err := upgrade.Run(releaseName, chrt, getValues(ctx))
-	return err
+	return timedRun(ctx, func(timeout time.Duration) error {
+		upgrade.Timeout = timeout
+		_, err := upgrade.Run(releaseName, chrt, getValues(ctx))
+		return err
+	})
 }
 
 func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, namespace string) error {
 	dlog.Info(ctx, "Uninstalling Traffic Manager")
 	uninstall := action.NewUninstall(helmConfig)
-	uninstall.Timeout = client.GetConfig(ctx).Timeouts.Helm
-	_, err := uninstall.Run(releaseName)
-	return err
+	return timedRun(ctx, func(timeout time.Duration) error {
+		uninstall.Timeout = timeout
+		_, err := uninstall.Run(releaseName)
+		return err
+	})
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
