@@ -31,7 +31,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 
 items:
   - version: 2.4.1
-    date: 'TBD'
+    date: '2021-08-30'
     notes:
       - type: feature
         title: External cloud variables are now configurable
