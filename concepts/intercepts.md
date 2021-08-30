@@ -8,6 +8,7 @@ import React from 'react';
 import Alert from '@material-ui/lab/Alert';
 import AppBar from '@material-ui/core/AppBar';
 import InterceptAnimationSVG from '@src/assets/images/intercept-animation.inline.svg'
+import Paper from '@material-ui/core/Paper';
 import Tab from '@material-ui/core/Tab';
 import TabContext from '@material-ui/lab/TabContext';
 import TabList from '@material-ui/lab/TabList';
@@ -52,20 +53,25 @@ export function TabsContainer({ children, ...props }) {
     );
 };
 
+# Types of intercepts
+
 <TabsContainer>
 <TabPanel class="TabBody" value="regular">
 
 ## No intercept
 
+<Paper style="padding: 1em">
 <Animation class="mode-regular" />
 
 This is the normal operation of your cluster without Telepresence.
 
+</Paper>
 </TabPanel>
 <TabPanel class="TabBody" value="global">
 
 ## Global intercept
 
+<Paper style="padding: 1em">
 <Animation class="mode-global" />
 
 **Global intercepts** replace the Kubernetes "Orders" service with the
@@ -73,7 +79,11 @@ Orders service running on your laptop.  The users see no change, but
 with all the traffic coming to your laptop, you can observe and debug
 with all your dev tools.
 
- 1. Intercept your service from your CLI:
+</Paper>
+
+### Creating and using global intercepts
+
+ 1. Creating the intercept: Intercept your service from your CLI:
 
     ```shell
     telepresence intercept SERVICENAME --http-match=all
@@ -87,7 +97,7 @@ with all your dev tools.
 
     </Alert>
 
- 2. Send requests to your service:
+ 2. Using the intercept: Send requests to your service:
 
     All requests will be sent to the version of your service that is
     running in the local development environment.
@@ -97,6 +107,7 @@ with all your dev tools.
 
 ## Personal intercept
 
+<Paper style="padding: 1em">
 <Animation class="mode-personal" />
 
 **Personal intercepts** allow you to be selective and intercept only
@@ -109,7 +120,11 @@ by a developer on their laptop and the **<span style="color:
 They can intercept the same service in the Kubernetes cluster to
 create a shared development environment.
 
- 1. Intercept your service from your CLI:
+</Paper>
+
+### Creating and using personal intercepts
+
+ 1. Creating the intercept: Intercept your service from your CLI:
 
     ```shell
     telepresence intercept SERVICENAME --http-match=Personal-Intercept=126a72c7-be8b-4329-af64-768e207a184b
@@ -123,7 +138,8 @@ create a shared development environment.
 
     </Alert>
 
- 2. Send requests to your service by passing the HTTP header:
+ 2. Using the intercept: Send requests to your service by passing the
+    HTTP header:
 
     ```http
     Personal-Intercept: 126a72c7-be8b-4329-af64-768e207a184b
@@ -139,7 +155,8 @@ create a shared development environment.
 
     </Alert>
 
- 3. Send requests to your service without the HTTP header:
+ 3. Using the intercept: Send requests to your service without the
+    HTTP header:
 
     Requests without the header will be sent to the version of your
     service that is running in the cluster.  This enables you to share
