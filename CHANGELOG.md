@@ -2,6 +2,11 @@
 
 ### 2.4.2 (TBD)
 
+- Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
+  temporarily for the local daemons, the `traffic-manager` and the `traffic-agents`.
+
+- Change: The default log-level is now `info` for all components of Telepresence.
+
 - Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
   `traffic-manager` to make the user daemon to hang indefinitely.
 

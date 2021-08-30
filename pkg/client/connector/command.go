@@ -295,11 +295,11 @@ func run(c context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	c = client.WithConfig(c, cfg)
+	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 	c, err = logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}
-	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 
 	s := &service{
 		scoutClient: scout.NewScout(c, "connector"),
