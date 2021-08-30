@@ -130,6 +130,12 @@ create a shared development environment.
     telepresence intercept SERVICENAME --http-match=Personal-Intercept=126a72c7-be8b-4329-af64-768e207a184b
     ```
 
+    We're using
+    `Personal-Intercept=126a72c7-be8b-4329-af64-768e207a184b` as the
+    header for the sake of the example, but you can use any
+    `key=value` pair you want, or `--http-match=auto` to have it
+    choose something automatically.
+
     <Alert severity="info">
 
     Make sure your current kubect context points to the target
