@@ -13,11 +13,11 @@ import QSCards from '../quick-start/qs-cards'
 ### Contents
 
 * [Prerequisites](#prerequisites)
-* [1. Install the Telepresence CLI](#1-install-the-telepresence-cli)
-* [2. Test Telepresence](#2-test-telepresence)
-* [3. Intercept your service](#3-intercept-your-service)
-* [4. Create a preview URL to only intercept certain requests to your service](#4-create-a-preview-url-to-only-intercept-certain-requests-to-your-service)
-* [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
+* [1. Install the Telepresence CLI](#1-install)
+* [2. Test Telepresence](#2-test)
+* [3. Intercept your service with a global intercept](#3-global-intercept)
+* [4. Intercept your service with a personal intercept and a preview URL](#4-personal-intercept)
+* [What's next?](#whats-next)
 
 </div>
 
@@ -46,7 +46,7 @@ This guide assumes you have a Kubernetes deployment and service
 accessible publicly by an ingress controller and that you can run a
 copy of that service on your laptop.
 
-## 1. Install the Telepresence CLI
+## 1. Install the Telepresence CLI {#1-install}
 
 <Platform.TabGroup>
 <Platform.MacOSTab>
@@ -102,7 +102,7 @@ Remove-Item telepresence
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
-## 2. Test Telepresence
+## 2. Test Telepresence {#2-test}
 
 Telepresence connects your local workstation to a remote Kubernetes
 cluster.
@@ -135,8 +135,8 @@ cluster.
    <Alert severity="info">
 
     **Didn't work?** Make sure you are using Telepresence 2.0.3 or
-    greater, check with `telepresence version` and upgrade
-    [here](../../install/upgrade/) if needed.
+    greater, check with `telepresence version` and
+    [upgrade](../../install/upgrade/) if needed.
 
    </Alert>
 
@@ -165,11 +165,14 @@ cluster.
 
 </Alert>
 
-## 3. Intercept your service
+## 3. Intercept your service with a global intercept {#3-global-intercept}
 
 In this section, we will go through the steps required for you to
-intercept all traffic going to a service in your cluster and route it
-to your local environment instead.
+create a [global intercept](../../concepts/intercepts/#global-intercept) that
+intercepts all traffic going to a service in your cluster and route it
+to your local environment instead.  In the [next
+section](#4-personal-intercept), we will instead create a personal
+intercept that is often more useful than a global intercept.
 
 1. List the services that you can intercept with `telepresence list`
    and make sure the one you want to intercept is listed.
@@ -261,15 +264,22 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-## 4. Create a preview URL to only intercept certain requests to your service
+## 4. Intercept your service with a personal intercept and a preview URL {#4-personal-intercept}
 
 When working on a development environment with multiple engineers, you
-don't want your intercepts to impact your teammates.  If you are
-[logged in](../../reference/client/login/), then when creating an
-intercept, by default Telpresence will automatically talk to
-Ambassador Cloud to generate a preview URL.  By doing so, Telepresence
-can route only the requests coming from that preview URL to your local
-environment; the rest will be routed to your cluster as usual.
+don't want your intercepts to impact your teammates.  Telepresence
+offers a solution to this: instead of creating a global intercept, you
+can create a [personal
+intercept](../../concepts/intercepts/#personal-intercept) that only
+interepts a subset of the traffic going to the service.  This is the
+default if you are [logged in to Ambassador Cloud with
+Telepresence](../../reference/client/login/).  Additionally if you are
+logged in, then by default Telpresence will talk to Ambassador Cloud
+to generate a "preview URL" that is set up such that traffic going
+through that URL gets intercepted and sent to your local environment.
+The rest of the traffic, the traffic not coming through the preview
+URL (and not containing the special header that the preview URL uses),
+will be routed to your cluster as usual.
 
 1. Clean up your previous intercept by removing it:
    `telepresence leave <service name>`
@@ -391,6 +401,6 @@ You can now:
 - Set breakpoints in your IDE to investigate bugs.
 
 ...and all of this **without impacting your teammates!**
-## <img class="os-logo" src="../../images/logo.png"/> What's Next?
+## <img class="os-logo" src="../../images/logo.png"/> What's Next? {#whats-next}
 
 <QSCards/>
