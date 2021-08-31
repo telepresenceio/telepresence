@@ -98,7 +98,6 @@ type Timeouts struct {
 	// grab it, but we want it to be clear that this is "bad".  We should probably (TODO) get
 	// rid of those later cases, but let's not spend time doing that right now; and instead just
 	// make them easy to grep for (`grep Private`) later.
-	// The exception is the helm timeout, since Helm APIs do not accept contexts.
 
 	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
 	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty"`
@@ -114,7 +113,7 @@ type Timeouts struct {
 	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
-	// Helm is how long to wait for any helm operations.
+	// PrivateHelm is how long to wait for any helm operation.
 	PrivateHelm time.Duration `json:"helm,omitempty"`
 }
 
