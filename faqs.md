@@ -117,7 +117,7 @@ More authentication mechanisms and identity provider support will be added soon.
 
 ** Is Telepresence open source?**
 
-Telepresence will be open source soon, in the meantime it is free to download. We prioritized releasing the binary as soon as possible for community feedback, but are actively working on the open sourcing logistics.
+Yes it is! You can find its source code on [GitHub](https://github.com/telepresenceio/telepresence).
 
 ** How do I share my feedback on Telepresence?**
 

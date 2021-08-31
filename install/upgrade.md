@@ -9,4 +9,6 @@ The Telepresence CLI will periodically check for new versions and notify you whe
 
 <UpgradeTabs/>
 
-After upgrading your CLI, the Traffic Manager **must be uninstalled** from your cluster. This can be done using `telepresence uninstall --everything` or by `kubectl delete svc,deploy -n ambassador traffic-manager`. The next time you run a `telepresence` command it will deploy an upgraded Traffic Manager.
+After upgrading your CLI you must stop any live Telepresence processes by issuing `telepresence quit`, then upgrade the Traffic Manager by running `telepresence connect`
+
+**Note** that if the Traffic Manager has been installed via Helm, `telepresence connect` will never upgrade it. If you wish to upgrade a Traffic Manager that was installed via the Helm chart, please see the [the Helm documentation](../helm#upgrading-the-traffic-manager)
