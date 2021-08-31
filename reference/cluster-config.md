@@ -75,9 +75,10 @@ Secrets that it detects to be formatted as one of those types.
 
 ## Air gapped cluster
 
-If your cluster is air gapped (it does not have access to the
-internet and therefore cannot connect to Ambassador Cloud), some additional
-configuration is required to acquire a license use selective intercepts.
+If your cluster is on an isolated network such that it cannot
+communicate with Ambassador Cloud, then some additional configuration
+is required to acquire a license key in order to use personal
+intercepts.
 
 ### Create a license
 
@@ -125,8 +126,10 @@ pulled and in a registry your cluster can pull from.
 
 5. Have users use the `images` [config key](../config/#images) keys so telepresence uses the aforementioned image for their agent.
 
-Users will now be able to use selective intercepts with the
-`--preview-url=false` flag (since use of preview URLs requires a connection to Ambassador Cloud).
+Users will now be able to use preview intercepts with the
+`--preview-url=false` flag.  Even with the license key, preview URLs
+cannot be used without enabling direct communication with Ambassador
+Cloud, as Ambassador Cloud is essential to their operation.
 
 If using Helm to install the server-side components, see the chart's [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence) to learn how to configure the image registry and license secret.
 

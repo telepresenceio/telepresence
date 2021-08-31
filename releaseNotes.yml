@@ -38,6 +38,101 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.4.1
+    date: '2021-08-30'
+    notes:
+      - type: feature
+        title: External cloud variables are now configurable
+        body: >-
+          We now support configuring the host and port for the cloud in your <code>config.yml</code>. These
+          are used when logging in to utilize features provided by an extension, and are also passed
+          along as environment variables when installing the `traffic-manager`. Additionally, we
+          now run our testsuite with these variables set to localhost to continue to ensure Telepresence
+          is fully fuctional without depeneding on an external service. The SYSTEMA_HOST and SYSTEMA_PORT
+          environment variables are no longer used.
+        image: telepresence-2.4.1-systema-vars.png
+        docs: reference/config/#cloud
+
+      - type: feature
+        title: Helm chart can now regenerate certificate used for mutating webhook on-demand.
+        body: >-
+          You can now set <code>agentInjector.certificate.regenerate</code> when deploying Telepresence
+          with the Helm chart to automatically regenerate the certificate used by the agent injector webhook.
+        docs: install/helm
+
+      - type: change
+        title: Traffic Manager installed via helm
+        body: >-
+          The traffic-manager is now installed via an embedded version of the Helm chart when <code>telepresence connect</code> is first performed on a cluster.
+          This change is transparent to the user.
+          A new configuration flag, <code>timeouts.helm</code> sets the timeouts for all helm operations performed by the Telepresence binary.
+        docs: reference/config#timeouts
+
+      - type: change
+        title: traffic-manager gets cluster ID itself instead of via environment variable
+        body: >-
+          The traffic-manager used to get the cluster ID as an environment variable when running
+          <code>telepresence connnect</code> or via adding the value in the helm chart. This was
+          clunky so now the traffic-manager gets the value itself as long as it has permissions
+          to "get" and "list" namespaces (this has been updated in the helm chart).
+        docs: install/helm
+
+      - type: bugfix
+        title: Telepresence now mounts all directories from /var/run/secrets
+        body: >-
+          In the past, we only mounted secret directories in <code>/var/run/secrets/kubernetes.io</code>.
+          We now mount *all* directories in <code>/var/run/secrets</code>, which, for example, includes
+          directories like <code>eks.amazonaws.com</code> used for IRSA tokens.
+        docs: reference/volume
+
+      - type: bugfix
+        title: Max gRPC receive size correctly propagates to all grpc servers
+        body: >-
+          This fixes a bug where the max gRPC receive size was only propagated to some of the
+          grpc servers, causing failures when the message size was over the default.
+        docs: reference/config/#grpc
+
+      - type: bugfix
+        title: Updated our Homebrew packaging to run manually
+        body: >-
+          We made some updates to our script that packages Telepresence for Homebrew so that it
+          can be run manually.  This will enable maintainers of Telepresence to run the script manually
+          should we ever need to rollback a release and have <code>latest</code> point to an older verison.
+        docs: install/
+
+      - type: bugfix
+        title: Telepresence uses namespace from kubeconfig context on each call
+        body: >-
+          In the past, Telepresence would use whatever namespace was specified in the kubeconfig's current-context
+          for the entirety of the time a user was connected to Telepresence.  This would lead to confusing behavior
+          when a user changed the context in their kubeconfig and expected Telepresence to acknowledge that change.
+          Telepresence now will do that and use the namespace designated by the context on each call.
+
+      - type: bugfix
+        title: Idle outbound TCP connections timeout increased to 7200 seconds
+        body: >-
+          Some users were noticing that their intercepts would start failing after 60 seconds.
+          This was because the keep idle outbound TCP connections were set to 60 seconds, which we have
+          now bumped to 7200 seconds to match Linux's <code>tcp_keepalive_time</code> default.
+
+      - type: bugfix
+        title: Telepresence will automatically remove a socket upon ungraceful termination
+        body: >-
+          When a Telepresence process terminates ungracefully, it would inform users that "this usually means
+          that the process has terminated ungracefully" and implied that they should remove the socket. We've
+          now made it so Telepresence will automatically attempt to remove the socket upon ungraceful termination.
+
+      - type: bugfix
+        title: Fixed user daemon deadlock
+        body: >-
+          Remedied a situation where the user daemon could hang when a user was logged in.
+
+      - type: bugfix
+        title: Fixed agentImage config setting
+        body: >-
+          The config setting <code>images.agentImages</code> is no longer required to contain the repository, and it
+          will use the value at <code>images.repository</code>.
+        docs: reference/config/#images
 
   - version: 2.4.0
     date: '2021-08-04'
@@ -241,7 +336,7 @@ items:
         body: >-
           We now support configuring which agent image + registry to use in the
           config. This enables users whose laptop is an air-gapped environment to
-          create selective intercepts without requiring a login. It also makes it easier
+          create personal intercepts without requiring a login. It also makes it easier
           for those who are developing on Telepresence to specify which agent image should
           be used. Env vars TELEPRESENCE_AGENT_IMAGE and TELEPRESENCE_REGISTRY are no longer
           used.
