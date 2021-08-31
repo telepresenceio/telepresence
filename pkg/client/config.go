@@ -98,7 +98,6 @@ type Timeouts struct {
 	// grab it, but we want it to be clear that this is "bad".  We should probably (TODO) get
 	// rid of those later cases, but let's not spend time doing that right now; and instead just
 	// make them easy to grep for (`grep Private`) later.
-	// The exception is the helm timeout, since Helm APIs do not accept contexts.
 
 	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
 	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty"`
@@ -114,8 +113,8 @@ type Timeouts struct {
 	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
-	// Helm is how long to wait for any helm operations.
-	Helm time.Duration `json:"helm,omitempty"`
+	// PrivateHelm is how long to wait for any helm operation.
+	PrivateHelm time.Duration `json:"helm,omitempty"`
 }
 
 type TimeoutID int
@@ -128,6 +127,7 @@ const (
 	TimeoutProxyDial
 	TimeoutTrafficManagerAPI
 	TimeoutTrafficManagerConnect
+	TimeoutHelm
 )
 
 type timeoutContext struct {
@@ -149,26 +149,33 @@ func (ctx timeoutContext) Err() error {
 	return err
 }
 
-func (cfg Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (context.Context, context.CancelFunc) {
+func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 	var timeoutVal time.Duration
 	switch timeoutID {
 	case TimeoutAgentInstall:
-		timeoutVal = cfg.PrivateAgentInstall
+		timeoutVal = t.PrivateAgentInstall
 	case TimeoutApply:
-		timeoutVal = cfg.PrivateApply
+		timeoutVal = t.PrivateApply
 	case TimeoutClusterConnect:
-		timeoutVal = cfg.PrivateClusterConnect
+		timeoutVal = t.PrivateClusterConnect
 	case TimeoutIntercept:
-		timeoutVal = cfg.PrivateIntercept
+		timeoutVal = t.PrivateIntercept
 	case TimeoutProxyDial:
-		timeoutVal = cfg.PrivateProxyDial
+		timeoutVal = t.PrivateProxyDial
 	case TimeoutTrafficManagerAPI:
-		timeoutVal = cfg.PrivateTrafficManagerAPI
+		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
-		timeoutVal = cfg.PrivateTrafficManagerConnect
+		timeoutVal = t.PrivateTrafficManagerConnect
+	case TimeoutHelm:
+		timeoutVal = t.PrivateHelm
 	default:
 		panic("should not happen")
 	}
+	return timeoutVal
+}
+
+func (t *Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (context.Context, context.CancelFunc) {
+	timeoutVal := t.Get(timeoutID)
 	ctx, cancel := context.WithTimeout(ctx, timeoutVal)
 	ctx = timeoutContext{
 		Context:    ctx,
@@ -209,6 +216,9 @@ func (e timeoutErr) Error() string {
 	case TimeoutTrafficManagerConnect:
 		yamlName = "trafficManagerConnect"
 		humanName = "port-forward connection to the traffic manager"
+	case TimeoutHelm:
+		yamlName = "helm"
+		humanName = "helm operation"
 	default:
 		panic("should not happen")
 	}
@@ -228,7 +238,7 @@ func CheckTimeout(ctx context.Context, err error) error {
 }
 
 // UnmarshalYAML caters for the unfortunate fact that time.Duration doesn't do YAML or JSON at all.
-func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
+func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("timeouts must be an object", node))
 	}
@@ -242,21 +252,21 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		var dp *time.Duration
 		switch kv {
 		case "agentInstall":
-			dp = &d.PrivateAgentInstall
+			dp = &t.PrivateAgentInstall
 		case "apply":
-			dp = &d.PrivateApply
+			dp = &t.PrivateApply
 		case "clusterConnect":
-			dp = &d.PrivateClusterConnect
+			dp = &t.PrivateClusterConnect
 		case "intercept":
-			dp = &d.PrivateIntercept
+			dp = &t.PrivateIntercept
 		case "proxyDial":
-			dp = &d.PrivateProxyDial
+			dp = &t.PrivateProxyDial
 		case "trafficManagerAPI":
-			dp = &d.PrivateTrafficManagerAPI
+			dp = &t.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
-			dp = &d.PrivateTrafficManagerConnect
+			dp = &t.PrivateTrafficManagerConnect
 		case "helm":
-			dp = &d.Helm
+			dp = &t.PrivateHelm
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -284,30 +294,30 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
-func (d *Timeouts) merge(o *Timeouts) {
+func (t *Timeouts) merge(o *Timeouts) {
 	if o.PrivateAgentInstall != 0 {
-		d.PrivateAgentInstall = o.PrivateAgentInstall
+		t.PrivateAgentInstall = o.PrivateAgentInstall
 	}
 	if o.PrivateApply != 0 {
-		d.PrivateApply = o.PrivateApply
+		t.PrivateApply = o.PrivateApply
 	}
 	if o.PrivateClusterConnect != 0 {
-		d.PrivateClusterConnect = o.PrivateClusterConnect
+		t.PrivateClusterConnect = o.PrivateClusterConnect
 	}
 	if o.PrivateIntercept != 0 {
-		d.PrivateIntercept = o.PrivateIntercept
+		t.PrivateIntercept = o.PrivateIntercept
 	}
 	if o.PrivateProxyDial != 0 {
-		d.PrivateProxyDial = o.PrivateProxyDial
+		t.PrivateProxyDial = o.PrivateProxyDial
 	}
 	if o.PrivateTrafficManagerAPI != 0 {
-		d.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
+		t.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
 	}
 	if o.PrivateTrafficManagerConnect != 0 {
-		d.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
+		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
 	}
-	if o.Helm != 0 {
-		d.Helm = o.Helm
+	if o.PrivateHelm != 0 {
+		t.PrivateHelm = o.PrivateHelm
 	}
 }
 
@@ -527,7 +537,7 @@ var defaultConfig = Config{
 		PrivateProxyDial:             5 * time.Second,
 		PrivateTrafficManagerAPI:     15 * time.Second,
 		PrivateTrafficManagerConnect: 60 * time.Second,
-		Helm:                         12 * time.Second,
+		PrivateHelm:                  12 * time.Second,
 	},
 	LogLevels: LogLevels{
 		UserDaemon: logrus.DebugLevel,
