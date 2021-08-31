@@ -18,8 +18,19 @@ An application like Datadog or New Relic will use agents running on services thr
 
 ## What are intercepts and preview URLs?
 
-[Intercepts](../../reference/intercepts) and [preview URLs](../../howtos/preview-urls/) are functions of Telepresence that enable easy local development from a remote Kubernetes cluster and offer a preview environment for sharing and real-time collaboration.
+[Intercepts](../../reference/intercepts) and [preview
+URLs](../../howtos/preview-urls/) are functions of Telepresence that
+enable easy local development from a remote Kubernetes cluster and
+offer a preview environment for sharing and real-time collaboration.
 
-Telepresence also uses custom headers and header propagation for controllable intercepts and preview URLs instead of for tracing. The headers facilitate the smart routing of requests either to live services in the cluster or services running locally on a developer’s machine.
+Telepresence uses custom HTTP headers and header propagation to
+identify which traffic to intercept both for plain personal intercepts
+and for personal intercepts with preview URLs; these techniques are
+more commonly used for distributed tracing, so what they are being
+used for is a little unorthodox, but the mechanisms for their use are
+already widely deployed because of the prevalence of tracing.  The
+headers facilitate the smart routing of requests either to live
+services in the cluster or services running locally on a developer’s
+machine.
 
 Preview URLs, when created, generate an ingress request containing a custom header with a token (the context). Telepresence sends this token to [Ambassador Cloud](https://app.getambassador.io) with other information about the preview. Visiting the preview URL directs the user to Ambassador Cloud, which proxies the user to the cluster ingress with the token header injected into the request. The request carrying the header is routed in the cluster to the appropriate pod (the propagation). The Traffic Agent on the service pod sees the header and intercepts the request, redirecting it to the local developer machine that ran the intercept.
