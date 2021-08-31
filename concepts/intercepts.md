@@ -155,9 +155,9 @@ create a shared development environment.
 
     Need a browser extension to modify or remove an HTTP-request-headers?
 
-    <a class="btn btn-black" href="https://chrome.google.com/webstore/detail/modheader/idgpnmonknjnojddfkpgkljpfnnfcklj">Chrome</a>
+    <a class="btn-sm-bluedark" href="https://chrome.google.com/webstore/detail/modheader/idgpnmonknjnojddfkpgkljpfnnfcklj">Chrome</a>
     {' '}
-    <a class="btn btn-black" href="https://addons.mozilla.org/firefox/addon/modheader-firefox/">Firefox</a>
+    <a class="btn-sm-bluedark" href="https://addons.mozilla.org/firefox/addon/modheader-firefox/">Firefox</a>
 
     </Alert>
 
