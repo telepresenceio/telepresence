@@ -48,6 +48,7 @@ These are the valid fields for the `timeouts` key:
 | `proxyDial`             | Waiting for an outbound connection to be established                               | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 5 seconds  |
 | `trafficManagerConnect` | Waiting for the Traffic Manager API to connect for port fowards                    | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 20 seconds |
 | `trafficManagerAPI`     | Waiting for connection to the gPRC API after `trafficManagerConnect` is successful | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 15 seconds |
+| `helm`                  | Waiting for Helm operations (e.g. `install`) on the Traffic Manager                | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 2 minutes  |
 
 #### Log Levels
 
@@ -94,6 +95,8 @@ These fields control how the client interacts with the Cloud service.
 |-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------|---------|
 | `skipLogin`       | Whether the CLI should skip automatic login to Ambassador Cloud.  If set to true, in order to perform personal intercepts you must have a [license key](../cluster-config/#air-gapped-cluster) installed in the cluster.                   | [bool][yaml-bool]                          | false   |
 | `refreshMessages` | How frequently the CLI should communicate with Ambassador Cloud to get new command messages, which also resets whether the message has been raised or not. You will see each message at most once within the duration given by this config | [duration][go-duration] [string][yaml-str] | 168h    |
+| `systemaHost`     | The host used to communicate with Ambassador Cloud                                                                                                                                                                                         | [string][yaml-str]         | app.getambassador.io    |
+| `systemaPort`     | The port used with `systemaHost` to communicate with Ambassador Cloud                                                                                                                                                                      | [string][yaml-str]         | 443                     |
 
 Telepresence attempts to auto-detect if the cluster is capable of
 communication with Ambassador Cloud, but may still prompt you to log
