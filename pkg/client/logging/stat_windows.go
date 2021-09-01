@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"syscall"
 	"time"
+
+	//nolint:depguard // We specifically need "syscall.Win32FileAttributeData" rather than
+	// "windows.Win32FileAttributeData" for fs.File.Sys().
+	"syscall"
 
 	"github.com/hectane/go-acl/api"
 	"golang.org/x/sys/windows"

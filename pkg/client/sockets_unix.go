@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -40,7 +39,7 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 			return conn, nil
 		}
 
-		if firstTry && errors.Is(err, syscall.ECONNREFUSED) {
+		if firstTry && errors.Is(err, unix.ECONNREFUSED) {
 			// Socket exists but doesn't accept connections. This usually means that the process
 			// terminated ungracefully. To remedy this, we make an attempt to remove the socket
 			// and dial again.
@@ -68,7 +67,7 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
 			err = fmt.Errorf("%w; this usually means that the process has locked up", err)
-		case errors.Is(err, syscall.ECONNREFUSED):
+		case errors.Is(err, unix.ECONNREFUSED):
 			err = fmt.Errorf("%w; this usually means that the process has terminated ungracefully", err)
 		case errors.Is(err, os.ErrNotExist):
 			err = fmt.Errorf("%w; this usually means that the process is not running", err)
@@ -84,7 +83,7 @@ func listenSocket(_ context.Context, processName, socketName string) (net.Listen
 	}
 	listener, err := net.Listen("unix", socketName)
 	if err != nil {
-		if errors.Is(err, syscall.EADDRINUSE) {
+		if errors.Is(err, unix.EADDRINUSE) {
 			err = fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully", socketName, processName)
 		}
 		return nil, err

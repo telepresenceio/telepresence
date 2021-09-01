@@ -4,6 +4,9 @@ import (
 	"errors"
 	"net"
 	"sync"
+
+	//nolint:depguard // On GOOS=windows, unix.ECONNREFUSED doesn't exist but
+	// syscall.ECONNREFUSED does, and this isn't a platform-specific file.
 	"syscall"
 )
 

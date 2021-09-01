@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package dbus
 
 import (
@@ -6,9 +9,9 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"syscall"
 
 	"github.com/godbus/dbus/v5"
+	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dlog"
 )
@@ -64,9 +67,9 @@ func SetLinkDNS(c context.Context, networkIndex int, ips ...net.IP) error {
 			addr := &addrs[i]
 			switch len(ip) {
 			case 4:
-				addr.Dialect = syscall.AF_INET
+				addr.Dialect = unix.AF_INET
 			case 16:
-				addr.Dialect = syscall.AF_INET6
+				addr.Dialect = unix.AF_INET6
 			default:
 				return errors.New("illegal IP (not AF_INET or AF_INET6")
 			}

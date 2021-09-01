@@ -31,6 +31,7 @@ linters-settings:
     packages-with-error-message:
       - io/ioutil:                         "`io/ioutil` is deprecated in Go 1.16, use `io` or `os` instead"
       - os/exec:                           "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
+      - syscall:                           "Use `golang.org/x/sys/...` instead of `syscall`"
       - github.com/golang/protobuf:        "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
       - github.com/kballard/go-shellquote: "Use `github.com/telepresenceio/telepresence/pkg/shellquote.ShellString` instead of `github.com/kballard/go-shellquote.Join`"
       - github.com/datawire/dlib/dutil:    "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"

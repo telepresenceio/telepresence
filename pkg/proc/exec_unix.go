@@ -7,17 +7,18 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"syscall"
 
 	//nolint:depguard // Because startInBackground{,AsRoot}() won't ever .Wait() for the process
 	// and we'd turn off logging, using dexec would just be extra overhead.
 	"os/exec"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-var signalsToForward = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
+var signalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM}
 
 func isAdmin() bool {
 	return os.Geteuid() == 0
@@ -28,7 +29,7 @@ func startInBackground(args ...string) error {
 
 	// Ensure that the processes uses a process group of its own to prevent
 	// it getting affected by <ctrl-c> in the terminal
-	cmd.SysProcAttr = &syscall.SysProcAttr{
+	cmd.SysProcAttr = &unix.SysProcAttr{
 		Setpgid: true,
 	}
 

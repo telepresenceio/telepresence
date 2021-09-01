@@ -3,8 +3,11 @@ package logging
 import (
 	"fmt"
 	"os"
-	"syscall"
 	"time"
+
+	//nolint:depguard // We specifically need "syscall.Stat_t" rather than "unix.Stat_t" for
+	// fs.File.Sys().
+	"syscall"
 )
 
 type fileInfo struct {
