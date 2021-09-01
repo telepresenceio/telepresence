@@ -29,11 +29,11 @@ linters-settings:
     list-type: blacklist
     include-go-root: true
     packages-with-error-message:
-      - os/exec:                    "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
-      - github.com/golang/protobuf: "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
-      - github/datawire/dlib/dutil: "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"
-      - golang.org/x/net/http2/h2c: "Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
+      - os/exec:                           "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
+      - github.com/golang/protobuf:        "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
       - github.com/kballard/go-shellquote: "Use `github.com/telepresenceio/telepresence/pkg/shellquote.ShellString` instead of `github.com/kballard/go-shellquote.Join`"
+      - github.com/datawire/dlib/dutil:    "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"
+      - golang.org/x/net/http2/h2c:        "Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
   gomodguard:
     blocked:
       modules:
@@ -81,6 +81,7 @@ linters:
     - lll
     - misspell
     - nakedret
+    - nolintlint
     - prealloc
     - scopelint
     - staticcheck
@@ -90,7 +91,6 @@ linters:
     - unused
     - varcheck
     - whitespace
-    - nolintlint
 
   # don't enable:
   # - dupl
