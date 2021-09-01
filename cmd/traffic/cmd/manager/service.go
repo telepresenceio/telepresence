@@ -287,7 +287,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return m.state.AddIntercept(sessionID, apiKey, spec)
 }
 
-func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {
+func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
 	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
 	sessionID := req.GetSession().GetSessionId()
 	var interceptID string

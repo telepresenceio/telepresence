@@ -166,7 +166,8 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		}
 		args.name = positional[0]
 		args.cmdline = positional[1:]
-		if args.localOnly {
+		switch args.localOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
+		case true:
 			// Not actually intercepting anything -- check that the flags make sense for that
 			if args.agentName != "" {
 				return errors.New("a local-only intercept cannot have a workload")
@@ -183,7 +184,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 			if cmd.Flag("preview-url").Changed && args.previewEnabled {
 				return errors.New("a local-only intercept cannot be previewed")
 			}
-		} else { //nolint:gocritic
+		case false:
 			// Actually intercepting something
 			if args.agentName == "" {
 				args.agentName = args.name
