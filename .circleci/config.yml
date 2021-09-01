@@ -18,7 +18,7 @@ executors:
 
   "vm-linux":
     machine:
-      image: "ubuntu-2004:202008-01"
+      image: "ubuntu-2004:202010-01"
 
   "vm-macos":
     macos:
