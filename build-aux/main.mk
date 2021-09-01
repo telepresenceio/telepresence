@@ -30,9 +30,14 @@ FORCE:
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
+build-aux/go1%.src.tar.gz:
+	curl -o $@ --fail -L https://dl.google.com/go/$(@F)
+
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
-generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
+generate: generate-clean
+generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
+generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.gz
 	rm -rf ./rpc/vendor
 	find ./rpc -name '*.go' -delete
 	$(tools/protoc) \
@@ -49,7 +54,9 @@ generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-g
 
 	rm -rf ./vendor
 	export GOFLAGS=-mod=mod && go generate ./...
-	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod >OPENSOURCE.md
+	rm -rf vendor
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
@@ -58,6 +65,7 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 
 	rm -rf ./vendor
 	find pkg cmd -name 'generated_*.go' -delete
+	rm -f OPENSOURCE.md
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
@@ -97,6 +105,7 @@ clean: ## (Build) Remove all build artifacts
 
 .PHONY: clobber
 clobber: clean ## (Build) Remove all build artifacts and tools
+	rm -f build-aux/go1*.src.tar.gz
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
