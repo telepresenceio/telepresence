@@ -24,15 +24,11 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
+.PHONY: FORCE
+FORCE:
+
 # Generate: artifacts that get checked in to Git
 # ==============================================
-
-
-# This has to be a phony target so that it will be rebuilt on changes to TELEPRESENCE_VERSION
-.PHONY: pkg/install/helm/telepresence-chart.tgz
-pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence
-	GOOS=$(GOHOSTOS) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
-
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
@@ -65,6 +61,9 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
+
+pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
+	GOOS=$(GOHOSTOS) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
 
 TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image
