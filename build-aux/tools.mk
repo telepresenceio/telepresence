@@ -49,7 +49,7 @@ $(TOOLSDIR)/$(PROTOC_ZIP):
 # ===============
 #
 tools/protolint = $(TOOLSBINDIR)/protolint
-PROTOLINT_VERSION=0.26.0
+PROTOLINT_VERSION=0.32.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
 $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
