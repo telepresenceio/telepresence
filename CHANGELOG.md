@@ -4,6 +4,9 @@
 
 - Bugfix: A timing related bug was fixed that sometimes caused a "daemon did not start" failure.
 
+- Bugfix: On Windows, crash stack traces and other errors were not
+  written to the log files, now they are.
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
@@ -20,7 +23,7 @@
 - Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
   `traffic-manager` to make the user daemon to hang indefinitely.
 
-- Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being 
+- Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being
   hard-coded to "cluster.local".
 
 ### 2.4.1 (August 30, 2021)
@@ -55,7 +58,7 @@
 - Change: Failure to report metrics is logged using loglevel info rather than error.
 
 - Bugfix: A potential deadlock situation is fixed that sometimes caused the user daemon to hang when the user
-  was logged in. 
+  was logged in.
 
 - Feature: The scout reports will now include additional metadata coming from environment variables starting with
   `TELEPRESENCE_REPORT_`.
