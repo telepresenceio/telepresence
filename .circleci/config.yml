@@ -124,6 +124,7 @@ commands:
       - run:
           name: "Install sshfs"
           command: |
+            sudo rm -f /etc/apt/sources.list.d/google-chrome.list
             sudo apt-get update
             sudo apt-get install -y sshfs
             sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
