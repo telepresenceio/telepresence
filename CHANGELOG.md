@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.2 (TBD)
+### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
   temporarily for the local daemons, the `traffic-manager` and the `traffic-agents`.
