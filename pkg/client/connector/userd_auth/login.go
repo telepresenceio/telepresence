@@ -253,6 +253,36 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	return grp.Wait()
 }
 
+func (l *loginExecutor) reportLoginResult(ctx context.Context, err error, method string) {
+	switch {
+	case err != nil && err != ctx.Err():
+		fmt.Fprintln(l.stdout, "Login failure.")
+		l.scout <- scout.ScoutReport{
+			Action: "login_failure",
+			Metadata: map[string]interface{}{
+				"error":  err.Error(),
+				"method": method,
+			},
+		}
+	case err != nil && err == ctx.Err():
+		fmt.Fprintln(l.stdout, "Login aborted.")
+		l.scout <- scout.ScoutReport{
+			Action: "login_interrupted",
+			Metadata: map[string]interface{}{
+				"method": method,
+			},
+		}
+	default:
+		fmt.Fprintln(l.stdout, "Login successful.")
+		l.scout <- scout.ScoutReport{
+			Action: "login_success",
+			Metadata: map[string]interface{}{
+				"method": method,
+			},
+		}
+	}
+}
+
 // Login tries logging the user by opening a browser window and authenticating against the
 // configured (in `l.env`) OAuth2 authorization server using the authorization-code flow.  This
 // relies on the .Worker() HTTP server being already running in the background, as it is needed to
@@ -273,28 +303,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 
 	// Whatever the result is, report it to the terminal and report it to Metriton.
 	var token *oauth2.Token
-	defer func() {
-		switch {
-		case err != nil && err != ctx.Err():
-			fmt.Fprintln(l.stdout, "Login failure.")
-			l.scout <- scout.ScoutReport{
-				Action: "login_failure",
-				Metadata: map[string]interface{}{
-					"error": err.Error(),
-				},
-			}
-		case err != nil && err == ctx.Err():
-			fmt.Fprintln(l.stdout, "Login aborted.")
-			l.scout <- scout.ScoutReport{
-				Action: "login_interrupted",
-			}
-		default:
-			fmt.Fprintln(l.stdout, "Login successful.")
-			l.scout <- scout.ScoutReport{
-				Action: "login_success",
-			}
-		}
-	}()
+	defer l.reportLoginResult(ctx, err, "browser")
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
@@ -354,6 +363,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogin bool, err error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
+	defer l.reportLoginResult(ctx, err, "apikey")
 
 	// Fetch userinfo first, as to validate the apikey.
 	err = l.lockedRetrieveUserInfo(ctx, map[string]string{
