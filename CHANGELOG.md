@@ -7,6 +7,10 @@
 
 - Change: The default log-level is now `info` for all components of Telepresence.
 
+- Bugfix: The RBAC was not updated in the helm chart to enable the traffic-manager to `get` and `list`
+  namespaces, which would impact users who use licensed features of the Telepresence extensions in an
+  air-gapped environment.
+
 - Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
   `traffic-manager` to make the user daemon to hang indefinitely.
 
