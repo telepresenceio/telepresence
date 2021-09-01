@@ -15,9 +15,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -139,12 +138,8 @@ func (is *installSuite) TearDownSuite() {
 
 func (is *installSuite) Test_findTrafficManager_notPresent() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.namespace}, env)
+	ctx := is.initContext()
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.namespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -159,9 +154,7 @@ func (is *installSuite) Test_findTrafficManager_notPresent() {
 
 func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 
 	f, err := ioutil.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
@@ -178,14 +171,8 @@ func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 
 func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
-
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	ctx := is.initContext()
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -202,22 +189,17 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.Error(ti.ensureManager(ctx, &env))
+	require.Error(ti.ensureManager(ctx))
 	restoreVersion()
 
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -225,12 +207,12 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 	defer is.removeManager(is.managerNamespace)
 	err = dexec.CommandContext(ctx, "../../../../tools/bin/helm", "--kubeconfig", is.kubeConfig, "--namespace", is.managerNamespace, "uninstall", "--keep-history", "traffic-manager").Run()
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 	require.Eventually(func() bool {
 		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
 		if err != nil {
@@ -242,14 +224,9 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
 
 func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -257,25 +234,20 @@ func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx, &env))
-	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
 	// We want to make sure that we can re-install the agent after it's been uninstalled,
 	// so try to ensureManager again.
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 	// Uninstall the agent one last time -- this should behave the same way as the previous uninstall
-	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}, &env))
+	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_upgrades() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -283,14 +255,14 @@ func (is *installSuite) Test_ensureTrafficManager_upgrades() {
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 	defer is.removeManager(is.managerNamespace)
 
 	version.Version = "v3.0.0-bogus"
 	restoreVersion := func() { version.Version = is.testVersion }
 	defer restoreVersion()
 
-	require.Error(ti.ensureManager(ctx, &env))
+	require.Error(ti.ensureManager(ctx))
 
 	require.Eventually(func() bool {
 		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
@@ -301,19 +273,14 @@ func (is *installSuite) Test_ensureTrafficManager_upgrades() {
 	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
 
 	restoreVersion()
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.managerNamespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -336,7 +303,7 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
 
 	kc.Client().InvalidateCache()
 	dep, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
@@ -348,9 +315,7 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 	oldCfg, err := clientcmd.LoadFromFile(is.kubeConfig)
 	require.NoError(err)
 	defer func() {
@@ -382,32 +347,36 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 
 func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 	require := is.Require()
-	ctx := dlog.NewTestContext(is.T(), false)
-	ctx, err := client.SetDefaultConfig(ctx, is.T().TempDir())
-	require.NoError(err)
+	ctx := is.initContext()
 	defer is.removeManager(is.managerNamespace)
-	env, err := client.LoadEnv(ctx)
-	require.NoError(err)
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.namespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": is.kubeConfig, "namespace": is.namespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
-	require.NoError(ti.ensureManager(ctx, &env))
+	require.NoError(ti.ensureManager(ctx))
+}
+
+func (is *installSuite) initContext() context.Context {
+	require := is.Require()
+	ctx := dlog.NewTestContext(is.T(), false)
+
+	env, err := client.LoadEnv(ctx)
+	require.NoError(err)
+	ctx = client.WithEnv(ctx, env)
+
+	ctx, err = client.SetDefaultConfig(ctx, is.T().TempDir())
+	require.NoError(err)
+	return ctx
 }
 
 func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	require := is.Require()
-	c := dlog.NewTestContext(is.T(), false)
-	c, err := client.SetDefaultConfig(c, is.T().TempDir())
-	require.NoError(err)
+	c := is.initContext()
 	defer is.removeManager(namespace)
 
-	env, err := client.LoadEnv(c)
-	require.NoError(err)
-
-	cfgAndFlags, err := userd_k8s.NewConfig(map[string]string{"kubeconfig": is.kubeConfig, "namespace": namespace}, env)
+	cfgAndFlags, err := userd_k8s.NewConfig(c, map[string]string{"kubeconfig": is.kubeConfig, "namespace": namespace})
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(c, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
@@ -428,7 +397,7 @@ func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	require.NoError(kc.WaitUntilReady(waitCtx))
 	ti, err := newTrafficManagerInstaller(kc)
 	require.NoError(err)
-	require.NoError(ti.ensureManager(c, &env))
+	require.NoError(ti.ensureManager(c))
 	require.Eventually(func() bool {
 		dep, err := ti.FindDeployment(c, namespace, install.ManagerAppName)
 		v := strings.TrimPrefix(version.Version, "v")
@@ -497,6 +466,12 @@ func TestAddAgentToWorkload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx = client.WithEnv(ctx, env)
+	cfg, err := client.LoadConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = client.WithConfig(ctx, cfg)
 
 	// We use the MachineLock here since we have to reset + set the config.yml
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
@@ -514,7 +489,18 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 			t.Run(tcName+"/install", func(t *testing.T) {
 				ctx := dlog.NewTestContext(t, true)
+				env, err := client.LoadEnv(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx = client.WithEnv(ctx, env)
 				ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+				cfg, err = client.LoadConfig(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx = client.WithConfig(ctx, cfg)
+
 				version.Version = tc.InputVersion
 
 				expectedWrk := deepCopyObject(tc.OutputWorkload)
@@ -682,7 +668,6 @@ func loadFile(filename, inputVersion string) (workload kates.Object, service *ka
 // prepareConfig resets the config + sets the registry. Only use within
 // withMachineLock
 func prepareConfig(ctx context.Context, configDir string) error {
-	client.ResetConfig(ctx)
 	config, err := os.Create(filepath.Join(configDir, "config.yml"))
 	if err != nil {
 		return err

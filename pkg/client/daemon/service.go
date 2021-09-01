@@ -22,10 +22,12 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -46,10 +48,11 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	dns      string
-	hClient  *http.Client
-	outbound *outbound
-	cancel   context.CancelFunc
+	dns           string
+	hClient       *http.Client
+	outbound      *outbound
+	cancel        context.CancelFunc
+	timedLogLevel log.TimedLevel
 
 	scoutClient *scout.Scout           // don't use this directly; use the 'scout' chan instead
 	scout       chan scout.ScoutReport // any-of-scoutUsers -> background-metriton
@@ -98,6 +101,14 @@ func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (
 	return &empty.Empty{}, d.outbound.setInfo(ctx, info)
 }
 
+func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+	duration := time.Duration(0)
+	if request.Duration != nil {
+		duration = request.Duration.AsDuration()
+	}
+	return &empty.Empty{}, logging.SetAndStoreTimedLevel(ctx, d.timedLogLevel, request.LogLevel, duration, ProcessName)
+}
+
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, configDir, dns string) error {
 	if !proc.IsAdmin() {
@@ -108,8 +119,14 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
+	cfg, err := client.LoadConfig(c)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	c = client.WithConfig(c, cfg)
 
-	c, err := logging.InitContext(c, ProcessName)
+	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
+	c, err = logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}
@@ -129,16 +146,18 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 				DisableKeepAlives: true,
 			},
 		},
-		scoutClient: scout.NewScout(c, "daemon"),
-		scout:       make(chan scout.ScoutReport),
+		scoutClient:   scout.NewScout(c, "daemon"),
+		scout:         make(chan scout.ScoutReport),
+		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
+	}
+	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
+		return err
 	}
 
 	d.outbound, err = newOutbound(c, dns, false, d.scout)
 	if err != nil {
 		return err
 	}
-
-	c = dgroup.WithGoroutineName(c, "/daemon")
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,

@@ -555,6 +555,30 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
+func (m *Manager) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
+	m.state.SetTempLogLevel(ctx, request)
+	return &empty.Empty{}, nil
+}
+
+func (m *Manager) WatchLogLevel(_ *empty.Empty, stream rpc.Manager_WatchLogLevelServer) error {
+	ctx := stream.Context()
+	dlog.Debugf(ctx, "WatchLogLevel called")
+
+	ll := m.state.InitialTempLogLevel()
+	dlog.Debugf(ctx, "InitialLogLevel %v", ll)
+	for m.ctx.Err() == nil {
+		if ll != nil {
+			if err := stream.Send(ll); err != nil {
+				dlog.Errorf(ctx, "WatchLogLevel.Send() failed: %v", err)
+				break
+			}
+		}
+		ll = m.state.WaitForTempLogLevel()
+		dlog.Debugf(ctx, "AwaitedLogLevel %v", ll)
+	}
+	return nil
+}
+
 func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_WatchClusterInfoServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchClusterInfo called")

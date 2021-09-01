@@ -103,6 +103,7 @@ func (p *MgrProxy) Depart(ctx context.Context, arg *managerrpc.SessionInfo) (*em
 	}
 	return client.Depart(ctx, arg, callOptions...)
 }
+
 func (p *MgrProxy) WatchAgents(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchAgentsServer) error {
 	client, callOptions, err := p.get()
 	if err != nil {
@@ -256,4 +257,16 @@ func (p *MgrProxy) WatchClusterInfo(arg *managerrpc.SessionInfo, srv managerrpc.
 			return err
 		}
 	}
+}
+
+func (p *MgrProxy) SetLogLevel(ctx context.Context, request *managerrpc.LogLevelRequest) (*empty.Empty, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.SetLogLevel(ctx, request, callOptions...)
+}
+
+func (p *MgrProxy) WatchLogLevel(e *empty.Empty, server managerrpc.Manager_WatchLogLevelServer) error {
+	return errors.New("must call manager.WatchLogLevel from an agent (intercepted Pod), not from a client (workstation)")
 }

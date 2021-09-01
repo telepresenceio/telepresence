@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
@@ -91,69 +92,32 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		}
 	}()
 
-	// Call WatchIntercepts
-	stream, err := manager.WatchIntercepts(ctx, session)
-	if err != nil {
-		return err
-	}
-
-	snapshots := make(chan *rpc.InterceptInfoSnapshot)
-	go func() {
-		defer cancel() // Drop the gRPC connection if we leave this function
-
-		for {
-			snapshot, err := stream.Recv()
-			if err != nil {
-				dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
-				return
-			}
-			snapshots <- snapshot
-		}
-	}()
-
 	// Deal with host lookups dispatched to this agent during intercepts
 	lrStream, err := manager.WatchLookupHost(ctx, session)
 	if err != nil {
 		return err
 	}
+	go lookupHostWaitLoop(ctx, manager, session, lrStream)
 
-	go func() {
-		for ctx.Err() == nil {
-			lr, err := lrStream.Recv()
-			if err != nil {
-				if ctx.Err() == nil {
-					dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
-				}
-				return
-			}
-			dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
-			addrs, err := net.LookupHost(lr.Host)
-			r := rpc.LookupHostResponse{}
-			if err == nil {
-				ips := make(iputil.IPs, len(addrs))
-				for i, addr := range addrs {
-					ips[i] = iputil.Parse(addr)
-				}
-				dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
-				r.Ips = ips.BytesSlice()
-			}
-			response := rpc.LookupHostAgentResponse{
-				Session:  session,
-				Request:  lr,
-				Response: &r,
-			}
-			if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
-				if ctx.Err() == nil {
-					dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
-				}
-				return
-			}
-		}
-	}()
+	// Deal with log-level changes
+	logLevelStream, err := manager.WatchLogLevel(ctx, &empty.Empty{})
+	if err != nil {
+		return err
+	}
+	go logLevelWaitLoop(ctx, logLevelStream)
 
 	// Loop calling Remain
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+
+	snapshots := make(chan *rpc.InterceptInfoSnapshot)
+
+	// Call WatchIntercepts
+	stream, err := manager.WatchIntercepts(ctx, session)
+	if err != nil {
+		return err
+	}
+	go interceptWaitLoop(ctx, cancel, snapshots, stream)
 
 	for {
 		select {
@@ -173,5 +137,69 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		if _, err := manager.Remain(ctx, &rpc.RemainRequest{Session: session}); err != nil {
 			return err
 		}
+	}
+}
+
+func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots chan<- *rpc.InterceptInfoSnapshot, stream rpc.Manager_WatchInterceptsClient) {
+	defer cancel() // Drop the gRPC connection if we leave this function
+	for {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
+			return
+		}
+		snapshots <- snapshot
+	}
+}
+
+func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lookupHostStream rpc.Manager_WatchLookupHostClient) {
+	for ctx.Err() == nil {
+		lr, err := lookupHostStream.Recv()
+		if err != nil {
+			if ctx.Err() == nil {
+				dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
+			}
+			return
+		}
+		dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
+		addrs, err := net.LookupHost(lr.Host)
+		r := rpc.LookupHostResponse{}
+		if err == nil {
+			ips := make(iputil.IPs, len(addrs))
+			for i, addr := range addrs {
+				ips[i] = iputil.Parse(addr)
+			}
+			dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
+			r.Ips = ips.BytesSlice()
+		}
+		response := rpc.LookupHostAgentResponse{
+			Session:  session,
+			Request:  lr,
+			Response: &r,
+		}
+		if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
+			if ctx.Err() == nil {
+				dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
+			}
+			return
+		}
+	}
+}
+
+func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
+	timedLevel := log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel)
+	for ctx.Err() == nil {
+		ll, err := logLevelStream.Recv()
+		if err != nil {
+			if ctx.Err() == nil {
+				dlog.Debugf(ctx, "log-level stream recv: %+v", err) // May be io.EOF
+			}
+			return
+		}
+		duration := time.Duration(0)
+		if ll.Duration != nil {
+			duration = ll.Duration.AsDuration()
+		}
+		timedLevel.Set(ctx, ll.LogLevel, duration)
 	}
 }

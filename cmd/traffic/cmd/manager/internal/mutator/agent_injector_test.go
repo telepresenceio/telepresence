@@ -62,7 +62,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		SystemAPort: "",
 
 		ManagerNamespace: "default",
-		AgentImage:       "docker.io/datawire/tel2:2.3.1",
+		AgentRegistry:    "docker.io/datawire",
+		AgentImage:       "tel2:2.3.1",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)
@@ -219,7 +220,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`"ports":[{"name":"http","containerPort":9900,"protocol":"TCP"}],` +
 				`"env":[` +
 				`{"name":"TELEPRESENCE_CONTAINER","value":"some-app-name"},` +
-				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"debug"},` +
+				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"info"},` +
 				`{"name":"_TEL_AGENT_NAME","value":"some-name"},` +
 				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
 				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
@@ -270,7 +271,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`"ports":[{"name":"http","containerPort":9900,"protocol":"TCP"}],` +
 				`"env":[` +
 				`{"name":"TELEPRESENCE_CONTAINER","value":"some-app-name"},` +
-				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"debug"},` +
+				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"info"},` +
 				`{"name":"_TEL_AGENT_NAME","value":"some-name"},` +
 				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
 				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +

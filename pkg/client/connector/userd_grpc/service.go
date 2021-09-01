@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync/atomic"
+	"time"
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -219,6 +220,14 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 		return nil, err
 	}
 	return &rpc.LicenseData{License: license, HostDomain: hostDomain}, nil
+}
+
+func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+	duration := time.Duration(0)
+	if request.Duration != nil {
+		duration = request.Duration.AsDuration()
+	}
+	return &empty.Empty{}, s.sharedState.SetLogLevel(ctx, request.LogLevel, duration)
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {

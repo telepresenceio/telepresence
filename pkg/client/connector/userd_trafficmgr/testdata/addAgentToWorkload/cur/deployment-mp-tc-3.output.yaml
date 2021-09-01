@@ -22,7 +22,7 @@ deployment:
           - name: TELEPRESENCE_CONTAINER
             value: app
           - name: _TEL_AGENT_LOG_LEVEL
-            value: debug
+            value: info
           - name: _TEL_AGENT_NAME
             value: app
           - name: _TEL_AGENT_NAMESPACE

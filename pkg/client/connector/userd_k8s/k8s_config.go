@@ -1,6 +1,7 @@
 package userd_k8s
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,7 +67,7 @@ type Config struct {
 
 const configExtension = "telepresence.io"
 
-func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
+func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -141,7 +142,7 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 	}
 
 	if k.kubeconfigExtension.Manager.Namespace == "" {
-		k.kubeconfigExtension.Manager.Namespace = env.ManagerNamespace
+		k.kubeconfigExtension.Manager.Namespace = client.GetEnv(c).ManagerNamespace
 	}
 
 	return k, nil

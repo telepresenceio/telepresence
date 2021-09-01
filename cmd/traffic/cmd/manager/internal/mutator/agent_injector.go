@@ -168,7 +168,7 @@ func addAgentContainer(
 		Path: "/spec/containers/-",
 		Value: install.AgentContainer(
 			agentName,
-			env.AgentImage,
+			env.AgentRegistry+"/"+env.AgentImage,
 			appContainer,
 			corev1.ContainerPort{
 				Name:          svcPort.TargetPort.StrVal,

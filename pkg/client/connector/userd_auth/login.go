@@ -45,7 +45,6 @@ type oauth2Callback struct {
 type loginExecutor struct {
 	// static
 
-	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
 	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
@@ -80,7 +79,6 @@ type LoginExecutor interface {
 
 // NewLoginExecutor returns an instance of LoginExecutor
 func NewLoginExecutor(
-	env client.Env,
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
@@ -88,7 +86,6 @@ func NewLoginExecutor(
 	scout chan<- scout.ScoutReport,
 ) LoginExecutor {
 	ret := &loginExecutor{
-		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
 		OpenURLFunc:      openURLFunc,
@@ -113,9 +110,8 @@ func NewLoginExecutor(
 	return ret
 }
 
-func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
+func NewStandardLoginExecutor(stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
 	return NewLoginExecutor(
-		env,
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,
 		browser.OpenURL,
@@ -179,12 +175,13 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	env := client.GetEnv(ctx)
 	l.oauth2Config = oauth2.Config{
-		ClientID:    l.env.LoginClientID,
+		ClientID:    env.LoginClientID,
 		RedirectURL: fmt.Sprintf("http://localhost:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  l.env.LoginAuthURL,
-			TokenURL: l.env.LoginTokenURL,
+			AuthURL:  env.LoginAuthURL,
+			TokenURL: env.LoginTokenURL,
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
@@ -214,8 +211,8 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	if l.apikeys == nil {
 		l.apikeys = make(map[string]map[string]string)
 	}
-	if l.apikeys[l.env.LoginDomain] == nil {
-		l.apikeys[l.env.LoginDomain] = make(map[string]string)
+	if l.apikeys[env.LoginDomain] == nil {
+		l.apikeys[env.LoginDomain] = make(map[string]string)
 	}
 
 	l.oauth2ConfigMu.Unlock()
@@ -230,7 +227,9 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 
 	grp.Go("server-http", func(ctx context.Context) error {
 		sc := dhttp.ServerConfig{
-			Handler: http.HandlerFunc(l.httpHandler),
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				l.httpHandler(ctx, w, r)
+			}),
 		}
 		return sc.Serve(ctx, listener)
 	})
@@ -364,7 +363,8 @@ func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogi
 		return false, err
 	}
 
-	if apikey == l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] {
+	env := client.GetEnv(ctx)
+	if apikey == l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] {
 		// Don't bother continuing if already logged in with this key.
 		return false, nil
 	}
@@ -372,10 +372,10 @@ func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogi
 	if l.apikeys == nil {
 		l.apikeys = make(map[string]map[string]string)
 	}
-	l.apikeys[l.env.LoginDomain] = map[string]string{
+	l.apikeys[env.LoginDomain] = map[string]string{
 		a8rcloud.KeyDescRoot: apikey,
 	}
-	l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] = apikey
+	l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] = apikey
 	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
 		return false, err
 	}
@@ -387,7 +387,8 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if l.tokenSource == nil && l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] == "" {
+	env := client.GetEnv(ctx)
+	if l.tokenSource == nil && l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] == "" {
 		return fmt.Errorf("Logout: %w", ErrNotLoggedIn)
 	}
 
@@ -398,7 +399,7 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	l.userInfo = nil
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)
 
-	l.apikeys[l.env.LoginDomain] = make(map[string]string)
+	l.apikeys[env.LoginDomain] = make(map[string]string)
 	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
 		return err
 	}
@@ -420,8 +421,8 @@ func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
 }
 
 // Must hold l.loginMu to call this.
-func (l *loginExecutor) lockedGetCreds() (map[string]string, error) {
-	rootKey, rootKeyOK := l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot]
+func (l *loginExecutor) lockedGetCreds(ctx context.Context) (map[string]string, error) {
+	rootKey, rootKeyOK := l.apikeys[client.GetEnv(ctx).LoginDomain][a8rcloud.KeyDescRoot]
 	switch {
 	case rootKeyOK:
 		return map[string]string{
@@ -445,7 +446,7 @@ func (l *loginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdat
 	defer l.loginMu.Unlock()
 
 	if refresh {
-		creds, err := l.lockedGetCreds()
+		creds, err := l.lockedGetCreds(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("GetUserInfo: %w", err)
 		}
@@ -463,20 +464,21 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if key, ok := l.apikeys[l.env.LoginDomain][description]; ok {
+	env := client.GetEnv(ctx)
+	if key, ok := l.apikeys[env.LoginDomain][description]; ok {
 		return key, nil
 	}
 
-	creds, err := l.lockedGetCreds()
+	creds, err := l.lockedGetCreds(ctx)
 	if err != nil {
 		return "", fmt.Errorf("GetAPIKey: %w", err)
 	}
-	key, err := getAPIKey(ctx, l.env, creds, description)
+	key, err := getAPIKey(ctx, creds, description)
 	if err != nil {
 		return "", err
 	}
 
-	l.apikeys[l.env.LoginDomain][description] = key
+	l.apikeys[env.LoginDomain][description] = key
 	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
 		return "", err
 	}
@@ -486,7 +488,7 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 // Must hold l.loginMu to call this.
 func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[string]string) error {
 	var userInfo authdata.UserInfo
-	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
+	req, err := http.NewRequest("GET", client.GetEnv(ctx).UserInfoURL, nil)
 	if err != nil {
 		return err
 	}
@@ -516,7 +518,7 @@ func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[st
 	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 
-func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
+func (l *loginExecutor) httpHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != callbackPath {
 		http.NotFound(w, r)
 		return
@@ -529,7 +531,7 @@ func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
 	var sb strings.Builder
 	sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
 	if errorName == "" && code != "" {
-		w.Header().Set("Location", l.env.LoginCompletionURL)
+		w.Header().Set("Location", client.GetEnv(ctx).LoginCompletionURL)
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		sb.WriteString("<h1>Authentication Successful</h1>")
 		sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")

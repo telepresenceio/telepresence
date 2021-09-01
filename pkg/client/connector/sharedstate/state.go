@@ -2,13 +2,17 @@ package sharedstate
 
 import (
 	"context"
+	"time"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 // A TrafficManager implementation is essentially the goroutine that handles communication with the
@@ -45,15 +49,20 @@ type State struct {
 
 	trafficMgrFinalized chan struct{}
 	trafficMgr          TrafficManager
+	procName            string
+	timedLogLevel       log.TimedLevel
 }
 
-func NewState() *State {
-	return &State{
+func NewState(ctx context.Context, procName string) (*State, error) {
+	s := &State{
 		//LoginExecutor:     "Caller will initialize this later",
 		//UserNotifications: "The zero value is fine",
 		clusterFinalized:    make(chan struct{}),
 		trafficMgrFinalized: make(chan struct{}),
+		procName:            procName,
+		timedLogLevel:       log.NewTimedLevel(client.GetConfig(ctx).LogLevels.UserDaemon.String(), log.SetLevel),
 	}
+	return s, logging.LoadTimedLevelFromCache(ctx, s.timedLogLevel, procName)
 }
 
 func (s *State) MaybeSetCluster(cluster *userd_k8s.Cluster) bool {
@@ -140,4 +149,8 @@ func (s *State) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool)
 		return "", err
 	}
 	return key, nil
+}
+
+func (s *State) SetLogLevel(ctx context.Context, level string, duration time.Duration) error {
+	return logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, level, duration, s.procName)
 }

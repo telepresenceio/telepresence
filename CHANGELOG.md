@@ -2,6 +2,11 @@
 
 ### 2.4.2 (TBD)
 
+- Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
+  temporarily for the local daemons, the `traffic-manager` and the `traffic-agents`.
+
+- Change: The default log-level is now `info` for all components of Telepresence.
+
 - Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
   `traffic-manager` to make the user daemon to hang indefinitely.
 
@@ -44,6 +49,10 @@
 
 - Bugfix: The config setting `images.agentImage` is no longer required to contain the repository. The repository is
   instead picked from `images.repository`.
+
+- Change: The `registry`, `webhookRegistry`, `agentImage` and `webhookAgentImage` settings in the `images` group of the `config.yml`
+  now get their defaults from `TELEPRESENCE_AGENT_IMAGE` and `TELEPRESENCE_REGISTRY`.
+
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.

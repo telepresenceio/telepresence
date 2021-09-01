@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
@@ -38,10 +40,19 @@ func TestInitContext(t *testing.T) {
 	testSetup := func(t *testing.T) (ctx context.Context, logDir, logFile string) {
 		t.Helper()
 		ctx = dlog.NewTestContext(t, false)
+		env, err := client.LoadEnv(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx = client.WithEnv(ctx, env)
 
 		// Ensure that we use a temporary log dir
 		logDir = t.TempDir()
 		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
+
+		cfg, err := client.LoadConfig(ctx)
+		require.NoError(t, err)
+		ctx = client.WithConfig(ctx, cfg)
 
 		// Ensure that we never consider Stdout to be a terminal
 		saveIsTerminal := IsTerminal
@@ -119,7 +130,7 @@ func TestInitContext(t *testing.T) {
 
 		bs, err := ioutil.ReadFile(logFile)
 		check.NoError(err)
-		check.Equal(fmt.Sprintln(msg), string(bs))
+		check.Contains(string(bs), fmt.Sprintln(msg))
 	})
 
 	t.Run("next session rotates on write", func(t *testing.T) {
@@ -143,18 +154,14 @@ func TestInitContext(t *testing.T) {
 		check.FileExists(logFile)
 		backupFile := filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
 
-		// Nothing has been logged yet so no rotation has taken place.
-		check.NoFileExists(backupFile)
-
 		ft.Step(time.Second)
 		infoTs := dtime.Now().Format("2006/01/02 15:04:05.0000")
 		dlog.Info(c, infoMsg)
-		backupFile = filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
 		check.FileExists(backupFile)
 
 		bs, err := ioutil.ReadFile(logFile)
 		check.NoError(err)
-		check.Equal(fmt.Sprintf("%s info     : %s\n", infoTs, infoMsg), string(bs))
+		check.Contains(string(bs), fmt.Sprintf("%s info     : %s\n", infoTs, infoMsg))
 	})
 
 	t.Run("old files are removed", func(t *testing.T) {

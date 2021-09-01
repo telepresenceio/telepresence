@@ -6,6 +6,7 @@ syntax = "proto3";
 // SystemA cloud service.
 package telepresence.manager;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/manager";
@@ -253,6 +254,14 @@ message RemainRequest {
   string api_key = 2;
 }
 
+message LogLevelRequest {
+  string log_level = 1;
+
+  // The time that this log-level will be in effect before
+  // falling back to the configured log-level.
+  google.protobuf.Duration duration = 2;
+}
+
 // VersionInfo2 is different than telepresence.common.VersionInfo in
 // that it does not contain an 'api_version' integer.
 message VersionInfo2 {
@@ -358,6 +367,10 @@ service Manager {
   // Depart terminates a session.
   rpc Depart(SessionInfo) returns (google.protobuf.Empty);
 
+  // SetLogLevel will temporarily set the log-level for the traffic-manager and all
+  // traffic-agents for a duration that is determined b the request.
+  rpc SetLogLevel(LogLevelRequest) returns (google.protobuf.Empty);
+
   // Watches
 
   // WatchAgents notifies a client of the set of known Agents.
@@ -416,4 +429,7 @@ service Manager {
 
   // WatchLookupHost lets an agent receive lookup requests
   rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
+
+  // WatchLogLevel lets an agent receive log-level updates
+  rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);
 }

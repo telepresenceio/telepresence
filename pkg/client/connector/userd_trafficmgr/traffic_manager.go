@@ -42,7 +42,6 @@ type trafficManager struct {
 	callbacks  Callbacks
 
 	// local information
-	env         client.Env
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
 
@@ -87,7 +86,6 @@ type interceptResult struct {
 // New returns a TrafficManager resource for the given cluster if it has a Traffic Manager service.
 func New(
 	_ context.Context,
-	env client.Env,
 	cluster *userd_k8s.Cluster,
 	installID string,
 	callbacks Callbacks,
@@ -108,7 +106,6 @@ func New(
 	}
 	tm := &trafficManager{
 		installer:   ti,
-		env:         env,
 		installID:   installID,
 		startup:     make(chan struct{}),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
@@ -119,7 +116,7 @@ func New(
 }
 
 func (tm *trafficManager) Run(c context.Context) error {
-	err := tm.ensureManager(c, &tm.env)
+	err := tm.ensureManager(c)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
 		close(tm.startup)
@@ -472,13 +469,13 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 		fallthrough
 	case rpc.UninstallRequest_ALL_AGENTS:
 		if len(agents) > 0 {
-			if err := tm.removeManagerAndAgents(c, true, agents, &tm.env); err != nil {
+			if err := tm.removeManagerAndAgents(c, true, agents); err != nil {
 				result.ErrorText = err.Error()
 			}
 		}
 	default:
 		// Cancel all communication with the manager
-		if err := tm.removeManagerAndAgents(c, false, agents, &tm.env); err != nil {
+		if err := tm.removeManagerAndAgents(c, false, agents); err != nil {
 			result.ErrorText = err.Error()
 		}
 	}

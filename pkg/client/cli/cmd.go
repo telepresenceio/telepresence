@@ -190,6 +190,10 @@ func Command(ctx context.Context) *cobra.Command {
 			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
 		},
 		{
+			Name:     "Debug Commands",
+			Commands: []*cobra.Command{loglevelCommand()},
+		},
+		{
 			Name:     "Other Commands",
 			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand()},
 		},

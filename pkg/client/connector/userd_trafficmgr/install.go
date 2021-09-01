@@ -40,7 +40,7 @@ func managerImageName(ctx context.Context) string {
 
 // removeManager will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.
-func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo, env *client.Env) error {
+func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
 	// Removes the manager and all agents from the cluster
 	var errs []error
 	var errsLock sync.Mutex
@@ -88,7 +88,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 
 	if !agentsOnly && len(errs) == 0 {
 		// agent removal succeeded. Remove the manager resources
-		if err := helm.DeleteTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), env); err != nil {
+		if err := helm.DeleteTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace()); err != nil {
 			addError(err)
 		}
 	}
@@ -656,6 +656,6 @@ func addAgentToWorkload(
 	return object, matchingService, nil
 }
 
-func (ki *installer) ensureManager(c context.Context, env *client.Env) error {
-	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.Client(), ki.GetManagerNamespace(), env)
+func (ki *installer) ensureManager(c context.Context) error {
+	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.Client(), ki.GetManagerNamespace())
 }

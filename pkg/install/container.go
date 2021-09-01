@@ -45,7 +45,7 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 	env = append(env,
 		corev1.EnvVar{
 			Name:  envPrefix + "LOG_LEVEL",
-			Value: "debug",
+			Value: "info",
 		},
 		corev1.EnvVar{
 			Name:  envPrefix + "NAME",

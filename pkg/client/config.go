@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -528,40 +527,6 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-var defaultConfig = Config{
-	Timeouts: Timeouts{
-		PrivateAgentInstall:          120 * time.Second,
-		PrivateApply:                 1 * time.Minute,
-		PrivateClusterConnect:        20 * time.Second,
-		PrivateIntercept:             5 * time.Second,
-		PrivateProxyDial:             5 * time.Second,
-		PrivateTrafficManagerAPI:     15 * time.Second,
-		PrivateTrafficManagerConnect: 60 * time.Second,
-		PrivateHelm:                  12 * time.Second,
-	},
-	LogLevels: LogLevels{
-		UserDaemon: logrus.DebugLevel,
-		RootDaemon: logrus.InfoLevel,
-	},
-	Images: Images{
-		Registry:          "docker.io/datawire",
-		WebhookRegistry:   "docker.io/datawire",
-		AgentImage:        "",
-		WebhookAgentImage: "",
-	},
-	Cloud: Cloud{
-		SkipLogin:       false,
-		RefreshMessages: 24 * 7 * time.Hour,
-		SystemaHost:     "app.getambassador.io",
-		SystemaPort:     "443",
-	},
-	Grpc: Grpc{},
-}
-
-var config *Config
-
-var configOnce = new(sync.Once)
-
 var parseContext context.Context
 
 type parsedFile struct{}
@@ -575,17 +540,18 @@ func withLoc(s string, n *yaml.Node) string {
 	return fmt.Sprintf("line %d: %s", n.Line, s)
 }
 
-// GetConfig returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
-// or filelocation.AppSystemConfigDirs
-//
-func GetConfig(c context.Context) *Config {
-	configOnce.Do(func() {
-		var err error
-		config, err = loadConfig(c)
-		if err != nil {
-			config = &defaultConfig
-		}
-	})
+type configKey struct{}
+
+// WithConfig returns a context with the given Config
+func WithConfig(ctx context.Context, config *Config) context.Context {
+	return context.WithValue(ctx, configKey{}, config)
+}
+
+func GetConfig(ctx context.Context) *Config {
+	config, ok := ctx.Value(configKey{}).(*Config)
+	if !ok {
+		return nil
+	}
 	return config
 }
 
@@ -595,14 +561,48 @@ func GetConfigFile(c context.Context) string {
 	return filepath.Join(dir, configFile)
 }
 
-func loadConfig(c context.Context) (*Config, error) {
+// GetDefaultConfig returns the default configuration settings
+func GetDefaultConfig(c context.Context) Config {
+	cfg := Config{
+		Timeouts: Timeouts{
+			PrivateAgentInstall:          120 * time.Second,
+			PrivateApply:                 1 * time.Minute,
+			PrivateClusterConnect:        20 * time.Second,
+			PrivateIntercept:             5 * time.Second,
+			PrivateProxyDial:             5 * time.Second,
+			PrivateTrafficManagerAPI:     15 * time.Second,
+			PrivateTrafficManagerConnect: 60 * time.Second,
+			PrivateHelm:                  12 * time.Second,
+		},
+		LogLevels: LogLevels{
+			UserDaemon: logrus.InfoLevel,
+			RootDaemon: logrus.InfoLevel,
+		},
+		Cloud: Cloud{
+			SkipLogin:       false,
+			RefreshMessages: 24 * 7 * time.Hour,
+			SystemaHost:     "app.getambassador.io",
+			SystemaPort:     "443",
+		},
+		Grpc: Grpc{},
+	}
+	env := GetEnv(c)
+	cfg.Images.Registry = env.Registry
+	cfg.Images.WebhookRegistry = env.Registry
+	cfg.Images.AgentImage = env.AgentImage
+	cfg.Images.WebhookAgentImage = env.AgentImage
+	return cfg
+}
+
+// LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
+// or filelocation.AppSystemConfigDirs
+func LoadConfig(c context.Context) (*Config, error) {
 	dirs, err := filelocation.AppSystemConfigDirs(c)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg := defaultConfig // start with a by value copy of the default
-
+	cfg := GetDefaultConfig(c)
 	readMerge := func(dir string) error {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
@@ -610,7 +610,7 @@ func loadConfig(c context.Context) (*Config, error) {
 		fileName := filepath.Join(dir, configFile)
 		bs, err := ioutil.ReadFile(fileName)
 		if err != nil {
-			if err == os.ErrNotExist {
+			if os.IsNotExist(err) {
 				err = nil
 			}
 			return err
@@ -634,10 +634,19 @@ func loadConfig(c context.Context) (*Config, error) {
 	}
 	appDir, err := filelocation.AppUserConfigDir(c)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return &cfg, nil
+		}
 		return nil, err
 	}
 	if err = readMerge(appDir); err != nil {
 		return nil, err
 	}
+
+	// Sanity check
+	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "beta-app.datawire.io" {
+		return nil, fmt.Errorf("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+	}
+
 	return &cfg, nil
 }
