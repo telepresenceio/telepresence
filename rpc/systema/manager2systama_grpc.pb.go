@@ -4,15 +4,16 @@ package systema
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // SystemACRUDClient is the client API for SystemACRUD service.
@@ -28,10 +29,10 @@ type SystemACRUDClient interface {
 	// action itself, not on behalf of the user that created the domain,
 	// so this requires that the manager authenticate itself, but does
 	// not require an end-user's API key.
-	RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// RemoveIntercept is used to inform AmbassadorCloud (SystemA) that an
 	// intercept has been removed.
-	RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*empty.Empty, error)
+	RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// PreferredAgent returns the active account's perferred agent
 	// sidecar, for the given Telepresence version.
 	PreferredAgent(ctx context.Context, in *common.VersionInfo, opts ...grpc.CallOption) (*PreferredAgentResponse, error)
@@ -54,8 +55,8 @@ func (c *systemACRUDClient) CreateDomain(ctx context.Context, in *CreateDomainRe
 	return out, nil
 }
 
-func (c *systemACRUDClient) RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *systemACRUDClient) RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACRUD/RemoveDomain", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -63,8 +64,8 @@ func (c *systemACRUDClient) RemoveDomain(ctx context.Context, in *RemoveDomainRe
 	return out, nil
 }
 
-func (c *systemACRUDClient) RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *systemACRUDClient) RemoveIntercept(ctx context.Context, in *InterceptRemoval, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACRUD/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -94,10 +95,10 @@ type SystemACRUDServer interface {
 	// action itself, not on behalf of the user that created the domain,
 	// so this requires that the manager authenticate itself, but does
 	// not require an end-user's API key.
-	RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error)
+	RemoveDomain(context.Context, *RemoveDomainRequest) (*emptypb.Empty, error)
 	// RemoveIntercept is used to inform AmbassadorCloud (SystemA) that an
 	// intercept has been removed.
-	RemoveIntercept(context.Context, *InterceptRemoval) (*empty.Empty, error)
+	RemoveIntercept(context.Context, *InterceptRemoval) (*emptypb.Empty, error)
 	// PreferredAgent returns the active account's perferred agent
 	// sidecar, for the given Telepresence version.
 	PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error)
@@ -111,10 +112,10 @@ type UnimplementedSystemACRUDServer struct {
 func (UnimplementedSystemACRUDServer) CreateDomain(context.Context, *CreateDomainRequest) (*CreateDomainResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateDomain not implemented")
 }
-func (UnimplementedSystemACRUDServer) RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error) {
+func (UnimplementedSystemACRUDServer) RemoveDomain(context.Context, *RemoveDomainRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveDomain not implemented")
 }
-func (UnimplementedSystemACRUDServer) RemoveIntercept(context.Context, *InterceptRemoval) (*empty.Empty, error) {
+func (UnimplementedSystemACRUDServer) RemoveIntercept(context.Context, *InterceptRemoval) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedSystemACRUDServer) PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error) {
@@ -130,7 +131,7 @@ type UnsafeSystemACRUDServer interface {
 }
 
 func RegisterSystemACRUDServer(s grpc.ServiceRegistrar, srv SystemACRUDServer) {
-	s.RegisterService(&_SystemACRUD_serviceDesc, srv)
+	s.RegisterService(&SystemACRUD_ServiceDesc, srv)
 }
 
 func _SystemACRUD_CreateDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -205,7 +206,10 @@ func _SystemACRUD_PreferredAgent_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-var _SystemACRUD_serviceDesc = grpc.ServiceDesc{
+// SystemACRUD_ServiceDesc is the grpc.ServiceDesc for SystemACRUD service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SystemACRUD_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.systema.SystemACRUD",
 	HandlerType: (*SystemACRUDServer)(nil),
 	Methods: []grpc.MethodDesc{
@@ -250,7 +254,7 @@ func NewSystemAProxyClient(cc grpc.ClientConnInterface) SystemAProxyClient {
 }
 
 func (c *systemAProxyClient) ReverseConnection(ctx context.Context, opts ...grpc.CallOption) (SystemAProxy_ReverseConnectionClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_SystemAProxy_serviceDesc.Streams[0], "/telepresence.systema.SystemAProxy/ReverseConnection", opts...)
+	stream, err := c.cc.NewStream(ctx, &SystemAProxy_ServiceDesc.Streams[0], "/telepresence.systema.SystemAProxy/ReverseConnection", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +313,7 @@ type UnsafeSystemAProxyServer interface {
 }
 
 func RegisterSystemAProxyServer(s grpc.ServiceRegistrar, srv SystemAProxyServer) {
-	s.RegisterService(&_SystemAProxy_serviceDesc, srv)
+	s.RegisterService(&SystemAProxy_ServiceDesc, srv)
 }
 
 func _SystemAProxy_ReverseConnection_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -338,7 +342,10 @@ func (x *systemAProxyReverseConnectionServer) Recv() (*Chunk, error) {
 	return m, nil
 }
 
-var _SystemAProxy_serviceDesc = grpc.ServiceDesc{
+// SystemAProxy_ServiceDesc is the grpc.ServiceDesc for SystemAProxy service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SystemAProxy_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.systema.SystemAProxy",
 	HandlerType: (*SystemAProxyServer)(nil),
 	Methods:     []grpc.MethodDesc{},

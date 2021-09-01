@@ -11,6 +11,7 @@ import (
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // ManagerProxyClient is the client API for ManagerProxy service.
@@ -33,7 +34,7 @@ func NewManagerProxyClient(cc grpc.ClientConnInterface) ManagerProxyClient {
 }
 
 func (c *managerProxyClient) HandleConnection(ctx context.Context, opts ...grpc.CallOption) (ManagerProxy_HandleConnectionClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_ManagerProxy_serviceDesc.Streams[0], "/telepresence.manager.ManagerProxy/HandleConnection", opts...)
+	stream, err := c.cc.NewStream(ctx, &ManagerProxy_ServiceDesc.Streams[0], "/telepresence.manager.ManagerProxy/HandleConnection", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ type UnsafeManagerProxyServer interface {
 }
 
 func RegisterManagerProxyServer(s grpc.ServiceRegistrar, srv ManagerProxyServer) {
-	s.RegisterService(&_ManagerProxy_serviceDesc, srv)
+	s.RegisterService(&ManagerProxy_ServiceDesc, srv)
 }
 
 func _ManagerProxy_HandleConnection_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -121,7 +122,10 @@ func (x *managerProxyHandleConnectionServer) Recv() (*ConnectionChunk, error) {
 	return m, nil
 }
 
-var _ManagerProxy_serviceDesc = grpc.ServiceDesc{
+// ManagerProxy_ServiceDesc is the grpc.ServiceDesc for ManagerProxy service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.manager.ManagerProxy",
 	HandlerType: (*ManagerProxyServer)(nil),
 	Methods:     []grpc.MethodDesc{},
