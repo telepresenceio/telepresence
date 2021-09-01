@@ -63,6 +63,9 @@ case insensitive:
  - `fatal`
  - `panic`
 
+For whichever log-level you select, you will get logs labeled with that level and of higher severity.
+(e.g. if you use `info`, you will also get logs labeled `error`. You will NOT get logs labeled `debug`.
+
 These are the valid fields for the `logLevels` key:
 
 | Field        | Description                                                         | Type                                        | Default |

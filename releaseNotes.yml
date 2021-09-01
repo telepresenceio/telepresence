@@ -38,6 +38,43 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.4.2
+    date: '2021-09-01'
+    notes:
+      - type: feature
+        title: New subcommand to temporarily change log-level
+        body: >-
+          We have added a new <code>telepresence loglevel <level></code> subcommand that enables users
+          to temporarily change the log-level for the local demons, the <code>traffic-manager</code> and
+          the <code>traffic-agents</code>. While the <code>logLevels</code> settings from the config will
+          still be used by default, this can be helpful if you are currently experiencing an issue and
+          want to have higher fidelity logs, without doing a <code>telepresence quit</code> and
+          <code>telepresence connect</code>. You can use <code>telepresence loglevel --help</code> to get
+          more information on options for the command.
+        docs: reference/config
+
+      - type: change
+        title: All components have info as the default log-level
+        body: >-
+          We've now set the default for all components of Telepresence (traffic-agent,
+          traffic-manager, local daemons) to use <code>info</code> as the default log-level.
+
+      - type: bugfix
+        title: Updating RBAC in helm chart to fix cluster-id regression
+        body: >-
+          In 2.4.1, we enabled the <code>traffic-manager</code> to get the cluster ID by getting the UID
+          of the default namespace. The helm chart was not updated to give the <code>traffic-manager</code>
+          those permissions, which has since been fixed.  This impacted users who use licensed features of
+          the Telepresence extension in an air-gapped environment.
+        docs: reference/cluster-config/#air-gapped-cluster
+
+      - type: bugfix
+        title: Timeouts for Helm actions are now respected
+        body: >-
+          The user-defined timeout for Helm actions wasn't always respected, causing the daemon to hang
+          indefinitely when failing to install the <code>traffic-manager</code>.
+        docs: reference/config#timeouts
+
   - version: 2.4.1
     date: '2021-08-30'
     notes:
