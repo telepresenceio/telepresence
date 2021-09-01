@@ -15,6 +15,6 @@ The following metrics are collected:
 | `connect`                             | Telepresence has attempted to connect to the cluster.                                                                                      |
 | `connecting_traffic_manager`          | Telepresence has attempted to connect to the Traffic Manager.                                                                              |
 | `finished_connecting_traffic_manager` | Telepresence has succeeded at connecting to the Traffic Manager.                                                                           |
-| `login_failure`                       | A `telepresence login` has failed. Includes an `error` trait detailing the error.                                                          |
-| `login_interrupted`                   | A `telepresence login` has been interrupted by the user.                                                                                   |
-| `login_success`                       | A `telepresence login` has succeded.                                                                                                       |
+| `login_failure`                       | A `telepresence login` has failed. Includes an `error` trait detailing the error, and a `method` trait detailing the login method.         |
+| `login_interrupted`                   | A `telepresence login` has been interrupted by the user, includes a `method` trait detailing the login method.                             |
+| `login_success`                       | A `telepresence login` has succeded, includes a `method` trait detailing the login method.                                                 |
