@@ -52,7 +52,7 @@ generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-g
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	rm -rf ./vendor
-	go generate ./...
+	export GOFLAGS=-mod=mod && go generate ./...
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 .PHONY: generate-clean
