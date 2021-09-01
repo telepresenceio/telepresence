@@ -15,6 +15,10 @@ import (
 	"github.com/datawire/dlib/dexec"
 )
 
+func prepareCmd(cmd *dexec.Cmd) {
+
+}
+
 func waitCloseAndKill(ctx context.Context, cmd *dexec.Cmd, peer io.Closer, closing *int32, killTimer **time.Timer) {
 	<-ctx.Done()
 

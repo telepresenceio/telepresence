@@ -142,6 +142,9 @@ $job | Receive-Job
 `, t.interfaceIndex, domain)
 	cmd := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
 	cmd.DisableLogging = true // disable chatty logging
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP,
+	}
 	dlog.Debugf(ctx, "Calling powershell's SetDNSDomain %q", domain)
 	if err := cmd.Run(); err != nil {
 		// Log the error, but don't actually fail on it: This is all just a fallback for SetDNS, so the domains might actually be working
@@ -151,7 +154,12 @@ $job | Receive-Job
 	dlog.Debug(ctx, "Calling ipconfig /flushdns")
 	cmd = dexec.CommandContext(ctx, "ipconfig", "/flushdns")
 	cmd.DisableLogging = true
-	_ = cmd.Run()
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP,
+	}
+	if err := cmd.Run(); err != nil {
+		dlog.Warnf(ctx, "Error flushing DNS cache: %v", err)
+	}
 	t.dns = server
 	return nil
 }

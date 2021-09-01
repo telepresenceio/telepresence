@@ -23,6 +23,12 @@ type processInfo struct {
 	exe  string
 }
 
+func prepareCmd(cmd *dexec.Cmd) {
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP,
+	}
+}
+
 func waitCloseAndKill(ctx context.Context, cmd *dexec.Cmd, peer io.Closer, closing *int32, _ **time.Timer) {
 	<-ctx.Done()
 	atomic.StoreInt32(closing, 1)

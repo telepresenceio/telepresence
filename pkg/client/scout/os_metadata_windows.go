@@ -6,6 +6,8 @@ import (
 	"context"
 	"strings"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 )
@@ -13,6 +15,9 @@ import (
 func getOsMetadata(ctx context.Context) map[string]interface{} {
 	cmd := dexec.CommandContext(ctx, "systeminfo")
 	cmd.DisableLogging = true
+	cmd.SysProcAttr = &windows.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP,
+	}
 	r, err := cmd.Output()
 	osMeta := map[string]interface{}{}
 	if err != nil {

@@ -18,6 +18,7 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 	cmd.Stdout = peer
 	cmd.Stderr = io.Discard   // Ensure error logging by passing a non nil, non *os.File here
 	cmd.DisableLogging = true // Avoid data logging (peer is not a *os.File)
+	prepareCmd(cmd)
 
 	cmdLine := shellquote.ShellString(cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
