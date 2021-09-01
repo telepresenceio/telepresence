@@ -173,7 +173,12 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything necessary to lint
+lint-deps: ## (QA) Everything necessary to lint
+lint-deps: pkg/install/helm/telepresence-chart.tgz
+lint-deps: $(tools/golangci-lint)
+lint-deps: $(tools/protolint)
+lint-deps: $(tools/shellcheck)
+lint-deps: $(tools/helm)
 
 .PHONY: build-tests
 build-tests: pkg/install/helm/telepresence-chart.tgz ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
