@@ -80,11 +80,11 @@ linters:
     - errcheck
     - exportloopref
     - forbidigo
+    - gci
     - gocognit
     - gocritic
     - gocyclo
     - gofmt
-    - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
     - gomodguard
     - gosimple
     - govet

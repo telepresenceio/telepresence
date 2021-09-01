@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/dlib/dtime"
-
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun"

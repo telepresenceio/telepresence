@@ -4,6 +4,8 @@ go 1.17
 
 require github.com/golangci/golangci-lint v1.42.0
 
+replace github.com/daixiang0/gci v0.2.9 => github.com/datawire/gci v0.2.10-0.20210903090524-096354b3afc2
+
 require (
 	4d63.com/gochecknoglobals v0.0.0-20201008074935-acfc0b28355a // indirect
 	github.com/Antonboom/errname v0.1.3 // indirect
