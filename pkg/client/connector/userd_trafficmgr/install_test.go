@@ -192,7 +192,10 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
 	require.Error(ti.ensureManager(ctx))
 	restoreVersion()
 
-	require.NoError(ti.ensureManager(ctx))
+	require.Eventually(func() bool {
+		err = ti.ensureManager(ctx)
+		return err == nil
+	}, 20*time.Second, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
 }
 
 func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
