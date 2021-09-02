@@ -35,11 +35,18 @@ func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 	goroutine, _ := data["THREAD"].(string)
 	delete(data, "THREAD")
 
-	fmt.Fprintf(b, "%s %-*s %s : %s",
-		entry.Time.Format(f.timestampFormat),
-		len("warning"), entry.Level,
-		strings.TrimPrefix(goroutine, "/"),
-		entry.Message)
+	if len(goroutine) > 0 {
+		fmt.Fprintf(b, "%s %-*s %s : %s",
+			entry.Time.Format(f.timestampFormat),
+			len("warning"), entry.Level,
+			strings.TrimPrefix(goroutine, "/"),
+			entry.Message)
+	} else {
+		fmt.Fprintf(b, "%s %-*s %s",
+			entry.Time.Format(f.timestampFormat),
+			len("warning"), entry.Level,
+			entry.Message)
+	}
 
 	if len(data) > 0 {
 		b.WriteString(" :")
