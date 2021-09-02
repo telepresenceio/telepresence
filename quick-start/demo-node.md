@@ -44,9 +44,9 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
 1. <Login urlParams="docs_source=telepresence-quick-start"/>
-2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster.
+2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster. 
    <EmojivotoServicesList/>
-The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
+    The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
 
 ## 2. Try the Emojivoto application
 
