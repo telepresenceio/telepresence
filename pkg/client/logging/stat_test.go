@@ -1,6 +1,7 @@
 package logging_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,11 +14,26 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )
 
+var osHasBTime = true
+
 func TestFStat(t *testing.T) {
-	testFStat(t, runtime.GOOS == "linux")
+	btimeIsCTime := testFStat(t, runtime.GOOS == "linux")
+	if btimeIsCTime && osHasBTime {
+		// The kernel supports btime, but the filesystem doesn't.  Set TMPDIR to be
+		// $HOME/tmp, on the assumption that $HOME is on a "big boy" filesystem and thus
+		// supports btime.
+		t.Run("tmpdirInHome", func(t *testing.T) {
+			os.Setenv("TMPDIR", filepath.Join(os.Getenv("HOME"), "tmp"))
+			err := os.Mkdir(os.Getenv("TMPDIR"), 0777)
+			if err != nil && !errors.Is(err, os.ErrExist) {
+				t.Fatal(err)
+			}
+			testFStat(t, false)
+		})
+	}
 }
 
-func testFStat(t *testing.T, okIfBTimeIsCTime bool) {
+func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 	const (
 		fsVsClockLeeway = 1 * time.Second // many filesystems only have second precision
 		minDelta        = 2 * time.Second
@@ -75,6 +91,7 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) {
 	}
 
 	if okIfBTimeIsCTime && stat.BirthTime() == stat.ChangeTime() {
+		btimeIsCTime = true
 		t.Logf("btime: %v (spoofed with ctime)", stat.BirthTime())
 	} else {
 		assertInRange(bBefore, bAfter, stat.BirthTime(), "btime")
@@ -84,4 +101,5 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) {
 		cBefore, cAfter = mBefore, mAfter
 	}
 	assertInRange(cBefore, cAfter, stat.ChangeTime(), "ctime")
+	return btimeIsCTime
 }
