@@ -36,7 +36,7 @@ In this guide, we'll give you a hands-on tutorial with Telepresence. To go throu
 
 If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker. 
 
-If you have Docker Desktop already installed, make sure it is running with the following command: 
+You can check if Docker was installed with the following command: 
 
 <CheckDockerCommand/>
 
