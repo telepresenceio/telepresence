@@ -10,8 +10,7 @@ Login,
 LoginCommand,
 DockerCommand,
 PreviewUrl,
-ExternalIp,
-CheckDockerCommand
+ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSCards from './qs-cards';
@@ -34,11 +33,7 @@ import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepre
 
 In this guide, we'll give you a hands-on tutorial with Telepresence. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
 
-If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker. 
-
-You can check if Docker was installed with the following command: 
-
-<CheckDockerCommand/>
+If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker.
 
 <Alert severity="info">
     While Telepresence works with any language, this guide uses a sample app written in Node.js and Golang. We have a version in <a href="../demo-react/">React</a> if you prefer.
@@ -58,10 +53,9 @@ The Service Catalog gives you a consolidated view of all your services across de
 The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
 
 1. Go to the <ExternalIp/> and vote for some emojis.
-
-<Alert severity="info">
-    If the link to the remote demo cluster doesn't work, make sure you don't have an ad blocker preventing it to open.
-</Alert>
+    <Alert severity="info">
+    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it to open.
+    </Alert>
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
 
@@ -78,7 +72,8 @@ We'll set up a development environment locally on your workstation. We'll then u
     <DockerCommand/>
 
     <Alert severity="info">
-        Make sure that your ports: 8080 and 8083 are open, that they are not being used by another service.
+    Make sure that your ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
+    If your docker engine is not running the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
     </Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
@@ -103,10 +98,6 @@ A common use case for Telepresence is to connect your local development environm
 
     <UserInterceptCommand/>
 
-    If the intecept is successful, it will show the following:
-
-    <UserInterceptCommand/>
-
 <Alert severity="success">
     <strong>Congratulations!</strong> Traffic to the remote service is now being routed to your local laptop, and you can see how the local fix works on the remote environment!
 </Alert>
@@ -115,16 +106,17 @@ A common use case for Telepresence is to connect your local development environm
 
 Preview URLs enable you to safely share your development environment with anyone. For example, you may want your UX designer to take a quick look at what you're developing, before you commit the code. Preview URLs enable this easy collaboration.
 
-2. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
+1. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
 
-1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
-   <Alert severity="success">
-   Now you're able to share your fix in your local environment with your team!
-   </Alert>
+2. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
 
-   <Alert severity="info">
-        To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
-   </Alert>
+<Alert severity="success">
+Now you're able to share your fix in your local environment with your team!
+</Alert>
+
+<Alert severity="info">
+    To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
+</Alert>
 
 ## 6. How/Why does this all work?
 
