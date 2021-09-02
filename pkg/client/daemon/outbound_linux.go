@@ -42,6 +42,10 @@ func (o *outbound) shouldApplySearch(query string) bool {
 		return false
 	}
 
+	if query == "localhost." {
+		return false
+	}
+
 	// Don't apply search paths to the kubernetes zone
 	if strings.HasSuffix(query, dotKubernetesZone) {
 		return false

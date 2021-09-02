@@ -11,6 +11,8 @@
 
 - Change: The default log-level is now `info` for all components of Telepresence.
 
+- Bugfix: The overriding DNS resolver will no longer apply search paths when resolving "localhost".
+
 - Bugfix: The RBAC was not updated in the helm chart to enable the traffic-manager to `get` and `list`
   namespaces, which would impact users who use licensed features of the Telepresence extensions in an
   air-gapped environment.
