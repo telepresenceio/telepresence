@@ -11,7 +11,8 @@ LoginCommand,
 DockerCommand,
 PreviewUrl,
 ExternalIp,
-CheckDockerCommand
+CheckDockerCommand,
+InterceptSuccessfulCommand
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSCards from './qs-cards';
@@ -34,9 +35,7 @@ import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepre
 
 In this guide, we'll give you a hands-on tutorial with Telepresence. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
 
-If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker. 
-
-If you have Docker Desktop already installed, make sure it is running with the following command: 
+If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker. You can check if Docker was installed with the following command: 
 
 <CheckDockerCommand/>
 
@@ -60,7 +59,7 @@ The remote cluster is running the Emojivoto application, which consists of four 
 1. Go to the <ExternalIp/> and vote for some emojis.
 
 <Alert severity="info">
-    If the link to the remote demo cluster doesn't work, make sure you don't have an ad blocker preventing it to open.
+    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it to open.
 </Alert>
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
@@ -78,7 +77,7 @@ We'll set up a development environment locally on your workstation. We'll then u
     <DockerCommand/>
 
     <Alert severity="info">
-        Make sure that your ports: 8080 and 8083 are open, that they are not being used by another service.
+        Make sure that your ports:  <strong>8080</strong> and <strong>8083</strong> are open.
     </Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
@@ -103,10 +102,14 @@ A common use case for Telepresence is to connect your local development environm
 
     <UserInterceptCommand/>
 
-    If the intecept is successful, it will show the following:
+    If the intercept is successful, it will show something similar to this example:
 
-    <UserInterceptCommand/>
+    <InterceptSuccessfulCommand/>
 
+     <Alert severity="info">
+        In the example the Preview URL is shown as <strong>https://blissful-bhaskara-3321.preview.edgestack.me</strong>
+    </Alert>
+   
 <Alert severity="success">
     <strong>Congratulations!</strong> Traffic to the remote service is now being routed to your local laptop, and you can see how the local fix works on the remote environment!
 </Alert>
