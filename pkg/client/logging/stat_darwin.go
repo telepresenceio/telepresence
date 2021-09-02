@@ -36,7 +36,6 @@ func (u fileInfo) String() string {
 	return fmt.Sprintf("CTIME %v, UID %d, GID %d", u.BirthTime(), u.Uid, u.Gid)
 }
 
-func (u fileInfo) BirthTime() time.Time {
-	sec, nsec := u.Birthtimespec.Unix()
-	return time.Unix(sec, nsec)
-}
+func (u fileInfo) BirthTime() time.Time  { return time.Unix(u.Birthtimespec.Unix()) }
+func (u fileInfo) ModifyTime() time.Time { return time.Unix(u.Mtimespec.Unix()) }
+func (u fileInfo) ChangeTime() time.Time { return time.Unix(u.Ctimespec.Unix()) }

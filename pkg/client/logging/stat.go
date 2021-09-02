@@ -25,6 +25,8 @@ type SysInfo interface {
 	Size() int64
 
 	BirthTime() time.Time
+	ModifyTime() time.Time // most recent content change
+	ChangeTime() time.Time // most recent metadata change
 
 	SetOwnerAndGroup(name string) error
 

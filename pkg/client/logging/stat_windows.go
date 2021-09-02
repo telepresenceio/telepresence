@@ -93,6 +93,14 @@ func (wi *windowsSysInfo) BirthTime() time.Time {
 	return time.Unix(0, wi.data.CreationTime.Nanoseconds())
 }
 
+func (wi *windowsSysInfo) ModifyTime() time.Time {
+	return time.Unix(0, wi.data.LastWriteTime.Nanoseconds())
+}
+
+func (wi *windowsSysInfo) ChangeTime() time.Time {
+	return time.Unix(0, wi.data.LastWriteTime.Nanoseconds())
+}
+
 func (wi *windowsSysInfo) Owner() *windows.SID {
 	return wi.owner
 }

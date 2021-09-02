@@ -1,0 +1,87 @@
+package logging_test
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+)
+
+func TestFStat(t *testing.T) {
+	testFStat(t, runtime.GOOS == "linux")
+}
+
+func testFStat(t *testing.T, okIfBTimeIsCTime bool) {
+	const (
+		fsVsClockLeeway = 1 * time.Second // many filesystems only have second precision
+		minDelta        = 2 * time.Second
+	)
+
+	filename := filepath.Join(t.TempDir(), "stamp.txt")
+	withFile := func(flags int, fn func(*os.File)) (time.Time, time.Time) {
+		before := time.Now()
+		time.Sleep(fsVsClockLeeway)
+		file, err := os.OpenFile(filename, flags, 0666)
+		require.NoError(t, err)
+		require.NotNil(t, file)
+		fn(file)
+		require.NoError(t, file.Close())
+		time.Sleep(fsVsClockLeeway)
+		after := time.Now()
+		return before, after
+	}
+
+	// btime
+	bBefore, bAfter := withFile(os.O_CREATE|os.O_RDWR, func(file *os.File) {})
+
+	time.Sleep(minDelta)
+
+	// mtime
+	mBefore, mAfter := withFile(os.O_RDWR, func(file *os.File) {
+		_, err := io.WriteString(file, "#!/bin/sh\n")
+		require.NoError(t, err)
+	})
+
+	time.Sleep(minDelta)
+
+	// ctime
+	cBefore := time.Now()
+	time.Sleep(fsVsClockLeeway)
+	require.NoError(t, os.Chmod(filename, 0777))
+	time.Sleep(fsVsClockLeeway)
+	cAfter := time.Now()
+
+	// stat
+	var stat logging.SysInfo
+	withFile(os.O_RDWR, func(file *os.File) {
+		var err error
+		stat, err = logging.FStat(file)
+		require.NoError(t, err)
+	})
+
+	// validate
+	assertInRange := func(before, after, x time.Time, msg string) {
+		if x.Before(before) || x.After(after) {
+			t.Errorf("%s: %v: not in range [%v, %v]", msg, x, before, after)
+		} else {
+			t.Logf("%s: %v", msg, x)
+		}
+	}
+
+	if okIfBTimeIsCTime && stat.BirthTime() == stat.ChangeTime() {
+		t.Logf("btime: %v (spoofed with ctime)", stat.BirthTime())
+	} else {
+		assertInRange(bBefore, bAfter, stat.BirthTime(), "btime")
+	}
+	assertInRange(mBefore, mAfter, stat.ModifyTime(), "mtime")
+	if runtime.GOOS == "windows" {
+		cBefore, cAfter = mBefore, mAfter
+	}
+	assertInRange(cBefore, cAfter, stat.ChangeTime(), "ctime")
+}
