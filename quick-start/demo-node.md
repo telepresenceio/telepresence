@@ -10,7 +10,8 @@ Login,
 LoginCommand,
 DockerCommand,
 PreviewUrl,
-ExternalIp
+ExternalIp,
+CheckDockerCommand
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSCards from './qs-cards';
@@ -33,7 +34,11 @@ import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepre
 
 In this guide, we'll give you a hands-on tutorial with Telepresence. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
 
-If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker.
+If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker. 
+
+If you have Docker Desktop already installed, make sure it is running with the following command: 
+
+<CheckDockerCommand/>
 
 <Alert severity="info">
     While Telepresence works with any language, this guide uses a sample app written in Node.js and Golang. We have a version in <a href="../demo-react/">React</a> if you prefer.
@@ -46,7 +51,7 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 1. <Login urlParams="docs_source=telepresence-quick-start"/>
 2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster.
    <EmojivotoServicesList/>
-   The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
+The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
 
 ## 2. Try the Emojivoto application
 
@@ -72,6 +77,10 @@ We'll set up a development environment locally on your workstation. We'll then u
 
     <DockerCommand/>
 
+    <Alert severity="info">
+        Make sure that your ports: 8080 and 8083 are open, that they are not being used by another service.
+    </Alert>
+
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
 3. Vote for 🍩 on your local leaderboard, and you can see that the bug is fixed!
@@ -85,12 +94,16 @@ We'll set up a development environment locally on your workstation. We'll then u
 A common use case for Telepresence is to connect your local development environment to a remote cluster. This way, if your application is too big or complex to run locally, you can still develop locally. In this Quick Start, we're also going to show Telepresence can be used for integration testing, by testing our fix against the services in the remote cluster.
 
 1. First, log in to Telepresence using your API key:
-   <LoginCommand/>
+    <LoginCommand/>
 
 2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
    `telepresence intercept web --port 8080`
 
-   When prompted for ingress configuration, all default values should be correct as displayed below.
+    When prompted for ingress configuration, all default values should be correct as displayed below.
+
+    <UserInterceptCommand/>
+
+    If the intecept is successful, it will show the following:
 
     <UserInterceptCommand/>
 
