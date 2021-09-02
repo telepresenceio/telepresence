@@ -54,7 +54,7 @@ The remote cluster is running the Emojivoto application, which consists of four 
 
 1. Go to the <ExternalIp/> and vote for some emojis.
     <Alert severity="info">
-    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it to open.
+    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it from opening.
     </Alert>
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
@@ -72,8 +72,8 @@ We'll set up a development environment locally on your workstation. We'll then u
     <DockerCommand/>
 
     <Alert severity="info">
-    Make sure that your ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
-    If your docker engine is not running the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
+    Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
+    If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
     </Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
