@@ -18,6 +18,9 @@
 - Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
   `traffic-manager` to make the user daemon to hang indefinitely.
 
+- Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being 
+  hard-coded to "cluster.local".
+
 ### 2.4.1 (August 30, 2021)
 
 - Bugfix: Telepresence will now mount all directories from `/var/run/secrets`, not just the kubernetes.io ones.
