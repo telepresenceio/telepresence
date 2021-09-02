@@ -58,14 +58,14 @@ The remote cluster is running the Emojivoto application, which consists of four 
 
 1. Go to the <ExternalIp/> and vote for some emojis.
 
-<Alert severity="info">
-    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it to open.
-</Alert>
-
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
 
 <Alert severity="success">
     <strong>Congratulations!</strong> You've successfully accessed the Emojivoto application on your remote cluster.
+</Alert>
+
+<Alert severity="info">
+    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it to open.
 </Alert>
 
 ## 3. Set up your local development environment
@@ -76,16 +76,15 @@ We'll set up a development environment locally on your workstation. We'll then u
 
     <DockerCommand/>
 
-    <Alert severity="info">
-        Make sure that your ports:  <strong>8080</strong> and <strong>8083</strong> are open.
-    </Alert>
-
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
 3. Vote for 🍩 on your local leaderboard, and you can see that the bug is fixed!
 
 <Alert severity="success">
   <strong>Congratulations!</strong> You have successfully set up a local development environment, and tested the fix locally.
+</Alert>
+<Alert severity="info">
+    Make sure that your ports:  <strong>8080</strong> and <strong>8083</strong> are open or the command will fail. Also, if your docker engine is not running the command will also fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
 </Alert>
 
 ## 4. Testing our fix
@@ -118,16 +117,17 @@ A common use case for Telepresence is to connect your local development environm
 
 Preview URLs enable you to safely share your development environment with anyone. For example, you may want your UX designer to take a quick look at what you're developing, before you commit the code. Preview URLs enable this easy collaboration.
 
-2. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
+1. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
 
-1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
-   <Alert severity="success">
-   Now you're able to share your fix in your local environment with your team!
-   </Alert>
+2. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
 
-   <Alert severity="info">
-        To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
-   </Alert>
+<Alert severity="success">
+Now you're able to share your fix in your local environment with your team!
+</Alert>
+
+<Alert severity="info">
+    To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
+</Alert>
 
 ## 6. How/Why does this all work?
 
