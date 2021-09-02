@@ -11,11 +11,11 @@ import (
 	dns2 "github.com/miekg/dns"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
@@ -39,21 +39,10 @@ type outbound struct {
 	domains    map[string]struct{}
 	search     []string
 
-	// dnsConfigured is closed when the dnsWorker has configured
-	// the dnsServer.
-	dnsConfigured chan struct{}
-
-	kubeDNS chan net.IP
-
 	// The domainsLock locks usage of namespaces, domains, and search
 	domainsLock sync.RWMutex
 
-	// Lock preventing concurrent calls to setSearchPath
-	searchPathLock sync.Mutex
-
-	setSearchPathFunc func(c context.Context, paths []string)
-
-	work chan func(context.Context) error
+	searchPathCh chan []string
 
 	// dnsQueriesInProgress unique set of DNS queries currently in progress.
 	dnsInProgress  map[string]*awaitLookupResult
@@ -85,9 +74,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan s
 		domains:       make(map[string]struct{}),
 		dnsInProgress: make(map[string]*awaitLookupResult),
 		search:        []string{""},
-		work:          make(chan func(context.Context) error),
-		dnsConfigured: make(chan struct{}),
-		kubeDNS:       make(chan net.IP, 1),
+		searchPathCh:  make(chan []string),
 		scout:         scout,
 	}
 
@@ -96,25 +83,6 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan s
 		return nil, err
 	}
 	return ret, nil
-}
-
-// routerServerWorker starts the TUN router and reads from the work queue of firewall config
-// changes that is written to by the 'Update' gRPC call.
-func (o *outbound) routerServerWorker(c context.Context) (err error) {
-	go func() {
-		// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
-		// shutting down.
-		for f := range o.work {
-			if c.Err() == nil {
-				// As long as we're not shutting down, keep doing work.  (If we are shutting
-				// down, do nothing but don't 'break'; keep draining the queue.)
-				if err = f(c); err != nil {
-					dlog.Error(c, err)
-				}
-			}
-		}
-	}()
-	return o.router.run(c)
 }
 
 // On a macOS, Docker uses its own search-path for single label names. This means that the search path that is declared
@@ -254,20 +222,7 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 		info.Dns.LookupTimeout = durationpb.New(4 * time.Second)
 	}
 	o.dnsConfig = info.Dns
-
-	kubeDNS := o.kubeDNS
-	if len(info.Dns.RemoteIp) > 0 {
-		// Never mind what the traffic-manager reports
-		kubeDNS = nil
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			case o.kubeDNS <- info.Dns.RemoteIp:
-			}
-		}()
-	}
-	return o.router.setOutboundInfo(ctx, info, kubeDNS)
+	return o.router.setOutboundInfo(ctx, info)
 }
 
 func (o *outbound) getInfo() *rpc.OutboundInfo {
@@ -285,18 +240,52 @@ func (o *outbound) getInfo() *rpc.OutboundInfo {
 	return &info
 }
 
-func (o *outbound) noMoreUpdates() {
-	close(o.work)
+// SetSearchPath updates the DNS search path used by the resolver
+func (o *outbound) setSearchPath(_ context.Context, paths []string) {
+	o.searchPathCh <- paths
 }
 
-// SetSearchPath updates the DNS search path used by the resolver
-func (o *outbound) setSearchPath(c context.Context, paths []string) {
-	select {
-	case <-c.Done():
-	case <-o.dnsConfigured:
-		o.searchPathLock.Lock()
-		defer o.searchPathLock.Unlock()
-		o.setSearchPathFunc(c, paths)
-		dns.Flush(c)
+// processSearchPaths is called from the different dnsWorkers that in turn provide their
+// own processor.
+func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string) error) {
+	g.Go("SearchPaths", func(c context.Context) error {
+		var prevPaths []string
+		unchanged := func(paths []string) bool {
+			if len(paths) != len(prevPaths) {
+				return false
+			}
+			for i, path := range paths {
+				if path != prevPaths[i] {
+					return false
+				}
+			}
+			return true
+		}
+
+		for {
+			select {
+			case <-c.Done():
+				return nil
+			case paths := <-o.searchPathCh:
+				if !unchanged(paths) {
+					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
+					prevPaths = make([]string, len(paths))
+					copy(prevPaths, paths)
+					if err := processor(c, paths); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	})
+}
+
+// splitToUDPAddr splits the given address into an UDPAddr. It's
+// an  error if the address is based on a hostname rather than an IP.
+func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
+	ip, port, err := iputil.SplitToIPPort(netAddr)
+	if err != nil {
+		return nil, err
 	}
+	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
 }

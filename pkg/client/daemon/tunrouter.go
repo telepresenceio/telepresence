@@ -131,9 +131,8 @@ func (t *tunRouter) configured() <-chan struct{} {
 	return t.cfgComplete
 }
 
-func (t *tunRouter) configureDNS(_ context.Context, dnsIP net.IP, dnsPort uint16, dnsLocalAddr *net.UDPAddr) {
-	t.dnsIP = dnsIP
-	t.dnsPort = dnsPort
+func (t *tunRouter) configureDNS(_ context.Context, dnsLocalAddr *net.UDPAddr) {
+	t.dnsPort = 53
 	t.dnsLocalAddr = dnsLocalAddr
 }
 
@@ -182,7 +181,7 @@ func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 	return nil
 }
 
-func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo, kubeDNS chan<- net.IP) (err error) {
+func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
 	if t.managerClient == nil {
 		// First check. Establish connection
 		clientConfig := client.GetConfig(ctx)
@@ -207,9 +206,10 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 				t.alsoProxySubnets[i] = apSn
 			}
 		}
+		t.dnsIP = mi.Dns.RemoteIp
 
 		dgroup.ParentGroup(ctx).Go("watch-cluster-info", func(ctx context.Context) error {
-			err := t.watchClusterInfo(ctx, kubeDNS)
+			err := t.watchClusterInfo(ctx)
 			var recvErr *client.RecvEOF
 			if errors.As(err, &recvErr) {
 				// If the remote end, which is the connector, has hung up mid-stream, that usually means that
@@ -222,11 +222,13 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 	return nil
 }
 
-func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP) error {
+func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
 	infoStream, err := t.managerClient.WatchClusterInfo(ctx, t.session)
 	if err != nil {
 		return fmt.Errorf("error when calling WatchClusterInfo: %w", err)
 	}
+
+	cfgComplete := t.cfgComplete
 	for {
 		mgrInfo, err := infoStream.Recv()
 		if err != nil {
@@ -234,18 +236,6 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP)
 				return nil
 			}
 			return client.WrapRecvErr(err, "error when reading WatchClusterInfo")
-		}
-
-		if kubeDNS != nil {
-			go func(ch chan<- net.IP) {
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- mgrInfo.KubeDnsIp:
-				}
-			}(kubeDNS)
-			// This is one shot.
-			kubeDNS = nil
 		}
 
 		subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
@@ -266,10 +256,13 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context, kubeDNS chan<- net.IP)
 			dlog.Error(ctx, err)
 		}
 
-		mgrConfigured := t.cfgComplete
-		t.cfgComplete = nil
-		if mgrConfigured != nil {
-			close(mgrConfigured)
+		if cfgComplete != nil {
+			// Only set clusterDNS when it hasn't been explicitly set with the --dns option
+			if t.dnsIP == nil {
+				dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
+				t.dnsIP = mgrInfo.KubeDnsIp
+			}
+			close(cfgComplete)
 		}
 	}
 }
@@ -466,7 +459,7 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	udpHdr := dg.Header()
 	connID := connpool.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
 	uh, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
-		if udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
+		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
 			return udp.NewDnsInterceptor(t.connStream, t.toTunCh, connID, remove, t.dnsLocalAddr)
 		}
 		return udp.NewHandler(t.connStream, t.toTunCh, connID, remove), nil

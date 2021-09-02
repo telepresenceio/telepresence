@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -23,36 +24,19 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 		return errResolveDNotConfigured
 	}
 
-	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		// When using systemd-resolved, we provide resolution of NAME.NAMESPACE by adding each
-		// namespace as a route (a search entry prefixed with ~)
-		namespaces := make(map[string]struct{})
-		search := make([]string, 0)
-		for i, path := range paths {
-			if strings.ContainsRune(path, '.') {
-				search = append(search, path)
-			} else {
-				namespaces[path] = struct{}{}
-				// Turn namespace into a route
-				paths[i] = "~" + path
-			}
-		}
-		for _, sfx := range o.dnsConfig.IncludeSuffixes {
-			paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
-		}
-		paths = append(paths, kubernetesZone+".")
-		namespaces[tel2SubDomain] = struct{}{}
+	c, cancelResolveD := context.WithCancel(c)
+	defer cancelResolveD()
 
-		o.domainsLock.Lock()
-		o.namespaces = namespaces
-		o.search = search
-		o.domainsLock.Unlock()
-		if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
-			dlog.Errorf(c, "failed to set link domains on %q: %v", dev.Name(), err)
-		} else {
-			dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
-		}
+	listeners, err := o.dnsListeners(c)
+	if err != nil {
+		return err
 	}
+	// Create a new local address that the DNS resolver can listen to.
+	dnsResolverAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
+	if err != nil {
+		return err
+	}
+	o.router.configureDNS(c, dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
@@ -65,20 +49,8 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 		case <-c.Done():
 			initDone <- struct{}{}
 			return nil
-		case dnsIP := <-o.kubeDNS:
-			listeners, err := o.dnsListeners(c)
-			if err != nil {
-				dlog.Error(c, err)
-				initDone <- struct{}{}
-				return err
-			}
-			// Create a new local address that the DNS resolver can listen to.
-			dnsResolverAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
-			if err != nil {
-				return err
-			}
-
-			o.router.configureDNS(c, dnsIP, uint16(53), dnsResolverAddr)
+		case <-o.router.configured():
+			dnsIP := o.router.dnsIP
 			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
 			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
 				dlog.Error(c, err)
@@ -91,36 +63,27 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 				c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
 				defer cancel()
 				dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
-				o.setSearchPathFunc = nil
-				o.router.configureDNS(c, nil, 0, nil) // Don't route from TUN-device
+				o.router.configureDNS(c, nil) // Don't route from TUN-device
 				if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
 					dlog.Error(c, err)
 				}
-
 				// No need to close listeners here. They are closed by the dnsServer
 			}()
 			// Some installation have default DNS configured with ~. routing path.
 			// If two interfaces with DefaultRoute: yes present, the one with the
-			// routing key used and and SanityCheck fails. Hence, tel2SubDomain
+			// routing key used and SanityCheck fails. Hence, tel2SubDomain
 			// must be used as a routing key.
-			o.domainsLock.Lock()
-			namespaces := make(map[string]struct{})
-			namespaces[tel2SubDomain] = struct{}{}
-			o.namespaces = namespaces
-			paths := []string{"~" + tel2SubDomainDot}
-			o.search = paths
-			o.domainsLock.Unlock()
-
-			if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
-				dlog.Errorf(c, "failed to set link domains on %q: %v", dev.Name(), err)
-			} else {
-				dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
+			if err = o.updateLinkDomains(c, []string{tel2SubDomain}); err != nil {
+				dlog.Error(c, err)
+				initDone <- struct{}{}
+				return errResolveDNotConfigured
 			}
 			dnsServer = dns.NewServer(c, listeners, nil, o.resolveInCluster)
 			close(initDone)
 			return dnsServer.Run(c)
 		}
 	})
+
 	g.Go("SanityCheck", func(c context.Context) error {
 		if _, ok := <-initDone; ok {
 			// initDone was not closed, bail out.
@@ -134,7 +97,9 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
 			if dnsServer.RequestCount() > 0 {
-				close(o.dnsConfigured)
+				// The query went all way through. Start processing search paths systemd-resolved style
+				// and return nil for successful validation.
+				o.processSearchPaths(g, o.updateLinkDomains)
 				return nil
 			}
 			dns.Flush(c)
@@ -143,4 +108,34 @@ func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
 		return errResolveDNotConfigured
 	})
 	return g.Wait()
+}
+
+func (o *outbound) updateLinkDomains(c context.Context, paths []string) error {
+	namespaces := make(map[string]struct{})
+	search := make([]string, 0)
+	for i, path := range paths {
+		if strings.ContainsRune(path, '.') {
+			search = append(search, path)
+		} else {
+			namespaces[path] = struct{}{}
+			// Turn namespace into a route
+			paths[i] = "~" + path
+		}
+	}
+	for _, sfx := range o.dnsConfig.IncludeSuffixes {
+		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
+	}
+	paths = append(paths, kubernetesZone+".")
+	namespaces[tel2SubDomain] = struct{}{}
+
+	o.domainsLock.Lock()
+	o.namespaces = namespaces
+	o.search = search
+	o.domainsLock.Unlock()
+	dev := o.router.dev
+	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
+		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
+	}
+	dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
+	return nil
 }

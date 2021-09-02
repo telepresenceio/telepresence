@@ -205,7 +205,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	scoutUsers.Add(1)
 	g.Go("server-router", func(ctx context.Context) error {
 		defer scoutUsers.Done()
-		return d.outbound.routerServerWorker(ctx)
+		return d.outbound.router.run(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
@@ -218,10 +218,6 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
-
-			// Tell the firewall-configurator that we won't be sending it any more
-			// updates.
-			d.outbound.noMoreUpdates()
 		}()
 
 		defer func() {
