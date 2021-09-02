@@ -20,8 +20,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-const kubernetesZone = "cluster.local"
-
 type awaitLookupResult struct {
 	done   chan struct{}
 	result iputil.IPs
@@ -92,13 +90,12 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan s
 // "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
 const tel2SubDomainDot = tel2SubDomain + "."
-const dotKubernetesZone = "." + kubernetesZone + "."
 
 var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
 
 func (o *outbound) shouldDoClusterLookup(query string) bool {
-	if strings.HasSuffix(query, dotKubernetesZone) && strings.Count(query, ".") < 4 {
+	if strings.HasSuffix(query, "."+o.router.clusterDomain) && strings.Count(query, ".") < 4 {
 		return false
 	}
 
@@ -241,12 +238,14 @@ func (o *outbound) getInfo() *rpc.OutboundInfo {
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
-func (o *outbound) setSearchPath(_ context.Context, paths []string) {
+func (o *outbound) setSearchPath(_ context.Context, paths, namespaces []string) {
+	// Provide direct access to intercepted namespaces
+	for _, ns := range namespaces {
+		paths = append(paths, ns+".svc."+o.router.clusterDomain)
+	}
 	o.searchPathCh <- paths
 }
 
-// processSearchPaths is called from the different dnsWorkers that in turn provide their
-// own processor.
 func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string) error) {
 	g.Go("SearchPaths", func(c context.Context) error {
 		var prevPaths []string

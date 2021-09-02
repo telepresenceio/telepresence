@@ -93,7 +93,7 @@ func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.outbound.setSearchPath(ctx, paths.Paths)
+	d.outbound.setSearchPath(ctx, paths.Paths, paths.Namespaces)
 	return &empty.Empty{}, nil
 }
 

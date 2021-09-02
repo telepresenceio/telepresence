@@ -125,7 +125,7 @@ func (o *outbound) updateLinkDomains(c context.Context, paths []string) error {
 	for _, sfx := range o.dnsConfig.IncludeSuffixes {
 		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
 	}
-	paths = append(paths, kubernetesZone+".")
+	paths = append(paths, o.router.clusterDomain)
 	namespaces[tel2SubDomain] = struct{}{}
 
 	o.domainsLock.Lock()

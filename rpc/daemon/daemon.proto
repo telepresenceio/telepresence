@@ -37,6 +37,8 @@ message DaemonStatus {
 
 message Paths {
   repeated string paths = 1;
+
+  repeated string namespaces = 2;
 }
 
 // DNS configuration for the local DNS resolver

@@ -43,7 +43,7 @@ func (o *outbound) shouldApplySearch(query string) bool {
 	}
 
 	// Don't apply search paths to the kubernetes zone
-	if strings.HasSuffix(query, dotKubernetesZone) {
+	if strings.HasSuffix(query, "."+o.router.clusterDomain) {
 		return false
 	}
 

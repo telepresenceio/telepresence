@@ -85,6 +85,9 @@ type tunRouter struct {
 	// dnsLocalAddr is the address of the local DNS server
 	dnsLocalAddr *net.UDPAddr
 
+	// clusterDomain reported by the traffic-manager
+	clusterDomain string
+
 	// Cluster subnets reported by the traffic-manager
 	clusterSubnets []*net.IPNet
 
@@ -262,6 +265,8 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
 				dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
 				t.dnsIP = mgrInfo.KubeDnsIp
 			}
+			dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
+			t.clusterDomain = mgrInfo.ClusterDomain
 			close(cfgComplete)
 		}
 	}

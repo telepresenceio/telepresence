@@ -151,6 +151,8 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		return err
 	}
 
+	kubernetesZone := o.router.clusterDomain
+	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
 		port:        dnsAddr.Port,
 		domain:      kubernetesZone,
