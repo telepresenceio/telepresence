@@ -1,3 +1,4 @@
+//go:build pin
 // +build pin
 
 package ignore

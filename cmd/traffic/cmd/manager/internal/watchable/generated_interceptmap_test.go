@@ -68,7 +68,7 @@ func TestInterceptMap_Delete(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"a": &manager.InterceptInfo{Id: "a"},
+				"a": {Id: "a"},
 			},
 		},
 		watchable.InterceptMapSnapshot{State: m.LoadAll()})
@@ -195,9 +195,9 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"a": &manager.InterceptInfo{Id: "A"},
-				"b": &manager.InterceptInfo{Id: "B"},
-				"c": &manager.InterceptInfo{Id: "C"},
+				"a": {Id: "A"},
+				"b": {Id: "B"},
+				"c": {Id: "C"},
 			},
 			Updates: nil,
 		},
@@ -214,12 +214,12 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"a": &manager.InterceptInfo{Id: "A"},
-				"b": &manager.InterceptInfo{Id: "B"},
-				"c": &manager.InterceptInfo{Id: "C"},
-				"d": &manager.InterceptInfo{Id: "D"},
-				"e": &manager.InterceptInfo{Id: "E"},
-				"f": &manager.InterceptInfo{Id: "F"},
+				"a": {Id: "A"},
+				"b": {Id: "B"},
+				"c": {Id: "C"},
+				"d": {Id: "D"},
+				"e": {Id: "E"},
+				"f": {Id: "F"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "d", Value: &manager.InterceptInfo{Id: "D"}},
@@ -236,11 +236,11 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"b": &manager.InterceptInfo{Id: "B"},
-				"c": &manager.InterceptInfo{Id: "C"},
-				"d": &manager.InterceptInfo{Id: "D"},
-				"e": &manager.InterceptInfo{Id: "E"},
-				"f": &manager.InterceptInfo{Id: "F"},
+				"b": {Id: "B"},
+				"c": {Id: "C"},
+				"d": {Id: "D"},
+				"e": {Id: "E"},
+				"f": {Id: "F"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "a", Delete: true, Value: &manager.InterceptInfo{Id: "A"}},
@@ -255,10 +255,10 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"c": &manager.InterceptInfo{Id: "C"},
-				"d": &manager.InterceptInfo{Id: "D"},
-				"e": &manager.InterceptInfo{Id: "E"},
-				"f": &manager.InterceptInfo{Id: "F"},
+				"c": {Id: "C"},
+				"d": {Id: "D"},
+				"e": {Id: "E"},
+				"f": {Id: "F"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "b", Delete: true, Value: &manager.InterceptInfo{Id: "B"}},
@@ -274,9 +274,9 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"d": &manager.InterceptInfo{Id: "D"},
-				"e": &manager.InterceptInfo{Id: "E"},
-				"f": &manager.InterceptInfo{Id: "F"},
+				"d": {Id: "D"},
+				"e": {Id: "E"},
+				"f": {Id: "F"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "c", Value: &manager.InterceptInfo{Id: "c"}},
@@ -326,9 +326,9 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"a": &manager.InterceptInfo{Id: "A"},
-				"b": &manager.InterceptInfo{Id: "B"},
-				"c": &manager.InterceptInfo{Id: "C"},
+				"a": {Id: "A"},
+				"b": {Id: "B"},
+				"c": {Id: "C"},
 			},
 		},
 		snapshot)
@@ -347,9 +347,9 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"a": &manager.InterceptInfo{Id: "a"},
-				"b": &manager.InterceptInfo{Id: "B"},
-				"c": &manager.InterceptInfo{Id: "C"},
+				"a": {Id: "a"},
+				"b": {Id: "B"},
+				"c": {Id: "C"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "a", Value: &manager.InterceptInfo{Id: "a"}},
@@ -364,8 +364,8 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	assertInterceptMapSnapshotEqual(t,
 		watchable.InterceptMapSnapshot{
 			State: map[string]*manager.InterceptInfo{
-				"b": &manager.InterceptInfo{Id: "B"},
-				"c": &manager.InterceptInfo{Id: "C"},
+				"b": {Id: "B"},
+				"c": {Id: "C"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "a", Delete: true, Value: &manager.InterceptInfo{Id: "a"}},

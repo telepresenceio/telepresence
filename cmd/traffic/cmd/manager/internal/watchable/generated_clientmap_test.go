@@ -68,7 +68,7 @@ func TestClientMap_Delete(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"a": &manager.ClientInfo{Name: "a"},
+				"a": {Name: "a"},
 			},
 		},
 		watchable.ClientMapSnapshot{State: m.LoadAll()})
@@ -195,9 +195,9 @@ func TestClientMap_Subscribe(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"a": &manager.ClientInfo{Name: "A"},
-				"b": &manager.ClientInfo{Name: "B"},
-				"c": &manager.ClientInfo{Name: "C"},
+				"a": {Name: "A"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 			Updates: nil,
 		},
@@ -214,12 +214,12 @@ func TestClientMap_Subscribe(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"a": &manager.ClientInfo{Name: "A"},
-				"b": &manager.ClientInfo{Name: "B"},
-				"c": &manager.ClientInfo{Name: "C"},
-				"d": &manager.ClientInfo{Name: "D"},
-				"e": &manager.ClientInfo{Name: "E"},
-				"f": &manager.ClientInfo{Name: "F"},
+				"a": {Name: "A"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "d", Value: &manager.ClientInfo{Name: "D"}},
@@ -236,11 +236,11 @@ func TestClientMap_Subscribe(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"b": &manager.ClientInfo{Name: "B"},
-				"c": &manager.ClientInfo{Name: "C"},
-				"d": &manager.ClientInfo{Name: "D"},
-				"e": &manager.ClientInfo{Name: "E"},
-				"f": &manager.ClientInfo{Name: "F"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "a", Delete: true, Value: &manager.ClientInfo{Name: "A"}},
@@ -255,10 +255,10 @@ func TestClientMap_Subscribe(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"c": &manager.ClientInfo{Name: "C"},
-				"d": &manager.ClientInfo{Name: "D"},
-				"e": &manager.ClientInfo{Name: "E"},
-				"f": &manager.ClientInfo{Name: "F"},
+				"c": {Name: "C"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "b", Delete: true, Value: &manager.ClientInfo{Name: "B"}},
@@ -274,9 +274,9 @@ func TestClientMap_Subscribe(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"d": &manager.ClientInfo{Name: "D"},
-				"e": &manager.ClientInfo{Name: "E"},
-				"f": &manager.ClientInfo{Name: "F"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "c", Value: &manager.ClientInfo{Name: "c"}},
@@ -326,9 +326,9 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"a": &manager.ClientInfo{Name: "A"},
-				"b": &manager.ClientInfo{Name: "B"},
-				"c": &manager.ClientInfo{Name: "C"},
+				"a": {Name: "A"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 		},
 		snapshot)
@@ -347,9 +347,9 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"a": &manager.ClientInfo{Name: "a"},
-				"b": &manager.ClientInfo{Name: "B"},
-				"c": &manager.ClientInfo{Name: "C"},
+				"a": {Name: "a"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "a", Value: &manager.ClientInfo{Name: "a"}},
@@ -364,8 +364,8 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	assertClientMapSnapshotEqual(t,
 		watchable.ClientMapSnapshot{
 			State: map[string]*manager.ClientInfo{
-				"b": &manager.ClientInfo{Name: "B"},
-				"c": &manager.ClientInfo{Name: "C"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "a", Delete: true, Value: &manager.ClientInfo{Name: "a"}},

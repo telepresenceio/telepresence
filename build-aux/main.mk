@@ -24,19 +24,20 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
+.PHONY: FORCE
+FORCE:
+
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
-
-# This has to be a phony target so that it will be rebuilt on changes to TELEPRESENCE_VERSION
-.PHONY: pkg/install/helm/telepresence-chart.tgz
-pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence
-	GOOS=$(GOHOSTOS) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
-
+build-aux/go1%.src.tar.gz:
+	curl -o $@ --fail -L https://dl.google.com/go/$(@F)
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
-generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
+generate: generate-clean
+generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
+generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.gz
 	rm -rf ./rpc/vendor
 	find ./rpc -name '*.go' -delete
 	$(tools/protoc) \
@@ -52,8 +53,10 @@ generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-g
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	rm -rf ./vendor
-	go generate ./...
-	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	export GOFLAGS=-mod=mod && go generate ./...
+	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod >OPENSOURCE.md
+	rm -rf vendor
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
@@ -62,9 +65,13 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 
 	rm -rf ./vendor
 	find pkg cmd -name 'generated_*.go' -delete
+	rm -f OPENSOURCE.md
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
+
+pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
+	GOOS=$(GOHOSTOS) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
 
 TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image
@@ -98,6 +105,7 @@ clean: ## (Build) Remove all build artifacts
 
 .PHONY: clobber
 clobber: clean ## (Build) Remove all build artifacts and tools
+	rm -f build-aux/go1*.src.tar.gz
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
@@ -173,7 +181,12 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: $(tools/golangci-lint) $(tools/protolint) $(tools/shellcheck) $(tools/helm) ## (QA) Everything necessary to lint
+lint-deps: ## (QA) Everything necessary to lint
+lint-deps: pkg/install/helm/telepresence-chart.tgz
+lint-deps: $(tools/golangci-lint)
+lint-deps: $(tools/protolint)
+lint-deps: $(tools/shellcheck)
+lint-deps: $(tools/helm)
 
 .PHONY: build-tests
 build-tests: pkg/install/helm/telepresence-chart.tgz ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.

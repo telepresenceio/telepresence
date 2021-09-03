@@ -68,7 +68,7 @@ func TestAgentMap_Delete(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"a": &manager.AgentInfo{Name: "a"},
+				"a": {Name: "a"},
 			},
 		},
 		watchable.AgentMapSnapshot{State: m.LoadAll()})
@@ -195,9 +195,9 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"a": &manager.AgentInfo{Name: "A"},
-				"b": &manager.AgentInfo{Name: "B"},
-				"c": &manager.AgentInfo{Name: "C"},
+				"a": {Name: "A"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 			Updates: nil,
 		},
@@ -214,12 +214,12 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"a": &manager.AgentInfo{Name: "A"},
-				"b": &manager.AgentInfo{Name: "B"},
-				"c": &manager.AgentInfo{Name: "C"},
-				"d": &manager.AgentInfo{Name: "D"},
-				"e": &manager.AgentInfo{Name: "E"},
-				"f": &manager.AgentInfo{Name: "F"},
+				"a": {Name: "A"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "d", Value: &manager.AgentInfo{Name: "D"}},
@@ -236,11 +236,11 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"b": &manager.AgentInfo{Name: "B"},
-				"c": &manager.AgentInfo{Name: "C"},
-				"d": &manager.AgentInfo{Name: "D"},
-				"e": &manager.AgentInfo{Name: "E"},
-				"f": &manager.AgentInfo{Name: "F"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "a", Delete: true, Value: &manager.AgentInfo{Name: "A"}},
@@ -255,10 +255,10 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"c": &manager.AgentInfo{Name: "C"},
-				"d": &manager.AgentInfo{Name: "D"},
-				"e": &manager.AgentInfo{Name: "E"},
-				"f": &manager.AgentInfo{Name: "F"},
+				"c": {Name: "C"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "b", Delete: true, Value: &manager.AgentInfo{Name: "B"}},
@@ -274,9 +274,9 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"d": &manager.AgentInfo{Name: "D"},
-				"e": &manager.AgentInfo{Name: "E"},
-				"f": &manager.AgentInfo{Name: "F"},
+				"d": {Name: "D"},
+				"e": {Name: "E"},
+				"f": {Name: "F"},
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "c", Value: &manager.AgentInfo{Name: "c"}},
@@ -326,9 +326,9 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"a": &manager.AgentInfo{Name: "A"},
-				"b": &manager.AgentInfo{Name: "B"},
-				"c": &manager.AgentInfo{Name: "C"},
+				"a": {Name: "A"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 		},
 		snapshot)
@@ -347,9 +347,9 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"a": &manager.AgentInfo{Name: "a"},
-				"b": &manager.AgentInfo{Name: "B"},
-				"c": &manager.AgentInfo{Name: "C"},
+				"a": {Name: "a"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "a", Value: &manager.AgentInfo{Name: "a"}},
@@ -364,8 +364,8 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	assertAgentMapSnapshotEqual(t,
 		watchable.AgentMapSnapshot{
 			State: map[string]*manager.AgentInfo{
-				"b": &manager.AgentInfo{Name: "B"},
-				"c": &manager.AgentInfo{Name: "C"},
+				"b": {Name: "B"},
+				"c": {Name: "C"},
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "a", Delete: true, Value: &manager.AgentInfo{Name: "a"}},
