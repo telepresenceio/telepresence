@@ -70,8 +70,11 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 # Build: artifacts that don't get checked in to Git
 # =================================================
 
+# We might be building for arm64 on a mac that doesn't have an M1 chip
+# (which is definitely the case with circle), so GOARCH may be set for that,
+# but we need to ensure it's using the host's architecture so the go command runs successfully.
 pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
-	GOOS=$(GOHOSTOS) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
+	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
 
 TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image
@@ -137,12 +140,12 @@ ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
+		--key tel2/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
 		--body $(BINDIR)/telepresence.zip
 else
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
+		--key tel2/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
 endif
 
@@ -159,7 +162,7 @@ promote-to-stable: ## (Release) Update stable.txt in S3
 	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/stable.txt \
+		--key tel2/$(GOHOSTOS)/$(GOARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
 	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION))
@@ -174,7 +177,7 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/nightly.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/nightly.txt \
+		--key tel2/$(GOHOSTOS)/$(GOARCH)/nightly.txt \
 		--body $(BUILDDIR)/nightly.txt
 
 # Quality Assurance: Make sure things are good

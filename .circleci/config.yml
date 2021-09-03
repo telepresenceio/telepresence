@@ -360,11 +360,17 @@ jobs:
     - install-go
     - run: sudo pip3 install awscli
     - run:
-        name: "Publish nightly macos"
+        name: "Publish nightly macos (arch amd64)"
         command: |
           newTag=$(go run build-aux/genversion.go nightly)
-          TELEPRESENCE_VERSION=$newTag make push-executable
-          TELEPRESENCE_VERSION=$newTag make promote-nightly
+          TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make push-executable
+          TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make promote-nightly
+    - run:
+        name: "Publish nightly macos (arch arm64)"
+        command: |
+          newTag=$(go run build-aux/genversion.go nightly)
+          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make push-executable
+          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make promote-nightly
 
 #  "release-finalize":
 #    executor: vm-linux
