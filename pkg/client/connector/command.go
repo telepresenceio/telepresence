@@ -3,7 +3,6 @@ package connector
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -301,6 +300,18 @@ func run(c context.Context) error {
 		return err
 	}
 
+	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
+	// before other tasks because the CLI client will only wait for a short period of time for
+	// the socket/pipe to appear before it gives up.
+	grpcListener, err := client.ListenSocket(c, ProcessName, client.ConnectorSocketName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.RemoveSocket(grpcListener)
+	}()
+	dlog.Debug(c, "Listener opened")
+
 	s := &service{
 		scoutClient: scout.NewScout(c, "connector"),
 
@@ -330,13 +341,6 @@ func run(c context.Context) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	var grpcListener net.Listener
-	defer func() {
-		if grpcListener != nil {
-			_ = client.RemoveSocket(grpcListener)
-		}
-	}()
-
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		defer func() {
 			if perr := derror.PanicToError(recover()); perr != nil {
@@ -351,13 +355,6 @@ func run(c context.Context) error {
 			}
 		}()
 
-		// Listen on unix domain socket
-		grpcListener, err = client.ListenSocket(c, ProcessName, client.ConnectorSocketName)
-		if err != nil {
-			return err
-		}
-
-		dlog.Info(c, "gRPC server started")
 		defer func() {
 			if err != nil {
 				dlog.Errorf(c, "gRPC server ended with: %v", err)
@@ -386,6 +383,7 @@ func run(c context.Context) error {
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
+		dlog.Info(c, "gRPC server started")
 		return sc.Serve(c, grpcListener)
 	})
 

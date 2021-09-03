@@ -131,6 +131,23 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		return err
 	}
 
+	dlog.Info(c, "---")
+	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
+	dlog.Infof(c, "PID is %d", os.Getpid())
+	dlog.Info(c, "")
+
+	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
+	// before other tasks because the CLI client will only wait for a short period of time for
+	// the socket/pipe to appear before it gives up.
+	grpcListener, err := client.ListenSocket(c, ProcessName, client.DaemonSocketName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.RemoveSocket(grpcListener)
+	}()
+	dlog.Debug(c, "Listener opened")
+
 	d := &service{
 		dns: dns,
 		hClient: &http.Client{
@@ -165,25 +182,12 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		ShutdownOnNonError:   true,
 	})
 
-	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
+	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a shutdown when it returns.
 	d.cancel = func() { g.Go(ProcessName+"-quit", d.quitAll) }
-
-	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.outbound are liable to do this, as it's passed into it.
-
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
-
-	var grpcListener net.Listener
-	defer func() {
-		if grpcListener != nil {
-			_ = client.RemoveSocket(grpcListener)
-		}
-	}()
 
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
+	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.outbound are liable to do this, as it's passed into it.
 	scoutUsers.Add(1)
 	g.Go("server-dns", func(ctx context.Context) error {
 		defer scoutUsers.Done()
@@ -220,14 +224,6 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			d.outbound.noMoreUpdates()
 		}()
 
-		// Listen on unix domain socket
-		dlog.Debug(c, "gRPC server starting")
-		grpcListener, err = client.ListenSocket(c, ProcessName, client.DaemonSocketName)
-		if err != nil {
-			return err
-		}
-
-		dlog.Info(c, "gRPC server started")
 		defer func() {
 			if err != nil {
 				dlog.Errorf(c, "gRPC server ended with: %v", err)
@@ -248,6 +244,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
+		dlog.Info(c, "gRPC server started")
 		return sc.Serve(c, grpcListener)
 	})
 
@@ -290,7 +287,13 @@ func (d *service) quitAll(c context.Context) error {
 
 // quitConnector ensures that the connector quits gracefully.
 func (d *service) quitConnector(c context.Context) error {
-	if !client.SocketExists(client.ConnectorSocketName) {
+	exists, err := client.SocketExists(client.ConnectorSocketName)
+	if err != nil {
+		// connector socket problem, so nothing to shut down
+		dlog.Errorf(c, "Daemon cannot quit connector: %v", err)
+		return nil
+	}
+	if !exists {
 		// no connector socket, so nothing to shut down
 		return nil
 	}
