@@ -792,7 +792,6 @@ func (cs *connectedSuite) TestM_AutoInjectedAgent() {
 
 	cs.Run("can be intercepted", func() {
 		defer telepresence(cs.T(), "leave", "echo-auto-inject-"+cs.ns())
-
 		require := cs.Require()
 		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "echo-auto-inject", "--port", "9091")
 		require.Empty(stderr)
@@ -800,6 +799,37 @@ func (cs *connectedSuite) TestM_AutoInjectedAgent() {
 		stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 		require.Empty(stderr)
 		require.Contains(stdout, "echo-auto-inject: intercepted")
+	})
+}
+
+func (cs *connectedSuite) TestM_AutoInjectedUninstall() {
+	ctx := dlog.NewTestContext(cs.T(), false)
+
+	cs.NoError(cs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
+	defer func() {
+		cs.NoError(cs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
+	}()
+
+	cs.Run("can be uninstalled", func() {
+		require := cs.Require()
+
+		cs.Eventually(func() bool {
+			stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+			cs.Empty(stderr)
+			return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+		},
+			10*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
+
+		stdout, stderr := telepresence(cs.T(), "uninstall", "-e")
+		require.Empty(stderr)
+		require.Contains(stdout, "Root Daemon quitting... done")
+
+		stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
+		require.Empty(stderr)
+		require.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent not yet installed)")
+
 	})
 }
 

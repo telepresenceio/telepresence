@@ -33,6 +33,7 @@ func newTrafficManagerInstaller(kc *userd_k8s.Cluster) (*installer, error) {
 }
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
+const annRestartedAt = install.DomainPrefix + "restartedAt"
 
 func managerImageName(ctx context.Context) string {
 	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry, strings.TrimPrefix(client.Version(), "v"))
@@ -51,6 +52,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 	}
 
 	// Remove the agent from all deployments
+	webhookAgentChannel := make(chan kates.Object, len(agents))
 	wg := sync.WaitGroup{}
 	wg.Add(len(agents))
 	for _, ai := range agents {
@@ -72,6 +74,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 				return
 			}
 			if _, ok := ann[annTelepresenceActions]; !ok {
+				webhookAgentChannel <- agent
 				return
 			}
 			if err = ki.undoObjectMods(c, agent); err != nil {
@@ -85,12 +88,35 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 	}
 	// wait for all agents to be removed
 	wg.Wait()
+	close(webhookAgentChannel)
 
 	if !agentsOnly && len(errs) == 0 {
 		// agent removal succeeded. Remove the manager resources
 		if err := helm.DeleteTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace()); err != nil {
 			addError(err)
 		}
+
+		// roll all agents installed by webhook
+		dlog.Infof(c, "rolling-to-uninstall %v webhook agents", len(webhookAgentChannel))
+		webhookWaitGroup := sync.WaitGroup{}
+		webhookWaitGroup.Add(len(webhookAgentChannel))
+		for agent := range webhookAgentChannel {
+			agent := agent // pin ?
+			go func() {
+				defer webhookWaitGroup.Done()
+				restartAnnotation := fmt.Sprintf(
+					"{\"spec\": {\"template\": {\"metadata\": {\"annotations\": {\"%s\": \"%s\"}}}}}",
+					annRestartedAt,
+					time.Now().Format(time.RFC3339),
+				)
+				err := ki.Client().Patch(c, agent, kates.StrategicMergePatchType, []byte(restartAnnotation), agent)
+				if err != nil {
+					addError(err)
+				}
+			}()
+		}
+		// wait for all agents to be removed
+		webhookWaitGroup.Wait()
 	}
 
 	switch len(errs) {
