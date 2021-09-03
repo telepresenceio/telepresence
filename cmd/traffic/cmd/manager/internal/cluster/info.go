@@ -90,6 +90,15 @@ func NewInfo(ctx context.Context) Info {
 		}
 	}
 
+	apiSvc := "kubernetes.default.svc"
+	if cn, err := net.LookupCNAME(apiSvc); err != nil {
+		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s: %v"`, err, apiSvc)
+		oi.ClusterDomain = "cluster.local."
+	} else {
+		oi.ClusterDomain = cn[len(apiSvc)+1:]
+	}
+	dlog.Infof(ctx, "Using cluster domain %q", oi.ClusterDomain)
+
 	// make an attempt to create a service with ClusterIP that is out of range and then
 	// check the error message for the correct range as suggested tin the second answer here:
 	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
@@ -187,6 +196,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		KubeDnsIp:     oi.KubeDnsIp,
 		ServiceSubnet: oi.ServiceSubnet,
 		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
+		ClusterDomain: oi.ClusterDomain,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

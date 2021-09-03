@@ -93,7 +93,7 @@ func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.outbound.setSearchPath(ctx, paths.Paths)
+	d.outbound.setSearchPath(ctx, paths.Paths, paths.Namespaces)
 	return &empty.Empty{}, nil
 }
 
@@ -205,7 +205,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	scoutUsers.Add(1)
 	g.Go("server-router", func(ctx context.Context) error {
 		defer scoutUsers.Done()
-		return d.outbound.routerServerWorker(ctx)
+		return d.outbound.router.run(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
@@ -218,10 +218,6 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
-
-			// Tell the firewall-configurator that we won't be sending it any more
-			// updates.
-			d.outbound.noMoreUpdates()
 		}()
 
 		defer func() {

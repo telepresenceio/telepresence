@@ -43,7 +43,7 @@ func (o *outbound) shouldApplySearch(query string) bool {
 	}
 
 	// Don't apply search paths to the kubernetes zone
-	if strings.HasSuffix(query, dotKubernetesZone) {
+	if strings.HasSuffix(query, "."+o.router.clusterDomain) {
 		return false
 	}
 
@@ -108,22 +108,6 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
-	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		namespaces := make(map[string]struct{})
-		search := make([]string, 0)
-		for _, path := range paths {
-			if strings.ContainsRune(path, '.') {
-				search = append(search, path)
-			} else if path != "" {
-				namespaces[path] = struct{}{}
-			}
-		}
-		o.domainsLock.Lock()
-		o.namespaces = namespaces
-		o.search = search
-		o.domainsLock.Unlock()
-	}
-
 	listeners, err := o.dnsListeners(c)
 	if err != nil {
 		return err
@@ -150,12 +134,35 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		unrouteDNS(ncc)
 	}()
 	dns.Flush(c)
-	srv := dns.NewServer(c, listeners, conn, o.resolveInSearch)
-	close(o.dnsConfigured)
-	dlog.Debug(c, "Starting server")
-	err = srv.Run(c)
-	dlog.Debug(c, "Server done")
-	return err
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go("Server", func(c context.Context) error {
+		select {
+		case <-c.Done():
+			return nil
+		case <-o.router.configured():
+			// Server will close the listener, so no need to close it here.
+			o.processSearchPaths(g, func(c context.Context, paths []string) error {
+				namespaces := make(map[string]struct{})
+				search := make([]string, 0)
+				for _, path := range paths {
+					if strings.ContainsRune(path, '.') {
+						search = append(search, path)
+					} else if path != "" {
+						namespaces[path] = struct{}{}
+					}
+				}
+				o.domainsLock.Lock()
+				o.namespaces = namespaces
+				o.search = search
+				o.domainsLock.Unlock()
+				return nil
+			})
+			v := dns.NewServer(c, listeners, nil, o.resolveInSearch)
+			return v.Run(c)
+		}
+	})
+	return g.Wait()
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {

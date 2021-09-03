@@ -32,7 +32,7 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 	if IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = log.NewFormatter("15:04:05.0000")
 	} else {
-		logger.Formatter = log.NewFormatter("2006/01/02 15:04:05.0000")
+		logger.Formatter = log.NewFormatter("2006-01-02 15:04:05.0000")
 		dir, err := filelocation.AppUserLogDir(ctx)
 		if err != nil {
 			return ctx, err

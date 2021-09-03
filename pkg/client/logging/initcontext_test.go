@@ -155,13 +155,13 @@ func TestInitContext(t *testing.T) {
 		backupFile := filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
 
 		ft.Step(time.Second)
-		infoTs := dtime.Now().Format("2006/01/02 15:04:05.0000")
+		infoTs := dtime.Now().Format("2006-01-02 15:04:05.0000")
 		dlog.Info(c, infoMsg)
 		check.FileExists(backupFile)
 
 		bs, err := ioutil.ReadFile(logFile)
 		check.NoError(err)
-		check.Contains(string(bs), fmt.Sprintf("%s info     : %s\n", infoTs, infoMsg))
+		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg))
 	})
 
 	t.Run("old files are removed", func(t *testing.T) {
