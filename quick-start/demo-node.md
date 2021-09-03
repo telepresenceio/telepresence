@@ -44,19 +44,18 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
 1. <Login urlParams="docs_source=telepresence-quick-start"/>
-2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster.
+2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster. 
    <EmojivotoServicesList/>
-The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
+    The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
 
 ## 2. Try the Emojivoto application
 
 The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
 
 1. Go to the <ExternalIp/> and vote for some emojis.
-
-<Alert severity="info">
-    If the link to the remote demo cluster doesn't work, make sure you don't have an ad blocker preventing it to open.
-</Alert>
+    <Alert severity="info">
+    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it from opening.
+    </Alert>
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
 
@@ -71,6 +70,11 @@ We'll set up a development environment locally on your workstation. We'll then u
 1. Run the Docker container locally:
 
     <DockerCommand/>
+
+    <Alert severity="info">
+    Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
+    If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
+    </Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
@@ -90,7 +94,7 @@ A common use case for Telepresence is to connect your local development environm
 2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
    `telepresence intercept web --port 8080`
 
-   When prompted for ingress configuration, all default values should be correct as displayed below.
+    When prompted for ingress configuration, all default values should be correct as displayed below.
 
     <UserInterceptCommand/>
 
@@ -102,16 +106,17 @@ A common use case for Telepresence is to connect your local development environm
 
 Preview URLs enable you to safely share your development environment with anyone. For example, you may want your UX designer to take a quick look at what you're developing, before you commit the code. Preview URLs enable this easy collaboration.
 
-2. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
+1. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
 
-1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
-   <Alert severity="success">
-   Now you're able to share your fix in your local environment with your team!
-   </Alert>
+2. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
 
-   <Alert severity="info">
-        To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
-   </Alert>
+<Alert severity="success">
+Now you're able to share your fix in your local environment with your team!
+</Alert>
+
+<Alert severity="info">
+    To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
+</Alert>
 
 ## 6. How/Why does this all work?
 
