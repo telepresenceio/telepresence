@@ -129,6 +129,16 @@ commands:
             sudo apt-get install -y sshfs
             sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
 
+  "create-test-user-linux":
+    steps:
+      - run:
+          command: |
+            sudo useradd tptester -m -s /bin/bash
+            sudo usermod -aG sudo tptester
+            echo "tptester ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/tptester
+            sudo cp "$BASH_ENV" /home/tptester/.bashrc
+            sudo chown tptester:tptester /home/tptester/.bashrc
+
   "dirty-check":
     steps:
       - run:
@@ -233,6 +243,7 @@ jobs:
       - run: make build
       - install-kubectl
       - install-sshfs
+      - create-test-user-linux
       - attach_workspace:
           at: /tmp/workspace
       - prepare-kluster:
@@ -242,7 +253,9 @@ jobs:
             # We want to validate that tests still pass, even if the metrics host
             # points to a broken IP
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
+            id
+            sudo -n -E -u tptester id
+            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" sudo -n -E -u tptester make test
           # Both CircleCI and `go test` itself time out after 10m by
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
