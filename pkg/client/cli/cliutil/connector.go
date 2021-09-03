@@ -70,7 +70,7 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 
 				if err := client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
 					logDir, _ := filelocation.AppUserLogDir(ctx)
-					return fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(logDir, "connector.log"))
+					return fmt.Errorf("connector service did not start (see %q for more info): %w", filepath.Join(logDir, "connector.log"), err)
 				}
 
 				maybeStart = false

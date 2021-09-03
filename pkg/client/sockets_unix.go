@@ -100,7 +100,16 @@ func removeSocket(listener net.Listener) error {
 }
 
 // socketExists returns true if a socket is found at the given path
-func socketExists(path string) bool {
+func socketExists(path string) (bool, error) {
 	s, err := os.Stat(path)
-	return err == nil && s.Mode()&os.ModeSocket != 0
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return false, err
+	}
+	if s.Mode()&os.ModeSocket == 0 {
+		return false, fmt.Errorf("%q is not a socket", path)
+	}
+	return true, nil
 }
