@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.4.3 (TBD)
+
+- Bugfix: A timing related bug was fixed that sometimes caused a "daemon did not start" failure.
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel

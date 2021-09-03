@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/Microsoft/go-winio"
@@ -59,21 +60,33 @@ func removeSocket(listener net.Listener) error {
 }
 
 // socketExists returns true if a socket exists with the given name
-func socketExists(name string) bool {
+func socketExists(name string) (bool, error) {
 	uPath, err := windows.UTF16PtrFromString(name)
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	// Despite the name of the function, this is actually an attempt to open an existing socket. The
 	// OPEN_EXISTING disposition will make it fail unless it exists.
 	h, err := windows.CreateFile(uPath, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
-	if err != nil {
+	switch err {
+	case windows.ERROR_PIPE_BUSY:
 		// ERROR_PIPE_BUSY is an error that is issued somewhat sporadically but it's a safe
 		// indication that the pipe exists.
-		return err == windows.ERROR_PIPE_BUSY
+		return true, nil
+	case windows.ERROR_FILE_NOT_FOUND:
+		return false, nil
+	case nil:
+		var ft uint32
+		ft, err = windows.GetFileType(h)
+		if err != nil {
+			break
+		}
+		_ = windows.CloseHandle(h)
+		if ft|windows.FILE_TYPE_PIPE != 0 {
+			return true, nil
+		}
+		err = fmt.Errorf("%q is not a named pipe", name)
 	}
-	ft, err := windows.GetFileType(h)
-	_ = windows.CloseHandle(h)
-	return err == nil && ft|windows.FILE_TYPE_PIPE != 0
+	return false, err
 }

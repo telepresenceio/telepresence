@@ -95,7 +95,7 @@ func withDaemon(ctx context.Context, maybeStart bool, dnsIP string, fn func(cont
 
 				if err := client.WaitUntilSocketAppears("daemon", client.DaemonSocketName, 10*time.Second); err != nil {
 					logDir, _ := filelocation.AppUserLogDir(ctx)
-					return fmt.Errorf("daemon service did not start (see %q for more info)", filepath.Join(logDir, "daemon.log"))
+					return fmt.Errorf("daemon service did not start (see %q for more info): %w", filepath.Join(logDir, "daemon.log"), err)
 				}
 
 				maybeStart = false
