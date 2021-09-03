@@ -31,7 +31,7 @@ following Free and Open Source software:
     github.com/containerd/continuity                                    v0.0.0-20201208142359-180525291bb7                          Apache License 2.0
     github.com/cyphar/filepath-securejoin                               v0.2.2                                                      3-clause BSD license
     github.com/datawire/ambassador                                      v1.13.7-0.20210527054604-663dfb393e59                       Apache License 2.0
-    github.com/datawire/dlib                                            v1.2.4-0.20210629021142-e221f3b9c3b8                        Apache License 2.0
+    github.com/datawire/dlib                                            v1.2.4                                                      Apache License 2.0
     github.com/datawire/dtest                                           v0.0.0-20210803160344-b219a345f448                          Apache License 2.0
     github.com/davecgh/go-spew                                          v1.1.1                                                      ISC license
     github.com/deislabs/oras                                            v0.11.1                                                     MIT license
