@@ -44,6 +44,7 @@ linters-settings:
   forbidigo:
     forbid:
       - '^os\.(DirEntry|FileInfo|FileMode|PathError)$' # deprecated in Go 1.16, import them from 'io/fs' instead
+      - '\.Readdir$' # deprecated in Go 1.16, use ReadDir instead
     exclude_godoc_examples: false
 
   gocyclo:
