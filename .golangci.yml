@@ -41,6 +41,10 @@ linters-settings:
         - gotest.tools:    { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
         - gotest.tools/v2: { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
         - gotest.tools/v3: { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
+  forbidigo:
+    forbid:
+      - '^os\.(DirEntry|FileInfo|FileMode|PathError)$' # deprecated in Go 1.16, import them from 'io/fs' instead
+    exclude_godoc_examples: false
 
   gocyclo:
     min-complexity: 35
@@ -73,6 +77,7 @@ linters:
     - dogsled
     - errcheck
     - exportloopref
+    - forbidigo
     - gocognit
     - gocritic
     - gocyclo

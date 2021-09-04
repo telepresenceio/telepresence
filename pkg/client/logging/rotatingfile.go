@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -60,7 +61,7 @@ func (rotateDaily) RotateNow(rf *RotatingFile, _ int) bool {
 }
 
 type RotatingFile struct {
-	fileMode    os.FileMode
+	fileMode    fs.FileMode
 	dirName     string
 	fileName    string
 	timeFormat  string
@@ -110,7 +111,7 @@ func OpenRotatingFile(
 	timeFormat string,
 	localTime bool,
 	captureStd bool,
-	fileMode os.FileMode,
+	fileMode fs.FileMode,
 	strategy RotationStrategy,
 	maxFiles uint16,
 ) (*RotatingFile, error) {
