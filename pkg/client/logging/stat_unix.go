@@ -9,21 +9,23 @@ import (
 	"syscall"
 )
 
-type unixSysInfo syscall.Stat_t
-
-func GetSysInfo(_ string, info os.FileInfo) (SysInfo, error) {
-	return (*unixSysInfo)(info.Sys().(*syscall.Stat_t)), nil
+type fileInfo struct {
+	*syscall.Stat_t
 }
 
-func (u *unixSysInfo) SetOwnerAndGroup(name string) error {
+func GetSysInfo(_ string, info os.FileInfo) (SysInfo, error) {
+	return fileInfo{info.Sys().(*syscall.Stat_t)}, nil
+}
+
+func (u fileInfo) SetOwnerAndGroup(name string) error {
 	return os.Chown(name, int(u.Uid), int(u.Gid))
 }
 
-func (u *unixSysInfo) HaveSameOwnerAndGroup(other SysInfo) bool {
-	ou := other.(*unixSysInfo)
+func (u fileInfo) HaveSameOwnerAndGroup(other SysInfo) bool {
+	ou := other.(fileInfo)
 	return u.Uid == ou.Uid && u.Gid == ou.Gid
 }
 
-func (u *unixSysInfo) String() string {
+func (u fileInfo) String() string {
 	return fmt.Sprintf("CTIME %v, UID %d, GID %d", u.BirthTime(), u.Uid, u.Gid)
 }
