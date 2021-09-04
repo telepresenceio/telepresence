@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
@@ -9,10 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 func run() error {

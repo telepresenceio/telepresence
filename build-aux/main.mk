@@ -74,7 +74,7 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 # (which is definitely the case with circle), so GOARCH may be set for that,
 # but we need to ensure it's using the host's architecture so the go command runs successfully.
 pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
-	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
+	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run ./build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
 
 TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image

@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
@@ -60,7 +57,7 @@ func run() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		err := client.Retry(ctx, "kubeception", func(ctx context.Context) error {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 			kubeconfig, err := kubeceptionRequest(ctx, cli, "PUT", token, clusterName, map[string]string{"wait": "true", "timeoutSecs": "7200", "version": "1.19"})
 			if err != nil {
