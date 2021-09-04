@@ -143,9 +143,9 @@ type addrIfReq6 struct {
 	addr           unix.RawSockaddrInet6
 	dest           unix.RawSockaddrInet6
 	mask           unix.RawSockaddrInet6
-	flags          int32 //nolint:structcheck
-	expire         int64 //nolint:structcheck
-	preferred      int64 //nolint:structcheck
+	_              int32 // flags
+	_              int64 // expire
+	_              int64 // preferred
 	validLifeTime  uint32
 	prefixLifeTime uint32
 }

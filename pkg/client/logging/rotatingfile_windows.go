@@ -53,3 +53,12 @@ func openForAppend(path string, _ os.FileMode) (*os.File, error) {
 var IsTerminal = func(fd int) bool {
 	return false
 }
+
+func (rf *RotatingFile) afterOpen() {
+	if rf.captureStd {
+		// Dup2 isn't implemented on the current platform
+		os.Stdout = rf.file
+		os.Stderr = rf.file
+	}
+	go rf.removeOldFiles()
+}

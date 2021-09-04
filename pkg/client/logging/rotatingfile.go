@@ -207,25 +207,6 @@ func (rf *RotatingFile) Write(data []byte) (int, error) {
 	return l, nil
 }
 
-func (rf *RotatingFile) afterOpen() {
-	if rf.captureStd {
-		err := dupToStd(rf.file)
-		if err != nil {
-			// Dup2 failed (or isn't implemented on the current platform)
-			os.Stdout = rf.file
-			os.Stderr = rf.file
-		} else {
-			if os.Stdout.Fd() != 1 {
-				os.Stdout = rf.file
-			}
-			if os.Stderr.Fd() != 2 {
-				os.Stderr = rf.file
-			}
-		}
-	}
-	go rf.removeOldFiles()
-}
-
 func (rf *RotatingFile) fileTime(t time.Time) time.Time {
 	if rf.localTime {
 		t = t.Local()

@@ -1,5 +1,5 @@
 module local
 
-go 1.16
+go 1.17
 
-require github.com/golangci/golangci-lint v1.33.0
+require github.com/golangci/golangci-lint v1.42.0

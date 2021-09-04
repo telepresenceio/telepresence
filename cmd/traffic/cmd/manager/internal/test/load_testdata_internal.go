@@ -13,7 +13,7 @@ import (
 )
 
 func callerPackage(skip int) string {
-	pc, _, _, _ := runtime.Caller(skip) //nolint:dogsled
+	pc, _, _, _ := runtime.Caller(skip) //nolint:dogsled // we're only interested in the pc
 	name := runtime.FuncForPC(pc).Name()
 	// name is "foo.bar/baz/pkg.func1.func2"; we want
 	// "foo.bar/baz/pkg".  That is: We trim at the first dot after

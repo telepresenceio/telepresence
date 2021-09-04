@@ -166,7 +166,15 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		}
 		args.name = positional[0]
 		args.cmdline = positional[1:]
-		if args.localOnly {
+		if !args.localOnly {
+			// Actually intercepting something
+			if args.agentName == "" {
+				args.agentName = args.name
+				if args.namespace != "" {
+					args.name += "-" + args.namespace
+				}
+			}
+		} else {
 			// Not actually intercepting anything -- check that the flags make sense for that
 			if args.agentName != "" {
 				return errors.New("a local-only intercept cannot have a workload")
@@ -182,14 +190,6 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 			}
 			if cmd.Flag("preview-url").Changed && args.previewEnabled {
 				return errors.New("a local-only intercept cannot be previewed")
-			}
-		} else { //nolint:gocritic
-			// Actually intercepting something
-			if args.agentName == "" {
-				args.agentName = args.name
-				if args.namespace != "" {
-					args.name += "-" + args.namespace
-				}
 			}
 		}
 		args.mountSet = cmd.Flag("mount").Changed

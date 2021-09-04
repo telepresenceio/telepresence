@@ -363,7 +363,7 @@ func (es *ExtensionsState) MechanismArgs() ([]string, error) {
 	}
 	mechdata := es.exts[es.mech2ext[mechname]].Mechanisms[mechname]
 
-	var args []string //nolint:prealloc // We have no idea how many entries .AsArgs will return.
+	var args []string
 	for flagname := range mechdata.Flags {
 		flag := es.flags.Lookup(mechname + "-" + flagname)
 		args = append(args, flag.Value.(Value).AsArgs(flagname)...)

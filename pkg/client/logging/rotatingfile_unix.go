@@ -21,3 +21,22 @@ func openForAppend(logfilePath string, perm os.FileMode) (*os.File, error) {
 
 // IsTerminal returns whether the given file descriptor is a terminal
 var IsTerminal = term.IsTerminal
+
+func (rf *RotatingFile) afterOpen() {
+	if rf.captureStd {
+		err := dupToStd(rf.file)
+		if err != nil {
+			// Dup2 failed
+			os.Stdout = rf.file
+			os.Stderr = rf.file
+		} else {
+			if os.Stdout.Fd() != 1 {
+				os.Stdout = rf.file
+			}
+			if os.Stderr.Fd() != 2 {
+				os.Stderr = rf.file
+			}
+		}
+	}
+	go rf.removeOldFiles()
+}

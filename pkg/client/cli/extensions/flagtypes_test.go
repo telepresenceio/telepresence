@@ -16,67 +16,68 @@ import (
 	"github.com/datawire/dlib/derror"
 )
 
-func TestFlagTypes(t *testing.T) { //nolint:gocognit
+func checkFn(t *testing.T, flagType TypeEnum, a interface{}) (ret bool) {
+	defer func() {
+		if err := derror.PanicToError(recover()); err != nil {
+			t.Logf("%+v", err)
+			ret = false
+		}
+		t.Logf(" => %v", ret)
+	}()
+
+	_, argTyp := flagType.sanityCheck()
+	bPtrVal := reflect.New(argTyp)
+
+	// Check that TypeEnum.NewFlagValue works.
+	aVal, err := flagType.NewFlagValue(a)
+	if err != nil {
+		t.Logf("flagType.NewFlagValue(a) returned err: %v", err)
+		return false
+	}
+
+	// Manually instantiate a Value, such that we can inspect its value via bPtrVal.
+	bVal := reflect.ValueOf(flagTypes[flagType]).Call([]reflect.Value{
+		reflect.ValueOf(pflag.NewFlagSet("", 0)),
+		bPtrVal,
+	})[0].Interface().(Value)
+	// Make sure extensions can get by using native pflag.
+	if pset, ok := bVal.(interface{ UsePflagSet(bool) }); ok {
+		pset.UsePflagSet(true)
+	}
+
+	// Round-trip from a to b.
+	fs := pflag.NewFlagSet("", pflag.ContinueOnError)
+	fs.Var(bVal, "tst", "")
+	args := aVal.AsArgs("tst")
+	t.Logf("args: %#v", args)
+	if err := fs.Parse(args); err != nil {
+		t.Logf("fs.Parse returned err: %v", err)
+		return false
+	}
+
+	// Check that round-tripping set the value correctly.
+	b := bPtrVal.Elem().Interface()
+	if reflect.TypeOf(a) != reflect.TypeOf(b) {
+		aPtr, err := convertNew(a, argTyp)
+		if err != nil {
+			t.Logf("convertNew returned err: %v", err)
+			return false
+		}
+		a = aPtr.Elem().Interface()
+	}
+	if diff := cmp.Diff(a, b, cmpopts.EquateEmpty()); diff != "" {
+		t.Logf("-expected, +actual :\n: %s", diff)
+		return false
+	}
+
+	return true
+}
+
+func TestFlagTypes(t *testing.T) {
 	// This is a combo table-driven and fuzzer-drivent test.  For each FlagType, we'll call
 	// checkFn with a bunch of different 'a' arguments.  Mostly these will be random fuzzing
 	// values from "testing/quick", but we'll also throw in our own table of worthwhile
 	// testcases.
-	checkFn := func(t *testing.T, flagType TypeEnum, a interface{}) (ret bool) {
-		defer func() {
-			if err := derror.PanicToError(recover()); err != nil {
-				t.Logf("%+v", err)
-				ret = false
-			}
-			t.Logf(" => %v", ret)
-		}()
-
-		_, argTyp := flagType.sanityCheck()
-		bPtrVal := reflect.New(argTyp)
-
-		// Check that TypeEnum.NewFlagValue works.
-		aVal, err := flagType.NewFlagValue(a)
-		if err != nil {
-			t.Logf("flagType.NewFlagValue(a) returned err: %v", err)
-			return false
-		}
-
-		// Manually instantiate a Value, such that we can inspect its value via bPtrVal.
-		bVal := reflect.ValueOf(flagTypes[flagType]).Call([]reflect.Value{
-			reflect.ValueOf(pflag.NewFlagSet("", 0)),
-			bPtrVal,
-		})[0].Interface().(Value)
-		// Make sure extensions can get by using native pflag.
-		if pset, ok := bVal.(interface{ UsePflagSet(bool) }); ok {
-			pset.UsePflagSet(true)
-		}
-
-		// Round-trip from a to b.
-		fs := pflag.NewFlagSet("", pflag.ContinueOnError)
-		fs.Var(bVal, "tst", "")
-		args := aVal.AsArgs("tst")
-		t.Logf("args: %#v", args)
-		if err := fs.Parse(args); err != nil {
-			t.Logf("fs.Parse returned err: %v", err)
-			return false
-		}
-
-		// Check that round-tripping set the value correctly.
-		b := bPtrVal.Elem().Interface()
-		if reflect.TypeOf(a) != reflect.TypeOf(b) {
-			aPtr, err := convertNew(a, argTyp)
-			if err != nil {
-				t.Logf("convertNew returned err: %v", err)
-				return false
-			}
-			a = aPtr.Elem().Interface()
-		}
-		if diff := cmp.Diff(a, b, cmpopts.EquateEmpty()); diff != "" {
-			t.Logf("-expected, +actual :\n: %s", diff)
-			return false
-		}
-
-		return true
-	}
 
 	// Our table of worthwhile testcases, plus any special instructions for the fuzzer.  In
 	// addition to the testcases listed here, for every flagtype we also always check
