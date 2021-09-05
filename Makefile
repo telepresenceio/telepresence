@@ -14,7 +14,7 @@
 
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
 
-_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build-aux/genversion.go)
+_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build-aux/genversion)
 TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
   $(info [make] TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\

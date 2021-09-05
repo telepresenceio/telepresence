@@ -9,14 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/spf13/cobra"
-
 	"github.com/datawire/dlib/dtime"
-
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"

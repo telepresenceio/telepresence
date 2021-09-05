@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/ambassador/pkg/kates"
@@ -113,7 +112,7 @@ func NewInfo(ctx context.Context) Info {
 			Namespace: env.ManagerNamespace,
 			Name:      "t2-tst-dummy",
 		},
-		Spec: v1.ServiceSpec{
+		Spec: corev1.ServiceSpec{
 			Ports:     []kates.ServicePort{{Port: 443}},
 			ClusterIP: "1.1.1.1",
 		},

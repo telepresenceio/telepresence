@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -608,7 +607,7 @@ func LoadConfig(c context.Context) (*Config, error) {
 			return nil
 		}
 		fileName := filepath.Join(dir, configFile)
-		bs, err := ioutil.ReadFile(fileName)
+		bs, err := os.ReadFile(fileName)
 		if err != nil {
 			if os.IsNotExist(err) {
 				err = nil

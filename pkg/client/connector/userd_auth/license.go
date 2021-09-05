@@ -3,7 +3,7 @@ package userd_auth
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 
@@ -48,7 +48,7 @@ func getLicenseJWT(ctx context.Context, accessToken, licenseID string) (string, 
 	}
 
 	// Read the body.
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		// No need to wrap this error with the status code, the magical resp.Body reader
 		// includes it for us.

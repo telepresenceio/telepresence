@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -62,7 +61,7 @@ func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, lice
 			return err
 		}
 	} else {
-		contents, err := ioutil.ReadFile(licenseFile)
+		contents, err := os.ReadFile(licenseFile)
 		if err != nil {
 			return err
 		}

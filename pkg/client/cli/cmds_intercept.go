@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"regexp"
@@ -166,7 +165,8 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		}
 		args.name = positional[0]
 		args.cmdline = positional[1:]
-		if args.localOnly {
+		switch args.localOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
+		case true:
 			// Not actually intercepting anything -- check that the flags make sense for that
 			if args.agentName != "" {
 				return errors.New("a local-only intercept cannot have a workload")
@@ -183,7 +183,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 			if cmd.Flag("preview-url").Changed && args.previewEnabled {
 				return errors.New("a local-only intercept cannot be previewed")
 			}
-		} else { //nolint:gocritic
+		case false:
 			// Actually intercepting something
 			if args.agentName == "" {
 				args.agentName = args.name
@@ -642,7 +642,7 @@ func validateDockerArgs(args []string) error {
 func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
 	envFile := is.args.envFile
 	if envFile == "" {
-		file, err := ioutil.TempFile("", "tel-*.env")
+		file, err := os.CreateTemp("", "tel-*.env")
 		if err != nil {
 			return fmt.Errorf("failed to create temporary environment file. %w", err)
 		}
@@ -730,7 +730,7 @@ func (is *interceptState) writeEnvJSON() error {
 		// Creating JSON from a map[string]string should never fail
 		panic(err)
 	}
-	return ioutil.WriteFile(is.args.envJSON, data, 0644)
+	return os.WriteFile(is.args.envJSON, data, 0644)
 }
 
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)

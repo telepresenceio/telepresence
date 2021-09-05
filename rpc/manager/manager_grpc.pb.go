@@ -4,14 +4,15 @@ package manager
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // ManagerClient is the client API for Manager service.
@@ -19,28 +20,28 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ManagerClient interface {
 	// Version returns the version information of the Manager.
-	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
+	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
-	GetLicense(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*License, error)
+	GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error)
 	// CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
 	// Ambassador Cloud
-	CanConnectAmbassadorCloud(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error)
+	CanConnectAmbassadorCloud(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error)
 	// GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
 	// by the agents.
-	GetCloudConfig(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error)
+	GetCloudConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	// Remain indicates that the session is still valid, and potentially
 	// updates the auth token for the session.
-	Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Depart terminates a session.
-	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the traffic-manager and all
 	// traffic-agents for a duration that is determined b the request.
-	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -63,12 +64,12 @@ type ManagerClient interface {
 	// dispositions).
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
-	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error)
+	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateIntercept(ctx context.Context, in *UpdateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
-	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ClientTunnel receives messages from the client and dispatches them to tracked
 	// net.Conn instances in the traffic-manager. Responses from tracked instances
 	// are sent back on the returned message stream
@@ -81,11 +82,11 @@ type ManagerClient interface {
 	// active, the lookup will be performed from the intercepted pods.
 	LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error)
 	// AgentLookupHostResponse lets an agent respond for lookup requests
-	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*empty.Empty, error)
+	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
 	WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error)
 	// WatchLogLevel lets an agent receive log-level updates
-	WatchLogLevel(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error)
+	WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error)
 }
 
 type managerClient struct {
@@ -96,7 +97,7 @@ func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
 	return &managerClient{cc}
 }
 
-func (c *managerClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
+func (c *managerClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
 	out := new(VersionInfo2)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Version", in, out, opts...)
 	if err != nil {
@@ -105,7 +106,7 @@ func (c *managerClient) Version(ctx context.Context, in *empty.Empty, opts ...gr
 	return out, nil
 }
 
-func (c *managerClient) GetLicense(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*License, error) {
+func (c *managerClient) GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error) {
 	out := new(License)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/GetLicense", in, out, opts...)
 	if err != nil {
@@ -114,7 +115,7 @@ func (c *managerClient) GetLicense(ctx context.Context, in *empty.Empty, opts ..
 	return out, nil
 }
 
-func (c *managerClient) CanConnectAmbassadorCloud(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error) {
+func (c *managerClient) CanConnectAmbassadorCloud(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error) {
 	out := new(AmbassadorCloudConnection)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/CanConnectAmbassadorCloud", in, out, opts...)
 	if err != nil {
@@ -123,7 +124,7 @@ func (c *managerClient) CanConnectAmbassadorCloud(ctx context.Context, in *empty
 	return out, nil
 }
 
-func (c *managerClient) GetCloudConfig(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error) {
+func (c *managerClient) GetCloudConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error) {
 	out := new(AmbassadorCloudConfig)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/GetCloudConfig", in, out, opts...)
 	if err != nil {
@@ -150,8 +151,8 @@ func (c *managerClient) ArriveAsAgent(ctx context.Context, in *AgentInfo, opts .
 	return out, nil
 }
 
-func (c *managerClient) Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *managerClient) Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Remain", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -159,8 +160,8 @@ func (c *managerClient) Remain(ctx context.Context, in *RemainRequest, opts ...g
 	return out, nil
 }
 
-func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Depart", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -168,8 +169,8 @@ func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grp
 	return out, nil
 }
 
-func (c *managerClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *managerClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/SetLogLevel", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -178,7 +179,7 @@ func (c *managerClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, op
 }
 
 func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[0], "/telepresence.manager.Manager/WatchAgents", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[0], "/telepresence.manager.Manager/WatchAgents", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +211,7 @@ func (x *managerWatchAgentsClient) Recv() (*AgentInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[1], "/telepresence.manager.Manager/WatchIntercepts", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], "/telepresence.manager.Manager/WatchIntercepts", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +243,7 @@ func (x *managerWatchInterceptsClient) Recv() (*InterceptInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[2], "/telepresence.manager.Manager/WatchClusterInfo", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], "/telepresence.manager.Manager/WatchClusterInfo", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +283,8 @@ func (c *managerClient) CreateIntercept(ctx context.Context, in *CreateIntercept
 	return out, nil
 }
 
-func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -300,8 +301,8 @@ func (c *managerClient) UpdateIntercept(ctx context.Context, in *UpdateIntercept
 	return out, nil
 }
 
-func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/ReviewIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -310,7 +311,7 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 }
 
 func (c *managerClient) ClientTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ClientTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[3], "/telepresence.manager.Manager/ClientTunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], "/telepresence.manager.Manager/ClientTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +342,7 @@ func (x *managerClientTunnelClient) Recv() (*ConnMessage, error) {
 }
 
 func (c *managerClient) AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[4], "/telepresence.manager.Manager/AgentTunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], "/telepresence.manager.Manager/AgentTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -380,8 +381,8 @@ func (c *managerClient) LookupHost(ctx context.Context, in *LookupHostRequest, o
 	return out, nil
 }
 
-func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/AgentLookupHostResponse", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -390,7 +391,7 @@ func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupH
 }
 
 func (c *managerClient) WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[5], "/telepresence.manager.Manager/WatchLookupHost", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], "/telepresence.manager.Manager/WatchLookupHost", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -421,8 +422,8 @@ func (x *managerWatchLookupHostClient) Recv() (*LookupHostRequest, error) {
 	return m, nil
 }
 
-func (c *managerClient) WatchLogLevel(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[6], "/telepresence.manager.Manager/WatchLogLevel", opts...)
+func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], "/telepresence.manager.Manager/WatchLogLevel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -458,28 +459,28 @@ func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
 // for forward compatibility
 type ManagerServer interface {
 	// Version returns the version information of the Manager.
-	Version(context.Context, *empty.Empty) (*VersionInfo2, error)
+	Version(context.Context, *emptypb.Empty) (*VersionInfo2, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
-	GetLicense(context.Context, *empty.Empty) (*License, error)
+	GetLicense(context.Context, *emptypb.Empty) (*License, error)
 	// CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
 	// Ambassador Cloud
-	CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error)
+	CanConnectAmbassadorCloud(context.Context, *emptypb.Empty) (*AmbassadorCloudConnection, error)
 	// GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
 	// by the agents.
-	GetCloudConfig(context.Context, *empty.Empty) (*AmbassadorCloudConfig, error)
+	GetCloudConfig(context.Context, *emptypb.Empty) (*AmbassadorCloudConfig, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error)
 	// Remain indicates that the session is still valid, and potentially
 	// updates the auth token for the session.
-	Remain(context.Context, *RemainRequest) (*empty.Empty, error)
+	Remain(context.Context, *RemainRequest) (*emptypb.Empty, error)
 	// Depart terminates a session.
-	Depart(context.Context, *SessionInfo) (*empty.Empty, error)
+	Depart(context.Context, *SessionInfo) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the traffic-manager and all
 	// traffic-agents for a duration that is determined b the request.
-	SetLogLevel(context.Context, *LogLevelRequest) (*empty.Empty, error)
+	SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -502,12 +503,12 @@ type ManagerServer interface {
 	// dispositions).
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
-	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error)
+	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error)
 	UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
-	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
+	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error)
 	// ClientTunnel receives messages from the client and dispatches them to tracked
 	// net.Conn instances in the traffic-manager. Responses from tracked instances
 	// are sent back on the returned message stream
@@ -520,11 +521,11 @@ type ManagerServer interface {
 	// active, the lookup will be performed from the intercepted pods.
 	LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error)
 	// AgentLookupHostResponse lets an agent respond for lookup requests
-	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*empty.Empty, error)
+	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
 	WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error
 	// WatchLogLevel lets an agent receive log-level updates
-	WatchLogLevel(*empty.Empty, Manager_WatchLogLevelServer) error
+	WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -532,16 +533,16 @@ type ManagerServer interface {
 type UnimplementedManagerServer struct {
 }
 
-func (UnimplementedManagerServer) Version(context.Context, *empty.Empty) (*VersionInfo2, error) {
+func (UnimplementedManagerServer) Version(context.Context, *emptypb.Empty) (*VersionInfo2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
-func (UnimplementedManagerServer) GetLicense(context.Context, *empty.Empty) (*License, error) {
+func (UnimplementedManagerServer) GetLicense(context.Context, *emptypb.Empty) (*License, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
 }
-func (UnimplementedManagerServer) CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*AmbassadorCloudConnection, error) {
+func (UnimplementedManagerServer) CanConnectAmbassadorCloud(context.Context, *emptypb.Empty) (*AmbassadorCloudConnection, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CanConnectAmbassadorCloud not implemented")
 }
-func (UnimplementedManagerServer) GetCloudConfig(context.Context, *empty.Empty) (*AmbassadorCloudConfig, error) {
+func (UnimplementedManagerServer) GetCloudConfig(context.Context, *emptypb.Empty) (*AmbassadorCloudConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudConfig not implemented")
 }
 func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error) {
@@ -550,13 +551,13 @@ func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (
 func (UnimplementedManagerServer) ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsAgent not implemented")
 }
-func (UnimplementedManagerServer) Remain(context.Context, *RemainRequest) (*empty.Empty, error) {
+func (UnimplementedManagerServer) Remain(context.Context, *RemainRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Remain not implemented")
 }
-func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*empty.Empty, error) {
+func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Depart not implemented")
 }
-func (UnimplementedManagerServer) SetLogLevel(context.Context, *LogLevelRequest) (*empty.Empty, error) {
+func (UnimplementedManagerServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error {
@@ -571,13 +572,13 @@ func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, Manager_WatchCl
 func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
 }
-func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error) {
+func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
-func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
+func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
 func (UnimplementedManagerServer) ClientTunnel(Manager_ClientTunnelServer) error {
@@ -589,13 +590,13 @@ func (UnimplementedManagerServer) AgentTunnel(Manager_AgentTunnelServer) error {
 func (UnimplementedManagerServer) LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
 }
-func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*empty.Empty, error) {
+func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupHostResponse not implemented")
 }
 func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLookupHost not implemented")
 }
-func (UnimplementedManagerServer) WatchLogLevel(*empty.Empty, Manager_WatchLogLevelServer) error {
+func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLogLevel not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
@@ -608,11 +609,11 @@ type UnsafeManagerServer interface {
 }
 
 func RegisterManagerServer(s grpc.ServiceRegistrar, srv ManagerServer) {
-	s.RegisterService(&_Manager_serviceDesc, srv)
+	s.RegisterService(&Manager_ServiceDesc, srv)
 }
 
 func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -624,13 +625,13 @@ func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(int
 		FullMethod: "/telepresence.manager.Manager/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).Version(ctx, req.(*empty.Empty))
+		return srv.(ManagerServer).Version(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Manager_GetLicense_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -642,13 +643,13 @@ func _Manager_GetLicense_Handler(srv interface{}, ctx context.Context, dec func(
 		FullMethod: "/telepresence.manager.Manager/GetLicense",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).GetLicense(ctx, req.(*empty.Empty))
+		return srv.(ManagerServer).GetLicense(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Manager_CanConnectAmbassadorCloud_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -660,13 +661,13 @@ func _Manager_CanConnectAmbassadorCloud_Handler(srv interface{}, ctx context.Con
 		FullMethod: "/telepresence.manager.Manager/CanConnectAmbassadorCloud",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, req.(*empty.Empty))
+		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Manager_GetCloudConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -678,7 +679,7 @@ func _Manager_GetCloudConfig_Handler(srv interface{}, ctx context.Context, dec f
 		FullMethod: "/telepresence.manager.Manager/GetCloudConfig",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).GetCloudConfig(ctx, req.(*empty.Empty))
+		return srv.(ManagerServer).GetCloudConfig(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1018,7 +1019,7 @@ func (x *managerWatchLookupHostServer) Send(m *LookupHostRequest) error {
 }
 
 func _Manager_WatchLogLevel_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(empty.Empty)
+	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -1038,7 +1039,10 @@ func (x *managerWatchLogLevelServer) Send(m *LogLevelRequest) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-var _Manager_serviceDesc = grpc.ServiceDesc{
+// Manager_ServiceDesc is the grpc.ServiceDesc for Manager service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Manager_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
 	Methods: []grpc.MethodDesc{

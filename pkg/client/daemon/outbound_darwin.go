@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -107,7 +106,7 @@ func (r *resolveFile) write(fileName string) error {
 		}
 		buf.WriteByte('\n')
 	}
-	return ioutil.WriteFile(fileName, buf.Bytes(), 0644)
+	return os.WriteFile(fileName, buf.Bytes(), 0644)
 }
 
 func (r *resolveFile) setSearchPaths(paths ...string) {

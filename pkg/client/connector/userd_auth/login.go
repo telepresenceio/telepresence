@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -516,7 +515,7 @@ func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[st
 		}
 		return fmt.Errorf("unexpected status %v from user info endpoint", resp.StatusCode)
 	}
-	content, err := ioutil.ReadAll(resp.Body)
+	content, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

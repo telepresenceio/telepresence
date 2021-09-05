@@ -3,7 +3,7 @@ package scout_test
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -286,7 +286,7 @@ func TestInstallID(t *testing.T) {
 				if err := os.MkdirAll(filepath.Dir(filepath.Join(homedir, filename)), 0755); err != nil {
 					t.Fatal(err)
 				}
-				if err := ioutil.WriteFile(filepath.Join(homedir, filename), []byte(filebody), 0644); err != nil {
+				if err := os.WriteFile(filepath.Join(homedir, filename), []byte(filebody), 0644); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -309,7 +309,7 @@ func TestInstallID(t *testing.T) {
 			}
 			os.Setenv("id", actualID)
 			for filename, expectedFilebody := range tcData.ExpectedHomeDir {
-				fileBytes, err := ioutil.ReadFile(filepath.Join(homedir, filename))
+				fileBytes, err := os.ReadFile(filepath.Join(homedir, filename))
 				assert.NoError(t, err)
 				assert.Equal(t, os.ExpandEnv(expectedFilebody), string(fileBytes), filename)
 			}
@@ -423,7 +423,7 @@ func TestReport(t *testing.T) {
 			var capturedRequestBodies []map[string]interface{}
 			testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				var body map[string]interface{}
-				bodyBytes, err := ioutil.ReadAll(request.Body)
+				bodyBytes, err := io.ReadAll(request.Body)
 				if err != nil {
 					t.Fatalf("Could not read request body: %v", err)
 				}

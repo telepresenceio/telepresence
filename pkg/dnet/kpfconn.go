@@ -3,7 +3,7 @@ package dnet
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -306,7 +306,7 @@ type kpfConn struct {
 }
 
 func (c *kpfConn) oobWorker() {
-	msg, err := ioutil.ReadAll(c.errorStream)
+	msg, err := io.ReadAll(c.errorStream)
 	switch {
 	case err != nil:
 		c.oobErr = fmt.Errorf("reading error stream: %w", err)

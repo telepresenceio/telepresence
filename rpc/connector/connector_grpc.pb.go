@@ -4,16 +4,17 @@ package connector
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // ConnectorClient is the client API for Connector service.
@@ -21,7 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ConnectorClient interface {
 	// Returns version information from the Connector
-	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
+	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
 	// the daemon process) to the cluster's network.  A result code of
 	// UNSPECIFIED indicates that the connection was successfully
@@ -46,17 +47,17 @@ type ConnectorClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Returns a stream of messages to display to the user.  Does NOT
 	// require having called anything else first.
-	UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
+	UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
-	Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
+	Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
 	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
 	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
-	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
-	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
+	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type connectorClient struct {
@@ -67,7 +68,7 @@ func NewConnectorClient(cc grpc.ClientConnInterface) ConnectorClient {
 	return &connectorClient{cc}
 }
 
-func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+func (c *connectorClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
 	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Version", in, out, opts...)
 	if err != nil {
@@ -130,8 +131,8 @@ func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grp
 	return out, nil
 }
 
-func (c *connectorClient) UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Connector_serviceDesc.Streams[0], "/telepresence.connector.Connector/UserNotifications", opts...)
+func (c *connectorClient) UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[0], "/telepresence.connector.Connector/UserNotifications", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +172,8 @@ func (c *connectorClient) Login(ctx context.Context, in *LoginRequest, opts ...g
 	return out, nil
 }
 
-func (c *connectorClient) Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *connectorClient) Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Logout", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -207,8 +208,8 @@ func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseReques
 	return out, nil
 }
 
-func (c *connectorClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *connectorClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/SetLogLevel", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -216,8 +217,8 @@ func (c *connectorClient) SetLogLevel(ctx context.Context, in *manager.LogLevelR
 	return out, nil
 }
 
-func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
+func (c *connectorClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Quit", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -230,7 +231,7 @@ func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grp
 // for forward compatibility
 type ConnectorServer interface {
 	// Returns version information from the Connector
-	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
+	Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
 	// the daemon process) to the cluster's network.  A result code of
 	// UNSPECIFIED indicates that the connection was successfully
@@ -255,17 +256,17 @@ type ConnectorServer interface {
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Returns a stream of messages to display to the user.  Does NOT
 	// require having called anything else first.
-	UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error
+	UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error
 	Login(context.Context, *LoginRequest) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
-	Logout(context.Context, *empty.Empty) (*empty.Empty, error)
+	Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
 	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
 	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
-	SetLogLevel(context.Context, *manager.LogLevelRequest) (*empty.Empty, error)
+	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
-	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
+	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -273,7 +274,7 @@ type ConnectorServer interface {
 type UnimplementedConnectorServer struct {
 }
 
-func (UnimplementedConnectorServer) Version(context.Context, *empty.Empty) (*common.VersionInfo, error) {
+func (UnimplementedConnectorServer) Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
@@ -294,13 +295,13 @@ func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
 }
-func (UnimplementedConnectorServer) UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error {
+func (UnimplementedConnectorServer) UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error {
 	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
 }
 func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
 }
-func (UnimplementedConnectorServer) Logout(context.Context, *empty.Empty) (*empty.Empty, error) {
+func (UnimplementedConnectorServer) Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
 }
 func (UnimplementedConnectorServer) GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error) {
@@ -312,10 +313,10 @@ func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest)
 func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
-func (UnimplementedConnectorServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*empty.Empty, error) {
+func (UnimplementedConnectorServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
-func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
+func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
@@ -328,11 +329,11 @@ type UnsafeConnectorServer interface {
 }
 
 func RegisterConnectorServer(s grpc.ServiceRegistrar, srv ConnectorServer) {
-	s.RegisterService(&_Connector_serviceDesc, srv)
+	s.RegisterService(&Connector_ServiceDesc, srv)
 }
 
 func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -344,7 +345,7 @@ func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: "/telepresence.connector.Connector/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Version(ctx, req.(*empty.Empty))
+		return srv.(ConnectorServer).Version(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -458,7 +459,7 @@ func _Connector_List_Handler(srv interface{}, ctx context.Context, dec func(inte
 }
 
 func _Connector_UserNotifications_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(empty.Empty)
+	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -497,7 +498,7 @@ func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(int
 }
 
 func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -509,7 +510,7 @@ func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/telepresence.connector.Connector/Logout",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Logout(ctx, req.(*empty.Empty))
+		return srv.(ConnectorServer).Logout(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -587,7 +588,7 @@ func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec fu
 }
 
 func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -599,12 +600,15 @@ func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: "/telepresence.connector.Connector/Quit",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Quit(ctx, req.(*empty.Empty))
+		return srv.(ConnectorServer).Quit(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Connector_serviceDesc = grpc.ServiceDesc{
+// Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Connector_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.connector.Connector",
 	HandlerType: (*ConnectorServer)(nil),
 	Methods: []grpc.MethodDesc{

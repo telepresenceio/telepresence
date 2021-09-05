@@ -4,14 +4,15 @@ package systema
 
 import (
 	context "context"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // SystemACliClient is the client API for SystemACli service.
@@ -24,7 +25,7 @@ type SystemACliClient interface {
 	// that we want to get to users who aren't currently logged into Ambassador
 	// Cloud. Telepresence should cache these messages, since they won't change
 	// frequently.
-	GetUnauthenticatedCommandMessages(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CommandMessageResponse, error)
+	GetUnauthenticatedCommandMessages(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandMessageResponse, error)
 }
 
 type systemACliClient struct {
@@ -35,7 +36,7 @@ func NewSystemACliClient(cc grpc.ClientConnInterface) SystemACliClient {
 	return &systemACliClient{cc}
 }
 
-func (c *systemACliClient) GetUnauthenticatedCommandMessages(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*CommandMessageResponse, error) {
+func (c *systemACliClient) GetUnauthenticatedCommandMessages(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandMessageResponse, error) {
 	out := new(CommandMessageResponse)
 	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACli/GetUnauthenticatedCommandMessages", in, out, opts...)
 	if err != nil {
@@ -54,7 +55,7 @@ type SystemACliServer interface {
 	// that we want to get to users who aren't currently logged into Ambassador
 	// Cloud. Telepresence should cache these messages, since they won't change
 	// frequently.
-	GetUnauthenticatedCommandMessages(context.Context, *empty.Empty) (*CommandMessageResponse, error)
+	GetUnauthenticatedCommandMessages(context.Context, *emptypb.Empty) (*CommandMessageResponse, error)
 	mustEmbedUnimplementedSystemACliServer()
 }
 
@@ -62,7 +63,7 @@ type SystemACliServer interface {
 type UnimplementedSystemACliServer struct {
 }
 
-func (UnimplementedSystemACliServer) GetUnauthenticatedCommandMessages(context.Context, *empty.Empty) (*CommandMessageResponse, error) {
+func (UnimplementedSystemACliServer) GetUnauthenticatedCommandMessages(context.Context, *emptypb.Empty) (*CommandMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUnauthenticatedCommandMessages not implemented")
 }
 func (UnimplementedSystemACliServer) mustEmbedUnimplementedSystemACliServer() {}
@@ -75,11 +76,11 @@ type UnsafeSystemACliServer interface {
 }
 
 func RegisterSystemACliServer(s grpc.ServiceRegistrar, srv SystemACliServer) {
-	s.RegisterService(&_SystemACli_serviceDesc, srv)
+	s.RegisterService(&SystemACli_ServiceDesc, srv)
 }
 
 func _SystemACli_GetUnauthenticatedCommandMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -91,12 +92,15 @@ func _SystemACli_GetUnauthenticatedCommandMessages_Handler(srv interface{}, ctx 
 		FullMethod: "/telepresence.systema.SystemACli/GetUnauthenticatedCommandMessages",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SystemACliServer).GetUnauthenticatedCommandMessages(ctx, req.(*empty.Empty))
+		return srv.(SystemACliServer).GetUnauthenticatedCommandMessages(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-var _SystemACli_serviceDesc = grpc.ServiceDesc{
+// SystemACli_ServiceDesc is the grpc.ServiceDesc for SystemACli service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SystemACli_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.systema.SystemACli",
 	HandlerType: (*SystemACliServer)(nil),
 	Methods: []grpc.MethodDesc{

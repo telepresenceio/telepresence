@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	//nolint:depguard // This short script has no logging and no Contexts.
+	"os/exec"
 
 	"github.com/blang/semver"
 )
@@ -49,12 +48,14 @@ func Main() error {
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Printf("v%d.%d.%d-%s-%s\n", gitDescVer.Major, gitDescVer.Minor, gitDescVer.Patch, os.Args[1], shortHash)
-	} else {
-		_, err = fmt.Printf("v%s-%d\n", gitDescVer, time.Now().Unix())
-		if err != nil {
+		if _, err := fmt.Printf("v%d.%d.%d-%s-%s\n", gitDescVer.Major, gitDescVer.Minor, gitDescVer.Patch, os.Args[1], shortHash); err != nil {
 			return err
 		}
+		return nil
+	}
+
+	if _, err := fmt.Printf("v%s-%d\n", gitDescVer, time.Now().Unix()); err != nil {
+		return err
 	}
 
 	return nil

@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
-
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot

@@ -37,7 +37,7 @@ clobber-tools:
 # cannot be trusted since this must be the exact same version as used when
 # running CI. If it isn't, the generate-check will fail.
 tools/protoc = $(TOOLSBINDIR)/protoc
-PROTOC_VERSION=3.13.0
+PROTOC_VERSION=3.17.3
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
 $(TOOLSDIR)/$(PROTOC_ZIP):
 	mkdir -p $(@D)
@@ -49,7 +49,7 @@ $(TOOLSDIR)/$(PROTOC_ZIP):
 # ===============
 #
 tools/protolint = $(TOOLSBINDIR)/protolint
-PROTOLINT_VERSION=0.26.0
+PROTOLINT_VERSION=0.32.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
 $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)

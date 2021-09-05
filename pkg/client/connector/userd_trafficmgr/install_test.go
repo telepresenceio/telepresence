@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -156,7 +155,7 @@ func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	require := is.Require()
 	ctx := is.initContext()
 
-	f, err := ioutil.ReadFile("testdata/legacyManifests/manifests.yml")
+	f, err := os.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
 	manifest := string(f)
 	manifest = strings.ReplaceAll(manifest, "NAMESPACE", is.managerNamespace)
@@ -422,13 +421,13 @@ func TestAddAgentToWorkload(t *testing.T) {
 	}
 	testcases := map[string]testcase{}
 
-	dirinfos, err := ioutil.ReadDir("testdata/addAgentToWorkload")
+	dirinfos, err := os.ReadDir("testdata/addAgentToWorkload")
 	if err != nil {
 		t.Fatal(err)
 	}
 	i := 0
 	for _, di := range dirinfos {
-		fileinfos, err := ioutil.ReadDir(filepath.Join("testdata/addAgentToWorkload", di.Name()))
+		fileinfos, err := os.ReadDir(filepath.Join("testdata/addAgentToWorkload", di.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -545,7 +544,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 						[]byte(strings.TrimPrefix(version.Version, "v")),
 						[]byte("{{.Version}}"))
 
-					err = ioutil.WriteFile(
+					err = os.WriteFile(
 						filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
 						goldBytes,
 						0644)

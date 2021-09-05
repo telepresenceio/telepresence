@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 
@@ -51,7 +51,7 @@ func getAPIKey(ctx context.Context, creds map[string]string, desc string) (strin
 
 	// Read the JSON body.  We do this _before_ checking the resp.StatusCode so that we can get
 	// the error message out of the body.
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		// No need to wrap this error with the status code, the magical resp.Body reader
 		// includes it for us.

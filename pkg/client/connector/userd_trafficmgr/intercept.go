@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
-
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dgroup"
@@ -21,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"

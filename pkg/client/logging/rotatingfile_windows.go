@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"io/fs"
 	"os"
 
 	"golang.org/x/sys/windows"
@@ -9,7 +10,7 @@ import (
 // createFile creates a new file or truncates an existing file. The
 // file is opened in a way that makes it possible to rename it without
 // first closing it.
-func createFile(path string, _ os.FileMode) (*os.File, error) {
+func createFile(path string, _ fs.FileMode) (*os.File, error) {
 	uPath, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err
@@ -30,7 +31,7 @@ func createFile(path string, _ os.FileMode) (*os.File, error) {
 
 // openForAppend opens a file for append or creates it if it doesn't exist. The
 // file is opened in a way that makes it possible to rename it without first closing it.
-func openForAppend(path string, _ os.FileMode) (*os.File, error) {
+func openForAppend(path string, _ fs.FileMode) (*os.File, error) {
 	uPath, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err

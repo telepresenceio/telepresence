@@ -1,14 +1,12 @@
 package client
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -50,7 +48,7 @@ images:
 	user := filepath.Join(tmp, "user")
 	for i, dir := range []string{sys1, sys2, user} {
 		require.NoError(t, os.MkdirAll(dir, 0700))
-		require.NoError(t, ioutil.WriteFile(filepath.Join(dir, configFile), []byte(configs[i]), 0600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, configFile), []byte(configs[i]), 0600))
 	}
 
 	c := dlog.NewTestContext(t, false)

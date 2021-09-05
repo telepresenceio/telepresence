@@ -76,9 +76,9 @@ commands:
       - run:
           name: "Create cluster"
           command: |
-            go run build-aux/kubeception/main.go create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            go run ./build-aux/kubeception create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
             export KUBECONFIG="$HOME/kubeconfig"
-            go run build-aux/wait_for_cluster/main.go "$KUBECONFIG"
+            go run ./build-aux/wait_for_cluster "$KUBECONFIG"
             KUBECTL=kubectl
             IMAGE=/tmp/workspace/tel2-image.tar
             if [[ $OS == Windows_NT ]]; then
@@ -100,7 +100,7 @@ commands:
           name: "Destroy cluster"
           command: |
             # We don't allow the destroy to fail the build; if the kluster couldn't be destroyed now, it'll just be cleaned up when it times out
-            go run build-aux/kubeception/main.go destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig" || true
+            go run ./build-aux/kubeception destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig" || true
 
   "install-sshfs-win":
     steps:
@@ -370,7 +370,7 @@ jobs:
     - run:
         name: "Publish nightly linux"
         command: |
-          newTag=$(go run build-aux/genversion.go nightly)
+          newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag make push-images push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
 
@@ -386,7 +386,7 @@ jobs:
     - run:
         name: "Publish nightly windows"
         command: |
-          newTag=$(go run build-aux/genversion.go nightly)
+          newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag make push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
 
@@ -399,13 +399,13 @@ jobs:
     - run:
         name: "Publish nightly macos (arch amd64)"
         command: |
-          newTag=$(go run build-aux/genversion.go nightly)
+          newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make push-executable
           TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make promote-nightly
     - run:
         name: "Publish nightly macos (arch arm64)"
         command: |
-          newTag=$(go run build-aux/genversion.go nightly)
+          newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make push-executable
           TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make promote-nightly
 

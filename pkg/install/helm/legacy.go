@@ -8,10 +8,9 @@ import (
 	"github.com/hashicorp/go-multierror"
 	admreg "k8s.io/api/admissionregistration/v1"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
-
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 func getLegacyObjects(namespace string) []kates.Object {

@@ -95,7 +95,7 @@ func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) 
 	if err != nil {
 		return err
 	}
-	fileInfo, err := secretsDir.Readdir(-1)
+	fileInfo, err := secretsDir.ReadDir(-1)
 	if err != nil {
 		return err
 	}

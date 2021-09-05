@@ -3,7 +3,6 @@ package scout
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,7 +42,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	filecache := make(map[string]filecacheEntry)
 	readFile := func(filename string) (string, error) {
 		if _, isCached := filecache[filename]; !isCached {
-			bs, err := ioutil.ReadFile(filename)
+			bs, err := os.ReadFile(filename)
 			filecache[filename] = filecacheEntry{
 				Body: string(bs),
 				Err:  err,
@@ -112,7 +111,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 		if err := os.MkdirAll(filepath.Dir(idFilename), 0755); err != nil {
 			return "", err
 		}
-		if err := ioutil.WriteFile(idFilename, []byte(retID), 0644); err != nil {
+		if err := os.WriteFile(idFilename, []byte(retID), 0644); err != nil {
 			return "", err
 		}
 	}

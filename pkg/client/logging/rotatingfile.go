@@ -2,7 +2,7 @@ package logging
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,7 +61,7 @@ func (rotateDaily) RotateNow(rf *RotatingFile, _ int) bool {
 }
 
 type RotatingFile struct {
-	fileMode    os.FileMode
+	fileMode    fs.FileMode
 	dirName     string
 	fileName    string
 	timeFormat  string
@@ -111,7 +111,7 @@ func OpenRotatingFile(
 	timeFormat string,
 	localTime bool,
 	captureStd bool,
-	fileMode os.FileMode,
+	fileMode fs.FileMode,
 	strategy RotationStrategy,
 	maxFiles uint16,
 ) (*RotatingFile, error) {
@@ -291,7 +291,7 @@ func (rf *RotatingFile) removeOldFiles() {
 	rf.removeMutex.Lock()
 	defer rf.removeMutex.Unlock()
 
-	files, err := ioutil.ReadDir(rf.dirName)
+	files, err := os.ReadDir(rf.dirName)
 	if err != nil {
 		return
 	}

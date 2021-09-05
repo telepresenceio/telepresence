@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/datawire/ambassador/pkg/kates"
-
 	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/datawire/ambassador/pkg/kates"
 )
 
 func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) {
