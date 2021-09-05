@@ -2,8 +2,14 @@ package logging
 
 import (
 	"fmt"
+	"os"
 	"time"
 )
+
+// FStat returns the file status/info of an open file.
+func FStat(file *os.File) (SysInfo, error) {
+	return osFStat(file)
+}
 
 // SysInfo represents the elaborate info in a FileInfo.Sys(). The implementations are
 // os specific.
@@ -16,7 +22,11 @@ import (
 type SysInfo interface {
 	fmt.Stringer
 
+	Size() int64
+
 	BirthTime() time.Time
+	ModifyTime() time.Time // most recent content change
+	ChangeTime() time.Time // most recent metadata change
 
 	SetOwnerAndGroup(name string) error
 

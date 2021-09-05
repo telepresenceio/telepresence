@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -30,13 +29,17 @@ type windowsSysInfo struct {
 	sacl  windows.Handle
 }
 
-func GetSysInfo(dir string, info os.FileInfo) (SysInfo, error) {
+func osFStat(file *os.File) (SysInfo, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat %s: %w", file.Name(), err)
+	}
 	wi := windowsSysInfo{
-		path: filepath.Join(dir, info.Name()),
+		path: file.Name(),
 		data: info.Sys().(*syscall.Win32FileAttributeData),
 	}
 	var secDesc windows.Handle
-	err := api.GetNamedSecurityInfo(
+	err = api.GetNamedSecurityInfo(
 		wi.path,
 		api.SE_FILE_OBJECT,
 		api.OWNER_SECURITY_INFORMATION,
@@ -53,6 +56,10 @@ func GetSysInfo(dir string, info os.FileInfo) (SysInfo, error) {
 		return nil, err
 	}
 	return &wi, nil
+}
+
+func (wi *windowsSysInfo) Size() int64 {
+	return int64(wi.data.FileSizeHigh)<<32 + int64(wi.data.FileSizeLow)
 }
 
 func (wi *windowsSysInfo) SetOwnerAndGroup(name string) error {
@@ -84,6 +91,14 @@ func (wi *windowsSysInfo) HaveSameOwnerAndGroup(s SysInfo) bool {
 
 func (wi *windowsSysInfo) BirthTime() time.Time {
 	return time.Unix(0, wi.data.CreationTime.Nanoseconds())
+}
+
+func (wi *windowsSysInfo) ModifyTime() time.Time {
+	return time.Unix(0, wi.data.LastWriteTime.Nanoseconds())
+}
+
+func (wi *windowsSysInfo) ChangeTime() time.Time {
+	return time.Unix(0, wi.data.LastWriteTime.Nanoseconds())
 }
 
 func (wi *windowsSysInfo) Owner() *windows.SID {

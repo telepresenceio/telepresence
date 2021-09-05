@@ -7,6 +7,11 @@
 - Bugfix: On Windows, crash stack traces and other errors were not
   written to the log files, now they are.
 
+- Bugfix: On Linux kernel 4.11 and above, the log file rotation now
+  properly reads the birth-time of the log file.  On older kernels, it
+  continues to use the old behavior of using the change-time in place
+  of the birth-time.
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
