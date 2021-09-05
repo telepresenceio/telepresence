@@ -294,11 +294,12 @@ func newInterceptState(
 	}
 }
 
-func interceptMessage(r *connector.InterceptResult) string {
+func interceptMessage(r *connector.InterceptResult) error {
 	msg := ""
+	cat := errcat.Unknown
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-		msg = "No error"
+		return nil
 	case connector.InterceptError_NO_CONNECTION:
 		msg = "Local network is not connected to the cluster"
 	case connector.InterceptError_NO_TRAFFIC_MANAGER:
@@ -338,10 +339,14 @@ func interceptMessage(r *connector.InterceptResult) string {
 	default:
 		msg = fmt.Sprintf("Unknown error code %d", r.Error)
 	}
-	if id := r.GetInterceptInfo().GetId(); id != "" {
-		return fmt.Sprintf("Intercept %q: %s", id, msg)
+	if r.ErrorCategory > 0 {
+		cat = errcat.Category(r.ErrorCategory)
 	}
-	return fmt.Sprintf("Intercept: %s", msg)
+
+	if id := r.GetInterceptInfo().GetId(); id != "" {
+		msg = fmt.Sprintf("%s: id = %q", msg, id)
+	}
+	return cat.Newf(msg)
 }
 
 func checkMountCapability(ctx context.Context) error {
@@ -600,15 +605,12 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
 		return true, nil
-	case connector.InterceptError_ALREADY_EXISTS:
-		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
-		return false, nil
 	default:
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
 			_ = is.DeactivateState(ctx)
-			return false, is.cmd.FlagError(errors.New(r.InterceptInfo.Message))
+			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
 		}
-		return false, errors.New(interceptMessage(r))
+		return false, interceptMessage(r)
 	}
 }
 
@@ -625,7 +627,7 @@ func removeIntercept(ctx context.Context, name string) error {
 			return err
 		}
 		if r.Error != connector.InterceptError_UNSPECIFIED {
-			return errors.New(interceptMessage(r))
+			return interceptMessage(r)
 		}
 		return nil
 	})

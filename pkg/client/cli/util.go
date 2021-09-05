@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 // quit sends the quit message to the daemon and waits for it to exit.
@@ -90,6 +91,7 @@ func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectIn
 		}
 
 		var msg string
+		cat := errcat.Unknown
 		switch resp.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			fmt.Fprintf(stdout, "Connected to context %s (%s)\n", resp.ClusterContext, resp.ClusterServer)
@@ -102,8 +104,11 @@ func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectIn
 			msg = "Cluster configuration changed, please quit telepresence and reconnect"
 		case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
 			msg = resp.ErrorText
+			if resp.ErrorCategory != 0 {
+				cat = errcat.Category(resp.ErrorCategory)
+			}
 		}
-		return fmt.Errorf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
+		return cat.Newf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
 	})
 	if err != nil {
 		return nil, err

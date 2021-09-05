@@ -21,10 +21,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 type Callbacks struct {
-	InterceptStatus func() (rpc.InterceptError, string)
+	InterceptStatus func() *rpc.InterceptResult
 	Cancel          func()
 	Connect         func(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo
 }
@@ -87,9 +88,9 @@ func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Con
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	ie, is := s.callbacks.InterceptStatus()
-	if ie != rpc.InterceptError_UNSPECIFIED {
-		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
+	result = s.callbacks.InterceptStatus()
+	if result != nil {
+		return result, nil
 	}
 	c = s.callCtx(c, "CreateIntercept")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -101,9 +102,9 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	ie, is := s.callbacks.InterceptStatus()
-	if ie != rpc.InterceptError_UNSPECIFIED {
-		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
+	result = s.callbacks.InterceptStatus()
+	if result != nil {
+		return result, nil
 	}
 	c = s.callCtx(c, "RemoveIntercept")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -111,8 +112,19 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	if mgr == nil {
 		return nil, err
 	}
-	err = mgr.RemoveIntercept(c, rr.Name)
-	return &rpc.InterceptResult{}, err
+	result = &rpc.InterceptResult{}
+	if err = mgr.RemoveIntercept(c, rr.Name); err != nil {
+		if grpcStatus.Code(err) == grpcCodes.NotFound {
+			result.Error = rpc.InterceptError_NOT_FOUND
+			result.ErrorText = rr.Name
+			result.ErrorCategory = int32(errcat.User)
+		} else {
+			result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
+			result.ErrorText = err.Error()
+			result.ErrorCategory = int32(errcat.Unknown)
+		}
+	}
+	return result, nil
 }
 
 func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
