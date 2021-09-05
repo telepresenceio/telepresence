@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -62,7 +63,9 @@ func main() {
 		cmd = cli.Command(ctx)
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			summarizeLogs(ctx, cmd)
+			if errcat.GetCategory(err) > errcat.OtherCLI {
+				summarizeLogs(ctx, cmd)
+			}
 			os.Exit(1)
 		}
 	}
