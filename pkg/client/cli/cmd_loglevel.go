@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 const defaultDuration = 30 * time.Minute
@@ -27,15 +27,15 @@ type logLevelSetter struct {
 
 func logLevelArg(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errors.New("accepts exactly one argument (the log level)")
+		return errcat.User.New("accepts exactly one argument (the log level)")
 	}
 	lvl, err := logrus.ParseLevel(args[0])
 	if err != nil {
-		return err
+		return errcat.User.New(err)
 	}
 	switch lvl {
 	case logrus.PanicLevel, logrus.FatalLevel:
-		return fmt.Errorf("unsupported log level: %s", lvl)
+		return errcat.User.Newf("unsupported log level: %s", lvl)
 	}
 	return nil
 }
@@ -63,7 +63,7 @@ func loglevelCommand() *cobra.Command {
 
 func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) error {
 	if lls.localOnly && lls.remoteOnly {
-		return errors.New("the local-only and remote-only options are mutually exclusive")
+		return errcat.User.New("the local-only and remote-only options are mutually exclusive")
 	}
 
 	return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {

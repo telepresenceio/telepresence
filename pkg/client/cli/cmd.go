@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your
@@ -44,12 +44,12 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	err := fmt.Errorf("invalid subcommand %q", args[0])
+	err := errcat.User.Newf("invalid subcommand %q", args[0])
 	if cmd.SuggestionsMinimumDistance <= 0 {
 		cmd.SuggestionsMinimumDistance = 2
 	}
 	if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
-		err = fmt.Errorf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
+		err = errcat.User.Newf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
 	}
 	return cmd.FlagErrorFunc()(cmd, err)
 }

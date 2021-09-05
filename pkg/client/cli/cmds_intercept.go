@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -169,19 +170,19 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		case true:
 			// Not actually intercepting anything -- check that the flags make sense for that
 			if args.agentName != "" {
-				return errors.New("a local-only intercept cannot have a workload")
+				return errcat.User.New("a local-only intercept cannot have a workload")
 			}
 			if args.serviceName != "" {
-				return errors.New("a local-only intercept cannot have a service")
+				return errcat.User.New("a local-only intercept cannot have a service")
 			}
 			if cmd.Flag("port").Changed {
-				return errors.New("a local-only intercept cannot have a port")
+				return errcat.User.New("a local-only intercept cannot have a port")
 			}
 			if cmd.Flag("mount").Changed {
-				return errors.New("a local-only intercept cannot have mounts")
+				return errcat.User.New("a local-only intercept cannot have mounts")
 			}
 			if cmd.Flag("preview-url").Changed && args.previewEnabled {
-				return errors.New("a local-only intercept cannot be previewed")
+				return errcat.User.New("a local-only intercept cannot be previewed")
 			}
 		case false:
 			// Actually intercepting something
@@ -392,15 +393,15 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	portMapping := strings.Split(is.args.port, ":")
 	portError := func() error {
 		if is.args.dockerRun {
-			return errors.New("ports must be of the format --ports <local-port>:<container-port>[:<svcPortIdentifier>]")
+			return errcat.User.New("ports must be of the format --ports <local-port>:<container-port>[:<svcPortIdentifier>]")
 		}
-		return errors.New("ports must be of the format --ports <local-port>[:<svcPortIdentifier>]")
+		return errcat.User.New("ports must be of the format --ports <local-port>[:<svcPortIdentifier>]")
 	}
 
 	parsePort := func(portStr string) (uint16, error) {
 		port, err := strconv.ParseUint(portStr, 10, 16)
 		if err != nil {
-			return 0, fmt.Errorf("port numbers must be a valid, positive int, you gave: %q", is.args.port)
+			return 0, errcat.User.Newf("port numbers must be a valid, positive int, you gave: %q", is.args.port)
 		}
 		return uint16(port), nil
 	}
@@ -448,24 +449,24 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 		doMount, boolErr = strconv.ParseBool(is.args.mount)
 		if boolErr != nil || doMount {
 			// not --mount=false, so refuse.
-			return nil, fmt.Errorf("remote volume mounts are disabled: %w", err)
+			return nil, errcat.User.Newf("remote volume mounts are disabled: %w", err)
 		}
 	}
 
 	for _, toPod := range is.args.toPod {
 		port, err := parsePort(toPod)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to parse port %s: %w", toPod, err)
+			return nil, errcat.User.Newf("Unable to parse port %s: %w", toPod, err)
 		}
 		spec.ExtraPorts = append(spec.ExtraPorts, int32(port))
 	}
 
 	if is.args.dockerMount != "" {
 		if !is.args.dockerRun {
-			return nil, errors.New("--docker-mount must be used together with --docker-run")
+			return nil, errcat.User.New("--docker-mount must be used together with --docker-run")
 		}
 		if !doMount {
-			return nil, errors.New("--docker-mount cannot be used with --mount=false")
+			return nil, errcat.User.New("--docker-mount cannot be used with --mount=false")
 		}
 	}
 
@@ -633,7 +634,7 @@ func removeIntercept(ctx context.Context, name string) error {
 func validateDockerArgs(args []string) error {
 	for _, arg := range args {
 		if arg == "-d" || arg == "--detach" {
-			return errors.New("running docker container in background using -d or --detach is not supported")
+			return errcat.User.New("running docker container in background using -d or --detach is not supported")
 		}
 	}
 	return nil
@@ -644,7 +645,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if envFile == "" {
 		file, err := os.CreateTemp("", "tel-*.env")
 		if err != nil {
-			return fmt.Errorf("failed to create temporary environment file. %w", err)
+			return errcat.OtherCLI.Newf("failed to create temporary environment file. %w", err)
 		}
 		defer os.Remove(file.Name())
 
@@ -690,7 +691,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 func (is *interceptState) writeEnvFile() error {
 	file, err := os.Create(is.args.envFile)
 	if err != nil {
-		return fmt.Errorf("failed to create environment file %q: %w", is.args.envFile, err)
+		return errcat.OtherCLI.Newf("failed to create environment file %q: %w", is.args.envFile, err)
 	}
 	return is.writeEnvToFileAndClose(file)
 }

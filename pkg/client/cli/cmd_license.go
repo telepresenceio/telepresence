@@ -7,12 +7,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 func LicenseCommand() *cobra.Command {
@@ -49,7 +49,7 @@ https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/`
 // to a file given by the user
 func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, licenseFile, hostDomain string) error {
 	if licenseFile == "" && id == "" {
-		return errors.New("Must use either --id or --license-file flag")
+		return errcat.User.New("Must use either --id or --license-file flag")
 	}
 	var license string
 	var err error

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 func prepareMount(mountPoint string) (string, error) {
@@ -18,7 +18,7 @@ func prepareMount(mountPoint string) (string, error) {
 				return fmt.Sprintf(`%c:`, c), nil
 			}
 		}
-		return "", errors.New("found no available drive to use as mount point")
+		return "", errcat.User.New("found no available drive to use as mount point")
 	}
 
 	// Mount point must be a drive letter
@@ -28,7 +28,7 @@ func prepareMount(mountPoint string) (string, error) {
 		ok = dl >= 'A' && dl <= 'Z' || dl >= 'a' && dl <= 'z'
 	}
 	if !ok {
-		err = errors.New("mount point must be a drive letter followed by a colon")
+		err = errcat.User.New("mount point must be a drive letter followed by a colon")
 	}
 	return mountPoint, err
 }
