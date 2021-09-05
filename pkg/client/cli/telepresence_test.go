@@ -255,19 +255,20 @@ cloud:
 		require.NoError(err)
 		defer func() {
 			_ = rootLog.Close()
-			st, err := os.Stat(rootLogName)
+			rootLog, err = os.Open(rootLogName)
 			if err != nil {
-				dlog.Errorf(ctx, "Stat on %q failed: %v", rootLogName, err)
+				dlog.Errorf(ctx, "open failed on %q failed: %v", rootLogName, err)
 				return
 			}
-			sysInfo, err := logging.GetSysInfo(rootLogName, st)
+			stat, err := logging.FStat(rootLog)
+			_ = rootLog.Close()
 			if err != nil {
-				dlog.Errorf(ctx, "GetSysInfo on %q failed: %v", rootLogName, err)
+				dlog.Errorf(ctx, "stat on %q failed: %v", rootLogName, err)
 				return
 			}
 			if err := os.Remove(rootLogName); err != nil {
 				dlog.Errorf(ctx, "Failed to remove %q: %v", rootLogName, err)
-				dlog.Error(ctx, sysInfo)
+				dlog.Error(ctx, stat)
 			}
 		}()
 

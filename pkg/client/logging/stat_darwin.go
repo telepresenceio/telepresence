@@ -11,8 +11,16 @@ type fileInfo struct {
 	*syscall.Stat_t
 }
 
-func GetSysInfo(_ string, info os.FileInfo) (SysInfo, error) {
-	return fileInfo{info.Sys().(*syscall.Stat_t)}, nil
+func osFStat(file *os.File) (SysInfo, error) {
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat %s: %w", file.Name(), err)
+	}
+	return fileInfo{stat.Sys().(*syscall.Stat_t)}, nil
+}
+
+func (u fileInfo) Size() int64 {
+	return u.Stat_t.Size
 }
 
 func (u fileInfo) SetOwnerAndGroup(name string) error {
