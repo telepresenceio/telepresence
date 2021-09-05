@@ -12,10 +12,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func dupToStd(_ *os.File) interface{} {
-	return errors.New("dupToStd() is not implemented on windows")
-}
-
 type WindowsSysInfo interface {
 	SysInfo
 	Owner() *windows.SID

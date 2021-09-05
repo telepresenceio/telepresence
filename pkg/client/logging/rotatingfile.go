@@ -209,9 +209,8 @@ func (rf *RotatingFile) Write(data []byte) (int, error) {
 
 func (rf *RotatingFile) afterOpen() {
 	if rf.captureStd {
-		err := dupToStd(rf.file)
-		if err != nil {
-			// Dup2 failed (or isn't implemented on the current platform)
+		if err := dupToStd(rf.file); err != nil {
+			// Dup2 failed
 			os.Stdout = rf.file
 			os.Stderr = rf.file
 		} else {
