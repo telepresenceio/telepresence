@@ -12,6 +12,9 @@
   continues to use the old behavior of using the change-time in place
   of the birth-time.
 
+- Bugfix: Telepresence will no longer refer the user to the daemon logs for errors that aren't related to
+  problems that are logged there.
+
 - Bugfix: The overriding DNS resolver will no longer apply search paths when resolving "localhost".
 
 - Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being
