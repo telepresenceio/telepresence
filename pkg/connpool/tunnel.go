@@ -94,7 +94,7 @@ func (s *tunnel) DialLoop(ctx context.Context, closing *int32, pool *Pool) error
 			}
 			id := msg.ID()
 			dlog.Debugf(ctx, "<- MGR %s, len %d", id.ReplyString(), len(msg.Payload()))
-			if conn, _, _ := pool.Get(ctx, id, nil); conn != nil {
+			if conn := pool.Get(id); conn != nil {
 				conn.HandleMessage(ctx, msg)
 			}
 		}
@@ -105,7 +105,7 @@ func (s *tunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
 	id := ctrl.ID()
 
 	dlog.Debugf(ctx, "<- MGR %s, code %s", id.ReplyString(), ctrl.Code())
-	conn, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
+	conn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
 		if ctrl.Code() != Connect {
 			// Only Connect requested from peer may create a new instance at this point
 			return nil, nil

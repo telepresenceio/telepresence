@@ -640,7 +640,7 @@ func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error 
 
 			id := msg.ID()
 			// Retrieve the connection that is tracked for the given id. Create a new one if necessary
-			h, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+			h, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 				switch id.Protocol() {
 				case ipproto.TCP, ipproto.UDP:
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
@@ -727,14 +727,14 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 				return nil
 			}
 			id := msg.ID()
-			conn, found, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+			conn, found, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 				return newConnForward(release, tunnel), nil
 			})
 			if found {
 				if _, ok := conn.(*connForward); !ok {
 					// lingering, non intercepted outbound connection to agent. Close it and create a new forward
 					conn.Close(ctx)
-					_, _, err = pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+					_, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 						return newConnForward(release, tunnel), nil
 					})
 				}

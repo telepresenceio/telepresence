@@ -276,7 +276,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 					return
 				}
 				id := msg.ID()
-				handler, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+				handler, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 					return connpool.NewDialer(id, tunnel, release), nil
 				})
 				if err != nil {
@@ -300,7 +300,7 @@ func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *man
 
 	destIp := iputil.Parse(iCept.Spec.TargetHost)
 	id := connpool.NewConnID(connpool.IPProto(conn.RemoteAddr().Network()), srcIp, destIp, srcPort, uint16(iCept.Spec.TargetPort))
-	_, found, err := connpool.GetPool(ctx).Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+	_, found, err := connpool.GetPool(ctx).GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 		return connpool.HandlerFromConn(id, tunnel, release, conn), nil
 	})
 	if err != nil {
