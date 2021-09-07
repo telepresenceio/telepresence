@@ -17,6 +17,8 @@
 - Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being
   hard-coded to "cluster.local".
 
+  - Bugfix: Agents installed with the mutating webhook were not uninstalled with "telepresence uninstall -e", now they are
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
