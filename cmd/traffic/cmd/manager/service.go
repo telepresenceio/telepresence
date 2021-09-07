@@ -462,33 +462,37 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 }
 
 func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
-	sessionInfo, err := readTunnelSessionID(server)
+	ctx := server.Context()
+	tunnel := connpool.NewTunnel(server)
+	sessionInfo, err := readTunnelSessionID(ctx, tunnel)
 	if err != nil {
 		return err
 	}
-	return m.state.ClientTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), server)
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), tunnel)
 }
 
 func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
-	agentSessionInfo, err := readTunnelSessionID(server)
+	ctx := server.Context()
+	tunnel := connpool.NewTunnel(server)
+	agentSessionInfo, err := readTunnelSessionID(ctx, tunnel)
 	if err != nil {
 		return err
 	}
-	clientSessionInfo, err := readTunnelSessionID(server)
+	clientSessionInfo, err := readTunnelSessionID(ctx, tunnel)
 	if err != nil {
 		return err
 	}
-	return m.state.AgentTunnel(managerutil.WithSessionInfo(server.Context(), agentSessionInfo), clientSessionInfo, server)
+	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, tunnel)
 }
 
-func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {
+func readTunnelSessionID(ctx context.Context, server connpool.Tunnel) (*rpc.SessionInfo, error) {
 	// Initial message must be the session info that this bidi stream should be attached to
-	cm, err := server.Recv()
+	cm, err := server.Receive(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "failed to read session info message: %v", err)
 	}
 	var sessionInfo *rpc.SessionInfo
-	if ctrl, ok := connpool.FromConnMessage(cm).(connpool.Control); ok {
+	if ctrl, ok := cm.(connpool.Control); ok {
 		if sessionInfo = ctrl.SessionInfo(); sessionInfo != nil {
 			return sessionInfo, nil
 		}
