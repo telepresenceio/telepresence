@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -624,12 +623,10 @@ func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error 
 	pool := cs.pool // must have one pool per client
 	cs.tunnel = tunnel
 	defer pool.CloseAll(ctx)
-	closing := int32(0)
-	msgCh, errCh := tunnel.ReadLoop(ctx, &closing)
+	msgCh, errCh := tunnel.ReadLoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
-			atomic.StoreInt32(&closing, 2)
 			return nil
 		case err := <-errCh:
 			return err
@@ -713,12 +710,10 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 	defer cs.deleteAgentTunnel(agentSessionID)
 
 	pool := cs.pool
-	closing := int32(0)
-	msgCh, errCh := tunnel.ReadLoop(ctx, &closing)
+	msgCh, errCh := tunnel.ReadLoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
-			atomic.StoreInt32(&closing, 2)
 			return nil
 		case err := <-errCh:
 			return err

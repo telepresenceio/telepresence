@@ -337,7 +337,7 @@ func (t *tunRouter) run(c context.Context) error {
 		}
 		t.tunnel = tunnel
 		dlog.Debug(c, "MGR read loop starting")
-		err = t.tunnel.DialLoop(c, &t.closing, t.handlers)
+		err = t.tunnel.DialLoop(c, t.handlers)
 		var recvErr *client.RecvEOF
 		if errors.As(err, &recvErr) {
 			<-c.Done()

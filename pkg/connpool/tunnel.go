@@ -20,8 +20,8 @@ type BidiStream interface {
 }
 
 type Tunnel interface {
-	DialLoop(ctx context.Context, closing *int32, pool *Pool) error
-	ReadLoop(ctx context.Context, closing *int32) (<-chan Message, <-chan error)
+	DialLoop(ctx context.Context, pool *Pool) error
+	ReadLoop(ctx context.Context) (<-chan Message, <-chan error)
 	Send(context.Context, Message) error
 	Receive(context.Context) (Message, error)
 	CloseSend() error
@@ -103,8 +103,8 @@ func (s *tunnel) CloseSend() error {
 }
 
 // ReadLoop reads from the stream and dispatches control messages and messages to the give channels
-func (s *tunnel) ReadLoop(ctx context.Context, closing *int32) (<-chan Message, <-chan error) {
-	msgCh := make(chan Message)
+func (s *tunnel) ReadLoop(ctx context.Context) (<-chan Message, <-chan error) {
+	msgCh := make(chan Message, 5)
 	errCh := make(chan error)
 	go func() {
 		defer func() {
@@ -112,10 +112,10 @@ func (s *tunnel) ReadLoop(ctx context.Context, closing *int32) (<-chan Message, 
 			close(msgCh)
 		}()
 
-		for atomic.LoadInt32(closing) == 0 {
+		for ctx.Err() == nil {
 			msg, err := s.Receive(ctx)
 			if err != nil {
-				if atomic.LoadInt32(closing) == 0 && ctx.Err() == nil {
+				if ctx.Err() == nil {
 					errCh <- client.WrapRecvErr(err, "read from grpc.ClientStream failed")
 				}
 				return
@@ -128,8 +128,8 @@ func (s *tunnel) ReadLoop(ctx context.Context, closing *int32) (<-chan Message, 
 
 // DialLoop reads replies from the stream and dispatches them to the correct connection
 // based on the message id.
-func (s *tunnel) DialLoop(ctx context.Context, closing *int32, pool *Pool) error {
-	msgCh, errCh := s.ReadLoop(ctx, closing)
+func (s *tunnel) DialLoop(ctx context.Context, pool *Pool) error {
+	msgCh, errCh := s.ReadLoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():

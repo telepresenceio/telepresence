@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -261,12 +260,10 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 
 	go func() {
 		pool := connpool.GetPool(ctx)
-		closing := int32(0)
-		msgCh, errCh := tunnel.ReadLoop(ctx, &closing)
+		msgCh, errCh := tunnel.ReadLoop(ctx)
 		for {
 			select {
 			case <-ctx.Done():
-				atomic.StoreInt32(&closing, 2)
 				return
 			case err := <-errCh:
 				dlog.Error(ctx, err)
