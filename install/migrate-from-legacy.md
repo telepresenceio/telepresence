@@ -6,7 +6,18 @@ In legacy Telepresence, a pod running a service was swapped with a pod running t
 
 In practice, this mechanism, while simple in concept, had some challenges. Losing the connection to the cluster would leave the deployment in an inconsistent state. Swapping the pods would take time.
 
-Telepresence introduces a [new architecture](../../reference/architecture/) built around "intercepts" that addresses these problems. With Telepresence, a sidecar proxy is injected onto the pod. The proxy then intercepts traffic intended for the pod and routes it to the workstation/laptop. The advantage of this approach is that the service is running at all times, and no swapping is used. By using the proxy approach, we can also do selective intercepts, where certain types of traffic get routed to the service while other traffic gets routed to your laptop/workstation.
+Telepresence 2 introduces a [new
+architecture](../../reference/architecture/) built around "intercepts"
+that addresses these problems.  With the new Telepresence, a sidecar
+proxy ("traffic agent") is injected onto the pod.  The proxy then
+intercepts traffic intended for the Pod and routes it to the
+workstation/laptop.  The advantage of this approach is that the
+service is running at all times, and no swapping is used.  By using
+the proxy approach, we can also do personal intercepts, where rather
+than re-routing all traffic to the laptop/workstation, it only
+re-routes the traffic designated as belonging to that user, so that
+multiple developers can intercept the same service at the same time
+without disrupting normal operation or disrupting eacho.
 
 Please see [the Telepresence quick start](../../quick-start/) for an introduction to running intercepts and [the intercept reference doc](../../reference/intercepts/) for a deep dive into intercepts.
 

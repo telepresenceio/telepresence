@@ -112,8 +112,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 1. You started this guide by installing the Telepresence CLI and
    logging in to Ambassador Cloud.  The Cloud dashboard is used to
    manage your intercepts and share them with colleagues.  You must be
-   logged in to create selective intercepts as we are going to do
-   here.
+   logged in to create personal intercepts as we are going to do here.
 
    <Alert severity="info" variant="outlined">Run <code>telepresence dashboard</code> if you are already logged in and just need to reopen the dashboard.</Alert>
 

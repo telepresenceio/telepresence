@@ -31,7 +31,7 @@ import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepre
 
 </div>
 
-In this guide, we'll give you a hands-on tutorial with Telepresence. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
+In this guide, we'll give you a hands-on tutorial with Telepresence. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
 
 If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker.
 
@@ -43,25 +43,19 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
-1. <Login urlParams="docs_source=telepresence-quick-start"/> Note where you've downloaded the <code>kubeconfig.yaml</code> file; you'll need the location of this file later in this guide.
-2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster:
+1. <Login urlParams="docs_source=telepresence-quick-start"/>
+2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster. 
    <EmojivotoServicesList/>
-
-<Alert severity="success">
-   The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
-</Alert>
-
-<Alert severity="info">
-    <strong>Already have a cluster?</strong> Switch over to a <a href="../../howtos/intercepts">version of this guide</a> that takes you though the same steps using your own cluster.
-</Alert>
-
-<ExpirationDate/>
+    The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
 
 ## 2. Try the Emojivoto application
 
 The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
 
 1. Go to the <ExternalIp/> and vote for some emojis.
+    <Alert severity="info">
+    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it from opening.
+    </Alert>
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work. We're going to use Telepresence shortly to fix this bug, as everyone should be able to vote for 🍩!
 
@@ -73,9 +67,14 @@ The remote cluster is running the Emojivoto application, which consists of four 
 
 We'll set up a development environment locally on your workstation. We'll then use Telepresence to connect this local development environment to the remote Kubernetes cluster. To save time, the development environment we'll use is pre-packaged as a Docker container.
 
-1. Run the Docker container locally. In the command below, replace the path to the `kubeconfig.yaml` with the actual location of the `kubeconfig.yaml` you previously noted in [step 1](#1-get-a-free-remote-cluster):
+1. Run the Docker container locally:
 
     <DockerCommand/>
+
+    <Alert severity="info">
+    Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
+    If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
+    </Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
@@ -95,8 +94,7 @@ A common use case for Telepresence is to connect your local development environm
 2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
    `telepresence intercept web --port 8080`
 
-   You will be asked for your ingress layer 3 address; specify the front end service: `ambassador.ambassador`
-   Then, when asked for the port, type `80`, for "use TLS", type `n`. The default for the fourth value is correct so hit enter to accept it.
+    When prompted for ingress configuration, all default values should be correct as displayed below.
 
     <UserInterceptCommand/>
 
@@ -108,18 +106,19 @@ A common use case for Telepresence is to connect your local development environm
 
 Preview URLs enable you to safely share your development environment with anyone. For example, you may want your UX designer to take a quick look at what you're developing, before you commit the code. Preview URLs enable this easy collaboration.
 
-2. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
+1. If you access the Emojivoto application on <ExternalIp> your remote cluster </ExternalIp> and vote for the 🍩 emoji, you'll see the bug is still present.
 
-1. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
-   <Alert severity="success">
-   Now you're able to share your fix in your local environment with your team!
-   </Alert>
+2. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
 
-   <Alert severity="info">
-        To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
-   </Alert>
+<Alert severity="success">
+Now you're able to share your fix in your local environment with your team!
+</Alert>
 
-## 6. How/Why does this all work
+<Alert severity="info">
+    To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
+</Alert>
+
+## 6. How/Why does this all work?
 
 Telepresence works by deploying a two-way network proxy in a pod running in a Kubernetes cluster. This proxy can intercept traffic meant for the service and reroute it to a local copy, which is ready for further (local) development.
 
@@ -131,4 +130,6 @@ Preview URLs, when created, generate an ingress request containing a custom head
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
+
 You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
+
