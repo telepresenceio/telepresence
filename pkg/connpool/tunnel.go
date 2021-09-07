@@ -3,9 +3,13 @@ package connpool
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
@@ -18,33 +22,81 @@ type BidiStream interface {
 type Tunnel interface {
 	DialLoop(ctx context.Context, closing *int32, pool *Pool) error
 	ReadLoop(ctx context.Context, closing *int32) (<-chan Message, <-chan error)
-	Send(Message) error
-	Receive() (Message, error)
+	Send(context.Context, Message) error
+	Receive(context.Context) (Message, error)
 	CloseSend() error
 }
 
 type tunnel struct {
-	stream BidiStream
+	stream    BidiStream
+	counter   uint32
+	lastAck   uint32
+	syncRatio uint32 // send and check sync after each syncRatio message
+	ackWindow uint32 // maximum permitted difference between sent and received ack
 }
 
 func NewTunnel(stream BidiStream) Tunnel {
-	return &tunnel{stream: stream}
+	return &tunnel{stream: stream, syncRatio: 8, ackWindow: 1}
 }
 
-func (s *tunnel) Receive() (Message, error) {
-	cm, err := s.stream.Recv()
-	if err != nil {
-		return nil, err
+func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
+	for err = ctx.Err(); err == nil; err = ctx.Err() {
+		var cm *rpc.ConnMessage
+		if cm, err = s.stream.Recv(); err != nil {
+			return nil, err
+		}
+		msg = FromConnMessage(cm)
+		if ctrl, ok := msg.(Control); ok {
+			switch ctrl.Code() {
+			case SyncRequest:
+				if err = s.stream.Send(SyncResponseControl(ctrl).TunnelMessage()); err != nil {
+					return nil, fmt.Errorf("failed to send sync response: %w", err)
+				}
+				continue
+			case SyncResponse:
+				atomic.StoreUint32(&s.lastAck, ctrl.AckNumber())
+				continue
+			}
+		}
+		return msg, nil
 	}
-	return FromConnMessage(cm), nil
+	return nil, err
 }
 
-func (s *tunnel) Send(m Message) error {
-	return s.stream.Send(m.TunnelMessage())
+func (s *tunnel) Send(ctx context.Context, m Message) error {
+	if err := s.stream.Send(m.TunnelMessage()); err != nil {
+		return err
+	}
+
+	// Sync unless Control
+	if _, ok := m.(Control); !ok {
+		s.counter++
+		if s.counter%s.syncRatio == 0 { // sync every nth package
+			return s.sync(ctx)
+		}
+	}
+	return nil
+}
+
+func (s *tunnel) sync(ctx context.Context) error {
+	ackSent := s.counter / s.syncRatio
+	if err := s.stream.Send(SyncRequestControl(ackSent).TunnelMessage()); err != nil {
+		return err
+	}
+	for ctx.Err() == nil {
+		lastAck := atomic.LoadUint32(&s.lastAck)
+		if ackSent <= lastAck+s.ackWindow {
+			dlog.Debugf(ctx, "Received Ack of %d", ackSent)
+			break
+		}
+		dtime.SleepWithContext(ctx, time.Millisecond)
+	}
+	return nil
 }
 
 func (s *tunnel) CloseSend() error {
 	if sender, ok := s.stream.(interface{ CloseSend() error }); ok {
+		atomic.StoreUint32(&s.lastAck, math.MaxUint32) // Terminate ongoing sync
 		return sender.CloseSend()
 	}
 	return errors.New("tunnel does not implement CloseSend()")
@@ -61,7 +113,7 @@ func (s *tunnel) ReadLoop(ctx context.Context, closing *int32) (<-chan Message, 
 		}()
 
 		for atomic.LoadInt32(closing) == 0 {
-			msg, err := s.Receive()
+			msg, err := s.Receive(ctx)
 			if err != nil {
 				if atomic.LoadInt32(closing) == 0 && ctx.Err() == nil {
 					errCh <- client.WrapRecvErr(err, "read from grpc.ClientStream failed")

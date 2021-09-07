@@ -89,7 +89,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			dlog.Debugf(ctx, "<- TUN %s", dg)
 			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			err := h.Send(connpool.NewMessage(h.id, udpHdr.Payload()))
+			err := h.Send(ctx, connpool.NewMessage(h.id, udpHdr.Payload()))
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {

@@ -332,7 +332,7 @@ func (t *tunRouter) run(c context.Context) error {
 			return err
 		}
 		tunnel := connpool.NewTunnel(clientTunnel)
-		if err = tunnel.Send(connpool.SessionInfoControl(t.session)); err != nil {
+		if err = tunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
 			return err
 		}
 		t.tunnel = tunnel

@@ -170,7 +170,7 @@ func (h *dialer) Close(_ context.Context) {
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> GRPC %s", ctrl)
-	err := h.tunnel.Send(ctrl)
+	err := h.tunnel.Send(ctx, ctrl)
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}
@@ -198,7 +198,7 @@ func (h *dialer) readLoop(ctx context.Context) {
 		}
 		if n > 0 {
 			dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
-			if err = h.tunnel.Send(NewMessage(h.id, b[:n])); err != nil {
+			if err = h.tunnel.Send(ctx, NewMessage(h.id, b[:n])); err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "!! GRPC %s, send: %v", h.id, err)
 				}

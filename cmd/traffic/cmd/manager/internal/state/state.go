@@ -676,7 +676,7 @@ func (cf *connForward) Close(_ context.Context) {
 
 func (cf *connForward) HandleMessage(ctx context.Context, cm connpool.Message) {
 	dlog.Debugf(ctx, ">> FRWD %s to agent", cm.ID())
-	if err := cf.toStream.Send(cm); err != nil {
+	if err := cf.toStream.Send(ctx, cm); err != nil {
 		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", cm.ID(), err)
 	}
 }
@@ -744,7 +744,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 				return status.Error(codes.Internal, err.Error())
 			}
 			dlog.Debugf(ctx, ">> FRWD %s to client", id)
-			if err = cs.tunnel.Send(msg); err != nil {
+			if err = cs.tunnel.Send(ctx, msg); err != nil {
 				dlog.Errorf(ctx, "Send to client failed: %v", err)
 				return err
 			}

@@ -250,11 +250,11 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 		}
 	}()
 
-	if err = tunnel.Send(connpool.SessionInfoControl(f.sessionInfo)); err != nil {
+	if err = tunnel.Send(ctx, connpool.SessionInfoControl(f.sessionInfo)); err != nil {
 		err = fmt.Errorf("failed to send agent sessionID: %s", err)
 		return nil, err
 	}
-	if err = tunnel.Send(connpool.SessionInfoControl(clientSession)); err != nil {
+	if err = tunnel.Send(ctx, connpool.SessionInfoControl(clientSession)); err != nil {
 		err = fmt.Errorf("failed to send client sessionID: %s", err)
 		return nil, err
 	}
