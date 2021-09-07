@@ -56,19 +56,19 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 type agentTunnel struct {
 	name      string
 	namespace string
-	tunnel    rpc.Manager_AgentTunnelServer
+	tunnel    connpool.Tunnel
 }
 
 type clientSessionState struct {
 	sessionState
-	name               string
-	pool               *connpool.Pool
-	ClientTunnelServer rpc.Manager_ClientTunnelServer
-	agentTunnelsMu     sync.Mutex
-	agentTunnels       map[string]*agentTunnel
+	name           string
+	pool           *connpool.Pool
+	tunnel         connpool.Tunnel
+	agentTunnelsMu sync.Mutex
+	agentTunnels   map[string]*agentTunnel
 }
 
-func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, tunnel rpc.Manager_AgentTunnelServer) {
+func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, tunnel connpool.Tunnel) {
 	cs.agentTunnelsMu.Lock()
 	cs.agentTunnels[agentSessionID] = &agentTunnel{
 		name:      name,
@@ -611,7 +611,7 @@ func (s *State) WatchIntercepts(
 	}
 }
 
-func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunnelServer) error {
+func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error {
 	sessionID := managerutil.GetSessionID(ctx)
 	s.mu.Lock()
 	ss := s.sessions[sessionID]
@@ -622,10 +622,10 @@ func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunne
 	}
 	dlog.Debug(ctx, "Established TCP tunnel")
 	pool := cs.pool // must have one pool per client
-	cs.ClientTunnelServer = server
+	cs.tunnel = tunnel
 	defer pool.CloseAll(ctx)
 	closing := int32(0)
-	msgCh, errCh := connpool.NewStream(server).ReadLoop(ctx, &closing)
+	msgCh, errCh := tunnel.ReadLoop(ctx, &closing)
 	for {
 		select {
 		case <-ctx.Done():
@@ -648,7 +648,7 @@ func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunne
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
 						return newConnForward(release, agentTunnel.tunnel), nil
 					}
-					return connpool.NewDialer(id, cs.ClientTunnelServer, release), nil
+					return connpool.NewDialer(id, cs.tunnel, release), nil
 				default:
 					return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
 				}
@@ -663,10 +663,10 @@ func (s *State) ClientTunnel(ctx context.Context, server rpc.Manager_ClientTunne
 
 type connForward struct {
 	release  func()
-	toStream connpool.TunnelStream
+	toStream connpool.Tunnel
 }
 
-func newConnForward(release func(), toStream connpool.TunnelStream) *connForward {
+func newConnForward(release func(), toStream connpool.Tunnel) *connForward {
 	return &connForward{release: release, toStream: toStream}
 }
 
@@ -676,7 +676,7 @@ func (cf *connForward) Close(_ context.Context) {
 
 func (cf *connForward) HandleMessage(ctx context.Context, cm connpool.Message) {
 	dlog.Debugf(ctx, ">> FRWD %s to agent", cm.ID())
-	if err := cf.toStream.Send(cm.TunnelMessage()); err != nil {
+	if err := cf.toStream.Send(cm); err != nil {
 		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", cm.ID(), err)
 	}
 }
@@ -684,7 +684,7 @@ func (cf *connForward) HandleMessage(ctx context.Context, cm connpool.Message) {
 func (cf *connForward) Start(_ context.Context) {
 }
 
-func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, server rpc.Manager_AgentTunnelServer) error {
+func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, tunnel connpool.Tunnel) error {
 	agentSessionID := managerutil.GetSessionID(ctx)
 	as, cs, err := func() (*agentSessionState, *clientSessionState, error) {
 		s.mu.Lock()
@@ -709,13 +709,12 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 
 	// During intercept, all requests that are made to this pool, are forwarded to the intercepted
 	// agent(s)
-	cs.addAgentTunnel(agentSessionID, as.agent.Name, as.agent.Namespace, server)
+	cs.addAgentTunnel(agentSessionID, as.agent.Name, as.agent.Namespace, tunnel)
 	defer cs.deleteAgentTunnel(agentSessionID)
 
 	pool := cs.pool
-	stream := connpool.NewStream(server)
 	closing := int32(0)
-	msgCh, errCh := stream.ReadLoop(ctx, &closing)
+	msgCh, errCh := tunnel.ReadLoop(ctx, &closing)
 	for {
 		select {
 		case <-ctx.Done():
@@ -729,14 +728,14 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 			}
 			id := msg.ID()
 			conn, found, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-				return newConnForward(release, server), nil
+				return newConnForward(release, tunnel), nil
 			})
 			if found {
 				if _, ok := conn.(*connForward); !ok {
 					// lingering, non intercepted outbound connection to agent. Close it and create a new forward
 					conn.Close(ctx)
 					_, _, err = pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-						return newConnForward(release, server), nil
+						return newConnForward(release, tunnel), nil
 					})
 				}
 			}
@@ -745,7 +744,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 				return status.Error(codes.Internal, err.Error())
 			}
 			dlog.Debugf(ctx, ">> FRWD %s to client", id)
-			if err = cs.ClientTunnelServer.Send(msg.TunnelMessage()); err != nil {
+			if err = cs.tunnel.Send(msg); err != nil {
 				dlog.Errorf(ctx, "Send to client failed: %v", err)
 				return err
 			}

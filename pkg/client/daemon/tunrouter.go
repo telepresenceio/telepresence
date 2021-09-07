@@ -62,8 +62,8 @@ type tunRouter struct {
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
 
-	// connStream is the bidirectional gRPC tunnel to the traffic-manager
-	connStream *connpool.Stream
+	// tunnel is the bidirectional gRPC tunnel to the traffic-manager
+	tunnel connpool.Tunnel
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
@@ -327,16 +327,17 @@ func (t *tunRouter) run(c context.Context) error {
 		case <-t.cfgComplete:
 		}
 
-		tunnel, err := t.managerClient.ClientTunnel(c)
+		clientTunnel, err := t.managerClient.ClientTunnel(c)
 		if err != nil {
 			return err
 		}
-		if err = tunnel.Send(connpool.SessionInfoControl(t.session).TunnelMessage()); err != nil {
+		tunnel := connpool.NewTunnel(clientTunnel)
+		if err = tunnel.Send(connpool.SessionInfoControl(t.session)); err != nil {
 			return err
 		}
-		t.connStream = connpool.NewStream(tunnel)
+		t.tunnel = tunnel
 		dlog.Debug(c, "MGR read loop starting")
-		err = t.connStream.DialLoop(c, &t.closing, t.handlers)
+		err = t.tunnel.DialLoop(c, &t.closing, t.handlers)
 		var recvErr *client.RecvEOF
 		if errors.As(err, &recvErr) {
 			<-c.Done()
@@ -450,7 +451,7 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 
 	connID := connpool.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
 	wf, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
-		return tcp.NewHandler(t.connStream, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
+		return tcp.NewHandler(t.tunnel, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
@@ -465,9 +466,9 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	connID := connpool.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
 	uh, _, err := t.handlers.Get(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
 		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
-			return udp.NewDnsInterceptor(t.connStream, t.toTunCh, connID, remove, t.dnsLocalAddr)
+			return udp.NewDnsInterceptor(t.tunnel, t.toTunCh, connID, remove, t.dnsLocalAddr)
 		}
-		return udp.NewHandler(t.connStream, t.toTunCh, connID, remove), nil
+		return udp.NewHandler(t.tunnel, t.toTunCh, connID, remove), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)

@@ -30,7 +30,7 @@ type Forwarder struct {
 	sessionInfo *manager.SessionInfo
 
 	intercept *manager.InterceptInfo
-	tunnel    manager.Manager_AgentTunnelClient
+	tunnel    connpool.Tunnel
 }
 
 func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort int32) *Forwarder {
@@ -237,23 +237,24 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 	return nil
 }
 
-func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manager.SessionInfo) (manager.Manager_AgentTunnelClient, error) {
-	tunnel, err := f.manager.AgentTunnel(ctx)
+func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manager.SessionInfo) (connpool.Tunnel, error) {
+	agentTunnel, err := f.manager.AgentTunnel(ctx)
 	if err != nil {
 		err = fmt.Errorf("call to AgentTunnel() failed: %v", err)
 		return nil, err
 	}
+	tunnel := connpool.NewTunnel(agentTunnel)
 	defer func() {
 		if err != nil {
 			_ = tunnel.CloseSend()
 		}
 	}()
 
-	if err = tunnel.Send(connpool.SessionInfoControl(f.sessionInfo).TunnelMessage()); err != nil {
+	if err = tunnel.Send(connpool.SessionInfoControl(f.sessionInfo)); err != nil {
 		err = fmt.Errorf("failed to send agent sessionID: %s", err)
 		return nil, err
 	}
-	if err = tunnel.Send(connpool.SessionInfoControl(clientSession).TunnelMessage()); err != nil {
+	if err = tunnel.Send(connpool.SessionInfoControl(clientSession)); err != nil {
 		err = fmt.Errorf("failed to send client sessionID: %s", err)
 		return nil, err
 	}
@@ -261,7 +262,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 	go func() {
 		pool := connpool.GetPool(ctx)
 		closing := int32(0)
-		msgCh, errCh := connpool.NewStream(tunnel).ReadLoop(ctx, &closing)
+		msgCh, errCh := tunnel.ReadLoop(ctx, &closing)
 		for {
 			select {
 			case <-ctx.Done():
@@ -289,7 +290,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 	return tunnel, nil
 }
 
-func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo, tunnel connpool.TunnelStream) error {
+func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo, tunnel connpool.Tunnel) error {
 	dlog.Infof(ctx, "Accept got connection from %s", conn.RemoteAddr())
 
 	srcIp, srcPort, err := iputil.SplitToIPPort(conn.RemoteAddr())

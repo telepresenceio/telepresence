@@ -10,7 +10,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 )
 
@@ -26,16 +25,11 @@ const (
 	connected
 )
 
-type TunnelStream interface {
-	Send(*rpc.ConnMessage) error
-	Recv() (*rpc.ConnMessage, error)
-}
-
 // The dialer takes care of dispatching messages between gRPC and UDP connections
 type dialer struct {
 	id            ConnID
 	release       func()
-	bidiStream    TunnelStream
+	tunnel        Tunnel
 	incoming      chan Message
 	conn          net.Conn
 	idleTimer     *time.Timer
@@ -49,10 +43,10 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewDialer(connID ConnID, bidiStream TunnelStream, release func()) Handler {
+func NewDialer(connID ConnID, tunnel Tunnel, release func()) Handler {
 	return &dialer{
 		id:            connID,
-		bidiStream:    bidiStream,
+		tunnel:        tunnel,
 		release:       release,
 		incoming:      make(chan Message, 10),
 		writerClosing: make(chan struct{}),
@@ -61,10 +55,10 @@ func NewDialer(connID ConnID, bidiStream TunnelStream, release func()) Handler {
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
-func HandlerFromConn(connID ConnID, bidiStream TunnelStream, release func(), conn net.Conn) Handler {
+func HandlerFromConn(connID ConnID, tunnel Tunnel, release func(), conn net.Conn) Handler {
 	return &dialer{
 		id:            connID,
-		bidiStream:    bidiStream,
+		tunnel:        tunnel,
 		release:       release,
 		incoming:      make(chan Message, 10),
 		writerClosing: make(chan struct{}),
@@ -176,7 +170,7 @@ func (h *dialer) Close(_ context.Context) {
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> GRPC %s", ctrl)
-	err := h.bidiStream.Send(ctrl.TunnelMessage())
+	err := h.tunnel.Send(ctrl)
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}
@@ -204,7 +198,7 @@ func (h *dialer) readLoop(ctx context.Context) {
 		}
 		if n > 0 {
 			dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
-			if err = h.bidiStream.Send(NewMessage(h.id, b[:n]).TunnelMessage()); err != nil {
+			if err = h.tunnel.Send(NewMessage(h.id, b[:n])); err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "!! GRPC %s, send: %v", h.id, err)
 				}

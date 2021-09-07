@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
 )
@@ -17,7 +16,7 @@ type DatagramHandler interface {
 }
 
 type handler struct {
-	*connpool.Stream
+	connpool.Tunnel
 	id        connpool.ConnID
 	remove    func()
 	toTun     chan<- ip.Packet
@@ -40,9 +39,9 @@ func (h *handler) Close(_ context.Context) {
 	h.remove()
 }
 
-func NewHandler(stream *connpool.Stream, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) DatagramHandler {
+func NewHandler(tunnel connpool.Tunnel, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) DatagramHandler {
 	return &handler{
-		Stream:  stream,
+		Tunnel:  tunnel,
 		id:      id,
 		toTun:   toTun,
 		remove:  remove,
@@ -90,7 +89,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			dlog.Debugf(ctx, "<- TUN %s", dg)
 			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			err := h.Send(&manager.ConnMessage{ConnId: []byte(h.id), Payload: udpHdr.Payload()})
+			err := h.Send(connpool.NewMessage(h.id, udpHdr.Payload()))
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {
