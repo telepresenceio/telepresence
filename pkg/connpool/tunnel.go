@@ -19,6 +19,27 @@ type BidiStream interface {
 	Recv() (*rpc.ConnMessage, error)
 }
 
+// The Tunnel interface represents a bidirectional, synchronized Tunnel that sends
+// TCP or UDP traffic over gRPC using manager.ConnMessage messages.
+//
+// A Tunnel is closed by one of six things happening at either end (or at both ends).
+//
+//   1. Read from local connection fails (typically EOF)
+//   2. Write to local connection fails (connection peer closed)
+//   3. Idle timer timed out.
+//   4. Context is cancelled.
+//   5. Disconnect request received from Tunnel peer.
+//   6. DisconnectOK received from Tunnel peer.
+//
+// When #1 or #2 happens, the Tunnel will send a Disconnect request to
+// its Tunnel peer, shorten the Idle timer, and then continue to serve
+// incoming data from the Tunnel peer until a DisconnectOK is received.
+// Once that happens, it's guaranteed that the Tunnel peer will send no
+// more messages and the Tunnel is closed.
+//
+// When #3, #4, or #5 happens, the Tunnel will send a DisconnectOK to its Tunnel peer and close.
+//
+// When #6 happens, the Tunnel will simply close.
 type Tunnel interface {
 	DialLoop(ctx context.Context, pool *Pool) error
 	ReadLoop(ctx context.Context) (<-chan Message, <-chan error)
@@ -156,23 +177,24 @@ func (s *tunnel) DialLoop(ctx context.Context, pool *Pool) error {
 func (s *tunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
 	id := ctrl.ID()
 
-	dlog.Debugf(ctx, "<- MGR %s, code %s", id.ReplyString(), ctrl.Code())
-	conn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
-		if ctrl.Code() != Connect {
-			// Only Connect requested from peer may create a new instance at this point
-			return nil, nil
+	code := ctrl.Code()
+	dlog.Debugf(ctx, "<- MGR %s, code %s", id.ReplyString(), code)
+
+	if code != Connect {
+		if conn := pool.Get(id); conn != nil {
+			conn.HandleMessage(ctx, ctrl)
+		} else if code != Disconnect && code != DisconnectOK {
+			dlog.Error(ctx, "control packet lost because no connection was active")
 		}
+		return
+	}
+
+	conn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
 		return NewDialer(id, s, release), nil
 	})
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
-	if conn != nil {
-		conn.HandleMessage(ctx, ctrl)
-		return
-	}
-	if ctrl.Code() != ReadClosed && ctrl.Code() != DisconnectOK {
-		dlog.Error(ctx, "control packet lost because no connection was active")
-	}
+	conn.HandleMessage(ctx, ctrl)
 }

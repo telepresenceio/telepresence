@@ -273,12 +273,24 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 					return
 				}
 				id := msg.ID()
-				handler, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-					return connpool.NewDialer(id, tunnel, release), nil
-				})
-				if err != nil {
-					dlog.Error(ctx, err)
-					return
+				var handler connpool.Handler
+				if ctrl, ok := msg.(connpool.Control); ok {
+					switch ctrl.Code() {
+					// Don't establish a new Dialer just to say goodbye
+					case connpool.Disconnect, connpool.DisconnectOK:
+						if handler = pool.Get(id); handler == nil {
+							continue
+						}
+					}
+				}
+				if handler == nil {
+					handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+						return connpool.NewDialer(id, tunnel, release), nil
+					})
+					if err != nil {
+						dlog.Error(ctx, err)
+						return
+					}
 				}
 				handler.HandleMessage(ctx, msg)
 			}

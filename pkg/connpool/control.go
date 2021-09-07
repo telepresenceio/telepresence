@@ -17,8 +17,6 @@ const (
 	ConnectReject
 	Disconnect
 	DisconnectOK
-	ReadClosed
-	WriteClosed
 	KeepAlive
 	SyncRequest
 	SyncResponse
@@ -38,10 +36,6 @@ func (c ControlCode) String() string {
 		return "DISCONNECT"
 	case DisconnectOK:
 		return "DISCONNECT_OK"
-	case ReadClosed:
-		return "READ_CLOSED"
-	case WriteClosed:
-		return "WRITE_CLOSED"
 	case KeepAlive:
 		return "KEEP_ALIVE"
 	case SyncRequest:

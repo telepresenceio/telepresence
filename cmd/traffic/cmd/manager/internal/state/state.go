@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -636,24 +635,33 @@ func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error 
 			}
 
 			id := msg.ID()
-			// Retrieve the connection that is tracked for the given id. Create a new one if necessary
-			h, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-				switch id.Protocol() {
-				case ipproto.TCP, ipproto.UDP:
+			var handler connpool.Handler
+			if ctrl, ok := msg.(connpool.Control); ok {
+				switch ctrl.Code() {
+				// Don't establish a conn-forward or dialer just to say goodbye
+				case connpool.Disconnect, connpool.DisconnectOK:
+					if handler = pool.Get(id); handler == nil {
+						continue
+					}
+				}
+			}
+
+			if handler == nil {
+				// Retrieve the connection that is tracked for the given id. Create a new one if necessary
+				var err error
+				handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
 						// Dispatch directly to agent and let the dial happen there
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
 						return newConnForward(release, agentTunnel.tunnel), nil
 					}
 					return connpool.NewDialer(id, cs.tunnel, release), nil
-				default:
-					return nil, fmt.Errorf("unhadled L4 protocol: %d", id.Protocol())
+				})
+				if err != nil {
+					return fmt.Errorf("failed to get connection handler: %w", err)
 				}
-			})
-			if err != nil {
-				return fmt.Errorf("failed to get connection handler: %w", err)
 			}
-			h.HandleMessage(ctx, msg)
+			handler.HandleMessage(ctx, msg)
 		}
 	}
 }
@@ -671,10 +679,18 @@ func (cf *connForward) Close(_ context.Context) {
 	cf.release()
 }
 
-func (cf *connForward) HandleMessage(ctx context.Context, cm connpool.Message) {
-	dlog.Debugf(ctx, ">> FRWD %s to agent", cm.ID())
-	if err := cf.toStream.Send(ctx, cm); err != nil {
-		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", cm.ID(), err)
+func (cf *connForward) HandleMessage(ctx context.Context, msg connpool.Message) {
+	dlog.Debugf(ctx, ">> FRWD %s to agent", msg.ID())
+	if err := cf.toStream.Send(ctx, msg); err != nil {
+		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", msg.ID(), err)
+	}
+	if ctrl, ok := msg.(connpool.Control); ok {
+		switch ctrl.Code() {
+		case connpool.Disconnect, connpool.DisconnectOK:
+			// There will be no more messages coming our way
+			cf.Close(ctx)
+			dlog.Debugf(ctx, "-- FRWD %s to agent closed", msg.ID())
+		}
 	}
 }
 
@@ -715,30 +731,27 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 		select {
 		case <-ctx.Done():
 			return nil
-		case err := <-errCh:
+		case err = <-errCh:
 			return err
 		case msg := <-msgCh:
 			if msg == nil {
 				return nil
 			}
-			id := msg.ID()
-			conn, found, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-				return newConnForward(release, tunnel), nil
-			})
-			if found {
-				if _, ok := conn.(*connForward); !ok {
-					// lingering, non intercepted outbound connection to agent. Close it and create a new forward
-					conn.Close(ctx)
-					_, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-						return newConnForward(release, tunnel), nil
-					})
+			if ctrl, ok := msg.(connpool.Control); ok {
+				switch ctrl.Code() {
+				// Don't establish a conn-forward just to say goodbye
+				case connpool.Disconnect, connpool.DisconnectOK:
+					continue
 				}
 			}
+			_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (connpool.Handler, error) {
+				return newConnForward(release, tunnel), nil
+			})
 			if err != nil {
 				dlog.Error(ctx, err)
 				return status.Error(codes.Internal, err.Error())
 			}
-			dlog.Debugf(ctx, ">> FRWD %s to client", id)
+			dlog.Debugf(ctx, ">> FRWD %s to client", msg.ID())
 			if err = cs.tunnel.Send(ctx, msg); err != nil {
 				dlog.Errorf(ctx, "Send to client failed: %v", err)
 				return err
