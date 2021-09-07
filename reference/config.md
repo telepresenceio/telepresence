@@ -78,7 +78,7 @@ Values for `images` are strings. These values affect the objects that are deploy
 so it's important to ensure users have the same configuration.
 
 Additionally, you can deploy the server-side components with [Helm](../../install/helm), to prevent them
-from being overridden by a client's config and use the [mutating-webhook](../clusterpconfig/#mutating-webhook)
+from being overridden by a client's config and use the [mutating-webhook](../cluster-config/#mutating-webhook)
 to handle installation of the `traffic-agents`.
 
 These are the valid fields for the `images` key:
