@@ -416,6 +416,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
 		ctx := dlog.NewTestContext(ts.T(), false)
+
 		names := func() (string, error) {
 			return ts.kubectlOut(ctx, "get",
 				"--namespace", ts.managerTestNamespace,
@@ -423,16 +424,36 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 				"--ignore-not-found",
 				"-o", "jsonpath={.items[*].metadata.name}")
 		}
+
 		stdout, err := names()
 		require.NoError(err)
 		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
 		ts.NoError(ts.capturePodLogs(ctx, "traffic-manager", ts.managerTestNamespace))
 
+		// Add webhook agent to test webhook uninstall
+		jobname := "echo-auto-inject"
+		deployname := "deploy/" + jobname
+		ts.NoError(ts.applyApp(ctx, jobname, jobname, 80))
+		ts.kubectlOut(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace) // wrap in eventually to catch deploy hang ?
+		stdout, stderr := telepresence(ts.T(), "list", "--namespace", ts.namespace, "--agents")
+		require.Empty(stderr)
+		require.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
+
 		// The telepresence-test-developer will not be able to uninstall everything
 		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
-		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
+		stdout, stderr = telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
 		require.Contains(stdout, "Root Daemon quitting... done")
+
+		// Double check webhook agent is uninstalled
+		ts.kubectlOut(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace)
+		stdout, stderr = telepresence(ts.T(), "list", "--namespace", ts.namespace)
+		require.Empty(stderr)
+		require.Contains(stdout, jobname+": ready to intercept (traffic-agent not yet installed)")
+		stdout, stderr = telepresence(ts.T(), "uninstall", "--everything")
+		require.Empty(stderr)
+		require.Contains(stdout, "Root Daemon quitting... done")
+
 		require.Eventually(
 			func() bool {
 				stdout, _ := names()
