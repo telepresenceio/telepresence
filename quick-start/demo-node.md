@@ -122,6 +122,8 @@ Now you're able to share your fix in your local environment with your team!
     To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
 </Alert>
 
+</div>
+
 ## 6. How/Why does this all work?
 
 Telepresence works by deploying a two-way network proxy in a pod running in a Kubernetes cluster. This proxy can intercept traffic meant for the service and reroute it to a local copy, which is ready for further (local) development.
@@ -131,8 +133,6 @@ Intercepts and preview URLs are functions of Telepresence that enable easy local
 Telepresence also uses custom headers and header propagation for controllable intercepts and preview URLs. The headers facilitate the smart routing of requests either to live services in the cluster or services running locally on a developer’s machine.
 
 Preview URLs, when created, generate an ingress request containing a custom header with a token (the context). Telepresence sends this token to Ambassador Cloud with other information about the preview. Visiting the preview URL directs the user to Ambassador Cloud, which proxies the user to the cluster ingress with the token header injected into the request. The request carrying the header is routed in the cluster to the appropriate pod (the propagation). The Traffic Agent on the service pod sees the header and intercepts the request, redirecting it to the local developer machine that ran the intercept.
-
-</div>
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
