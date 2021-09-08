@@ -87,7 +87,7 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update"]
+  verbs: ["get", "list", "update", "patch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]
