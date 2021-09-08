@@ -178,4 +178,12 @@ replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316
 
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95
+// Helm pulls both of these in to support the registry functionality (which telepresence doesn't leverage)
+// but it pulls in old, vulnerable, versions. These replaces will force it into pulling new versions.
+// If there's ever a helm version that depends on versions >= these two, we can drop this replace block.
+// We do this via replace because if we updated the require() //indirect block above, and then upgraded helm to a version
+// that still pulls in the vulnerable runc and containerd, we could end up accidentally downgrading their versions.
+replace (
+	github.com/containerd/containerd => github.com/containerd/containerd v1.4.8
+	github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95
+)
