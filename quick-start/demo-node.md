@@ -14,7 +14,7 @@ ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSCards from './qs-cards';
-import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
+import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
 # Telepresence Quick Start
 
@@ -47,6 +47,10 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster. 
    <EmojivotoServicesList/>
     The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
+
+<DemoClusterWarning />
+
+<div class="docs-opaque-section">
 
 ## 2. Try the Emojivoto application
 
@@ -127,6 +131,8 @@ Intercepts and preview URLs are functions of Telepresence that enable easy local
 Telepresence also uses custom headers and header propagation for controllable intercepts and preview URLs. The headers facilitate the smart routing of requests either to live services in the cluster or services running locally on a developer’s machine.
 
 Preview URLs, when created, generate an ingress request containing a custom header with a token (the context). Telepresence sends this token to Ambassador Cloud with other information about the preview. Visiting the preview URL directs the user to Ambassador Cloud, which proxies the user to the cluster ingress with the token header injected into the request. The request carrying the header is routed in the cluster to the appropriate pod (the propagation). The Traffic Agent on the service pod sees the header and intercepts the request, redirecting it to the local developer machine that ran the intercept.
+
+</div>
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
