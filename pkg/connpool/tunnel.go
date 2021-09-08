@@ -184,7 +184,7 @@ func (s *tunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
 		if conn := pool.Get(id); conn != nil {
 			conn.HandleMessage(ctx, ctrl)
 		} else if code != Disconnect && code != DisconnectOK {
-			dlog.Error(ctx, "control packet of type %s lost because no connection was active", code)
+			dlog.Errorf(ctx, "control packet of type %s lost because no connection was active", code)
 		}
 		return
 	}
