@@ -9,7 +9,7 @@ require (
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
 	github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible
-	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
+	github.com/godbus/dbus/v5 v5.0.4
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.2
 	github.com/hashicorp/go-multierror v1.1.1
@@ -177,3 +177,5 @@ replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316
+
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95
