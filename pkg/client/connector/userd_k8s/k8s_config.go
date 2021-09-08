@@ -3,8 +3,6 @@ package userd_k8s
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"sort"
 
 	"github.com/spf13/pflag"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -79,7 +78,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	for k, v := range flagMap {
 		flagArgs = append(flagArgs, "--"+k+"="+v)
 		if err := flags.Set(k, v); err != nil {
-			return nil, fmt.Errorf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
 		}
 	}
 
@@ -90,7 +89,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	}
 
 	if len(config.Contexts) == 0 {
-		return nil, errors.New("kubeconfig has no context definition")
+		return nil, errcat.Config.New("kubeconfig has no context definition")
 	}
 
 	ctxName := flagMap["context"]
@@ -100,12 +99,12 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 
 	ctx, ok := config.Contexts[ctxName]
 	if !ok {
-		return nil, fmt.Errorf("context %q does not exist in the kubeconfig", ctxName)
+		return nil, errcat.Config.Newf("context %q does not exist in the kubeconfig", ctxName)
 	}
 
 	cluster, ok := config.Clusters[ctx.Cluster]
 	if !ok {
-		return nil, fmt.Errorf("cluster %q but no entry for that cluster exists in the kubeconfig", ctx.Cluster)
+		return nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", ctx.Cluster, ctxName)
 	}
 
 	restConfig, err := configLoader.ClientConfig()
@@ -133,7 +132,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
 		if err = json.Unmarshal(ext.Raw, &k.kubeconfigExtension); err != nil {
-			return nil, fmt.Errorf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+			return nil, errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
 		}
 	}
 

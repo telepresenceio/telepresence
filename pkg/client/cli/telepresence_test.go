@@ -651,7 +651,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		// service can be resolve with unqualified name
 		cs.Eventually(func() bool {
 			return run(ctx, "curl", "--silent", "ss-echo") == nil
-		}, 15*time.Second, time.Second)
+		}, 30*time.Second, 3*time.Second)
 	})
 
 	cs.Run("leaving renders services unavailable using unqualified name", func() {
@@ -663,7 +663,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
 			return run(ctx, "curl", "--silent", "ss-echo") != nil
-		}, 15*time.Second, time.Second)
+		}, 30*time.Second, 3*time.Second)
 	})
 }
 
@@ -819,11 +819,11 @@ func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 
 		cs.Eventually(func() bool {
 			return run(ctx, "curl", "--silent", "localhost:8081") == nil
-		}, 3*time.Second, 1*time.Second)
+		}, 15*time.Second, 2*time.Second)
 
 		cs.Eventually(func() bool {
 			return run(ctx, "curl", "--silent", "localhost:8082") == nil
-		}, 3*time.Second, 1*time.Second)
+		}, 15*time.Second, 2*time.Second)
 	})
 
 	cs.Run("Non-forwarded port is not reachable", func() {
@@ -833,7 +833,7 @@ func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
 			return run(ctx, "curl", "--silent", "localhost:8083") != nil
-		}, 3*time.Second, 1*time.Second)
+		}, 15*time.Second, 2*time.Second)
 	})
 }
 
@@ -1493,7 +1493,7 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 }
 
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
-	c, cancel := context.WithTimeout(c, 120*time.Second)
+	c, cancel := context.WithTimeout(c, 3*time.Minute)
 	defer cancel()
 
 	// Since this function can be called multiple times in parallel
@@ -1504,7 +1504,7 @@ func (ts *telepresenceSuite) waitForService(c context.Context, name string, port
 	k8sSafeName := reg.ReplaceAllString(name, "")
 	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
 	for c.Err() == nil {
-		time.Sleep(time.Second)
+		time.Sleep(3 * time.Second)
 		err := ts.kubectl(c, "run", containerName, "--context", "default", "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
 			"curl",

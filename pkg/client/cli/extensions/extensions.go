@@ -3,7 +3,6 @@ package extensions
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -51,8 +51,14 @@ type ExtensionsState struct {
 // The basename of the extension YAML filename (i.e. the non-directory part, with the ".yml" suffix
 // removed) identifies the name of the extension.  The content of the extension YAML file must be an
 // ExtensionInfo object serialized as YAML.  See the docs for ExtensionInfo for more information.
-func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*ExtensionsState, error) {
-	es := &ExtensionsState{
+func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *ExtensionsState, err error) {
+	defer func() {
+		// Consider all errors issued here to belong to the Config category.
+		if err != nil {
+			err = errcat.Config.New(err)
+		}
+	}()
+	es = &ExtensionsState{
 		ext2file: make(map[string]string),
 		exts:     make(map[string]ExtensionInfo),
 		mech2ext: make(map[string]string),
@@ -318,7 +324,7 @@ func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 		msg := fmt.Sprintf(
 			`images.agentImage must be set with cloud.skipLogin in
 %s for intercepts of mechanism: %s`, client.GetConfigFile(ctx), mechname)
-		err := errors.New(msg)
+		err := errcat.Config.New(msg)
 		return "", err
 	}
 	for urlSchemeIsOneOf(image, "http", "https", "grpc+https") {
@@ -338,11 +344,11 @@ func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusOK {
-					return "", fmt.Errorf("image URL %q returned HTTP %v", image, resp.StatusCode)
+					return "", errcat.NoLogs.Newf("image URL %q returned HTTP %v", image, resp.StatusCode)
 				}
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
-					return "", err
+					return "", errcat.NoLogs.New(err)
 				}
 				return strings.TrimSpace(string(body)), nil
 			}()

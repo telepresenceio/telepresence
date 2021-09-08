@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -595,13 +596,21 @@ func GetDefaultConfig(c context.Context) Config {
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
 // or filelocation.AppSystemConfigDirs
-func LoadConfig(c context.Context) (*Config, error) {
-	dirs, err := filelocation.AppSystemConfigDirs(c)
+func LoadConfig(c context.Context) (cfg *Config, err error) {
+	defer func() {
+		if err != nil {
+			err = errcat.Config.New(err)
+		}
+	}()
+
+	var dirs []string
+	dirs, err = filelocation.AppSystemConfigDirs(c)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg := GetDefaultConfig(c)
+	dflt := GetDefaultConfig(c)
+	cfg = &dflt
 	readMerge := func(dir string) error {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
@@ -634,7 +643,7 @@ func LoadConfig(c context.Context) (*Config, error) {
 	appDir, err := filelocation.AppUserConfigDir(c)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &cfg, nil
+			return cfg, nil
 		}
 		return nil, err
 	}
@@ -644,8 +653,8 @@ func LoadConfig(c context.Context) (*Config, error) {
 
 	// Sanity check
 	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "beta-app.datawire.io" {
-		return nil, fmt.Errorf("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+		return nil, errors.New("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
 	}
 
-	return &cfg, nil
+	return cfg, nil
 }
