@@ -413,7 +413,7 @@ func (ts *telepresenceSuite) TestB_Connected() {
 }
 
 func (ts *telepresenceSuite) TestC_Uninstall() {
-	//telepresence(ts.T(), "connect")
+	// telepresence(ts.T(), "connect")
 
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
