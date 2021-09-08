@@ -63,7 +63,7 @@ func main() {
 		cmd = cli.Command(ctx)
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			if errcat.GetCategory(err) > errcat.OtherCLI {
+			if errcat.GetCategory(err) > errcat.NoLogs {
 				summarizeLogs(ctx, cmd)
 			}
 			os.Exit(1)

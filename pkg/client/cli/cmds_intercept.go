@@ -296,7 +296,7 @@ func newInterceptState(
 
 func interceptMessage(r *connector.InterceptResult) error {
 	msg := ""
-	cat := errcat.Unknown
+	errCat := errcat.Unknown
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 		return nil
@@ -340,13 +340,13 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = fmt.Sprintf("Unknown error code %d", r.Error)
 	}
 	if r.ErrorCategory > 0 {
-		cat = errcat.Category(r.ErrorCategory)
+		errCat = errcat.Category(r.ErrorCategory)
 	}
 
 	if id := r.GetInterceptInfo().GetId(); id != "" {
 		msg = fmt.Sprintf("%s: id = %q", msg, id)
 	}
-	return cat.Newf(msg)
+	return errCat.Newf(msg)
 }
 
 func checkMountCapability(ctx context.Context) error {
@@ -647,7 +647,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if envFile == "" {
 		file, err := os.CreateTemp("", "tel-*.env")
 		if err != nil {
-			return errcat.OtherCLI.Newf("failed to create temporary environment file. %w", err)
+			return errcat.NoLogs.Newf("failed to create temporary environment file. %w", err)
 		}
 		defer os.Remove(file.Name())
 
@@ -693,7 +693,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 func (is *interceptState) writeEnvFile() error {
 	file, err := os.Create(is.args.envFile)
 	if err != nil {
-		return errcat.OtherCLI.Newf("failed to create environment file %q: %w", is.args.envFile, err)
+		return errcat.NoLogs.Newf("failed to create environment file %q: %w", is.args.envFile, err)
 	}
 	return is.writeEnvToFileAndClose(file)
 }
