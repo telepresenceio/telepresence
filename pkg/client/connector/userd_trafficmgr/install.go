@@ -70,6 +70,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 			// annotation can be found in the workload.
 			ann := agent.GetAnnotations()
 			if ann == nil {
+				webhookAgentChannel <- agent
 				return
 			}
 			if _, ok := ann[annTelepresenceActions]; !ok {
@@ -99,14 +100,13 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		webhookWaitGroup := sync.WaitGroup{}
 		webhookWaitGroup.Add(len(webhookAgentChannel))
 		for agent := range webhookAgentChannel {
-			agent := agent // pin ?
-			go func() {
+			go func(obj kates.Object) {
 				defer webhookWaitGroup.Done()
-				err := ki.rolloutRestart(c, agent)
+				err := ki.rolloutRestart(c, obj)
 				if err != nil {
 					addError(err)
 				}
-			}()
+			}(agent)
 		}
 		// wait for all agents to be removed
 		webhookWaitGroup.Wait()
@@ -130,7 +130,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 // recreates "kubectl rollout restart <obj>" for kates.obj
 func (ki *installer) rolloutRestart(c context.Context, obj kates.Object) error {
 	restartAnnotation := fmt.Sprintf(
-		"{\"spec\": {\"template\": {\"metadata\": {\"annotations\": {\"%srestartedAt\": \"%s\"}}}}}",
+		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
 		install.DomainPrefix,
 		time.Now().Format(time.RFC3339),
 	)
