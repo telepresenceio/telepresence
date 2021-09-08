@@ -69,12 +69,12 @@ func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
 		msg = FromConnMessage(cm)
 		if ctrl, ok := msg.(Control); ok {
 			switch ctrl.Code() {
-			case SyncRequest:
+			case syncRequest:
 				if err = s.stream.Send(SyncResponseControl(ctrl).TunnelMessage()); err != nil {
 					return nil, fmt.Errorf("failed to send sync response: %w", err)
 				}
 				continue
-			case SyncResponse:
+			case syncResponse:
 				atomic.StoreUint32(&s.lastAck, ctrl.AckNumber())
 				continue
 			}
@@ -184,7 +184,7 @@ func (s *tunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
 		if conn := pool.Get(id); conn != nil {
 			conn.HandleMessage(ctx, ctrl)
 		} else if code != Disconnect && code != DisconnectOK {
-			dlog.Error(ctx, "control packet lost because no connection was active")
+			dlog.Error(ctx, "control packet of type %s lost because no connection was active", code)
 		}
 		return
 	}

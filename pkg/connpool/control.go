@@ -18,8 +18,8 @@ const (
 	Disconnect
 	DisconnectOK
 	KeepAlive
-	SyncRequest
-	SyncResponse
+	syncRequest
+	syncResponse
 )
 
 func (c ControlCode) String() string {
@@ -38,9 +38,9 @@ func (c ControlCode) String() string {
 		return "DISCONNECT_OK"
 	case KeepAlive:
 		return "KEEP_ALIVE"
-	case SyncRequest:
+	case syncRequest:
 		return "SYNC_REQUEST"
-	case SyncResponse:
+	case syncResponse:
 		return "SYNC_RESPONSE"
 	default:
 		return fmt.Sprintf("** unknown control code: %d **", c)
@@ -75,7 +75,7 @@ func (c *control) Payload() []byte {
 // AckNumber returns the AckNumber that this Control represents or zero if
 // this isn't a SyncResponse Control.
 func (c *control) AckNumber() uint32 {
-	if c.code == SyncResponse {
+	if c.code == syncResponse {
 		return binary.BigEndian.Uint32(c.payload)
 	}
 	return 0
@@ -121,9 +121,9 @@ func SessionInfoControl(sessionInfo *manager.SessionInfo) Control {
 func SyncRequestControl(ackNbr uint32) Control {
 	payload := make([]byte, 4)
 	binary.BigEndian.PutUint32(payload, ackNbr)
-	return &control{id: "", code: SyncRequest, payload: payload}
+	return &control{id: "", code: syncRequest, payload: payload}
 }
 
 func SyncResponseControl(request Control) Control {
-	return &control{id: "", code: SyncResponse, payload: request.Payload()}
+	return &control{id: "", code: syncResponse, payload: request.Payload()}
 }

@@ -35,7 +35,7 @@ func (p *Pool) release(id ConnID) {
 // HandlerCreator describes the function signature for the function that creates a handler
 type HandlerCreator func(ctx context.Context, release func()) (Handler, error)
 
-// Get finds a handler for the given id from the pool and returns it. Nil is returned if no such handler exisyd
+// Get finds a handler for the given id from the pool and returns it. Nil is returned if no such handler exists
 func (p *Pool) Get(id ConnID) Handler {
 	p.lock.Lock()
 	handler := p.handlers[id]
