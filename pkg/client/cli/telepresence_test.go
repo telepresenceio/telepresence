@@ -413,7 +413,7 @@ func (ts *telepresenceSuite) TestB_Connected() {
 }
 
 func (ts *telepresenceSuite) TestC_Uninstall() {
-	telepresence(ts.T(), "connect")
+	//telepresence(ts.T(), "connect")
 
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
@@ -449,12 +449,11 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 
 		// Double check webhook agent is uninstalled
 		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
-		stdout, stderr = telepresence(ts.T(), "list", "--namespace", ts.namespace)
-		require.Empty(stderr)
-		require.Contains(stdout, jobname+": ready to intercept (traffic-agent not yet installed)")
-		stdout, stderr = telepresence(ts.T(), "uninstall", "--everything")
-		require.Empty(stderr)
-		require.Contains(stdout, "Root Daemon quitting... done")
+		stdout, err = ts.kubectlOut(ctx, "get", "pods", "-n", ts.namespace)
+		require.NoError(err)
+		match, err := regexp.MatchString(jobname+`-[a-z0-9]+-[a-z0-9]+\s+1/1\s+Running`, stdout)
+		require.NoError(err)
+		require.True(match)
 
 		require.Eventually(
 			func() bool {
