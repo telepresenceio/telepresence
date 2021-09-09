@@ -572,7 +572,7 @@ func GetDefaultConfig(c context.Context) Config {
 			PrivateProxyDial:             5 * time.Second,
 			PrivateTrafficManagerAPI:     15 * time.Second,
 			PrivateTrafficManagerConnect: 60 * time.Second,
-			PrivateHelm:                  12 * time.Second,
+			PrivateHelm:                  30 * time.Second,
 		},
 		LogLevels: LogLevels{
 			UserDaemon: logrus.InfoLevel,

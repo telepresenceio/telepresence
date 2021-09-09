@@ -20,6 +20,8 @@
 - Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being
   hard-coded to "cluster.local".
 
+- Bugfix: Downloading large files during an intercept will no longer cause timeouts and hanging traffic-agent.
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
