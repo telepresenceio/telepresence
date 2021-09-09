@@ -495,6 +495,7 @@ func (cs *connectedSuite) SetupSuite() {
 	configYml := fmt.Sprintf(`
 logLevels:
   rootDaemon: debug
+  userDaemon: debug
 images:
   registry: %[1]s
   webhookRegistry: %[1]s
