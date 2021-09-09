@@ -431,18 +431,23 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		require.NoError(err)
 		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
 		ts.NoError(ts.capturePodLogs(ctx, "traffic-manager", ts.managerTestNamespace))
+		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 
 		// Add webhook agent to test webhook uninstall
 		jobname := "echo-auto-inject"
 		deployname := "deploy/" + jobname
 		require.NoError(ts.applyApp(ctx, jobname, jobname, 80))
+
+		defer func() {
+			require.NoError(ts.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject"))
+		}()
+
 		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
 		stdout, stderr := telepresence(ts.T(), "list", "--namespace", ts.namespace, "--agents")
 		require.Empty(stderr)
 		require.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
 
 		// The telepresence-test-developer will not be able to uninstall everything
-		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 		stdout, stderr = telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
 		require.Contains(stdout, "Root Daemon quitting... done")
