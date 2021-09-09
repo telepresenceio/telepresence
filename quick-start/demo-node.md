@@ -14,7 +14,7 @@ ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import QSCards from './qs-cards';
-import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
+import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
 # Telepresence Quick Start
 
@@ -47,6 +47,10 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster.
    <EmojivotoServicesList/>
     The Service Catalog gives you a consolidated view of all your services across development, staging, and production. After exploring the Service Catalog, continue with this tutorial to test the application in your demo cluster.
+
+<DemoClusterWarning />
+
+<div className="docs-opaque-section">
 
 ## 2. Try the Emojivoto application
 
@@ -118,6 +122,8 @@ Now you're able to share your fix in your local environment with your team!
     To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
 </Alert>
 
+</div>
+
 ## 6. How/Why does this all work?
 
 Telepresence works by deploying a two-way network proxy in a pod running in a Kubernetes cluster. This proxy can intercept traffic meant for the service and reroute it to a local copy, which is ready for further (local) development.
@@ -132,4 +138,3 @@ Preview URLs, when created, generate an ingress request containing a custom head
 
 
 You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
-
