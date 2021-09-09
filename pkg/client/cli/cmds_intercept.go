@@ -497,8 +497,11 @@ func (is *interceptState) getMountPoint() (string, bool, error) {
 	if err != nil {
 		mountPoint = is.args.mount
 		doMount = len(mountPoint) > 0
+		err = nil
 	}
-	mountPoint, err = prepareMount(mountPoint)
+	if doMount {
+		mountPoint, err = prepareMount(mountPoint)
+	}
 	return mountPoint, doMount, err
 }
 

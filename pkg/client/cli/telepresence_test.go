@@ -632,6 +632,7 @@ func (cs *connectedSuite) TestF_SuccessfullyInterceptsDeploymentWithProbes() {
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "with-probes: intercepted")
+	require.NotContains(stdout, "Volume Mount Point")
 }
 
 func (cs *connectedSuite) TestG_SuccessfullyInterceptsReplicaSet() {
@@ -644,6 +645,7 @@ func (cs *connectedSuite) TestG_SuccessfullyInterceptsReplicaSet() {
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "rs-echo: intercepted")
+	require.NotContains(stdout, "Volume Mount Point")
 }
 
 func (cs *connectedSuite) TestH_SuccessfullyInterceptsStatefulSet() {
@@ -656,6 +658,7 @@ func (cs *connectedSuite) TestH_SuccessfullyInterceptsStatefulSet() {
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "ss-echo: intercepted")
+	require.NotContains(stdout, "Volume Mount Point")
 }
 
 func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
