@@ -1,6 +1,7 @@
 package connpool
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 
@@ -16,9 +17,9 @@ const (
 	ConnectReject
 	Disconnect
 	DisconnectOK
-	ReadClosed
-	WriteClosed
 	KeepAlive
+	syncRequest
+	syncResponse
 )
 
 func (c ControlCode) String() string {
@@ -35,12 +36,12 @@ func (c ControlCode) String() string {
 		return "DISCONNECT"
 	case DisconnectOK:
 		return "DISCONNECT_OK"
-	case ReadClosed:
-		return "READ_CLOSED"
-	case WriteClosed:
-		return "WRITE_CLOSED"
 	case KeepAlive:
 		return "KEEP_ALIVE"
+	case syncRequest:
+		return "SYNC_REQUEST"
+	case syncResponse:
+		return "SYNC_RESPONSE"
 	default:
 		return fmt.Sprintf("** unknown control code: %d **", c)
 	}
@@ -50,6 +51,7 @@ type Control interface {
 	Message
 	Code() ControlCode
 	SessionInfo() *manager.SessionInfo
+	AckNumber() uint32
 }
 
 type control struct {
@@ -68,6 +70,15 @@ func (c *control) ID() ConnID {
 
 func (c *control) Payload() []byte {
 	return c.payload
+}
+
+// AckNumber returns the AckNumber that this Control represents or zero if
+// this isn't a SyncResponse Control.
+func (c *control) AckNumber() uint32 {
+	if c.code == syncResponse {
+		return binary.BigEndian.Uint32(c.payload)
+	}
+	return 0
 }
 
 // SessionInfo returns the SessionInfo that this Control represents or nil if
@@ -105,4 +116,14 @@ func SessionInfoControl(sessionInfo *manager.SessionInfo) Control {
 		panic(err)
 	}
 	return &control{id: "", code: SessionInfo, payload: jsonInfo}
+}
+
+func SyncRequestControl(ackNbr uint32) Control {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, ackNbr)
+	return &control{id: "", code: syncRequest, payload: payload}
+}
+
+func SyncResponseControl(request Control) Control {
+	return &control{id: "", code: syncResponse, payload: request.Payload()}
 }

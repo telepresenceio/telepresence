@@ -27,7 +27,7 @@ following Free and Open Source software:
     github.com/blang/semver                                             v3.5.1+incompatible                                         MIT license
     github.com/cespare/xxhash/v2                                        v2.1.1                                                      MIT license
     github.com/containerd/cgroups                                       v0.0.0-20200531161412-0dbf7f05ba59                          Apache License 2.0
-    github.com/containerd/containerd                                    v1.4.4                                                      Apache License 2.0
+    github.com/containerd/containerd                                    v1.4.8                                                      Apache License 2.0
     github.com/containerd/continuity                                    v0.0.0-20201208142359-180525291bb7                          Apache License 2.0
     github.com/cyphar/filepath-securejoin                               v0.2.2                                                      3-clause BSD license
     github.com/datawire/ambassador                                      v1.13.7-0.20210527054604-663dfb393e59                       Apache License 2.0
@@ -54,7 +54,7 @@ following Free and Open Source software:
     github.com/go-openapi/spec                                          v0.19.5                                                     Apache License 2.0
     github.com/go-openapi/swag                                          v0.19.5                                                     Apache License 2.0
     github.com/gobwas/glob                                              v0.2.3                                                      MIT license
-    github.com/godbus/dbus/v5                                           v5.0.4-0.20201218172701-b3768b321399                        2-clause BSD license
+    github.com/godbus/dbus/v5                                           v5.0.4                                                      2-clause BSD license
     github.com/gogo/protobuf                                            v1.3.2                                                      3-clause BSD license
     github.com/golang/groupcache                                        v0.0.0-20200121045136-8c9f03a8e57e                          Apache License 2.0
     github.com/golang/protobuf                                          v1.4.3                                                      3-clause BSD license
@@ -98,7 +98,7 @@ following Free and Open Source software:
     github.com/morikuni/aec                                             v1.0.0                                                      MIT license
     github.com/opencontainers/go-digest                                 v1.0.0                                                      Apache License 2.0
     github.com/opencontainers/image-spec                                v1.0.1                                                      Apache License 2.0
-    github.com/opencontainers/runc                                      v0.1.1                                                      Apache License 2.0
+    github.com/opencontainers/runc                                      v1.0.0-rc95                                                 Apache License 2.0
     github.com/peterbourgon/diskv                                       v2.0.1+incompatible                                         MIT license
     github.com/pkg/browser                                              v0.0.0-20180916011732-0a3d74bf9ce4                          2-clause BSD license
     github.com/pkg/errors                                               v0.9.1                                                      2-clause BSD license

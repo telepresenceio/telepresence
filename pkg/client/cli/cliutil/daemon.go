@@ -89,13 +89,12 @@ func withDaemon(ctx context.Context, maybeStart bool, dnsIP string, fn func(cont
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoDaemon
 			if maybeStart {
-				if err := launchDaemon(ctx, dnsIP); err != nil {
+				if err = launchDaemon(ctx, dnsIP); err != nil {
 					return fmt.Errorf("failed to launch the daemon service: %w", err)
 				}
 
-				if err := client.WaitUntilSocketAppears("daemon", client.DaemonSocketName, 10*time.Second); err != nil {
-					logDir, _ := filelocation.AppUserLogDir(ctx)
-					return fmt.Errorf("daemon service did not start (see %q for more info): %w", filepath.Join(logDir, "daemon.log"), err)
+				if err = client.WaitUntilSocketAppears("daemon", client.DaemonSocketName, 10*time.Second); err != nil {
+					return fmt.Errorf("daemon service did not start: %w", err)
 				}
 
 				maybeStart = false

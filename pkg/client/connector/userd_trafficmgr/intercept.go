@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	grpcCodes "google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dgroup"
@@ -20,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -238,39 +241,34 @@ func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptIn
 	tm.currentInterceptsLock.Unlock()
 }
 
+func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
+	return &rpc.InterceptResult{
+		Error:         tp,
+		ErrorText:     err.Error(),
+		ErrorCategory: int32(errcat.GetCategory(err)),
+	}
+}
+
 // AddIntercept adds one intercept
 func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
-		return &rpc.InterceptResult{
-			Error:     rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD,
-			ErrorText: spec.Name,
-		}, nil
+		return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil
 	}
 
 	if _, inUse := tm.LocalIntercepts[spec.Name]; inUse {
-		return &rpc.InterceptResult{
-			Error:     rpc.InterceptError_ALREADY_EXISTS,
-			ErrorText: spec.Name,
-		}, nil
+		return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
 	}
 
 	<-tm.startup
 	for _, iCept := range tm.getCurrentIntercepts() {
 		if iCept.Spec.Name == spec.Name {
-			return &rpc.InterceptResult{
-				Error:     rpc.InterceptError_ALREADY_EXISTS,
-				ErrorText: spec.Name,
-			}, nil
+			return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
 		}
 		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
-			return &rpc.InterceptResult{
-				InterceptInfo: &manager.InterceptInfo{Spec: spec},
-				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
-				ErrorText:     iCept.Spec.Name,
-			}, nil
+			return interceptError(rpc.InterceptError_LOCAL_TARGET_IN_USE, errcat.User.Newf(spec.Name)), nil
 		}
 	}
 
@@ -297,11 +295,7 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	if ir.MountPoint != "" {
 		// Ensure that the mount-point is free to use
 		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
-			return &rpc.InterceptResult{
-				InterceptInfo: nil,
-				Error:         rpc.InterceptError_MOUNT_POINT_BUSY,
-				ErrorText:     prev.(string),
-			}, nil
+			return interceptError(rpc.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
 		}
 
 		// Assume that the mount-point should to be removed from the busy map. Only a happy path
@@ -346,19 +340,11 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	select {
 	case <-c.Done():
-		return &rpc.InterceptResult{
-			InterceptInfo: ii,
-			Error:         rpc.InterceptError_FAILED_TO_ESTABLISH,
-			ErrorText:     c.Err().Error(),
-		}, nil
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, c.Err()), nil
 	case wr := <-waitCh:
 		ii = wr.intercept
 		if wr.err != nil {
-			return &rpc.InterceptResult{
-				InterceptInfo: ii,
-				Error:         rpc.InterceptError_FAILED_TO_ESTABLISH,
-				ErrorText:     wr.err.Error(),
-			}, nil
+			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
 		}
 		result.InterceptInfo = wr.intercept
 		if ir.MountPoint != "" && ii.SftpPort > 0 {
@@ -503,7 +489,7 @@ func (tm *trafficManager) clearIntercepts(c context.Context) error {
 	<-tm.startup
 	for _, cept := range tm.getCurrentIntercepts() {
 		err := tm.RemoveIntercept(c, cept.Spec.Name)
-		if err != nil {
+		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {
 			return err
 		}
 	}

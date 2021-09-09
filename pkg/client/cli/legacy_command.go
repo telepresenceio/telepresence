@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -141,7 +141,7 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 		// This should be impossible based on how we currently parse commands.
 		// Just putting it here just in case the impossible happens.
 		if lc.run && lc.dockerRun {
-			return "", errors.New("--run and --docker-run are mutually exclusive")
+			return "", errcat.User.New("--run and --docker-run are mutually exclusive")
 		}
 
 		if lc.run {

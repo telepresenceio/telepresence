@@ -35,15 +35,23 @@ func (p *Pool) release(id ConnID) {
 // HandlerCreator describes the function signature for the function that creates a handler
 type HandlerCreator func(ctx context.Context, release func()) (Handler, error)
 
-// Get finds a handler for the given id from the pool, or creates a new handler using the given createHandler func
+// Get finds a handler for the given id from the pool and returns it. Nil is returned if no such handler exists
+func (p *Pool) Get(id ConnID) Handler {
+	p.lock.Lock()
+	handler := p.handlers[id]
+	p.lock.Unlock()
+	return handler
+}
+
+// GetOrCreate finds a handler for the given id from the pool, or creates a new handler using the given createHandler func
 // when no handler was found. The handler is returned together with a boolean flag which is set to true if
 // the handler was found or false if it was created.
-func (p *Pool) Get(ctx context.Context, id ConnID, createHandler HandlerCreator) (Handler, bool, error) {
+func (p *Pool) GetOrCreate(ctx context.Context, id ConnID, createHandler HandlerCreator) (Handler, bool, error) {
 	p.lock.Lock()
 	handler, ok := p.handlers[id]
 	p.lock.Unlock()
 
-	if ok || createHandler == nil {
+	if ok {
 		return handler, true, nil
 	}
 

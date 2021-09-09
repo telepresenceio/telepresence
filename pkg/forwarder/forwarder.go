@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -30,7 +29,7 @@ type Forwarder struct {
 	sessionInfo *manager.SessionInfo
 
 	intercept *manager.InterceptInfo
-	tunnel    manager.Manager_AgentTunnelClient
+	tunnel    connpool.Tunnel
 }
 
 func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort int32) *Forwarder {
@@ -237,35 +236,34 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 	return nil
 }
 
-func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manager.SessionInfo) (manager.Manager_AgentTunnelClient, error) {
-	tunnel, err := f.manager.AgentTunnel(ctx)
+func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manager.SessionInfo) (connpool.Tunnel, error) {
+	agentTunnel, err := f.manager.AgentTunnel(ctx)
 	if err != nil {
 		err = fmt.Errorf("call to AgentTunnel() failed: %v", err)
 		return nil, err
 	}
+	tunnel := connpool.NewTunnel(agentTunnel)
 	defer func() {
 		if err != nil {
 			_ = tunnel.CloseSend()
 		}
 	}()
 
-	if err = tunnel.Send(connpool.SessionInfoControl(f.sessionInfo).TunnelMessage()); err != nil {
+	if err = tunnel.Send(ctx, connpool.SessionInfoControl(f.sessionInfo)); err != nil {
 		err = fmt.Errorf("failed to send agent sessionID: %s", err)
 		return nil, err
 	}
-	if err = tunnel.Send(connpool.SessionInfoControl(clientSession).TunnelMessage()); err != nil {
+	if err = tunnel.Send(ctx, connpool.SessionInfoControl(clientSession)); err != nil {
 		err = fmt.Errorf("failed to send client sessionID: %s", err)
 		return nil, err
 	}
 
 	go func() {
 		pool := connpool.GetPool(ctx)
-		closing := int32(0)
-		msgCh, errCh := connpool.NewStream(tunnel).ReadLoop(ctx, &closing)
+		msgCh, errCh := tunnel.ReadLoop(ctx)
 		for {
 			select {
 			case <-ctx.Done():
-				atomic.StoreInt32(&closing, 2)
 				return
 			case err := <-errCh:
 				dlog.Error(ctx, err)
@@ -275,12 +273,24 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 					return
 				}
 				id := msg.ID()
-				handler, _, err := pool.Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
-					return connpool.NewDialer(id, tunnel, release), nil
-				})
-				if err != nil {
-					dlog.Error(ctx, err)
-					return
+				var handler connpool.Handler
+				if ctrl, ok := msg.(connpool.Control); ok {
+					switch ctrl.Code() {
+					// Don't establish a new Dialer just to say goodbye
+					case connpool.Disconnect, connpool.DisconnectOK:
+						if handler = pool.Get(id); handler == nil {
+							continue
+						}
+					}
+				}
+				if handler == nil {
+					handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+						return connpool.NewDialer(id, tunnel, release), nil
+					})
+					if err != nil {
+						dlog.Error(ctx, err)
+						return
+					}
 				}
 				handler.HandleMessage(ctx, msg)
 			}
@@ -289,7 +299,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 	return tunnel, nil
 }
 
-func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo, tunnel connpool.TunnelStream) error {
+func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo, tunnel connpool.Tunnel) error {
 	dlog.Infof(ctx, "Accept got connection from %s", conn.RemoteAddr())
 
 	srcIp, srcPort, err := iputil.SplitToIPPort(conn.RemoteAddr())
@@ -299,7 +309,7 @@ func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *man
 
 	destIp := iputil.Parse(iCept.Spec.TargetHost)
 	id := connpool.NewConnID(connpool.IPProto(conn.RemoteAddr().Network()), srcIp, destIp, srcPort, uint16(iCept.Spec.TargetPort))
-	_, found, err := connpool.GetPool(ctx).Get(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+	_, found, err := connpool.GetPool(ctx).GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
 		return connpool.HandlerFromConn(id, tunnel, release, conn), nil
 	})
 	if err != nil {

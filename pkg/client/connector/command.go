@@ -25,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -83,6 +84,14 @@ func Command() *cobra.Command {
 	return c
 }
 
+func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
+	return &rpc.ConnectInfo{
+		Error:         t,
+		ErrorText:     err.Error(),
+		ErrorCategory: int32(errcat.GetCategory(err)),
+	}
+}
+
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo {
 	s.connectMu.Lock()
@@ -90,10 +99,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 
 	config, err := userd_k8s.NewConfig(c, cr.KubeFlags)
 	if err != nil && !dryRun {
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	if cluster := s.sharedState.GetClusterNonBlocking(); cluster != nil {
 		if cluster.Config.ContextServiceAndFlagsEqual(config) {
@@ -107,10 +113,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			}
 			ingressInfo, err := cluster.DetectIngressBehavior(c)
 			if err != nil {
-				return &rpc.ConnectInfo{
-					Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-					ErrorText: err.Error(),
-				}
+				return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 			}
 			ret := &rpc.ConnectInfo{
 				Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
@@ -166,10 +169,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	if err != nil {
 		dlog.Errorf(c, "unable to connect to daemon: %+v", err)
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_DAEMON_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
 	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
 	// prefer to let the OS close it when we exit.
@@ -194,10 +194,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	s.sharedState.MaybeSetCluster(cluster)
 	dlog.Infof(c, "Connected to context %s (%s)", cluster.Context, cluster.Server)
@@ -229,10 +226,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 	s.sharedState.MaybeSetTrafficManager(tmgr)
 
@@ -244,19 +238,13 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		dlog.Errorf(c, "Failed to initialize session with traffic-manager: %v", err)
 		// No point in continuing without a traffic manager
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 
 	// Wait until all of the k8s watches (in the "background-k8swatch" goroutine) are running.
 	if err = cluster.WaitUntilReady(c); err != nil {
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
 	// Collect data on how long connection time took
@@ -270,10 +258,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	ingressInfo, err := cluster.DetectIngressBehavior(c)
 	if err != nil {
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
 	ret := &rpc.ConnectInfo{

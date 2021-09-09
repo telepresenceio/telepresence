@@ -40,7 +40,10 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 		}
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
-	case connpool.ReadClosed, connpool.WriteClosed:
+	case connpool.Disconnect:
+		_ = h.sendConnControl(ctx, connpool.DisconnectOK)
+		h.Close(ctx)
+	case connpool.DisconnectOK:
 		h.Close(ctx)
 	case connpool.KeepAlive:
 	}
@@ -74,7 +77,7 @@ const flushDelay = 10 * time.Millisecond
 func (h *handler) writeToMgrLoop(ctx context.Context) {
 	mgrWrite := func(payload []byte) bool {
 		dlog.Debugf(ctx, "-> MGR %s, len %d", h.id, len(payload))
-		if err := h.Send(connpool.NewMessage(h.id, payload).TunnelMessage()); err != nil {
+		if err := h.Send(ctx, connpool.NewMessage(h.id, payload)); err != nil {
 			if ctx.Err() == nil && atomic.LoadInt32(h.dispatcherClosing) == 0 && h.state() < stateFinWait2 {
 				dlog.Errorf(ctx, "   CON %s failed to write to dispatcher's remote endpoint: %v", h.id, err)
 			}
@@ -127,7 +130,7 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode) error {
 	pkt := connpool.NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
-	if err := h.Send(pkt.TunnelMessage()); err != nil {
+	if err := h.Send(ctx, pkt); err != nil {
 		return fmt.Errorf("failed to send control package: %w", err)
 	}
 	return nil
