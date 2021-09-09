@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -563,6 +564,72 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 			}
 		}
 	}
+}
+
+// GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
+// GetLogsRequest and returns them to the caller
+func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
+	resp := &rpc.LogsResponse{
+		PodLogs: make(map[string]string),
+	}
+	var errMsg string
+	client := managerutil.GetKatesClient(ctx)
+
+	// getPodLogs is a helper function for getting the logs from the container
+	// of a given pod. If we are unable to get a log for a given pod, we will
+	// instead return the error in the map, instead of the log, so that:
+	// - one failure doesn't prevent us from getting logs from other pods
+	// - it is easy to figure out why gettings logs for a given pod failed
+	getPodLogs := func(pods []*kates.Pod, container string) {
+		for _, pod := range pods {
+			logEvents := make(chan kates.LogEvent)
+			plo := &kates.PodLogOptions{
+				Container: container,
+			}
+
+			if err := client.PodLogs(ctx, pod, plo, false, logEvents); err != nil {
+				resp.PodLogs[pod.Name] = fmt.Sprintf("Failed to get logs: %s", err)
+				continue
+			}
+			var log string
+			for {
+				event := <-logEvents
+				// If there's an error, we want to put that in the log output for that
+				// container.
+				if event.Error != nil {
+					log += fmt.Sprintf("Failed getting log event: %s\n", event.Error)
+				}
+
+				if event.Closed {
+					break
+				}
+				log += event.Output
+			}
+			resp.PodLogs[pod.Name] = log
+		}
+	}
+	if request.TrafficManager {
+		managerPods, err := m.clusterInfo.GetTrafficManagerPods(ctx)
+		if err != nil {
+			errMsg += fmt.Sprintf("error getting traffic-manager pods: %s", err)
+		} else {
+			getPodLogs(managerPods, "traffic-manager")
+		}
+	}
+
+	agentPods, err := m.clusterInfo.GetTrafficAgentPods(ctx, request.Agents)
+	if err != nil {
+		errMsg += fmt.Sprintf("error getting traffic-agent pods: %s", err)
+	} else {
+		getPodLogs(agentPods, "traffic-agent")
+	}
+
+	// If we were unable to get logs from the traffic-manager and/or traffic-agents
+	// we put that information in the errMsg.
+	if errMsg != "" {
+		resp.ErrMsg = errMsg
+	}
+	return resp, nil
 }
 
 func (m *Manager) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {

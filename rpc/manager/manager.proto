@@ -262,6 +262,26 @@ message LogLevelRequest {
   google.protobuf.Duration duration = 2;
 }
 
+message GetLogsRequest {
+  // Whether or not logs from the traffic-manager are desired
+  bool traffic_manager = 1;
+
+  // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
+  // or substring to filter based on pod names.
+  string agents = 2;
+}
+
+message LogsResponse {
+
+  // The first value of this map is the `podName.namespace` and the
+  // second value is the logs from that pod
+  map<string, string> pod_logs = 1;
+
+  // If we encountered any errors getting logs from the traffic-manager
+  // and/or traffic-agents
+  string err_msg = 2;
+}
+
 // VersionInfo2 is different than telepresence.common.VersionInfo in
 // that it does not contain an 'api_version' integer.
 message VersionInfo2 {
@@ -373,6 +393,10 @@ service Manager {
   // SetLogLevel will temporarily set the log-level for the traffic-manager and all
   // traffic-agents for a duration that is determined b the request.
   rpc SetLogLevel(LogLevelRequest) returns (google.protobuf.Empty);
+
+  // GetLogs will acquire logs for the various Telepresence components in kubernetes
+  // (pending the request) and return them to the caller
+  rpc GetLogs(GetLogsRequest) returns (LogsResponse);
 
   // Watches
 

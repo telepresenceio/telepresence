@@ -154,7 +154,7 @@ require (
 	k8s.io/apiserver v0.21.0 // indirect
 	k8s.io/cli-runtime v0.21.0 // indirect
 	k8s.io/component-base v0.21.0 // indirect
-	k8s.io/klog/v2 v2.8.0 // indirect
+	k8s.io/klog/v2 v2.10.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7 // indirect
 	k8s.io/metrics v0.21.0 // indirect
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
@@ -174,6 +174,8 @@ replace (
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
+
+replace github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59 => github.com/donnyyung/emissary v1.14.2-0.20210909174709-51a94441b88c
 
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316

@@ -24,6 +24,9 @@ type Info interface {
 
 	// GetClusterID returns the ClusterID
 	GetClusterID() string
+
+	GetTrafficManagerPods(context.Context) ([]*kates.Pod, error)
+	GetTrafficAgentPods(context.Context, string) ([]*kates.Pod, error)
 }
 
 type subnetRetriever interface {
@@ -280,4 +283,51 @@ func toRPCSubnets(cidrMap subnet.Set) []*rpc.IPNet {
 		rpcSubnets[i] = iputil.IPNetToRPC(s)
 	}
 	return rpcSubnets
+}
+
+// GetTrafficAgentPods gets all pods that have a `traffic-agent` container
+// in them.
+func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*kates.Pod, error) {
+	client := managerutil.GetKatesClient(ctx)
+	var pods []*kates.Pod
+
+	// We don't get agents if they explicitly say false
+	if agents == "False" {
+		return nil, nil
+	}
+	if err := client.List(ctx, kates.Query{Kind: "Pod"}, &pods); err != nil {
+		return nil, err
+	}
+	var agentPods []*kates.Pod
+	for _, pod := range pods {
+		if agents != "all" {
+			if !strings.Contains(pod.Name, agents) {
+				continue
+			}
+		}
+		for _, container := range pod.Spec.Containers {
+			if container.Name == "traffic-agent" {
+				agentPods = append(agentPods, pod)
+			}
+		}
+	}
+	return agentPods, nil
+}
+
+// GetTrafficAgentPods gets all pods in the manager's namespace that have
+// `traffic-manager` in the name
+func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*kates.Pod, error) {
+	client := managerutil.GetKatesClient(ctx)
+	env := managerutil.GetEnv(ctx)
+	var pods []*kates.Pod
+	if err := client.List(ctx, kates.Query{Kind: "Pod", Namespace: env.ManagerNamespace}, &pods); err != nil {
+		return nil, err
+	}
+	var tmPods []*kates.Pod
+	for _, pod := range pods {
+		if strings.Contains(pod.Name, "traffic-manager") {
+			tmPods = append(tmPods, pod)
+		}
+	}
+	return tmPods, nil
 }
