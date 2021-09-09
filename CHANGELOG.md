@@ -24,6 +24,7 @@
 
 - Bugfix: Downloading large files during an intercept will no longer cause timeouts and hanging traffic-agent.
 
+- Bugfix: Passing false to the intercept command's --mount flag will no longer result in a filesystem being mounted.
 
 ### 2.4.2 (September 1, 2021)
 
