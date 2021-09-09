@@ -51,6 +51,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 	}
 
 	// Remove the agent from all deployments
+	webhookAgentChannel := make(chan kates.Object, len(agents))
 	wg := sync.WaitGroup{}
 	wg.Add(len(agents))
 	for _, ai := range agents {
@@ -69,9 +70,11 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 			// annotation can be found in the workload.
 			ann := agent.GetAnnotations()
 			if ann == nil {
+				webhookAgentChannel <- agent
 				return
 			}
 			if _, ok := ann[annTelepresenceActions]; !ok {
+				webhookAgentChannel <- agent
 				return
 			}
 			if err = ki.undoObjectMods(c, agent); err != nil {
@@ -85,12 +88,28 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 	}
 	// wait for all agents to be removed
 	wg.Wait()
+	close(webhookAgentChannel)
 
 	if !agentsOnly && len(errs) == 0 {
 		// agent removal succeeded. Remove the manager resources
 		if err := helm.DeleteTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace()); err != nil {
 			addError(err)
 		}
+
+		// roll all agents installed by webhook
+		webhookWaitGroup := sync.WaitGroup{}
+		webhookWaitGroup.Add(len(webhookAgentChannel))
+		for agent := range webhookAgentChannel {
+			go func(obj kates.Object) {
+				defer webhookWaitGroup.Done()
+				err := ki.rolloutRestart(c, obj)
+				if err != nil {
+					addError(err)
+				}
+			}(agent)
+		}
+		// wait for all agents to be removed
+		webhookWaitGroup.Wait()
 	}
 
 	switch len(errs) {
@@ -106,6 +125,16 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		return errors.New(bld.String())
 	}
 	return nil
+}
+
+// recreates "kubectl rollout restart <obj>" for kates.obj
+func (ki *installer) rolloutRestart(c context.Context, obj kates.Object) error {
+	restartAnnotation := fmt.Sprintf(
+		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
+		install.DomainPrefix,
+		time.Now().Format(time.RFC3339),
+	)
+	return ki.Client().Patch(c, obj, kates.StrategicMergePatchType, []byte(restartAnnotation), obj)
 }
 
 // Finds the Referenced Service in an objects' annotations

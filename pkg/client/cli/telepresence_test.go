@@ -413,9 +413,12 @@ func (ts *telepresenceSuite) TestB_Connected() {
 }
 
 func (ts *telepresenceSuite) TestC_Uninstall() {
+	// telepresence(ts.T(), "connect")
+
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
 		ctx := dlog.NewTestContext(ts.T(), false)
+
 		names := func() (string, error) {
 			return ts.kubectlOut(ctx, "get",
 				"--namespace", ts.managerTestNamespace,
@@ -423,16 +426,40 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 				"--ignore-not-found",
 				"-o", "jsonpath={.items[*].metadata.name}")
 		}
+
 		stdout, err := names()
 		require.NoError(err)
 		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
 		ts.NoError(ts.capturePodLogs(ctx, "traffic-manager", ts.managerTestNamespace))
+		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
+
+		// Add webhook agent to test webhook uninstall
+		jobname := "echo-auto-inject"
+		deployname := "deploy/" + jobname
+		require.NoError(ts.applyApp(ctx, jobname, jobname, 80))
+
+		defer func() {
+			require.NoError(ts.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject"))
+		}()
+
+		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
+		stdout, stderr := telepresence(ts.T(), "list", "--namespace", ts.namespace, "--agents")
+		require.Empty(stderr)
+		require.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
 
 		// The telepresence-test-developer will not be able to uninstall everything
-		require.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
-		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
+		stdout, stderr = telepresence(ts.T(), "uninstall", "--everything")
 		require.Empty(stderr)
 		require.Contains(stdout, "Root Daemon quitting... done")
+
+		// Double check webhook agent is uninstalled
+		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
+		stdout, err = ts.kubectlOut(ctx, "get", "pods", "-n", ts.namespace)
+		require.NoError(err)
+		match, err := regexp.MatchString(jobname+`-[a-z0-9]+-[a-z0-9]+\s+1/1\s+Running`, stdout)
+		require.NoError(err)
+		require.True(match)
+
 		require.Eventually(
 			func() bool {
 				stdout, _ := names()

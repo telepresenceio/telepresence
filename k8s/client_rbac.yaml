@@ -29,7 +29,7 @@ rules:
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update"]
+  verbs: ["get", "list", "update", "patch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]
