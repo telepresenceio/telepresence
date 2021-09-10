@@ -41,7 +41,89 @@ items:
 
   - version: 2.4.3
     date: '2021-09-013'
-    notes: []
+    notes:
+      - type: feature
+        title: Environment variable `TELEPRESENCE_INTERCEPT_ID` available in interceptor's environment
+        body: >-
+          When you perform an intercept, we now include a `TELEPRESENCE_INTERCEPT_ID` environment
+          variable in the environment. This can be useful if you need special behavior when
+          intercepting a pod (e.g. perhaps you have a different Kafka topic that you want your
+          intercepted service to use, so you could use this environment variable to enable that).
+
+      - type: bugfix
+        title: Improved daemon stability
+        body: >-
+          Fixed a timing bug that sometimes caused a "daemon did not start" failure.
+
+      - type: bugfix
+        title: Complete logs for Windows
+        body: >-
+          Crash stack traces and other errors were incorrectly not written to log files. This has
+          been fixed so logs for Windows should be at parity with the ones in MacOS and Linux.
+
+      - type: bugfix
+        title: Log rotation fix for Linux kernel 4.11+
+        body: >-
+          On Linux kernel 4.11 and above, the log file rotation now properly reads the
+          <code>birth-time</code> of the log file. Older kernels continue to use the old behavior
+          of using the <code>change-time</code> in place of the <code>birth-time</code>.
+
+      - type: bugfix
+        title: Improved error messaging
+        body: >-
+          When Telepresence encounters an error, it tells the user where they should look for
+          logs related to the error. We have refined this so that it only tells users to look
+          for errors in the daemon logs for issues that are logged there.
+
+      - type: bugfix
+        title: Stop resolving localhost
+        body: >-
+          When using the overriding DNS resolver, it will no longer apply search paths when
+          resolving <code>localhost</code>, since that should be resolved on the user's machine
+          instead of the cluster.
+        docs: reference/routing#linux-systemd-resolved-resolver
+
+      - type: bugfix
+        title: Variable cluster domain
+        body: >-
+          Previously, the cluster domain was hardcoded to <code>cluster.local</code>.  While this
+          is true for many kubernetes clusters, it is not for all of them. Now this value is
+          retrieved from the <code>traffic-manager</code>.
+
+      - type: bugfix
+        title: Improved cleanup of traffic-agents
+        body: >-
+          Telepresence now uninstalls <code>traffic-agents</code> installed via mutating webhook
+          when using <code>telepresence uninstall --everything</code>.
+
+      - type: bugfix
+        title: More large file transfer fixes
+        body: >-
+          Downloading large files during an intercept will no longer cause timeouts and hanging
+          <code>traffic-agents</code>.
+
+      - type: bugfix
+        title: Setting --mount to false when intercepting works as expected
+        body: >-
+          When using <code>--mount=false</code> while performing an intercept, the file system
+          was still mounted.  This has been remedied so the intercept behavior respects the
+          flag.
+        docs: reference/volume
+
+      - type: bugfix
+        title: Traffic-manager establishes outbound connections in parallel
+        body: >-
+          Previously, the <code>traffic-manager</code> established outbound connections
+          sequentially. This resulted in slow (and failing) <code>Dial</code> calls would
+          block all outbound traffic from the workstation (for up to 30 seconds). We now
+          establish these connections in parallel so that won't occur.
+        docs: reference/routing/#outbound
+
+      - type: bugfix
+        title: Status command reports correct DNS settings
+        body: >-
+          <code>Telepresence status</code> now correctly reports DNS settings for all operating
+          systems, instead of <code>Local IP:nil, Remote IP:nil</code> when they don't exist.
 
   - version: 2.4.2
     date: '2021-09-01'
