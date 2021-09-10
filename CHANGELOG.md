@@ -30,6 +30,8 @@
 
 - Bugfix: The traffic manager will establish outbound connections in parallel instead of sequentially.
 
+- Bugfix: The `telepresence status` command reports correct DNS settings instead of "Local IP: nil, Remote IP: nil"
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel

@@ -48,7 +48,6 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	dns           string
 	hClient       *http.Client
 	outbound      *outbound
 	cancel        context.CancelFunc
@@ -149,7 +148,6 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	dlog.Debug(c, "Listener opened")
 
 	d := &service{
-		dns: dns,
 		hClient: &http.Client{
 			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
