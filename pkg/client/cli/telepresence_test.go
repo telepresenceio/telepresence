@@ -751,7 +751,8 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	})
 
 	grp.Go("client", func(ctx context.Context) error {
-		expectedOutput := "Hello from intercepted echo-server!"
+		// Response contains env variables TELEPRESENCE_CONTAINER and TELEPRESENCE_INTERCEPT_ID
+		expectedOutput := regexp.MustCompile(`Hello from intercepted echo-server with id [0-9a-f-]+:` + svc)
 		cs.Eventually(
 			// condition
 			func() bool {
@@ -763,11 +764,11 @@ func (cs *connectedSuite) TestK_DockerRun() {
 					return false
 				}
 				dlog.Info(ctx, out)
-				return strings.Contains(out, expectedOutput)
+				return expectedOutput.MatchString(out)
 			},
 			30*time.Second, // waitFor
 			1*time.Second,  // polling interval
-			`body of %q equals %q`, "http://"+svc, expectedOutput,
+			`body of %q matches %q`, "http://"+svc, expectedOutput,
 		)
 		return nil
 	})
