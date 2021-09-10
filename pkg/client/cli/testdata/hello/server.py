@@ -2,7 +2,7 @@ import os
 from flask import Flask
 
 PORT = 8000
-MESSAGE = "Hello from intercepted {}!\n".format(os.environ["TELEPRESENCE_CONTAINER"])
+MESSAGE = "Hello from intercepted {} with id {}!\n".format(os.environ["TELEPRESENCE_CONTAINER"], os.environ["TELEPRESENCE_INTERCEPT_ID"])
 
 app = Flask(__name__)
 
