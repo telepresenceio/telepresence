@@ -7,18 +7,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs ...string) error {
-	cmd := dexec.CommandContext(ctx, cmdName, cmdArgs...)
+	// Under normal operation, waitCloseAndKill is going to clean up the running sshfs command
+	// By passing in a hard context here, we make sure that dexec does an ungraceful kill if it ever
+	// turns out that waitCloseAndKill wasn't able to kill the sshfs and the daemon is shutting down in a hurry.
+	hardCtx := dcontext.HardContext(ctx)
+	cmd := dexec.CommandContext(hardCtx, cmdName, cmdArgs...)
 	cmd.Stdin = peer
 	cmd.Stdout = peer
 	cmd.Stderr = io.Discard   // Ensure error logging by passing a non nil, non *os.File here
 	cmd.DisableLogging = true // Avoid data logging (peer is not a *os.File)
-	prepareCmd(cmd)
 
 	cmdLine := shellquote.ShellString(cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
