@@ -26,6 +26,8 @@
 
 - Bugfix: Passing false to the intercept command's --mount flag will no longer result in a filesystem being mounted.
 
+- Bugfix: The traffic manager will establish outbound connections in parallel instead of sequentially.
+
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel

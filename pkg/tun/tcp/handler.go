@@ -204,6 +204,7 @@ func (h *handler) Start(ctx context.Context) {
 		}()
 		h.processPackets(ctx)
 	}()
+	go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packages
 }
 
 func (h *handler) adjustReceiveWindow() {
@@ -319,7 +320,6 @@ func (h *handler) writeToTunLoop(ctx context.Context) {
 	timer := time.NewTimer(500 * time.Millisecond)
 	defer timer.Stop()
 	for {
-		var cm connpool.Message
 		timer.Stop()
 		select {
 		case <-timer.C:
@@ -329,68 +329,75 @@ func (h *handler) writeToTunLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case cm = <-h.fromMgr:
 		case <-timer.C:
 			if atomic.LoadInt32(&h.isClosing) > 0 {
 				return
 			}
 			continue
-		}
-		data := cm.Payload()
-		start := 0
-		n := len(data)
-		for n > start {
-			h.sendLock.Lock()
-			window := h.sendWindow
-			aqz := h.ackWaitQueueSize
-			for window == 0 || aqz > maxAckWaits {
-				if window == 0 {
-					// The intended receiver is currently not accepting data. We must
-					// wait for the window to increase.
-					dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
+		case cm := <-h.fromMgr:
+			if cm == nil {
+				return
+			}
+			if ctrl, ok := cm.(connpool.Control); ok {
+				h.handleControl(ctx, ctrl)
+				continue
+			}
+			data := cm.Payload()
+			start := 0
+			n := len(data)
+			for n > start {
+				h.sendLock.Lock()
+				window := h.sendWindow
+				aqz := h.ackWaitQueueSize
+				for window == 0 || aqz > maxAckWaits {
+					if window == 0 {
+						// The intended receiver is currently not accepting data. We must
+						// wait for the window to increase.
+						dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
+					}
+					if aqz > maxAckWaits {
+						// The intended receiver is currently not accepting data. We must
+						// wait for the window to increase.
+						dlog.Debugf(ctx, "   CON %s Await ACK queue is full", h.id)
+					}
+					h.sendCondition.Wait()
+					window = h.sendWindow
+					aqz = h.ackWaitQueueSize
 				}
-				if aqz > maxAckWaits {
-					// The intended receiver is currently not accepting data. We must
-					// wait for the window to increase.
-					dlog.Debugf(ctx, "   CON %s Await ACK queue is full", h.id)
+				h.sendLock.Unlock()
+
+				mxSend := n - start
+				if mxSend > int(h.peerMaxSegmentSize) {
+					mxSend = int(h.peerMaxSegmentSize)
 				}
-				h.sendCondition.Wait()
-				window = h.sendWindow
-				aqz = h.ackWaitQueueSize
+				if mxSend > int(window) {
+					mxSend = int(window)
+				}
+
+				pkt := h.newResponse(HeaderLen+mxSend, true)
+				ipHdr := pkt.IPHeader()
+				tcpHdr := pkt.Header()
+				ipHdr.SetPayloadLen(HeaderLen + mxSend)
+				ipHdr.SetChecksum()
+
+				tcpHdr.SetACK(true)
+				tcpHdr.SetSequence(h.sequence())
+				tcpHdr.SetAckNumber(h.sequenceLastAcked())
+
+				end := start + mxSend
+				copy(tcpHdr.Payload(), data[start:end])
+				tcpHdr.SetPSH(end == n)
+				tcpHdr.SetChecksum(ipHdr)
+
+				h.sendToTun(ctx, pkt)
+				h.pushToAckWait(ctx, uint32(mxSend), pkt)
+
+				// Decrease the window size with the bytes that we just sent unless it's already updated
+				// from a received package
+				window -= window - uint64(mxSend)
+				atomic.CompareAndSwapUint64(&h.sendWindow, window, window)
+				start = end
 			}
-			h.sendLock.Unlock()
-
-			mxSend := n - start
-			if mxSend > int(h.peerMaxSegmentSize) {
-				mxSend = int(h.peerMaxSegmentSize)
-			}
-			if mxSend > int(window) {
-				mxSend = int(window)
-			}
-
-			pkt := h.newResponse(HeaderLen+mxSend, true)
-			ipHdr := pkt.IPHeader()
-			tcpHdr := pkt.Header()
-			ipHdr.SetPayloadLen(HeaderLen + mxSend)
-			ipHdr.SetChecksum()
-
-			tcpHdr.SetACK(true)
-			tcpHdr.SetSequence(h.sequence())
-			tcpHdr.SetAckNumber(h.sequenceLastAcked())
-
-			end := start + mxSend
-			copy(tcpHdr.Payload(), data[start:end])
-			tcpHdr.SetPSH(end == n)
-			tcpHdr.SetChecksum(ipHdr)
-
-			h.sendToTun(ctx, pkt)
-			h.pushToAckWait(ctx, uint32(mxSend), pkt)
-
-			// Decrease the window size with the bytes that we just sent unless it's already updated
-			// from a received package
-			window -= window - uint64(mxSend)
-			atomic.CompareAndSwapUint64(&h.sendWindow, window, window)
-			start = end
 		}
 	}
 }
@@ -464,7 +471,6 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 	h.ackReceived(ctx, tcpHdr.AckNumber())
 	h.setState(ctx, stateEstablished)
 	go h.writeToMgrLoop(ctx)
-	go h.writeToTunLoop(ctx)
 
 	pl := len(tcpHdr.Payload())
 	h.setSequenceLastAcked(tcpHdr.Sequence() + uint32(pl))

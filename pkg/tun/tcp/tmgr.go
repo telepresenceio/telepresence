@@ -50,10 +50,6 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 }
 
 func (h *handler) HandleMessage(ctx context.Context, msg connpool.Message) {
-	if ctrl, ok := msg.(connpool.Control); ok {
-		h.handleControl(ctx, ctrl)
-		return
-	}
 	select {
 	case <-ctx.Done():
 	case h.fromMgr <- msg:

@@ -19,6 +19,10 @@ const udpConnTTL = 1 * time.Minute
 const partlyClosedDuration = 5 * time.Second
 const dialTimeout = 30 * time.Second
 
+// handlerBufferSize is the total number of messages that a handler can have in its buffer before it
+// starts blocking on the HandleMessage function (and hence, generate backpressure on the tunnel)
+const handlerBufferSize = 100
+
 const (
 	notConnected = int32(iota)
 	halfConnected
@@ -53,7 +57,7 @@ func NewDialer(connID ConnID, tunnel Tunnel, release func()) Handler {
 		id:        connID,
 		tunnel:    tunnel,
 		release:   release,
-		incoming:  make(chan Message, 10),
+		incoming:  make(chan Message, handlerBufferSize),
 		connected: notConnected,
 		ttl:       int64(ttl),
 	}
@@ -69,7 +73,7 @@ func HandlerFromConn(connID ConnID, tunnel Tunnel, release func(), conn net.Conn
 		id:        connID,
 		tunnel:    tunnel,
 		release:   release,
-		incoming:  make(chan Message, 10),
+		incoming:  make(chan Message, handlerBufferSize),
 		connected: halfConnected,
 		conn:      conn,
 		ttl:       int64(ttl),
@@ -91,6 +95,9 @@ func (h *dialer) Start(ctx context.Context) {
 		h.connected = connected
 		h.sendTCD(ctx, Connect)
 	}
+
+	// Start writeLoop so that initial control packages can be handled
+	go h.writeLoop(ctx)
 }
 
 func (h *dialer) getTTL() time.Duration {
@@ -111,7 +118,6 @@ func (h *dialer) open(ctx context.Context) ControlCode {
 	}
 	h.conn = conn
 	dlog.Debugf(ctx, "   CONN %s, dial answered", h.id)
-	go h.writeLoop(ctx)
 	go h.readLoop(ctx)
 	return ConnectOK
 }
@@ -122,7 +128,6 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	case Connect:
 		h.sendTCD(ctx, h.open(ctx))
 	case ConnectOK:
-		go h.writeLoop(ctx)
 		go h.readLoop(ctx)
 	case Disconnect: // Peer requests a disconnect. No more messages will arrive
 		h.Close(ctx)
@@ -140,16 +145,9 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 
 // HandleMessage sends a package to the underlying TCP/UDP connection
 func (h *dialer) HandleMessage(ctx context.Context, dg Message) {
-	if ctrl, ok := dg.(Control); ok {
-		h.handleControl(ctx, ctrl)
-		return
-	}
-	if atomic.LoadInt32(&h.connected) == connected {
-		select {
-		case <-ctx.Done():
-			return
-		case h.incoming <- dg:
-		}
+	select {
+	case <-ctx.Done():
+	case h.incoming <- dg:
 	}
 }
 
@@ -250,6 +248,10 @@ func (h *dialer) writeLoop(ctx context.Context) {
 				// h.incoming was closed by the reader and is now drained.
 				h.startDisconnect(ctx, true)
 				return
+			}
+			if ctrl, ok := dg.(Control); ok {
+				h.handleControl(ctx, ctrl)
+				continue
 			}
 			if !h.resetIdle() {
 				// Hard close of peer. We don't want any more data
