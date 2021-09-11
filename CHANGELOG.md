@@ -4,6 +4,8 @@
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.
 
+- Feature: Build multiarch tel2 image to support ARM64 k8s clusters.
+
 - Bugfix: A timing related bug was fixed that sometimes caused a "daemon did not start" failure.
 
 - Bugfix: On Windows, crash stack traces and other errors were not
