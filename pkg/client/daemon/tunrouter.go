@@ -335,6 +335,9 @@ func (t *tunRouter) run(c context.Context) error {
 		if err = tunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
 			return err
 		}
+		if err = tunnel.Send(c, connpool.VersionControl()); err != nil {
+			return err
+		}
 		t.tunnel = tunnel
 		dlog.Debug(c, "MGR read loop starting")
 		err = t.tunnel.DialLoop(c, t.handlers)

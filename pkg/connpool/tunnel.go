@@ -49,12 +49,15 @@ type Tunnel interface {
 }
 
 type tunnel struct {
-	stream    BidiStream
-	counter   uint32
-	lastAck   uint32
-	syncRatio uint32 // send and check sync after each syncRatio message
-	ackWindow uint32 // maximum permitted difference between sent and received ack
+	stream      BidiStream
+	counter     uint32
+	lastAck     uint32
+	syncRatio   uint32 // send and check sync after each syncRatio message
+	ackWindow   uint32 // maximum permitted difference between sent and received ack
+	peerVersion uint32
 }
+
+const tunnelVersion = 1 // preceded by version 0 which didn't do synchronization
 
 func NewTunnel(stream BidiStream) Tunnel {
 	return &tunnel{stream: stream, syncRatio: 8, ackWindow: 1}
@@ -69,13 +72,18 @@ func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
 		msg = FromConnMessage(cm)
 		if ctrl, ok := msg.(Control); ok {
 			switch ctrl.Code() {
+			case version:
+				peerVersion := ctrl.version()
+				atomic.StoreUint32(&s.peerVersion, uint32(peerVersion))
+				dlog.Debugf(ctx, "setting tunnel's peer version to %d", peerVersion)
+				continue
 			case syncRequest:
 				if err = s.stream.Send(SyncResponseControl(ctrl).TunnelMessage()); err != nil {
 					return nil, fmt.Errorf("failed to send sync response: %w", err)
 				}
 				continue
 			case syncResponse:
-				atomic.StoreUint32(&s.lastAck, ctrl.AckNumber())
+				atomic.StoreUint32(&s.lastAck, ctrl.ackNumber())
 				continue
 			}
 		}
@@ -87,6 +95,9 @@ func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
 func (s *tunnel) Send(ctx context.Context, m Message) error {
 	if err := s.stream.Send(m.TunnelMessage()); err != nil {
 		return err
+	}
+	if s.peerVersion < 1 {
+		return nil // unable to synchronize
 	}
 
 	// Sync unless Control
@@ -178,12 +189,16 @@ func (s *tunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
 	id := ctrl.ID()
 
 	code := ctrl.Code()
+	if len(id) == 0 {
+		dlog.Errorf(ctx, "<- MGR <no id> message, code %s", code)
+		return
+	}
 	dlog.Debugf(ctx, "<- MGR %s, code %s", id.ReplyString(), code)
 
 	if code != Connect {
 		if conn := pool.Get(id); conn != nil {
 			conn.HandleMessage(ctx, ctrl)
-		} else if code != Disconnect && code != DisconnectOK {
+		} else if !(code == Disconnect || code == DisconnectOK || code == ReadClosed || code == WriteClosed) {
 			dlog.Errorf(ctx, "control packet of type %s lost because no connection was active", code)
 		}
 		return

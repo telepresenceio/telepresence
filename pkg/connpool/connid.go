@@ -39,6 +39,10 @@ func NewConnID(proto int, src, dst net.IP, srcPort, dstPort uint16) ConnID {
 	return ConnID(bs)
 }
 
+func NewZeroID() ConnID {
+	return ConnID(make([]byte, 13))
+}
+
 // IsIPv4 returns true if the source and destination of this ConnID are IPv4
 func (id ConnID) IsIPv4() bool {
 	return len(id) == 13

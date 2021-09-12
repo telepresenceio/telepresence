@@ -257,6 +257,10 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 		err = fmt.Errorf("failed to send client sessionID: %s", err)
 		return nil, err
 	}
+	if err = tunnel.Send(ctx, connpool.VersionControl()); err != nil {
+		err = fmt.Errorf("failed to send agent tunnel version: %s", err)
+		return nil, err
+	}
 
 	go func() {
 		pool := connpool.GetPool(ctx)
@@ -277,7 +281,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 				if ctrl, ok := msg.(connpool.Control); ok {
 					switch ctrl.Code() {
 					// Don't establish a new Dialer just to say goodbye
-					case connpool.Disconnect, connpool.DisconnectOK:
+					case connpool.ReadClosed, connpool.WriteClosed, connpool.Disconnect, connpool.DisconnectOK:
 						if handler = pool.Get(id); handler == nil {
 							continue
 						}
