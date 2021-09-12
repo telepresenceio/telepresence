@@ -161,7 +161,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 				o.domainsLock.Unlock()
 				return nil
 			})
-			v := dns.NewServer(c, listeners, nil, o.resolveInSearch)
+			v := dns.NewServer(c, listeners, conn, o.resolveInSearch)
 			return v.Run(c)
 		}
 	})
