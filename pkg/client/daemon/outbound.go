@@ -224,7 +224,15 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 
 func (o *outbound) getInfo() *rpc.OutboundInfo {
 	info := rpc.OutboundInfo{
-		Dns: o.dnsConfig,
+		Dns: &rpc.DNSConfig{
+			RemoteIp: o.router.dnsIP,
+		},
+	}
+	if o.dnsConfig != nil {
+		info.Dns.LocalIp = o.dnsConfig.LocalIp
+		info.Dns.ExcludeSuffixes = o.dnsConfig.ExcludeSuffixes
+		info.Dns.IncludeSuffixes = o.dnsConfig.IncludeSuffixes
+		info.Dns.LookupTimeout = o.dnsConfig.LookupTimeout
 	}
 
 	if len(o.router.alsoProxySubnets) > 0 {
