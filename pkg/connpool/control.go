@@ -17,7 +17,10 @@ const (
 	ConnectReject
 	Disconnect
 	DisconnectOK
+	ReadClosed  // deprecated, treat as Disconnect
+	WriteClosed // deprecated, treat as Disconnect
 	KeepAlive
+	version
 	syncRequest
 	syncResponse
 )
@@ -36,8 +39,14 @@ func (c ControlCode) String() string {
 		return "DISCONNECT"
 	case DisconnectOK:
 		return "DISCONNECT_OK"
+	case ReadClosed:
+		return "READ_CLOSED"
+	case WriteClosed:
+		return "WRITE_CLOSED"
 	case KeepAlive:
 		return "KEEP_ALIVE"
+	case version:
+		return "VERSION"
 	case syncRequest:
 		return "SYNC_REQUEST"
 	case syncResponse:
@@ -51,7 +60,8 @@ type Control interface {
 	Message
 	Code() ControlCode
 	SessionInfo() *manager.SessionInfo
-	AckNumber() uint32
+	ackNumber() uint32
+	version() uint16
 }
 
 type control struct {
@@ -73,8 +83,8 @@ func (c *control) Payload() []byte {
 }
 
 // AckNumber returns the AckNumber that this Control represents or zero if
-// this isn't a SyncResponse Control.
-func (c *control) AckNumber() uint32 {
+// this isn't a syncResponse Control.
+func (c *control) ackNumber() uint32 {
 	if c.code == syncResponse {
 		return binary.BigEndian.Uint32(c.payload)
 	}
@@ -121,9 +131,25 @@ func SessionInfoControl(sessionInfo *manager.SessionInfo) Control {
 func SyncRequestControl(ackNbr uint32) Control {
 	payload := make([]byte, 4)
 	binary.BigEndian.PutUint32(payload, ackNbr)
-	return &control{id: "", code: syncRequest, payload: payload}
+	// Need a ZeroID here to prevent older managers and agents from crashing.
+	return &control{id: NewZeroID(), code: syncRequest, payload: payload}
 }
 
 func SyncResponseControl(request Control) Control {
-	return &control{id: "", code: syncResponse, payload: request.Payload()}
+	return &control{id: request.ID(), code: syncResponse, payload: request.Payload()}
+}
+
+func VersionControl() Control {
+	payload := make([]byte, 2)
+	binary.BigEndian.PutUint16(payload, tunnelVersion)
+	return &control{id: NewZeroID(), code: version, payload: payload}
+}
+
+// version returns the tunnel version that this Control represents or zero if
+// this isn't a version Control.
+func (c *control) version() uint16 {
+	if c.code == version {
+		return binary.BigEndian.Uint16(c.payload)
+	}
+	return 0
 }

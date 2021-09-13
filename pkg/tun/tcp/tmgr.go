@@ -40,7 +40,7 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 		}
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
-	case connpool.Disconnect:
+	case connpool.ReadClosed, connpool.WriteClosed, connpool.Disconnect:
 		_ = h.sendConnControl(ctx, connpool.DisconnectOK)
 		h.Close(ctx)
 	case connpool.DisconnectOK:
