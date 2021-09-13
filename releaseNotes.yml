@@ -35,9 +35,9 @@ items:
     date: '2021-09-13'
     notes:
       - type: feature
-        title: Environment variable `TELEPRESENCE_INTERCEPT_ID` available in interceptor's environment
+        title: Environment variable TELEPRESENCE_INTERCEPT_ID available in interceptor's environment
         body: >-
-          When you perform an intercept, we now include a `TELEPRESENCE_INTERCEPT_ID` environment
+          When you perform an intercept, we now include a <code>TELEPRESENCE_INTERCEPT_ID</code> environment
           variable in the environment. This can be useful if you need special behavior when
           intercepting a pod (e.g. perhaps you have a different Kafka topic that you want your
           intercepted service to use, so you could use this environment variable to enable that).
