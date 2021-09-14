@@ -737,19 +737,23 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 			if msg == nil {
 				return nil
 			}
+			ensureForward := true
 			if ctrl, ok := msg.(connpool.Control); ok {
 				switch ctrl.Code() {
 				// Don't establish a conn-forward just to say goodbye
 				case connpool.Disconnect, connpool.DisconnectOK:
-					continue
+					ensureForward = false
 				}
 			}
-			_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (connpool.Handler, error) {
-				return newConnForward(release, tunnel), nil
-			})
-			if err != nil {
-				dlog.Error(ctx, err)
-				return status.Error(codes.Internal, err.Error())
+			if ensureForward {
+				// Ensure that a forward tunnel exists that the client can use for responses
+				_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (connpool.Handler, error) {
+					return newConnForward(release, tunnel), nil
+				})
+				if err != nil {
+					dlog.Error(ctx, err)
+					return status.Error(codes.Internal, err.Error())
+				}
 			}
 			dlog.Debugf(ctx, ">> FRWD %s to client", msg.ID())
 			if err = cs.tunnel.Send(ctx, msg); err != nil {
