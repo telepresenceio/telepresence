@@ -26,3 +26,21 @@ There are three options available to do this:
   `telepresence intercept [service] --port [port] -- /bin/bash`
 
   This would start the intercept then launch the subshell on your laptop with all the same variables set as on the pod.
+
+## Telepresence Environment Variables
+
+Telepresence adds some useful environment variables in addition to the ones imported from the intercepted pod:
+
+### TELEPRESENCE_ROOT
+Directory where all remote volumes mounts are rooted. See [Volume Mounts](../volume/) for more info.
+
+### TELEPRESENCE_MOUNTS
+Colon separated list of remotely mounted directories.
+
+### TELEPRESENCE_CONTAINER
+The name of the intercepted container. Useful when a pod has several containers, and you want to know which one that was intercepted by Telepresence.
+
+### TELEPRESENCE_INTERCEPT_ID
+ID of the intercept (same as the "x-intercept-id" http header).
+
+Useful if you need special behavior when intercepting a pod. One example might be when dealing with pub/sub systems like Kafka, where all processes that doesn't have the `TELEPRESENCE_INTERCEPT_ID` set can filter out all messages that contain an `x-intercept-id` header, while those that don't, instead filter based on a matching `x-intercept-id` header. This to assure that messages belonging to a certain intercept always are consumed by the intercepting process.
