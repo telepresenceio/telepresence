@@ -168,7 +168,7 @@ get_config() {
 
     case "$(uname)" in
 	Darwin)
-        if [ test -f "$HOME/Library/ApplicationSupport/telepresence/config.yml" ]
+        if test -f "$HOME/Library/ApplicationSupport/telepresence/config.yml"
         then
             config_file="$HOME/Library/ApplicationSupport/telepresence/config.yml"
         else
