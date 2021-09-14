@@ -267,6 +267,11 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
 			}
 			dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
 			t.clusterDomain = mgrInfo.ClusterDomain
+			if t.clusterDomain == "" {
+				// Traffic manager predates 2.4.3 and doesn't report a cluster domain. Only thing
+				// left to do then is to assume it's the standard one.
+				t.clusterDomain = "cluster.local."
+			}
 			close(cfgComplete)
 		}
 	}
