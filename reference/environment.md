@@ -43,4 +43,4 @@ The name of the intercepted container. Useful when a pod has several containers,
 ### TELEPRESENCE_INTERCEPT_ID
 ID of the intercept (same as the "x-intercept-id" http header).
 
-Useful if you need special behavior when intercepting a pod. One example might be when dealing with pub/sub systems like Kafka, where all processes that doesn't have the `TELEPRESENCE_INTERCEPT_ID` set can filter out all messages that contain an `x-intercept-id` header, while those that don't, instead filter based on a matching `x-intercept-id` header. This to assure that messages belonging to a certain intercept always are consumed by the intercepting process.
+Useful if you need special behavior when intercepting a pod. One example might be when dealing with pub/sub systems like Kafka, where all processes that don't have the `TELEPRESENCE_INTERCEPT_ID` set can filter out all messages that contain an `x-intercept-id` header, while those that do, instead filter based on a matching `x-intercept-id` header. This is to assure that messages belonging to a certain intercept always are consumed by the intercepting process.
