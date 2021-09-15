@@ -129,39 +129,44 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 			}
 		}
 	}
-	// To get logs from the components in the kubernetes cluster, we ask the
-	// traffic-manager.
-	rq := &manager.GetLogsRequest{
-		TrafficManager: gl.trafficManager,
-		Agents:         gl.trafficAgents,
-	}
-	err = withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
-		err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			lr, err := managerClient.GetLogs(ctx, rq)
-			if err != nil {
-				return err
-			}
-			// Write the logs for each pod to files
-			for podName, log := range lr.PodLogs {
-				agentLogFile := fmt.Sprintf("%s/%s", exportDir, podName)
-				fd, err := os.Create(agentLogFile)
+
+	// Since getting the logs from k8s requires the connector, let's only do this
+	// work if we know the user wants to get logs from k8s.
+	if gl.trafficManager || gl.trafficAgents != "False" {
+		// To get logs from the components in the kubernetes cluster, we ask the
+		// traffic-manager.
+		rq := &manager.GetLogsRequest{
+			TrafficManager: gl.trafficManager,
+			Agents:         gl.trafficAgents,
+		}
+		err = withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+				lr, err := managerClient.GetLogs(ctx, rq)
 				if err != nil {
 					return err
 				}
-				defer fd.Close()
-				fdWriter := bufio.NewWriter(fd)
-				_, _ = fdWriter.WriteString(log)
-				fdWriter.Flush()
+				// Write the logs for each pod to files
+				for podName, log := range lr.PodLogs {
+					agentLogFile := fmt.Sprintf("%s/%s", exportDir, podName)
+					fd, err := os.Create(agentLogFile)
+					if err != nil {
+						return err
+					}
+					defer fd.Close()
+					fdWriter := bufio.NewWriter(fd)
+					_, _ = fdWriter.WriteString(log)
+					fdWriter.Flush()
+				}
+				return nil
+			})
+			if err != nil {
+				return err
 			}
 			return nil
 		})
 		if err != nil {
-			return err
+			fmt.Fprintf(stdout, "Error getting logs from k8s components: %s", err)
 		}
-		return nil
-	})
-	if err != nil {
-		fmt.Fprintf(stdout, "Error getting logs from k8s components: %s", err)
 	}
 
 	// Zip up all the files we've created in the zip directory and return that to the user
