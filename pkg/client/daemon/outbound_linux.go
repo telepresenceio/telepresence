@@ -9,13 +9,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	dns2 "github.com/miekg/dns"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
 
@@ -119,7 +120,6 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	ncc := dcontext.WithoutCancel(c)
 	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port)
 
 	// Create the connection later used for fallback. We need to create this before the firewall
@@ -129,17 +129,15 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err = routeDNS(ncc, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr)); err != nil {
-		return err
-	}
 	defer func() {
 		_ = conn.Close()
-		unrouteDNS(ncc)
 	}()
-	dns.Flush(c)
 
+	serverStarted := make(chan struct{})
+	serverDone := make(chan struct{})
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
+		defer close(serverDone)
 		select {
 		case <-c.Done():
 			return nil
@@ -159,11 +157,35 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 				o.namespaces = namespaces
 				o.search = search
 				o.domainsLock.Unlock()
+				dns.Flush(c)
 				return nil
 			})
 			v := dns.NewServer(c, listeners, conn, o.resolveInSearch)
+			close(serverStarted)
 			return v.Run(c)
 		}
+	})
+
+	g.Go("NAT-redirect", func(c context.Context) error {
+		select {
+		case <-c.Done():
+		case <-serverStarted:
+			// Give DNS server time to start before rerouting NAT
+			dtime.SleepWithContext(c, time.Millisecond)
+
+			err := routeDNS(c, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
+			if err != nil {
+				return err
+			}
+			defer func() {
+				c := context.Background()
+				unrouteDNS(c)
+				dns.Flush(c)
+			}()
+			dns.Flush(c)
+			<-serverDone // Stay alive until DNS server is done
+		}
+		return nil
 	})
 	return g.Wait()
 }

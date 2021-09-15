@@ -130,8 +130,8 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	case ConnectOK:
 		go h.readLoop(ctx)
 	case ReadClosed, WriteClosed, Disconnect: // Peer requests a disconnect. No more messages will arrive
-		h.Close(ctx)
 		h.sendTCD(ctx, DisconnectOK)
+		h.Close(ctx)
 	case DisconnectOK: // Peer responded to our disconnect or wants to hard-close. No more messages will arrive
 		h.Close(ctx)
 	case ConnectReject:
