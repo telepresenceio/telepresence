@@ -6,6 +6,10 @@
 # This should move to our go tests eventually since there is some overlap
 # and it's nice to have tests in one place.
 
+
+# s3.amazonaws.com/datawire-static-files/tel2/windows/amd64/2.4.3-rc.4/telepresence.zip
+# agentImage: ambassador-telepresence-agent:1.11.1-rc.1
+
 # Note that the given step has passsed and bumps global step counter
 finish_step() {
     echo "Step ${STEP} success!"
@@ -104,6 +108,9 @@ get_workstation_apikey() {
 	Linux)
 		cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/apikeys.json"
 		;;
+    MINGW64_NT-10.0-19043)
+        cache_file="$LOCALAPPDATA/telepresence/apikeys.json"
+        ;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
@@ -173,6 +180,9 @@ get_config() {
 	Linux)
 		config_file="${XDG_CONFIG_HOME:-$HOME/.cache}/telepresence/config.yml"
 		;;
+    MINGW64_NT-10.0-19043)
+        config_file="$APPDATA/telepresence/config.yml"
+        ;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
@@ -552,7 +562,7 @@ finish_step
 ##########################################################
 
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all --preview-url=false)
-sleep 1
+sleep 5
 has_intercept_id false
 has_preview_url false
 output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
@@ -581,15 +591,8 @@ finish_step
 ##########################################################
 #### Step 13 - Verify version prompts new version     ####
 ##########################################################
-os=$(uname -s | awk '{print tolower($0)}')
-echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
-sudo curl "${curl_opts[@]}" -fL "https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence" -o /tmp/old_telepresence
-sudo chmod +x /tmp/old_telepresence
-output=$(/tmp/old_telepresence version | grep 'An update of telepresence from version')
+output=$(D:/tmp/old_telepresence version | grep 'An update of telepresence from version')
 verify_output_empty "${output}" false
-echo "Removing old version of telepresence: /tmp/old_telepresence"
-sudo rm /tmp/old_telepresence
-
 finish_step
 
 ##########################################################
