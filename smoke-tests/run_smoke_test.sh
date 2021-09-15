@@ -171,7 +171,7 @@ get_config() {
         config_file="$HOME/Library/ApplicationSupport/telepresence/config.yml"
 		;;
 	Linux)
-		config_file="${XDG_CONFIG_HOME:-$HOME/.cache}/telepresence/config.yml"
+		config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
 		;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
