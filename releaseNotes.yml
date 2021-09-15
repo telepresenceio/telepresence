@@ -32,7 +32,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 items:
 
   - version: 2.4.3
-    date: '2021-09-14'
+    date: '2021-09-15'
     notes:
       - type: feature
         title: Environment variable TELEPRESENCE_INTERCEPT_ID available in interceptor's environment
