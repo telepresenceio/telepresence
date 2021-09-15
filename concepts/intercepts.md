@@ -107,18 +107,21 @@ with all your dev tools.
 
 ## Personal intercept
 
+**Personal intercepts** allow you to be selective and intercept only
+some of the traffic to a service while not interfering with the rest
+of the traffic. This allows you to share a cluster with others on your
+team without interfering with their work.
+
 <Paper style="padding: 1em">
 <Animation class="mode-personal" />
 
-**Personal intercepts** allow you to be selective and intercept only
-some of the traffic to a service.
+In the illustration above, **<span style="color: #f24e1e">Orange</span>**
+requests are being made by Developer 2 on their laptop and the
+**<span style="color: #00c05b">green</span>** are made by a teammate,
+Developer 1, on a different laptop.
 
-**<span style="color: #f24e1e">Orange</span>** requests are being made
-by a developer on their laptop and the **<span style="color:
-#00c05b">green</span>** are made by a teammate on a different laptop.
-
-They can intercept the same service in the Kubernetes cluster to
-create a shared development environment.
+Each developer can intercept the Orders service for their requests only,
+while sharing the rest of the development environment.
 
 </Paper>
 

@@ -29,7 +29,7 @@ bash-3.2$ echo $TELEPRESENCE_ROOT
 
 <Alert severity="info"><code>--mount=true</code> is the default if a <code>mount</code> option is not specified, use <code>--mount=false</code> to disable mounting volumes.</Alert>
 
-With either method, the code you run locally either from the subshell or from the intercept command will need to be prepended with the `$TELEPRESENCE_ROOT` environment variable to utilitze the mounted volumes.
+With either method, the code you run locally either from the subshell or from the intercept command will need to be prepended with the `$TELEPRESENCE_ROOT` environment variable to utilize the mounted volumes.
 
 For example, Kubernetes mounts secrets to `/var/run/secrets/kubernetes.io` (even if no `mountPoint` for it exists in the Pod spec).  Once mounted, to access these you would need to change your code to use `$TELEPRESENCE_ROOT/var/run/secrets/kubernetes.io`.
 
