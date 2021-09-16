@@ -3,7 +3,7 @@ package actions
 import (
 	"context"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/derror"
 )
 
