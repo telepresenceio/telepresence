@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/Microsoft/go-winio v0.4.16
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/datawire/ambassador v1.13.7-0.20210527054604-663dfb393e59
+	github.com/datawire/ambassador/v2 7bc28ed11dfcc36f63b914780e46a163f5677e3e
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
 	github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible
@@ -164,13 +164,6 @@ require (
 	sigs.k8s.io/kustomize/api v0.8.5 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.10.15 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.0 // indirect
-)
-
-// We need to inherit this from github.com/datawire/ambassador
-replace (
-	github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible
-	github.com/docker/distribution => github.com/docker/distribution v0.0.0-20191216044856-a8371794149d
-	github.com/docker/docker => github.com/moby/moby v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
