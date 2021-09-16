@@ -3,11 +3,16 @@ package cli
 import (
 	"archive/zip"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
+	"regexp"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 func Test_gatherLogsZipFiles(t *testing.T) {
@@ -88,21 +93,11 @@ func Test_gatherLogsZipFiles(t *testing.T) {
 				// Ensure the file was actually supposed to be in the zip
 				assert.Contains(t, tc.realFileNames, f.Name)
 
-				zipFile, err := f.Open()
+				filesEqual, err := checkZipEqual(f, "testdata/zipDir")
 				if err != nil {
 					t.Fatal(err)
 				}
-				// it's maybe not best to read them into memory, but since this is
-				// just for tests and the files are very small, it's fine
-				zipFileContents, err := ioutil.ReadAll(zipFile)
-				if err != nil {
-					t.Fatal(err)
-				}
-				testFileContents, err := os.ReadFile(fmt.Sprintf("testdata/zipDir/%s", f.Name))
-				if err != nil {
-					t.Fatal(err)
-				}
-				assert.Equal(t, string(zipFileContents), string(testFileContents))
+				assert.True(t, filesEqual)
 			}
 
 			// Ensure that only the "real files" were added to the zip file
@@ -117,7 +112,7 @@ func Test_gatherLogsCopyFiles(t *testing.T) {
 		srcFileName string
 		fileDir     string
 		outputDir   string
-		errMsg      string
+		errExpected bool
 	}
 	testCases := []testcase{
 		{
@@ -125,21 +120,21 @@ func Test_gatherLogsCopyFiles(t *testing.T) {
 			srcFileName: "file1.log",
 			fileDir:     "testdata/zipDir",
 			outputDir:   "",
-			errMsg:      "",
+			errExpected: false,
 		},
 		{
 			name:        "failSrcFile",
 			srcFileName: "fake_file.log",
 			fileDir:     "testdata/zipDir",
 			outputDir:   "",
-			errMsg:      "no such file or directory",
+			errExpected: true,
 		},
 		{
 			name:        "failDstFile",
 			srcFileName: "file1.log",
 			fileDir:     "testdata/zipDir",
 			outputDir:   "notarealdir",
-			errMsg:      "no such file or directory",
+			errExpected: true,
 		},
 	}
 	for _, tc := range testCases {
@@ -152,13 +147,10 @@ func Test_gatherLogsCopyFiles(t *testing.T) {
 			dstFile := fmt.Sprintf("%s/copiedFile.log", tc.outputDir)
 			srcFile := fmt.Sprintf("%s/%s", tc.fileDir, tc.srcFileName)
 			err := copyFiles(dstFile, srcFile)
-			// if we have an errMsg, then we validate it is what we expect
-			if tc.errMsg != "" {
-				if err == nil {
-					t.Fatal("expected there to be an error, got nil")
-				}
-				assert.Contains(t, err.Error(), tc.errMsg)
+			if tc.errExpected {
+				assert.Error(t, err)
 			} else {
+				assert.NoError(t, err)
 				// when there's no error message, we validate that the file was
 				// copied correctly
 				if err != nil {
@@ -181,20 +173,137 @@ func Test_gatherLogsCopyFiles(t *testing.T) {
 
 func Test_gatherLogsNoK8s(t *testing.T) {
 	type testcase struct {
-		name string
-		// We use these two slices so it's easier to write tests knowing which
-		// files are exptected to exist and which aren't. These slices are combined
-		// prior to calling zipFiles in the tests.
-		realFileNames []string
-		fakeFileNames []string
-		fileDir       string
+		name       string
+		outputFile string
+		daemons    string
+		errMsg     string
 	}
-	testCases := []testcase{}
+	testCases := []testcase{
+		{
+			name:       "successfulZipAllDaemonLogs",
+			outputFile: "",
+			daemons:    "all",
+			errMsg:     "",
+		},
+		{
+			name:       "successfulZipOnlyRootLogs",
+			outputFile: "",
+			daemons:    "root",
+			errMsg:     "",
+		},
+		{
+			name:       "successfulZipOnlyConnectorLogs",
+			outputFile: "",
+			daemons:    "user",
+			errMsg:     "",
+		},
+		{
+			name:       "successfulZipNoDaemonLogs",
+			outputFile: "",
+			daemons:    "False",
+			errMsg:     "",
+		},
+		{
+			name:       "incorrectDaemonFlagValue",
+			outputFile: "",
+			daemons:    "notarealflag",
+			errMsg:     "Options for --daemons are: all, root, user, or False",
+		},
+	}
 
 	for _, tc := range testCases {
 		tcName := tc.name
-		//tc := tc
+		tc := tc
 		t.Run(tcName, func(t *testing.T) {
+			// Prepare the context + use our testdata log dir for these tests
+			ctx := dlog.NewTestContext(t, false)
+			testLogDir := "testdata/testLogDir"
+			ctx = filelocation.WithAppUserLogDir(ctx, testLogDir)
+
+			// this isn't actually used for our unit tests, but is needed for the function
+			// when it is getting logs from k8s components
+			cmd := &cobra.Command{}
+
+			// override the outputFile
+			outputDir := t.TempDir()
+			if tc.outputFile == "" {
+				tc.outputFile = fmt.Sprintf("%s/telepresence_logs.zip", outputDir)
+			}
+			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+			gl := &gatherLogsArgs{
+				outputFile: tc.outputFile,
+				daemons:    tc.daemons,
+				// We will test other values of this in our integration tests since
+				// they require a kubernetes cluster
+				trafficAgents:  "False",
+				trafficManager: false,
+			}
+
+			// Ensure we can create a zip of the logs
+			err := gl.gatherLogs(cmd, ctx, stdout)
+			if tc.errMsg != "" {
+				if err == nil {
+					t.Fatal("error was expected")
+				}
+				assert.Contains(t, err.Error(), tc.errMsg)
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// Validate that the zip file only contains the files we expect
+				zipReader, err := zip.OpenReader(tc.outputFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer zipReader.Close()
+
+				var regexStr string
+				switch gl.daemons {
+				case "all":
+					regexStr = "connector|daemon"
+				case "root":
+					regexStr = "daemon"
+				case "user":
+					regexStr = "connector"
+				case "False":
+					regexStr = "!connector|!daemon"
+				default:
+					// We shouldn't hit this
+					t.Fatal("Used an option for daemon that is impossible")
+				}
+				for _, f := range zipReader.File {
+					// Ensure the file was actually supposed to be in the zip
+					assert.Regexp(t, regexp.MustCompile(regexStr), f.Name)
+
+					filesEqual, err := checkZipEqual(f, testLogDir)
+					if err != nil {
+						t.Fatal(err)
+					}
+					assert.True(t, filesEqual)
+				}
+			}
 		})
 	}
+}
+
+// checkZipEqual is a helper function for validating that the zippedFile in the
+// zip directory matches the file that was used to create the zip.
+func checkZipEqual(zippedFile *zip.File, srcLogDir string) (bool, error) {
+	dstFile, err := zippedFile.Open()
+	if err != nil {
+		return false, err
+	}
+	// It's maybe not ideal to read these logs into memory, but they are small
+	// so I think it's fine for simplicity
+	dstContent, err := io.ReadAll(dstFile)
+	if err != nil {
+		return false, err
+	}
+	srcContent, err := os.ReadFile(fmt.Sprintf("%s/%s", srcLogDir, zippedFile.Name))
+	if err != nil {
+		return false, err
+	}
+
+	return string(dstContent) == string(srcContent), nil
 }
