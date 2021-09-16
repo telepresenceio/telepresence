@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
@@ -33,6 +34,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
@@ -1113,7 +1115,83 @@ func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
 	}
 }
 
-func (is *interceptedSuite) TestC_MountedFilesystem() {
+// We do some tests in this suite that check that we only get logs from
+// one agent, so we do these tests now since future tests remove agents
+// and/or pods, which could potentially make those tests fail since we
+// are only expecting one agent.
+func (is *interceptedSuite) TestC_GatherLogs() {
+	require := is.Require()
+	outputDir := is.T().TempDir()
+
+	getZipData := func(outputFile string) (bool, int) {
+		zipReader, err := zip.OpenReader(outputFile)
+		require.NoError(err)
+		defer zipReader.Close()
+		foundManager, foundAgents := false, 0
+		for _, f := range zipReader.File {
+			if strings.Contains(f.Name, "traffic-manager") {
+				foundManager = true
+				fileContent, err := cli.ReadZip(f)
+				require.NoError(err)
+				// We can be fairly certain we actually got a traffic-manager log
+				// if we see the following
+				require.Contains(string(fileContent), "Traffic Manager v2.")
+			}
+			if strings.Contains(f.Name, "hello-") {
+				foundAgents++
+				fileContent, err := cli.ReadZip(f)
+				require.NoError(err)
+				// We can be fairly certain we actually got a traffic-manager log
+				// if we see the following
+				require.Contains(string(fileContent), "Traffic Agent v2.")
+			}
+		}
+		return foundManager, foundAgents
+	}
+	is.Run("Get All Logs", func() {
+		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile)
+		require.Empty(stderr)
+		foundManager, foundAgents := getZipData(outputFile)
+		require.True(foundManager)
+		require.Equal(foundAgents, serviceCount)
+	})
+
+	is.Run("Get Manager Logs Only", func() {
+		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-agents=False")
+		require.Empty(stderr)
+		foundManager, foundAgents := getZipData(outputFile)
+		require.True(foundManager)
+		require.Equal(foundAgents, 0)
+	})
+	is.Run("Get Agent Logs Only", func() {
+		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False")
+		require.Empty(stderr)
+		foundManager, foundAgents := getZipData(outputFile)
+		require.False(foundManager)
+		require.Equal(foundAgents, serviceCount)
+	})
+	is.Run("Get Only 1 Agent Log", func() {
+		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=hello-1")
+		require.Empty(stderr)
+		foundManager, foundAgents := getZipData(outputFile)
+		require.False(foundManager)
+		require.Equal(foundAgents, 1)
+	})
+	is.Run("No K8s Logs", func() {
+		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=False")
+		require.Empty(stderr)
+		foundManager, foundAgents := getZipData(outputFile)
+		require.False(foundManager)
+		require.Equal(foundAgents, 0)
+	})
+}
+
+func (is *interceptedSuite) TestD_MountedFilesystem() {
 	require := is.Require()
 	st, err := os.Stat(is.mountPoint)
 	require.NoError(err, "Stat on <mount point> failed")
@@ -1123,7 +1201,7 @@ func (is *interceptedSuite) TestC_MountedFilesystem() {
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
-func (is *interceptedSuite) TestD_RestartInterceptedPod() {
+func (is *interceptedSuite) TestE_RestartInterceptedPod() {
 	ts := is.tpSuite
 	assert := is.Assert()
 	require := is.Require()
@@ -1169,7 +1247,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	}, 5*time.Second, time.Second)
 }
 
-func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
+func (is *interceptedSuite) TestF_StopInterceptedPodOfMany() {
 	ts := is.tpSuite
 	assert := is.Assert()
 	require := is.Require()

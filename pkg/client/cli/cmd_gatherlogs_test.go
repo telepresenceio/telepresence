@@ -287,16 +287,23 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 	}
 }
 
+func ReadZip(zippedFile *zip.File) ([]byte, error) {
+	fileReader, err := zippedFile.Open()
+	if err != nil {
+		return nil, err
+	}
+
+	fileContent, err := io.ReadAll(fileReader)
+	if err != nil {
+		return nil, err
+	}
+	return fileContent, nil
+}
+
 // checkZipEqual is a helper function for validating that the zippedFile in the
 // zip directory matches the file that was used to create the zip.
 func checkZipEqual(zippedFile *zip.File, srcLogDir string) (bool, error) {
-	dstFile, err := zippedFile.Open()
-	if err != nil {
-		return false, err
-	}
-	// It's maybe not ideal to read these logs into memory, but they are small
-	// so I think it's fine for simplicity
-	dstContent, err := io.ReadAll(dstFile)
+	dstContent, err := ReadZip(zippedFile)
 	if err != nil {
 		return false, err
 	}

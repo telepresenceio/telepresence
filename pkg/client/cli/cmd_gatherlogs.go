@@ -200,7 +200,7 @@ func copyFiles(dstFile, srcFile string) error {
 	if err != nil {
 		return err
 	}
-	defer srcWriter.Close()
+	defer dstWriter.Close()
 
 	if _, err := io.Copy(dstWriter, srcWriter); err != nil {
 		return err
