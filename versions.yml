@@ -1,4 +1,4 @@
-version: "2.4.0"
+version: "2.4.3"
 docsVersion: "2.4"
 branch: release/v2
 productName: "Telepresence"
