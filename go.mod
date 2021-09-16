@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/Microsoft/go-winio v0.4.16
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/datawire/ambassador/v2 7bc28ed11dfcc36f63b914780e46a163f5677e3e
+	github.com/datawire/ambassador/v2 v2.0.2-rc.1.0.20210915144712-7bc28ed11dfc
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
 	github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible
@@ -80,7 +80,7 @@ require (
 	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/go-logr/logr v0.4.0 // indirect
-	github.com/go-openapi/jsonpointer v0.19.3 // indirect
+	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.3 // indirect
 	github.com/go-openapi/spec v0.19.5 // indirect
 	github.com/go-openapi/swag v0.19.5 // indirect
@@ -92,7 +92,7 @@ require (
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/gnostic v0.5.1 // indirect
-	github.com/gorilla/mux v1.7.3 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
@@ -154,10 +154,11 @@ require (
 	k8s.io/apiserver v0.21.0 // indirect
 	k8s.io/cli-runtime v0.21.0 // indirect
 	k8s.io/component-base v0.21.0 // indirect
-	k8s.io/klog/v2 v2.8.0 // indirect
+	k8s.io/klog/v2 v2.10.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7 // indirect
 	k8s.io/metrics v0.21.0 // indirect
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
+	rsc.io/letsencrypt v0.0.3 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.15 // indirect
 	sigs.k8s.io/controller-runtime v0.8.0 // indirect
 	sigs.k8s.io/gateway-api v0.2.0 // indirect
