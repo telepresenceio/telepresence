@@ -62,7 +62,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/containerd/cgroups v0.0.0-20200531161412-0dbf7f05ba59 // indirect
-	github.com/containerd/containerd v1.4.4 // indirect
+	github.com/containerd/containerd v1.4.8 // indirect
 	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -123,7 +123,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
-	github.com/opencontainers/runc v0.1.1 // indirect
+	github.com/opencontainers/runc v1.0.0-rc95 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.7.1 // indirect
@@ -177,13 +177,3 @@ replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316
-
-// Helm pulls both of these in to support the registry functionality (which telepresence doesn't leverage)
-// but it pulls in old, vulnerable, versions. These replaces will force it into pulling new versions.
-// If there's ever a helm version that depends on versions >= these two, we can drop this replace block.
-// We do this via replace because if we updated the require() //indirect block above, and then upgraded helm to a version
-// that still pulls in the vulnerable runc and containerd, we could end up accidentally downgrading their versions.
-replace (
-	github.com/containerd/containerd => github.com/containerd/containerd v1.4.8
-	github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95
-)
