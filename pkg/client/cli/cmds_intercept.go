@@ -743,8 +743,9 @@ func (is *interceptState) writeEnvJSON() error {
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
 
 const (
-	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter your cluster.  Please %s the ingress to use.`
-	ingressQ1   = `1/4: What's your ingress' layer 3 (IP) address?
+	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter 
+	your cluster.  Please %s the ingress to use.`
+	ingressQ1 = `1/4: What's your ingress' layer 3 (IP) address?
      You may use an IP address or a DNS name (this is usually a
      "service.namespace" DNS name).`
 	ingressQ2 = `2/4: What's your ingress' layer 4 address (TCP port number)?`
