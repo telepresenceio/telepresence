@@ -11,6 +11,7 @@ import (
 )
 
 const EnvPrefix = "_TEL_AGENT_"
+const InitContainerName = "tel-agent-init"
 const AgentUID = int64(7777)
 
 // AgentContainer will return a configured traffic agent
