@@ -8,6 +8,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agentinit"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 )
 
@@ -27,6 +28,8 @@ func main() {
 			doMain(agent.Main, os.Args[2:]...)
 		case "manager":
 			doMain(manager.Main, os.Args[2:]...)
+		case "agent-init":
+			doMain(agentinit.Main, os.Args[2:]...)
 		default:
 			fmt.Println("traffic: unknown command:", name)
 			os.Exit(127)
@@ -37,6 +40,8 @@ func main() {
 	switch name := filepath.Base(os.Args[0]); name {
 	case "traffic-agent":
 		doMain(agent.Main, os.Args[1:]...)
+	case "traffic-agent-init":
+		doMain(agentinit.Main, os.Args[1:]...)
 	case "traffic-manager":
 		fallthrough
 	default:

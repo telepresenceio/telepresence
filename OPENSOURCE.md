@@ -29,6 +29,7 @@ following Free and Open Source software:
     github.com/containerd/cgroups                                       v0.0.0-20200531161412-0dbf7f05ba59                          Apache License 2.0
     github.com/containerd/containerd                                    v1.4.8                                                      Apache License 2.0
     github.com/containerd/continuity                                    v0.0.0-20201208142359-180525291bb7                          Apache License 2.0
+    github.com/coreos/go-iptables                                       v0.6.0                                                      Apache License 2.0
     github.com/cyphar/filepath-securejoin                               v0.2.2                                                      3-clause BSD license
     github.com/datawire/ambassador                                      v1.13.7-0.20210527054604-663dfb393e59                       Apache License 2.0
     github.com/datawire/dlib                                            v1.2.4-0.20210629021142-e221f3b9c3b8                        Apache License 2.0
