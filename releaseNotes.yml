@@ -30,11 +30,14 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
-
   - version: 2.4.4
     date: 'TBD'
-    notes: []
-
+    notes:
+      - type: feature
+        title: Numeric ports in agent injector
+        body: >-
+          The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
+        docs: reference/cluster-config/#note-on-numeric-ports
   - version: 2.4.3
     date: '2021-09-15'
     notes:
