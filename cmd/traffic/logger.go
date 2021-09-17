@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
@@ -15,7 +16,12 @@ func makeBaseLogger(ctx context.Context) context.Context {
 	logrusFormatter := log.NewFormatter("2006-01-02 15:04:05.0000")
 	logrusLogger.SetFormatter(logrusFormatter)
 
-	log.SetLogrusLevel(logrusLogger, os.Getenv("LOG_LEVEL"))
+	level, ok := os.LookupEnv("LOG_LEVEL")
+	if !ok {
+		level = os.Getenv(install.EnvPrefix + "LOG_LEVEL")
+	}
+
+	log.SetLogrusLevel(logrusLogger, level)
 
 	logger := dlog.WrapLogrus(logrusLogger)
 	dlog.SetFallbackLogger(logger)

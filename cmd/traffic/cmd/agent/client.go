@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -187,7 +188,11 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 }
 
 func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
-	timedLevel := log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel)
+	level, ok := os.LookupEnv("LOG_LEVEL")
+	if !ok {
+		level = os.Getenv(install.EnvPrefix + "LOG_LEVEL")
+	}
+	timedLevel := log.NewTimedLevel(level, log.SetLevel)
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
 		if err != nil {
