@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/datawire/ambassador/pkg/kates"
+
 	admission "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +75,14 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		}
 	}
 
-	svc, err := findMatchingService(ctx, managerutil.GetKatesClient(ctx), "", "", podNamespace, pod.Labels)
+	// Make the kates client available in the context
+	// TODO: Use the kubernetes SharedInformerFactory instead
+	client, err := kates.NewClient(kates.ClientConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new kates client: %w", err)
+	}
+
+	svc, err := findMatchingService(ctx, client, "", "", podNamespace, pod.Labels)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil, nil
