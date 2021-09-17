@@ -79,10 +79,10 @@ pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
 TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image
 base-image: base-image/Dockerfile # Intentionally not in 'make help'
-	if ! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); then \
-	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) . && \
-	  docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); \
-	fi
+	if (! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION)) && (! docker image inspect $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) > /dev/null); then \
+	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) .; \
+	fi; \
+    docker tag $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) ko.local/tel2-base:$(TELEPRESENCE_BASE_VERSION)
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -100,6 +100,7 @@ image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container ima
 
 .PHONY: push-image
 push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
+	docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) && \
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: clean
