@@ -745,12 +745,12 @@ var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.
 const (
 	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter 
 	your cluster.  Please %s the ingress to use.`
-	ingressQ1 = `1/4: What's your ingress' layer 3 (IP) address?
+	ingressQ1 = `1/4: What's your ingress' IP address?
      You may use an IP address or a DNS name (this is usually a
      "service.namespace" DNS name).`
-	ingressQ2 = `2/4: What's your ingress' layer 4 address (TCP port number)?`
+	ingressQ2 = `2/4: What's your ingress' TCP port number?`
 	ingressQ3 = `3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?`
-	ingressQ4 = `4/4: If required by your ingress, specify a different layer 5 hostname
+	ingressQ4 = `4/4: If required by your ingress, specify a different hostname
      (TLS-SNI, HTTP "Host" header) to be used in requests.`
 )
 
