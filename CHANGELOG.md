@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.4.4 (TBD)
+
+- Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
+
+- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
+
 ### 2.4.3 (September 15, 2021)
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.

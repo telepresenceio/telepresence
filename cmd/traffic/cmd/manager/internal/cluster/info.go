@@ -4,12 +4,12 @@ import (
 	"context"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
-
-	"k8s.io/client-go/informers"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -137,13 +137,25 @@ func NewInfo(ctx context.Context) Info {
 		oi.ServiceSubnet = &rpc.IPNet{Ip: net.IP(oi.KubeDnsIp).Mask(mask), Mask: int32(ones)}
 	}
 
-	go func() {
-		if !oi.watchNodeSubnets(ctx) {
-			if !oi.watchPodSubnets(ctx) {
-				dlog.Errorf(ctx, "Unable to derive subnets from nodes or pods")
+	podCIDRStrategy := env.PodCIDRStrategy
+	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
+
+	switch {
+	case strings.EqualFold("auto", podCIDRStrategy):
+		go func() {
+			if !oi.watchNodeSubnets(ctx) {
+				oi.watchPodSubnets(ctx)
 			}
-		}
-	}()
+		}()
+	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
+		go oi.watchNodeSubnets(ctx)
+	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
+		go oi.watchPodSubnets(ctx)
+	case strings.EqualFold("environment", podCIDRStrategy):
+		oi.setSubnetsFromEnv(ctx)
+	default:
+		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
+	}
 	return &oi
 }
 
@@ -160,6 +172,7 @@ func (oi *info) watchNodeSubnets(ctx context.Context) bool {
 
 	retriever := newNodeWatcher(nodeLister, nodeInformer)
 	if !retriever.viable(ctx) {
+		dlog.Errorf(ctx, "Unable to derive subnets from nodes")
 		return false
 	}
 	dlog.Infof(ctx, "Deriving subnets from podCIRs of nodes")
@@ -180,11 +193,37 @@ func (oi *info) watchPodSubnets(ctx context.Context) bool {
 
 	retriever := newPodWatcher(podLister, podInformer)
 	if !retriever.viable(ctx) {
+		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
 		return false
 	}
 	dlog.Infof(ctx, "Deriving subnets from IPs of pods")
 	oi.watchSubnets(ctx, retriever)
 	return true
+}
+
+func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
+	pcEnv := managerutil.GetEnv(ctx).PodCIDRs
+	cidrStrs := strings.Split(pcEnv, " ")
+	allOK := len(cidrStrs) > 0
+	podCIDRs := make([]*net.IPNet, len(cidrStrs))
+	if allOK {
+		for i, s := range cidrStrs {
+			_, cidr, err := net.ParseCIDR(s)
+			if err != nil {
+				dlog.Errorf(ctx, "unable to parse CIDR %q from environment variable POD_CIDRS: %v", s, err)
+				allOK = false
+				break
+			}
+			podCIDRs[i] = cidr
+		}
+	}
+	if allOK {
+		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
+		oi.updateSubnets(podCIDRs)
+	} else {
+		dlog.Errorf(ctx, "unable to parse subnets from POD_CIDRS value %q", pcEnv)
+	}
+	return allOK
 }
 
 // Watch will start by sending an initial snapshot of the ClusterInfo on the given stream
