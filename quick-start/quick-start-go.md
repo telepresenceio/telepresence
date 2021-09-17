@@ -45,8 +45,6 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 
 ## 2. Try the Emojivoto application
 
-</div>
-
 The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
 
 1. Go to the <a href="">emoji-web-app</a> and vote for some emojis.
@@ -119,6 +117,12 @@ Preview URLs allows you to safely share your development environment. With this 
   When prompted for ingress configuration, all default values should be correct as displayed below.
 
   <UserInterceptCommand/>
+
+3. If you access the <a href="#">emoji-web-app</a> application on your remote cluster and vote for the 🍩 emoji, you'll see the bug is still present.
+
+4. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version running locally.
+
+</div>
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
