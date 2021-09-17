@@ -201,11 +201,6 @@ To solve this issue, you can use Telepresence's Mutating Webhook alternative mec
 workloads will then stay untouched and only the underlying pods will be modified to inject the Traffic
 Agent sidecar container and update the port definitions.
 
-<Alert severity="info">
-A current limitation of the Mutating Webhook mechanism is that the <code>targetPort</code> of your intercepted
-Service needs to point to the <strong>name</strong> of a port on your container, not the port number itself.
-</Alert>
-
 Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` annotation to your
 workload template's annotations:
 
@@ -220,6 +215,7 @@ workload template's annotations:
      spec:
        containers:
 ```
+
 
 ### Service Port Annotation
 
@@ -237,4 +233,54 @@ in the service. This is necessary when the service has multiple ports.
 +        telepresence.getambassador.io/inject-service-port: https
      spec:
        containers:
+```
+
+### Note on numeric ports
+
+If the <code>targetPort</code> of your intercepted Service is pointing at a port number, in addition to
+injecting the Traffic Agent sidecar, Telepresence will also inject an <code>initContainer</code> that will
+reconfigure the pod's firewall rules to redirect traffic to the Traffic Agent.
+
+<Alert severity="info">
+Note that this <code>initContainer</code> requires `NET_ADMIN` capabilities.
+If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
+</Alert>
+
+For example, the following service is using a numeric port, and so Telepresence would inject an initContainer into it:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: your-service
+spec:
+  type: ClusterIP
+  selector:
+    service: your-service
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: your-service
+  labels:
+    service: your-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: your-service
+  template:
+    metadata:
+      annotations:
+        telepresence.getambassador.io/inject-traffic-agent: enabled
+      labels:
+        service: your-service
+    spec:
+      containers:
+        - name: your-container
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
 ```
