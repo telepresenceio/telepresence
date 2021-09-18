@@ -8,11 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
