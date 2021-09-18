@@ -20,7 +20,7 @@ type nodeWatcher struct {
 	informer cache.SharedIndexInformer
 	subnets  subnet.Set
 	changed  time.Time
-	lock     sync.Mutex // Protects all access to ipsMap
+	lock     sync.Mutex // Protects all access to subnets
 }
 
 func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer cache.SharedIndexInformer) *nodeWatcher {

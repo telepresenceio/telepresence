@@ -79,7 +79,7 @@ podCIDRs: []
 #  nodePodCIDRs extract CIDRs from the podCIDR and podCIDRs field of the Node Spec.
 #  coverPodIPs  extract IPs from the podIP and podIPs field of the Pod Status and compute the CIDRs needed to cover those IPs.
 #  environment  use CIDRs listed in the space separated POD_CIDRS environment variable verbatim.
-#  auto         first tru nodePodCIDRs and if that fails, tru coverPodIPs
+#  auto         first try nodePodCIDRs and if that fails, tru coverPodIPs
 #
 # Default: auto
 podCIDRStrategy: auto
