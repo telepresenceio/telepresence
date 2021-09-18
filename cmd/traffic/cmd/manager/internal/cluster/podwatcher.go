@@ -24,12 +24,24 @@ type podWatcher struct {
 	lock     sync.Mutex // Protects all access to ipsMap
 }
 
-func newPodWatcher(lister licorev1.PodLister, informer cache.SharedIndexInformer) *podWatcher {
-	return &podWatcher{
+func newPodWatcher(ctx context.Context, lister licorev1.PodLister, informer cache.SharedIndexInformer) *podWatcher {
+	w := &podWatcher{
 		lister:   lister,
 		informer: informer,
 		ipsMap:   make(map[iputil.IPKey]struct{}),
 	}
+	w.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			w.onPodAdded(ctx, obj.(*corev1.Pod))
+		},
+		DeleteFunc: func(obj interface{}) {
+			w.onPodDeleted(ctx, obj.(*corev1.Pod))
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
+		},
+	})
+	return w
 }
 
 func (w *podWatcher) changeNotifier(ctx context.Context, updateSubnets func([]*net.IPNet)) {
@@ -88,20 +100,6 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 		w.changed = time.Now()
 	}
 	return changed
-}
-
-func (w *podWatcher) watch(ctx context.Context) {
-	w.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			w.onPodAdded(ctx, obj.(*corev1.Pod))
-		},
-		DeleteFunc: func(obj interface{}) {
-			w.onPodDeleted(ctx, obj.(*corev1.Pod))
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
-		},
-	})
 }
 
 func (w *podWatcher) onPodAdded(ctx context.Context, pod *corev1.Pod) {

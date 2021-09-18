@@ -23,11 +23,23 @@ type nodeWatcher struct {
 	lock     sync.Mutex // Protects all access to ipsMap
 }
 
-func newNodeWatcher(lister licorev1.NodeLister, informer cache.SharedIndexInformer) *nodeWatcher {
-	return &nodeWatcher{
+func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer cache.SharedIndexInformer) *nodeWatcher {
+	w := &nodeWatcher{
 		lister:   lister,
 		informer: informer,
 	}
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			w.onNodeAdded(ctx, obj.(*corev1.Node))
+		},
+		DeleteFunc: func(obj interface{}) {
+			w.onNodeDeleted(ctx, obj.(*corev1.Node))
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			w.onNodeUpdated(ctx, oldObj.(*corev1.Node), newObj.(*corev1.Node))
+		},
+	})
+	return w
 }
 
 func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func([]*net.IPNet)) {
@@ -85,20 +97,6 @@ func (w *nodeWatcher) viable(ctx context.Context) bool {
 		dlog.Info(ctx, "No subnets found")
 	}
 	return changed
-}
-
-func (w *nodeWatcher) watch(ctx context.Context) {
-	w.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			w.onNodeAdded(ctx, obj.(*corev1.Node))
-		},
-		DeleteFunc: func(obj interface{}) {
-			w.onNodeDeleted(ctx, obj.(*corev1.Node))
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			w.onNodeUpdated(ctx, oldObj.(*corev1.Node), newObj.(*corev1.Node))
-		},
-	})
 }
 
 func (w *nodeWatcher) onNodeAdded(ctx context.Context, node *corev1.Node) {
