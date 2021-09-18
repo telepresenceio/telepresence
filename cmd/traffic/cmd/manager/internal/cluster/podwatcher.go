@@ -85,6 +85,16 @@ func (w *podWatcher) changeNotifier(ctx context.Context, updateSubnets func(set 
 }
 
 func (w *podWatcher) viable(ctx context.Context) bool {
+	if len(w.ipsMap) > 0 {
+		return true
+	}
+	if !w.changed.IsZero() {
+		// Tested before but didn't produce anything
+		return false
+	}
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	pods, err := w.lister.List(labels.Everything())
 	if err != nil {
 		dlog.Errorf(ctx, "unable to list pods: %v", err)
@@ -92,17 +102,13 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 	}
 
 	// Create the initial snapshot
-	w.lock.Lock()
-	defer w.lock.Unlock()
 	changed := false
 	for _, pod := range pods {
 		if w.addLocked(podIPKeys(ctx, pod)) {
 			changed = true
 		}
 	}
-	if changed {
-		w.changed = time.Now()
-	}
+	w.changed = time.Now()
 	return changed
 }
 

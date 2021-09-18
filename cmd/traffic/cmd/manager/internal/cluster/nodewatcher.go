@@ -74,15 +74,23 @@ func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func(set
 }
 
 func (w *nodeWatcher) viable(ctx context.Context) bool {
+	// Create the initial snapshot
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if len(w.subnets) > 0 {
+		return true
+	}
+	if !w.changed.IsZero() {
+		// Tested before but didn't produce anything
+		return false
+	}
+
 	nodes, err := w.lister.List(labels.Everything())
 	if err != nil {
 		dlog.Errorf(ctx, "unable to list nodes: %v", err)
 		return false
 	}
 
-	// Create the initial snapshot
-	w.lock.Lock()
-	defer w.lock.Unlock()
 	changed := false
 	dlog.Infof(ctx, "Scanning %d nodes", len(nodes))
 	for _, node := range nodes {
@@ -90,9 +98,9 @@ func (w *nodeWatcher) viable(ctx context.Context) bool {
 			changed = true
 		}
 	}
+	w.changed = time.Now()
 	if changed {
 		dlog.Infof(ctx, "Found %d subnets", len(w.subnets))
-		w.changed = time.Now()
 	} else {
 		dlog.Info(ctx, "No subnets found")
 	}
