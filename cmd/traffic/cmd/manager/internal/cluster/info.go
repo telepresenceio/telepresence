@@ -15,6 +15,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 type Info interface {
@@ -26,7 +27,7 @@ type Info interface {
 }
 
 type subnetRetriever interface {
-	changeNotifier(ctx context.Context, updateSubnets func([]*net.IPNet))
+	changeNotifier(ctx context.Context, updateSubnets func(subnet.Set))
 	viable(ctx context.Context) bool
 }
 
@@ -35,8 +36,6 @@ type info struct {
 	accLock sync.Mutex
 	waiter  sync.Cond
 
-	// podCIDRMap keeps track of the current set of pod CIDRs
-	podCIDRMap map[iputil.IPKey]int
 	// clusterID is the UID of the default namespace
 	clusterID string
 }
@@ -205,21 +204,21 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 	pcEnv := managerutil.GetEnv(ctx).PodCIDRs
 	cidrStrs := strings.Split(pcEnv, " ")
 	allOK := len(cidrStrs) > 0
-	podCIDRs := make([]*net.IPNet, len(cidrStrs))
+	subnets := make(subnet.Set, len(cidrStrs))
 	if allOK {
-		for i, s := range cidrStrs {
+		for _, s := range cidrStrs {
 			_, cidr, err := net.ParseCIDR(s)
 			if err != nil {
 				dlog.Errorf(ctx, "unable to parse CIDR %q from environment variable POD_CIDRS: %v", s, err)
 				allOK = false
 				break
 			}
-			podCIDRs[i] = cidr
+			subnets.Add(cidr)
 		}
 	}
 	if allOK {
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
-		oi.updateSubnets(podCIDRs)
+		oi.PodSubnets = toRPCSubnets(subnets)
 	} else {
 		dlog.Errorf(ctx, "unable to parse subnets from POD_CIDRS value %q", pcEnv)
 	}
@@ -268,49 +267,17 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 }
 
 func (oi *info) watchSubnets(ctx context.Context, retriever subnetRetriever) {
-	retriever.changeNotifier(ctx, func(subnets []*net.IPNet) {
-		if oi.updateSubnets(subnets) {
-			oi.waiter.Broadcast()
-		}
+	retriever.changeNotifier(ctx, func(subnets subnet.Set) {
+		oi.PodSubnets = toRPCSubnets(subnets)
+		oi.waiter.Broadcast()
 	})
 }
 
-func (oi *info) updateSubnets(podCIDRs []*net.IPNet) bool {
-	changed := true
-	if len(podCIDRs) == len(oi.podCIDRMap) {
-		changed = false // assume equal
-
-		// Check if all IPs are found and that their masks are equal
-		for _, cidr := range podCIDRs {
-			if ones, ok := oi.podCIDRMap[iputil.IPKey(cidr.IP)]; ok {
-				newOnes, _ := cidr.Mask.Size()
-				if newOnes == ones {
-					continue
-				}
-			}
-			changed = true
-			break
-		}
+func toRPCSubnets(cidrMap subnet.Set) []*rpc.IPNet {
+	subnets := cidrMap.AppendSortedTo(nil)
+	rpcSubnets := make([]*rpc.IPNet, len(subnets))
+	for i, s := range subnets {
+		rpcSubnets[i] = iputil.IPNetToRPC(s)
 	}
-	if changed {
-		oi.podCIDRMap = makeCIDRMap(podCIDRs)
-		oi.PodSubnets = toRPCSubnets(podCIDRs)
-	}
-	return changed
-}
-
-func makeCIDRMap(cidrs []*net.IPNet) map[iputil.IPKey]int {
-	m := make(map[iputil.IPKey]int, len(cidrs))
-	for _, cidr := range cidrs {
-		m[iputil.IPKey(cidr.IP)], _ = cidr.Mask.Size()
-	}
-	return m
-}
-
-func toRPCSubnets(cidrs []*net.IPNet) []*rpc.IPNet {
-	subnets := make([]*rpc.IPNet, len(cidrs))
-	for i, cidr := range cidrs {
-		subnets[i] = iputil.IPNetToRPC(cidr)
-	}
-	return subnets
+	return rpcSubnets
 }

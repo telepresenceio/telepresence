@@ -4,11 +4,14 @@ import (
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 var (
@@ -174,4 +177,21 @@ func Test_nodeSubnets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_nodeWatcher_add(t *testing.T) {
+	w := &nodeWatcher{subnets: subnet.Set{}}
+	w.add([]*net.IPNet{oneCIDR, twoCIDR})
+	assert.Equal(t, 2, len(w.subnets))
+	assert.False(t, w.changed.IsZero(), "Changed time not se when adding subnet")
+
+	// reset changed and add an existing subnet
+	w.changed = time.Time{}
+	w.add([]*net.IPNet{twoCIDR})
+	assert.Equal(t, 2, len(w.subnets))
+	assert.True(t, w.changed.IsZero(), "Adding existing subnet caused changed time to be set")
+
+	w.add([]*net.IPNet{oneCIDR, threeCIDR})
+	assert.False(t, w.changed.IsZero(), "Changed time not se when adding subnet")
+	assert.Equal(t, 3, len(w.subnets))
 }

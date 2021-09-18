@@ -18,7 +18,7 @@ import (
 type nodeWatcher struct {
 	lister   licorev1.NodeLister
 	informer cache.SharedIndexInformer
-	subnets  []*net.IPNet
+	subnets  subnet.Set
 	changed  time.Time
 	lock     sync.Mutex // Protects all access to ipsMap
 }
@@ -27,6 +27,7 @@ func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer ca
 	w := &nodeWatcher{
 		lister:   lister,
 		informer: informer,
+		subnets:  make(subnet.Set),
 	}
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -42,7 +43,7 @@ func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer ca
 	return w
 }
 
-func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func([]*net.IPNet)) {
+func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func(set subnet.Set)) {
 	// Check for changes every 5 second
 	const nodeReviewPeriod = 5 * time.Second
 
@@ -65,8 +66,7 @@ func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func([]*
 			continue
 		}
 		w.changed = time.Time{}
-		subnets := make([]*net.IPNet, len(w.subnets))
-		copy(subnets, w.subnets)
+		subnets := w.subnets.Clone()
 		w.lock.Unlock()
 		dlog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", subnets)
 		updateSubnets(subnets)
@@ -164,11 +164,13 @@ func (w *nodeWatcher) update(dropped, added []*net.IPNet) {
 }
 
 func (w *nodeWatcher) addLocked(subnets []*net.IPNet) bool {
-	if len(subnets) > 0 {
-		w.subnets = append(w.subnets, subnets...)
-		return true
+	changed := false
+	for _, subnet := range subnets {
+		if w.subnets.Add(subnet) {
+			changed = true
+		}
 	}
-	return false
+	return changed
 }
 
 func (w *nodeWatcher) dropLocked(subnets []*net.IPNet) bool {
@@ -177,19 +179,10 @@ func (w *nodeWatcher) dropLocked(subnets []*net.IPNet) bool {
 	if last < 0 {
 		return false
 	}
-nextDS:
+
 	for _, ds := range subnets {
-		for i, s := range w.subnets {
-			if subnet.Equal(ds, s) {
-				changed = true
-				w.subnets[i] = w.subnets[last]
-				w.subnets = w.subnets[:last]
-				last--
-				if last < 0 {
-					break nextDS
-				}
-				continue nextDS
-			}
+		if w.subnets.Delete(ds) {
+			changed = true
 		}
 	}
 	return changed

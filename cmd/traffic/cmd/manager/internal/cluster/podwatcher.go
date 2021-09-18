@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"context"
-	"net"
 	"sync"
 	"time"
 
@@ -20,6 +19,7 @@ type podWatcher struct {
 	lister   licorev1.PodLister
 	informer cache.SharedIndexInformer
 	ipsMap   map[iputil.IPKey]struct{}
+	subnets  subnet.Set
 	changed  time.Time
 	lock     sync.Mutex // Protects all access to ipsMap
 }
@@ -29,6 +29,7 @@ func newPodWatcher(ctx context.Context, lister licorev1.PodLister, informer cach
 		lister:   lister,
 		informer: informer,
 		ipsMap:   make(map[iputil.IPKey]struct{}),
+		subnets:  make(subnet.Set),
 	}
 	w.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -44,7 +45,7 @@ func newPodWatcher(ctx context.Context, lister licorev1.PodLister, informer cach
 	return w
 }
 
-func (w *podWatcher) changeNotifier(ctx context.Context, updateSubnets func([]*net.IPNet)) {
+func (w *podWatcher) changeNotifier(ctx context.Context, updateSubnets func(set subnet.Set)) {
 	// Check for changes every 5 second
 	const podReviewPeriod = 5 * time.Second
 
@@ -74,9 +75,12 @@ func (w *podWatcher) changeNotifier(ctx context.Context, updateSubnets func([]*n
 			i++
 		}
 		w.lock.Unlock()
-		subnets := subnet.CoveringCIDRs(ips)
+		subnets := subnet.NewSet(subnet.CoveringCIDRs(ips))
+		if !subnets.Equals(w.subnets) {
+			w.subnets = subnets
+			updateSubnets(subnets)
+		}
 		dlog.Debugf(ctx, "podWatcher calling updateSubnets with %v", subnets)
-		updateSubnets(subnets)
 	}
 }
 
