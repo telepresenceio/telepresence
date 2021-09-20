@@ -586,9 +586,12 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 			plo := &kates.PodLogOptions{
 				Container: container,
 			}
-
+			// Since the same named workload could exist in multiple namespaces
+			// we add the namespace into the name so that it's easier to make
+			// sense of the logs
+			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
 			if err := client.PodLogs(ctx, pod, plo, false, logEvents); err != nil {
-				resp.PodLogs[pod.Name] = fmt.Sprintf("Failed to get logs: %s", err)
+				resp.PodLogs[podAndNs] = fmt.Sprintf("Failed to get logs: %s", err)
 				continue
 			}
 			var log string
@@ -605,7 +608,7 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 				}
 				log += event.Output
 			}
-			resp.PodLogs[pod.Name] = log
+			resp.PodLogs[podAndNs] = log
 		}
 	}
 	if request.TrafficManager {

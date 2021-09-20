@@ -147,7 +147,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 				}
 				// Write the logs for each pod to files
 				for podName, log := range lr.PodLogs {
-					agentLogFile := fmt.Sprintf("%s/%s", exportDir, podName)
+					agentLogFile := fmt.Sprintf("%s/%s.log", exportDir, podName)
 					fd, err := os.Create(agentLogFile)
 					if err != nil {
 						return err
