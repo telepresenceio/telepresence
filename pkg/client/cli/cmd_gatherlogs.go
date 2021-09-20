@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -69,25 +70,25 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 	// Get the log directory and return the error if we can't get it
 	logDir, err := filelocation.AppUserLogDir(ctx)
 	if err != nil {
-		return err
+		return errcat.User.New(err)
 	}
 
 	// If the user did not provide an outputFile, we'll use their current working directory
 	if gl.outputFile == "" {
 		pwd, err := os.Getwd()
 		if err != nil {
-			return err
+			return errcat.User.New(err)
 		}
 		gl.outputFile = fmt.Sprintf("%s/telepresence_logs.zip", pwd)
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
-		return errors.New("output file must end in .zip")
+		return errcat.User.New("output file must end in .zip")
 	}
 
 	// Create a temporary directory where we will store the logs before we zip
 	// them for export
 	exportDir, err := os.MkdirTemp("", "logexp-")
 	if err != nil {
-		return err
+		return errcat.User.New(err)
 	}
 	defer func() {
 		if err := os.RemoveAll(exportDir); err != nil {
@@ -106,13 +107,13 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 		daemonLogs = append(daemonLogs, "connector")
 	case "False":
 	default:
-		return errors.New("Options for --daemons are: all, root, user, or False")
+		return errcat.User.New("Options for --daemons are: all, root, user, or False")
 	}
 
 	// Get all logs from the logdir that match the daemons the user cares about.
 	logFiles, err := os.ReadDir(logDir)
 	if err != nil {
-		return err
+		return errcat.User.New(err)
 	}
 	for _, entry := range logFiles {
 		if entry.IsDir() {
@@ -123,6 +124,8 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 				srcFile := fmt.Sprintf("%s/%s", logDir, entry.Name())
 				dstFile := fmt.Sprintf("%s/%s", exportDir, entry.Name())
 				if err := copyFiles(dstFile, srcFile); err != nil {
+					// We don't want to fail / exit abruptly if we can't copy certain
+					// files, but we do want the user to know we were unsuccessful
 					fmt.Fprintf(stdout, "failed exporting %s: %s\n", entry.Name(), err)
 					continue
 				}
@@ -165,7 +168,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 			return nil
 		})
 		if err != nil {
-			fmt.Fprintf(stdout, "Error getting logs from k8s components: %s", err)
+			return errcat.Unknown.Newf("error getting logs from kubernetes components: %s", err)
 		}
 	}
 
@@ -173,7 +176,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 	var files []string
 	dirEntries, err := os.ReadDir(exportDir)
 	if err != nil {
-		return err
+		return errcat.User.New(err)
 	}
 	for _, entry := range dirEntries {
 		if !entry.IsDir() {
@@ -182,7 +185,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 	}
 
 	if err := zipFiles(files, gl.outputFile); err != nil {
-		return err
+		return errcat.User.New(err)
 	}
 
 	return nil
