@@ -135,18 +135,7 @@ func Command(ctx context.Context) *cobra.Command {
 	*/
 
 	globalFlagGroups = []FlagGroup{
-		{
-			Name: "Kubernetes flags",
-			Flags: func() *pflag.FlagSet {
-				kubeFlags = pflag.NewFlagSet("", 0)
-				kubeConfig = kates.NewConfigFlags(false)
-				kubeConfig.Namespace = nil // some of the subcommands, like "connect", don't take --namespace
-				kubeConfig.AddFlags(kubeFlags)
-				return kubeFlags
-			}(),
-		}}
-
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+	    {
 		Name: "Telepresence networking flags",
 		Flags: func() *pflag.FlagSet {
 			netflags := pflag.NewFlagSet("", 0)
@@ -165,7 +154,7 @@ func Command(ctx context.Context) *cobra.Command {
 
 			return netflags
 		}(),
-	})
+	}}
 
 	globalFlagGroups = append(globalFlagGroups, FlagGroup{
 		Name: "other Telepresence flags",

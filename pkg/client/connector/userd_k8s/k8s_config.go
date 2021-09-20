@@ -147,23 +147,10 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	return k, nil
 }
 
-// ContextServiceAndFlagsEqual determines if this instance is equal to the given instance with respect to context,
-// server, and flag arguments.
-func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
+// ContextServiceEqual determines if this instance is equal to the given instance with respect to context,
+// server.
+func (kf *Config) ContextServiceEqual(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
-		kf.Server == okf.Server &&
-		sliceEqual(kf.flagArgs, okf.flagArgs)
-}
-
-func sliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+		kf.Server == okf.Server
 }

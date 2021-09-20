@@ -102,7 +102,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	if cluster := s.sharedState.GetClusterNonBlocking(); cluster != nil {
-		if cluster.Config.ContextServiceAndFlagsEqual(config) {
+		if cluster.Config.ContextServiceEqual(config) {
 			cluster.Config = config // namespace might have changed
 			if mns := cr.MappedNamespaces; len(mns) > 0 {
 				if len(mns) == 1 && mns[0] == "all" {

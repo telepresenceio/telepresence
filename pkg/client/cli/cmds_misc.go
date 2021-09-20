@@ -6,8 +6,9 @@ import (
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+    "github.com/spf13/pflag"
 
-	"github.com/datawire/ambassador/pkg/kates"
+    "github.com/datawire/ambassador/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
@@ -41,7 +42,7 @@ func ClusterIdCommand() *cobra.Command {
 }
 
 func connectCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:  "connect [flags] [-- <command to run while connected>]",
 		Args: cobra.ArbitraryArgs,
 
@@ -57,6 +58,15 @@ func connectCommand() *cobra.Command {
 			})
 		},
 	}
+	flags := cmd.Flags()
+	flags.AddFlagSet(func() *pflag.FlagSet {
+	    kubeFlags = pflag.NewFlagSet("", 0)
+	    kubeConfig = kates.NewConfigFlags(false)
+	    kubeConfig.Namespace = nil // some of the subcommands, like "connect", don't take --namespace
+	    kubeConfig.AddFlags(kubeFlags)
+	    return kubeFlags
+	}())
+	return cmd
 }
 
 func dashboardCommand() *cobra.Command {
