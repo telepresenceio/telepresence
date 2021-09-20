@@ -187,11 +187,17 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 	}
 }
 
-func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
-	level, ok := os.LookupEnv("LOG_LEVEL")
+// GetLogLevel will return the log level that this agent should use
+func GetLogLevel() string {
+	level, ok := os.LookupEnv(install.EnvPrefix + "LOG_LEVEL")
 	if !ok {
-		level = os.Getenv(install.EnvPrefix + "LOG_LEVEL")
+		level = os.Getenv("LOG_LEVEL")
 	}
+	return level
+}
+
+func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
+	level := GetLogLevel()
 	timedLevel := log.NewTimedLevel(level, log.SetLevel)
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
