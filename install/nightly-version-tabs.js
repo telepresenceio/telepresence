@@ -70,7 +70,13 @@ export default function SimpleTabs() {
       <TabPanel value={value} index={0}>
         <CodeBlock>
         {
-          'https://app.getambassador.io/download/tel2/darwin/amd64/nightly/telepresence'
+          '# For Macs with Intel chip (X86)' +
+          '\n' +
+          'https://app.getambassador.io/download/tel2/darwin/amd64/nightly/telepresence' +
+          '\n \n' +
+          '# For Macs with M1 chip (ARM)' +
+          '\n' +
+          'https://app.getambassador.io/download/tel2/darwin/arm64/nightly/telepresence'
         }
         </CodeBlock>
       </TabPanel>
