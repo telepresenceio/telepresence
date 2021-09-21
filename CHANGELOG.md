@@ -17,6 +17,9 @@
 
 - Bugfix: Fix an issue where the traffic-manager would sometimes go into a CPU loop.
 
+- Bugfix: The TUN-device no longer builds an unlimited internal buffer before sending it when receiving lots of TCP-packets without PSH.
+  Instead, the buffer is flushed when it reaches a size of 64K.
+
 ### 2.4.3 (September 15, 2021)
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.
