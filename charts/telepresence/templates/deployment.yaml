@@ -35,6 +35,12 @@ spec:
           env:
           - name: LOG_LEVEL
             value: {{ .Values.logLevel }}
+          - name: POD_CIDR_STRATEGY
+            value: {{ .Values.podCIDRStrategy }}
+          {{- with .Values.podCIDRs }}
+          - name: POD_CIDRS
+            value: "{{ join " " . }}"
+          {{- end }}
           - name: SYSTEMA_HOST
             value: {{ .Values.systemaHost }}
           - name: SYSTEMA_PORT

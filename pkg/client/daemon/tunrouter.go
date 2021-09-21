@@ -273,6 +273,7 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
 				t.clusterDomain = "cluster.local."
 			}
 			close(cfgComplete)
+			cfgComplete = nil
 		}
 	}
 }

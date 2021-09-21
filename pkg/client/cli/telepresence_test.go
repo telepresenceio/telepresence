@@ -36,7 +36,6 @@ import (
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -249,27 +248,11 @@ cloud:
 		require.Empty(stderr)
 		_, stderr = telepresenceContext(ctx, "quit")
 		require.Empty(stderr)
+
 		rootLogName := filepath.Join(logDir, "daemon.log")
 		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
-		defer func() {
-			_ = rootLog.Close()
-			rootLog, err = os.Open(rootLogName)
-			if err != nil {
-				dlog.Errorf(ctx, "open failed on %q failed: %v", rootLogName, err)
-				return
-			}
-			stat, err := logging.FStat(rootLog)
-			_ = rootLog.Close()
-			if err != nil {
-				dlog.Errorf(ctx, "stat on %q failed: %v", rootLogName, err)
-				return
-			}
-			if err := os.Remove(rootLogName); err != nil {
-				dlog.Errorf(ctx, "Failed to remove %q: %v", rootLogName, err)
-				dlog.Error(ctx, stat)
-			}
-		}()
+		defer rootLog.Close()
 
 		hasDebug := false
 		scn := bufio.NewScanner(rootLog)
@@ -278,6 +261,10 @@ cloud:
 			hasDebug = match.MatchString(scn.Text())
 		}
 		ts.True(hasDebug, "daemon.log does not contain expected debug statements")
+
+		// Give daemon time to really quit and release the daemon.log to avoid a "TempDir RemoveAll cleanup" failure
+		// with an "Access is denied" error.
+		time.Sleep(time.Second)
 	})
 
 	ts.Run("DNS includes", func() {
@@ -896,13 +883,13 @@ func (cs *connectedSuite) TestO_LargeRequest() {
 
 	buf = make([]byte, len(b)-2)
 	i := 0
-	for err != io.EOF {
+	for err == nil {
 		var j int
 		j, err = resp.Body.Read(buf[i:])
 		i += j
 	}
 
-	require.Equal(err, io.EOF)
+	require.Equal(io.EOF, err)
 	cs.Equal(len(buf), i)
 	// Do this instead of cs.Equal(b[2:], buf) so that on failure we don't print two 5MB buffers to the terminal
 	cs.Equal(0, bytes.Compare(b[2:], buf))
