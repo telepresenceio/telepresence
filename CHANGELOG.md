@@ -8,6 +8,8 @@
 
 - Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
 
+- Bugfix: The traffic-manager would sometimes start consuming a lot of CPU, and remain doing so until killed.
+
 ### 2.4.3 (September 15, 2021)
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.
