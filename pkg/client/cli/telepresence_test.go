@@ -896,13 +896,13 @@ func (cs *connectedSuite) TestO_LargeRequest() {
 
 	buf = make([]byte, len(b)-2)
 	i := 0
-	for err != io.EOF {
+	for err == nil {
 		var j int
 		j, err = resp.Body.Read(buf[i:])
 		i += j
 	}
 
-	require.Equal(err, io.EOF)
+	require.Equal(io.EOF, err)
 	cs.Equal(len(buf), i)
 	// Do this instead of cs.Equal(b[2:], buf) so that on failure we don't print two 5MB buffers to the terminal
 	cs.Equal(0, bytes.Compare(b[2:], buf))
