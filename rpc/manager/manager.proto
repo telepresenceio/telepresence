@@ -273,12 +273,12 @@ message GetLogsRequest {
 
 message LogsResponse {
 
-  // The first value of this map is the `podName.namespace` and the
-  // second value is the logs from that pod
+  // The map contains assocations between <podName.namespace> and the logs
+  // from that pod.
   map<string, string> pod_logs = 1;
 
-  // If we encountered any errors getting logs from the traffic-manager
-  // and/or traffic-agents
+  // Errors encountered when getting logs from the traffic-manager
+  // and/or traffic-agents.
   string err_msg = 2;
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -25,8 +26,13 @@ type Info interface {
 	// GetClusterID returns the ClusterID
 	GetClusterID() string
 
-	GetTrafficManagerPods(context.Context) ([]*kates.Pod, error)
-	GetTrafficAgentPods(context.Context, string) ([]*kates.Pod, error)
+	// GetTrafficManagerPods acquires all pods that have `traffic-manager` in
+	// their name
+	GetTrafficManagerPods(context.Context) ([]*corev1.Pod, error)
+
+	// GetTrafficAgentPods acquires all pods that have a `traffic-agent`
+	// container in their spec
+	GetTrafficAgentPods(context.Context, string) ([]*corev1.Pod, error)
 }
 
 type subnetRetriever interface {
@@ -287,27 +293,32 @@ func toRPCSubnets(cidrMap subnet.Set) []*rpc.IPNet {
 
 // GetTrafficAgentPods gets all pods that have a `traffic-agent` container
 // in them.
-func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*kates.Pod, error) {
-	client := managerutil.GetKatesClient(ctx)
-	var pods []*kates.Pod
-
+func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*corev1.Pod, error) {
 	// We don't get agents if they explicitly say false
-	if agents == "False" {
+	if agents == "None" {
 		return nil, nil
 	}
-	if err := client.List(ctx, kates.Query{Kind: "Pod"}, &pods); err != nil {
+	clientset := managerutil.GetK8sClientset(ctx)
+	client := clientset.CoreV1()
+	podList, err := client.Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
 		return nil, err
 	}
-	var agentPods []*kates.Pod
-	for _, pod := range pods {
-		if agents != "all" {
-			if !strings.Contains(pod.Name, agents) {
-				continue
-			}
+
+	// This is useful to determine how many pods we *should* be
+	// getting logs for
+	dlog.Debugf(ctx, "Found %d pod that contain a traffic-agent", len(podList.Items))
+
+	var agentPods []*corev1.Pod
+	for _, pod := range podList.Items {
+		pod := pod
+		if agents != "all" && !strings.Contains(pod.Name, agents) {
+			continue
 		}
 		for _, container := range pod.Spec.Containers {
-			if container.Name == "traffic-agent" {
-				agentPods = append(agentPods, pod)
+			if container.Name == install.AgentContainerName {
+				agentPods = append(agentPods, &pod)
+				break
 			}
 		}
 	}
@@ -316,17 +327,24 @@ func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*kate
 
 // GetTrafficAgentPods gets all pods in the manager's namespace that have
 // `traffic-manager` in the name
-func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*kates.Pod, error) {
-	client := managerutil.GetKatesClient(ctx)
+func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error) {
+	clientset := managerutil.GetK8sClientset(ctx)
+	client := clientset.CoreV1()
 	env := managerutil.GetEnv(ctx)
-	var pods []*kates.Pod
-	if err := client.List(ctx, kates.Query{Kind: "Pod", Namespace: env.ManagerNamespace}, &pods); err != nil {
+	podList, err := client.Pods(env.ManagerNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
 		return nil, err
 	}
-	var tmPods []*kates.Pod
-	for _, pod := range pods {
-		if strings.Contains(pod.Name, "traffic-manager") {
-			tmPods = append(tmPods, pod)
+
+	// This is useful to determine how many pods we *should* be
+	// getting logs for
+	dlog.Debugf(ctx, "Found %d traffic-manager pods", len(podList.Items))
+
+	var tmPods []*corev1.Pod
+	for _, pod := range podList.Items {
+		pod := pod
+		if strings.Contains(pod.Name, install.ManagerAppName) {
+			tmPods = append(tmPods, &pod)
 		}
 	}
 	return tmPods, nil

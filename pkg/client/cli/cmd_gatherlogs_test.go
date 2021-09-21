@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -71,22 +72,19 @@ func Test_gatherLogsZipFiles(t *testing.T) {
 				}
 			}
 			outputDir := t.TempDir()
-			err := zipFiles(fileNames, fmt.Sprintf("%s/blah.zip", outputDir))
-			if err != nil {
-				if len(tc.fakeFileNames) > 0 {
-					for _, name := range tc.fakeFileNames {
-						assert.Contains(t, err.Error(), fmt.Sprintf("failed adding %s/%s to zip file", tc.fileDir, name))
-					}
-				} else {
-					t.Fatal(err)
+			err := zipFiles(fileNames, fmt.Sprintf("%s/logs.zip", outputDir))
+			// If we put in fakeFileNames, then we verify we get the errors we expect
+			if len(tc.fakeFileNames) > 0 {
+				for _, name := range tc.fakeFileNames {
+					assert.Contains(t, err.Error(), fmt.Sprintf("failed adding %s/%s to zip file", tc.fileDir, name))
 				}
+			} else {
+				require.NoError(t, err)
 			}
 
 			// Ensure the files in the zip match the files that wer zipped
-			zipReader, err := zip.OpenReader(fmt.Sprintf("%s/blah.zip", outputDir))
-			if err != nil {
-				t.Fatal(err)
-			}
+			zipReader, err := zip.OpenReader(fmt.Sprintf("%s/logs.zip", outputDir))
+			require.NoError(t, err)
 			defer zipReader.Close()
 
 			for _, f := range zipReader.File {
@@ -94,9 +92,7 @@ func Test_gatherLogsZipFiles(t *testing.T) {
 				assert.Contains(t, tc.realFileNames, f.Name)
 
 				filesEqual, err := checkZipEqual(f, "testdata/zipDir")
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				assert.True(t, filesEqual)
 			}
 
@@ -151,20 +147,15 @@ func Test_gatherLogsCopyFiles(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				require.NoError(t, err)
 				// when there's no error message, we validate that the file was
 				// copied correctly
-				if err != nil {
-					t.Fatal(err)
-				}
-
 				dstContent, err := os.ReadFile(dstFile)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
+
 				srcContent, err := os.ReadFile(srcFile)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
+
 				assert.Equal(t, string(dstContent), string(srcContent))
 			}
 		})
@@ -200,14 +191,14 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 		{
 			name:       "successfulZipNoDaemonLogs",
 			outputFile: "",
-			daemons:    "False",
+			daemons:    "None",
 			errMsg:     "",
 		},
 		{
 			name:       "incorrectDaemonFlagValue",
 			outputFile: "",
-			daemons:    "notarealflag",
-			errMsg:     "Options for --daemons are: all, root, user, or False",
+			daemons:    "notARealFlagValue",
+			errMsg:     "Options for --daemons are: all, root, user, or None",
 		},
 	}
 
@@ -230,32 +221,27 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 				tc.outputFile = fmt.Sprintf("%s/telepresence_logs.zip", outputDir)
 			}
 			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
 			gl := &gatherLogsArgs{
 				outputFile: tc.outputFile,
 				daemons:    tc.daemons,
 				// We will test other values of this in our integration tests since
 				// they require a kubernetes cluster
-				trafficAgents:  "False",
+				trafficAgents:  "None",
 				trafficManager: false,
 			}
 
 			// Ensure we can create a zip of the logs
-			err := gl.gatherLogs(cmd, ctx, stdout)
+			err := gl.gatherLogs(ctx, cmd, stdout, stderr)
 			if tc.errMsg != "" {
-				if err == nil {
-					t.Fatal("error was expected")
-				}
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.errMsg)
 			} else {
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 
 				// Validate that the zip file only contains the files we expect
 				zipReader, err := zip.OpenReader(tc.outputFile)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				defer zipReader.Close()
 
 				var regexStr string
@@ -266,7 +252,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 					regexStr = "daemon"
 				case "user":
 					regexStr = "connector"
-				case "False":
+				case "None":
 					regexStr = "!connector|!daemon"
 				default:
 					// We shouldn't hit this
@@ -277,9 +263,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 					assert.Regexp(t, regexp.MustCompile(regexStr), f.Name)
 
 					filesEqual, err := checkZipEqual(f, testLogDir)
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err)
 					assert.True(t, filesEqual)
 				}
 			}

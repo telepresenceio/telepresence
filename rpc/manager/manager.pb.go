@@ -1366,11 +1366,11 @@ type LogsResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// The first value of this map is the `podName.namespace` and the
-	// second value is the logs from that pod
+	// The map contains assocations between <podName.namespace> and the logs
+	// from that pod.
 	PodLogs map[string]string `protobuf:"bytes,1,rep,name=pod_logs,json=podLogs,proto3" json:"pod_logs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	// If we encountered any errors getting logs from the traffic-manager
-	// and/or traffic-agents
+	// Errors encountered when getting logs from the traffic-manager
+	// and/or traffic-agents.
 	ErrMsg string `protobuf:"bytes,2,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
 }
 

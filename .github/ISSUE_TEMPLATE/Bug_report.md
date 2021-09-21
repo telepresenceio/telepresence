@@ -8,10 +8,16 @@ about: Create a report to help us improve Telepresence
 A clear and concise description of what the bug is.
 
 Additionally, if you are using Telepresence 2.4.4 and above, please use
-`telepresence gather-logs` to create a zip file of all logs for Telepresence's
-components (root and user daemons, traffic-manager, and traffic-agents) and
-attach it to this issue. See an example command below:
+`telepresence loglevel debug` to ensure we have the most helpful logs,
+reproduce the error, and then run `telepresence gather-logs` to create a
+zip file of all logs for Telepresence's components (root and user daemons,
+traffic-manager, and traffic-agents) and attach it to this issue. See an
+example command below:
 ```
+telepresence loglevel debug
+
+* reproduce the error *
+
 telepresence gather-logs --output-file /tmp/telepresence_logs.zip
 
 # To see all options, run the following command

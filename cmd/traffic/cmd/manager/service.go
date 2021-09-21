@@ -1,11 +1,14 @@
 package manager
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,8 +16,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	corev1 "k8s.io/api/core/v1"
 
-	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -573,58 +576,63 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 		PodLogs: make(map[string]string),
 	}
 	var errMsg string
-	client := managerutil.GetKatesClient(ctx)
+	clientset := managerutil.GetK8sClientset(ctx)
 
 	// getPodLogs is a helper function for getting the logs from the container
 	// of a given pod. If we are unable to get a log for a given pod, we will
 	// instead return the error in the map, instead of the log, so that:
 	// - one failure doesn't prevent us from getting logs from other pods
 	// - it is easy to figure out why gettings logs for a given pod failed
-	getPodLogs := func(pods []*kates.Pod, container string) {
+	getPodLogs := func(pods []*corev1.Pod, container string) {
+		wg := sync.WaitGroup{}
+		wg.Add(len(pods))
 		for _, pod := range pods {
-			logEvents := make(chan kates.LogEvent)
-			plo := &kates.PodLogOptions{
-				Container: container,
-			}
-			// Since the same named workload could exist in multiple namespaces
-			// we add the namespace into the name so that it's easier to make
-			// sense of the logs
-			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
-			if err := client.PodLogs(ctx, pod, plo, false, logEvents); err != nil {
-				resp.PodLogs[podAndNs] = fmt.Sprintf("Failed to get logs: %s", err)
-				continue
-			}
-			var log string
-			for {
-				event := <-logEvents
-				// If there's an error, we want to put that in the log output for that
-				// container.
-				if event.Error != nil {
-					log += fmt.Sprintf("Failed getting log event: %s\n", event.Error)
+			go func(pod *corev1.Pod) {
+				dlog.Errorf(ctx, "Getting logs for container: %s in pod: %s", container, pod.Name)
+				defer wg.Done()
+				plo := &corev1.PodLogOptions{
+					Container: container,
 				}
-
-				if event.Closed {
-					break
+				// Since the same named workload could exist in multiple namespaces
+				// we add the namespace into the name so that it's easier to make
+				// sense of the logs
+				podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
+				req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, plo)
+				podLogs, err := req.Stream(ctx)
+				if err != nil {
+					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed to get logs: %s", err)
+					return
 				}
-				log += event.Output
-			}
-			resp.PodLogs[podAndNs] = log
+				defer podLogs.Close()
+				buf := new(bytes.Buffer)
+				_, err = io.Copy(buf, podLogs)
+				if err != nil {
+					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed writing log to buffer: %s", err)
+					return
+				}
+				resp.PodLogs[podAndNs] = buf.String()
+			}(pod)
 		}
+		wg.Wait()
 	}
+	// Get the pods that have traffic-agents
+	agentPods, err := m.clusterInfo.GetTrafficAgentPods(ctx, request.Agents)
+	if err != nil {
+		errMsg += fmt.Sprintf("error getting traffic-agent pods: %s\n", err)
+	} else {
+		getPodLogs(agentPods, "traffic-agent")
+	}
+
+	// We want to get the traffic-manager logs *last* so that if we generate
+	// any errors in the traffic-manager getting the traffic-agent pods, we
+	// want those logs to appear in what we export
 	if request.TrafficManager {
 		managerPods, err := m.clusterInfo.GetTrafficManagerPods(ctx)
 		if err != nil {
-			errMsg += fmt.Sprintf("error getting traffic-manager pods: %s", err)
+			errMsg += fmt.Sprintf("error getting traffic-manager pods: %s\n", err)
 		} else {
 			getPodLogs(managerPods, "traffic-manager")
 		}
-	}
-
-	agentPods, err := m.clusterInfo.GetTrafficAgentPods(ctx, request.Agents)
-	if err != nil {
-		errMsg += fmt.Sprintf("error getting traffic-agent pods: %s", err)
-	} else {
-		getPodLogs(agentPods, "traffic-agent")
 	}
 
 	// If we were unable to get logs from the traffic-manager and/or traffic-agents

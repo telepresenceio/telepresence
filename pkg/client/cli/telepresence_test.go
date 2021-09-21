@@ -1154,16 +1154,16 @@ func (is *interceptedSuite) TestC_GatherLogs() {
 		require.Empty(stderr)
 		foundManager, foundAgents := getZipData(outputFile)
 		require.True(foundManager)
-		require.Equal(foundAgents, serviceCount)
+		require.Equal(serviceCount, foundAgents)
 	})
 
 	is.Run("Get Manager Logs Only", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-agents=False")
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-agents=None")
 		require.Empty(stderr)
 		foundManager, foundAgents := getZipData(outputFile)
 		require.True(foundManager)
-		require.Equal(foundAgents, 0)
+		require.Equal(0, foundAgents)
 	})
 	is.Run("Get Agent Logs Only", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
@@ -1171,7 +1171,7 @@ func (is *interceptedSuite) TestC_GatherLogs() {
 		require.Empty(stderr)
 		foundManager, foundAgents := getZipData(outputFile)
 		require.False(foundManager)
-		require.Equal(foundAgents, serviceCount)
+		require.Equal(serviceCount, foundAgents)
 	})
 	is.Run("Get Only 1 Agent Log", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
@@ -1179,15 +1179,15 @@ func (is *interceptedSuite) TestC_GatherLogs() {
 		require.Empty(stderr)
 		foundManager, foundAgents := getZipData(outputFile)
 		require.False(foundManager)
-		require.Equal(foundAgents, 1)
+		require.Equal(1, foundAgents)
 	})
 	is.Run("No K8s Logs", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=False")
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=None")
 		require.Empty(stderr)
 		foundManager, foundAgents := getZipData(outputFile)
 		require.False(foundManager)
-		require.Equal(foundAgents, 0)
+		require.Equal(0, foundAgents)
 	})
 }
 

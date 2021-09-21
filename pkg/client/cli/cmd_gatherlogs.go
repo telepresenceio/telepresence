@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -16,7 +17,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type gatherLogsArgs struct {
@@ -40,7 +43,7 @@ someone to help you debug Telepresence.`,
 telepresence gather-logs -o /tmp/telepresence_logs.zip
 
 # Get all logs for the daemons only
-telepresence gather-logs --traffic-agents=False --traffic-manager=False
+telepresence gather-logs --traffic-agents=None --traffic-manager=False
 
 # Get all logs for pods that have "echo-easy" in the name, useful if you have multiple replicas
 telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy
@@ -49,24 +52,24 @@ telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy
 telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy-6848967857-tw4jw     
 
 # Get logs from everything except the daemons
-telepresence gather-logs --daemons=False
+telepresence gather-logs --daemons=None
 `,
 
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return gl.gatherLogs(cmd, cmd.Context(), cmd.OutOrStdout())
+			return gl.gatherLogs(cmd.Context(), cmd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	flags := cmd.Flags()
 	flags.StringVarP(&gl.outputFile, "output-file", "o", "", "The file you want to output the logs to.")
-	flags.StringVar(&gl.daemons, "daemons", "all", "The daemons you want logs from: all, root, user, False")
+	flags.StringVar(&gl.daemons, "daemons", "all", "The daemons you want logs from: all, root, user, None")
 	flags.BoolVar(&gl.trafficManager, "traffic-manager", true, "If you want to collect logs from the traffic-manager")
-	flags.StringVar(&gl.trafficAgents, "traffic-agents", "all", "Traffic-agents to collect logs from: all, name substring, False")
+	flags.StringVar(&gl.trafficAgents, "traffic-agents", "all", "Traffic-agents to collect logs from: all, name substring, None")
 	return cmd
 }
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
-// file with their contents.
-func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, stdout io.Writer) error {
+func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error {
+	scout := scout.NewScout(ctx, "cli")
 	// Get the log directory and return the error if we can't get it
 	logDir, err := filelocation.AppUserLogDir(ctx)
 	if err != nil {
@@ -92,7 +95,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 	}
 	defer func() {
 		if err := os.RemoveAll(exportDir); err != nil {
-			fmt.Fprintf(stdout, "Failed to remove temp directory %s: %s", exportDir, err)
+			fmt.Fprintf(stderr, "Failed to remove temp directory %s: %s", exportDir, err)
 		}
 	}()
 
@@ -105,10 +108,18 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 		daemonLogs = append(daemonLogs, "daemon")
 	case "user":
 		daemonLogs = append(daemonLogs, "connector")
-	case "False":
+	case "None":
 	default:
-		return errcat.User.New("Options for --daemons are: all, root, user, or False")
+		return errcat.User.New("Options for --daemons are: all, root, user, or None")
 	}
+	// Add metadata about the request so we can track usage + see which
+	// types of logs people are requesting more frequently.
+	// This also gives us an idea about how much usage this command is
+	// getting.
+	scout.SetMetadatum("daemon_logs", daemonLogs)
+	scout.SetMetadatum("traffic_manager_logs", gl.trafficManager)
+	scout.SetMetadatum("traffic_agent_logs", gl.trafficAgents)
+	scout.Report(log.WithDiscardingLogger(ctx), "Used gather-logs")
 
 	// Get all logs from the logdir that match the daemons the user cares about.
 	logFiles, err := os.ReadDir(logDir)
@@ -126,7 +137,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 				if err := copyFiles(dstFile, srcFile); err != nil {
 					// We don't want to fail / exit abruptly if we can't copy certain
 					// files, but we do want the user to know we were unsuccessful
-					fmt.Fprintf(stdout, "failed exporting %s: %s\n", entry.Name(), err)
+					fmt.Fprintf(stderr, "failed exporting %s: %s\n", entry.Name(), err)
 					continue
 				}
 			}
@@ -135,7 +146,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 
 	// Since getting the logs from k8s requires the connector, let's only do this
 	// work if we know the user wants to get logs from k8s.
-	if gl.trafficManager || gl.trafficAgents != "False" {
+	if gl.trafficManager || gl.trafficAgents != "None" {
 		// To get logs from the components in the kubernetes cluster, we ask the
 		// traffic-manager.
 		rq := &manager.GetLogsRequest{
@@ -188,6 +199,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, ctx context.Context, st
 		return errcat.User.New(err)
 	}
 
+	fmt.Fprintf(stdout, "Logs have been exported to %s\n", gl.outputFile)
 	return nil
 }
 
@@ -233,11 +245,7 @@ func zipFiles(files []string, zipFileName string) error {
 
 		// Get the basename of the file since that's all we want
 		// to include in the zip
-		info, err := fd.Stat()
-		if err != nil {
-			return err
-		}
-		baseName := info.Name()
+		baseName := filepath.Base(file)
 		zfd, err := zipWriter.Create(baseName)
 		if err != nil {
 			return err
