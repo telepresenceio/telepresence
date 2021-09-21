@@ -53,7 +53,7 @@ func (s state) String() (txt string) {
 
 const maxReceiveWindow = uint64(0x40000)
 const ioChannelSize = 0x40
-const maxAckWaits = 0x80
+const maxAckWaits = 0x400
 
 type queueElement struct {
 	sequence uint32
