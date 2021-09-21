@@ -276,7 +276,7 @@ func (tm *MAPTYPE) coalesce(
 
 	var shutdown func()
 	shutdown = func() {
-		shutdown = func() {}
+		shutdown = func() {} // Make this function an empty one after first run to prevent calling the following goroutine multiple times
 		// Do this asyncrounously because getting the lock might block a .Store() that's
 		// waiting on us to read from 'upstream'!  We don't need to worry about separately
 		// waiting for this goroutine because we implicitly do that when we drain
@@ -352,8 +352,10 @@ func (tm *MAPTYPE) coalesce(
 			select {
 			case <-ctx.Done():
 				shutdown()
+				return
 			case <-tm.close:
 				shutdown()
+				return
 			case update, readOK := <-upstream:
 				if !readOK {
 					return
@@ -365,8 +367,10 @@ func (tm *MAPTYPE) coalesce(
 			select {
 			case <-ctx.Done():
 				shutdown()
+				return
 			case <-tm.close:
 				shutdown()
+				return
 			case update, readOK := <-upstream:
 				if !readOK {
 					return
