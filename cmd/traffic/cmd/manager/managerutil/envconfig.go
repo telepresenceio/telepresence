@@ -22,6 +22,9 @@ type Env struct {
 	AgentImage       string            `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 	AgentPort        int32             `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
 	MaxReceiveSize   resource.Quantity `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
+
+	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`
+	PodCIDRs        string `env:"POD_CIDRS,default="`
 }
 
 type envKey struct{}

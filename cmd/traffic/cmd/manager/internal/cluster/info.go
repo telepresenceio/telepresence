@@ -4,13 +4,13 @@ import (
 	"context"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 
-	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -26,15 +26,16 @@ type Info interface {
 	GetClusterID() string
 }
 
+type subnetRetriever interface {
+	changeNotifier(ctx context.Context, updateSubnets func(subnet.Set))
+	viable(ctx context.Context) bool
+}
+
 type info struct {
 	rpc.ClusterInfo
 	accLock sync.Mutex
-	Pods    []kates.Pod
-	Nodes   []kates.Node
 	waiter  sync.Cond
 
-	// podCIDRMap keeps track of the current set of pod CIDRs
-	podCIDRMap map[iputil.IPKey]int
 	// clusterID is the UID of the default namespace
 	clusterID string
 }
@@ -42,22 +43,14 @@ type info struct {
 func NewInfo(ctx context.Context) Info {
 	oi := info{}
 	oi.waiter.L = &oi.accLock
-
-	client := managerutil.GetKatesClient(ctx)
-	if client == nil {
-		// running in test environment
-		return &oi
-	}
+	clientset := managerutil.GetK8sClientset(ctx)
+	client := clientset.CoreV1()
 
 	// Get the clusterID from the default namespaces
 	// We use a default clusterID because we don't want to fail if
 	// the traffic-manager doesn't have the ability to get the namespace
-	ns := &kates.Namespace{
-		TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
-		ObjectMeta: kates.ObjectMeta{Name: "default"},
-	}
-
-	if err := client.Get(ctx, ns, ns); err != nil {
+	ns, err := client.Namespaces().Get(ctx, "default", metav1.GetOptions{})
+	if err != nil {
 		oi.clusterID = "00000000-0000-0000-0000-000000000000"
 		dlog.Errorf(ctx, "unable to get `default` namespace: %s, using default clusterID: %s",
 			err, oi.clusterID)
@@ -81,8 +74,7 @@ func NewInfo(ctx context.Context) Info {
 		},
 	}
 	for _, dnsService := range dnsServices {
-		svc := kates.Service{TypeMeta: metav1.TypeMeta{Kind: "Service"}, ObjectMeta: dnsService}
-		if err := client.Get(ctx, &svc, &svc); err == nil {
+		if svc, err := client.Services(dnsService.Namespace).Get(ctx, dnsService.Name, metav1.GetOptions{}); err == nil {
 			dlog.Infof(ctx, "Using DNS IP from %s.%s", svc.Name, svc.Namespace)
 			oi.KubeDnsIp = iputil.Parse(svc.Spec.ClusterIP)
 			break
@@ -104,7 +96,7 @@ func NewInfo(ctx context.Context) Info {
 	// This requires an additional permission to create a service, which the traffic-manager
 	// should have.
 	env := managerutil.GetEnv(ctx)
-	svc := kates.Service{
+	svc := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
 		},
@@ -113,12 +105,11 @@ func NewInfo(ctx context.Context) Info {
 			Name:      "t2-tst-dummy",
 		},
 		Spec: corev1.ServiceSpec{
-			Ports:     []kates.ServicePort{{Port: 443}},
+			Ports:     []corev1.ServicePort{{Port: 443}},
 			ClusterIP: "1.1.1.1",
 		},
 	}
-
-	if err := client.Create(ctx, &svc, &svc); err != nil {
+	if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
 		svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
 		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
 			var cidr *net.IPNet
@@ -145,19 +136,93 @@ func NewInfo(ctx context.Context) Info {
 		oi.ServiceSubnet = &rpc.IPNet{Ip: net.IP(oi.KubeDnsIp).Mask(mask), Mask: int32(ones)}
 	}
 
-	podCIDRs := oi.getPodCIDRsFromNodes(ctx)
-	if len(podCIDRs) == 0 {
-		// Some clusters (e.g. Amazon EKS) doesn't assign podCIDRs to nodes
-		// by default so we compute those CIDRs by looking at all pods instead.
-		dlog.Infof(ctx, "Deriving subnets from IPs of pods")
-		podCIDRs = oi.getPodCIDRsFromPods(ctx)
-		oi.watchSubnets(ctx, "Pods", "pod", oi.podCIDRsFromPods)
-	} else {
-		dlog.Infof(ctx, "Deriving subnets from podCIRs of nodes")
-		oi.watchSubnets(ctx, "Nodes", "node", oi.podCIDRsFromNodes)
+	podCIDRStrategy := env.PodCIDRStrategy
+	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
+
+	switch {
+	case strings.EqualFold("auto", podCIDRStrategy):
+		go func() {
+			if !oi.watchNodeSubnets(ctx) {
+				oi.watchPodSubnets(ctx)
+			}
+		}()
+	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
+		go oi.watchNodeSubnets(ctx)
+	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
+		go oi.watchPodSubnets(ctx)
+	case strings.EqualFold("environment", podCIDRStrategy):
+		oi.setSubnetsFromEnv(ctx)
+	default:
+		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
 	}
-	oi.updateSubnets(podCIDRs)
 	return &oi
+}
+
+func (oi *info) watchNodeSubnets(ctx context.Context) bool {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	informerFactory := informers.NewSharedInformerFactory(managerutil.GetK8sClientset(ctx), 0)
+	nodeController := informerFactory.Core().V1().Nodes()
+	nodeLister := nodeController.Lister()
+	nodeInformer := nodeController.Informer()
+
+	informerFactory.Start(ctx.Done())
+	informerFactory.WaitForCacheSync(ctx.Done())
+
+	retriever := newNodeWatcher(ctx, nodeLister, nodeInformer)
+	if !retriever.viable(ctx) {
+		dlog.Errorf(ctx, "Unable to derive subnets from nodes")
+		return false
+	}
+	dlog.Infof(ctx, "Deriving subnets from podCIRs of nodes")
+	oi.watchSubnets(ctx, retriever)
+	return true
+}
+
+func (oi *info) watchPodSubnets(ctx context.Context) bool {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	informerFactory := informers.NewSharedInformerFactory(managerutil.GetK8sClientset(ctx), 0)
+	podController := informerFactory.Core().V1().Pods()
+	podLister := podController.Lister()
+	podInformer := podController.Informer()
+
+	informerFactory.Start(ctx.Done())
+	informerFactory.WaitForCacheSync(ctx.Done())
+
+	retriever := newPodWatcher(ctx, podLister, podInformer)
+	if !retriever.viable(ctx) {
+		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
+		return false
+	}
+	dlog.Infof(ctx, "Deriving subnets from IPs of pods")
+	oi.watchSubnets(ctx, retriever)
+	return true
+}
+
+func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
+	pcEnv := managerutil.GetEnv(ctx).PodCIDRs
+	cidrStrs := strings.Split(pcEnv, " ")
+	allOK := len(cidrStrs) > 0
+	subnets := make(subnet.Set, len(cidrStrs))
+	if allOK {
+		for _, s := range cidrStrs {
+			_, cidr, err := net.ParseCIDR(s)
+			if err != nil {
+				dlog.Errorf(ctx, "unable to parse CIDR %q from environment variable POD_CIDRS: %v", s, err)
+				allOK = false
+				break
+			}
+			subnets.Add(cidr)
+		}
+	}
+	if allOK {
+		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
+		oi.PodSubnets = toRPCSubnets(subnets)
+	} else {
+		dlog.Errorf(ctx, "unable to parse subnets from POD_CIDRS value %q", pcEnv)
+	}
+	return allOK
 }
 
 // Watch will start by sending an initial snapshot of the ClusterInfo on the given stream
@@ -201,134 +266,18 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	return ci
 }
 
-func (oi *info) watchSubnets(ctx context.Context, name, kind string, retriever func(context.Context) []*net.IPNet) {
-	acc := managerutil.GetKatesClient(ctx).Watch(ctx,
-		kates.Query{
-			Name: name,
-			Kind: kind,
-		})
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-acc.Changed():
-				if oi.accUpdate(ctx, acc) && oi.updateSubnets(retriever(ctx)) {
-					oi.waiter.Broadcast()
-				}
-			}
-		}
-	}()
+func (oi *info) watchSubnets(ctx context.Context, retriever subnetRetriever) {
+	retriever.changeNotifier(ctx, func(subnets subnet.Set) {
+		oi.PodSubnets = toRPCSubnets(subnets)
+		oi.waiter.Broadcast()
+	})
 }
 
-func (oi *info) updateSubnets(podCIDRs []*net.IPNet) bool {
-	changed := true
-	if len(podCIDRs) == len(oi.podCIDRMap) {
-		changed = false // assume equal
-
-		// Check if all IPs are found and that their masks are equal
-		for _, cidr := range podCIDRs {
-			if ones, ok := oi.podCIDRMap[iputil.IPKey(cidr.IP)]; ok {
-				newOnes, _ := cidr.Mask.Size()
-				if newOnes == ones {
-					continue
-				}
-			}
-			changed = true
-			break
-		}
+func toRPCSubnets(cidrMap subnet.Set) []*rpc.IPNet {
+	subnets := cidrMap.AppendSortedTo(nil)
+	rpcSubnets := make([]*rpc.IPNet, len(subnets))
+	for i, s := range subnets {
+		rpcSubnets[i] = iputil.IPNetToRPC(s)
 	}
-	if changed {
-		oi.podCIDRMap = makeCIDRMap(podCIDRs)
-		oi.PodSubnets = toRPCSubnets(podCIDRs)
-	}
-	return changed
-}
-
-// accUpdate updates the relevant field in the info and recovers any panics that
-// may be raised by the accumulator Update() call and logs them.
-func (oi *info) accUpdate(ctx context.Context, a *kates.Accumulator) bool {
-	oi.accLock.Lock()
-	defer func() {
-		if r := recover(); r != nil {
-			dlog.Errorf(ctx, "Accumulator updated failed: %v", derror.PanicToError(r))
-		}
-		oi.accLock.Unlock()
-	}()
-	return a.Update(oi)
-}
-
-func (oi *info) getPodCIDRsFromNodes(ctx context.Context) []*net.IPNet {
-	if err := managerutil.GetKatesClient(ctx).List(ctx, kates.Query{Kind: "Node"}, &oi.Nodes); err != nil {
-		dlog.Errorf(ctx, "failed to get nodes: %v", err)
-		return nil
-	}
-	return oi.podCIDRsFromNodes(ctx)
-}
-
-func (oi *info) podCIDRsFromNodes(ctx context.Context) []*net.IPNet {
-	subnets := make([]*net.IPNet, 0, len(oi.Nodes))
-	for i := range oi.Nodes {
-		node := &oi.Nodes[i]
-		spec := node.Spec
-		cidrs := spec.PodCIDRs
-		if len(cidrs) == 0 && spec.PodCIDR != "" {
-			cidrs = []string{spec.PodCIDR}
-		}
-		for _, cs := range cidrs {
-			_, cidr, err := net.ParseCIDR(cs)
-			if err != nil {
-				dlog.Errorf(ctx, "unable to parse podCIDR %q in node %s", cs, node.Name)
-				continue
-			}
-			subnets = append(subnets, cidr)
-		}
-	}
-	return subnets
-}
-
-func (oi *info) getPodCIDRsFromPods(ctx context.Context) []*net.IPNet {
-	if err := managerutil.GetKatesClient(ctx).List(ctx, kates.Query{Kind: "Pod"}, &oi.Pods); err != nil {
-		dlog.Errorf(ctx, "failed to get pods: %v", err)
-		return nil
-	}
-	return oi.podCIDRsFromPods(ctx)
-}
-
-func (oi *info) podCIDRsFromPods(ctx context.Context) []*net.IPNet {
-	ips := make(iputil.IPs, 0, len(oi.Pods))
-	for i := range oi.Pods {
-		pod := &oi.Pods[i]
-		status := pod.Status
-		podIPs := status.PodIPs
-		if len(podIPs) == 0 && status.PodIP != "" {
-			podIPs = []corev1.PodIP{{IP: status.PodIP}}
-		}
-		for _, ps := range podIPs {
-			ip := iputil.Parse(ps.IP)
-			if ip == nil {
-				dlog.Errorf(ctx, "unable to parse IP %q in pod %s.%s", ps.IP, pod.Name, pod.Namespace)
-				continue
-			}
-			ips = append(ips, ip)
-		}
-	}
-	return subnet.CoveringCIDRs(ips)
-}
-
-func makeCIDRMap(cidrs []*net.IPNet) map[iputil.IPKey]int {
-	m := make(map[iputil.IPKey]int, len(cidrs))
-	for _, cidr := range cidrs {
-		m[iputil.IPKey(cidr.IP)], _ = cidr.Mask.Size()
-	}
-	return m
-}
-
-func toRPCSubnets(cidrs []*net.IPNet) []*rpc.IPNet {
-	subnets := make([]*rpc.IPNet, len(cidrs))
-	for i, cidr := range cidrs {
-		subnets[i] = iputil.IPNetToRPC(cidr)
-	}
-	return subnets
+	return rpcSubnets
 }
