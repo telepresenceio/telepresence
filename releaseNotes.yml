@@ -38,6 +38,22 @@ items:
         body: >-
           The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
         docs: reference/cluster-config/#note-on-numeric-ports
+        
+      - type: feature
+        title: New subcommand to gather logs and export into zip file
+        body: >-
+          Telepresence has logs for various components (the <code>
+          traffic-manager</code>, <code>traffic-agents</code>, the root and
+          user daemons), which are integral for understanding and debugging
+          Telepresence behavior.  We have added the <code>telepresence
+          gather-logs</code> command to make it simple to compile logs for
+          all Telepresence components and export them in a zip file that can
+          be shared to others and/or included in a github issue. For more
+          information on usage, run <code>telepresence gather-logs --help
+          </code>.
+        docs: reference/client
+        image: telepresence-2.4.4-gather-logs.png
+
   - version: 2.4.3
     date: '2021-09-15'
     notes:
