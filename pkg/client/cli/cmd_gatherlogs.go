@@ -119,7 +119,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	scout.SetMetadatum("daemon_logs", daemonLogs)
 	scout.SetMetadatum("traffic_manager_logs", gl.trafficManager)
 	scout.SetMetadatum("traffic_agent_logs", gl.trafficAgents)
-	scout.Report(log.WithDiscardingLogger(ctx), "Used gather-logs")
+	scout.Report(log.WithDiscardingLogger(ctx), "used_gather_logs")
 
 	// Get all logs from the logdir that match the daemons the user cares about.
 	logFiles, err := os.ReadDir(logDir)

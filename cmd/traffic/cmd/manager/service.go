@@ -585,10 +585,10 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 	// - it is easy to figure out why gettings logs for a given pod failed
 	getPodLogs := func(pods []*corev1.Pod, container string) {
 		wg := sync.WaitGroup{}
+		logWriteMutex := &sync.Mutex{}
 		wg.Add(len(pods))
 		for _, pod := range pods {
 			go func(pod *corev1.Pod) {
-				dlog.Errorf(ctx, "Getting logs for container: %s in pod: %s", container, pod.Name)
 				defer wg.Done()
 				plo := &corev1.PodLogOptions{
 					Container: container,
@@ -600,17 +600,23 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 				req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, plo)
 				podLogs, err := req.Stream(ctx)
 				if err != nil {
+					logWriteMutex.Lock()
 					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed to get logs: %s", err)
+					logWriteMutex.Unlock()
 					return
 				}
 				defer podLogs.Close()
 				buf := new(bytes.Buffer)
 				_, err = io.Copy(buf, podLogs)
 				if err != nil {
+					logWriteMutex.Lock()
 					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed writing log to buffer: %s", err)
+					logWriteMutex.Unlock()
 					return
 				}
+				logWriteMutex.Lock()
 				resp.PodLogs[podAndNs] = buf.String()
+				logWriteMutex.Unlock()
 			}(pod)
 		}
 		wg.Wait()
