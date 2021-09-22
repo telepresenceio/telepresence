@@ -274,10 +274,8 @@ func (tm *MAPTYPE) coalesce(
 	defer tm.wg.Done()
 	defer close(downstream)
 
-	var shutdown func()
-	shutdown = func() {
-		shutdown = func() {} // Make this function an empty one after first run to prevent calling the following goroutine multiple times
-		// Do this asyncrounously because getting the lock might block a .Store() that's
+	defer func() {
+		// Do this asynchronously because getting the lock might block a .Store() that's
 		// waiting on us to read from 'upstream'!  We don't need to worry about separately
 		// waiting for this goroutine because we implicitly do that when we drain
 		// 'upstream'.
@@ -287,7 +285,16 @@ func (tm *MAPTYPE) coalesce(
 			close(tm.subscribers[upstream])
 			delete(tm.subscribers, upstream)
 		}()
-	}
+		// Drain upstream to unblock writers
+		for {
+			select {
+			case <-upstream:
+				continue
+			default:
+			}
+			break
+		}
+	}()
 
 	// Cur is a snapshot of the current state all the map according to all MAPTYPEUpdates we've
 	// received from 'upstream', with any entries removed that do not satisfy the predicate
@@ -301,7 +308,7 @@ func (tm *MAPTYPE) coalesce(
 
 	snapshot := MAPTYPESnapshot{
 		// snapshot.State is a copy of 'cur' that we send to the 'downstream' channel.  We
-		// don't send 'cur' directly because we're nescessarily in a separate goroutine from
+		// don't send 'cur' directly because we're necessarily in a separate goroutine from
 		// the reader of 'downstream', and map gets/sets aren't thread-safe, so we'd risk
 		// memory corruption with our updating of 'cur' and the reader's accessing of 'cur'.
 		// snapshot.State gets set to 'nil' when we need to do a read before we can write to
@@ -314,7 +321,7 @@ func (tm *MAPTYPE) coalesce(
 		snapshot.State[k] = v
 	}
 
-	// applyUpdate applies an update to 'cur', and updates 'snapshot.State' as nescessary.
+	// applyUpdate applies an update to 'cur', and updates 'snapshot.State' as necessary.
 	applyUpdate := func(update MAPTYPEUpdate) {
 		if update.Delete || !includep(update.Key, update.Value) {
 			if old, haveOld := cur[update.Key]; haveOld {
@@ -351,10 +358,8 @@ func (tm *MAPTYPE) coalesce(
 		if snapshot.State == nil {
 			select {
 			case <-ctx.Done():
-				shutdown()
 				return
 			case <-tm.close:
-				shutdown()
 				return
 			case update, readOK := <-upstream:
 				if !readOK {
@@ -366,10 +371,8 @@ func (tm *MAPTYPE) coalesce(
 			// Same as above, but with an additional "downstream <- snapshot" case.
 			select {
 			case <-ctx.Done():
-				shutdown()
 				return
 			case <-tm.close:
-				shutdown()
 				return
 			case update, readOK := <-upstream:
 				if !readOK {
