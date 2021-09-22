@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -92,9 +93,7 @@ func (is *installSuite) removeManager(namespace string) {
 }
 
 func TestE2E(t *testing.T) {
-	dtest.WithMachineLock(dlog.NewTestContext(t, false), func(ctx context.Context) {
-		suite.Run(t, new(installSuite))
-	})
+	suite.Run(t, new(installSuite))
 }
 
 func (is *installSuite) SetupSuite() {
@@ -464,95 +463,88 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
 	ctx := dlog.NewTestContext(t, true)
+	// Load the environment since it's used in the rest of test
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx = client.WithEnv(ctx, env)
+
+	// Create our own config directory to use for the tests
+	// and set the registry config value
+	configDir := t.TempDir()
+	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
+	configYml := fmt.Sprintf(`
+images:
+  registry: localhost:5000
+`)
+	ctx, err = client.SetConfig(ctx, configDir, configYml)
+	require.NoError(t, err)
+
 	cfg, err := client.LoadConfig(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	fmt.Fprintf(os.Stdout, "config: %#v", cfg)
+
 	ctx = client.WithConfig(ctx, cfg)
 
-	// We use the MachineLock here since we have to reset + set the config.yml
-	dtest.WithMachineLock(ctx, func(ctx context.Context) {
-		// Specify the registry used in the test data
-		configDir := t.TempDir()
-		err = prepareConfig(ctx, configDir)
+	for tcName, tc := range testcases {
+		tcName := tcName // "{version-dir}/{yaml-base-name}"
+		tc := tc
+		if !strings.HasPrefix(tcName, "cur/") {
+			// Don't check install for historical snapshots.
+			continue
+		}
 
-		for tcName, tc := range testcases {
-			tcName := tcName // "{version-dir}/{yaml-base-name}"
-			tc := tc
-			if !strings.HasPrefix(tcName, "cur/") {
-				// Don't check install for historical snapshots.
-				continue
+		t.Run(tcName+"/install", func(t *testing.T) {
+			version.Version = tc.InputVersion
+
+			expectedWrk := deepCopyObject(tc.OutputWorkload)
+			sanitizeWorkload(expectedWrk)
+
+			expectedSvc := tc.OutputService.DeepCopy()
+			sanitizeService(expectedSvc)
+
+			actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
+				tc.InputPortName,
+				managerImageName(ctx), // ignore extensions
+				env.ManagerNamespace,
+				deepCopyObject(tc.InputWorkload),
+				tc.InputService.DeepCopy(),
+			)
+			if !assert.NoError(t, actualErr) {
+				return
 			}
 
-			t.Run(tcName+"/install", func(t *testing.T) {
-				ctx := dlog.NewTestContext(t, true)
-				env, err := client.LoadEnv(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ctx = client.WithEnv(ctx, env)
-				ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-				cfg, err = client.LoadConfig(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ctx = client.WithConfig(ctx, cfg)
+			sanitizeWorkload(actualWrk)
+			assert.Equal(t, expectedWrk, actualWrk)
 
-				version.Version = tc.InputVersion
+			if actualSvc != nil {
+				sanitizeService(actualSvc)
+				assert.Equal(t, expectedSvc, actualSvc)
+			}
 
-				expectedWrk := deepCopyObject(tc.OutputWorkload)
-				sanitizeWorkload(expectedWrk)
+			if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
+				workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
 
-				expectedSvc := tc.OutputService.DeepCopy()
-				sanitizeService(expectedSvc)
-
-				actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
-					tc.InputPortName,
-					managerImageName(ctx), // ignore extensions
-					env.ManagerNamespace,
-					deepCopyObject(tc.InputWorkload),
-					tc.InputService.DeepCopy(),
-				)
-				if !assert.NoError(t, actualErr) {
+				goldBytes, err := yaml.Marshal(map[string]interface{}{
+					strings.ToLower(workloadKind): actualWrk,
+					"service":                     actualSvc,
+				})
+				if !assert.NoError(t, err) {
 					return
 				}
+				goldBytes = bytes.ReplaceAll(goldBytes,
+					[]byte(strings.TrimPrefix(version.Version, "v")),
+					[]byte("{{.Version}}"))
 
-				sanitizeWorkload(actualWrk)
-				assert.Equal(t, expectedWrk, actualWrk)
-
-				if actualSvc != nil {
-					sanitizeService(actualSvc)
-					assert.Equal(t, expectedSvc, actualSvc)
-				}
-
-				if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
-					workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
-
-					goldBytes, err := yaml.Marshal(map[string]interface{}{
-						strings.ToLower(workloadKind): actualWrk,
-						"service":                     actualSvc,
-					})
-					if !assert.NoError(t, err) {
-						return
-					}
-					goldBytes = bytes.ReplaceAll(goldBytes,
-						[]byte(strings.TrimPrefix(version.Version, "v")),
-						[]byte("{{.Version}}"))
-
-					err = os.WriteFile(
-						filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
-						goldBytes,
-						0644)
-					assert.NoError(t, err)
-				}
-			})
-		}
-	})
+				err = os.WriteFile(
+					filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
+					goldBytes,
+					0644)
+				assert.NoError(t, err)
+			}
+		})
+	}
 
 	// Part 3: Run the testcases in "uninstall" mode ///////////////////////
 
@@ -665,19 +657,4 @@ func loadFile(filename, inputVersion string) (workload kates.Object, service *ka
 	}
 
 	return workload, dat.Service, dat.InterceptPort, nil
-}
-
-// prepareConfig resets the config + sets the registry. Only use within
-// withMachineLock
-func prepareConfig(ctx context.Context, configDir string) error {
-	config, err := os.Create(filepath.Join(configDir, "config.yml"))
-	if err != nil {
-		return err
-	}
-	_, err = config.WriteString("images:\n  registry: localhost:5000\n")
-	if err != nil {
-		return err
-	}
-	config.Close()
-	return nil
 }
