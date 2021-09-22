@@ -54,6 +54,13 @@ items:
         docs: reference/client
         image: telepresence-2.4.4-gather-logs.png
 
+      - type: bugfix
+        title: Compute pod CIDRs more efficiently
+        body: >-
+          When computing subnets using the pod CIDRs, the traffic-manager
+          now uses less CPU-cycles.
+        docs: reference/routing/#subnets
+
   - version: 2.4.3
     date: '2021-09-15'
     notes:
