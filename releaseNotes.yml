@@ -54,6 +54,15 @@ items:
         docs: reference/client
         image: telepresence-2.4.4-gather-logs.png
 
+      - type: feature
+        title: Pod CIDR strategy is configurable in Helm chart
+        body: >-
+          Telepresence now enables you to directly configure how to get
+          pod CIDRs when deploying Telepresence with the Helm chart.
+          The default behavior remains the same. We've also introduced
+          the ability to explicitly set what the pod CIDRs should be.
+        docs: install/helm
+
       - type: bugfix
         title: Compute pod CIDRs more efficiently
         body: >-
