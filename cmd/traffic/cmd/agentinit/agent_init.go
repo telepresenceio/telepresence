@@ -29,6 +29,7 @@ func configureIptables(ctx context.Context, iptables *iptables.IPTables, loopbac
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic will flow request -> mesh -> agent -> app
 	appPort := strconv.Itoa(cfg.AppPort)
 	agentPort := strconv.Itoa(cfg.AgentPort)
+	agentUID := strconv.FormatInt(install.AgentUID, 10)
 	// Clearing the inbound chain will create it if it doesn't exist, or clear it out if it does.
 	err := iptables.ClearChain(nat, inboundChain)
 	if err != nil {
@@ -55,16 +56,29 @@ func configureIptables(ctx context.Context, iptables *iptables.IPTables, loopbac
 	// be redirected to the agent. This will ensure that if there's a service mesh, when the mesh's proxy goes to
 	// request the application, it will get a response via the traffic agent.
 	err = iptables.Insert(nat, "OUTPUT", 1, "-o", loopback,
-		"-p", cfg.AgentProtocol, "--dport", appPort,
-		"-m", "owner", "!", "--gid-owner", strconv.FormatInt(install.AgentUID, 10),
-		"-j", "REDIRECT", "--to-ports", agentPort)
+		"-m", "owner", "!", "--gid-owner", agentUID,
+		"-j", inboundChain)
 	if err != nil {
 		return fmt.Errorf("failed to insert ! --gid-owner rule in OUTPUT: %w", err)
 	}
-	// Finally, any traffic heading out of the traffic agent should pass by unperturbed -- it should obviously not be
-	// redirected back into the agent, but it also should not pass through a mesh proxy.
+	// Any agent traffic heading out on the loopback but NOT towards localhost needs to be processed in case
+	// it needs to be redirected. This is so that if the traffic agent requests its own IP, it doesn't just
+	// serve the app but actually goes through the agent, and thus through any intercepts.
+	// This is needed to support requesting an intercepted pod by IP (or to intercept a headless service).
 	err = iptables.Insert(nat, "OUTPUT", 1,
-		"-m", "owner", "--gid-owner", strconv.FormatInt(install.AgentUID, 10),
+		"-o", loopback,
+		"-p", cfg.AgentProtocol,
+		"!", "-d", "127.0.0.1/32",
+		"-m", "owner", "--gid-owner", agentUID,
+		"-j", inboundChain)
+	if err != nil {
+		return fmt.Errorf("failed to insert --gid-owner rule in OUTPUT: %w", err)
+	}
+	// Finally, any other traffic heading out of the traffic agent should pass by unperturbed -- it should obviously not be
+	// redirected back into the agent, but it also should not pass through a mesh proxy.
+	// This will include not just agent->manager traffic but also the agent requesting 127.0.0.1:appPort to serve the application
+	err = iptables.Insert(nat, "OUTPUT", 2,
+		"-m", "owner", "--gid-owner", agentUID,
 		"-j", "RETURN")
 	if err != nil {
 		return fmt.Errorf("failed to insert --gid-owner rule in OUTPUT: %w", err)
