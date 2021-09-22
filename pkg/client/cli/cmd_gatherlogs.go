@@ -27,6 +27,7 @@ type gatherLogsArgs struct {
 	daemons        string
 	trafficAgents  string
 	trafficManager bool
+	anon           bool
 }
 
 func gatherLogsCommand() *cobra.Command {
@@ -64,7 +65,17 @@ telepresence gather-logs --daemons=None
 	flags.StringVar(&gl.daemons, "daemons", "all", "The daemons you want logs from: all, root, user, None")
 	flags.BoolVar(&gl.trafficManager, "traffic-manager", true, "If you want to collect logs from the traffic-manager")
 	flags.StringVar(&gl.trafficAgents, "traffic-agents", "all", "Traffic-agents to collect logs from: all, name substring, None")
+	flags.BoolVarP(&gl.anon, "anonymize", "a", false, "To anonymize pod names + namespaces from the logs")
 	return cmd
+}
+
+// anonymizer contains the mappings between things we want to anonymize
+// and their new, anonymized name.  Using a map instead of simply redacting
+// makes it easier for us to maintain certain relationships in the logs (e.g.
+// namespaces things are in) which may be helpful in troubleshooting.
+type anonymizer struct {
+	namespaces map[string]string
+	podNames   map[string]string
 }
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
@@ -76,6 +87,10 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		return errcat.User.New(err)
 	}
 
+	anonymizer := &anonymizer{
+		namespaces: make(map[string]string),
+		podNames:   make(map[string]string),
+	}
 	// If the user did not provide an outputFile, we'll use their current working directory
 	if gl.outputFile == "" {
 		pwd, err := os.Getwd()
@@ -161,6 +176,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 				}
 				// Write the logs for each pod to files
 				for podName, log := range lr.PodLogs {
+					podName = getPodName(podName, gl.anon, anonymizer)
 					agentLogFile := fmt.Sprintf("%s/%s.log", exportDir, podName)
 					fd, err := os.Create(agentLogFile)
 					if err != nil {
@@ -183,6 +199,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		}
 	}
 
+	// Now we anonymize the logs
 	// Zip up all the files we've created in the zip directory and return that to the user
 	var files []string
 	dirEntries, err := os.ReadDir(exportDir)
@@ -190,9 +207,16 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		return errcat.User.New(err)
 	}
 	for _, entry := range dirEntries {
-		if !entry.IsDir() {
-			files = append(files, fmt.Sprintf("%s/%s", exportDir, entry.Name()))
+		if entry.IsDir() {
+			continue
 		}
+
+		fullFileName := fmt.Sprintf("%s/%s", exportDir, entry.Name())
+		// anonymize the log if necessary
+		if gl.anon {
+			anonymizeLog(stdout, fullFileName, anonymizer)
+		}
+		files = append(files, fullFileName)
 	}
 
 	if err := zipFiles(files, gl.outputFile); err != nil {
@@ -267,5 +291,107 @@ func zipFiles(files []string, zipFileName string) error {
 	if errMsg != "" {
 		return errors.New(errMsg)
 	}
+	return nil
+}
+
+// getPodName either returns the podName passed in or gets the anonymized
+// name of the pod.  If the podName has not been yet anonymized in the
+// anonymizer, then it will create the anonymized name and store it in
+// the anonymizer.
+func getPodName(podName string, anon bool, anonymizer *anonymizer) string {
+	// If we aren't anonymizing the logs, just return the podName
+	if !anon {
+		return podName
+	}
+
+	// If this pod name has already been mapped, return that
+	if anonName, ok := anonymizer.podNames[podName]; ok {
+		return anonName
+	}
+
+	// the podName hasn't been anonymized yet so we split it up
+	// so we can anonymize the namespace
+	nameComponents := strings.SplitN(podName, ".", 2)
+	if len(nameComponents) != 2 {
+		unknownPodName := "anonPod.anonNamespace"
+		anonymizer.podNames[podName] = unknownPodName
+		return unknownPodName
+	}
+	var anonPodName, anonNamespace string
+	name, namespace := nameComponents[0], nameComponents[1]
+	if val, ok := anonymizer.namespaces[namespace]; ok {
+		anonNamespace = val
+	} else {
+		anonNamespace = fmt.Sprintf("namespace-%d", len(anonymizer.namespaces)+1)
+		anonymizer.namespaces[namespace] = anonNamespace
+	}
+
+	// we want to special case the traffic-manager so we can easily distinguish
+	// between that and the traffic-agents
+	if strings.Contains(name, "traffic-manager") {
+		anonPodName = fmt.Sprintf("traffic-manager.%s", anonNamespace)
+	} else {
+		anonPodName = fmt.Sprintf("pod-%d.%s", len(anonymizer.podNames)+1, anonNamespace)
+	}
+	// Store the anonPodName in the map
+	anonymizer.podNames[podName] = anonPodName
+	return anonPodName
+}
+
+// anonymizeLog is a helper function that replaces the namespace + podName
+// used in the log with its anonymized version, provided by the anonymizer.
+func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) error {
+	// Read the contents we are going to overwrite from the file
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		return err
+	}
+	// Open the file with write so we can overwrite it
+	stringContent := string(content)
+	f, err := os.OpenFile(logFile, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// First we replace the actual namespace with the anonymized
+	// version.
+	for namespace, anonNamespace := range anonymizer.namespaces {
+		stringContent = strings.ReplaceAll(stringContent, namespace, anonNamespace)
+	}
+	// Now we do pod name which is a little bit more complicated
+	for fullPodName, fullAnonPodName := range anonymizer.podNames {
+		// strip the namespace off of the anonymized name
+		anonPodParts := strings.Split(fullAnonPodName, ".")
+		anonPodName := anonPodParts[0]
+
+		// Strip the namespace off of the podName + replace pod name + full
+		// hash with the anonymized name
+		podParts := strings.Split(fullPodName, ".")
+		podName := podParts[0]
+		stringContent = strings.ReplaceAll(stringContent, podName, anonPodName)
+
+		// Strip the hash off of the pod name + replace that with anonymized name
+		brokenPodName := strings.Split(podName, "-")
+		podName = strings.Join(brokenPodName[:len(brokenPodName)-2], "-")
+		stringContent = strings.ReplaceAll(stringContent, podName, anonPodName)
+	}
+
+	// Overwrite the file with the new name
+	err = f.Truncate(0)
+	if err != nil {
+		return err
+	}
+	_, err = f.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+	fdWriter := bufio.NewWriter(f)
+	_, err = fdWriter.WriteString(stringContent)
+	if err != nil {
+		return err
+	}
+	fdWriter.Flush()
+
 	return nil
 }
