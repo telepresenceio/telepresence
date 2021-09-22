@@ -67,13 +67,6 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		return nil, nil
 	}
 
-	for _, container := range pod.Spec.Containers {
-		if container.Name == install.AgentContainerName {
-			dlog.Infof(ctx, "The %s pod already has a %q container; skipping", refPodName, install.AgentContainerName)
-			return nil, nil
-		}
-	}
-
 	// Make the kates client available in the context
 	// TODO: Use the kubernetes SharedInformerFactory instead
 	client, err := kates.NewClient(kates.ClientConfig{})
@@ -94,13 +87,17 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		dlog.Error(ctx, err)
 		return nil, nil
 	}
+	if appContainer.Name == install.AgentContainerName {
+		dlog.Infof(ctx, "service %s/%s is already pointing at agent container %s; skipping", svc.Namespace, svc.Name, appContainer.Name)
+		return nil, nil
+	}
 
 	env := managerutil.GetEnv(ctx)
 	ports := appContainer.Ports
 	for i := range ports {
 		if ports[i].ContainerPort == env.AgentPort {
-			dlog.Infof(ctx, "the %s pod container is exposing the same port (%d) as the %s sidecar; skipping",
-				refPodName, env.AgentPort, install.AgentContainerName)
+			dlog.Infof(ctx, "the %s pod container %s is exposing the same port (%d) as the %s sidecar; skipping",
+				refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
 			return nil, nil
 		}
 	}
@@ -111,27 +108,89 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 			svc.Name, svc.Namespace)
 	}
 
-	if servicePort.TargetPort.Type == intstr.Int {
-		return nil, fmt.Errorf("intercepts of service %s.%s won't work because it has an integer targetPort",
-			svc.Name, svc.Namespace)
+	var appPort corev1.ContainerPort
+	switch {
+	case containerPortIndex >= 0:
+		appPort = appContainer.Ports[containerPortIndex]
+	case servicePort.TargetPort.Type == intstr.Int:
+		appPort = corev1.ContainerPort{
+			Protocol:      servicePort.Protocol,
+			ContainerPort: servicePort.TargetPort.IntVal,
+		}
+	default:
+		// This really shouldn't have happened: the target port is a string, but we weren't able to
+		// find a corresponding container port. This should've been caught in FindMatchingPort, but in
+		// case it isn't, just return an error.
+		return nil, fmt.Errorf("container port unexpectedly not found in %s", refPodName)
 	}
-
-	appPort := appContainer.Ports[containerPortIndex]
 
 	// Create patch operations to add the traffic-agent sidecar
 	dlog.Infof(ctx, "Injecting %s into pod %s", install.AgentContainerName, refPodName)
 
 	var patches []patchOperation
-	patches, err = addAgentContainer(ctx, svc, servicePort, appContainer, &appPort, podName, podNamespace, patches)
+	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, podName, podNamespace, patches)
 	if err != nil {
 		return nil, err
 	}
-	patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
-	patches = addAgentVolume(patches)
+	if servicePort.TargetPort.Type == intstr.Int {
+		patches = addInitContainer(ctx, &pod, servicePort, &appPort, patches)
+	} else {
+		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
+	}
+	patches = addAgentVolume(&pod, patches)
 	return patches, nil
 }
 
-func addAgentVolume(patches []patchOperation) []patchOperation {
+func addInitContainer(ctx context.Context, pod *corev1.Pod, svcPort *corev1.ServicePort, appPort *corev1.ContainerPort, patches []patchOperation) []patchOperation {
+	env := managerutil.GetEnv(ctx)
+	proto := svcPort.Protocol
+	if proto == "" {
+		proto = appPort.Protocol
+	}
+	containerPort := corev1.ContainerPort{
+		Protocol:      proto,
+		ContainerPort: env.AgentPort,
+	}
+	container := install.InitContainer(
+		env.AgentRegistry+"/"+env.AgentImage,
+		containerPort,
+		int(appPort.ContainerPort),
+	)
+
+	if pod.Spec.InitContainers == nil {
+		patches = append(patches, patchOperation{
+			Op:    "add",
+			Path:  "/spec/initContainers",
+			Value: []corev1.Container{},
+		})
+	} else {
+		for i, container := range pod.Spec.InitContainers {
+			if container.Name == install.InitContainerName {
+				if i == len(pod.Spec.InitContainers)-1 {
+					return patches
+				}
+				// If the container isn't the last one, remove it so it can be appended at the end.
+				patches = append(patches, patchOperation{
+					Op:   "remove",
+					Path: fmt.Sprintf("/spec/initContainers/%d", i),
+				})
+			}
+		}
+	}
+
+	return append(patches, patchOperation{
+		Op:    "add",
+		Path:  "/spec/initContainers/-",
+		Value: container,
+	})
+}
+
+func addAgentVolume(pod *corev1.Pod, patches []patchOperation) []patchOperation {
+	for _, vol := range pod.Spec.Volumes {
+		if vol.Name == install.AgentAnnotationVolumeName {
+			return patches
+		}
+	}
 	return append(patches, patchOperation{
 		Op:    "add",
 		Path:  "/spec/volumes/-",
@@ -143,14 +202,23 @@ func addAgentVolume(patches []patchOperation) []patchOperation {
 func addAgentContainer(
 	ctx context.Context,
 	svc *corev1.Service,
+	pod *corev1.Pod,
 	svcPort *corev1.ServicePort,
 	appContainer *corev1.Container,
 	appPort *corev1.ContainerPort,
 	podName, namespace string,
-	patches []patchOperation) ([]patchOperation, error) {
+	patches []patchOperation,
+) ([]patchOperation, error) {
 	env := managerutil.GetEnv(ctx)
 
 	refPodName := podName + "." + namespace
+	for _, container := range pod.Spec.Containers {
+		if container.Name == install.AgentContainerName {
+			dlog.Infof(ctx, "Pod %s already has container %s", refPodName, install.AgentContainerName)
+			return patches, nil
+		}
+	}
+
 	dlog.Debugf(ctx, "using service %q port %q when intercepting %s",
 		svc.Name,
 		func() string {
@@ -171,6 +239,13 @@ func addAgentContainer(
 	if proto == "" {
 		proto = appPort.Protocol
 	}
+	containerPort := corev1.ContainerPort{
+		Protocol:      proto,
+		ContainerPort: env.AgentPort,
+	}
+	if svcPort.TargetPort.Type == intstr.String {
+		containerPort.Name = svcPort.TargetPort.StrVal
+	}
 	patches = append(patches, patchOperation{
 		Op:   "add",
 		Path: "/spec/containers/-",
@@ -178,11 +253,7 @@ func addAgentContainer(
 			agentName,
 			env.AgentRegistry+"/"+env.AgentImage,
 			appContainer,
-			corev1.ContainerPort{
-				Name:          svcPort.TargetPort.StrVal,
-				Protocol:      proto,
-				ContainerPort: env.AgentPort,
-			},
+			containerPort,
 			int(appPort.ContainerPort),
 			env.ManagerNamespace)})
 

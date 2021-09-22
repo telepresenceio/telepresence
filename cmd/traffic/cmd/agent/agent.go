@@ -42,6 +42,7 @@ var skipKeys = map[string]bool{
 	"_TEL_AGENT_APP_PORT":     true,
 	"_TEL_AGENT_MANAGER_HOST": true,
 	"_TEL_AGENT_MANAGER_PORT": true,
+	"_TEL_AGENT_LOG_LEVEL":    true,
 
 	// Keys that aren't useful when running on the local machine
 	"HOME":     true,

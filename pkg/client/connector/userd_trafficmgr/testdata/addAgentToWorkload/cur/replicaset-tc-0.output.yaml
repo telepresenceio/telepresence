@@ -48,6 +48,10 @@ replicaset:
               - /bin/stat
               - /tmp/agent/ready
           resources: {}
+          securityContext:
+            runAsGroup: 7777
+            runAsNonRoot: true
+            runAsUser: 7777
           volumeMounts:
           - mountPath: /tel_pod_info
             name: traffic-annotations

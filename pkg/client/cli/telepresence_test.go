@@ -42,7 +42,7 @@ import (
 
 // serviceCount is the number of interceptable services that gets installed
 // in the cluster and later intercepted
-const serviceCount = 3
+const serviceCount = 4
 
 func TestTelepresence(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
@@ -485,6 +485,7 @@ logLevels:
 images:
   registry: %[1]s
   webhookRegistry: %[1]s
+  webhookAgentImage: tel2:%[2]s
 timeouts:
   intercept: 20s
   trafficManagerAPI: 120s
@@ -492,7 +493,7 @@ grpc:
   maxReceiveSize: 10Mi
 cloud:
   systemaHost: 127.0.0.1
-`, registry)
+`, registry, cs.tpSuite.testVersion[1:])
 	configYml = strings.TrimSpace(configYml)
 	c, err := client.SetConfig(c, configDir, configYml)
 
@@ -987,6 +988,23 @@ func (is *interceptedSuite) SetupSuite() {
 	is.services = dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	is.cancelServices = cancel
 
+	err := run(ctx, "kubectl", "patch", "-n", is.tpSuite.namespace, "deploy", "hello-3", "-p", `
+{
+	"spec": {
+		"template": {
+			"metadata": {
+				"annotations": {
+					"telepresence.getambassador.io/inject-traffic-agent": "enabled",
+					"telepresence.getambassador.io/inject-service-port": "80"
+				}
+			}
+		}
+	}
+}
+				`)
+	is.NoError(err)
+	is.NoError(run(ctx, "kubectl", "rollout", "status", "-w", "deploy/hello-3", "-n", is.tpSuite.namespace))
+
 	is.Run("all intercepts ready", func() {
 		rxs := make([]*regexp.Regexp, serviceCount)
 		for i := 0; i < serviceCount; i++ {
@@ -1055,6 +1073,14 @@ func (is *interceptedSuite) TearDownSuite() {
 		is.Empty(stderr)
 		is.Empty(stdout)
 	}
+	ctx := dlog.NewTestContext(is.T(), true)
+	err := run(ctx, "kubectl", "patch", "-n", is.tpSuite.namespace, "deploy", "hello-3", "--type=json", "-p", `[{
+	"op": "remove",
+	"path": "/spec/template/metadata/annotations"
+}]`)
+	is.NoError(err)
+	is.NoError(run(ctx, "kubectl", "rollout", "status", "-w", "deploy/hello-3", "-n", is.tpSuite.namespace))
+
 	is.cancelServices()
 	is.NoError(is.services.Wait())
 	time.Sleep(time.Second) // Allow some time for processes to die and intercepts to vanish
