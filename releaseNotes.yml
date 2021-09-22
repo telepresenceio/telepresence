@@ -71,7 +71,7 @@ items:
         docs: reference/routing/#subnets
 
       - type: bugfix
-        title: General CPU improvements in traffic-manager
+        title: Prevent busy loop in traffic-manager
         body: >-
           In some circumstances, the <code>traffic-manager</code>'s CPU
           would max out and get pinned at its limit. This then required a
