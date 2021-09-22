@@ -3,6 +3,7 @@ package userd_k8s
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -168,6 +169,24 @@ func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object,
 		return nil, err
 	}
 	return obj, nil
+}
+
+// FindPodFromDeployName returns a pod with the given name-hex-hex
+func (kc *Cluster) FindPodFromDeployName(c context.Context, namespace, name string) (*kates.Pod, error) {
+	pods, err := kc.Pods(c, namespace)
+	if err != nil {
+		return nil, err
+	}
+	regex, err := regexp.Compile(`^` + name + `-[a-z0-9]+-[a-z0-9]+$`)
+	if err != nil {
+		return nil, err
+	}
+	for _, pod := range pods {
+		if regex.MatchString(pod.Name) {
+			return pod, nil
+		}
+	}
+	return nil, errors.NewNotFound(corev1.Resource("pod"), name+"."+namespace)
 }
 
 // FindPod returns a pod with the given name in the given namespace or nil

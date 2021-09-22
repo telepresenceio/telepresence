@@ -220,12 +220,27 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 		if err != nil {
 			return "", "", err
 		}
-		// We cannot check if agent already installed using kates,
-		// as agent will not be listed in the deployment
-		err = ki.rolloutRestart(c, obj)
+
+		// Check the pod for agent. If missing, roll pod
+		pod, err := ki.FindPodFromDeployName(c, namespace, name)
 		if err != nil {
 			return "", "", err
 		}
+		roll := true
+		for _, containter := range pod.Spec.Containers {
+			if containter.Name == install.AgentContainerName {
+				roll = false
+				break
+			}
+		}
+
+		if roll {
+			err = ki.rolloutRestart(c, obj)
+			if err != nil {
+				return "", "", err
+			}
+		}
+
 		return string(svc.GetUID()), kind, nil
 	}
 
