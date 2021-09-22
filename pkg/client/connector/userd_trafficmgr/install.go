@@ -220,6 +220,12 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 		if err != nil {
 			return "", "", err
 		}
+		// We cannot check if agent already installed using kates,
+		// as agent will not be listed in the deployment
+		err = ki.rolloutRestart(c, obj)
+		if err != nil {
+			return "", "", err
+		}
 		return string(svc.GetUID()), kind, nil
 	}
 

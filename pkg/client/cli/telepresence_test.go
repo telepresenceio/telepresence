@@ -426,7 +426,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		require.NoError(ts.applyApp(ctx, jobname, jobname, 80))
 
 		defer func() {
-			require.NoError(ts.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject"))
+			require.NoError(ts.kubectl(ctx, "delete", "svc,deploy", jobname))
 		}()
 
 		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
@@ -501,8 +501,23 @@ cloud:
 	_, stderr := telepresenceContext(c, "uninstall", "-e")
 	require.Empty(stderr)
 
+	// Deployment with webhook annotation installed before telepresence so that agent is absent
+	jobname := "echo-auto-inject"
+	require.NoError(cs.tpSuite.applyApp(c, jobname, jobname, 80))
+
 	_, stderr = telepresenceContext(c, "connect")
 	require.Empty(stderr)
+
+	// Verify webhook agent is installed on intercept
+	stdout, stderr := telepresence(cs.T(), "intercept", jobname, "--namespace", cs.ns())
+	require.Empty(stderr)
+	regex := regexp.MustCompile("Intercept name    : (.*?)\n")
+	interceptName := regex.FindStringSubmatch(stdout)
+	require.NotNil(interceptName)
+	_, stderr = telepresence(cs.T(), "leave", interceptName[1])
+	require.Empty(stderr)
+	require.NoError(cs.tpSuite.kubectl(c, "delete", "svc,deploy", jobname))
+
 	time.Sleep(time.Second) // Allow some time before we quit
 	_, stderr = telepresenceContext(c, "quit")
 	require.Empty(stderr)
@@ -513,7 +528,7 @@ cloud:
 	}, 10*time.Second, time.Second)
 
 	require.NoError(err)
-	stdout, stderr := telepresenceContext(c, "connect")
+	stdout, stderr = telepresenceContext(c, "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
 
