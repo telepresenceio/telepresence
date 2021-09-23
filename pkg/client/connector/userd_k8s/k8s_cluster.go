@@ -185,6 +185,7 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 		for key, val := range selector {
 			if podLabels[key] != val {
 				match = false
+				break
 			}
 		}
 		if match {
