@@ -1,0 +1,73 @@
+2021-09-16 13:03:18.7998 debug   Logging at this level "debug"
+2021-09-16 13:03:18.8006 info    ---
+2021-09-16 13:03:18.8006 info    Telepresence daemon v2.4.3-98-g0585bbd1-1631811285 (api v3) starting...
+2021-09-16 13:03:18.8006 info    PID is 42026
+2021-09-16 13:03:18.8006 info    
+2021-09-16 13:03:18.8007 debug   Listener opened
+2021-09-16 13:03:18.8379 info    daemon/server-grpc : gRPC server started
+2021-09-16 13:03:18.8379 debug   daemon/server-router/TUN reader : Waiting until manager gRPC is configured
+2021-09-16 13:03:18.8379 debug   daemon/server-router/MGR stream : Waiting until manager gRPC is configured
+2021-09-16 13:03:36.8925 info    daemon/server-grpc/conn=2 : Adding also-proxy subnet 1.2.3.4/32
+2021-09-16 13:03:36.9395 info    daemon/watch-cluster-info : Adding service subnet 10.43.0.0/16
+2021-09-16 13:03:36.9397 info    daemon/watch-cluster-info : Adding pod subnet 10.42.0.0/24
+2021-09-16 13:03:36.9407 info    daemon/watch-cluster-info : Setting cluster DNS to 10.43.0.10
+2021-09-16 13:03:36.9408 info    daemon/watch-cluster-info : Setting cluster domain to "cluster.local."
+2021-09-16 13:03:36.9410 debug   daemon/server-router/TUN reader : TUN read loop starting
+2021-09-16 13:03:36.9413 debug   daemon/server-router/MGR stream : MGR read loop starting
+2021-09-16 13:03:36.9423 info    daemon/server-dns : Generated new /etc/resolver/telepresence.local
+2021-09-16 13:03:36.9431 debug   daemon/server-dns/SearchPaths : [] -> [ambassador default kube-node-lease kube-public kube-system]
+2021-09-16 13:03:36.9455 info    daemon/server-dns/SearchPaths : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021-09-16 13:03:36.9462 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.default.local
+2021-09-16 13:03:36.9477 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.kube-node-lease.local
+2021-09-16 13:03:36.9484 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.kube-public.local
+2021-09-16 13:03:36.9489 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.kube-system.local
+2021-09-16 13:03:36.9495 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.tel2-search.local
+2021-09-16 13:03:36.9499 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.ambassador.local
+2021-09-16 13:03:36.9516 info    daemon/server-dns : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="42097"
+2021-09-16 13:03:36.9519 info    daemon/server-dns :  : dexec.pid="42097" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:03:36.9643 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="42097"
+2021-09-16 13:03:36.9671 info    daemon/server-dns : started command ["killall" "mDNSResponderHelper"] : dexec.pid="42098"
+2021-09-16 13:03:36.9673 info    daemon/server-dns :  : dexec.pid="42098" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:03:36.9786 info    daemon/server-dns :  : dexec.pid="42098" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021-09-16 13:03:36.9791 info    daemon/server-dns : finished with error: exit status 1 : dexec.pid="42098"
+2021-09-16 13:03:36.9815 info    daemon/server-dns : started command ["dscacheutil" "-flushcache"] : dexec.pid="42099"
+2021-09-16 13:03:36.9817 info    daemon/server-dns :  : dexec.pid="42099" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:03:36.9844 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="42099"
+2021-09-16 13:03:36.9880 debug   daemon/server-router/MGR stream : setting tunnel's peer version to 1
+2021-09-16 13:03:38.4784 debug   daemon/server-dns/Server : QTYPE[1] ykbcmbcwnwgwvjt.cluster.local. -> NOT FOUND
+2021-09-16 13:03:38.4786 debug   daemon/server-dns/Server : QTYPE[28] ykbcmbcwnwgwvjt.cluster.local. -> NOT FOUND
+2021-09-16 13:03:38.4791 debug   daemon/server-dns/Server : QTYPE[1] znqoxvhdzp.cluster.local. -> NOT FOUND
+2021-09-16 13:03:38.4795 debug   daemon/server-dns/Server : QTYPE[28] znqoxvhdzp.cluster.local. -> NOT FOUND
+2021-09-16 13:03:38.4802 debug   daemon/server-dns/Server : QTYPE[1] lvwmxfvxyahtpa.cluster.local. -> NOT FOUND
+2021-09-16 13:03:38.4806 debug   daemon/server-dns/Server : QTYPE[28] lvwmxfvxyahtpa.cluster.local. -> NOT FOUND
+2021-09-16 13:03:43.0249 debug   daemon/server-grpc/conn=3 : Received gRPC Quit
+2021-09-16 13:03:43.0256 debug   daemon/server-router/TUN reader : goroutine "/daemon/server-router/TUN reader" exited without error
+2021-09-16 13:03:43.0257 info    daemon/daemon-quit : Shutting down connector
+2021-09-16 13:03:43.0269 debug   daemon/daemon-quit : Sending quit message to connector
+2021-09-16 13:03:43.0279 debug   daemon/daemon-quit : Connector shutdown complete
+2021-09-16 13:03:43.2331 debug   daemon/daemon-quit : goroutine "/daemon/daemon-quit" exited without error
+2021-09-16 13:03:43.2334 info    daemon/server-dns/Server:shutdown_logger : shutting down (gracefully)...
+2021-09-16 13:03:43.2335 debug   daemon/server-router/MGR stream : goroutine "/daemon/server-router/MGR stream" exited without error
+2021-09-16 13:03:43.2337 debug   daemon/server-dns/SearchPaths : goroutine "/daemon/server-dns/SearchPaths" exited without error
+2021-09-16 13:03:43.2334 info    daemon:shutdown_logger : shutting down (gracefully)...
+2021-09-16 13:03:43.2337 info    daemon/server-dns:shutdown_logger : shutting down (gracefully)...
+2021-09-16 13:03:43.2336 debug   daemon/server-router/TUN writer : goroutine "/daemon/server-router/TUN writer" exited without error
+2021-09-16 13:03:43.2339 debug   daemon/server-dns/Server/127.0.0.1:52776 : goroutine "/daemon/server-dns/Server/127.0.0.1:52776" exited without error
+2021-09-16 13:03:43.2337 info    daemon/server-router:shutdown_logger : shutting down (gracefully)...
+2021-09-16 13:03:43.2343 debug   daemon/server-dns/Server : goroutine "/daemon/server-dns/Server" exited without error
+2021-09-16 13:03:43.2343 debug   daemon/server-router : goroutine "/daemon/server-router" exited without error
+2021-09-16 13:03:43.2341 debug   daemon/watch-cluster-info : goroutine "/daemon/watch-cluster-info" exited without error
+2021-09-16 13:03:43.2359 debug   daemon/server-grpc : gRPC server ended
+2021-09-16 13:03:43.2361 debug   daemon/server-grpc : goroutine "/daemon/server-grpc" exited without error
+2021-09-16 13:03:43.2425 info    daemon/server-dns : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="42103"
+2021-09-16 13:03:43.2429 info    daemon/server-dns :  : dexec.pid="42103" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:03:43.2600 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="42103"
+2021-09-16 13:03:43.2630 info    daemon/server-dns : started command ["killall" "mDNSResponderHelper"] : dexec.pid="42104"
+2021-09-16 13:03:43.2632 info    daemon/server-dns :  : dexec.pid="42104" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:03:43.2722 info    daemon/server-dns :  : dexec.pid="42104" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021-09-16 13:03:43.2724 info    daemon/server-dns : finished with error: exit status 1 : dexec.pid="42104"
+2021-09-16 13:03:43.2745 info    daemon/server-dns : started command ["dscacheutil" "-flushcache"] : dexec.pid="42105"
+2021-09-16 13:03:43.2746 info    daemon/server-dns :  : dexec.pid="42105" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:03:43.2779 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="42105"
+2021-09-16 13:03:43.2780 debug   daemon/server-dns : goroutine "/daemon/server-dns" exited without error
+2021-09-16 13:03:43.2781 debug   daemon/background-metriton : goroutine "/daemon/background-metriton" exited without error

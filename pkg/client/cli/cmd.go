@@ -191,7 +191,7 @@ func Command(ctx context.Context) *cobra.Command {
 		},
 		{
 			Name:     "Debug Commands",
-			Commands: []*cobra.Command{loglevelCommand()},
+			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
 		},
 		{
 			Name:     "Other Commands",

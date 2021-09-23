@@ -18,3 +18,4 @@ The following metrics are collected:
 | `login_failure`                       | A `telepresence login` has failed. Includes an `error` trait detailing the error, and a `method` trait detailing the login method.         |
 | `login_interrupted`                   | A `telepresence login` has been interrupted by the user, includes a `method` trait detailing the login method.                             |
 | `login_success`                       | A `telepresence login` has succeded, includes a `method` trait detailing the login method.                                                 |
+| `used_gather_logs`                    | A `telepresence gather-logs` command has been used.                                                                                        |

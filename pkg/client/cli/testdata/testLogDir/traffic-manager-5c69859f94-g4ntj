@@ -1,0 +1,9 @@
+2021-09-16 17:06:51.8710 info    Logging at this level "info"
+2021-09-16 17:06:51.8711 info    Traffic Manager v2.4.3-98-g0585bbd1-1631811285 [pid:1]
+2021-09-16 17:06:51.9889 info    Using DNS IP from kube-dns.kube-system
+2021-09-16 17:06:51.9959 info    Using cluster domain "cluster.local."
+2021-09-16 17:06:52.0282 info    Extracting service subnet 10.43.0.0/16 from create service error message
+2021-09-16 17:06:52.0572 info    Deriving subnets from podCIRs of nodes
+2021-09-16 17:06:52.0852 info    agent-injector : Mutating webhook service is listening on :8443
+2021/09/16 17:06:52 Patching synced Node fe5953af-7777-4787-accf-719601327fb6
+2021-09-16 17:07:03.4843 info    agent-injector : Injecting traffic-agent into pod echo-auto-inject-6496f77cbd-.default

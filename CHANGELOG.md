@@ -4,7 +4,15 @@
 
 - Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
 
+- Feature: Add the command `telepresence gather-logs`, which bundles the logs for all components
+  into one zip file that can then be shared in a github issue, in slack, etc.  Use
+  `telepresence gather-logs --help` to see additional options for running the command.
+
 - Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
+
+- Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
+
+- Bugfix: Fix an issue where the traffic-manager would sometimes go into a CPU loop.
 
 ### 2.4.3 (September 15, 2021)
 
