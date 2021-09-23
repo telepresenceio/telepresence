@@ -12,6 +12,9 @@
 
 - Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
 
+
+- Bugfix: If a deployment annotated with webhook annotations is deployed before telepresence is installed, telepresence will now install an agent in that deployment before intercept
+
 - Bugfix: Fix an issue where the traffic-manager would sometimes go into a CPU loop.
 
 ### 2.4.3 (September 15, 2021)
