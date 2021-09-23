@@ -79,7 +79,7 @@ items:
           to prevent the traffic-manager from getting into this state.
 
       - type: bugfix
-        title: The traffic agent will backoff, retry after a failed connection to Ambassador Cloud
+        title: Improved proprietary agent connectivity
         body: >-
           To determine whether the environment cluster is air-gapped, the
           proprietary agent attempts to connect to the cloud during startup.
