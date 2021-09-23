@@ -125,11 +125,25 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
 
 1. Now the bug is fixed, we we'll use Telepresence to intercept *all* the traffic through our local service, to do that, inside the container you can run:
   ```
-  $ telepresence intercept voting --port 8081
+  $ telepresence intercept voting --port 8081:8080
+
+    Using Deployment voting
+    intercepted
+      Intercept name         : voting
+      State                  : ACTIVE
+      Workload kind          : Deployment
+      Destination            : 127.0.0.1:8081
+      Service Port Identifier: 8080
+      Volume Mount Point     : /tmp/telfs-XXXXXXXXX
+      Intercepting           : all TCP connections
   ```
-  Now you can go back to <a href="#">emoji-web-app</a> and after refreshing the page, we will see that it works as expected.
+  Now you can go back to <a href="#">emoji-web-app</a> and you'll see that voting for 🍩 woks as expected.
 
 2. We just created an intercept, this tell Telepresence where to send traffic. In this example we sent all the traffic destined to `voting-svc` to the local Dockerized version of the service. In this way we intercept *all the traffic* to our local `voting-svc` service and since we already fixed it, now it works.
+
+<Alert severity="success">
+  <strong>Congratulations!</strong> Traffic to the remote service is now being routed to your local laptop, and you can see how the local fix works on the remote environment!
+</Alert>
 
 ## 5. Telepresence intercept with a preview URL
 
