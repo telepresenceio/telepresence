@@ -220,7 +220,8 @@ check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA)
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=23m ./...
+	# The timeout must be larger than the no_output_timeout in .circleci/config.yml
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=30m ./...
 
 .PHONY: _login
 _login:

@@ -20,7 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
+	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/api/resource"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -45,7 +48,7 @@ import (
 const serviceCount = 3
 
 func TestTelepresence(t *testing.T) {
-	ctx := dlog.NewTestContext(t, false)
+	ctx := testContext(t)
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
 		suite.Run(t, new(telepresenceSuite))
 	})
@@ -76,7 +79,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 	version.Version = ts.testVersion
 
-	ctx := dlog.NewTestContext(ts.T(), false)
+	ctx := testContext(ts.T())
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -161,7 +164,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 }
 
 func (ts *telepresenceSuite) TearDownSuite() {
-	ctx := dlog.NewTestContext(ts.T(), false)
+	ctx := testContext(ts.T())
 	_ = run(ctx, "kubectl", "config", "use-context", "default")
 	_ = run(ctx, "kubectl", "delete", "namespace", ts.namespace)
 	_ = run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration", "agent-injector-webhook-"+ts.managerTestNamespace)
@@ -218,29 +221,14 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			require.Contains(stdout, "Kubernetes context:")
 			require.Regexp(`Telepresence proxy:\s+ON`, stdout)
 			require.Contains(stdout, "Telepresence Root Daemon quitting... done")
-			ts.NoError(ts.capturePodLogs(dlog.NewTestContext(ts.T(), false), "traffic-manager", ts.managerTestNamespace))
+			ts.NoError(ts.capturePodLogs(testContext(ts.T()), "traffic-manager", ts.managerTestNamespace))
 		})
 	})
 
 	ts.Run("Root Daemon Log Level", func() {
 		t := ts.T()
 		require := ts.Require()
-
-		configDir := t.TempDir()
-
-		ctx := dlog.NewTestContext(t, false)
-		registry := dtest.DockerRegistry(ctx)
-		configYml := fmt.Sprintf(`
-logLevels:
-  rootDaemon: debug
-images:
-  registry: %[1]s
-  webhookRegistry: %[1]s
-cloud:
-  systemaHost: 127.0.0.1
-`, registry)
-		ctx, err := client.SetConfig(ctx, configDir, configYml)
-		require.NoError(err)
+		ctx := testContext(t)
 
 		logDir := t.TempDir()
 		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
@@ -291,20 +279,7 @@ cloud:
 
 		require.NoError(clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
 
-		ctx := dlog.NewTestContext(t, false)
-		registry := dtest.DockerRegistry(ctx)
-		configYml := fmt.Sprintf(`
-logLevels:
-  rootDaemon: debug
-images:
-  registry: %[1]s
-  webhookRegistry: %[1]s
-cloud:
-  systemaHost: 127.0.0.1
-`, registry)
-		ctx, err = client.SetConfig(ctx, tmpDir, configYml)
-		require.NoError(err)
-
+		ctx := testContext(t)
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
 		os.Setenv("KUBECONFIG", kubeconfigFileName)
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
@@ -349,24 +324,15 @@ cloud:
 		require.Empty(stderr)
 		require.Contains(stdout, "Root Daemon quitting... done")
 
-		configDir := t.TempDir()
-
-		// Use a config with agentImage and webhookAgentImage to validate that its the
+		// Use a config with agentImage and webhookAgentImage to validate that it's the
 		// latter that is used in the traffic-manager
-		ctx := dlog.NewTestContext(t, false)
+		ctx := testContextWithConfig(t, &client.Config{
+			Images: client.Images{
+				AgentImage:        "notUsed:0.0.1",
+				WebhookAgentImage: "imageFromConfig:0.0.1",
+			},
+		})
 		registry := dtest.DockerRegistry(ctx)
-		configYml := fmt.Sprintf(`
-images:
-  registry: %[1]s
-  agentImage: notUsed:0.0.1
-  webhookRegistry: %[1]s
-  webhookAgentImage: imageFromConfig:0.0.1
-cloud:
-  systemaHost: 127.0.0.1
-`, registry)
-		ctx, err := client.SetConfig(ctx, configDir, configYml)
-		require.NoError(err)
-
 		_, stderr = telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
 
@@ -404,7 +370,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
-		ctx := dlog.NewTestContext(ts.T(), false)
+		ctx := testContext(ts.T())
 
 		names := func() (string, error) {
 			return ts.kubectlOut(ctx, "get",
@@ -473,33 +439,14 @@ func (cs *connectedSuite) ns() string {
 
 func (cs *connectedSuite) SetupSuite() {
 	require := cs.Require()
-	c := dlog.NewTestContext(cs.T(), false)
-
-	// Connect + quit before we change contexts to ensure the
-	// traffic-manager is installed
-	configDir := cs.T().TempDir()
-	registry := dtest.DockerRegistry(c)
-	configYml := fmt.Sprintf(`
-logLevels:
-  rootDaemon: debug
-images:
-  registry: %[1]s
-  webhookRegistry: %[1]s
-timeouts:
-  intercept: 20s
-  trafficManagerAPI: 120s
-grpc:
-  maxReceiveSize: 10Mi
-cloud:
-  systemaHost: 127.0.0.1
-`, registry)
-	configYml = strings.TrimSpace(configYml)
-	c, err := client.SetConfig(c, configDir, configYml)
+	c := testContext(cs.T())
 
 	// Uninstall and re-install to make sure the traffic-manager is installed with the right config
 	_, stderr := telepresenceContext(c, "uninstall", "-e")
 	require.Empty(stderr)
 
+	// Connect + quit before we change contexts to ensure the
+	// traffic-manager is installed
 	_, stderr = telepresenceContext(c, "connect")
 	require.Empty(stderr)
 	time.Sleep(time.Second) // Allow some time before we quit
@@ -511,7 +458,6 @@ cloud:
 		return run(c, "kubectl", "config", "use-context", "telepresence-test-developer") == nil
 	}, 10*time.Second, time.Second)
 
-	require.NoError(err)
 	stdout, stderr := telepresenceContext(c, "connect")
 	require.Empty(stderr)
 	require.Contains(stdout, "Connected to context")
@@ -534,7 +480,7 @@ func (cs *connectedSuite) TearDownSuite() {
 	stdout, stderr := telepresence(cs.T(), "quit")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "quitting")
-	c := dlog.NewTestContext(cs.T(), false)
+	c := testContext(cs.T())
 	cs.NoError(cs.tpSuite.kubectl(c, "config", "use-context", "default"))
 	time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
 }
@@ -555,7 +501,7 @@ func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
 }
 
 func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
-	ctx := dlog.NewTestContext(cs.T(), false)
+	ctx := testContext(cs.T())
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d.%s", i, cs.ns())
 		expectedOutput := fmt.Sprintf("Request served by hello-%d", i)
@@ -591,7 +537,7 @@ func (cs *connectedSuite) TestD_Intercepted() {
 
 func (cs *connectedSuite) TestE_PodWithSubdomain() {
 	require := cs.Require()
-	c := dlog.NewTestContext(cs.T(), false)
+	c := testContext(cs.T())
 	require.NoError(cs.tpSuite.applyApp(c, "echo-w-subdomain", "echo.subsonic", 8080))
 	defer func() {
 		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic", "--context", "default"))
@@ -663,7 +609,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 	})
 
 	cs.Run("makes services reachable using unqualified name", func() {
-		ctx := dlog.NewTestContext(cs.T(), false)
+		ctx := testContext(cs.T())
 
 		// service can be resolve with unqualified name
 		cs.Eventually(func() bool {
@@ -675,7 +621,7 @@ func (cs *connectedSuite) TestI_LocalOnlyIntercept() {
 		stdout, stderr := telepresence(cs.T(), "leave", "mylocal")
 		cs.Empty(stdout)
 		cs.Empty(stderr)
-		ctx := dlog.NewTestContext(cs.T(), false)
+		ctx := testContext(cs.T())
 		cs.Eventually(func() bool {
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
@@ -709,7 +655,7 @@ func (cs *connectedSuite) TestK_DockerRun() {
 		cs.T().SkipNow()
 	}
 	require := cs.Require()
-	ctx := dlog.NewTestContext(cs.T(), false)
+	ctx := testContext(cs.T())
 
 	svc := "hello-0"
 	tag := "telepresence/hello-test"
@@ -717,12 +663,6 @@ func (cs *connectedSuite) TestK_DockerRun() {
 	_, err := output(ctx, "docker", "build", "-t", tag, testDir)
 	require.NoError(err)
 	abs, err := filepath.Abs(testDir)
-	require.NoError(err)
-
-	// We need to explicitly set the default config since telepresenceContext
-	// is being used below
-	configDir := cs.T().TempDir()
-	ctx, err = client.SetDefaultConfig(ctx, configDir)
 	require.NoError(err)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
@@ -791,7 +731,7 @@ func (cs *connectedSuite) TestL_LegacySwapDeploymentDoesIntercept() {
 }
 
 func (cs *connectedSuite) TestM_AutoInjectedAgent() {
-	ctx := dlog.NewTestContext(cs.T(), false)
+	ctx := testContext(cs.T())
 	cs.NoError(cs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
 	defer func() {
 		cs.NoError(cs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
@@ -803,7 +743,7 @@ func (cs *connectedSuite) TestM_AutoInjectedAgent() {
 			cs.Empty(stderr)
 			return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
 		},
-			10*time.Second, // waitFor
+			20*time.Second, // waitFor
 			2*time.Second,  // polling interval
 		)
 	})
@@ -833,7 +773,7 @@ func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 	require.Contains(stdout, "echo-w-sidecars: intercepted")
 
 	cs.Run("Forwarded port is reachable as localhost:PORT", func() {
-		ctx := dlog.NewTestContext(cs.T(), false)
+		ctx := testContext(cs.T())
 
 		cs.Eventually(func() bool {
 			return run(ctx, "curl", "--silent", "localhost:8081") == nil
@@ -845,7 +785,7 @@ func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 	})
 
 	cs.Run("Non-forwarded port is not reachable", func() {
-		ctx := dlog.NewTestContext(cs.T(), false)
+		ctx := testContext(cs.T())
 
 		cs.Eventually(func() bool {
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
@@ -983,7 +923,7 @@ func (is *interceptedSuite) ns() string {
 
 func (is *interceptedSuite) SetupSuite() {
 	is.intercepts = make([]string, 0, serviceCount)
-	ctx, cancel := context.WithCancel(dcontext.WithSoftness(dlog.NewTestContext(is.T(), true)))
+	ctx, cancel := context.WithCancel(dcontext.WithSoftness(testContext(is.T())))
 	is.services = dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	is.cancelServices = cancel
 
@@ -1061,7 +1001,7 @@ func (is *interceptedSuite) TearDownSuite() {
 }
 
 func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
-	ctx := dlog.NewTestContext(is.T(), false)
+	ctx := testContext(is.T())
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d", i)
 		is.Run("Test intercept "+svc, func() {
@@ -1127,7 +1067,7 @@ func (is *interceptedSuite) TestD_RestartInterceptedPod() {
 	ts := is.tpSuite
 	assert := is.Assert()
 	require := is.Require()
-	c := dlog.NewTestContext(is.T(), false)
+	c := testContext(is.T())
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: hello-0-` + is.ns() + `\s+State\s*: ([^\n]+)\n`))
 
 	// Scale down to zero pods
@@ -1173,7 +1113,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 	ts := is.tpSuite
 	assert := is.Assert()
 	require := is.Require()
-	c := dlog.NewTestContext(is.T(), false)
+	c := testContext(is.T())
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: hello-0-` + is.ns() + `\s+State\s*: ([^\n]+)\n`))
 
 	// Terminating is not a state, so you may want to wrap calls to this function in an eventually
@@ -1262,7 +1202,7 @@ type helmSuite struct {
 }
 
 func (hs *helmSuite) SetupSuite() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 
 	hs.appNamespace1 = hs.tpSuite.namespace
 	hs.managerNamespace1 = hs.tpSuite.managerTestNamespace
@@ -1303,7 +1243,7 @@ func (hs *helmSuite) SetupSuite() {
 }
 
 func (hs *helmSuite) TestA_CanConnect() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	stdout, stderr := telepresenceContext(ctx, "connect")
 	hs.Empty(stderr)
 	hs.Contains(stdout, "Connected to context")
@@ -1351,7 +1291,7 @@ func (hs *helmSuite) TestB_CanInterceptInManagedNamespace() {
 }
 
 func (hs *helmSuite) TestC_CannotInterceptInUnmanagedNamespace() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	hs.tpSuite.namespace = hs.appNamespace2
 	hs.NoError(hs.tpSuite.applyApp(ctx, "with-probes", "with-probes", 80))
 	defer func() {
@@ -1363,7 +1303,7 @@ func (hs *helmSuite) TestC_CannotInterceptInUnmanagedNamespace() {
 }
 
 func (hs *helmSuite) TestD_WebhookInjectsInManagedNamespace() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	hs.NoError(hs.tpSuite.applyApp(ctx, "echo-auto-inject", "echo-auto-inject", 80))
 	defer func() {
 		hs.NoError(hs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
@@ -1380,7 +1320,7 @@ func (hs *helmSuite) TestD_WebhookInjectsInManagedNamespace() {
 }
 
 func (hs *helmSuite) TestE_WebhookDoesntInjectInUnmanagedNamespace() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	defer func() {
 		hs.NoError(hs.tpSuite.kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject", "--context", "default"))
 		hs.tpSuite.namespace = hs.appNamespace1
@@ -1399,7 +1339,7 @@ func (hs *helmSuite) TestE_WebhookDoesntInjectInUnmanagedNamespace() {
 }
 
 func (hs *helmSuite) TestF_MultipleInstalls() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	telepresenceContext(ctx, "quit")
 	hs.tpSuite.namespace = hs.appNamespace2
 	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", hs.managerNamespace2)
@@ -1416,10 +1356,6 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 		hs.NoError(hs.helmInstall(ctx, hs.managerNamespace2, hs.appNamespace2))
 	})
 	hs.Run("Can be connected to", func() {
-		configDir := hs.T().TempDir()
-		// Needed to prevent a (harmless) message on stderr stating that there's no config to use
-		ctx, err := client.SetDefaultConfig(ctx, configDir)
-		hs.NoError(err)
 		stdout, stderr := telepresenceContext(ctx, "connect")
 		hs.Empty(stderr)
 		hs.Contains(stdout, "Connected to context")
@@ -1446,14 +1382,14 @@ func (hs *helmSuite) TestF_MultipleInstalls() {
 }
 
 func (hs *helmSuite) TestG_CollidingInstalls() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 	defer func() { hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer")) }()
 	hs.Error(hs.helmInstall(ctx, hs.managerNamespace2, hs.appNamespace1, hs.appNamespace2))
 }
 
 func (hs *helmSuite) TestZ_Uninstall() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 	telepresenceContext(ctx, "quit")
 	hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace1))
@@ -1483,7 +1419,7 @@ func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, a
 }
 
 func (hs *helmSuite) TearDownSuite() {
-	ctx := dlog.NewTestContext(hs.T(), false)
+	ctx := testContext(hs.T())
 	// Restore the rbac we blew up in the setup
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 	hs.NoError(run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml"))
@@ -1544,7 +1480,7 @@ func (ts *telepresenceSuite) kubectlOut(ctx context.Context, args ...string) (st
 }
 
 func (ts *telepresenceSuite) publishManager() error {
-	ctx := dlog.NewTestContext(ts.T(), true)
+	ctx := testContext(ts.T())
 	cmd := dexec.CommandContext(ctx, "make", "push-image")
 	if goRuntime.GOOS == "windows" {
 		cmd = dexec.CommandContext(ctx, "winmake.bat", "push-image")
@@ -1676,17 +1612,7 @@ func output(ctx context.Context, args ...string) (string, error) {
 
 // telepresence executes the CLI command
 func telepresence(t testing.TB, args ...string) (string, string) {
-	ctx := dlog.NewTestContext(t, false)
-
-	// Ensure the config.yml is using the dtest registry by default
-	configDir := t.TempDir()
-	ctx, err := client.SetDefaultConfig(ctx, configDir)
-	if err != nil {
-		t.Error(err)
-	}
-
-	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-	return telepresenceContext(ctx, args...)
+	return telepresenceContext(testContext(t), args...)
 }
 
 // telepresence executes the CLI command in-process
@@ -1709,4 +1635,56 @@ func telepresenceContext(ctx context.Context, args ...string) (string, string) {
 	_ = cmd.Run()
 
 	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
+}
+
+func testContext(t testing.TB) context.Context {
+	return testContextWithConfig(t, nil)
+}
+
+func testContextWithConfig(t testing.TB, addConfig *client.Config) context.Context {
+	c := dlog.NewTestContext(t, false)
+	env, err := client.LoadEnv(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c = client.WithEnv(c, env)
+
+	config := client.GetDefaultConfig(c)
+	config.LogLevels.UserDaemon = logrus.DebugLevel
+	config.LogLevels.RootDaemon = logrus.DebugLevel
+
+	to := &config.Timeouts
+	to.PrivateAgentInstall = 240 * time.Second
+	to.PrivateApply = 120 * time.Second
+	to.PrivateClusterConnect = 60 * time.Second
+	to.PrivateIntercept = 30 * time.Second
+	to.PrivateProxyDial = 30 * time.Second
+	to.PrivateTrafficManagerAPI = 60 * time.Second
+	to.PrivateTrafficManagerConnect = 240 * time.Second
+	to.PrivateHelm = 230 * time.Second
+
+	registry := dtest.DockerRegistry(c)
+	config.Images.Registry = registry
+	config.Images.WebhookRegistry = registry
+
+	mz, _ := resource.ParseQuantity("10Mi")
+	config.Grpc.MaxReceiveSize = &mz
+	config.Cloud.SystemaHost = "127.0.0.1"
+
+	if addConfig != nil {
+		config.Merge(addConfig)
+	}
+	configYaml, err := yaml.Marshal(&config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configYamlStr := string(configYaml)
+
+	configDir := t.TempDir()
+	c = filelocation.WithAppUserConfigDir(c, configDir)
+	c, err = client.SetConfig(c, configDir, configYamlStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
 }

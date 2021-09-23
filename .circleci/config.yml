@@ -230,7 +230,7 @@ jobs:
             # points to a broken IP
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:/c/Program Files/SSHFS-Win/bin:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
-          no_output_timeout: 27m
+          no_output_timeout: 29m
       - cleanup-kluster:
           platform: windows
       - save-logs
@@ -257,7 +257,7 @@ jobs:
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
           # just a bit, so `go test`'s timeout output isn't hidden.
-          no_output_timeout: 25m
+          no_output_timeout: 29m
       - cleanup-kluster:
           platform: macos
       - save-logs
@@ -284,7 +284,7 @@ jobs:
           # default.  `go test` gives us helpful output when that
           # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
           # just a bit, so `go test`'s timeout output isn't hidden.
-          no_output_timeout: 22m
+          no_output_timeout: 29m
       - save-logs
       - cleanup-kluster:
           platform: linux
