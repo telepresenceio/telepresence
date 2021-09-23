@@ -180,11 +180,15 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 
 	for _, pod := range pods {
 		podLabels := pod.GetLabels()
+		match := true
 		// check if selector is in labels
 		for key, val := range selector {
-			if podLabels[key] == val {
-				return pod, nil
+			if podLabels[key] != val {
+				match = false
 			}
+		}
+		if match {
+			return pod, nil
 		}
 	}
 
