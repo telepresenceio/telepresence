@@ -2,14 +2,14 @@ package userd_k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"regexp"
 	"sync"
 
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
@@ -172,21 +172,23 @@ func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object,
 }
 
 // FindPodFromDeployName returns a pod with the given name-hex-hex
-func (kc *Cluster) FindPodFromDeployName(c context.Context, namespace, name string) (*kates.Pod, error) {
+func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*kates.Pod, error) {
 	pods, err := kc.Pods(c, namespace)
 	if err != nil {
 		return nil, err
 	}
-	regex, err := regexp.Compile(`^` + name + `-[a-z0-9]+-[a-z0-9]+$`)
-	if err != nil {
-		return nil, err
-	}
+
 	for _, pod := range pods {
-		if regex.MatchString(pod.Name) {
-			return pod, nil
+		podLabels := pod.GetLabels()
+		// check if selector is in labels
+		for key, val := range selector {
+			if podLabels[key] == val {
+				return pod, nil
+			}
 		}
 	}
-	return nil, errors.NewNotFound(corev1.Resource("pod"), name+"."+namespace)
+
+	return nil, errors.New("pod not found")
 }
 
 // FindPod returns a pod with the given name in the given namespace or nil
@@ -225,7 +227,7 @@ func (kc *Cluster) FindWorkload(c context.Context, namespace, name string) (kate
 		}
 		return wl.obj, nil
 	}
-	return nil, errors.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
+	return nil, k8err.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns

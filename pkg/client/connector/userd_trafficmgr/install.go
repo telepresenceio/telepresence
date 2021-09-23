@@ -221,11 +221,18 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 			return "", "", err
 		}
 
-		// Check the pod for agent. If missing, roll pod
-		pod, err := ki.FindPodFromDeployName(c, namespace, name)
+		// Find pod from svc. On fail, assume agent not present and roll
+		pod, err := ki.FindPodFromSelector(c, namespace, svc.Spec.Selector)
 		if err != nil {
-			return "", "", err
+			dlog.Warnf(c, "Error finding pod for %s, rolling and proceeding anyway: %v", name, err)
+			err = ki.rolloutRestart(c, obj)
+			if err != nil {
+				return "", "", err
+			}
+			return string(svc.GetUID()), kind, nil
 		}
+
+		// Check pod for agent. If missing, roll pod
 		roll := true
 		for _, containter := range pod.Spec.Containers {
 			if containter.Name == install.AgentContainerName {
@@ -233,7 +240,6 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 				break
 			}
 		}
-
 		if roll {
 			err = ki.rolloutRestart(c, obj)
 			if err != nil {
