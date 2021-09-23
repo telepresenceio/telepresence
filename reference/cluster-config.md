@@ -234,9 +234,9 @@ in the service. This is necessary when the service has multiple ports.
        containers:
 ```
 
-### Note on numeric ports
+### Note on Numeric Ports
 
-If the <code>targetPort</code> of your intercepted Service is pointing at a port number, in addition to
+If the <code>targetPort</code> of your intercepted service is pointing at a port number, in addition to
 injecting the Traffic Agent sidecar, Telepresence will also inject an <code>initContainer</code> that will
 reconfigure the pod's firewall rules to redirect traffic to the Traffic Agent.
 
@@ -245,7 +245,7 @@ Note that this <code>initContainer</code> requires `NET_ADMIN` capabilities.
 If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
 </Alert>
 
-For example, the following service is using a numeric port, and so Telepresence would inject an initContainer into it:
+For example, the following service is using a numeric port, so Telepresence would inject an initContainer into it:
 ```yaml
 apiVersion: v1
 kind: Service

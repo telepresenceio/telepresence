@@ -67,14 +67,14 @@ items:
         title: Compute pod CIDRs more efficiently
         body: >-
           When computing subnets using the pod CIDRs, the traffic-manager
-          now uses less CPU-cycles.
+          now uses less CPU cycles.
         docs: reference/routing/#subnets
 
       - type: bugfix
         title: Prevent busy loop in traffic-manager
         body: >-
           In some circumstances, the <code>traffic-manager</code>'s CPU
-          would max out and get pinned at its limit. This then required a
+          would max out and get pinned at its limit. This required a
           shutdown or pod restart to fix. We've added some fixes
           to prevent the traffic-manager from getting into this state.
 

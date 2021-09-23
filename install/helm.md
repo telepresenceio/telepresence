@@ -4,7 +4,7 @@
 
 **Note** that installing the Traffic Manager through Helm will prevent `telepresence connect` from ever upgrading it. If you wish to upgrade a Traffic Manager that was installed via the Helm chart, please see the steps [below](#upgrading-the-traffic-manager)
 
-For more details on what the Helm chart installs and what can be configured, take a look at the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence).
+For more details on what the Helm chart installs and what can be configured, see the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence).
 
 ## Before you begin
 
