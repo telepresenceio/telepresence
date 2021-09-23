@@ -593,9 +593,8 @@ func (s *State) RemoveInterceptAPIKey(interceptID string) bool {
 	return true
 }
 
-func (s *State) GetIntercept(interceptID string) *rpc.InterceptInfo {
-	intercept, _ := s.intercepts.Load(interceptID)
-	return intercept
+func (s *State) GetIntercept(interceptID string) (*rpc.InterceptInfo, bool) {
+	return s.intercepts.Load(interceptID)
 }
 
 func (s *State) WatchIntercepts(

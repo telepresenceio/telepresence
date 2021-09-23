@@ -26,6 +26,14 @@ type MgrProxy struct {
 	managerrpc.UnsafeManagerServer
 }
 
+func (p *MgrProxy) GetIntercept(ctx context.Context, arg *managerrpc.GetInterceptRequest) (*managerrpc.InterceptInfo, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetIntercept(ctx, arg, callOptions...)
+}
+
 func (p *MgrProxy) SetClient(client managerrpc.ManagerClient, callOptions ...grpc.CallOption) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
