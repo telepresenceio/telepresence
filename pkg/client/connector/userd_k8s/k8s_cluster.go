@@ -284,7 +284,7 @@ func (kc *Cluster) WaitUntilReady(ctx context.Context) error {
 	case <-kc.accWait:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("retrieval of initial cluster information was cancelled: %w", ctx.Err())
 	}
 }
 

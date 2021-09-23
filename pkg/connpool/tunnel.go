@@ -89,7 +89,7 @@ func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
 		}
 		return msg, nil
 	}
-	return nil, err
+	return nil, fmt.Errorf("tunnel receive canelled: %w", err)
 }
 
 func (s *tunnel) Send(ctx context.Context, m Message) error {

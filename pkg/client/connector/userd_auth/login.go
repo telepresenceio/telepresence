@@ -355,7 +355,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("login cancelled: %w", ctx.Err())
 	}
 }
 
