@@ -65,7 +65,7 @@ func (c *systemaCredentials) RequireTransportSecurity() bool {
 }
 
 func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
-	intercept := m.state.GetIntercept(interceptID)
+	intercept, _ := m.state.GetIntercept(interceptID)
 	if intercept == nil || intercept.PreviewSpec.Ingress == nil {
 		return nil, fmt.Errorf("missing ingress information for intercept %s", interceptID)
 	}

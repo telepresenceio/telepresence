@@ -1093,6 +1093,61 @@ func (x *RemoveInterceptRequest2) GetName() string {
 	return ""
 }
 
+type GetInterceptRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Session *SessionInfo `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Name    string       `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (x *GetInterceptRequest) Reset() {
+	*x = GetInterceptRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_manager_manager_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetInterceptRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetInterceptRequest) ProtoMessage() {}
+
+func (x *GetInterceptRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_manager_manager_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetInterceptRequest.ProtoReflect.Descriptor instead.
+func (*GetInterceptRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetInterceptRequest) GetSession() *SessionInfo {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *GetInterceptRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 type ReviewInterceptRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1113,7 +1168,7 @@ type ReviewInterceptRequest struct {
 func (x *ReviewInterceptRequest) Reset() {
 	*x = ReviewInterceptRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_manager_manager_proto_msgTypes[12]
+		mi := &file_rpc_manager_manager_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1126,7 +1181,7 @@ func (x *ReviewInterceptRequest) String() string {
 func (*ReviewInterceptRequest) ProtoMessage() {}
 
 func (x *ReviewInterceptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_manager_manager_proto_msgTypes[12]
+	mi := &file_rpc_manager_manager_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1139,7 +1194,7 @@ func (x *ReviewInterceptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewInterceptRequest.ProtoReflect.Descriptor instead.
 func (*ReviewInterceptRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{12}
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReviewInterceptRequest) GetSession() *SessionInfo {
@@ -1203,7 +1258,7 @@ type RemainRequest struct {
 func (x *RemainRequest) Reset() {
 	*x = RemainRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_manager_manager_proto_msgTypes[13]
+		mi := &file_rpc_manager_manager_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1216,7 +1271,7 @@ func (x *RemainRequest) String() string {
 func (*RemainRequest) ProtoMessage() {}
 
 func (x *RemainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_manager_manager_proto_msgTypes[13]
+	mi := &file_rpc_manager_manager_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1229,7 +1284,7 @@ func (x *RemainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemainRequest.ProtoReflect.Descriptor instead.
 func (*RemainRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{13}
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RemainRequest) GetSession() *SessionInfo {
@@ -1260,7 +1315,7 @@ type LogLevelRequest struct {
 func (x *LogLevelRequest) Reset() {
 	*x = LogLevelRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_manager_manager_proto_msgTypes[14]
+		mi := &file_rpc_manager_manager_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1273,7 +1328,7 @@ func (x *LogLevelRequest) String() string {
 func (*LogLevelRequest) ProtoMessage() {}
 
 func (x *LogLevelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_manager_manager_proto_msgTypes[14]
+	mi := &file_rpc_manager_manager_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1286,7 +1341,7 @@ func (x *LogLevelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLevelRequest.ProtoReflect.Descriptor instead.
 func (*LogLevelRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{14}
+	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LogLevelRequest) GetLogLevel() string {
@@ -2776,7 +2831,7 @@ func file_rpc_manager_manager_proto_init() {
 			}
 		}
 		file_rpc_manager_manager_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ReviewInterceptRequest); i {
+			switch v := v.(*GetInterceptRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2788,7 +2843,7 @@ func file_rpc_manager_manager_proto_init() {
 			}
 		}
 		file_rpc_manager_manager_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RemainRequest); i {
+			switch v := v.(*ReviewInterceptRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2800,7 +2855,7 @@ func file_rpc_manager_manager_proto_init() {
 			}
 		}
 		file_rpc_manager_manager_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*LogLevelRequest); i {
+			switch v := v.(*RemainRequest); i {
 			case 0:
 				return &v.state
 			case 1:

@@ -524,7 +524,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
-		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo)
+		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, is.args.name, is.args.namespace)
 		if err != nil {
 			return false, err
 		}
@@ -830,7 +830,7 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *connector.ConnectInfo) (*manager.IngressInfo, error) {
+func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *connector.ConnectInfo, interceptName string, interceptNamespace string) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return nil, err
@@ -844,8 +844,12 @@ func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *c
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {
 			selectOrConfirm = "Select" // Hard to confirm unless there's a default.
+			if interceptNamespace == "" {
+				interceptNamespace = "default"
+			}
 			cachedIngressInfo = &manager.IngressInfo{
 				// Default Settings
+				Host:   fmt.Sprintf("%s.%s", interceptName, interceptNamespace),
 				Port:   80,
 				UseTls: false,
 			}

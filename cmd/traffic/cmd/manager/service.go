@@ -291,10 +291,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return m.state.AddIntercept(sessionID, apiKey, spec)
 }
 
-func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
-	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
-	sessionID := req.GetSession().GetSessionId()
-	var interceptID string
+func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name string) (string, error) {
 	// When something without a session ID (e.g. System A) calls this function,
 	// it is sending the intercept ID as the name, so we use that.
 	//
@@ -303,12 +300,20 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 	// Or at least functions outside services (e.g. SystemA), which don't know about sessions,
 	// use in requests.
 	if sessionID == "" {
-		interceptID = req.Name
+		return name, nil
 	} else {
 		if m.state.GetClient(sessionID) == nil {
-			return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+			return "", status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 		}
-		interceptID = sessionID + ":" + req.Name
+		return sessionID + ":" + name, nil
+	}
+}
+
+func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
+	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
+	interceptID, err := m.makeinterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
+	if err != nil {
+		return nil, err
 	}
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
@@ -426,6 +431,19 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	}
 
 	return &empty.Empty{}, nil
+}
+
+// GetIntercept gets an intercept info from intercept name
+func (m *Manager) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
+	interceptID, err := m.makeinterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if intercept, ok := m.state.GetIntercept(interceptID); ok {
+		return intercept, nil
+	} else {
+		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", request.Name)
+	}
 }
 
 // ReviewIntercept lets an agent approve or reject an intercept.
