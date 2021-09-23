@@ -47,7 +47,7 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 
 The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
 
-1. Go to the <ExternalIp/> and vote for some emojis.
+1. Go to the <ExternalIp>Emojivoto webapp</ExternalIp> and vote for some emojis.
    <Alert severity="info">
    If the link to the remote demo cluster doesn't work, make sure you don't have an <strong>ad blocker</strong> preventing it from opening.
    </Alert>
@@ -137,7 +137,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
       Volume Mount Point     : /tmp/telfs-XXXXXXXXX
       Intercepting           : all TCP connections
   ```
-  Now you can go back to <a href="#">emoji-web-app</a> and you'll see that voting for 🍩 woks as expected.
+  Now you can go back to <ExternalIp>Emojivoto webapp</ExternalIp> and you'll see that voting for 🍩 woks as expected.
 
 2. We just created an intercept, this tell Telepresence where to send traffic. In this example we sent all the traffic destined to `voting-svc` to the local Dockerized version of the service. In this way we intercept *all the traffic* to our local `voting-svc` service and since we already fixed it, now it works.
 
