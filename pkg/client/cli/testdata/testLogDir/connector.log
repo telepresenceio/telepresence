@@ -1,0 +1,16 @@
+2021-09-16 13:06:43.4849 info    Logging at this level "info"
+2021-09-16 13:06:43.5211 info    ---
+2021-09-16 13:06:43.5211 info    Telepresence Connector v2.4.3-98-g0585bbd1-1631811285 (api v3) starting...
+2021-09-16 13:06:43.5211 info    PID is 42749
+2021-09-16 13:06:43.5212 info    
+2021-09-16 13:06:43.5213 info    connector/server-grpc : gRPC server started
+2021-09-16 13:06:43.6978 info    connector/background-init : Connecting to daemon...
+2021-09-16 13:06:43.6992 info    connector/background-init : Connecting to k8s cluster...
+2021-09-16 13:06:43.9374 info    connector/background-init : Server version v1.17.17+k3s1
+2021-09-16 13:06:43.9375 info    connector/background-init : Context: default
+2021-09-16 13:06:43.9375 info    connector/background-init : Server: https://35.224.222.254
+2021-09-16 13:06:43.9375 info    connector/background-init : Connected to context default (https://35.224.222.254)
+2021-09-16 13:06:44.0110 info    connector/background-init : Connecting to traffic manager...
+2021-09-16 13:06:44.0112 info    connector/background-init : Waiting for TrafficManager to connect
+2021/09/16 13:06:44 Patching synced Namespace 55b19f40-65d2-4a0a-b61e-3009a28881d4
+2021-09-16 13:06:46.4289 info    connector/background-manager : No existing Traffic Manager found, installing v2.4.3-98-g0585bbd1-1631811285...

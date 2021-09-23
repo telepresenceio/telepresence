@@ -1,0 +1,5 @@
+time="2021-09-16 17:07:04.8111" level=info msg="Logging at this level \"info\""
+time="2021-09-16 17:07:04.8112" level=info msg="Traffic Agent v2.4.2 [pid:1]"
+time="2021-09-16 17:07:04.8112" level=info msg="{Name:echo-auto-inject Namespace:default PodIP:10.42.0.25 AgentPort:9900 AppMounts:/tel_app_mounts AppPort:8080 ManagerHost:traffic-manager.ambassador ManagerPort:8081}"
+time="2021-09-16 17:07:04.8257" level=info msg="new agent secrets mount path: /var/run/secrets/kubernetes.io"
+time="2021-09-16 17:07:04.8298" level=info msg="Connected to Manager v2.4.3-98-g0585bbd1-1631811285" THREAD=/client
