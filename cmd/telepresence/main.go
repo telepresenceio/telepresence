@@ -65,6 +65,12 @@ func main() {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			if errcat.GetCategory(err) > errcat.NoLogs {
 				summarizeLogs(ctx, cmd)
+				// If the user gets here, it might be an actual bug that they found, so
+				// point them to the `gather-logs` command in case they want to open an
+				// issue.
+				fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
+					", please run `telepresence gather-logs` and attach the "+
+					"telepresence_logs.zip to your github issue.")
 			}
 			os.Exit(1)
 		}

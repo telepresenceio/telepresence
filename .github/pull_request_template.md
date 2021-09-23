@@ -13,3 +13,4 @@ A few sentences describing the overall goals of the pull request's commits.
  - [ ] I made sure to either submit a docs PR, or tell Matt about the necessary documentation changes.
  - [ ] My change is adequately tested.
  - [ ] I updated `DEVELOPING.md` with any any special dev tricks I had to use to work on this code efficiently.
+ - [ ] I updated `TELEMETRY.md` if I added, changed, or removed a metric name.

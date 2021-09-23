@@ -348,10 +348,14 @@ func (tm *MAPTYPE) coalesce(
 	}
 
 	for {
+		done := ctx.Done()
+		if ctx.Err() != nil {
+			shutdown()
+			done = context.Background().Done()
+		}
 		if snapshot.State == nil {
 			select {
-			case <-ctx.Done():
-				shutdown()
+			case <-done:
 			case <-tm.close:
 				shutdown()
 			case update, readOK := <-upstream:
@@ -363,8 +367,7 @@ func (tm *MAPTYPE) coalesce(
 		} else {
 			// Same as above, but with an additional "downstream <- snapshot" case.
 			select {
-			case <-ctx.Done():
-				shutdown()
+			case <-done:
 			case <-tm.close:
 				shutdown()
 			case update, readOK := <-upstream:

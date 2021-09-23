@@ -267,6 +267,14 @@ func (p *MgrProxy) SetLogLevel(ctx context.Context, request *managerrpc.LogLevel
 	return client.SetLogLevel(ctx, request, callOptions...)
 }
 
+func (p *MgrProxy) GetLogs(ctx context.Context, request *managerrpc.GetLogsRequest) (*managerrpc.LogsResponse, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetLogs(ctx, request, callOptions...)
+}
+
 func (p *MgrProxy) WatchLogLevel(e *empty.Empty, server managerrpc.Manager_WatchLogLevelServer) error {
 	return errors.New("must call manager.WatchLogLevel from an agent (intercepted Pod), not from a client (workstation)")
 }
