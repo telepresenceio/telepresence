@@ -13,6 +13,7 @@ PreviewUrl,
 ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
+import Platform from '@src/components/Platform';
 import QSCards from './qs-cards';
 import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
@@ -73,7 +74,24 @@ We'll set up a development environment locally on your workstation. We'll then u
 
 1. Run the Docker container locally:
 
-    <DockerCommand/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+<DockerCommand osType="macos"/>
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+<DockerCommand osType="linux"/>
+
+</Platform.GNULinuxTab>
+<Platform.WindowsTab>
+
+<DockerCommand osType="windows"/>
+
+</Platform.WindowsTab>
+</Platform.TabGroup>
+
 
     <Alert severity="info">
     Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
