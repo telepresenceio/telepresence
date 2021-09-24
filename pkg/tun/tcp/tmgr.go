@@ -66,11 +66,14 @@ func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 	}
 }
 
-// the time to wait until we flush in spite of not getting a PSH
-const flushDelay = 10 * time.Millisecond
-
 // writeToMgrLoop sends the packages read from the toMgr channel to the traffic-manager device
 func (h *handler) writeToMgrLoop(ctx context.Context) {
+	// the time to wait until we flush in spite of not getting a PSH
+	const flushDelay = 2 * time.Millisecond
+
+	// Threshold when we flush in spite of not getting a PSH
+	const maxBufSize = 0x10000
+
 	mgrWrite := func(payload []byte) bool {
 		dlog.Debugf(ctx, "-> MGR %s, len %d", h.id, len(payload))
 		if err := h.Send(ctx, connpool.NewMessage(h.id, payload)); err != nil {
@@ -83,40 +86,44 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 	}
 
 	flushTimer := time.NewTimer(flushDelay)
+	flushTimer.Stop() // Not used until we write to buf
+
 	buf := bytes.Buffer{}
+
+	sendBuf := func() {
+		if mgrWrite(buf.Bytes()) {
+			return
+		}
+		buf.Reset()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-flushTimer.C:
 			if buf.Len() > 0 {
-				if mgrWrite(buf.Bytes()) {
-					return
-				}
-				buf.Reset()
+				sendBuf()
 			}
 		case pkt := <-h.toMgr:
-			drained := flushTimer.Stop()
 			h.adjustReceiveWindow()
 			tcpHdr := pkt.Header()
 			payload := tcpHdr.Payload()
-			if tcpHdr.PSH() {
+			if tcpHdr.PSH() || buf.Len()+len(payload) > maxBufSize {
 				if buf.Len() == 0 {
 					if mgrWrite(payload) { // save extra copying by bypassing buf.
 						return
 					}
 				} else {
+					flushTimer.Stop() // It doesn't matter if the flushTime.C isn't empty. It will fire on a zero buffer
 					buf.Write(payload)
-					if mgrWrite(buf.Bytes()) {
-						return
-					}
-					buf.Reset()
+					sendBuf()
 				}
 			} else {
-				buf.Write(payload)
-				if drained {
+				if buf.Len() == 0 {
 					flushTimer.Reset(flushDelay)
 				}
+				buf.Write(payload)
 			}
 			pkt.Release()
 		}
