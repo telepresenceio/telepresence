@@ -17,13 +17,6 @@ import QSCards from './qs-cards';
 import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
 
-<div class="docs-language-toc">
-
-* <a href="../qs-go/" title="Go" class="active">Go</a>
-* <a href="../demo-node/" title="Node">Node</a>
-
-</div>
-
 # Telepresence Quick Start - **Go**
 
 In this guide, we'll give you a hands-on tutorial with Telepresence and Golang. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.

@@ -37,7 +37,7 @@ const TelepresenceQuickStartLanding = () => (
           <h2 className="title underlined">
             Use <strong>Our</strong> Free Demo Cluster
           </h2>
-          <p>See how Telepresence works without having to mess with your production environments</p>
+          <p>See how Telepresence works without having to mess with your production environments.</p>
         </div>
         <Box color="blue" withConnector>
           <p className="reading-time">
@@ -65,7 +65,7 @@ const TelepresenceQuickStartLanding = () => (
           <h2 className="title underlined">
             Use <strong>Your</strong> Cluster
           </h2>
-          <p>Understand how Telepresence fits in to your Kubernetes development workflow</p>
+          <p>Understand how Telepresence fits in to your Kubernetes development workflow.</p>
         </div>
         <Box color="green" withConnector>
           <p className="reading-time">
@@ -83,11 +83,11 @@ const TelepresenceQuickStartLanding = () => (
     </div>
 
     <div className="telepresence-video">
-      <h2>
+      <h2 className="telepresence-video-title">
         Watch the Demo
       </h2>
-      <div className="video-wrapper">
-        <div className="description">
+      <div className="video-section">
+        <div>
           <p>
             See Telepresence in action in our <strong>3-minute</strong> demo video that you can share with your teammates.
           </p>
@@ -99,7 +99,7 @@ const TelepresenceQuickStartLanding = () => (
           </ul>
         </div>
         <div className="video-container">
-          <iframe className="video" title="Telepresence Demo" src="https://www.youtube.com/embed/W_a3aErN3NU" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+          <iframe title="Telepresence Demo" src="https://www.youtube.com/embed/W_a3aErN3NU" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
         </div>
       </div>
     </div>
