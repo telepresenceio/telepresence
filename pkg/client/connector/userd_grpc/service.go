@@ -77,39 +77,54 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 
 func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Connect")
+	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.callbacks.Connect(c, cr, false), nil
+	ci, err = s.callbacks.Connect(c, cr, false), nil
+	dlog.Debug(c, "returned")
+	return
 }
 
 func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Status")
+	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.callbacks.Connect(c, cr, true), nil
+	ci, err = s.callbacks.Connect(c, cr, true), nil
+	dlog.Debug(c, "returned")
+	return
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	c = s.callCtx(c, "CreateIntercept")
+	dlog.Debug(c, "called")
 	result = s.callbacks.InterceptStatus()
 	if result != nil {
+		dlog.Debug(c, "returned")
 		return result, nil
 	}
-	c = s.callCtx(c, "CreateIntercept")
+	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
 	mgr, err := s.sharedState.GetTrafficManagerBlocking(c)
 	if mgr == nil {
+		dlog.Debug(c, "returned")
 		return nil, err
 	}
-	return mgr.AddIntercept(c, ir)
+	result, err = mgr.AddIntercept(c, ir)
+	dlog.Debug(c, "returned")
+	return
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
+	c = s.callCtx(c, "RemoveIntercept")
+	dlog.Debug(c, "called")
 	result = s.callbacks.InterceptStatus()
 	if result != nil {
+		dlog.Debug(c, "returned")
 		return result, nil
 	}
-	c = s.callCtx(c, "RemoveIntercept")
 	defer func() { err = callRecovery(c, recover(), err) }()
 	mgr, err := s.sharedState.GetTrafficManagerBlocking(c)
 	if mgr == nil {
+		dlog.Debug(c, "returned")
 		return nil, err
 	}
 	result = &rpc.InterceptResult{}
@@ -124,47 +139,58 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 			result.ErrorCategory = int32(errcat.Unknown)
 		}
 	}
+	dlog.Debug(c, "returned")
 	return result, nil
 }
 
-func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
+func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
+	c = s.callCtx(c, "List")
+	dlog.Debug(c, "called")
 	haveManager := false
-	manager, _ := s.sharedState.GetTrafficManagerBlocking(ctx)
+	manager, _ := s.sharedState.GetTrafficManagerBlocking(c)
 	if manager != nil {
 		managerClient, _ := manager.GetClientNonBlocking()
 		haveManager = (managerClient != nil)
 	}
 	if !haveManager {
+		dlog.Debug(c, "returned")
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 
-	return manager.WorkloadInfoSnapshot(ctx, lr), nil
+	result, err = manager.WorkloadInfoSnapshot(c, lr), nil
+	dlog.Debug(c, "returned")
+	return
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	c = s.callCtx(c, "Uninstall")
+	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
 	mgr, err := s.sharedState.GetTrafficManagerBlocking(c)
 	if mgr == nil {
+		dlog.Debug(c, "returned")
 		return nil, err
 	}
-	return mgr.Uninstall(c, ur)
+	result, err = mgr.Uninstall(c, ur)
+	dlog.Debug(c, "returned")
+	return
 }
 
 func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
 	ctx := s.callCtx(stream.Context(), "UserNotifications")
-
+	dlog.Debug(ctx, "called")
 	for msg := range s.sharedState.UserNotifications.Subscribe(ctx) {
 		if err := stream.Send(&rpc.Notification{Message: msg}); err != nil {
 			return err
 		}
 	}
-
+	dlog.Debug(ctx, "returned")
 	return nil
 }
 
 func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginResult, error) {
 	ctx = s.callCtx(ctx, "Login")
+	dlog.Debug(ctx, "called")
 	if apikey := req.GetApiKey(); apikey != "" {
 		newLogin, err := s.sharedState.LoginExecutor.LoginAPIKey(ctx, apikey)
 		dlog.Infof(ctx, "LoginAPIKey => (%v, %v)", newLogin, err)
@@ -172,54 +198,68 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginR
 			if errors.Is(err, os.ErrPermission) {
 				err = grpcStatus.Error(grpcCodes.PermissionDenied, err.Error())
 			}
+			dlog.Debug(ctx, "returned")
 			return nil, err
 		}
 		if !newLogin {
+			dlog.Debug(ctx, "returned")
 			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
 		}
 	} else {
 		if _, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, false); err == nil {
+			dlog.Debug(ctx, "returned")
 			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
 		}
 		if err := s.sharedState.LoginExecutor.Login(ctx); err != nil {
+			dlog.Debug(ctx, "returned")
 			return nil, err
 		}
 	}
+	dlog.Debug(ctx, "returned")
 	return &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}, nil
 }
 
 func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Logout")
+	dlog.Debug(ctx, "called")
 	if err := s.sharedState.LoginExecutor.Logout(ctx); err != nil {
 		if errors.Is(err, userd_auth.ErrNotLoggedIn) {
 			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
 		}
+		dlog.Debug(ctx, "returned")
 		return nil, err
 	}
+	dlog.Debug(ctx, "returned")
 	return &empty.Empty{}, nil
 }
 
 func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (*rpc.UserInfo, error) {
 	ctx = s.callCtx(ctx, "GetCloudUserInfo")
+	dlog.Debug(ctx, "called")
 	info, err := s.sharedState.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
 	if err != nil {
+		dlog.Debug(ctx, "returned")
 		return nil, err
 	}
+	dlog.Debug(ctx, "returned")
 	return info, nil
 }
 
 func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
 	ctx = s.callCtx(ctx, "GetCloudAPIKey")
+	dlog.Debug(ctx, "called")
 	key, err := s.sharedState.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
 	if err != nil {
+		dlog.Debug(ctx, "returned")
 		return nil, err
 	}
+	dlog.Debug(ctx, "returned")
 	return &rpc.KeyData{ApiKey: key}, nil
 }
 
 func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
 	ctx = s.callCtx(ctx, "GetCloudLicense")
-
+	dlog.Debug(ctx, "called")
 	license, hostDomain, err := s.sharedState.LoginExecutor.GetLicense(ctx, req.GetId())
 	// login is required to get the license from system a so
 	// we try to login before retrying the request
@@ -229,20 +269,28 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 		}
 	}
 	if err != nil {
+		dlog.Debug(ctx, "returned")
 		return nil, err
 	}
+	dlog.Debug(ctx, "returned")
 	return &rpc.LicenseData{License: license, HostDomain: hostDomain}, nil
 }
 
 func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+	ctx = s.callCtx(ctx, "SetLogLevel")
+	dlog.Debug(ctx, "called")
 	duration := time.Duration(0)
 	if request.Duration != nil {
 		duration = request.Duration.AsDuration()
 	}
+	dlog.Debug(ctx, "returned")
 	return &empty.Empty{}, s.sharedState.SetLogLevel(ctx, request.LogLevel, duration)
 }
 
-func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	ctx = s.callCtx(ctx, "Quit")
+	dlog.Debug(ctx, "called")
 	s.callbacks.Cancel()
+	dlog.Debug(ctx, "returned")
 	return &empty.Empty{}, nil
 }
