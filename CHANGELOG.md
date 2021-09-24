@@ -20,6 +20,8 @@
 - Bugfix: The TUN-device no longer builds an unlimited internal buffer before sending it when receiving lots of TCP-packets without PSH.
   Instead, the buffer is flushed when it reaches a size of 64K.
 
+- Bugfix: The user daemon would sometimes hang when it encountered a problem connecting to the cluster or the root daemon.
+
 ### 2.4.3 (September 15, 2021)
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.
