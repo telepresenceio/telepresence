@@ -152,6 +152,13 @@ func (ts *telepresenceSuite) SetupSuite() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		err = ts.applyApp(ctx, "echo-headless", "echo-headless", 8080)
+		ts.NoError(err)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		err = ts.applyApp(ctx, "echo-w-sidecars", "echo-w-sidecars", 80)
 		ts.NoError(err)
 	}()
@@ -868,6 +875,69 @@ func (cs *connectedSuite) TestO_LargeRequest() {
 	cs.Equal(len(buf), i)
 	// Do this instead of cs.Equal(b[2:], buf) so that on failure we don't print two 5MB buffers to the terminal
 	cs.Equal(0, bytes.Compare(b[2:], buf))
+}
+
+func (cs *connectedSuite) TestP_SuccessfullyInterceptsHeadlessService() {
+	defer telepresence(cs.T(), "leave", "echo-headless-"+cs.ns())
+
+	ctx, cancel := context.WithCancel(dcontext.WithSoftness(dlog.NewTestContext(cs.T(), true)))
+	defer cancel()
+	services := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	const svc = "echo-headless"
+	services.Go("intercept", func(ctx context.Context) error {
+		sc := &dhttp.ServerConfig{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
+			}),
+		}
+		return sc.ListenAndServe(ctx, ":9092")
+	})
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", svc, "--port", "9092")
+	require.Empty(stderr)
+	require.Contains(stdout, "Using StatefulSet echo-headless")
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+	require.Empty(stderr)
+	require.Contains(stdout, "echo-headless: intercepted")
+	require.NotContains(stdout, "Volume Mount Point")
+
+	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+	cs.Require().Eventually(
+		// condition
+		func() bool {
+			ip, err := net.DefaultResolver.LookupHost(ctx, svc)
+			if err != nil {
+				dlog.Infof(ctx, "%v", err)
+				return false
+			}
+			if 1 != len(ip) {
+				dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
+				return false
+			}
+
+			url := fmt.Sprintf("http://%s:8080", svc)
+
+			dlog.Infof(ctx, "trying %q...", url)
+			hc := http.Client{Timeout: 2 * time.Second}
+			resp, err := hc.Get(url)
+			if err != nil {
+				dlog.Infof(ctx, "%v", err)
+				return false
+			}
+			defer resp.Body.Close()
+			dlog.Infof(ctx, "status code: %v", resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				dlog.Infof(ctx, "%v", err)
+				return false
+			}
+			dlog.Infof(ctx, "body: %q", body)
+			return string(body) == expectedOutput
+		},
+		time.Minute,   // waitFor
+		3*time.Second, // polling interval
+		`body of %q equals %q`, "http://"+svc, expectedOutput,
+	)
 }
 
 func (cs *connectedSuite) TestZ_Uninstall() {
