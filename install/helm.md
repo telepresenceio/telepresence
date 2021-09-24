@@ -57,7 +57,7 @@ clusters:
   name: example-cluster
 ```
 
-See [the kubeconfig documentation](../reference/config#manager) for more information.
+See [the kubeconfig documentation](../../reference/config#manager) for more information.
 
 ### Upgrading the Traffic Manager.
 
@@ -156,7 +156,7 @@ clientRbac:
 
 #### Namespace-scoped webhook
 
-If you wish to use the traffic-manager's [mutating webhook](../reference/cluster-config#mutating-webhook) with a namespace-scoped traffic manager, you will have to ensure that each namespace has an `app.kubernetes.io/name` label that is identical to its name:
+If you wish to use the traffic-manager's [mutating webhook](../../reference/cluster-config#mutating-webhook) with a namespace-scoped traffic manager, you will have to ensure that each namespace has an `app.kubernetes.io/name` label that is identical to its name:
 
 ```yaml
 apiVersion: v1
