@@ -72,7 +72,7 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan s
 		domains:       make(map[string]struct{}),
 		dnsInProgress: make(map[string]*awaitLookupResult),
 		search:        []string{""},
-		searchPathCh:  make(chan []string),
+		searchPathCh:  make(chan []string, 5),
 		scout:         scout,
 	}
 
@@ -246,12 +246,15 @@ func (o *outbound) getInfo() *rpc.OutboundInfo {
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
-func (o *outbound) setSearchPath(_ context.Context, paths, namespaces []string) {
+func (o *outbound) setSearchPath(ctx context.Context, paths, namespaces []string) {
 	// Provide direct access to intercepted namespaces
 	for _, ns := range namespaces {
 		paths = append(paths, ns+".svc."+o.router.clusterDomain)
 	}
-	o.searchPathCh <- paths
+	select {
+	case <-ctx.Done():
+	case o.searchPathCh <- paths:
+	}
 }
 
 func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string) error) {
@@ -274,6 +277,10 @@ func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Co
 			case <-c.Done():
 				return nil
 			case paths := <-o.searchPathCh:
+				if len(o.searchPathCh) > 0 {
+					// Only interested in the last one
+					continue
+				}
 				if !unchanged(paths) {
 					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
 					prevPaths = make([]string, len(paths))

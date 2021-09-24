@@ -9,6 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -75,4 +77,30 @@ images:
 	assert.Equal(t, "testregistry.io", cfg.Images.Registry)                                      // from user
 	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.AgentImage)         // from user
 	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.WebhookAgentImage) // from user
+}
+
+func Test_ConfigMarshalYAML(t *testing.T) {
+	ctx := dlog.NewTestContext(t, true)
+	env, err := LoadEnv(ctx)
+	require.NoError(t, err)
+	ctx = WithEnv(ctx, env)
+	cfg := GetDefaultConfig(ctx)
+	cfg.Images.AgentImage = "something:else"
+	cfg.Timeouts.PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
+	cfg.Cloud.RefreshMessages += 10 * time.Minute
+	cfg.LogLevels.UserDaemon = logrus.TraceLevel
+	mrSize, _ := resource.ParseQuantity("20Mi")
+	cfg.Grpc.MaxReceiveSize = &mrSize
+	cfgBytes, err := yaml.Marshal(cfg)
+	require.NoError(t, err)
+
+	// Store YAML in file
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, configFile), cfgBytes, 0600))
+	ctx = filelocation.WithAppUserConfigDir(ctx, tmp)
+
+	// Load from file and compare
+	cfg2, err := LoadConfig(ctx)
+	require.NoError(t, err)
+	require.Equal(t, &cfg, cfg2)
 }
