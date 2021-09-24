@@ -397,7 +397,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 			require.NoError(ts.kubectl(ctx, "delete", "svc,deploy", jobname))
 		}()
 
-		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
+		require.NoError(ts.rolloutStatusWait(ctx, deployname, ts.namespace))
 		stdout, stderr := telepresence(ts.T(), "list", "--namespace", ts.namespace, "--agents")
 		require.Empty(stderr)
 		require.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
@@ -408,12 +408,15 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		require.Contains(stdout, "Root Daemon quitting... done")
 
 		// Double check webhook agent is uninstalled
-		require.NoError(ts.kubectl(ctx, "rollout", "status", "-w", deployname, "-n", ts.namespace))
-		stdout, err = ts.kubectlOut(ctx, "get", "pods", "-n", ts.namespace)
-		require.NoError(err)
-		match, err := regexp.MatchString(jobname+`-[a-z0-9]+-[a-z0-9]+\s+1/1\s+Running`, stdout)
-		require.NoError(err)
-		require.True(match)
+		require.NoError(ts.rolloutStatusWait(ctx, deployname, ts.namespace))
+		ts.Eventually(func() bool {
+			stdout, err = ts.kubectlOut(ctx, "get", "pods", "-n", ts.namespace)
+			if err != nil {
+				return false
+			}
+			match, err := regexp.MatchString(jobname+`-[a-z0-9]+-[a-z0-9]+\s+1/1\s+Running`, stdout)
+			return err == nil && match
+		}, 10*time.Second, 2*time.Second)
 
 		require.Eventually(
 			func() bool {
@@ -961,7 +964,7 @@ func (is *interceptedSuite) SetupSuite() {
 }
 				`)
 	is.NoError(err)
-	is.NoError(run(ctx, "kubectl", "rollout", "status", "-w", "deploy/hello-3", "-n", is.tpSuite.namespace))
+	is.NoError(is.tpSuite.rolloutStatusWait(ctx, "deploy/hello-3", is.tpSuite.namespace))
 
 	is.Run("all intercepts ready", func() {
 		rxs := make([]*regexp.Regexp, serviceCount)
@@ -1037,7 +1040,7 @@ func (is *interceptedSuite) TearDownSuite() {
 	"path": "/spec/template/metadata/annotations"
 }]`)
 	is.NoError(err)
-	is.NoError(run(ctx, "kubectl", "rollout", "status", "-w", "deploy/hello-3", "-n", is.tpSuite.namespace))
+	is.NoError(is.tpSuite.rolloutStatusWait(ctx, "deploy/hello-3", is.tpSuite.namespace))
 
 	is.cancelServices()
 	is.NoError(is.services.Wait())
@@ -1594,6 +1597,14 @@ func (ts *telepresenceSuite) waitForService(c context.Context, name string, port
 		}
 	}
 	return fmt.Errorf("timed out waiting for %s service", name)
+}
+
+func (ts *telepresenceSuite) rolloutStatusWait(ctx context.Context, workload, namespace string) error {
+	if strings.HasPrefix(dtest.DockerRegistry(ctx), "localhost:") {
+		// Assume that we run a local k3s setup and that we're affected by this bug: https://github.com/rancher/rancher/issues/21324
+		return ts.kubectl(ctx, "wait", workload, "--for", "condition=available", "-n", namespace)
+	}
+	return ts.kubectl(ctx, "rollout", "status", "-w", workload, "-n", namespace)
 }
 
 func (ts *telepresenceSuite) kubectl(c context.Context, args ...string) error {
