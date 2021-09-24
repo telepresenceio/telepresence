@@ -8,10 +8,9 @@
   into one zip file that can then be shared in a github issue, in slack, etc.  Use
   `telepresence gather-logs --help` to see additional options for running the command.
 
-- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
-
 - Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
 
+- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
 
 - Bugfix: If a deployment annotated with webhook annotations is deployed before telepresence is installed, telepresence will now install an agent in that deployment before intercept
 
