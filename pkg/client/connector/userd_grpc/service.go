@@ -101,7 +101,6 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		dlog.Debug(c, "returned")
 		return result, nil
 	}
-	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
 	mgr, err := s.sharedState.GetTrafficManagerBlocking(c)
 	if mgr == nil {
