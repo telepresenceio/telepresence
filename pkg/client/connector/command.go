@@ -168,6 +168,8 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	conn, err := client.DialSocket(c, client.DaemonSocketName)
 	if err != nil {
 		dlog.Errorf(c, "unable to connect to daemon: %+v", err)
+		s.sharedState.MaybeSetCluster(nil)
+		s.sharedState.MaybeSetTrafficManager(nil)
 		s.cancel()
 		return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
@@ -193,6 +195,8 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}()
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
+		s.sharedState.MaybeSetCluster(nil)
+		s.sharedState.MaybeSetTrafficManager(nil)
 		s.cancel()
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
@@ -225,6 +229,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
+		s.sharedState.MaybeSetTrafficManager(nil)
 		s.cancel()
 		return connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
