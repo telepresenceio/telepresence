@@ -1315,6 +1315,11 @@ func (is *interceptedSuite) TestF_StopInterceptedPodOfMany() {
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
+func (is *interceptedSuite) TestG_ReportsPortConflict() {
+	_, stderr := telepresence(is.T(), "intercept", "--namespace", is.ns(), "--port", "9001", "dummy-name")
+	is.Contains(stderr, "Port 127.0.0.1:9001 is already in use by intercept hello-1-"+is.ns())
+}
+
 type helmSuite struct {
 	suite.Suite
 	tpSuite           *telepresenceSuite
