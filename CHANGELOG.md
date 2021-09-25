@@ -22,6 +22,8 @@
 
 - Bugfix: The user daemon would sometimes hang when it encountered a problem connecting to the cluster or the root daemon.
 
+- Bugfix: Telepresence correctly reports an intercept port conflict instead of panicking with segfault.
+
 ### 2.4.3 (September 15, 2021)
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.
