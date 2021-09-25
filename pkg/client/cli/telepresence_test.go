@@ -287,10 +287,9 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
-		if goRuntime.GOOS == "windows" || goRuntime.GOOS == "darwin" {
-			// FIXME(josecv) Windows and macOS need a few seconds before the DNS queries start going through the daemon
-			time.Sleep(10 * time.Second)
-		}
+		// FIXME(josecv) need a few seconds before the DNS queries start going through the daemon
+		time.Sleep(10 * time.Second)
+
 		// Test with ".org" suffix that was added as an include-suffix
 		_ = run(ctx, "curl", "--silent", "example.org")
 
