@@ -285,29 +285,43 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
 		os.Setenv("KUBECONFIG", kubeconfigFileName)
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
+
+		logDir, err := filelocation.AppUserLogDir(ctx)
+		logFile := filepath.Join(logDir, "daemon.log")
+		require.NoError(err)
+
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
-		// FIXME(josecv) need a few seconds before the DNS queries start going through the daemon
-		time.Sleep(10 * time.Second)
+		defer func() {
+			_, stderr = telepresenceContext(ctx, "quit")
+			require.Empty(stderr)
+		}()
 
-		// Test with ".org" suffix that was added as an include-suffix
-		_ = run(ctx, "curl", "--silent", "example.org")
+		retryCount := 0
+		ts.Eventually(func() bool {
+			// Test with ".org" suffix that was added as an include-suffix
+			host := fmt.Sprintf("zwslkjsdf-%d.org", retryCount)
+			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+			defer cancel()
+			_ = run(short, "curl", "--silent", "--connect-timeout", "0.01", host)
 
-		_, stderr = telepresenceContext(ctx, "quit")
-		require.Empty(stderr)
-		rootLog, err := os.Open(filepath.Join(tmpDir, "daemon.log"))
-		require.NoError(err)
-		defer rootLog.Close()
+			// Give query time to reach telepresence and produce a log entry
+			dtime.SleepWithContext(ctx, 10*time.Millisecond)
 
-		hasLookup := false
-		scn := bufio.NewScanner(rootLog)
-		builder := strings.Builder{}
-		for scn.Scan() && !hasLookup {
-			text := scn.Text()
-			builder.WriteString(text)
-			hasLookup = strings.Contains(text, `LookupHost "example.org"`)
-		}
-		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement\ncontents:\n"+builder.String())
+			rootLog, err := os.Open(logFile)
+			require.NoError(err)
+			defer rootLog.Close()
+
+			scanFor := fmt.Sprintf(`LookupHost "%s"`, host)
+			scn := bufio.NewScanner(rootLog)
+			for scn.Scan() {
+				if strings.Contains(scn.Text(), scanFor) {
+					return true
+				}
+			}
+			retryCount++
+			return false
+		}, 10*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
