@@ -2,17 +2,18 @@ package userd_k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -170,6 +171,31 @@ func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object,
 	return obj, nil
 }
 
+// FindPodFromDeployName returns a pod with the given name-hex-hex
+func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*kates.Pod, error) {
+	pods, err := kc.Pods(c, namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pod := range pods {
+		podLabels := pod.GetLabels()
+		match := true
+		// check if selector is in labels
+		for key, val := range selector {
+			if podLabels[key] != val {
+				match = false
+				break
+			}
+		}
+		if match {
+			return pod, nil
+		}
+	}
+
+	return nil, errors.New("pod not found")
+}
+
 // FindPod returns a pod with the given name in the given namespace or nil
 // if no such replica set could be found.
 func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Pod, error) {
@@ -206,7 +232,7 @@ func (kc *Cluster) FindWorkload(c context.Context, namespace, name string) (kate
 		}
 		return wl.obj, nil
 	}
-	return nil, errors.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
+	return nil, k8err.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns

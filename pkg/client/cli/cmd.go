@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -180,7 +180,7 @@ func Command(ctx context.Context) *cobra.Command {
 		},
 		{
 			Name:     "Debug Commands",
-			Commands: []*cobra.Command{loglevelCommand()},
+			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
 		},
 		{
 			Name:     "Other Commands",

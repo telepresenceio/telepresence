@@ -79,10 +79,10 @@ pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
 TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image
 base-image: base-image/Dockerfile # Intentionally not in 'make help'
-	if ! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); then \
-	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) . && \
-	  docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); \
-	fi
+	if (! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION)) && (! docker image inspect $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) > /dev/null); then \
+	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) .; \
+	fi; \
+    docker tag $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) ko.local/tel2-base:$(TELEPRESENCE_BASE_VERSION)
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -100,6 +100,7 @@ image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container ima
 
 .PHONY: push-image
 push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
+	docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) && \
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: clean
@@ -202,9 +203,9 @@ shellscripts += ./packaging/push_chart.sh
 shellscripts += ./packaging/windows-package.sh
 .PHONY: lint
 lint: lint-deps ## (QA) Run the linters
-	GOOS=linux   $(tools/golangci-lint) run --timeout 2m ./...
-	GOOS=darwin  $(tools/golangci-lint) run --timeout 2m ./...
-	GOOS=windows $(tools/golangci-lint) run --timeout 2m ./...
+	GOOS=linux   $(tools/golangci-lint) run --timeout 3m ./...
+	GOOS=darwin  $(tools/golangci-lint) run --timeout 3m ./...
+	GOOS=windows $(tools/golangci-lint) run --timeout 3m ./...
 	$(tools/protolint) lint rpc
 	$(tools/shellcheck) $(shellscripts)
 	$(tools/helm) lint charts/telepresence --set isCI=true
@@ -219,7 +220,7 @@ check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA)
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=25m ./...
 
 .PHONY: _login
 _login:

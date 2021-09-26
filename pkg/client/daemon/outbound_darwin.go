@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -163,10 +162,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	}
 	dlog.Infof(c, "Generated new %s", resolverFileName)
 
-	spLock := sync.Mutex{}
 	defer func() {
-		spLock.Lock()
-		defer spLock.Unlock()
 		// Remove the main resolver file
 		_ = os.Remove(resolverFileName)
 
@@ -186,19 +182,16 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		case <-o.router.configured():
 			// Server will close the listener, so no need to close it here.
 			o.processSearchPaths(g, func(c context.Context, paths []string) error {
-				return o.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths, &spLock)
+				return o.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
 			})
 			v := dns.NewServer(c, []net.PacketConn{listener}, nil, o.resolveInCluster)
 			return v.Run(c)
 		}
 	})
-	dns.Flush(c)
 	return g.Wait()
 }
 
-func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string, spLock *sync.Mutex) error {
-	spLock.Lock()
-	defer spLock.Unlock()
+func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
 	dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
 	rf, err := readResolveFile(resolverFileName)
 	if err != nil {
@@ -223,12 +216,14 @@ func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resol
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}
 
+	o.domainsLock.Lock()
+	defer o.domainsLock.Unlock()
+
 	// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
 	// for each namespace in its own domain file under /etc/resolver. Each file
 	// is named "telepresence.<domain>.local"
 	var removals []string
 	var additions []string
-	o.domainsLock.Lock()
 	for ns := range o.domains {
 		if _, ok := domains[ns]; !ok {
 			removals = append(removals, ns)
@@ -243,7 +238,6 @@ func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resol
 	o.search = search
 	o.namespaces = namespaces
 	o.domains = domains
-	o.domainsLock.Unlock()
 
 	for _, namespace := range removals {
 		nsFile := namespaceResolverFile(resolverDirName, namespace)
@@ -270,7 +264,11 @@ func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resol
 	// Versions prior to Big Sur will not trigger an update unless the resolver file
 	// is removed and recreated.
 	_ = os.Remove(resolverFileName)
-	return rf.write(resolverFileName)
+	if err = rf.write(resolverFileName); err != nil {
+		return err
+	}
+	dns.Flush(c)
+	return nil
 }
 
 func namespaceResolverFile(resolverDirName, namespace string) string {

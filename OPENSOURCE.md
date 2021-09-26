@@ -29,15 +29,16 @@ following Free and Open Source software:
     github.com/containerd/cgroups                                       v0.0.0-20200531161412-0dbf7f05ba59                          Apache License 2.0
     github.com/containerd/containerd                                    v1.4.8                                                      Apache License 2.0
     github.com/containerd/continuity                                    v0.0.0-20201208142359-180525291bb7                          Apache License 2.0
+    github.com/coreos/go-iptables                                       v0.6.0                                                      Apache License 2.0
     github.com/cyphar/filepath-securejoin                               v0.2.2                                                      3-clause BSD license
-    github.com/datawire/ambassador                                      v1.13.7-0.20210527054604-663dfb393e59                       Apache License 2.0
+    github.com/datawire/ambassador/v2                                   v2.0.2-rc.1.0.20210915144712-7bc28ed11dfc                   Apache License 2.0
     github.com/datawire/dlib                                            v1.2.4-0.20210629021142-e221f3b9c3b8                        Apache License 2.0
     github.com/datawire/dtest                                           v0.0.0-20210803160344-b219a345f448                          Apache License 2.0
     github.com/davecgh/go-spew                                          v1.1.1                                                      ISC license
     github.com/deislabs/oras                                            v0.11.1                                                     MIT license
     github.com/docker/cli                                               v20.10.5+incompatible                                       Apache License 2.0
-    github.com/docker/distribution                                      v0.0.0-20191216044856-a8371794149d                          Apache License 2.0
-    github.com/moby/moby (modified from github.com/docker/docker)       v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible  Apache License 2.0
+    github.com/docker/distribution                                      v2.7.1+incompatible                                         Apache License 2.0
+    github.com/docker/docker                                            v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible  Apache License 2.0
     github.com/docker/docker-credential-helpers                         v0.6.3                                                      MIT license
     github.com/docker/go-connections                                    v0.4.0                                                      Apache License 2.0
     github.com/docker/go-metrics                                        v0.0.0-20180209012529-399ea8c73916                          Apache License 2.0
@@ -49,7 +50,7 @@ following Free and Open Source software:
     github.com/form3tech-oss/jwt-go                                     v3.2.2+incompatible                                         MIT license
     github.com/go-errors/errors                                         v1.0.1                                                      MIT license
     github.com/go-logr/logr                                             v0.4.0                                                      Apache License 2.0
-    github.com/go-openapi/jsonpointer                                   v0.19.3                                                     Apache License 2.0
+    github.com/go-openapi/jsonpointer                                   v0.19.5                                                     Apache License 2.0
     github.com/go-openapi/jsonreference                                 v0.19.3                                                     Apache License 2.0
     github.com/go-openapi/spec                                          v0.19.5                                                     Apache License 2.0
     github.com/go-openapi/swag                                          v0.19.5                                                     Apache License 2.0
@@ -64,7 +65,7 @@ following Free and Open Source software:
     github.com/google/shlex                                             v0.0.0-20191202100458-e7afc7fbc510                          Apache License 2.0
     github.com/google/uuid                                              v1.1.2                                                      3-clause BSD license
     github.com/googleapis/gnostic                                       v0.5.1                                                      Apache License 2.0
-    github.com/gorilla/mux                                              v1.7.3                                                      3-clause BSD license
+    github.com/gorilla/mux                                              v1.8.0                                                      3-clause BSD license
     github.com/gosuri/uitable                                           v0.0.4                                                      MIT license
     github.com/gregjones/httpcache                                      v0.0.0-20180305231024-9cad4c3443a7                          MIT license
     github.com/hashicorp/errwrap                                        v1.0.0                                                      Mozilla Public License 2.0
@@ -150,7 +151,7 @@ following Free and Open Source software:
     k8s.io/cli-runtime                                                  v0.21.0                                                     Apache License 2.0
     k8s.io/client-go                                                    v0.21.0                                                     Apache License 2.0
     k8s.io/component-base                                               v0.21.0                                                     Apache License 2.0
-    k8s.io/klog/v2                                                      v2.8.0                                                      Apache License 2.0
+    k8s.io/klog/v2                                                      v2.10.0                                                     Apache License 2.0
     k8s.io/kube-openapi                                                 v0.0.0-20210305001622-591a79e4bda7                          Apache License 2.0
     k8s.io/kubectl                                                      v0.21.0                                                     Apache License 2.0
     k8s.io/metrics                                                      v0.21.0                                                     Apache License 2.0

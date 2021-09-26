@@ -3,7 +3,8 @@ package managerutil
 import (
 	"context"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -31,16 +32,16 @@ func GetSessionID(ctx context.Context) string {
 
 type sessionContextKey struct{}
 
-func WithKatesClient(ctx context.Context, client *kates.Client) context.Context {
-	return context.WithValue(ctx, katesClientContextKey{}, client)
+func WithK8SClientset(ctx context.Context, clientset kubernetes.Interface) context.Context {
+	return context.WithValue(ctx, clientsetKey{}, clientset)
 }
 
-func GetKatesClient(ctx context.Context) *kates.Client {
-	client, ok := ctx.Value(katesClientContextKey{}).(*kates.Client)
+func GetK8sClientset(ctx context.Context) kubernetes.Interface {
+	clientset, ok := ctx.Value(clientsetKey{}).(kubernetes.Interface)
 	if !ok {
 		return nil
 	}
-	return client
+	return clientset
 }
 
-type katesClientContextKey struct{}
+type clientsetKey struct{}

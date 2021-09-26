@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/ambassador/v2/pkg/metriton"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"

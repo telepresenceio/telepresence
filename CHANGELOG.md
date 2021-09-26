@@ -2,7 +2,26 @@
 
 ### 2.4.4 (TBD)
 
+- Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
+
+- Feature: Add the command `telepresence gather-logs`, which bundles the logs for all components
+  into one zip file that can then be shared in a github issue, in slack, etc.  Use
+  `telepresence gather-logs --help` to see additional options for running the command.
+
+- Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
+
 - Change: K8S flags(`--context`, `--as`, etc.) scope from `global` to `connect` command spec only.
+
+- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
+
+- Bugfix: If a deployment annotated with webhook annotations is deployed before telepresence is installed, telepresence will now install an agent in that deployment before intercept
+
+- Bugfix: Fix an issue where the traffic-manager would sometimes go into a CPU loop.
+
+- Bugfix: The TUN-device no longer builds an unlimited internal buffer before sending it when receiving lots of TCP-packets without PSH.
+  Instead, the buffer is flushed when it reaches a size of 64K.
+
+- Bugfix: The user daemon would sometimes hang when it encountered a problem connecting to the cluster or the root daemon.
 
 ### 2.4.3 (September 15, 2021)
 

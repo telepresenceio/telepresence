@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -196,6 +197,11 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 
 		conn, err = client.DialSocket(tc, client.ConnectorSocketName)
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// The connector called us, and then it died which means we will die too. This is
+				// a race, but it's not an error.
+				return nil
+			}
 			return client.CheckTimeout(tc, err)
 		}
 		t.session = mi.Session
@@ -273,6 +279,7 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
 				t.clusterDomain = "cluster.local."
 			}
 			close(cfgComplete)
+			cfgComplete = nil
 		}
 	}
 }

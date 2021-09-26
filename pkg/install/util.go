@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 )
 
 func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, error) {

@@ -7,11 +7,14 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 )
 
-const envPrefix = "_TEL_AGENT_"
+const EnvPrefix = "_TEL_AGENT_"
+const InitContainerName = "tel-agent-init"
+const AgentUID = int64(7777)
 
+// AgentContainer will return a configured traffic agent
 func AgentContainer(
 	name string,
 	imageName string,
@@ -28,10 +31,46 @@ func AgentContainer(
 		Env:          agentEnvironment(name, appContainer, appPort, managerNamespace),
 		EnvFrom:      appContainer.EnvFrom,
 		VolumeMounts: agentVolumeMounts(appContainer.VolumeMounts),
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot: func() *bool { b := true; return &b }(),
+			RunAsGroup:   func() *int64 { i := AgentUID; return &i }(),
+			RunAsUser:    func() *int64 { i := AgentUID; return &i }(),
+		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/bin/stat", "/tmp/agent/ready"},
+				},
+			},
+		},
+	}
+}
+
+// InitContainer will return a configured init container for an agent.
+func InitContainer(imageName string, port corev1.ContainerPort, appPort int) corev1.Container {
+	env := []corev1.EnvVar{
+		{
+			Name:  "APP_PORT",
+			Value: strconv.Itoa(appPort),
+		},
+		{
+			Name:  "AGENT_PORT",
+			Value: strconv.Itoa(int(port.ContainerPort)),
+		},
+		{
+			Name:  "AGENT_PROTOCOL",
+			Value: string(port.Protocol),
+		},
+	}
+	return corev1.Container{
+		Name:  InitContainerName,
+		Image: imageName,
+		Args:  []string{"agent-init"},
+		Env:   env,
+		SecurityContext: &corev1.SecurityContext{
+			Capabilities: &corev1.Capabilities{
+				Add: []corev1.Capability{
+					"NET_ADMIN",
 				},
 			},
 		},
@@ -44,15 +83,15 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 	copy(env, appEnv)
 	env = append(env,
 		corev1.EnvVar{
-			Name:  envPrefix + "LOG_LEVEL",
+			Name:  EnvPrefix + "LOG_LEVEL",
 			Value: "info",
 		},
 		corev1.EnvVar{
-			Name:  envPrefix + "NAME",
+			Name:  EnvPrefix + "NAME",
 			Value: agentName,
 		},
 		corev1.EnvVar{
-			Name: envPrefix + "NAMESPACE",
+			Name: EnvPrefix + "NAMESPACE",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "metadata.namespace",
@@ -60,7 +99,7 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 			},
 		},
 		corev1.EnvVar{
-			Name: envPrefix + "POD_IP",
+			Name: EnvPrefix + "POD_IP",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "status.podIP",
@@ -68,12 +107,12 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 			},
 		},
 		corev1.EnvVar{
-			Name:  envPrefix + "APP_PORT",
+			Name:  EnvPrefix + "APP_PORT",
 			Value: strconv.Itoa(appPort),
 		})
 	if len(appContainer.VolumeMounts) > 0 {
 		env = append(env, corev1.EnvVar{
-			Name:  envPrefix + "APP_MOUNTS",
+			Name:  EnvPrefix + "APP_MOUNTS",
 			Value: TelAppMountPoint,
 		})
 
@@ -89,7 +128,7 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort i
 		})
 	}
 	env = append(env, corev1.EnvVar{
-		Name:  envPrefix + "MANAGER_HOST",
+		Name:  EnvPrefix + "MANAGER_HOST",
 		Value: ManagerAppName + "." + managerNamespace,
 	})
 	return env

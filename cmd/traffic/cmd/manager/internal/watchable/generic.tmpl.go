@@ -276,7 +276,7 @@ func (tm *MAPTYPE) coalesce(
 
 	var shutdown func()
 	shutdown = func() {
-		shutdown = func() {}
+		shutdown = func() {} // Make this function an empty one after first run to prevent calling the following goroutine multiple times
 		// Do this asyncrounously because getting the lock might block a .Store() that's
 		// waiting on us to read from 'upstream'!  We don't need to worry about separately
 		// waiting for this goroutine because we implicitly do that when we drain
@@ -347,13 +347,24 @@ func (tm *MAPTYPE) coalesce(
 		}
 	}
 
+	// The following loop is reading both a tm.close channel and the ctx.Done() channel. When the
+	// tm.close channel is closed, the Map as a whole has been closed, and when ctx.Done() is closed,
+	// the subscription that started this call to coalesce has ended. If one of the the channels close,
+	// the loop must call shutdown() and then continue looping,  now in a way that never selects the
+	// closed channel. The closed channel is therefore set to `nil` so that it blocks forever, which
+	// in essence means that the only way out of the loop is to close the `upstream` channel. This
+	// happens when the subscription ends.
+	closeCh := tm.close
+	doneCh := ctx.Done()
 	for {
 		if snapshot.State == nil {
 			select {
-			case <-ctx.Done():
+			case <-doneCh:
 				shutdown()
-			case <-tm.close:
+				doneCh = nil
+			case <-closeCh:
 				shutdown()
+				closeCh = nil
 			case update, readOK := <-upstream:
 				if !readOK {
 					return
@@ -363,10 +374,12 @@ func (tm *MAPTYPE) coalesce(
 		} else {
 			// Same as above, but with an additional "downstream <- snapshot" case.
 			select {
-			case <-ctx.Done():
+			case <-doneCh:
 				shutdown()
-			case <-tm.close:
+				doneCh = nil
+			case <-closeCh:
 				shutdown()
+				closeCh = nil
 			case update, readOK := <-upstream:
 				if !readOK {
 					return
