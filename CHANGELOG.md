@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.4.4 (TBD)
+
+- Change: K8S flags(`--context`, `--as`, etc.) scope from `global` to `connect` command spec only.
+
 ### 2.4.3 (September 15, 2021)
 
 - Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.

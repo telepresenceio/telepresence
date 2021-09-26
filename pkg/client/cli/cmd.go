@@ -135,26 +135,26 @@ func Command(ctx context.Context) *cobra.Command {
 	*/
 
 	globalFlagGroups = []FlagGroup{
-	    {
-		Name: "Telepresence networking flags",
-		Flags: func() *pflag.FlagSet {
-			netflags := pflag.NewFlagSet("", 0)
-			// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
-			//  that's unknown until it's been tested during the first connect attempt.
-			if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
-				netflags.StringVarP(&dnsIP,
-					"dns", "", "",
-					"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-				)
-			}
-			netflags.StringSliceVar(&mappedNamespaces,
-				"mapped-namespaces", nil, ``+
-					`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
-					`Defaults to all namespaces`)
+		{
+			Name: "Telepresence networking flags",
+			Flags: func() *pflag.FlagSet {
+				netflags := pflag.NewFlagSet("", 0)
+				// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
+				//  that's unknown until it's been tested during the first connect attempt.
+				if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+					netflags.StringVarP(&dnsIP,
+						"dns", "", "",
+						"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
+					)
+				}
+				netflags.StringSliceVar(&mappedNamespaces,
+					"mapped-namespaces", nil, ``+
+						`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
+						`Defaults to all namespaces`)
 
-			return netflags
-		}(),
-	}}
+				return netflags
+			}(),
+		}}
 
 	globalFlagGroups = append(globalFlagGroups, FlagGroup{
 		Name: "other Telepresence flags",

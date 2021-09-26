@@ -97,43 +97,33 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	config, err := userd_k8s.NewConfig(c, cr.KubeFlags)
-	if err != nil && !dryRun {
-		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
-	}
 	if cluster := s.sharedState.GetClusterNonBlocking(); cluster != nil {
-		if cluster.Config.ContextServiceEqual(config) {
-			cluster.Config = config // namespace might have changed
-			if mns := cr.MappedNamespaces; len(mns) > 0 {
-				if len(mns) == 1 && mns[0] == "all" {
-					mns = nil
-				}
-				sort.Strings(mns)
-				cluster.SetMappedNamespaces(c, mns)
-			}
-			ingressInfo, err := cluster.DetectIngressBehavior(c)
-			if err != nil {
-				return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
-			}
-			ret := &rpc.ConnectInfo{
-				Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
-				ClusterContext: cluster.Config.Context,
-				ClusterServer:  cluster.Config.Server,
-				ClusterId:      cluster.GetClusterId(c),
-				IngressInfos:   ingressInfo,
-			}
-			s.sharedState.GetTrafficManagerNonBlocking().SetStatus(c, ret)
-			return ret
-		} else {
-			ret := &rpc.ConnectInfo{
-				Error:          rpc.ConnectInfo_MUST_RESTART,
-				ClusterContext: cluster.Config.Context,
-				ClusterServer:  cluster.Config.Server,
-				ClusterId:      cluster.GetClusterId(c),
-			}
-			s.sharedState.GetTrafficManagerNonBlocking().SetStatus(c, ret)
-			return ret
+		// namespace might have changed, let's re-generate k8s config.
+		config, err := userd_k8s.NewConfig(c, cluster.Config.FlagMap)
+		if err != nil && !dryRun {
+			return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 		}
+		cluster.Config = config
+		if mns := cr.MappedNamespaces; len(mns) > 0 {
+			if len(mns) == 1 && mns[0] == "all" {
+				mns = nil
+			}
+			sort.Strings(mns)
+			cluster.SetMappedNamespaces(c, mns)
+		}
+		ingressInfo, err := cluster.DetectIngressBehavior(c)
+		if err != nil {
+			return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+		}
+		ret := &rpc.ConnectInfo{
+			Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
+			ClusterContext: cluster.Config.Context,
+			ClusterServer:  cluster.Config.Server,
+			ClusterId:      cluster.GetClusterId(c),
+			IngressInfos:   ingressInfo,
+		}
+		s.sharedState.GetTrafficManagerNonBlocking().SetStatus(c, ret)
+		return ret
 	} else {
 		// This is the first call to Connect; we have to tell the background connect
 		// goroutine to actually do the work.
@@ -142,6 +132,10 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 				Error: rpc.ConnectInfo_DISCONNECTED,
 			}
 		} else {
+			config, err := userd_k8s.NewConfig(c, cr.KubeFlags)
+			if err != nil && !dryRun {
+				return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+			}
 			s.connectRequest <- parsedConnectRequest{
 				ConnectRequest: cr,
 				Config:         config,

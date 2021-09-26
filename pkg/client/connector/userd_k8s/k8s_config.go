@@ -58,7 +58,7 @@ type Config struct {
 	Namespace   string // default cluster namespace.
 	Context     string
 	Server      string
-	flagMap     map[string]string
+	FlagMap     map[string]string
 	flagArgs    []string
 	ConfigFlags *kates.ConfigFlags
 	config      *rest.Config
@@ -124,7 +124,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 		Context:     ctxName,
 		Server:      cluster.Server,
 		Namespace:   namespace,
-		flagMap:     flagMap,
+		FlagMap:     flagMap,
 		flagArgs:    flagArgs,
 		ConfigFlags: configFlags,
 		config:      restConfig,
@@ -145,12 +145,4 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	}
 
 	return k, nil
-}
-
-// ContextServiceEqual determines if this instance is equal to the given instance with respect to context,
-// server.
-func (kf *Config) ContextServiceEqual(okf *Config) bool {
-	return kf != nil && okf != nil &&
-		kf.Context == okf.Context &&
-		kf.Server == okf.Server
 }
