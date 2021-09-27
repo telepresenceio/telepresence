@@ -44,7 +44,7 @@ someone to help you debug Telepresence.`,
 # Get all logs and export to a given file
 telepresence gather-logs -o /tmp/telepresence_logs.zip
 
-# Get all logs and pod yaml for components in the kubernetes cluster
+# Get all logs and pod yaml manifests for components in the kubernetes cluster
 telepresence gather-logs -o /tmp/telepresence_logs.zip --get-pod-yaml
 
 # Get all logs for the daemons only
@@ -181,32 +181,8 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 				if err != nil {
 					return err
 				}
-				// Write the logs for each pod to files
-				for podName, log := range lr.PodLogs {
-					podName = getPodName(podName, gl.anon, anonymizer)
-					agentLogFile := fmt.Sprintf("%s/%s.log", exportDir, podName)
-					fd, err := os.Create(agentLogFile)
-					if err != nil {
-						return err
-					}
-					defer fd.Close()
-					fdWriter := bufio.NewWriter(fd)
-					_, _ = fdWriter.WriteString(log)
-					fdWriter.Flush()
-				}
-
-				// Write the pod yaml to files
-				for podName, yaml := range lr.PodYaml {
-					podName = getPodName(podName, gl.anon, anonymizer)
-					podYamlFile := fmt.Sprintf("%s/%s.yaml", exportDir, podName)
-					fd, err := os.Create(podYamlFile)
-					if err != nil {
-						return err
-					}
-					defer fd.Close()
-					fdWriter := bufio.NewWriter(fd)
-					_, _ = fdWriter.WriteString(yaml)
-					fdWriter.Flush()
+				if err := writeResponseToFiles(lr, anonymizer, exportDir, gl.anon); err != nil {
+					return err
 				}
 				return nil
 			})
@@ -220,24 +196,26 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		}
 	}
 
-	// Now we anonymize the logs
 	// Zip up all the files we've created in the zip directory and return that to the user
-	var files []string
 	dirEntries, err := os.ReadDir(exportDir)
+	files := make([]string, len(dirEntries))
 	if err != nil {
 		return errcat.User.New(err)
 	}
-	for _, entry := range dirEntries {
+	for i, entry := range dirEntries {
 		if entry.IsDir() {
+			files = files[:len(files)-1]
 			continue
 		}
 
 		fullFileName := fmt.Sprintf("%s/%s", exportDir, entry.Name())
 		// anonymize the log if necessary
 		if gl.anon {
-			anonymizeLog(stdout, fullFileName, anonymizer)
+			if err := anonymizeLog(stdout, fullFileName, anonymizer); err != nil {
+				fmt.Fprintf(stdout, "error anonymizing %s: %s\n", fullFileName, err)
+			}
 		}
-		files = append(files, fullFileName)
+		files[i] = fullFileName
 	}
 
 	if err := zipFiles(files, gl.outputFile); err != nil {
@@ -245,6 +223,40 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	}
 
 	fmt.Fprintf(stdout, "Logs have been exported to %s\n", gl.outputFile)
+	return nil
+}
+
+// writeResponseToFiles contains the logic for parsing the response from the
+// manager and writing its components into logical files.
+func writeResponseToFiles(lr *manager.LogsResponse, anonymizer *anonymizer, exportDir string, anonymize bool) error {
+	createFileWithContent := func(fileName, content string) error {
+		fd, err := os.Create(fileName)
+		if err != nil {
+			return err
+		}
+		defer fd.Close()
+		fdWriter := bufio.NewWriter(fd)
+		_, _ = fdWriter.WriteString(content)
+		fdWriter.Flush()
+		return nil
+	}
+	// Write the logs for each pod to files
+	for podName, log := range lr.PodLogs {
+		podName = getPodName(podName, anonymize, anonymizer)
+		agentLogFile := fmt.Sprintf("%s/%s.log", exportDir, podName)
+		if err := createFileWithContent(agentLogFile, log); err != nil {
+			return err
+		}
+	}
+
+	// Write the pod yaml to files
+	for podName, yaml := range lr.PodYaml {
+		podName = getPodName(podName, anonymize, anonymizer)
+		podYamlFile := fmt.Sprintf("%s/%s.yaml", exportDir, podName)
+		if err := createFileWithContent(podYamlFile, yaml); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -305,8 +317,14 @@ func zipFiles(files []string, zipFileName string) error {
 	// zip is incomplete
 	errMsg := ""
 	for _, file := range files {
+		// If the file doesn't have a name, then we obviously can't add it to
+		// the zip. We have handling elsewhere to prevent files like this from
+		// getting here but are extra cautious.
+		if file == "" {
+			continue
+		}
 		if err := addFileToZip(file); err != nil {
-			errMsg += fmt.Sprintf("failed adding %s to zip file: %s", file, err)
+			errMsg += fmt.Sprintf("failed adding %s to zip file: %s ", file, err)
 		}
 	}
 	if errMsg != "" {
@@ -361,6 +379,7 @@ func getPodName(podName string, anon bool, anonymizer *anonymizer) string {
 
 // anonymizeLog is a helper function that replaces the namespace + podName
 // used in the log with its anonymized version, provided by the anonymizer.
+// It overwrites the file with the anonymized version.
 func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) error {
 	// Read the contents we are going to overwrite from the file
 	content, err := os.ReadFile(logFile)
@@ -386,19 +405,20 @@ func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) erro
 		anonPodParts := strings.Split(fullAnonPodName, ".")
 		anonPodName := anonPodParts[0]
 
-		// Strip the namespace off of the podName + replace pod name + full
-		// hash with the anonymized name
+		// Strip the namespace off of the podName
 		podParts := strings.Split(fullPodName, ".")
+
+		// replace pod name + full hash with the anonymized name
 		podName := podParts[0]
 		stringContent = strings.ReplaceAll(stringContent, podName, anonPodName)
 
-		// Strip the hash off of the pod name + replace that with anonymized name
+		// Strip the hash off of the pod name + replace remainder with anonymized name
 		brokenPodName := strings.Split(podName, "-")
 		podName = strings.Join(brokenPodName[:len(brokenPodName)-2], "-")
 		stringContent = strings.ReplaceAll(stringContent, podName, anonPodName)
 	}
 
-	// Overwrite the file with the new name
+	// Overwrite the file with the anonymized log
 	err = f.Truncate(0)
 	if err != nil {
 		return err
