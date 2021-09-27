@@ -101,6 +101,14 @@ items:
           To deal with a possible initial failure, the agent backs off
           and retries the connection with an increasing backoff duration.
 
+      - type: bugfix
+        title: Telepresence correctly reports intercept port conflict
+        body: >-
+          When creating a second intercept targetting the same local port,
+          it now gives the user an informative error message. Additionally,
+          it tells them which intercept is currently using that port to make
+          it easier to remedy.
+
   - version: 2.4.3
     date: '2021-09-15'
     notes:
