@@ -180,7 +180,7 @@ Preview URLs allows you to safely share your development environment. With this 
 
 4. If you access the <ExternalIp>Emojivoto webapp</ExternalIp> application on your remote cluster and vote for the 🍩 emoji, you'll see the bug is still present.
 
-5. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version which is running locally.
+5. Vote for the 🍩 emoji using the <PreviewUrl language="go">Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version which is running locally.
 
 </div>
 
