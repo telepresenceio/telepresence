@@ -222,11 +222,31 @@ func addAgentContainer(
 			return strconv.Itoa(int(svcPort.Port))
 		}(), refPodName)
 
-	agentName := podName
-	if strings.HasSuffix(agentName, "-") {
-		// Transform a generated name "my-echo-697464c6c5-" into an agent service name "my-echo"
-		tokens := strings.Split(podName, "-")
-		agentName = strings.Join(tokens[:len(tokens)-2], "-")
+	agentName := ""
+	if pod.OwnerReferences != nil {
+	owners:
+		for _, owner := range pod.OwnerReferences {
+			switch owner.Kind {
+			case "StatefulSet":
+				// If the pod is owned by a statefulset, the workload's name is the same as the statefulset's
+				agentName = owner.Name
+				break owners
+			case "ReplicaSet":
+				// If it's owned by a replicaset, then it's the same as the deployment e.g. "my-echo-697464c6c5" -> "my-echo"
+				tokens := strings.Split(owner.Name, "-")
+				agentName = strings.Join(tokens[:len(tokens)-1], "-")
+				break owners
+			}
+		}
+	}
+	if agentName == "" {
+		// If we weren't able to find a good name for the agent from the owners, take it from the pod name
+		agentName = podName
+		if strings.HasSuffix(agentName, "-") {
+			// Transform a generated name "my-echo-697464c6c5-" into an agent service name "my-echo"
+			tokens := strings.Split(podName, "-")
+			agentName = strings.Join(tokens[:len(tokens)-2], "-")
+		}
 	}
 
 	proto := svcPort.Protocol
