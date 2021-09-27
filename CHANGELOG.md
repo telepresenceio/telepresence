@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.4 (TBD)
+### 2.4.4 (September 27, 2021)
 
 - Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
 
