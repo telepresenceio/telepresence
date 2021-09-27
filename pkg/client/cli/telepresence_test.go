@@ -878,8 +878,6 @@ func (cs *connectedSuite) TestO_LargeRequest() {
 }
 
 func (cs *connectedSuite) TestP_SuccessfullyInterceptsHeadlessService() {
-	defer telepresence(cs.T(), "leave", "echo-headless-"+cs.ns())
-
 	ctx, cancel := context.WithCancel(dcontext.WithSoftness(dlog.NewTestContext(cs.T(), true)))
 	defer cancel()
 	services := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
@@ -893,51 +891,80 @@ func (cs *connectedSuite) TestP_SuccessfullyInterceptsHeadlessService() {
 		return sc.ListenAndServe(ctx, ":9092")
 	})
 	require := cs.Require()
-	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", svc, "--port", "9092")
-	require.Empty(stderr)
-	require.Contains(stdout, "Using StatefulSet echo-headless")
-	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
-	require.Empty(stderr)
-	require.Contains(stdout, "echo-headless: intercepted")
-	require.NotContains(stdout, "Volume Mount Point")
-
-	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-	cs.Require().Eventually(
-		// condition
-		func() bool {
-			ip, err := net.DefaultResolver.LookupHost(ctx, svc)
-			if err != nil {
-				dlog.Infof(ctx, "%v", err)
-				return false
-			}
-			if 1 != len(ip) {
-				dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
-				return false
-			}
-
-			url := fmt.Sprintf("http://%s:8080", svc)
-
-			dlog.Infof(ctx, "trying %q...", url)
-			hc := http.Client{Timeout: 2 * time.Second}
-			resp, err := hc.Get(url)
-			if err != nil {
-				dlog.Infof(ctx, "%v", err)
-				return false
-			}
-			defer resp.Body.Close()
-			dlog.Infof(ctx, "status code: %v", resp.StatusCode)
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				dlog.Infof(ctx, "%v", err)
-				return false
-			}
-			dlog.Infof(ctx, "body: %q", body)
-			return string(body) == expectedOutput
+	for _, test := range []struct {
+		webhook bool
+		name    string
+	}{
+		{
+			webhook: true,
+			name:    "injected from webhook",
 		},
-		time.Minute,   // waitFor
-		3*time.Second, // polling interval
-		`body of %q equals %q`, "http://"+svc, expectedOutput,
-	)
+		{
+			webhook: false,
+			name:    "injected from command",
+		},
+	} {
+		cs.Run(test.name, func() {
+			if test.webhook {
+				require.NoError(annotateForWebhook(ctx, "statefulset", "echo-headless", cs.tpSuite.namespace, 8080))
+			}
+			stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", svc, "--port", "9092")
+			require.Empty(stderr)
+			require.Contains(stdout, "Using StatefulSet echo-headless")
+
+			defer func() {
+				telepresence(cs.T(), "leave", "echo-headless-"+cs.ns())
+				if test.webhook {
+					require.NoError(dropWebhookAnnotation(ctx, "statefulset", "echo-headless", cs.tpSuite.namespace))
+				} else {
+					telepresence(cs.T(), "uninstall", "--agent", "echo-headless", "-n", cs.tpSuite.namespace)
+				}
+			}()
+
+			stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
+			require.Empty(stderr)
+			require.Contains(stdout, "echo-headless: intercepted")
+			require.NotContains(stdout, "Volume Mount Point")
+
+			expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+			cs.Require().Eventually(
+				// condition
+				func() bool {
+					ip, err := net.DefaultResolver.LookupHost(ctx, svc)
+					if err != nil {
+						dlog.Infof(ctx, "%v", err)
+						return false
+					}
+					if 1 != len(ip) {
+						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
+						return false
+					}
+
+					url := fmt.Sprintf("http://%s:8080", svc)
+
+					dlog.Infof(ctx, "trying %q...", url)
+					hc := http.Client{Timeout: 2 * time.Second}
+					resp, err := hc.Get(url)
+					if err != nil {
+						dlog.Infof(ctx, "%v", err)
+						return false
+					}
+					defer resp.Body.Close()
+					dlog.Infof(ctx, "status code: %v", resp.StatusCode)
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						dlog.Infof(ctx, "%v", err)
+						return false
+					}
+					dlog.Infof(ctx, "body: %q", body)
+					return string(body) == expectedOutput
+				},
+				time.Minute,   // waitFor
+				3*time.Second, // polling interval
+				`body of %q equals %q`, "http://"+svc, expectedOutput,
+			)
+		})
+	}
 }
 
 func (cs *connectedSuite) TestZ_Uninstall() {
@@ -1032,22 +1059,8 @@ func (is *interceptedSuite) SetupSuite() {
 	is.services = dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	is.cancelServices = cancel
 
-	err := run(ctx, "kubectl", "patch", "-n", is.tpSuite.namespace, "deploy", "hello-3", "-p", `
-{
-	"spec": {
-		"template": {
-			"metadata": {
-				"annotations": {
-					"telepresence.getambassador.io/inject-traffic-agent": "enabled",
-					"telepresence.getambassador.io/inject-service-port": "80"
-				}
-			}
-		}
-	}
-}
-				`)
+	err := annotateForWebhook(ctx, "deploy", "hello-3", is.tpSuite.namespace, 80)
 	is.NoError(err)
-	is.NoError(is.tpSuite.rolloutStatusWait(ctx, "deploy/hello-3", is.tpSuite.namespace))
 
 	is.Run("all intercepts ready", func() {
 		rxs := make([]*regexp.Regexp, serviceCount)
@@ -1118,10 +1131,7 @@ func (is *interceptedSuite) TearDownSuite() {
 		is.Empty(stdout)
 	}
 	ctx := testContext(is.T())
-	err := run(ctx, "kubectl", "patch", "-n", is.tpSuite.namespace, "deploy", "hello-3", "--type=json", "-p", `[{
-	"op": "remove",
-	"path": "/spec/template/metadata/annotations"
-}]`)
+	err := dropWebhookAnnotation(ctx, "deploy", "hello-3", is.tpSuite.namespace)
 	is.NoError(err)
 	is.NoError(is.tpSuite.rolloutStatusWait(ctx, "deploy/hello-3", is.tpSuite.namespace))
 
@@ -1821,6 +1831,34 @@ func (ts *telepresenceSuite) capturePodLogs(ctx context.Context, app, ns string)
 		}(pod)
 	}
 	return nil
+}
+
+func annotateForWebhook(ctx context.Context, objKind, objName, objNamespace string, servicePort int) error {
+	err := run(ctx, "kubectl", "patch", "-n", objNamespace, objKind, objName, "-p", fmt.Sprintf(`
+{
+	"spec": {
+		"template": {
+			"metadata": {
+				"annotations": {
+					"telepresence.getambassador.io/inject-traffic-agent": "enabled",
+					"telepresence.getambassador.io/inject-service-port": "%d"
+				}
+			}
+		}
+	}
+}`, servicePort))
+	if err != nil {
+		return err
+	}
+
+	return run(ctx, "kubectl", "rollout", "status", "-w", fmt.Sprintf("%s/%s", objKind, objName), "-n", objNamespace)
+}
+
+func dropWebhookAnnotation(ctx context.Context, objKind, objName, objNamespace string) error {
+	return run(ctx, "kubectl", "patch", "-n", objNamespace, objKind, objName, "--type=json", "-p", `[{
+	"op": "remove",
+	"path": "/spec/template/metadata/annotations"
+}]`)
 }
 
 func run(c context.Context, args ...string) error {
