@@ -1,4 +1,5 @@
 version: "2.4.4"
+dlVersion: "latest"
 docsVersion: "2.4"
 branch: release/v2
 productName: "Telepresence"
