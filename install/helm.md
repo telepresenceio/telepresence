@@ -4,6 +4,8 @@
 
 **Note** that installing the Traffic Manager through Helm will prevent `telepresence connect` from ever upgrading it. If you wish to upgrade a Traffic Manager that was installed via the Helm chart, please see the steps [below](#upgrading-the-traffic-manager)
 
+For more details on what the Helm chart installs and what can be configured, see the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence).
+
 ## Before you begin
 
 The Telepresence Helm chart is hosted by Ambassador Labs and published at `https://app.getambassador.io`.
@@ -31,8 +33,6 @@ When you run the Helm chart, it installs all the components required for the Tel
    helm install traffic-manager --namespace ambassador datawire/telepresence
    ```
 
-For more details on what the Helm chart installs and what can be configured, take a look at the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence).
-
 ### Install into custom namespace
 
 The Helm chart supports being installed into any namespace, not necessarily `ambassador`. Simply pass a different `namespace` argument to `helm install`.
@@ -57,7 +57,7 @@ clusters:
   name: example-cluster
 ```
 
-See [the kubeconfig documentation](../reference/config#manager) for more information.
+See [the kubeconfig documentation](../../reference/config#manager) for more information.
 
 ### Upgrading the Traffic Manager.
 
@@ -156,7 +156,7 @@ clientRbac:
 
 #### Namespace-scoped webhook
 
-If you wish to use the traffic-manager's [mutating webhook](../reference/cluster-config#mutating-webhook) with a namespace-scoped traffic manager, you will have to ensure that each namespace has an `app.kubernetes.io/name` label that is identical to its name:
+If you wish to use the traffic-manager's [mutating webhook](../../reference/cluster-config#mutating-webhook) with a namespace-scoped traffic manager, you will have to ensure that each namespace has an `app.kubernetes.io/name` label that is identical to its name:
 
 ```yaml
 apiVersion: v1
