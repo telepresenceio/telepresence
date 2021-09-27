@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.4 (TBD)
+### 2.4.4 (September 27, 2021)
 
 - Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
 
@@ -8,10 +8,9 @@
   into one zip file that can then be shared in a github issue, in slack, etc.  Use
   `telepresence gather-logs --help` to see additional options for running the command.
 
-- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
-
 - Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
 
+- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
 
 - Bugfix: If a deployment annotated with webhook annotations is deployed before telepresence is installed, telepresence will now install an agent in that deployment before intercept
 
@@ -21,6 +20,8 @@
   Instead, the buffer is flushed when it reaches a size of 64K.
 
 - Bugfix: The user daemon would sometimes hang when it encountered a problem connecting to the cluster or the root daemon.
+
+- Bugfix: Telepresence correctly reports an intercept port conflict instead of panicking with segfault.
 
 ### 2.4.3 (September 15, 2021)
 

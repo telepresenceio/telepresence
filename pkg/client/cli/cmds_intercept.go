@@ -313,7 +313,7 @@ func interceptMessage(r *connector.InterceptResult) error {
 	case connector.InterceptError_LOCAL_TARGET_IN_USE:
 		spec := r.InterceptInfo.Spec
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
-			spec.TargetHost, spec.TargetPort, r.ErrorText)
+			spec.TargetHost, spec.TargetPort, spec.Name)
 	case connector.InterceptError_NO_ACCEPTABLE_WORKLOAD:
 		msg = fmt.Sprintf("No interceptable deployment or replicaset matching %s found", r.ErrorText)
 	case connector.InterceptError_AMBIGUOUS_MATCH:

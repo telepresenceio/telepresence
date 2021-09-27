@@ -45,14 +45,15 @@ func Flush(c context.Context) {
 	// As of macOS 11 (Big Sur), how to flush the DNS cache hasn't changed since 10.10.4 (a Yosemite version release in mid 2015),
 	// other than that in 10.12 (Sierra) it became necessary to also kill mDNSResponderHelper. On older versions the call to kill
 	// mDNSResponderHelper is unnecessary but harmless, as the process doesn't exist.
+	sig := "-HUP"
 	if majorProductVersion >= 11 {
-		// Big Sur, a killall -HUP mDNSResponder doesn't restart the mDNSResponderHelper, so don't kill it!
+		// Big Sur, a killall -HUP mDNSResponder doesn't restart the mDNSResponderHelper, so use -TERM instead
 		dlog.Debug(c, "Flushing DNS")
-		devNullCmd(c, "killall", "-HUP", "mDNSResponder")
+		sig = "-TERM"
 	} else {
 		dlog.Debug(c, "Flushing DNS on version < Big Sur")
-		devNullCmd(c, "killall", "mDNSResponderHelper")
-		devNullCmd(c, "killall", "-HUP", "mDNSResponder", "mDNSResponderHelper")
 	}
+	devNullCmd(c, "killall", "mDNSResponderHelper")
+	devNullCmd(c, "killall", sig, "mDNSResponder")
 	devNullCmd(c, "dscacheutil", "-flushcache")
 }

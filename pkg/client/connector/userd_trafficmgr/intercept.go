@@ -268,7 +268,12 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
 		}
 		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
-			return interceptError(rpc.InterceptError_LOCAL_TARGET_IN_USE, errcat.User.Newf(spec.Name)), nil
+			return &rpc.InterceptResult{
+				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
+				ErrorText:     spec.Name,
+				ErrorCategory: int32(errcat.User),
+				InterceptInfo: iCept,
+			}, nil
 		}
 	}
 
