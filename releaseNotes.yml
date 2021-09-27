@@ -38,9 +38,87 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.4.4
+    date: '2021-09-27'
+    notes:
+      - type: feature
+        title: Numeric ports in agent injector
+        body: >-
+          The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
+        docs: reference/cluster-config/#note-on-numeric-ports
+        
+      - type: feature
+        title: New subcommand to gather logs and export into zip file
+        body: >-
+          Telepresence has logs for various components (the <code>
+          traffic-manager</code>, <code>traffic-agents</code>, the root and
+          user daemons), which are integral for understanding and debugging
+          Telepresence behavior.  We have added the <code>telepresence
+          gather-logs</code> command to make it simple to compile logs for
+          all Telepresence components and export them in a zip file that can
+          be shared to others and/or included in a github issue. For more
+          information on usage, run <code>telepresence gather-logs --help
+          </code>.
+        docs: reference/client
+        image: telepresence-2.4.4-gather-logs.png
+
+      - type: feature
+        title: Pod CIDR strategy is configurable in Helm chart
+        body: >-
+          Telepresence now enables you to directly configure how to get
+          pod CIDRs when deploying Telepresence with the Helm chart.
+          The default behavior remains the same. We've also introduced
+          the ability to explicitly set what the pod CIDRs should be.
+        docs: install/helm
+
+      - type: bugfix
+        title: Compute pod CIDRs more efficiently
+        body: >-
+          When computing subnets using the pod CIDRs, the traffic-manager
+          now uses less CPU cycles.
+        docs: reference/routing/#subnets
+
+      - type: bugfix
+        title: Prevent busy loop in traffic-manager
+        body: >-
+          In some circumstances, the <code>traffic-manager</code>'s CPU
+          would max out and get pinned at its limit. This required a
+          shutdown or pod restart to fix. We've added some fixes
+          to prevent the traffic-manager from getting into this state.
+
+      - type: bugfix
+        title: Added a fixed buffer size to TUN-device
+        body: >-
+          The TUN-device now has a max buffer size of 64K. This prevents the
+          buffer from growing limitlessly until it receies a PSH, which could
+          be a blocking operation when receiving lots of TCP-packets.
+        docs: reference/tun-device
+
+      - type: bugfix
+        title: Fix hanging user daemon
+        body: >-
+          When Telepresence encountered an issue connecting to the cluster or
+          the root daemon, it could hang indefintely. It now will error correctly
+          when it encounters that situation.
+
+      - type: bugfix
+        title: Improved proprietary agent connectivity
+        body: >-
+          To determine whether the environment cluster is air-gapped, the
+          proprietary agent attempts to connect to the cloud during startup.
+          To deal with a possible initial failure, the agent backs off
+          and retries the connection with an increasing backoff duration.
+
+      - type: bugfix
+        title: Telepresence correctly reports intercept port conflict
+        body: >-
+          When creating a second intercept targetting the same local port,
+          it now gives the user an informative error message. Additionally,
+          it tells them which intercept is currently using that port to make
+          it easier to remedy.
 
   - version: 2.4.3
-    date: '2021-09-14'
+    date: '2021-09-15'
     notes:
       - type: feature
         title: Environment variable TELEPRESENCE_INTERCEPT_ID available in interceptor's environment

@@ -65,7 +65,7 @@ Follow one of our [quick start guides](../quick-start/) to start using Teleprese
 ## Installing nightly versions of Telepresence
 
 We build and publish the contents of the default branch, [release/v2](https://github.com/telepresenceio/telepresence), of Telepresence
-nightly, Monday through Friday.
+nightly, Monday through Friday, for macOS (Intel and M1 chips), Linux, and Windows.
 
 The tags are formatted like so: `vX.Y.Z-nightly-$gitShortHash`.
 
