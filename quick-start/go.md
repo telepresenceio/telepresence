@@ -90,18 +90,28 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
       Message: ERROR
   ```
 
-3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/main.go` here we are going to delete the line `5` since we are not going to use the `"fmt"` package anymore an also replace the line `22`:
+3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/main.go` here we are going to delete the line `5` since we are not going to use the `"fmt"` package anymore.
 
   ```go
-  func (pS *PollServiceServer) VoteDoughnut(_ context.Context, _ *pb.VoteRequest) (*pb.VoteResponse, error) {
-    return nil, fmt.Errorf("ERROR")
-  }
+  3 import (
+  4  "context"
+  5  "fmt" // delete this line
+  6
+  7  pb "github.com/buoyantio/emojivoto/emojivoto-voting-svc/gen/proto"
+  ```
+
+  and also replace the line `21`:
+
+  ```go
+  20 func (pS *PollServiceServer) VoteDoughnut(_ context.Context, _ *pb.VoteRequest) (*pb.VoteResponse, error) {
+  21   return nil, fmt.Errorf("ERROR")
+  22 }
   ```
   with
   ```go
-  func (pS *PollServiceServer) VoteDoughnut(_ context.Context, _ *pb.VoteRequest) (*pb.VoteResponse, error) {
-    return pS.vote(":doughnut:")
-  }
+  20 func (pS *PollServiceServer) VoteDoughnut(_ context.Context, _ *pb.VoteRequest) (*pb.VoteResponse, error) {
+  21   return pS.vote(":doughnut:")
+  22 }
   ```
   Then save the file (`Ctrl+s` or `Menu -> File -> Save`) and now we can verify that the error is fixed now:
 
@@ -166,7 +176,7 @@ Preview URLs allows you to safely share your development environment. With this 
 
 3. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster. When prompted for ingress configuration, all default values should be correct as displayed below.
 
-  <UserInterceptCommand />
+  <UserInterceptCommand language="go" />
 
 4. If you access the <ExternalIp>Emojivoto webapp</ExternalIp> application on your remote cluster and vote for the 🍩 emoji, you'll see the bug is still present.
 
