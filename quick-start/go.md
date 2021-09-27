@@ -13,6 +13,7 @@ PreviewUrl,
 ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
+import Platform from '@src/components/Platform';
 import QSCards from './qs-cards';
 import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
@@ -53,7 +54,19 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
 
 1. Run the Docker container locally: 
 
-  <DockerCommand type="go" />
+  <Platform.TabGroup>
+    <Platform.MacOSTab>
+      <DockerCommand osType="macos" language="go" />
+    </Platform.MacOSTab>
+
+    <Platform.GNULinuxTab>
+      <DockerCommand osType="linux" language="go" />
+    </Platform.GNULinuxTab>
+
+    <Platform.WindowsTab>
+      <DockerCommand osType="windows" language="go" />
+    </Platform.WindowsTab>
+  </Platform.TabGroup>
 
 2. The application is failing due to a little bug inside this service which uses gRPC to communicate with the others services. We can use `grpcurl` to test the gRPC endpoint and see the error by running:
 
@@ -77,7 +90,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
       Message: ERROR
   ```
 
-3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/main.go` an replace the line `22`:
+3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/main.go` here we are going to delete the line `5` since we are not going to use the `"fmt"` package anymore an also replace the line `22`:
 
   ```go
   func (pS *PollServiceServer) VoteDoughnut(_ context.Context, _ *pb.VoteRequest) (*pb.VoteResponse, error) {
@@ -90,7 +103,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
     return pS.vote(":doughnut:")
   }
   ```
-  Also we need to remove the line `5` since we are not using the `"fmt"` package anymore, then save the file (`Ctrl+s` or `Menu -> File -> Save`) and now we can verify that the error is fixed now:
+  Then save the file (`Ctrl+s` or `Menu -> File -> Save`) and now we can verify that the error is fixed now:
 
   ```
   $ grpcurl -v -plaintext -import-path ./proto -proto Voting.proto localhost:8081 emojivoto.v1.VotingService.VoteDoughnut
@@ -141,29 +154,26 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
 
 Preview URLs allows you to safely share your development environment. With this approach, you can try and test your local service more accurately because you have a total control about which traffic is handled through your service, all of this thank to the preview URL. 
 
-1. First, run inside the container: 
+1. First leave the current intercept: 
+
+  ```
+  $ telepresence leave voting
+  ```
+
+2. Then login to telepresence: 
 
   <LoginCommand />
 
-2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
+3. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster. When prompted for ingress configuration, all default values should be correct as displayed below.
 
-  ```
-  $ telepresence intercept voting --port 8080
-  ```
+  <UserInterceptCommand />
 
-  When prompted for ingress configuration, all default values should be correct as displayed below.
+4. If you access the <ExternalIp>Emojivoto webapp</ExternalIp> application on your remote cluster and vote for the 🍩 emoji, you'll see the bug is still present.
 
-  <UserInterceptCommand/>
-
-3. If you access the <ExternalIp>Emojivoto webapp</ExternalIp> application on your remote cluster and vote for the 🍩 emoji, you'll see the bug is still present.
-
-4. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version which is running locally.
-
-5. Don't forget to leave an intercept: `telepresence leave voting` if you want to do a new one. 
+5. Vote for the 🍩 emoji using the <PreviewUrl>Preview URL</PreviewUrl> obtained in the previous step, and you will see that the bug is fixed, since traffic is being routed to the fixed version which is running locally.
 
 </div>
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
-
 
 You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
