@@ -102,12 +102,6 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		}
 	}
 
-	if svc.Spec.ClusterIP == "None" {
-		return nil, fmt.Errorf("intercepts of headless service: %s.%s won't work "+
-			"see https://github.com/telepresenceio/telepresence/issues/1632",
-			svc.Name, svc.Namespace)
-	}
-
 	var appPort corev1.ContainerPort
 	switch {
 	case containerPortIndex >= 0:
@@ -132,7 +126,7 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	if err != nil {
 		return nil, err
 	}
-	if servicePort.TargetPort.Type == intstr.Int {
+	if servicePort.TargetPort.Type == intstr.Int || svc.Spec.ClusterIP == "None" {
 		patches = addInitContainer(ctx, &pod, servicePort, &appPort, patches)
 	} else {
 		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
