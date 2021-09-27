@@ -28,6 +28,7 @@ type gatherLogsArgs struct {
 	trafficAgents  string
 	trafficManager bool
 	anon           bool
+	podYaml        bool
 }
 
 func gatherLogsCommand() *cobra.Command {
@@ -42,6 +43,9 @@ someone to help you debug Telepresence.`,
 		Example: `Here are a few examples of how you can use this command:
 # Get all logs and export to a given file
 telepresence gather-logs -o /tmp/telepresence_logs.zip
+
+# Get all logs and pod yaml for components in the kubernetes cluster
+telepresence gather-logs -o /tmp/telepresence_logs.zip --get-pod-yaml
 
 # Get all logs for the daemons only
 telepresence gather-logs --traffic-agents=None --traffic-manager=False
@@ -66,6 +70,7 @@ telepresence gather-logs --daemons=None
 	flags.BoolVar(&gl.trafficManager, "traffic-manager", true, "If you want to collect logs from the traffic-manager")
 	flags.StringVar(&gl.trafficAgents, "traffic-agents", "all", "Traffic-agents to collect logs from: all, name substring, None")
 	flags.BoolVarP(&gl.anon, "anonymize", "a", false, "To anonymize pod names + namespaces from the logs")
+	flags.BoolVarP(&gl.podYaml, "get-pod-yaml", "y", false, "Get the yaml of any pods you are getting logs for")
 	return cmd
 }
 
@@ -134,6 +139,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	scout.SetMetadatum("daemon_logs", daemonLogs)
 	scout.SetMetadatum("traffic_manager_logs", gl.trafficManager)
 	scout.SetMetadatum("traffic_agent_logs", gl.trafficAgents)
+	scout.SetMetadatum("get_pod_yaml", gl.podYaml)
 	scout.Report(log.WithDiscardingLogger(ctx), "used_gather_logs")
 
 	// Get all logs from the logdir that match the daemons the user cares about.
@@ -167,6 +173,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		rq := &manager.GetLogsRequest{
 			TrafficManager: gl.trafficManager,
 			Agents:         gl.trafficAgents,
+			GetPodYaml:     gl.podYaml,
 		}
 		err = withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
 			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
@@ -185,6 +192,20 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 					defer fd.Close()
 					fdWriter := bufio.NewWriter(fd)
 					_, _ = fdWriter.WriteString(log)
+					fdWriter.Flush()
+				}
+
+				// Write the pod yaml to files
+				for podName, yaml := range lr.PodYaml {
+					podName = getPodName(podName, gl.anon, anonymizer)
+					podYamlFile := fmt.Sprintf("%s/%s.yaml", exportDir, podName)
+					fd, err := os.Create(podYamlFile)
+					if err != nil {
+						return err
+					}
+					defer fd.Close()
+					fdWriter := bufio.NewWriter(fd)
+					_, _ = fdWriter.WriteString(yaml)
 					fdWriter.Flush()
 				}
 				return nil

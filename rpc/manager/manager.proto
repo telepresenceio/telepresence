@@ -268,12 +268,15 @@ message LogLevelRequest {
 }
 
 message GetLogsRequest {
-  // Whether or not logs from the traffic-manager are desired
+  // Whether or not logs from the traffic-manager are desired.
   bool traffic_manager = 1;
 
   // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
   // or substring to filter based on pod names.
   string agents = 2;
+
+  // Whether or not to get the pod yaml deployed to the cluster.
+  bool get_pod_yaml = 3;
 }
 
 message LogsResponse {
@@ -285,6 +288,10 @@ message LogsResponse {
   // Errors encountered when getting logs from the traffic-manager
   // and/or traffic-agents.
   string err_msg = 2;
+
+  // The map contains assocations between <podName.namespace> and the pod's
+  // yaml.
+  map<string, string> pod_yaml = 3;
 }
 
 // VersionInfo2 is different than telepresence.common.VersionInfo in
