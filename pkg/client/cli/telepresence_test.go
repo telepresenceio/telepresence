@@ -285,30 +285,43 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
 		os.Setenv("KUBECONFIG", kubeconfigFileName)
 		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
+
+		logDir, err := filelocation.AppUserLogDir(ctx)
+		logFile := filepath.Join(logDir, "daemon.log")
+		require.NoError(err)
+
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
-		if goRuntime.GOOS == "windows" || goRuntime.GOOS == "darwin" {
-			// FIXME(josecv) Windows and macOS need a few seconds before the DNS queries start going through the daemon
-			time.Sleep(10 * time.Second)
-		}
-		// Test with ".org" suffix that was added as an include-suffix
-		_ = run(ctx, "curl", "--silent", "example.org")
+		defer func() {
+			_, stderr = telepresenceContext(ctx, "quit")
+			require.Empty(stderr)
+		}()
 
-		_, stderr = telepresenceContext(ctx, "quit")
-		require.Empty(stderr)
-		rootLog, err := os.Open(filepath.Join(tmpDir, "daemon.log"))
-		require.NoError(err)
-		defer rootLog.Close()
+		retryCount := 0
+		ts.Eventually(func() bool {
+			// Test with ".org" suffix that was added as an include-suffix
+			host := fmt.Sprintf("zwslkjsdf-%d.org", retryCount)
+			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+			defer cancel()
+			_ = run(short, "curl", "--silent", "--connect-timeout", "0.01", host)
 
-		hasLookup := false
-		scn := bufio.NewScanner(rootLog)
-		builder := strings.Builder{}
-		for scn.Scan() && !hasLookup {
-			text := scn.Text()
-			builder.WriteString(text)
-			hasLookup = strings.Contains(text, `LookupHost "example.org"`)
-		}
-		ts.True(hasLookup, "daemon.log does not contain expected LookupHost statement\ncontents:\n"+builder.String())
+			// Give query time to reach telepresence and produce a log entry
+			dtime.SleepWithContext(ctx, 10*time.Millisecond)
+
+			rootLog, err := os.Open(logFile)
+			require.NoError(err)
+			defer rootLog.Close()
+
+			scanFor := fmt.Sprintf(`LookupHost "%s"`, host)
+			scn := bufio.NewScanner(rootLog)
+			for scn.Scan() {
+				if strings.Contains(scn.Text(), scanFor) {
+					return true
+				}
+			}
+			retryCount++
+			return false
+		}, 10*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
@@ -1313,6 +1326,11 @@ func (is *interceptedSuite) TestF_StopInterceptedPodOfMany() {
 	st, err := os.Stat(filepath.Join(is.mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+func (is *interceptedSuite) TestG_ReportsPortConflict() {
+	_, stderr := telepresence(is.T(), "intercept", "--namespace", is.ns(), "--port", "9001", "dummy-name")
+	is.Contains(stderr, "Port 127.0.0.1:9001 is already in use by intercept hello-1-"+is.ns())
 }
 
 type helmSuite struct {
