@@ -12,12 +12,20 @@
 #     - version: The (optional) version number of the release, if applicable.
 #     - date: The date of the release in the format YYYY-MM-DD.
 #     - notes: An array of noteworthy changes included in the release, each having the following attributes:
-#         - title: A short title of the noteworthy change.
-#         - body: Two or three sentences describing the change and why it is noteworthy. This is in rich text format and may contain HTML elements.
-#         - image: The URL of an image that visually represents the noteworthy change.
-#         - docs: The path to the documentation page where additional information can be found.
 #         - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
-#
+#         - title: A short title of the noteworthy change.
+#         - body: >-
+#             Two or three sentences describing the change and why it
+#             is noteworthy.  This is HTML, not plain text or
+#             markdown.  It is handy to use YAML's ">-" feature to
+#             allow line-wrapping.
+#         - image: >-
+#             The URL of an image that visually represents the
+#             noteworthy change.  This path is relative to the
+#             `release-notes` directory; if this file is
+#             `FOO/releaseNotes.yml`, then the image paths are
+#             relative to `FOO/release-notes/`.
+#         - docs: The path to the documentation page where additional information can be found.
 
 docTitle: Telepresence Release Notes
 docDescription: >-
@@ -38,7 +46,7 @@ items:
         body: >-
           The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
         docs: reference/cluster-config/#note-on-numeric-ports
-        
+
       - type: feature
         title: New subcommand to gather logs and export into zip file
         body: >-
