@@ -2,7 +2,6 @@
 description: "Install Telepresence and learn to use it to intercept services running in your Kubernetes cluster, speeding up local development and debugging."
 ---
 
-import {DemoClusterMetadata, ExpirationDate} from '../../../../../src/components/DemoClusterMetadata';
 import {
 EmojivotoServicesList,
 DCPLink,
@@ -14,7 +13,6 @@ ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
 import Platform from '@src/components/Platform';
-import QSCards from './qs-cards';
 import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
 
@@ -90,7 +88,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
       Message: ERROR
   ```
 
-3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/main.go` here we are going to delete the line `5` since we are not going to use the `"fmt"` package anymore.
+3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/api.go` here we are going to delete the line `5` since we are not going to use the `"fmt"` package anymore.
 
   ```go
   3 import (
