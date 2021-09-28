@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.4.5 (TBD)
+
+- Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.
+
 ### 2.4.4 (September 27, 2021)
 
 - Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
