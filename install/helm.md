@@ -27,7 +27,7 @@ When you run the Helm chart, it installs all the components required for the Tel
    kubectl create namespace ambassador
    ```
 
-2. Install the Telepresenc Traffic Manager with the following command:
+2. Install the Telepresence Traffic Manager with the following command:
 
    ```shell
    helm install traffic-manager --namespace ambassador datawire/telepresence
