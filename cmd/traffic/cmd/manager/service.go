@@ -547,32 +547,37 @@ func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
 	sessionID := request.GetSession().GetSessionId()
-	response := &rpc.LookupHostResponse{}
-	ips, err := m.state.AgentsLookup(ctx, sessionID, request)
+
+	ips, count, err := m.state.AgentsLookup(ctx, sessionID, request)
 	if err != nil {
-		return nil, err
-	}
-	if len(ips) > 0 {
-		dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
-		response.Ips = ips.BytesSlice()
-		return response, nil
+		dlog.Errorf(ctx, "AgentLookup: %v", err)
+	} else if count > 0 {
+		if len(ips) == 0 {
+			dlog.Debugf(ctx, "LookupHost on agents: %s -> NOT FOUND", request.Host)
+		} else {
+			dlog.Debugf(ctx, "LookupHost on agents: %s -> %s", request.Host, ips)
+		}
 	}
 
-	// Either we aren't intercepting any agents, or none of them was able to find the given host. Let's
-	// try from the manager too.
-	addrs, err := net.LookupHost(request.Host)
-	if err != nil {
-		response.Ips = [][]byte{}
-		dlog.Debugf(ctx, "LookupHost response %s -> NOT FOUND", request.Host)
-		return response, nil
+	if count == 0 {
+		if addrs, err := net.DefaultResolver.LookupHost(ctx, request.Host); err != nil {
+			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+				dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> NOT FOUND", request.Host)
+			} else {
+				dlog.Errorf(ctx, "LookupHost on traffic-manager LookupHost: %v", err)
+			}
+		} else {
+			ips = make(iputil.IPs, len(addrs))
+			for i, addr := range addrs {
+				ips[i] = iputil.Parse(addr)
+			}
+			dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> %s", request.Host, ips)
+		}
 	}
-	ips = make(iputil.IPs, len(addrs))
-	for i, addr := range addrs {
-		ips[i] = iputil.Parse(addr)
+	if ips == nil {
+		ips = iputil.IPs{}
 	}
-	dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
-	response.Ips = ips.BytesSlice()
-	return response, nil
+	return &rpc.LookupHostResponse{Ips: ips.BytesSlice()}, nil
 }
 
 func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.LookupHostAgentResponse) (*empty.Empty, error) {

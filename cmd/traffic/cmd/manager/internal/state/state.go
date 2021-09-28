@@ -765,24 +765,24 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 
 // AgentsLookup will send the given request to all agents currently intercepted by the client identified with
 // the clientSessionID, it will then wait for results to arrive, collect those results, and return them as a
-// unique and sorted slice.
-func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, request *rpc.LookupHostRequest) (iputil.IPs, error) {
+// unique and sorted slice together with a count of how many agents that replied.
+func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, request *rpc.LookupHostRequest) (iputil.IPs, int, error) {
 	iceptAgentIDs, err := s.getAgentsInterceptedByClient(clientSessionID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	ips := iputil.IPs{}
 	iceptCount := len(iceptAgentIDs)
 	if iceptCount == 0 {
-		return ips, nil
+		return ips, 0, nil
 	}
 
 	rsMu := sync.Mutex{} // prevent concurrent updates of the ips slice
-	agentTimeout, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-	responseCount := 0
+	agentTimeout, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
+	count := 0
 	wg := sync.WaitGroup{}
 	wg.Add(iceptCount)
 	for _, agentSessionID := range iceptAgentIDs {
@@ -805,21 +805,16 @@ func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, reques
 					return
 				}
 				rsMu.Lock()
-				responseCount++
-				rc := responseCount
+				count++
 				for _, ip := range rs.Ips {
 					ips = append(ips, ip)
 				}
 				rsMu.Unlock()
-				if rc == iceptCount {
-					// all agents have responded
-					return
-				}
 			}
 		}(agentSessionID)
 	}
 	wg.Wait() // wait for timeout or that all agents have responded
-	return ips.UniqueSorted(), nil
+	return ips.UniqueSorted(), count, nil
 }
 
 // PostLookupResponse receives lookup responses from an agent and places them in the channel

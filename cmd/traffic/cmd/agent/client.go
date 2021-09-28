@@ -162,27 +162,37 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 			}
 			return
 		}
-		dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
-		addrs, err := net.LookupHost(lr.Host)
-		r := rpc.LookupHostResponse{}
-		if err == nil {
-			ips := make(iputil.IPs, len(addrs))
-			for i, addr := range addrs {
-				ips[i] = iputil.Parse(addr)
-			}
-			dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
-			r.Ips = ips.BytesSlice()
+		go lookupAndRespond(ctx, manager, session, lr)
+	}
+}
+
+func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
+	dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
+	response := rpc.LookupHostAgentResponse{
+		Session:  session,
+		Request:  lr,
+		Response: &rpc.LookupHostResponse{},
+	}
+
+	if addrs, err := net.DefaultResolver.LookupHost(ctx, lr.Host); err != nil {
+		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+			dlog.Debugf(ctx, "Lookup response for %s -> NOT FOUND", lr.Host)
+		} else {
+			dlog.Errorf(ctx, "LookupHost: %v", err)
 		}
-		response := rpc.LookupHostAgentResponse{
-			Session:  session,
-			Request:  lr,
-			Response: &r,
+	} else if len(addrs) > 0 {
+		ips := make(iputil.IPs, len(addrs))
+		for i, addr := range addrs {
+			ips[i] = iputil.Parse(addr)
 		}
-		if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
-			if ctx.Err() == nil {
-				dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
-			}
-			return
+		dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
+		response.Response.Ips = ips.BytesSlice()
+	} else {
+		dlog.Debugf(ctx, "Lookup response for %s -> EMPTY", lr.Host)
+	}
+	if _, err := manager.AgentLookupHostResponse(ctx, &response); err != nil {
+		if ctx.Err() == nil {
+			dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
 		}
 	}
 }
