@@ -830,7 +830,14 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *connector.ConnectInfo, interceptName string, interceptNamespace string) (*manager.IngressInfo, error) {
+func selectIngress(
+	ctx context.Context,
+	in io.Reader,
+	out io.Writer,
+	connInfo *connector.ConnectInfo,
+	interceptName string,
+	interceptNamespace string,
+) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return nil, err
