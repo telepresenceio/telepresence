@@ -1201,13 +1201,21 @@ func (is *interceptedSuite) TestC_GatherLogs() {
 	require := is.Require()
 	outputDir := is.T().TempDir()
 
-	getZipData := func(outputFile string) (bool, int) {
+	getZipData := func(outputFile string) (bool, int, int, []string) {
 		zipReader, err := zip.OpenReader(outputFile)
 		require.NoError(err)
+		// we collect and return the fileNames so that it makes it easier
+		// to debug if tests fail
+		var fileNames []string
 		defer zipReader.Close()
-		foundManager, foundAgents := false, 0
+		foundManager, foundAgents, yamlCount := false, 0, 0
 		for _, f := range zipReader.File {
+			fileNames = append(fileNames, f.Name)
 			if strings.Contains(f.Name, "traffic-manager") {
+				if strings.HasSuffix(f.Name, ".yaml") {
+					yamlCount++
+					continue
+				}
 				foundManager = true
 				fileContent, err := cli.ReadZip(f)
 				require.NoError(err)
@@ -1216,6 +1224,10 @@ func (is *interceptedSuite) TestC_GatherLogs() {
 				require.Contains(string(fileContent), "Traffic Manager v2.")
 			}
 			if strings.Contains(f.Name, "hello-") {
+				if strings.HasSuffix(f.Name, ".yaml") {
+					yamlCount++
+					continue
+				}
 				foundAgents++
 				fileContent, err := cli.ReadZip(f)
 				require.NoError(err)
@@ -1224,48 +1236,63 @@ func (is *interceptedSuite) TestC_GatherLogs() {
 				require.Contains(string(fileContent), "Traffic Agent v2.")
 			}
 		}
-		return foundManager, foundAgents
+		return foundManager, foundAgents, yamlCount, fileNames
 	}
 	is.Run("Get All Logs", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile)
+		_, stderr := telepresence(is.T(), "gather-logs", "--get-pod-yaml", "--output-file", outputFile)
 		require.Empty(stderr)
-		foundManager, foundAgents := getZipData(outputFile)
+		foundManager, foundAgents, yamlCount, fileNames := getZipData(outputFile)
 		require.True(foundManager)
-		require.Equal(serviceCount, foundAgents)
+		require.Equal(serviceCount, foundAgents, fileNames)
+		// One for each agent + one for the traffic manager
+		require.Equal(serviceCount+1, yamlCount, fileNames)
 	})
 
 	is.Run("Get Manager Logs Only", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-agents=None")
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--get-pod-yaml", "--traffic-agents=None")
 		require.Empty(stderr)
-		foundManager, foundAgents := getZipData(outputFile)
+		foundManager, foundAgents, yamlCount, fileNames := getZipData(outputFile)
 		require.True(foundManager)
-		require.Equal(0, foundAgents)
+		require.Equal(0, foundAgents, fileNames)
+		require.Equal(1, yamlCount, fileNames)
 	})
 	is.Run("Get Agent Logs Only", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False")
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--get-pod-yaml", "--traffic-manager=False")
 		require.Empty(stderr)
-		foundManager, foundAgents := getZipData(outputFile)
+		foundManager, foundAgents, yamlCount, fileNames := getZipData(outputFile)
 		require.False(foundManager)
-		require.Equal(serviceCount, foundAgents)
+		require.Equal(serviceCount, foundAgents, fileNames)
+		require.Equal(serviceCount, yamlCount, fileNames)
 	})
 	is.Run("Get Only 1 Agent Log", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=hello-1")
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--get-pod-yaml", "--traffic-manager=False", "--traffic-agents=hello-1")
 		require.Empty(stderr)
-		foundManager, foundAgents := getZipData(outputFile)
+		foundManager, foundAgents, yamlCount, fileNames := getZipData(outputFile)
 		require.False(foundManager)
-		require.Equal(1, foundAgents)
+		require.Equal(1, foundAgents, fileNames)
+		require.Equal(1, yamlCount, fileNames)
+	})
+	is.Run("Don't get pod yaml if we aren't getting logs", func() {
+		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--get-pod-yaml", "--traffic-manager=False", "--traffic-agents=None")
+		require.Empty(stderr)
+		foundManager, foundAgents, yamlCount, fileNames := getZipData(outputFile)
+		require.False(foundManager)
+		require.Equal(0, foundAgents, fileNames)
+		require.Equal(0, yamlCount, fileNames)
 	})
 	is.Run("No K8s Logs", func() {
 		outputFile := fmt.Sprintf("%s/allLogs.zip", outputDir)
-		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=None")
+		_, stderr := telepresence(is.T(), "gather-logs", "--output-file", outputFile, "--traffic-manager=False", "--traffic-agents=None", "--get-pod-yaml")
 		require.Empty(stderr)
-		foundManager, foundAgents := getZipData(outputFile)
+		foundManager, foundAgents, yamlCount, fileNames := getZipData(outputFile)
 		require.False(foundManager)
-		require.Equal(0, foundAgents)
+		require.Equal(0, foundAgents, fileNames)
+		require.Equal(0, yamlCount, fileNames)
 	})
 }
 
