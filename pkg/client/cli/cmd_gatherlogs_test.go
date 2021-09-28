@@ -271,6 +271,115 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 	}
 }
 
+func Test_gatherLogsGetPodName(t *testing.T) {
+	type testcase struct {
+		name string
+		anon bool
+	}
+	testCases := []testcase{
+		{
+			name: "noAnonymize",
+			anon: false,
+		},
+		{
+			name: "anonymize",
+			anon: true,
+		},
+	}
+	podNames := []string{
+		"echo-auto-inject-64323-3454.default",
+		"echo-easy-141245-23432.ambassador",
+		"traffic-manager-123214-2332.ambassador",
+	}
+	podMapping := []string{
+		"pod-1.namespace-1",
+		"pod-2.namespace-2",
+		"traffic-manager.namespace-2",
+	}
+
+	for _, tc := range testCases {
+		tcName := tc.name
+		tc := tc
+		// We need a fresh anonymizer for each test
+		anonymizer := &anonymizer{
+			namespaces: make(map[string]string),
+			podNames:   make(map[string]string),
+		}
+		t.Run(tcName, func(t *testing.T) {
+			// Get the newPodName for each pod
+			for _, podName := range podNames {
+				newPodName := getPodName(podName, tc.anon, anonymizer)
+				if !tc.anon {
+					require.Equal(t, podName, newPodName)
+				} else {
+					require.NotEqual(t, podName, newPodName)
+				}
+			}
+			if !tc.anon {
+				// If we weren't anonymizing the names, then the
+				// maps should be empty
+				require.Empty(t, anonymizer.podNames)
+				require.Empty(t, anonymizer.namespaces)
+			} else {
+				// Ensure the anonymizer contains the total expected values
+				require.Equal(t, 3, len(anonymizer.podNames))
+				require.Equal(t, 2, len(anonymizer.namespaces))
+
+				// Ensure the podNames were anonymized correctly
+				for i := range podNames {
+					require.Equal(t, podMapping[i], anonymizer.podNames[podNames[i]])
+				}
+
+				// Ensure the namespaces were anonymized correctly
+				require.Equal(t, "namespace-1", anonymizer.namespaces["default"])
+				require.Equal(t, "namespace-2", anonymizer.namespaces["ambassador"])
+			}
+		})
+	}
+}
+
+func Test_gatherLogsAnonymizeLogs(t *testing.T) {
+	anonymizer := &anonymizer{
+		namespaces: map[string]string{
+			"default":    "namespace-1",
+			"ambassador": "namespace-2",
+		},
+		// these names are specific because they come from the test data
+		podNames: map[string]string{
+			"echo-auto-inject-6496f77cbd-n86nc.default":   "pod-1.namespace-1",
+			"traffic-manager-5c69859f94-g4ntj.ambassador": "traffic-manager.namespace-2",
+		},
+	}
+
+	ctx := dlog.NewTestContext(t, false)
+	testLogDir := "testdata/testLogDir"
+	outputDir := t.TempDir()
+	stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+	files := []string{"echo-auto-inject-6496f77cbd-n86nc", "traffic-manager-5c69859f94-g4ntj"}
+	for _, file := range files {
+		// The anonymize function edits files in place
+		// so copy the files before we do that
+		srcFile := fmt.Sprintf("%s/%s", testLogDir, file)
+		dstFile := fmt.Sprintf("%s/%s", outputDir, file)
+		err := copyFiles(dstFile, srcFile)
+		require.NoError(t, err)
+
+		err = anonymizeLog(stdout, dstFile, anonymizer)
+		require.NoError(t, err)
+
+		// Now verify things have actually been anonymized
+		anonFile, err := os.ReadFile(dstFile)
+		require.NoError(t, err)
+		require.NotContains(t, string(anonFile), "echo-auto-inject")
+		require.NotContains(t, string(anonFile), "default")
+		require.NotContains(t, string(anonFile), "ambassador")
+
+		// Both logs make reference to "echo-auto-inject" so we
+		// validate that "pod-1" appears in both logs
+		require.Contains(t, string(anonFile), "pod-1")
+	}
+}
+
 // ReadZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
 // also used in telepresence_test.go
