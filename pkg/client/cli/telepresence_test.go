@@ -1857,8 +1857,13 @@ func annotateForWebhook(ctx context.Context, objKind, objName, objNamespace stri
 func dropWebhookAnnotation(ctx context.Context, objKind, objName, objNamespace string) error {
 	return run(ctx, "kubectl", "patch", "-n", objNamespace, objKind, objName, "--type=json", "-p", `[{
 	"op": "remove",
-	"path": "/spec/template/metadata/annotations"
-}]`)
+	"path": "/spec/template/metadata/annotations/telepresence.getambassador.io~1inject-traffic-agent"
+},
+{
+	"op": "remove",
+	"path": "/spec/template/metadata/annotations/telepresence.getambassador.io~1inject-service-port"
+}
+]`)
 }
 
 func run(c context.Context, args ...string) error {
