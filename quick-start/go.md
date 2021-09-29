@@ -18,13 +18,13 @@ import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/com
 
 # Telepresence Quick Start - **Go**
 
-In this guide, we'll give you a hands-on tutorial with Telepresence and Golang. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
+This guide provides you with a hands-on tutorial with Telepresence and Golang. To go through this tutorial, the only thing you'll need is a computer that runs Docker Desktop >=20.10.7. We'll give you a pre-configured remote Kubernetes cluster and a Docker container to run locally.
 
 If you don't have Docker Desktop already installed, go to the [Docker download page](https://www.docker.com/get-started) and install Docker.
 
 ## 1. Get a free remote cluster
 
-Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
+Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, you'll start with a pre-configured, remote cluster.
 
 1. <Login urlParams="docs_source=telepresence-quick-start&login_variant=free-cluster-activation" origin="telepresence-novice-go-quick-start" />
 2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster.
@@ -37,7 +37,8 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 
 ## 2. Try the Emojivoto application
 
-The remote cluster is running the Emojivoto application, which consists of four services. Test out the application:
+The remote cluster is running the Emojivoto application, which consists of four services.
+Test out the application:
 
 1. Go to the <ExternalIp>Emojivoto webapp</ExternalIp> and vote for some emojis.
    <Alert severity="info">
@@ -48,7 +49,7 @@ The remote cluster is running the Emojivoto application, which consists of four 
 
 ## 3. Run the docker container
 
-We'll run the `voting-svc` service locally since the bug is present in that service, to save you time, we have a docker container with this service running and all you'll need to fix the bug.
+The bug is present in the `voting-svc` service, you'll run that service locally. To save your time, we prepared a Docker container with this service running and all you'll need to fix the bug.
 
 1. Run the Docker container locally: 
 
@@ -88,12 +89,12 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
       Message: ERROR
   ```
 
-3. In order to fix the bug, the docker container comes with an embedded IDE that runs in the browser, you can go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/api.go` here we are going to delete the line `5` since we are not going to use the `"fmt"` package anymore.
+3. In order to fix the bug, use the Docker container's embedded IDE to fix this error. Go to <a href="http://localhost:8083" target="_blank">http://localhost:8083</a> and open `api/api.go`. Remove the `"fmt"` package by deleting the line 5.
 
   ```go
   3 import (
   4  "context"
-  5  "fmt" // delete this line
+  5  "fmt"     // DELETE THIS LINE
   6
   7  pb "github.com/buoyantio/emojivoto/emojivoto-voting-svc/gen/proto"
   ```
@@ -111,7 +112,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
   21   return pS.vote(":doughnut:")
   22 }
   ```
-  Then save the file (`Ctrl+s` for Windows, `Cmd+s` for Mac or `Menu -> File -> Save`) and now we can verify that the error is fixed now:
+  Then save the file (`Ctrl+s` for Windows, `Cmd+s` for Mac or `Menu -> File -> Save`) and verify that the error is fixed now:
 
   ```
   $ grpcurl -v -plaintext -import-path ./proto -proto Voting.proto localhost:8081 emojivoto.v1.VotingService.VoteDoughnut
@@ -136,7 +137,9 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
 
 ## 4. Telepresence intercept
 
-1. Now the bug is fixed, we we'll use Telepresence to intercept *all* the traffic through our local service, to do that, inside the container you can run:
+1. Now the bug is fixed, you can use Telepresence to intercept *all* the traffic through our local service.
+Run the following command inside the container:
+
   ```
   $ telepresence intercept voting --port 8081:8080
 
@@ -152,7 +155,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
   ```
   Now you can go back to <ExternalIp>Emojivoto webapp</ExternalIp> and you'll see that voting for 🍩 woks as expected.
 
-2. We just created an intercept, this tell Telepresence where to send traffic. In this example we sent all the traffic destined to `voting-svc` to the local Dockerized version of the service. In this way we intercept *all the traffic* to our local `voting-svc` service and since we already fixed it, now it works.
+You have created an intercept to tell Telepresence where to send traffic. The `voting-svc` traffic is now destined to the local Dockerized version of the service. This intercepts *all the traffic* to the local `voting-svc` service, which has been fixed with the Telepresence intercept.
 
 <Alert severity="success">
   <strong>Congratulations!</strong> Traffic to the remote service is now being routed to your local laptop, and you can see how the local fix works on the remote environment!
