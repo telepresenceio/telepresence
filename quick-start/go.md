@@ -111,7 +111,7 @@ We'll run the `voting-svc` service locally since the bug is present in that serv
   21   return pS.vote(":doughnut:")
   22 }
   ```
-  Then save the file (`Ctrl+s` or `Menu -> File -> Save`) and now we can verify that the error is fixed now:
+  Then save the file (`Ctrl+s` for Windows, `Cmd+s` for Mac or `Menu -> File -> Save`) and now we can verify that the error is fixed now:
 
   ```
   $ grpcurl -v -plaintext -import-path ./proto -proto Voting.proto localhost:8081 emojivoto.v1.VotingService.VoteDoughnut
