@@ -33,7 +33,7 @@ following Free and Open Source software:
     github.com/cyphar/filepath-securejoin                               v0.2.2                                                      3-clause BSD license
     github.com/datawire/ambassador/v2                                   v2.0.2-rc.1.0.20210915144712-7bc28ed11dfc                   Apache License 2.0
     github.com/datawire/dlib                                            v1.2.4-0.20210629021142-e221f3b9c3b8                        Apache License 2.0
-    github.com/datawire/dtest                                           v0.0.0-20210803160344-b219a345f448                          Apache License 2.0
+    github.com/datawire/dtest                                           v0.0.0-20210928162311-722b199c4c2f                          Apache License 2.0
     github.com/davecgh/go-spew                                          v1.1.1                                                      ISC license
     github.com/deislabs/oras                                            v0.11.1                                                     MIT license
     github.com/docker/cli                                               v20.10.5+incompatible                                       Apache License 2.0

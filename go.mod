@@ -8,7 +8,7 @@ require (
 	github.com/coreos/go-iptables v0.6.0
 	github.com/datawire/ambassador/v2 v2.0.2-rc.1.0.20210915144712-7bc28ed11dfc
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
-	github.com/datawire/dtest v0.0.0-20210803160344-b219a345f448
+	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible
 	github.com/godbus/dbus/v5 v5.0.4
 	github.com/google/go-cmp v0.5.5
