@@ -47,7 +47,7 @@ Test out the application:
 
 2. Now, click on the 🍩 emoji. You'll see that a bug is present, and voting 🍩 doesn't work.
 
-## 3. Run the docker container
+## 3. Run the Docker container
 
 The bug is present in the `voting-svc` service, you'll run that service locally. To save your time, we prepared a Docker container with this service running and all you'll need to fix the bug.
 
