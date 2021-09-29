@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/blang/semver"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +21,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 )
+
+const supportedKubeAPIVersion = "1.17.0"
 
 type nameMeta struct {
 	Name string `json:"name"`
@@ -85,7 +89,21 @@ func (kc *Cluster) check(c context.Context) error {
 			errCh <- err
 			return
 		}
+		// Validate that the kubernetes server version is supported
 		dlog.Infof(c, "Server version %s", info.GitVersion)
+		gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
+		if err != nil {
+			dlog.Errorf(c, "error converting version %s to semver: %s", info.GitVersion, err)
+		}
+		supGitVer, err := semver.Parse(supportedKubeAPIVersion)
+		if err != nil {
+			dlog.Errorf(c, "error converting known version %s to semver: %s", supportedKubeAPIVersion, err)
+		}
+		if gitVer.LT(supGitVer) {
+			dlog.Errorf(c,
+				"kubernetes server versions older than %s are not supported, using %s .",
+				supportedKubeAPIVersion, info.GitVersion)
+		}
 		close(errCh)
 	}()
 
