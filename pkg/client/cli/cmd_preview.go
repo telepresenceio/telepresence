@@ -41,11 +41,12 @@ func previewCommand() *cobra.Command {
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					if createSpec.Ingress == nil {
 						request := manager.GetInterceptRequest{Session: connInfo.SessionInfo, Name: args[0]}
+						// Will throw rpc "not found" error if intercept has not yet been created
 						interceptInfo, err := managerClient.GetIntercept(ctx, &request)
 						if err != nil {
 							return err
 						}
-						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), connInfo, interceptInfo.Spec.Name, interceptInfo.Spec.Namespace)
+						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), connInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace)
 						if err != nil {
 							return err
 						}
