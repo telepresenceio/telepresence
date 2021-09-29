@@ -61,7 +61,7 @@ func NewInfo(ctx context.Context) Info {
 	dc := clientset.Discovery()
 	info, err := dc.ServerVersion()
 	if err != nil {
-		dlog.Errorf(ctx, "unable to get server information")
+		dlog.Errorf(ctx, "error getting server information: %s", err)
 	} else {
 		gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
 		if err != nil {
