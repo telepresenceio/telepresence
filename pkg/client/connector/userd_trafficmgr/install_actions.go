@@ -455,6 +455,91 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 	return nil
 }
 
+// addInitContainerAction ///////////////////////////////////////////////////////
+
+// addInitContainerAction is a partialAction that adds a traffic-agent to the set of containers in a
+// pod template spec.
+type addInitContainerAction struct {
+	// The information of the pre-existing container port that the agent will take over.
+	AppPortProto  corev1.Protocol `json:"container_port_proto"`
+	AppPortNumber uint16          `json:"app_port"`
+
+	// The image name of the initContainer to add -- usually the same as the traffic agent image that will be used
+	ImageName string `json:"image_name"`
+}
+
+var _ partialAction = (*addInitContainerAction)(nil)
+
+func (ica *addInitContainerAction) Do(obj kates.Object) error {
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	if err != nil {
+		return err
+	}
+	if tplSpec.Spec.InitContainers == nil {
+		tplSpec.Spec.InitContainers = []corev1.Container{}
+	}
+	tplSpec.Spec.InitContainers = append(tplSpec.Spec.InitContainers, install.InitContainer(
+		ica.ImageName,
+		corev1.ContainerPort{
+			ContainerPort: 9900,
+			Protocol:      ica.AppPortProto,
+		},
+		int(ica.AppPortNumber),
+	))
+
+	return nil
+}
+
+func (ica *addInitContainerAction) ExplainDo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "add %s initContainer with image %s", install.InitContainerName, ica.ImageName)
+}
+
+func (ica *addInitContainerAction) ExplainUndo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "remove %s initContainer with image %s", install.InitContainerName, ica.ImageName)
+}
+
+func (ica *addInitContainerAction) IsDone(obj kates.Object) bool {
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	if err != nil {
+		return false
+	}
+	cns := tplSpec.Spec.InitContainers
+	if cns == nil {
+		return false
+	}
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Name == install.InitContainerName {
+			return true
+		}
+	}
+	return false
+}
+
+func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) error {
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	if err != nil {
+		return err
+	}
+
+	containerIdx := -1
+	cns := tplSpec.Spec.InitContainers
+	if cns == nil {
+		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+	}
+	for i := range cns {
+		if tplSpec.Spec.Containers[i].Name == install.InitContainerName {
+			containerIdx = i
+			break
+		}
+	}
+	if containerIdx < 0 {
+		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+	}
+	tplSpec.Spec.InitContainers = append(tplSpec.Spec.InitContainers[:containerIdx], tplSpec.Spec.InitContainers[containerIdx+1:]...)
+	return nil
+}
+
 // hideContainerPortAction /////////////////////////////////////////////////////
 
 // A hideContainerPortAction will replace the symbolic name of a container port
@@ -562,6 +647,7 @@ type workloadActions struct {
 	ReferencedServicePortName string                   `json:"referenced_service_port_name,omitempty"`
 	HideContainerPort         *hideContainerPortAction `json:"hide_container_port,omitempty"`
 	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
+	AddInitContainer          *addInitContainerAction  `json:"add_init_container,omitempty"`
 }
 
 var _ completeAction = (*workloadActions)(nil)
@@ -572,6 +658,9 @@ func (d *workloadActions) actions() (actions multiAction) {
 	}
 	if d.AddTrafficAgent != nil {
 		actions = append(actions, d.AddTrafficAgent)
+	}
+	if d.AddInitContainer != nil {
+		actions = append(actions, d.AddInitContainer)
 	}
 	return actions
 }

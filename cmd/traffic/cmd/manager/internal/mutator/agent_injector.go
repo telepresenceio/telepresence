@@ -102,12 +102,6 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		}
 	}
 
-	if svc.Spec.ClusterIP == "None" {
-		return nil, fmt.Errorf("intercepts of headless service: %s.%s won't work "+
-			"see https://github.com/telepresenceio/telepresence/issues/1632",
-			svc.Name, svc.Namespace)
-	}
-
 	var appPort corev1.ContainerPort
 	switch {
 	case containerPortIndex >= 0:
@@ -132,7 +126,7 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	if err != nil {
 		return nil, err
 	}
-	if servicePort.TargetPort.Type == intstr.Int {
+	if servicePort.TargetPort.Type == intstr.Int || svc.Spec.ClusterIP == "None" {
 		patches = addInitContainer(ctx, &pod, servicePort, &appPort, patches)
 	} else {
 		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
@@ -228,11 +222,31 @@ func addAgentContainer(
 			return strconv.Itoa(int(svcPort.Port))
 		}(), refPodName)
 
-	agentName := podName
-	if strings.HasSuffix(agentName, "-") {
-		// Transform a generated name "my-echo-697464c6c5-" into an agent service name "my-echo"
-		tokens := strings.Split(podName, "-")
-		agentName = strings.Join(tokens[:len(tokens)-2], "-")
+	agentName := ""
+	if pod.OwnerReferences != nil {
+	owners:
+		for _, owner := range pod.OwnerReferences {
+			switch owner.Kind {
+			case "StatefulSet":
+				// If the pod is owned by a statefulset, the workload's name is the same as the statefulset's
+				agentName = owner.Name
+				break owners
+			case "ReplicaSet":
+				// If it's owned by a replicaset, then it's the same as the deployment e.g. "my-echo-697464c6c5" -> "my-echo"
+				tokens := strings.Split(owner.Name, "-")
+				agentName = strings.Join(tokens[:len(tokens)-1], "-")
+				break owners
+			}
+		}
+	}
+	if agentName == "" {
+		// If we weren't able to find a good name for the agent from the owners, take it from the pod name
+		agentName = podName
+		if strings.HasSuffix(agentName, "-") {
+			// Transform a generated name "my-echo-697464c6c5-" into an agent service name "my-echo"
+			tokens := strings.Split(podName, "-")
+			agentName = strings.Join(tokens[:len(tokens)-2], "-")
+		}
 	}
 
 	proto := svcPort.Protocol
