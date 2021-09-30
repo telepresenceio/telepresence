@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/blang/semver"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -18,6 +19,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
+
+const supportedKubeAPIVersion = "1.17.0"
 
 type Info interface {
 	// Watch changes of an ClusterInfo and write them on the given stream
@@ -53,8 +56,29 @@ func NewInfo(ctx context.Context) Info {
 	oi := info{}
 	oi.waiter.L = &oi.accLock
 	clientset := managerutil.GetK8sClientset(ctx)
-	client := clientset.CoreV1()
 
+	// Validate that the kubernetes server version is supported
+	dc := clientset.Discovery()
+	info, err := dc.ServerVersion()
+	if err != nil {
+		dlog.Errorf(ctx, "error getting server information: %s", err)
+	} else {
+		gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
+		if err != nil {
+			dlog.Errorf(ctx, "error converting version %s to semver: %s", info.GitVersion, err)
+		}
+		supGitVer, err := semver.Parse(supportedKubeAPIVersion)
+		if err != nil {
+			dlog.Errorf(ctx, "error converting known version %s to semver: %s", supportedKubeAPIVersion, err)
+		}
+		if gitVer.LT(supGitVer) {
+			dlog.Errorf(ctx,
+				"kubernetes server versions older than %s are not supported, using %s .",
+				supportedKubeAPIVersion, info.GitVersion)
+		}
+	}
+
+	client := clientset.CoreV1()
 	// Get the clusterID from the default namespaces
 	// We use a default clusterID because we don't want to fail if
 	// the traffic-manager doesn't have the ability to get the namespace
