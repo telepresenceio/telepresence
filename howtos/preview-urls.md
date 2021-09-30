@@ -62,42 +62,47 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
    For the example below, you will create a preview URL for `example-service` which listens on port 8080.  The preview URL for ingress will use the `ambassador` service in the `ambassador` namespace on port `443` using TLS encryption and the hostname `dev-environment.edgestack.me`:
 
-   ```
-   $ telepresence intercept example-service --port 8080 --env-file ~/ex-svc.env
+   ```console
+   $ telepresence intercept example-service --port 8080:http --env-file ~/example-service-intercept.env
+      To create a preview URL, telepresence needs to know how requests enter 
+	    your cluster. Please Select the ingress to use.
 
-     To create a preview URL, telepresence needs to know how cluster
-     ingress works for this service.  Please Confirm the ingress to use.
+      1/4: What's your ingress' IP address?
+           You may use an IP address or a DNS name (this is usually a
+           "service.namespace" DNS name).
 
-     1/4: What's your ingress' layer 3 (IP) address?
-          You may use an IP address or a DNS name (this is usually a
-          "service.namespace" DNS name).
+             [default: example-service.default]: ambassador.ambassador
 
-            [default: -]: ambassador.ambassador
+      2/4: What's your ingress' TCP port number?
 
-     2/4: What's your ingress' layer 4 address (TCP port number)?
+             [default: 80]: 443
 
-            [default: -]: 443
+      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
 
-     3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+             [default: n]: y
 
-            [default: n]: y
+      4/4: If required by your ingress, specify a different hostname
+           (TLS-SNI, HTTP "Host" header) to be used in requests.
 
-     4/4: If required by your ingress, specify a different layer 5 hostname
-          (TLS-SNI, HTTP "Host" header) to access this service.
+             [default: ambassador.ambassador]: dev-environment.edgestack.me
 
-            [default: ambassador.ambassador]: dev-environment.edgestack.me
-
-     Using deployment example-service
-     intercepted
+      Using Deployment example-service
+      intercepted
          Intercept name         : example-service
          State                  : ACTIVE
+         Workload kind          : Deployment
          Destination            : 127.0.0.1:8080
          Service Port Identifier: http
          Intercepting           : HTTP requests that match all of:
-           header("x-telepresence-intercept-id") ~= regexp("<intercept-id>:example-service")
-         Preview URL            : https://<random-domain-name>.preview.edgestack.me
+            header("x-telepresence-intercept-id") ~= regexp("<intercept id>:example-service")
+         Preview URL            : https://<random domain name>.preview.edgestack.me
          Layer 5 Hostname       : dev-environment.edgestack.me
-   ```
+
+  ```
+
+  <Alert severity="info">
+      These questions were modified for clarity and given defaults in release 2.4.5.
+  </Alert>
 
 4. Start your local environment using the environment variables retrieved in the previous step.
 
