@@ -8,7 +8,6 @@
 
 - Bugfix: Telepresence will now log that the kubernetes server version is unsupported when using a version older than 1.17.
 
-
 ### 2.4.4 (September 27, 2021)
 
 - Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
