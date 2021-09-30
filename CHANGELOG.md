@@ -4,6 +4,8 @@
 
 - Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.
 
+- Feature: Preview url questions have more context and provide "best guess" defaults.
+
 - Bugfix: Telepresence will now log that the kubernetes server version is unsupported when using a version older than 1.17.
 
 ### 2.4.4 (September 27, 2021)

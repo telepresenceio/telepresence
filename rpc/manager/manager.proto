@@ -234,6 +234,11 @@ message RemoveInterceptRequest2 {
   string name = 2;
 }
 
+message GetInterceptRequest {
+  SessionInfo session = 1;
+  string name = 2;
+}
+
 message ReviewInterceptRequest {
   SessionInfo session = 1;
   string id = 2;
@@ -431,6 +436,9 @@ service Manager {
   rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
 
   rpc UpdateIntercept(UpdateInterceptRequest) returns (InterceptInfo);
+
+  // GetIntercept gets info from intercept name
+  rpc GetIntercept(GetInterceptRequest) returns (InterceptInfo);
 
   // ReviewIntercept lets an agent approve or reject an intercept by
   // changing the disposition from "WATING" to "ACTIVE" or to an

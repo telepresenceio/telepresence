@@ -40,7 +40,13 @@ func previewCommand() *cobra.Command {
 			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					if createSpec.Ingress == nil {
-						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), connInfo)
+						request := manager.GetInterceptRequest{Session: connInfo.SessionInfo, Name: args[0]}
+						// Throws rpc "not found" error if intercept has not yet been created
+						interceptInfo, err := managerClient.GetIntercept(ctx, &request)
+						if err != nil {
+							return err
+						}
+						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), connInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace)
 						if err != nil {
 							return err
 						}

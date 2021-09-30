@@ -524,7 +524,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
-		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo)
+		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, is.args.name, is.args.namespace)
 		if err != nil {
 			return false, err
 		}
@@ -743,15 +743,15 @@ func (is *interceptState) writeEnvJSON() error {
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
 
 const (
-	ingressDesc = `To create a preview URL, telepresence needs to know how cluster
-ingress works for this service.  Please %s the ingress to use.`
-	ingressQ1 = `1/4: What's your ingress' layer 3 (IP) address?
+	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter 
+	your cluster.  Please %s the ingress to use.`
+	ingressQ1 = `1/4: What's your ingress' IP address?
      You may use an IP address or a DNS name (this is usually a
      "service.namespace" DNS name).`
-	ingressQ2 = `2/4: What's your ingress' layer 4 address (TCP port number)?`
+	ingressQ2 = `2/4: What's your ingress' TCP port number?`
 	ingressQ3 = `3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?`
-	ingressQ4 = `4/4: If required by your ingress, specify a different layer 5 hostname
-     (TLS-SNI, HTTP "Host" header) to access this service.`
+	ingressQ4 = `4/4: If required by your ingress, specify a different hostname
+     (TLS-SNI, HTTP "Host" header) to be used in requests.`
 )
 
 func showPrompt(out io.Writer, question string, defaultValue interface{}) {
@@ -830,7 +830,14 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *connector.ConnectInfo) (*manager.IngressInfo, error) {
+func selectIngress(
+	ctx context.Context,
+	in io.Reader,
+	out io.Writer,
+	connInfo *connector.ConnectInfo,
+	interceptName string,
+	interceptNamespace string,
+) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return nil, err
@@ -844,7 +851,15 @@ func selectIngress(ctx context.Context, in io.Reader, out io.Writer, connInfo *c
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {
 			selectOrConfirm = "Select" // Hard to confirm unless there's a default.
-			cachedIngressInfo = &manager.IngressInfo{}
+			if interceptNamespace == "" {
+				interceptNamespace = "default"
+			}
+			cachedIngressInfo = &manager.IngressInfo{
+				// Default Settings
+				Host:   fmt.Sprintf("%s.%s", interceptName, interceptNamespace),
+				Port:   80,
+				UseTls: false,
+			}
 		}
 	}
 
