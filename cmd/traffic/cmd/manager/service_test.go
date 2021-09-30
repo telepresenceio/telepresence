@@ -14,6 +14,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sVersion "k8s.io/apimachinery/pkg/version"
+	fakeDiscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/datawire/dlib/dhttp"
@@ -293,11 +295,15 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 		return lis.Dial()
 	}
 
-	ctx = managerutil.WithK8SClientset(ctx, fake.NewSimpleClientset(&corev1.Namespace{
+	fakeClient := fake.NewSimpleClientset(&corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default",
 		},
-	}))
+	})
+	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
+		GitVersion: "v1.17.0",
+	}
+	ctx = managerutil.WithK8SClientset(ctx, fakeClient)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
 		MaxReceiveSize:  resource.Quantity{},
 		PodCIDRStrategy: "environment",
