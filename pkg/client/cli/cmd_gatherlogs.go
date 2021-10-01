@@ -303,10 +303,26 @@ func zipFiles(files []string, zipFileName string) error {
 		}
 		defer fd.Close()
 
+		// Get the header information from the original file
+		fileInfo, err := os.Stat(file)
+		if err != nil {
+			return err
+		}
+		fileHeader, err := zip.FileInfoHeader(fileInfo)
+		if err != nil {
+			return err
+		}
+		fileHeader.Method = zip.Deflate
+		if err != nil {
+			return err
+		}
+
 		// Get the basename of the file since that's all we want
 		// to include in the zip
 		baseName := filepath.Base(file)
-		zfd, err := zipWriter.Create(baseName)
+
+		fileHeader.Name = baseName
+		zfd, err := zipWriter.CreateHeader(fileHeader)
 		if err != nil {
 			return err
 		}

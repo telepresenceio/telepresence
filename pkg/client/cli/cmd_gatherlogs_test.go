@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -206,6 +207,9 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 		tcName := tc.name
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
+			// Use this time to validate that the zip file says the
+			// files inside were modified after the test started.
+			startTime := time.Now()
 			// Prepare the context + use our testdata log dir for these tests
 			ctx := dlog.NewTestContext(t, false)
 			testLogDir := "testdata/testLogDir"
@@ -265,6 +269,23 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 					filesEqual, err := checkZipEqual(f, testLogDir)
 					require.NoError(t, err)
 					assert.True(t, filesEqual)
+
+					// Ensure the zip file metadata is correct (e.g. not the
+					// default which is 1979) that it was modified after the
+					// test started.
+					// This test is incredibly fast (within a second) so we
+					// convert the times to unix timestamps (to get us to
+					// nearest seconds) and ensure the unix timestamp for the
+					// zip file is not less than the unix timestamp for the
+					// start time.
+					// If this ends up being flakey, we can move the start
+					// time out of the test loop and add a sleep for a second
+					// to ensure nothing weird could happen with rounding.
+					assert.False(t,
+						f.FileInfo().ModTime().Unix() < startTime.Unix(),
+						fmt.Sprintf("Start time: %d, file time: %d",
+							startTime.Unix(),
+							f.FileInfo().ModTime().Unix()))
 				}
 			}
 		})
