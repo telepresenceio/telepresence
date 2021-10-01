@@ -191,8 +191,11 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 			}
 			return nil
 		})
+		// We let the user know we were unable to get logs from the kubernetes components,
+		// and why, but this shouldn't block the command returning successful with the logs
+		// it was able to get.
 		if err != nil {
-			return errcat.Unknown.Newf("error getting logs from kubernetes components: %s", err)
+			fmt.Fprintf(stdout, "error getting logs from kubernetes components: %s\n", err)
 		}
 	}
 
