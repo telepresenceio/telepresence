@@ -4,10 +4,12 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -140,6 +142,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	scout.SetMetadatum("traffic_manager_logs", gl.trafficManager)
 	scout.SetMetadatum("traffic_agent_logs", gl.trafficAgents)
 	scout.SetMetadatum("get_pod_yaml", gl.podYaml)
+	scout.SetMetadatum("anonymized_logs", gl.anon)
 	scout.Report(log.WithDiscardingLogger(ctx), "used_gather_logs")
 
 	// Get all logs from the logdir that match the daemons the user cares about.
@@ -239,7 +242,10 @@ func writeResponseToFiles(lr *manager.LogsResponse, anonymizer *anonymizer, expo
 		}
 		defer fd.Close()
 		fdWriter := bufio.NewWriter(fd)
-		_, _ = fdWriter.WriteString(content)
+		_, err = fdWriter.WriteString(content)
+		if err != nil {
+			return nil
+		}
 		fdWriter.Flush()
 		return nil
 	}
@@ -371,7 +377,14 @@ func getPodName(podName string, anon bool, anonymizer *anonymizer) string {
 	// so we can anonymize the namespace
 	nameComponents := strings.SplitN(podName, ".", 2)
 	if len(nameComponents) != 2 {
-		unknownPodName := "anonPod.anonNamespace"
+		// Note: the ordinal here is based on the total number of
+		// pods, not the number of anonPods that are found. This
+		// shouldn't be a problem because the main goal of this
+		// is to make them distinct, but should we ever want the
+		// ordinals to be strictly for anonPods, we'll need to
+		// make a change here.
+		unknownPodName := fmt.Sprintf("anonPod-%d.anonNamespace",
+			len(anonymizer.podNames)+1)
 		anonymizer.podNames[podName] = unknownPodName
 		return unknownPodName
 	}
@@ -427,14 +440,9 @@ func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) erro
 		// Strip the namespace off of the podName
 		podParts := strings.Split(fullPodName, ".")
 
-		// replace pod name + full hash with the anonymized name
-		podName := podParts[0]
-		stringContent = strings.ReplaceAll(stringContent, podName, anonPodName)
-
-		// Strip the hash off of the pod name + replace remainder with anonymized name
-		brokenPodName := strings.Split(podName, "-")
-		podName = strings.Join(brokenPodName[:len(brokenPodName)-2], "-")
-		stringContent = strings.ReplaceAll(stringContent, podName, anonPodName)
+		for _, name := range getSignificantPodNames(podParts[0]) {
+			stringContent = strings.ReplaceAll(stringContent, name, anonPodName)
+		}
 	}
 
 	// Overwrite the file with the anonymized log
@@ -454,4 +462,44 @@ func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) erro
 	fdWriter.Flush()
 
 	return nil
+}
+
+// getSignificantPodNames is a helper function that takes in a
+// pod's name and returns the significant subnames that we want
+// to anonymize.  It currently works for pods owned by StatefulSets,
+// ReplicaSets, and Deployments.
+func getSignificantPodNames(podName string) []string {
+	subNames := make([]string, 2)
+	nameComponents := strings.Split(podName, "-")
+	significantComponent := false
+	for i, component := range nameComponents {
+		// Indicates we found a Pod that comes from either a
+		// ReplicaSet and/or a Deployment
+		if _, err := hex.DecodeString(component); err == nil {
+			significantComponent = true
+		}
+		// Indicates we found a Pod that comes from a StatefulSet
+		if _, err := strconv.Atoi(component); err == nil {
+			significantComponent = true
+		}
+
+		if significantComponent {
+			nameComponents = nameComponents[:i+1]
+			break
+		}
+	}
+	// If the podName didn't fall into either of the buckets above
+	// then it's likely not a podName we can anonymize.
+	// Having nameComponents less than 2 shouldn't occur, but
+	// we return an empty slice if that happens.
+	if !significantComponent || len(nameComponents) < 2 {
+		return []string{}
+	}
+	// We add two subnames:
+	// - The metadata name
+	// - The generated name (If pod owned by ReplicaSet or Deployment)
+	// - The metadata name + ordinal (if pod owned by StatefulSet)
+	subNames[0] = strings.Join(nameComponents, "-")
+	subNames[1] = strings.Join(nameComponents[:len(nameComponents)-1], "-")
+	return subNames
 }

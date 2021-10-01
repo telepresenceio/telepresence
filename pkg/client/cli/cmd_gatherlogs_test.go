@@ -401,6 +401,52 @@ func Test_gatherLogsAnonymizeLogs(t *testing.T) {
 	}
 }
 
+func Test_gatherLogsSignificantPodNames(t *testing.T) {
+	type testcase struct {
+		name    string
+		podName string
+		results []string
+	}
+	testCases := []testcase{
+		{
+			name:    "deploymentPod",
+			podName: "echo-easy-867b648b88-zjsp2",
+			results: []string{
+				"echo-easy-867b648b88",
+				"echo-easy",
+			},
+		},
+		{
+			name:    "statefulSetPod",
+			podName: "echo-easy-0",
+			results: []string{
+				"echo-easy-0",
+				"echo-easy",
+			},
+		},
+		{
+			name:    "unkownName",
+			podName: "notarealname",
+			results: []string{},
+		},
+		{
+			name:    "emptyName",
+			podName: "",
+			results: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		tcName := tc.name
+		tc := tc
+		// We need a fresh anonymizer for each test
+		t.Run(tcName, func(t *testing.T) {
+			sigPodNames := getSignificantPodNames(tc.podName)
+			require.Equal(t, tc.results, sigPodNames)
+		})
+	}
+}
+
 // ReadZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
 // also used in telepresence_test.go
