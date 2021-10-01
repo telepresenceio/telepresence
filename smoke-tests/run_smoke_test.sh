@@ -168,7 +168,7 @@ get_config() {
 
     case "$(uname)" in
 	Darwin)
-        config_file="$HOME/Library/ApplicationSupport/telepresence/config.yml"
+        config_file="$HOME/Library/Application Support/telepresence/config.yml"
 		;;
 	Linux)
 		config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
