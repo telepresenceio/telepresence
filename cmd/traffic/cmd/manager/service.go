@@ -75,18 +75,32 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
+	clusterID := m.clusterInfo.GetClusterID()
+	resp := &rpc.License{ClusterId: clusterID}
+	// We want to be able to test GetClusterID easily in our integration tests,
+	// so we return the error in the license.ErrMsg response RPC.
+	var errMsg string
+
+	// This is the actual license used by the cluster
 	licenseData, err := os.ReadFile("/home/telepresence/license")
 	if err != nil {
-		return &rpc.License{}, err
+		errMsg += fmt.Sprintf("error reading license: %s\n", err)
+	} else {
+		resp.License = string(licenseData)
 	}
-	license := string(licenseData)
 
+	// This is the host domain associated with a license
 	hostDomainData, err := os.ReadFile("/home/telepresence/hostDomain")
 	if err != nil {
-		return &rpc.License{}, err
+		errMsg += fmt.Sprintf("error reading hostDomain: %s\n", err)
+	} else {
+		resp.Host = string(hostDomainData)
 	}
-	hostDomain := string(hostDomainData)
-	return &rpc.License{License: license, Host: hostDomain, ClusterId: m.clusterInfo.GetClusterID()}, nil
+
+	if errMsg != "" {
+		resp.ErrMsg = errMsg
+	}
+	return resp, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
