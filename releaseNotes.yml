@@ -30,6 +30,35 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.4.5
+    date: '2021-10-1'
+    notes:
+      - type: feature
+        title: Get pod yaml with gather-logs command
+        body: >-
+          Adding the flag <code>--get-pod-yaml</code> to your request will get the
+          pod yaml manifest for all kubernetes components you are getting logs for
+          (<code> traffic-manager</code> and/or pods containing a <code>
+          traffic-agent</code> container).  This flag is set to <code>false</code>
+          by default.
+
+      - type: feature
+        title: Anonymize pod name + namespace when using gather-logs command
+        body: >-
+          Adding the flag <code>--anonymize</code> to your command will
+          anonymize your pod names + namespaces in the output file.  We replace the
+          sensitive names with simple names (e.g. pod-1, namespace-2) to maintain
+          relationships between the objects without exposing the real names of your
+          objects. This flag is set to <code>false</code> by default.
+
+      - type: bugfix
+        title: Added checks for Telepresence kubernetes compatibility
+        body: >-
+          Telepresence currently works with Kubernetes server versions <code>1.17.0</code>
+          and higher.  We have added logs in the connector and <code>traffic-manager</code>
+          to let users know when they are using Telepresence with a cluster it doesn't support.
+        docs: reference/cluster-config
+
   - version: 2.4.4
     date: '2021-09-27'
     notes:
