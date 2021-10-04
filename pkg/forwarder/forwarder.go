@@ -11,6 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type Forwarder struct {
@@ -263,7 +264,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 	}
 
 	go func() {
-		pool := connpool.GetPool(ctx)
+		pool := tunnel.GetPool(ctx)
 		msgCh, errCh := muxTunnel.ReadLoop(ctx)
 		for {
 			select {
@@ -277,7 +278,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 					return
 				}
 				id := msg.ID()
-				var handler connpool.Handler
+				var handler tunnel.Handler
 				if ctrl, ok := msg.(connpool.Control); ok {
 					switch ctrl.Code() {
 					// Don't establish a new Dialer just to say goodbye
@@ -288,7 +289,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 					}
 				}
 				if handler == nil {
-					handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+					handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 						return connpool.NewDialer(id, muxTunnel, release), nil
 					})
 					if err != nil {
@@ -296,7 +297,7 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 						return
 					}
 				}
-				handler.HandleMessage(ctx, msg)
+				handler.(connpool.Handler).HandleMessage(ctx, msg)
 			}
 		}
 	}()
@@ -312,8 +313,8 @@ func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *man
 	}
 
 	destIp := iputil.Parse(iCept.Spec.TargetHost)
-	id := connpool.NewConnID(connpool.IPProto(conn.RemoteAddr().Network()), srcIp, destIp, srcPort, uint16(iCept.Spec.TargetPort))
-	_, found, err := connpool.GetPool(ctx).GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+	id := tunnel.NewConnID(tunnel.IPProto(conn.RemoteAddr().Network()), srcIp, destIp, srcPort, uint16(iCept.Spec.TargetPort))
+	_, found, err := tunnel.GetPool(ctx).GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 		return connpool.HandlerFromConn(id, muxTunnel, release, conn), nil
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-package connpool
+package tunnel
 
 import (
 	"context"
@@ -16,8 +16,6 @@ type Pool struct {
 type Handler interface {
 	// Close closes the handle
 	Close(context.Context)
-
-	HandleMessage(ctx context.Context, message Message)
 
 	Start(ctx context.Context)
 }

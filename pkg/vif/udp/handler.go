@@ -7,17 +7,18 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
 type DatagramHandler interface {
-	connpool.Handler
+	tunnel.Handler
 	NewDatagram(ctx context.Context, dg Datagram)
 }
 
 type handler struct {
 	connpool.MuxTunnel
-	id        connpool.ConnID
+	id        tunnel.ConnID
 	remove    func()
 	toTun     chan<- ip.Packet
 	fromTun   chan Datagram
@@ -39,7 +40,7 @@ func (h *handler) Close(_ context.Context) {
 	h.remove()
 }
 
-func NewHandler(muxTunnel connpool.MuxTunnel, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) DatagramHandler {
+func NewHandler(muxTunnel connpool.MuxTunnel, toTun chan<- ip.Packet, id tunnel.ConnID, remove func()) DatagramHandler {
 	return &handler{
 		MuxTunnel: muxTunnel,
 		id:        id,

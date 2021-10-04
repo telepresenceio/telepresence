@@ -10,6 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
@@ -32,7 +33,7 @@ const (
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections
 type dialer struct {
-	id        ConnID
+	id        tunnel.ConnID
 	release   func()
 	muxTunnel MuxTunnel
 	incoming  chan Message
@@ -48,7 +49,7 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewDialer(connID ConnID, muxTunnel MuxTunnel, release func()) Handler {
+func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) tunnel.Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
@@ -64,7 +65,7 @@ func NewDialer(connID ConnID, muxTunnel MuxTunnel, release func()) Handler {
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
-func HandlerFromConn(connID ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) Handler {
+func HandlerFromConn(connID tunnel.ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) tunnel.Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL

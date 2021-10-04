@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type SessionState interface {
@@ -60,7 +61,7 @@ type agentTunnel struct {
 type clientSessionState struct {
 	sessionState
 	name           string
-	pool           *connpool.Pool
+	pool           *tunnel.Pool
 	muxTunnel      connpool.MuxTunnel
 	agentTunnelsMu sync.Mutex
 	agentTunnels   map[string]*agentTunnel
@@ -156,7 +157,7 @@ type State struct {
 	clients          watchable.ClientMap                  // info for client sessions
 	sessions         map[string]SessionState              // info for all sessions
 	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
-	listeners        map[string]connpool.Handler          // listeners for all intercepts
+	listeners        map[string]tunnel.Handler            // listeners for all intercepts
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
 	logLevelCond     sync.Cond
@@ -168,7 +169,7 @@ func NewState(ctx context.Context) *State {
 		sessions:         make(map[string]SessionState),
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
-		listeners:        make(map[string]connpool.Handler),
+		listeners:        make(map[string]tunnel.Handler),
 		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
 		logLevelCond:     sync.Cond{L: &sync.Mutex{}},
 	}
@@ -368,7 +369,7 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 			lastMarked: now,
 		},
 		name:         client.Name,
-		pool:         connpool.NewPool(),
+		pool:         tunnel.NewPool(),
 		agentTunnels: make(map[string]*agentTunnel),
 	}
 	return sessionID
@@ -634,7 +635,7 @@ func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) 
 			}
 
 			id := msg.ID()
-			var handler connpool.Handler
+			var handler tunnel.Handler
 			if ctrl, ok := msg.(connpool.Control); ok {
 				switch ctrl.Code() {
 				// Don't establish a conn-forward or dialer just to say goodbye
@@ -648,7 +649,7 @@ func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) 
 			if handler == nil {
 				// Retrieve the connection that is tracked for the given id. Create a new one if necessary
 				var err error
-				handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (connpool.Handler, error) {
+				handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
 						// Dispatch directly to agent and let the dial happen there
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
@@ -660,7 +661,7 @@ func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) 
 					return fmt.Errorf("failed to get connection handler: %w", err)
 				}
 			}
-			handler.HandleMessage(ctx, msg)
+			handler.(connpool.Handler).HandleMessage(ctx, msg)
 		}
 	}
 }
@@ -746,7 +747,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 			}
 			if ensureForward {
 				// Ensure that a forward tunnel exists that the client can use for responses
-				_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (connpool.Handler, error) {
+				_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (tunnel.Handler, error) {
 					return newConnForward(release, muxTunnel), nil
 				})
 				if err != nil {

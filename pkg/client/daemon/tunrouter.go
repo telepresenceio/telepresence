@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/icmp"
@@ -68,7 +69,7 @@ type tunRouter struct {
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
-	handlers *connpool.Pool
+	handlers *tunnel.Pool
 
 	// toTunCh  is where handlers post packages intended to be written to the TUN device
 	toTunCh chan ip.Packet
@@ -123,7 +124,7 @@ func newTunRouter(ctx context.Context) (*tunRouter, error) {
 	}
 	return &tunRouter{
 		dev:         td,
-		handlers:    connpool.NewPool(),
+		handlers:    tunnel.NewPool(),
 		toTunCh:     make(chan ip.Packet, 100),
 		cfgComplete: make(chan struct{}),
 		fragmentMap: make(map[uint16][]*buffer.Data),
@@ -464,8 +465,8 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 		return
 	}
 
-	connID := connpool.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
-	wf, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
+	connID := tunnel.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
+	wf, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
 		return tcp.NewHandler(t.muxTunnel, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
@@ -478,8 +479,8 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	ipHdr := dg.IPHeader()
 	udpHdr := dg.Header()
-	connID := connpool.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
-	uh, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
+	connID := tunnel.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
+	uh, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
 		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
 			return udp.NewDnsInterceptor(t.muxTunnel, t.toTunCh, connID, remove, t.dnsLocalAddr)
 		}

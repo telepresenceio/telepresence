@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
@@ -75,7 +76,7 @@ const (
 )
 
 type PacketHandler interface {
-	connpool.Handler
+	tunnel.Handler
 
 	// HandlePacket handles a packet that was read from the TUN device
 	HandlePacket(ctx context.Context, pkt Packet)
@@ -85,7 +86,7 @@ type handler struct {
 	connpool.MuxTunnel
 
 	// id identifies this connection. It contains source and destination IPs and ports
-	id connpool.ConnID
+	id tunnel.ConnID
 
 	// remove is the function that removes this instance from the pool
 	remove func()
@@ -151,7 +152,7 @@ func NewHandler(
 	tcpStream connpool.MuxTunnel,
 	dispatcherClosing *int32,
 	toTun chan<- ip.Packet,
-	id connpool.ConnID,
+	id tunnel.ConnID,
 	remove func(),
 	rndSource rand.Source,
 ) PacketHandler {

@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type BidiStream interface {
@@ -42,7 +43,7 @@ type BidiStream interface {
 //
 // When #6 happens, the MuxTunnel will simply close.
 type MuxTunnel interface {
-	DialLoop(ctx context.Context, pool *Pool) error
+	DialLoop(ctx context.Context, pool *tunnel.Pool) error
 	ReadLoop(ctx context.Context) (<-chan Message, <-chan error)
 	Send(context.Context, Message) error
 	Receive(context.Context) (Message, error)
@@ -161,7 +162,7 @@ func (s *muxTunnel) ReadLoop(ctx context.Context) (<-chan Message, <-chan error)
 
 // DialLoop reads replies from the stream and dispatches them to the correct connection
 // based on the message id.
-func (s *muxTunnel) DialLoop(ctx context.Context, pool *Pool) error {
+func (s *muxTunnel) DialLoop(ctx context.Context, pool *tunnel.Pool) error {
 	msgCh, errCh := s.ReadLoop(ctx)
 	for {
 		select {
@@ -180,13 +181,13 @@ func (s *muxTunnel) DialLoop(ctx context.Context, pool *Pool) error {
 			id := msg.ID()
 			dlog.Debugf(ctx, "<- MGR %s, len %d", id.ReplyString(), len(msg.Payload()))
 			if conn := pool.Get(id); conn != nil {
-				conn.HandleMessage(ctx, msg)
+				conn.(Handler).HandleMessage(ctx, msg)
 			}
 		}
 	}
 }
 
-func (s *muxTunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
+func (s *muxTunnel) handleControl(ctx context.Context, ctrl Control, pool *tunnel.Pool) {
 	id := ctrl.ID()
 
 	code := ctrl.Code()
@@ -198,19 +199,19 @@ func (s *muxTunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool)
 
 	if code != Connect {
 		if conn := pool.Get(id); conn != nil {
-			conn.HandleMessage(ctx, ctrl)
+			conn.(Handler).HandleMessage(ctx, ctrl)
 		} else if !(code == Disconnect || code == DisconnectOK || code == ReadClosed || code == WriteClosed) {
 			dlog.Errorf(ctx, "control packet of type %s lost because no connection was active", code)
 		}
 		return
 	}
 
-	conn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
+	conn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 		return NewDialer(id, s, release), nil
 	})
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
-	conn.HandleMessage(ctx, ctrl)
+	conn.(Handler).HandleMessage(ctx, ctrl)
 }

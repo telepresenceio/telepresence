@@ -14,10 +14,10 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -242,7 +242,7 @@ func Main(ctx context.Context, args ...string) error {
 
 	// Manage the forwarder
 	g.Go("forward", func(ctx context.Context) error {
-		ctx = connpool.WithPool(ctx, connpool.NewPool())
+		ctx = tunnel.WithPool(ctx, tunnel.NewPool())
 		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
 		if err != nil {
 			close(forwarderChan)
