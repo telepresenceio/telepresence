@@ -26,7 +26,7 @@ cluster.
 
 In addition to the default open-source traffic-agent, Telepresence
 already knows about the Ambassador Cloud
-[traffic-agent](ambassador-agent), which supports the `http`
+[traffic-agent][ambassador-agent], which supports the `http`
 mechanism.  The `http` mechanism operates at higher layer, working
 with layer 7 HTTP, and may intercept specific HTTP requests, allowing
 other HTTP requests through to the regular service.  This allows for

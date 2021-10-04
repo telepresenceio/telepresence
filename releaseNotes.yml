@@ -673,7 +673,7 @@ items:
       - type: change
         title: Traffic Manager needs new RBAC permissions
         body: >-
-          The Traffic Manager requires <a href="reference/rbac">RBAC
+          The Traffic Manager requires <a href="../reference/rbac">RBAC
           permissions</a> to list Nodes, Pods, and to create a dummy
           Service in the manager's namespace.
         docs: reference/routing/#subnets
@@ -681,7 +681,7 @@ items:
         title: Reduced developer RBAC requirements
         body: >-
           The on-laptop client no longer requires <a
-          href="reference/rbac">RBAC permissions</a> to list the Nodes
+          href="../reference/rbac">RBAC permissions</a> to list the Nodes
           in the cluster or to create Services, as that functionality
           has been moved to the Traffic Manager.
 
@@ -721,7 +721,7 @@ items:
           <code>/etc/resolver/</code> as the result of using
           <code>include-suffixes</code> in the cluster config are now
           properly removed on quit.
-        docs: reference/routing/#mac-os-resolver
+        docs: reference/routing/#macos-resolver
 
       - type: bugfix
         title: Large file transfers
