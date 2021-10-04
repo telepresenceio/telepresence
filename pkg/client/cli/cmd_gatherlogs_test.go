@@ -430,6 +430,11 @@ func Test_gatherLogsSignificantPodNames(t *testing.T) {
 			results: []string{},
 		},
 		{
+			name:    "followPatternNotFullName",
+			podName: "a123b",
+			results: []string{},
+		},
+		{
 			name:    "emptyName",
 			podName: "",
 			results: []string{},

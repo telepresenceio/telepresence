@@ -4,12 +4,11 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -244,7 +243,7 @@ func writeResponseToFiles(lr *manager.LogsResponse, anonymizer *anonymizer, expo
 		fdWriter := bufio.NewWriter(fd)
 		_, err = fdWriter.WriteString(content)
 		if err != nil {
-			return nil
+			return err
 		}
 		fdWriter.Flush()
 		return nil
@@ -469,37 +468,29 @@ func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) erro
 // to anonymize.  It currently works for pods owned by StatefulSets,
 // ReplicaSets, and Deployments.
 func getSignificantPodNames(podName string) []string {
-	subNames := make([]string, 2)
-	nameComponents := strings.Split(podName, "-")
-	significantComponent := false
-	for i, component := range nameComponents {
-		// Indicates we found a Pod that comes from either a
-		// ReplicaSet and/or a Deployment
-		if _, err := hex.DecodeString(component); err == nil {
-			significantComponent = true
-		}
-		// Indicates we found a Pod that comes from a StatefulSet
-		if _, err := strconv.Atoi(component); err == nil {
-			significantComponent = true
-		}
-
-		if significantComponent {
-			nameComponents = nameComponents[:i+1]
-			break
-		}
+	// if the pods ends in an ordinal we can be pretty sure it's
+	// coming from a StatefulSet.
+	statefulSetRegex := regexp.MustCompile("(.*)-([0-9]+)$")
+	// ReplicasSets, and therefore Deployments because they create
+	// ReplicaSets, have a hash followed by a 5 character identity
+	// string attached to the end.
+	replicaSetRegex := regexp.MustCompile("(.*)-([0-9a-f]+)-([0-9a-z]{5})$")
+	sigNames := []string{}
+	switch {
+	case statefulSetRegex.MatchString(podName):
+		match := statefulSetRegex.FindStringSubmatch(podName)
+		appName := match[1]
+		// Add the pod name with and without the ordinal
+		sigNames = append(sigNames, podName, appName)
+	case replicaSetRegex.MatchString(podName):
+		match := replicaSetRegex.FindStringSubmatch(podName)
+		appName := match[1]
+		rsName := fmt.Sprintf("%s-%s", appName, match[2])
+		// add the app name with and without generated ReplicaSet hash
+		sigNames = append(sigNames, rsName, appName)
+	default:
+		// For default we don't do anything and will leave sigNames
+		// as an empty slice
 	}
-	// If the podName didn't fall into either of the buckets above
-	// then it's likely not a podName we can anonymize.
-	// Having nameComponents less than 2 shouldn't occur, but
-	// we return an empty slice if that happens.
-	if !significantComponent || len(nameComponents) < 2 {
-		return []string{}
-	}
-	// We add two subnames:
-	// - The metadata name
-	// - The generated name (If pod owned by ReplicaSet or Deployment)
-	// - The metadata name + ordinal (if pod owned by StatefulSet)
-	subNames[0] = strings.Join(nameComponents, "-")
-	subNames[1] = strings.Join(nameComponents[:len(nameComponents)-1], "-")
-	return subNames
+	return sigNames
 }
