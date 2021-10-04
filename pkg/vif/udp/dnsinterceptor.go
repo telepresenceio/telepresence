@@ -19,14 +19,14 @@ type dnsInterceptor struct {
 // instead of passing them on to the traffic-manager
 //
 // TODO: Get rid of most of this. We can use the kube-system/kube-dns service directly for everything except the tel2_search domain
-func NewDnsInterceptor(tunnel connpool.Tunnel, toTun chan<- ip.Packet, id connpool.ConnID, remove func(), dnsAddr *net.UDPAddr) (DatagramHandler, error) {
+func NewDnsInterceptor(muxTunnel connpool.MuxTunnel, toTun chan<- ip.Packet, id connpool.ConnID, remove func(), dnsAddr *net.UDPAddr) (DatagramHandler, error) {
 	h := &dnsInterceptor{
 		handler: handler{
-			Tunnel:  tunnel,
-			id:      id,
-			toTun:   toTun,
-			remove:  remove,
-			fromTun: make(chan Datagram, ioChannelSize),
+			MuxTunnel: muxTunnel,
+			id:        id,
+			toTun:     toTun,
+			remove:    remove,
+			fromTun:   make(chan Datagram, ioChannelSize),
 		},
 	}
 	var err error

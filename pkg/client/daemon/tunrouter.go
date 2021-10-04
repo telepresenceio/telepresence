@@ -31,12 +31,12 @@ import (
 )
 
 // tunRouter is a router for outbound traffic that is centered around a TUN device. It's similar to a
-// TUN-to-SOCKS5 but uses a bidirectional gRPC tunnel instead of SOCKS when communicating with the
+// TUN-to-SOCKS5 but uses a bidirectional gRPC muxTunnel instead of SOCKS when communicating with the
 // traffic-manager. The addresses of the device are derived from IP addresses sent to it from the user
 // daemon (which in turn receives them from the cluster).
 //
 // Data sent to the device is received as L3 IP-packages and parsed into L4 UDP and TCP before they
-// are dispatched over the tunnel. Returned payloads are wrapped as IP-packages before written
+// are dispatched over the muxTunnel. Returned payloads are wrapped as IP-packages before written
 // back to the device.
 //
 // Connection pooling:
@@ -53,7 +53,7 @@ import (
 // UDP is of course very simple. It's fire and forget. There's no negotiation whatsoever.
 //
 // TCP requires a complete workflow engine on the TUN-device side (see tcp.Handler). All TCP negotiation,
-// takes place in the client and the same bidirectional tunnel is then used to send both TCP and UDP
+// takes place in the client and the same bidirectional muxTunnel is then used to send both TCP and UDP
 // packages to the manager. TCP will send some control packages. One to verify that a connection can
 // be established at the manager side, and one when the connection is closed (from either side).
 type tunRouter struct {
@@ -64,7 +64,7 @@ type tunRouter struct {
 	managerClient manager.ManagerClient
 
 	// tunnel is the bidirectional gRPC tunnel to the traffic-manager
-	tunnel connpool.Tunnel
+	muxTunnel connpool.MuxTunnel
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
@@ -343,16 +343,16 @@ func (t *tunRouter) run(c context.Context) error {
 		if err != nil {
 			return err
 		}
-		tunnel := connpool.NewTunnel(clientTunnel)
+		tunnel := connpool.NewMuxTunnel(clientTunnel)
 		if err = tunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
 			return err
 		}
 		if err = tunnel.Send(c, connpool.VersionControl()); err != nil {
 			return err
 		}
-		t.tunnel = tunnel
+		t.muxTunnel = tunnel
 		dlog.Debug(c, "MGR read loop starting")
-		err = t.tunnel.DialLoop(c, t.handlers)
+		err = t.muxTunnel.DialLoop(c, t.handlers)
 		var recvErr *client.RecvEOF
 		if errors.As(err, &recvErr) {
 			<-c.Done()
@@ -466,7 +466,7 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 
 	connID := connpool.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
 	wf, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
-		return tcp.NewHandler(t.tunnel, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
+		return tcp.NewHandler(t.muxTunnel, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
@@ -481,9 +481,9 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	connID := connpool.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
 	uh, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (connpool.Handler, error) {
 		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
-			return udp.NewDnsInterceptor(t.tunnel, t.toTunCh, connID, remove, t.dnsLocalAddr)
+			return udp.NewDnsInterceptor(t.muxTunnel, t.toTunCh, connID, remove, t.dnsLocalAddr)
 		}
-		return udp.NewHandler(t.tunnel, t.toTunCh, connID, remove), nil
+		return udp.NewHandler(t.muxTunnel, t.toTunCh, connID, remove), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)

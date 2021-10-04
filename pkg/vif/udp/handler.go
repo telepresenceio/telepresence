@@ -16,7 +16,7 @@ type DatagramHandler interface {
 }
 
 type handler struct {
-	connpool.Tunnel
+	connpool.MuxTunnel
 	id        connpool.ConnID
 	remove    func()
 	toTun     chan<- ip.Packet
@@ -39,13 +39,13 @@ func (h *handler) Close(_ context.Context) {
 	h.remove()
 }
 
-func NewHandler(tunnel connpool.Tunnel, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) DatagramHandler {
+func NewHandler(muxTunnel connpool.MuxTunnel, toTun chan<- ip.Packet, id connpool.ConnID, remove func()) DatagramHandler {
 	return &handler{
-		Tunnel:  tunnel,
-		id:      id,
-		toTun:   toTun,
-		remove:  remove,
-		fromTun: make(chan Datagram, ioChannelSize),
+		MuxTunnel: muxTunnel,
+		id:        id,
+		toTun:     toTun,
+		remove:    remove,
+		fromTun:   make(chan Datagram, ioChannelSize),
 	}
 }
 

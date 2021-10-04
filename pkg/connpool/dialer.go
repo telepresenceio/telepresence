@@ -34,7 +34,7 @@ const (
 type dialer struct {
 	id        ConnID
 	release   func()
-	tunnel    Tunnel
+	muxTunnel MuxTunnel
 	incoming  chan Message
 	conn      net.Conn
 	idleTimer *time.Timer
@@ -48,14 +48,14 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewDialer(connID ConnID, tunnel Tunnel, release func()) Handler {
+func NewDialer(connID ConnID, muxTunnel MuxTunnel, release func()) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
 	}
 	return &dialer{
 		id:        connID,
-		tunnel:    tunnel,
+		muxTunnel: muxTunnel,
 		release:   release,
 		incoming:  make(chan Message, handlerBufferSize),
 		connected: notConnected,
@@ -64,14 +64,14 @@ func NewDialer(connID ConnID, tunnel Tunnel, release func()) Handler {
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
-func HandlerFromConn(connID ConnID, tunnel Tunnel, release func(), conn net.Conn) Handler {
+func HandlerFromConn(connID ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
 	}
 	return &dialer{
 		id:        connID,
-		tunnel:    tunnel,
+		muxTunnel: muxTunnel,
 		release:   release,
 		incoming:  make(chan Message, handlerBufferSize),
 		connected: halfConnected,
@@ -169,7 +169,7 @@ func (h *dialer) drop() {
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> GRPC %s", ctrl)
-	err := h.tunnel.Send(ctx, ctrl)
+	err := h.muxTunnel.Send(ctx, ctrl)
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}
@@ -223,7 +223,7 @@ func (h *dialer) readLoop(ctx context.Context) {
 		}
 		if n > 0 {
 			dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
-			err = h.tunnel.Send(ctx, NewMessage(h.id, b[:n]))
+			err = h.muxTunnel.Send(ctx, NewMessage(h.id, b[:n]))
 			if err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "!! GRPC %s, send: %v", h.id, err)

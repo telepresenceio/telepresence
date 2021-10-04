@@ -82,7 +82,7 @@ type PacketHandler interface {
 }
 
 type handler struct {
-	connpool.Tunnel
+	connpool.MuxTunnel
 
 	// id identifies this connection. It contains source and destination IPs and ports
 	id connpool.ConnID
@@ -148,7 +148,7 @@ type handler struct {
 }
 
 func NewHandler(
-	tcpStream connpool.Tunnel,
+	tcpStream connpool.MuxTunnel,
 	dispatcherClosing *int32,
 	toTun chan<- ip.Packet,
 	id connpool.ConnID,
@@ -156,7 +156,7 @@ func NewHandler(
 	rndSource rand.Source,
 ) PacketHandler {
 	h := &handler{
-		Tunnel:            tcpStream,
+		MuxTunnel:         tcpStream,
 		id:                id,
 		remove:            remove,
 		ToTun:             toTun,

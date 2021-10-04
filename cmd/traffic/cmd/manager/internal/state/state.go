@@ -54,24 +54,24 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 type agentTunnel struct {
 	name      string
 	namespace string
-	tunnel    connpool.Tunnel
+	muxTunnel connpool.MuxTunnel
 }
 
 type clientSessionState struct {
 	sessionState
 	name           string
 	pool           *connpool.Pool
-	tunnel         connpool.Tunnel
+	muxTunnel      connpool.MuxTunnel
 	agentTunnelsMu sync.Mutex
 	agentTunnels   map[string]*agentTunnel
 }
 
-func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, tunnel connpool.Tunnel) {
+func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, muxTunnel connpool.MuxTunnel) {
 	cs.agentTunnelsMu.Lock()
 	cs.agentTunnels[agentSessionID] = &agentTunnel{
 		name:      name,
 		namespace: namespace,
-		tunnel:    tunnel,
+		muxTunnel: muxTunnel,
 	}
 	cs.agentTunnelsMu.Unlock()
 }
@@ -608,7 +608,7 @@ func (s *State) WatchIntercepts(
 	}
 }
 
-func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error {
+func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) error {
 	sessionID := managerutil.GetSessionID(ctx)
 	s.mu.Lock()
 	ss := s.sessions[sessionID]
@@ -619,9 +619,9 @@ func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error 
 	}
 	dlog.Debug(ctx, "Established TCP tunnel")
 	pool := cs.pool // must have one pool per client
-	cs.tunnel = tunnel
+	cs.muxTunnel = muxTunnel
 	defer pool.CloseAll(ctx)
-	msgCh, errCh := tunnel.ReadLoop(ctx)
+	msgCh, errCh := muxTunnel.ReadLoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -652,9 +652,9 @@ func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error 
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
 						// Dispatch directly to agent and let the dial happen there
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
-						return newConnForward(release, agentTunnel.tunnel), nil
+						return newConnForward(release, agentTunnel.muxTunnel), nil
 					}
-					return connpool.NewDialer(id, cs.tunnel, release), nil
+					return connpool.NewDialer(id, cs.muxTunnel, release), nil
 				})
 				if err != nil {
 					return fmt.Errorf("failed to get connection handler: %w", err)
@@ -666,12 +666,12 @@ func (s *State) ClientTunnel(ctx context.Context, tunnel connpool.Tunnel) error 
 }
 
 type connForward struct {
-	release  func()
-	toStream connpool.Tunnel
+	release     func()
+	toMuxTunnel connpool.MuxTunnel
 }
 
-func newConnForward(release func(), toStream connpool.Tunnel) *connForward {
-	return &connForward{release: release, toStream: toStream}
+func newConnForward(release func(), toStream connpool.MuxTunnel) *connForward {
+	return &connForward{release: release, toMuxTunnel: toStream}
 }
 
 func (cf *connForward) Close(_ context.Context) {
@@ -680,7 +680,7 @@ func (cf *connForward) Close(_ context.Context) {
 
 func (cf *connForward) HandleMessage(ctx context.Context, msg connpool.Message) {
 	dlog.Debugf(ctx, ">> FRWD %s to agent", msg.ID())
-	if err := cf.toStream.Send(ctx, msg); err != nil {
+	if err := cf.toMuxTunnel.Send(ctx, msg); err != nil {
 		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", msg.ID(), err)
 	}
 	if ctrl, ok := msg.(connpool.Control); ok {
@@ -696,7 +696,7 @@ func (cf *connForward) HandleMessage(ctx context.Context, msg connpool.Message) 
 func (cf *connForward) Start(_ context.Context) {
 }
 
-func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, tunnel connpool.Tunnel) error {
+func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, muxTunnel connpool.MuxTunnel) error {
 	agentSessionID := managerutil.GetSessionID(ctx)
 	as, cs, err := func() (*agentSessionState, *clientSessionState, error) {
 		s.mu.Lock()
@@ -721,11 +721,11 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 
 	// During intercept, all requests that are made to this pool, are forwarded to the intercepted
 	// agent(s)
-	cs.addAgentTunnel(agentSessionID, as.agent.Name, as.agent.Namespace, tunnel)
+	cs.addAgentTunnel(agentSessionID, as.agent.Name, as.agent.Namespace, muxTunnel)
 	defer cs.deleteAgentTunnel(agentSessionID)
 
 	pool := cs.pool
-	msgCh, errCh := tunnel.ReadLoop(ctx)
+	msgCh, errCh := muxTunnel.ReadLoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -747,7 +747,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 			if ensureForward {
 				// Ensure that a forward tunnel exists that the client can use for responses
 				_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (connpool.Handler, error) {
-					return newConnForward(release, tunnel), nil
+					return newConnForward(release, muxTunnel), nil
 				})
 				if err != nil {
 					dlog.Error(ctx, err)
@@ -755,7 +755,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 				}
 			}
 			dlog.Debugf(ctx, ">> FRWD %s to client", msg.ID())
-			if err = cs.tunnel.Send(ctx, msg); err != nil {
+			if err = cs.muxTunnel.Send(ctx, msg); err != nil {
 				dlog.Errorf(ctx, "Send to client failed: %v", err)
 				return err
 			}

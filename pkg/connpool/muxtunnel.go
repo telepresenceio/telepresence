@@ -19,28 +19,29 @@ type BidiStream interface {
 	Recv() (*rpc.ConnMessage, error)
 }
 
-// The Tunnel interface represents a bidirectional, synchronized Tunnel that sends
-// TCP or UDP traffic over gRPC using manager.ConnMessage messages.
+// The MuxTunnel interface represents a bidirectional, synchronized, multiplexed connection
+// tunnel that sends TCP or UDP traffic over gRPC using manager.ConnMessage messages.
 //
-// A Tunnel is closed by one of six things happening at either end (or at both ends).
+// A MuxTunnel connection is closed by one of six things happening at either end (or at both ends).
 //
 //   1. Read from local connection fails (typically EOF)
 //   2. Write to local connection fails (connection peer closed)
 //   3. Idle timer timed out.
 //   4. Context is cancelled.
-//   5. Disconnect request received from Tunnel peer.
-//   6. DisconnectOK received from Tunnel peer.
+//   5. Disconnect request received from MuxTunnel peer.
+//   6. DisconnectOK received from MuxTunnel peer.
 //
-// When #1 or #2 happens, the Tunnel will send a Disconnect request to
-// its Tunnel peer, shorten the Idle timer, and then continue to serve
-// incoming data from the Tunnel peer until a DisconnectOK is received.
-// Once that happens, it's guaranteed that the Tunnel peer will send no
-// more messages and the Tunnel is closed.
+// When #1 or #2 happens, the MuxTunnel will send a Disconnect request to
+// its MuxTunnel peer, shorten the Idle timer, and then continue to serve
+// incoming data from the tunnel peer until a DisconnectOK is received.
+// Once that happens, it's guaranteed that the tunnel peer will send no
+// more messages and the connection is closed.
 //
-// When #3, #4, or #5 happens, the Tunnel will send a DisconnectOK to its Tunnel peer and close.
+// When #3, #4, or #5 happens, the MuxTunnel will send a DisconnectOK to
+// its tunnel peer and close the connection.
 //
-// When #6 happens, the Tunnel will simply close.
-type Tunnel interface {
+// When #6 happens, the MuxTunnel will simply close.
+type MuxTunnel interface {
 	DialLoop(ctx context.Context, pool *Pool) error
 	ReadLoop(ctx context.Context) (<-chan Message, <-chan error)
 	Send(context.Context, Message) error
@@ -48,7 +49,7 @@ type Tunnel interface {
 	CloseSend() error
 }
 
-type tunnel struct {
+type muxTunnel struct {
 	stream      BidiStream
 	counter     uint32
 	lastAck     uint32
@@ -59,11 +60,11 @@ type tunnel struct {
 
 const tunnelVersion = 1 // preceded by version 0 which didn't do synchronization
 
-func NewTunnel(stream BidiStream) Tunnel {
-	return &tunnel{stream: stream, syncRatio: 8, ackWindow: 1}
+func NewMuxTunnel(stream BidiStream) MuxTunnel {
+	return &muxTunnel{stream: stream, syncRatio: 8, ackWindow: 1}
 }
 
-func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
+func (s *muxTunnel) Receive(ctx context.Context) (msg Message, err error) {
 	for err = ctx.Err(); err == nil; err = ctx.Err() {
 		var cm *rpc.ConnMessage
 		if cm, err = s.stream.Recv(); err != nil {
@@ -92,7 +93,7 @@ func (s *tunnel) Receive(ctx context.Context) (msg Message, err error) {
 	return nil, err
 }
 
-func (s *tunnel) Send(ctx context.Context, m Message) error {
+func (s *muxTunnel) Send(ctx context.Context, m Message) error {
 	if err := s.stream.Send(m.TunnelMessage()); err != nil {
 		return err
 	}
@@ -110,7 +111,7 @@ func (s *tunnel) Send(ctx context.Context, m Message) error {
 	return nil
 }
 
-func (s *tunnel) sync(ctx context.Context) error {
+func (s *muxTunnel) sync(ctx context.Context) error {
 	ackSent := s.counter / s.syncRatio
 	if err := s.stream.Send(SyncRequestControl(ackSent).TunnelMessage()); err != nil {
 		return err
@@ -126,7 +127,7 @@ func (s *tunnel) sync(ctx context.Context) error {
 	return nil
 }
 
-func (s *tunnel) CloseSend() error {
+func (s *muxTunnel) CloseSend() error {
 	if sender, ok := s.stream.(interface{ CloseSend() error }); ok {
 		atomic.StoreUint32(&s.lastAck, math.MaxUint32) // Terminate ongoing sync
 		return sender.CloseSend()
@@ -135,7 +136,7 @@ func (s *tunnel) CloseSend() error {
 }
 
 // ReadLoop reads from the stream and dispatches control messages and messages to the give channels
-func (s *tunnel) ReadLoop(ctx context.Context) (<-chan Message, <-chan error) {
+func (s *muxTunnel) ReadLoop(ctx context.Context) (<-chan Message, <-chan error) {
 	msgCh := make(chan Message, 5)
 	errCh := make(chan error)
 	go func() {
@@ -160,7 +161,7 @@ func (s *tunnel) ReadLoop(ctx context.Context) (<-chan Message, <-chan error) {
 
 // DialLoop reads replies from the stream and dispatches them to the correct connection
 // based on the message id.
-func (s *tunnel) DialLoop(ctx context.Context, pool *Pool) error {
+func (s *muxTunnel) DialLoop(ctx context.Context, pool *Pool) error {
 	msgCh, errCh := s.ReadLoop(ctx)
 	for {
 		select {
@@ -185,7 +186,7 @@ func (s *tunnel) DialLoop(ctx context.Context, pool *Pool) error {
 	}
 }
 
-func (s *tunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
+func (s *muxTunnel) handleControl(ctx context.Context, ctrl Control, pool *Pool) {
 	id := ctrl.ID()
 
 	code := ctrl.Code()

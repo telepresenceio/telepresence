@@ -500,35 +500,35 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
 	ctx := server.Context()
-	tunnel := connpool.NewTunnel(server)
-	sessionInfo, err := readTunnelSessionID(ctx, tunnel)
+	muxTunnel := connpool.NewMuxTunnel(server)
+	sessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	if err = tunnel.Send(ctx, connpool.VersionControl()); err != nil {
+	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
 	}
-	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), tunnel)
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), muxTunnel)
 }
 
 func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
 	ctx := server.Context()
-	tunnel := connpool.NewTunnel(server)
-	agentSessionInfo, err := readTunnelSessionID(ctx, tunnel)
+	muxTunnel := connpool.NewMuxTunnel(server)
+	agentSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	clientSessionInfo, err := readTunnelSessionID(ctx, tunnel)
+	clientSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	if err = tunnel.Send(ctx, connpool.VersionControl()); err != nil {
+	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
 	}
-	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, tunnel)
+	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, muxTunnel)
 }
 
-func readTunnelSessionID(ctx context.Context, server connpool.Tunnel) (*rpc.SessionInfo, error) {
+func readTunnelSessionID(ctx context.Context, server connpool.MuxTunnel) (*rpc.SessionInfo, error) {
 	// Initial message must be the session info that this bidi stream should be attached to
 	msg, err := server.Receive(ctx)
 	if err != nil {
