@@ -1,4 +1,4 @@
-package tun
+package vif
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 // This device will require that wintun.dll is available to the loader.

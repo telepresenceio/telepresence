@@ -1,4 +1,4 @@
-package tun
+package vif
 
 import (
 	"net"

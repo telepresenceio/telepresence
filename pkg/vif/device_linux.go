@@ -1,4 +1,4 @@
-package tun
+package vif
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dexec"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 const devicePath = "/dev/net/tun"

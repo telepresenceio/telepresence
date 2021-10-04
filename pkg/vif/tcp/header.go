@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
 // HeaderLen is the length of a TCP header that doesn't have any options

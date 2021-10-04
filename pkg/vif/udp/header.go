@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
 const HeaderLen = 8

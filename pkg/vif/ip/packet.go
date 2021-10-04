@@ -6,7 +6,7 @@ import (
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 type Packet interface {

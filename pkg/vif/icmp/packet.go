@@ -9,8 +9,8 @@ import (
 	"golang.org/x/net/ipv6"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
 type Packet interface {

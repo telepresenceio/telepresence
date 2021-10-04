@@ -1,4 +1,4 @@
-package tun
+package vif
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 const sysProtoControl = 2

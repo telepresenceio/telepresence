@@ -1,10 +1,10 @@
-package tun
+package vif
 
 import (
 	"context"
 	"net"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 // OpenTun creates a new TUN device and ensures that it is up and running.

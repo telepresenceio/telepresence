@@ -22,12 +22,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/icmp"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/tcp"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/udp"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/icmp"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/tcp"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/udp"
 )
 
 // tunRouter is a router for outbound traffic that is centered around a TUN device. It's similar to a
@@ -58,7 +58,7 @@ import (
 // be established at the manager side, and one when the connection is closed (from either side).
 type tunRouter struct {
 	// dev is the TUN device that gets configured with the subnets found in the cluster
-	dev *tun.Device
+	dev *vif.Device
 
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
@@ -117,7 +117,7 @@ type tunRouter struct {
 }
 
 func newTunRouter(ctx context.Context) (*tunRouter, error) {
-	td, err := tun.OpenTun(ctx)
+	td, err := vif.OpenTun(ctx)
 	if err != nil {
 		return nil, err
 	}

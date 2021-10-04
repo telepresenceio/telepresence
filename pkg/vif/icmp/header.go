@@ -6,7 +6,7 @@ import (
 	"golang.org/x/net/ipv4"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
 const HeaderLen = 8 // Same for IPv4 and IPv6
