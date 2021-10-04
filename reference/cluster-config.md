@@ -4,7 +4,8 @@ import Alert from '@material-ui/lab/Alert';
 
 For the most part, Telepresence doesn't require any special
 configuration in the cluster and can be used right away in any
-cluster (as long as the user has adequate [RBAC permissions](../rbac)).
+cluster (as long as the user has adequate [RBAC permissions](../rbac)
+and the cluster's server version is `1.17.0` or higher).
 
 However, some advanced features do require some configuration in the
 cluster.
