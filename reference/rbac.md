@@ -41,29 +41,29 @@ After creating `config.yaml` in your current directory, export the file's locati
 
 ## Administrating Telepresence
 
-Telepresence administration requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator. The following permissions are needed for the instillation and use of Telepresence.
+Telepresence administration requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator. The following permissions are needed for the installation and use of Telepresence.
 
 ```yaml
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: telepresence-test-developer
+  name: telepresence-admin
   namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: telepresence-role
+  name: telepresence-admin-role
 rules:
   - apiGroups:
       - ""
     resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "create", "delete"]
+    verbs: ["get", "list", "create", "delete", "watch"]
   - apiGroups:
       - ""
     resources: ["services"]
-    verbs: ["get", "list", "update", "create"]
+    verbs: ["get", "list", "update", "create", "delete"]
   - apiGroups:
       - ""
     resources: ["pods/portforward"]
@@ -71,7 +71,7 @@ rules:
   - apiGroups:
       - "apps"
     resources: ["deployments", "replicasets", "statefulsets"]
-    verbs: ["get", "list", "update"]
+    verbs: ["get", "list", "update", "create", "delete", "watch"]
   - apiGroups:
       - "getambassador.io"
     resources: ["hosts", "mappings"]
@@ -83,35 +83,39 @@ rules:
   - apiGroups:
       - "rbac.authorization.k8s.io"
     resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create", "delete"]
   - apiGroups:
       - ""
     resources: ["namespaces"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create"]
   - apiGroups:
       - ""
     resources: ["secrets"]
-    verbs: ["get", "create"]
+    verbs: ["get", "create", "list", "delete"]
   - apiGroups:
       - ""
     resources: ["serviceaccounts"]
-    verbs: ["get", "create"]
+    verbs: ["get", "create", "delete"]
   - apiGroups:
       - "admissionregistration.k8s.io"
     resources: ["mutatingwebhookconfigurations"]
-    verbs: ["get"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups:
+      - ""
+    resources: ["nodes"]
+    verbs: ["list", "get", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: telepresence-clusterrolebinding
 subjects:
-  - name: telepresence-test-developer
+  - name: telepresence-admin
     kind: ServiceAccount
     namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  name: telepresence-role
+  name: telepresence-admin-role
   kind: ClusterRole
 ```
 
