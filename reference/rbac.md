@@ -144,12 +144,12 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  resources: ["pods"]
-  verbs: ["get", "list", "create", "watch", "delete"]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list", "create", "delete"]
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "watch", "update"]
+  verbs: ["get", "list", "update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]
@@ -157,7 +157,7 @@ rules:
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update"]
+  verbs: ["get", "list", "update", "patch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]
@@ -165,6 +165,10 @@ rules:
 - apiGroups:
   - ""
   resources: ["endpoints"]
+  verbs: ["get", "list"]
+- apiGroups:
+  - "rbac.authorization.k8s.io"
+  resources: ["clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
 - apiGroups:
   - ""
