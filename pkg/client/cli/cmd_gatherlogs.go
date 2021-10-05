@@ -487,7 +487,7 @@ func getSignificantPodNames(podName string) []string {
 		appName := match[1]
 		rsName := fmt.Sprintf("%s-%s", appName, match[2])
 		// add the app name with and without generated ReplicaSet hash
-		sigNames = append(sigNames, rsName, appName)
+		sigNames = append(sigNames, podName, rsName, appName)
 	default:
 		// For default we don't do anything and will leave sigNames
 		// as an empty slice

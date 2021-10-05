@@ -412,6 +412,7 @@ func Test_gatherLogsSignificantPodNames(t *testing.T) {
 			name:    "deploymentPod",
 			podName: "echo-easy-867b648b88-zjsp2",
 			results: []string{
+				"echo-easy-867b648b88-zjsp2",
 				"echo-easy-867b648b88",
 				"echo-easy",
 			},
