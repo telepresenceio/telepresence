@@ -29,6 +29,7 @@ import QSCards from '../quick-start/qs-cards'
 </Alert>
 
 ## Prerequisites
+
 You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
 and set up
 ([Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#verify-kubectl-configuration) /
@@ -115,7 +116,7 @@ cluster.
 ## 3. Intercept your service with a global intercept {#3-global-intercept}
 
 In this section, we will go through the steps required for you to
-create a [global intercept](../../concepts/intercepts/#global-intercept) that
+create a [global intercept](../../concepts/intercepts/?intercept=global) that
 intercepts all traffic going to a service in your cluster and route it
 to your local environment instead.  In the [next
 section](#4-personal-intercept), we will instead create a personal
@@ -217,7 +218,7 @@ When working on a development environment with multiple engineers, you
 don't want your intercepts to impact your teammates.  Telepresence
 offers a solution to this: instead of creating a global intercept, you
 can create a [personal
-intercept](../../concepts/intercepts/#personal-intercept) that only
+intercept](../../concepts/intercepts/?intercept=personal) that only
 interepts a subset of the traffic going to the service.  This is the
 default if you are [logged in to Ambassador Cloud with
 Telepresence](../../reference/client/login/).  Additionally if you are
