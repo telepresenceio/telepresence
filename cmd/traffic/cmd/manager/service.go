@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
@@ -592,6 +593,7 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
 	resp := &rpc.LogsResponse{
 		PodLogs: make(map[string]string),
+		PodYaml: make(map[string]string),
 	}
 	var errMsg string
 	clientset := managerutil.GetK8sClientset(ctx)
@@ -635,6 +637,20 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 				logWriteMutex.Lock()
 				resp.PodLogs[podAndNs] = buf.String()
 				logWriteMutex.Unlock()
+
+				// Get the pod yaml if the user asked for it
+				if request.GetPodYaml {
+					podYaml, err := yaml.Marshal(pod)
+					if err != nil {
+						logWriteMutex.Lock()
+						resp.PodYaml[podAndNs] = fmt.Sprintf("Failed marshaling pod yaml: %s", err)
+						logWriteMutex.Unlock()
+						return
+					}
+					logWriteMutex.Lock()
+					resp.PodYaml[podAndNs] = string(podYaml)
+					logWriteMutex.Unlock()
+				}
 			}(pod)
 		}
 		wg.Wait()

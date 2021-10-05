@@ -6,6 +6,8 @@
 
 - Feature: Preview url questions have more context and provide "best guess" defaults.
 
+- Feature: The `gather-logs` command added two new flags. One for anonymizing pod names + namespaces and the other for getting the pod yaml of the `traffic-manager` and any pod that contains a `traffic-agent`.
+
 - Bugfix: Telepresence will now log that the kubernetes server version is unsupported when using a version older than 1.17.
 
 ### 2.4.4 (September 27, 2021)

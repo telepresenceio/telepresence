@@ -70,7 +70,8 @@ func main() {
 				// issue.
 				fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
 					", please run `telepresence gather-logs` and attach the "+
-					"telepresence_logs.zip to your github issue.")
+					"telepresence_logs.zip to your github issue or create a new one: "+
+					"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
 			}
 			os.Exit(1)
 		}

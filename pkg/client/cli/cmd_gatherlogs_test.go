@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -206,6 +207,9 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 		tcName := tc.name
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
+			// Use this time to validate that the zip file says the
+			// files inside were modified after the test started.
+			startTime := time.Now()
 			// Prepare the context + use our testdata log dir for these tests
 			ctx := dlog.NewTestContext(t, false)
 			testLogDir := "testdata/testLogDir"
@@ -265,8 +269,186 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 					filesEqual, err := checkZipEqual(f, testLogDir)
 					require.NoError(t, err)
 					assert.True(t, filesEqual)
+
+					// Ensure the zip file metadata is correct (e.g. not the
+					// default which is 1979) that it was modified after the
+					// test started.
+					// This test is incredibly fast (within a second) so we
+					// convert the times to unix timestamps (to get us to
+					// nearest seconds) and ensure the unix timestamp for the
+					// zip file is not less than the unix timestamp for the
+					// start time.
+					// If this ends up being flakey, we can move the start
+					// time out of the test loop and add a sleep for a second
+					// to ensure nothing weird could happen with rounding.
+					assert.False(t,
+						f.FileInfo().ModTime().Unix() < startTime.Unix(),
+						fmt.Sprintf("Start time: %d, file time: %d",
+							startTime.Unix(),
+							f.FileInfo().ModTime().Unix()))
 				}
 			}
+		})
+	}
+}
+
+func Test_gatherLogsGetPodName(t *testing.T) {
+	type testcase struct {
+		name string
+		anon bool
+	}
+	testCases := []testcase{
+		{
+			name: "noAnonymize",
+			anon: false,
+		},
+		{
+			name: "anonymize",
+			anon: true,
+		},
+	}
+	podNames := []string{
+		"echo-auto-inject-64323-3454.default",
+		"echo-easy-141245-23432.ambassador",
+		"traffic-manager-123214-2332.ambassador",
+	}
+	podMapping := []string{
+		"pod-1.namespace-1",
+		"pod-2.namespace-2",
+		"traffic-manager.namespace-2",
+	}
+
+	for _, tc := range testCases {
+		tcName := tc.name
+		tc := tc
+		// We need a fresh anonymizer for each test
+		anonymizer := &anonymizer{
+			namespaces: make(map[string]string),
+			podNames:   make(map[string]string),
+		}
+		t.Run(tcName, func(t *testing.T) {
+			// Get the newPodName for each pod
+			for _, podName := range podNames {
+				newPodName := getPodName(podName, tc.anon, anonymizer)
+				if !tc.anon {
+					require.Equal(t, podName, newPodName)
+				} else {
+					require.NotEqual(t, podName, newPodName)
+				}
+			}
+			if !tc.anon {
+				// If we weren't anonymizing the names, then the
+				// maps should be empty
+				require.Empty(t, anonymizer.podNames)
+				require.Empty(t, anonymizer.namespaces)
+			} else {
+				// Ensure the anonymizer contains the total expected values
+				require.Equal(t, 3, len(anonymizer.podNames))
+				require.Equal(t, 2, len(anonymizer.namespaces))
+
+				// Ensure the podNames were anonymized correctly
+				for i := range podNames {
+					require.Equal(t, podMapping[i], anonymizer.podNames[podNames[i]])
+				}
+
+				// Ensure the namespaces were anonymized correctly
+				require.Equal(t, "namespace-1", anonymizer.namespaces["default"])
+				require.Equal(t, "namespace-2", anonymizer.namespaces["ambassador"])
+			}
+		})
+	}
+}
+
+func Test_gatherLogsAnonymizeLogs(t *testing.T) {
+	anonymizer := &anonymizer{
+		namespaces: map[string]string{
+			"default":    "namespace-1",
+			"ambassador": "namespace-2",
+		},
+		// these names are specific because they come from the test data
+		podNames: map[string]string{
+			"echo-auto-inject-6496f77cbd-n86nc.default":   "pod-1.namespace-1",
+			"traffic-manager-5c69859f94-g4ntj.ambassador": "traffic-manager.namespace-2",
+		},
+	}
+
+	ctx := dlog.NewTestContext(t, false)
+	testLogDir := "testdata/testLogDir"
+	outputDir := t.TempDir()
+	stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+	files := []string{"echo-auto-inject-6496f77cbd-n86nc", "traffic-manager-5c69859f94-g4ntj"}
+	for _, file := range files {
+		// The anonymize function edits files in place
+		// so copy the files before we do that
+		srcFile := fmt.Sprintf("%s/%s", testLogDir, file)
+		dstFile := fmt.Sprintf("%s/%s", outputDir, file)
+		err := copyFiles(dstFile, srcFile)
+		require.NoError(t, err)
+
+		err = anonymizeLog(stdout, dstFile, anonymizer)
+		require.NoError(t, err)
+
+		// Now verify things have actually been anonymized
+		anonFile, err := os.ReadFile(dstFile)
+		require.NoError(t, err)
+		require.NotContains(t, string(anonFile), "echo-auto-inject")
+		require.NotContains(t, string(anonFile), "default")
+		require.NotContains(t, string(anonFile), "ambassador")
+
+		// Both logs make reference to "echo-auto-inject" so we
+		// validate that "pod-1" appears in both logs
+		require.Contains(t, string(anonFile), "pod-1")
+	}
+}
+
+func Test_gatherLogsSignificantPodNames(t *testing.T) {
+	type testcase struct {
+		name    string
+		podName string
+		results []string
+	}
+	testCases := []testcase{
+		{
+			name:    "deploymentPod",
+			podName: "echo-easy-867b648b88-zjsp2",
+			results: []string{
+				"echo-easy-867b648b88-zjsp2",
+				"echo-easy-867b648b88",
+				"echo-easy",
+			},
+		},
+		{
+			name:    "statefulSetPod",
+			podName: "echo-easy-0",
+			results: []string{
+				"echo-easy-0",
+				"echo-easy",
+			},
+		},
+		{
+			name:    "unkownName",
+			podName: "notarealname",
+			results: []string{},
+		},
+		{
+			name:    "followPatternNotFullName",
+			podName: "a123b",
+			results: []string{},
+		},
+		{
+			name:    "emptyName",
+			podName: "",
+			results: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		tcName := tc.name
+		tc := tc
+		// We need a fresh anonymizer for each test
+		t.Run(tcName, func(t *testing.T) {
+			sigPodNames := getSignificantPodNames(tc.podName)
+			require.Equal(t, tc.results, sigPodNames)
 		})
 	}
 }
