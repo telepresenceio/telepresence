@@ -23,6 +23,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -36,6 +38,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/dtest"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/cli"
@@ -571,6 +574,26 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 			`body of %q contains %q`, "http://"+svc, expectedOutput,
 		)
 	}
+}
+
+func (cs *connectedSuite) TestD_GetClusterID() {
+	c := testContext(cs.T())
+	c, cancel := context.WithTimeout(c, 15*time.Second)
+	defer cancel()
+	trafficManagerSvc := fmt.Sprintf("traffic-manager.%s:8081", cs.tpSuite.managerTestNamespace)
+	conn, err := grpc.DialContext(c, trafficManagerSvc, grpc.WithInsecure(), grpc.WithBlock())
+	cs.NoError(err, fmt.Sprintf("error connecting to %s: %s", trafficManagerSvc, err))
+	defer conn.Close()
+
+	mgr := manager.NewManagerClient(conn)
+	license, err := mgr.GetLicense(c, &empty.Empty{})
+	cs.NoError(err, "error with GetLicense gRPC call")
+	cs.NotEmpty(license.ErrMsg, "there should be an error message since there's no license installed")
+
+	// Get clusterID from the cluster
+	clusterID, err := output(c, "kubectl", "get", "ns", "default", "-o", "jsonpath={.metadata.uid}")
+	cs.NoError(err, "error getting cluster-id with kubectl")
+	cs.Equal(clusterID, license.GetClusterId(), fmt.Sprintf("license from cluster %s does not match from getLicense %s, %#v", clusterID, license.GetClusterId(), license))
 }
 
 func (cs *connectedSuite) TestD_Intercepted() {

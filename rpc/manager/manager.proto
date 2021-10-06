@@ -305,6 +305,7 @@ message License {
   string license = 1;
   string host = 2;
   string cluster_id = 3;
+  string err_msg = 4;
 }
 
 // The host and port used to connect to Ambassador Cloud.
