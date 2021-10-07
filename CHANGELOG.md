@@ -5,9 +5,15 @@
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
   This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
 
-- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
+- Feature: When using `--docker-run`, volumes are mounted directly to the correct paths, obviating
+  the need to use `$TELEPRESENCE_ROOT` and enabling Telepresence to work with containers that use
+  volume mounts without modifying application code.
 
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
+
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
+- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
 
 - Bugfix: Outbound connections are now properly closed when the peer closes.
 
@@ -15,8 +21,6 @@
 
 - Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the 
   cluster runs in a docker-container on the client).
-
-- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
 
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
