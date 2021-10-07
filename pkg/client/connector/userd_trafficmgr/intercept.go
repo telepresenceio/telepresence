@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"runtime"
@@ -148,7 +149,9 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 			if err != nil {
 				if ctx.Err() == nil {
-					err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
+					if !errors.Is(err, io.EOF) {
+						err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
+					}
 					break
 				}
 				// context is cancelled. Continue as if we had an empty snapshot. This
