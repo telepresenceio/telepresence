@@ -103,20 +103,6 @@ func (cs *clientSessionState) getRandomAgentTunnel() (tunnel *agentTunnel) {
 	return tunnel
 }
 
-// getInterceptedAgents returns the session ID of each agent currently intercepted
-// by this client
-func (cs *clientSessionState) getInterceptedAgents() []string {
-	cs.Lock()
-	agentSessionIDs := make([]string, len(cs.agentTunnels))
-	i := 0
-	for agentSession := range cs.agentTunnels {
-		agentSessionIDs[i] = agentSession
-		i++
-	}
-	cs.Unlock()
-	return agentSessionIDs
-}
-
 type agentSessionState struct {
 	sessionState
 	agent           *rpc.AgentInfo
@@ -514,16 +500,34 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 	return cept, nil
 }
 
-// getAgentsInterceptedByClient returns the session IDs for each agent that is currently
+// getAgentsInterceptedByClient returns the session IDs for each agent that are currently
 // intercepted by the client with the given client session ID.
-func (s *State) getAgentsInterceptedByClient(clientSessionID string) ([]string, error) {
-	s.mu.Lock()
-	ss := s.sessions[clientSessionID]
-	s.mu.Unlock()
-	if cs, ok := ss.(*clientSessionState); ok {
-		return cs.getInterceptedAgents(), nil
+func (s *State) getAgentsInterceptedByClient(clientSessionID string) []string {
+	intercepts := s.intercepts.LoadAllMatching(func(_ string, ii *rpc.InterceptInfo) bool {
+		return ii.ClientSession.SessionId == clientSessionID
+	})
+	if len(intercepts) == 0 {
+		return nil
 	}
-	return nil, status.Errorf(codes.NotFound, "Client session %q not found", clientSessionID)
+	agents := s.agents.LoadAllMatching(func(_ string, ai *rpc.AgentInfo) bool {
+		for _, ii := range intercepts {
+			if ai.Name == ii.Spec.Agent && ai.Namespace == ii.Spec.Namespace {
+				return true
+			}
+		}
+		return false
+	})
+	if len(agents) == 0 {
+		return nil
+	}
+
+	agentIDs := make([]string, len(agents)) // At least one agent per intercept
+	i := 0
+	for id := range agents {
+		agentIDs[i] = id
+		i++
+	}
+	return agentIDs
 }
 
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
@@ -771,11 +775,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 // the clientSessionID, it will then wait for results to arrive, collect those results, and return them as a
 // unique and sorted slice together with a count of how many agents that replied.
 func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, request *rpc.LookupHostRequest) (iputil.IPs, int, error) {
-	iceptAgentIDs, err := s.getAgentsInterceptedByClient(clientSessionID)
-	if err != nil {
-		return nil, 0, err
-	}
-
+	iceptAgentIDs := s.getAgentsInterceptedByClient(clientSessionID)
 	ips := iputil.IPs{}
 	iceptCount := len(iceptAgentIDs)
 	if iceptCount == 0 {
