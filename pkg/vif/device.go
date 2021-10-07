@@ -40,10 +40,10 @@ func (t *Device) SetDNS(ctx context.Context, server net.IP, domains []string) (e
 	return t.setDNS(ctx, server, domains)
 }
 
-// WritePacket writes bytes from the given buffer.Data and returns the number of bytes
+// WritePacket writes bytes from the buffer.Data starting at offset and returns the number of bytes
 // actually written.
-func (t *Device) WritePacket(from *buffer.Data) (int, error) {
-	return t.writePacket(from)
+func (t *Device) WritePacket(from *buffer.Data, offset int) (int, error) {
+	return t.writePacket(from, offset)
 }
 
 func (t *Device) SetMTU(mtu int) error {

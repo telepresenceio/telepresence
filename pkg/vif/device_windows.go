@@ -164,6 +164,6 @@ func (t *Device) readPacket(into *buffer.Data) (int, error) {
 	return t.Device.Read(into.Raw(), 0)
 }
 
-func (t *Device) writePacket(from *buffer.Data) (int, error) {
-	return t.Device.Write(from.Raw(), 0)
+func (t *Device) writePacket(from *buffer.Data, offset int) (int, error) {
+	return t.Device.Write(from.Raw(), offset)
 }

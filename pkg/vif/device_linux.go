@@ -125,8 +125,8 @@ func (t *Device) readPacket(into *buffer.Data) (int, error) {
 	return t.File.Read(into.Raw())
 }
 
-func (t *Device) writePacket(from *buffer.Data) (int, error) {
-	return t.File.Write(from.Raw())
+func (t *Device) writePacket(from *buffer.Data, offset int) (int, error) {
+	return t.File.Write(from.Raw()[offset:])
 }
 
 func getInterfaceIndex(fd int, name string) (int32, error) {

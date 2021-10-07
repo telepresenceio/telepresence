@@ -106,22 +106,34 @@ func (t *Device) readPacket(into *buffer.Data) (int, error) {
 	return n, err
 }
 
-func (t *Device) writePacket(from *buffer.Data) (int, error) {
+func (t *Device) writePacket(from *buffer.Data, offset int) (n int, err error) {
 	raw := from.Raw()
 	if len(raw) <= buffer.PrefixLen {
 		return 0, unix.EIO
 	}
 
 	ipVer := raw[buffer.PrefixLen] >> 4
+	var af byte
 	switch ipVer {
 	case ipv4.Version:
-		raw[3] = unix.AF_INET
+		af = unix.AF_INET
 	case ipv6.Version:
-		raw[3] = unix.AF_INET6
+		af = unix.AF_INET6
 	default:
 		return 0, errors.New("unable to determine IP version from packet")
 	}
-	n, err := t.File.Write(raw)
+
+	if offset > 0 {
+		raw = raw[offset:]
+		// Temporarily move AF_INET/AF_INET6 into the offset position.
+		r3 := raw[3]
+		raw[3] = af
+		n, err = t.File.Write(raw)
+		raw[3] = r3
+	} else {
+		raw[3] = af
+		n, err = t.File.Write(raw)
+	}
 	return n - buffer.PrefixLen, err
 }
 

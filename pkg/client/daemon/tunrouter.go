@@ -319,7 +319,7 @@ func (t *tunRouter) run(c context.Context) error {
 				return nil
 			case pkt := <-t.toTunCh:
 				dlog.Debugf(c, "-> TUN %s", pkt)
-				_, err := t.dev.WritePacket(pkt.Data())
+				_, err := t.dev.WritePacket(pkt.Data(), 0)
 				pkt.SoftRelease()
 				if err != nil {
 					if atomic.LoadInt32(&t.closing) == 2 || c.Err() != nil {
