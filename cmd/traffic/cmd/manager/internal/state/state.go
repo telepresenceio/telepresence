@@ -263,9 +263,10 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 }
 
 // RemoveSession removes a session from the set of present session IDs.
-func (s *State) RemoveSession(sessionID string) {
+func (s *State) RemoveSession(ctx context.Context, sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	dlog.Debugf(ctx, "Session %s removed. Explicit removal", sessionID)
 
 	s.unlockedRemoveSession(sessionID)
 }
@@ -316,12 +317,13 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 
 // ExpireSessions prunes any sessions that haven't had a MarkSession heartbeat since the given
 // 'moment'.
-func (s *State) ExpireSessions(moment time.Time) {
+func (s *State) ExpireSessions(ctx context.Context, moment time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for id, sess := range s.sessions {
 		if sess.LastMarked().Before(moment) {
+			dlog.Debugf(ctx, "Session %s removed. It has expired", id)
 			s.unlockedRemoveSession(id)
 		}
 	}

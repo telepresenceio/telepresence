@@ -169,7 +169,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 	dlog.Debug(ctx, "Depart called")
 
-	m.state.RemoveSession(session.GetSessionId())
+	m.state.RemoveSession(ctx, session.GetSessionId())
 
 	return &empty.Empty{}, nil
 }
@@ -735,6 +735,6 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 }
 
 // expire removes stale sessions.
-func (m *Manager) expire() {
-	m.state.ExpireSessions(m.clock.Now().Add(-15 * time.Second))
+func (m *Manager) expire(ctx context.Context) {
+	m.state.ExpireSessions(ctx, m.clock.Now().Add(-15*time.Second))
 }

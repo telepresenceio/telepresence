@@ -55,7 +55,7 @@ func TestPresence(t *testing.T) {
 	a.Contains(collected, "b/item-b")
 	a.Contains(collected, "c/item-c")
 
-	p.ExpireSessions(now)
+	p.ExpireSessions(ctx, now)
 
 	// B@1 C@1
 
@@ -64,8 +64,8 @@ func TestPresence(t *testing.T) {
 	a.True(p.IsPresent("c"))
 	a.False(p.IsPresent("d"))
 
-	p.RemoveSession("a")
-	p.RemoveSession("c")
+	p.RemoveSession(ctx, "a")
+	p.RemoveSession(ctx, "c")
 
 	// B@1
 
