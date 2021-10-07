@@ -13,8 +13,9 @@ PreviewUrl,
 ExternalIp
 } from '../../../../../src/components/Docs/Telepresence';
 import Alert from '@material-ui/lab/Alert';
+import Platform from '@src/components/Platform';
 import QSCards from './qs-cards';
-import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
+import { UserInterceptCommand, DemoClusterWarning } from '../../../../../src/components/Docs/Telepresence';
 
 # Telepresence Quick Start
 
@@ -43,10 +44,14 @@ If you don't have Docker Desktop already installed, go to the [Docker download p
 
 Telepresence connects your local workstation with a remote Kubernetes cluster. In this tutorial, we'll start with a pre-configured, remote cluster.
 
-1. <Login urlParams="docs_source=telepresence-quick-start"/>
-2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster. 
+1. <Login urlParams="docs_source=telepresence-quick-start&login_variant=free-cluster-activation" origin="telepresence-novice-quick-start" />
+2. Go to the <DCPLink>Service Catalog</DCPLink> to see all the services deployed on your cluster.
    <EmojivotoServicesList/>
-    The Service Catalog gives you a consolidated view of all your services across development, staging, and production.
+    The Service Catalog gives you a consolidated view of all your services across development, staging, and production. After exploring the Service Catalog, continue with this tutorial to test the application in your demo cluster.
+
+<DemoClusterWarning />
+
+<div className="docs-opaque-section">
 
 ## 2. Try the Emojivoto application
 
@@ -69,12 +74,29 @@ We'll set up a development environment locally on your workstation. We'll then u
 
 1. Run the Docker container locally:
 
-    <DockerCommand/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
 
-    <Alert severity="info">
-    Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
-    If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
-    </Alert>
+<DockerCommand osType="macos"/>
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+<DockerCommand osType="linux"/>
+
+</Platform.GNULinuxTab>
+<Platform.WindowsTab>
+
+<DockerCommand osType="windows"/>
+
+</Platform.WindowsTab>
+</Platform.TabGroup>
+
+
+<Alert severity="info">
+Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
+If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
+</Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
@@ -118,6 +140,8 @@ Now you're able to share your fix in your local environment with your team!
     To get more information regarding Preview URLs and intercepts, visit the <DCPLink>Developer Control Plane </DCPLink>.
 </Alert>
 
+</div>
+
 ## 6. How/Why does this all work?
 
 Telepresence works by deploying a two-way network proxy in a pod running in a Kubernetes cluster. This proxy can intercept traffic meant for the service and reroute it to a local copy, which is ready for further (local) development.
@@ -132,4 +156,3 @@ Preview URLs, when created, generate an ingress request containing a custom head
 
 
 You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
-
