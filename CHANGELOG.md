@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.4.6 (TBD)
+
+- Feature: When using `--docker-run`, volumes are mounted directly to the correct paths, obviating
+  the need to use `$TELEPRESENCE_ROOT` and enabling Telepresence to work with containers that use
+  volume mounts without modifying application code.
+
 ### 2.4.5 (October 15, 2021)
 
 - Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.
