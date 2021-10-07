@@ -59,6 +59,14 @@ items:
           to let users know when they are using Telepresence with a cluster it doesn't support.
         docs: reference/cluster-config
 
+      - type: feature
+        title: Added context and defaults to ingress questions when creating a preview URL
+        body: >-
+          Previeously, we refered to OSI model layers when asking these questions, but this
+          terminology is not commonly used. This was changed to instead use context to help
+          the user understand what each question was asking for. Additionally, a default was
+          added to each question to give the user examples of correct input.
+
   - version: 2.4.4
     date: '2021-09-27'
     notes:
