@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -30,9 +31,9 @@ import (
 )
 
 type Callbacks struct {
-	GetCloudAPIKey  func(context.Context, string, bool) (string, error)
-	SetClient       func(client manager.ManagerClient, callOptions ...grpc.CallOption)
-	SetOutboundInfo func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	GetCloudAPIKey        func(context.Context, string, bool) (string, error)
+	RegisterManagerServer func(server manager.ManagerServer)
+	SetOutboundInfo       func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -183,14 +184,13 @@ func (tm *trafficManager) Run(c context.Context) error {
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	// Gotta call mgrProxy.SetClient before we call daemon.SetOutboundInfo which tells the
+	// Gotta call RegisterManagerServer before we call daemon.SetOutboundInfo which tells the
 	// daemon to use the proxy.
-	tm.callbacks.SetClient(tm.managerClient)
+	tm.callbacks.RegisterManagerServer(userd_grpc.NewManagerProxy(tm.managerClient))
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
 		tm.managerClient = nil
-		tm.callbacks.SetClient(nil)
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
 

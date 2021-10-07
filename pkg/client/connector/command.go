@@ -56,8 +56,7 @@ type ScoutReport = scout.ScoutReport
 type service struct {
 	scoutClient *scout.Scout // don't use this directly; use the 'scout' chan instead
 
-	managerProxy userd_grpc.MgrProxy
-	cancel       func()
+	cancel func()
 
 	// Must hold connectMu to use the sharedState.MaybeSetXXX methods.
 	connectMu   sync.Mutex
@@ -152,7 +151,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	}
 }
 
-func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config) *rpc.ConnectInfo {
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config, svc *grpc.Server) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -222,8 +221,10 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		cluster,
 		s.scoutClient.Reporter.InstallID(),
 		userd_trafficmgr.Callbacks{
-			GetCloudAPIKey:  s.sharedState.GetCloudAPIKey,
-			SetClient:       s.managerProxy.SetClient,
+			GetCloudAPIKey: s.sharedState.GetCloudAPIKey,
+			RegisterManagerServer: func(mgrSrv manager.ManagerServer) {
+				manager.RegisterManagerServer(svc, mgrSrv)
+			},
 			SetOutboundInfo: daemonClient.SetOutboundInfo,
 		})
 	if err != nil {
@@ -331,8 +332,10 @@ func run(c context.Context) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
+	svcCh := make(chan *grpc.Server, 1)
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		defer func() {
+			close(svcCh)
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
@@ -368,7 +371,7 @@ func run(c context.Context) error {
 			},
 			s.sharedState,
 		))
-		manager.RegisterManagerServer(svc, &s.managerProxy)
+		svcCh <- svc
 
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
@@ -378,7 +381,7 @@ func run(c context.Context) error {
 	})
 
 	// background-init handles the work done by the initial connector.Connect RPC call.  This
-	// happens in a separage goroutine from the gRPC server's connection handler so that the
+	// happens in a separate goroutine from the gRPC server's connection handler so that the
 	// request getting cancelled doesn't cancel the work.
 	g.Go("background-init", func(c context.Context) error {
 		defer func() {
@@ -393,7 +396,11 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config)
+		svc, ok := <-svcCh
+		if !ok {
+			return nil
+		}
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config, svc)
 
 		return nil
 	})
