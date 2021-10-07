@@ -105,7 +105,7 @@ func (s *muxTunnel) Send(ctx context.Context, m Message) error {
 	// Sync unless Control
 	if _, ok := m.(Control); !ok {
 		s.counter++
-		if s.counter%s.syncRatio == 0 { // sync every nth package
+		if s.counter%s.syncRatio == 0 { // sync every nth packet
 			return s.sync(ctx)
 		}
 	}

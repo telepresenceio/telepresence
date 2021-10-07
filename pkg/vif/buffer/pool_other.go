@@ -3,9 +3,7 @@
 
 package buffer
 
-import (
-	"sync"
-)
+import "sync"
 
 type Data struct {
 	buf []byte

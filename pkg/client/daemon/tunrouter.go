@@ -36,16 +36,16 @@ import (
 // traffic-manager. The addresses of the device are derived from IP addresses sent to it from the user
 // daemon (which in turn receives them from the cluster).
 //
-// Data sent to the device is received as L3 IP-packages and parsed into L4 UDP and TCP before they
-// are dispatched over the muxTunnel. Returned payloads are wrapped as IP-packages before written
+// Data sent to the device is received as L3 IP-packets and parsed into L4 UDP and TCP before they
+// are dispatched over the muxTunnel. Returned payloads are wrapped as IP-packets before written
 // back to the device.
 //
 // Connection pooling:
 //
-// For UDP and TCP packages, a ConnID is created which uniquely identifies a combination of protocol,
+// For UDP and TCP packets, a ConnID is created which uniquely identifies a combination of protocol,
 // source IP, source port, destination IP, and destination port. A handler is then obtained that matches
-// that ID (active handlers are cached in a connpool.Pool) and the package is then sent to that handler.
-// The handler typically sends the ConnID and the payload of the package over to the traffic-manager
+// that ID (active handlers are cached in a connpool.Pool) and the packet is then sent to that handler.
+// The handler typically sends the ConnID and the payload of the packet over to the traffic-manager
 // using the gRPC ClientTunnel. At the receiving en din the traffic-manager, a similar connpool.Pool obtains
 // a corresponding handler which manages a net.Conn matching the ConnID in the cluster.
 //
@@ -55,7 +55,7 @@ import (
 //
 // TCP requires a complete workflow engine on the TUN-device side (see tcp.Handler). All TCP negotiation,
 // takes place in the client and the same bidirectional muxTunnel is then used to send both TCP and UDP
-// packages to the manager. TCP will send some control packages. One to verify that a connection can
+// packets to the manager. TCP will send some control packets. One to verify that a connection can
 // be established at the manager side, and one when the connection is closed (from either side).
 type tunRouter struct {
 	// dev is the TUN device that gets configured with the subnets found in the cluster
@@ -346,7 +346,7 @@ func (t *tunRouter) run(c context.Context) error {
 		dlog.Debug(c, "TUN read loop starting")
 
 		// bufCh is just a small buffer to enable better parallel processing between
-		// the actual TUN reader loop and the package handlers.
+		// the actual TUN reader loop and the packet handlers.
 		bufCh := make(chan *buffer.Data, 100)
 		defer close(bufCh)
 
@@ -395,13 +395,13 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 
 	ipHdr, err := ip.ParseHeader(data.Buf())
 	if err != nil {
-		dlog.Error(c, "Unable to parse package header")
+		dlog.Error(c, "Unable to parse packet header")
 		return
 	}
 
 	if ipHdr.PayloadLen() > buffer.DataPool.MTU-ipHdr.HeaderLen() {
-		// Package is too large for us.
-		dlog.Error(c, "Package exceeds MTU")
+		// Packet is too large for us.
+		dlog.Error(c, "Packet exceeds MTU")
 		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.MustFragment))
 		return
 	}
@@ -409,7 +409,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 	if ipHdr.Version() == ipv4.Version {
 		v4Hdr := ipHdr.(ip.V4Header)
 		if v4Hdr.Flags()&ipv4.MoreFragments != 0 || v4Hdr.FragmentOffset() != 0 {
-			dlog.Debug(c, "Package concat")
+			dlog.Debug(c, "Packet concat")
 			data = v4Hdr.ConcatFragments(data, t.fragmentMap)
 			if data == nil {
 				return
@@ -478,7 +478,7 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
 	if tcpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
-		// Ignore TCP packages intended for the DNS resolver for now
+		// Ignore TCP packets intended for the DNS resolver for now
 		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
 		return
 	}

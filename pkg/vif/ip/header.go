@@ -35,10 +35,10 @@ type Header interface {
 	// L4Protocol is the protocol of the layer-4 header.
 	L4Protocol() int
 
-	// PacketBase returns the full packet that this header is backed by.
+	// Packet returns the full packet that this header is backed by.
 	Packet() []byte
 
-	// Payload returns the payload of the package that this header is backed by.
+	// Payload returns the payload of the packet that this header is backed by.
 	Payload() []byte
 
 	// PseudoHeader returns the pseudo header used when computing the checksum for a layer-4 header.
@@ -48,10 +48,10 @@ type Header interface {
 	// SetTTL sets the hop limit
 	SetTTL(id int)
 
-	// SetSource sets the package source IP address
+	// SetSource sets the packet source IP address
 	SetSource(ip net.IP)
 
-	// SetDestination sets the package destination IP address
+	// SetDestination sets the packet destination IP address
 	SetDestination(ip net.IP)
 
 	// SetL4Protocol sets the layer 4 protocol (a.k.a. the next-layer protocol)
@@ -96,7 +96,7 @@ func ParseHeader(b []byte) (Header, error) {
 // The checksumPosition is the offset into the IP payload for the checksum for the given
 // level-4 protocol which should be ipproto.TCP or ipproto.UDP.
 //
-// It is assumed that the ipHdr represents an un-fragmented package with a complete L4
+// It is assumed that the ipHdr represents an un-fragmented packet with a complete L4
 // payload.
 func L4Checksum(ipHdr Header, checksumPosition, l4Proto int) {
 	// reset current checksum, if any

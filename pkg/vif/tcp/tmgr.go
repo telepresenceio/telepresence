@@ -66,7 +66,7 @@ func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 	}
 }
 
-// writeToMgrLoop sends the packages read from the toMgr channel to the traffic-manager device
+// writeToMgrLoop sends the packets read from the toMgrCh channel to the traffic-manager device
 func (h *handler) writeToMgrLoop(ctx context.Context) {
 	// the time to wait until we flush in spite of not getting a PSH
 	const flushDelay = 2 * time.Millisecond
@@ -134,7 +134,7 @@ func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode
 	pkt := connpool.NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
 	if err := h.Send(ctx, pkt); err != nil {
-		return fmt.Errorf("failed to send control package: %w", err)
+		return fmt.Errorf("failed to send control packet: %w", err)
 	}
 	return nil
 }

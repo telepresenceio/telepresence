@@ -97,7 +97,7 @@ func (h *dialer) Start(ctx context.Context) error {
 		h.sendTCD(ctx, Connect)
 	}
 
-	// Start writeLoop so that initial control packages can be handled
+	// Start writeLoop so that initial control packets can be handled
 	go h.writeLoop(ctx)
 	return nil
 }
@@ -145,7 +145,7 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	}
 }
 
-// HandleMessage sends a package to the underlying TCP/UDP connection
+// HandleMessage sends a packet to the underlying TCP/UDP connection
 func (h *dialer) HandleMessage(ctx context.Context, dg Message) {
 	select {
 	case <-ctx.Done():

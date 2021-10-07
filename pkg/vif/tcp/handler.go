@@ -106,7 +106,7 @@ type handler struct {
 	ackWaitQueue     *queueElement
 	ackWaitQueueSize uint32
 
-	// oooQueue is where out-of-order packages are placed until they can be processed
+	// oooQueue is where out-of-order packets are placed until they can be processed
 	oooQueue *queueElement
 
 	// synPacket is the initial syn packet received on a connect request. It is
@@ -116,7 +116,7 @@ type handler struct {
 	// wfState is the current workflow state
 	wfState state
 
-	// seq is the sequence that we provide in the packages we send to TUN
+	// seq is the sequence that we provide in the packets we send to TUN
 	seq uint32
 
 	// lastAck is the last ackNumber that we received from TUN
@@ -129,7 +129,7 @@ type handler struct {
 	sendWindow uint64
 	rcvWnd     uint64
 
-	// windowScale is the negotiated number of bits to shift the windowSize of a package
+	// windowScale is the negotiated number of bits to shift the windowSize of a packet
 	windowScale uint8
 
 	// peerMaxSegmentSize is the maximum size of a segment sent to the peer (not counting IP-header)
@@ -205,7 +205,7 @@ func (h *handler) Start(ctx context.Context) error {
 		}()
 		h.processPackets(ctx)
 	}()
-	go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packages
+	go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packets
 	return nil
 }
 
@@ -312,7 +312,7 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 	h.pushToAckWait(ctx, 1, pkt)
 }
 
-// writeToTunLoop sends the packages read from the fromMgr channel to the TUN device
+// writeToTunLoop sends the packets read from the fromMgr channel to the TUN device
 func (h *handler) writeToTunLoop(ctx context.Context) {
 	defer close(h.readyToFin)
 	// We use a timer that we reset on each iteration instead of a ticker to prevent drift between
@@ -394,7 +394,7 @@ func (h *handler) writeToTunLoop(ctx context.Context) {
 				h.pushToAckWait(ctx, uint32(mxSend), pkt)
 
 				// Decrease the window size with the bytes that we just sent unless it's already updated
-				// from a received package
+				// from a received packet
 				window -= window - uint64(mxSend)
 				atomic.CompareAndSwapUint64(&h.sendWindow, window, window)
 				start = end
@@ -502,7 +502,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	}
 
 	if !tcpHdr.ACK() {
-		// Just ignore packages that has no ack
+		// Just ignore packets that have no ack
 		return pleaseContinue
 	}
 
@@ -523,10 +523,10 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 			return pleaseContinue
 		}
 	case sq > lastAck:
-		// Oops. Package loss! Let sender know by sending an ACK so that we ack the receipt
+		// Oops. Packet loss! Let sender know by sending an ACK so that we ack the receipt
 		// and also tell the sender about our expected number
 		h.sendAck(ctx)
-		h.addOutOfOrderPackage(ctx, pkt)
+		h.addOutOfOrderPacket(ctx, pkt)
 		release = false
 		return pleaseContinue
 	case sq == lastAck-1 && payloadLen == 0:
@@ -535,8 +535,8 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 		_ = h.sendConnControl(ctx, connpool.KeepAlive)
 		return pleaseContinue
 	default:
-		// resend of already acknowledged package. Just ignore
-		dlog.Debug(ctx, "client resends already acked package")
+		// resend of already acknowledged packet. Just ignore
+		dlog.Debug(ctx, "client resends already acked packet")
 		return pleaseContinue
 	}
 	if tcpHdr.RST() {
@@ -588,7 +588,7 @@ func (h *handler) processPackets(ctx context.Context) {
 				return
 			}
 			for {
-				continueProcessing, next := h.processNextOutOfOrderPackage(ctx)
+				continueProcessing, next := h.processNextOutOfOrderPacket(ctx)
 				if !continueProcessing {
 					return
 				}
@@ -656,7 +656,7 @@ func (h *handler) processResends(ctx context.Context) {
 			if deadLine.Before(now) {
 				el.retries++
 				if el.retries > maxResends {
-					dlog.Errorf(ctx, "   CON %s, package resent %d times, giving up", h.id, maxResends)
+					dlog.Errorf(ctx, "   CON %s, packet resent %d times, giving up", h.id, maxResends)
 					// Drop from queue and point to next
 					el = el.next
 					if prev == nil {
@@ -697,7 +697,7 @@ func (h *handler) pushToAckWait(ctx context.Context, seqAdd uint32, pkt Packet) 
 
 func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 	h.sendLock.Lock()
-	// ack-queue is guaranteed to be sorted descending on sequence so we cut from the package with
+	// ack-queue is guaranteed to be sorted descending on sequence so we cut from the packet with
 	// a sequence less than or equal to the received sequence.
 	el := h.ackWaitQueue
 	oldSz := h.ackWaitQueueSize
@@ -728,7 +728,7 @@ func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 	}
 }
 
-func (h *handler) processNextOutOfOrderPackage(ctx context.Context) (bool, bool) {
+func (h *handler) processNextOutOfOrderPacket(ctx context.Context) (bool, bool) {
 	seq := h.sequenceLastAcked()
 	var prev *queueElement
 	for el := h.oooQueue; el != nil; el = el.next {
@@ -738,7 +738,7 @@ func (h *handler) processNextOutOfOrderPackage(ctx context.Context) (bool, bool)
 			} else {
 				h.oooQueue = el.next
 			}
-			dlog.Debugf(ctx, "   CON %s, Processing out-of-order package %s", h.id, el.packet)
+			dlog.Debugf(ctx, "   CON %s, Processing out-of-order packet %s", h.id, el.packet)
 			return h.processPacket(ctx, el.packet), true
 		}
 		prev = el
@@ -746,8 +746,8 @@ func (h *handler) processNextOutOfOrderPackage(ctx context.Context) (bool, bool)
 	return true, false
 }
 
-func (h *handler) addOutOfOrderPackage(ctx context.Context, pkt Packet) {
-	dlog.Debugf(ctx, "   CON %s, Keeping out-of-order package %s", h.id, pkt)
+func (h *handler) addOutOfOrderPacket(ctx context.Context, pkt Packet) {
+	dlog.Debugf(ctx, "   CON %s, Keeping out-of-order packet %s", h.id, pkt)
 	h.oooQueue = &queueElement{
 		sequence: pkt.Header().Sequence(),
 		cTime:    time.Now(),
@@ -765,7 +765,7 @@ func (h *handler) setState(ctx context.Context, s state) {
 	atomic.StoreInt32((*int32)(&h.wfState), int32(s))
 }
 
-// sequence is the sequence number of the packages that this client
+// sequence is the sequence number of the packets that this client
 // sends to the TUN device.
 func (h *handler) sequence() uint32 {
 	return atomic.LoadUint32(&h.seq)
