@@ -44,10 +44,11 @@ func (h *dnsInterceptor) Close(ctx context.Context) {
 	h.handler.Close(ctx)
 }
 
-func (h *dnsInterceptor) Start(ctx context.Context) {
+func (h *dnsInterceptor) Start(ctx context.Context) error {
 	h.idleTimer = time.NewTimer(idleDuration)
 	go h.readLoop(ctx)
 	go h.writeLoop(ctx)
+	return nil
 }
 
 func (h *dnsInterceptor) readLoop(ctx context.Context) {

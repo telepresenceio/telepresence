@@ -696,7 +696,8 @@ func (cf *connForward) HandleMessage(ctx context.Context, msg connpool.Message) 
 	}
 }
 
-func (cf *connForward) Start(_ context.Context) {
+func (cf *connForward) Start(_ context.Context) error {
+	return nil
 }
 
 func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, muxTunnel connpool.MuxTunnel) error {

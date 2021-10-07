@@ -196,7 +196,7 @@ func (h *handler) Close(ctx context.Context) {
 	}
 }
 
-func (h *handler) Start(ctx context.Context) {
+func (h *handler) Start(ctx context.Context) error {
 	go h.processResends(ctx)
 	go func() {
 		defer func() {
@@ -206,6 +206,7 @@ func (h *handler) Start(ctx context.Context) {
 		h.processPackets(ctx)
 	}()
 	go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packages
+	return nil
 }
 
 func (h *handler) adjustReceiveWindow() {

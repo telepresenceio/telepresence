@@ -70,9 +70,10 @@ func (h *handler) HandleMessage(ctx context.Context, mdg connpool.Message) {
 	}
 }
 
-func (h *handler) Start(ctx context.Context) {
+func (h *handler) Start(ctx context.Context) error {
 	h.idleTimer = time.NewTimer(idleDuration)
 	go h.writeLoop(ctx)
+	return nil
 }
 
 func (h *handler) writeLoop(ctx context.Context) {
