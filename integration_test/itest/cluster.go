@@ -77,7 +77,7 @@ type cluster struct {
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
-	s.suffix, s.isCI = os.LookupEnv("CIRCLE_SHA1")
+	s.suffix, s.isCI = os.LookupEnv("GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
 		if len(s.suffix) > 7 {
