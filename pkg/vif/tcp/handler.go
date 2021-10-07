@@ -91,8 +91,8 @@ type handler struct {
 	// remove is the function that removes this instance from the pool
 	remove func()
 
-	// TUN channels
-	ToTun   chan<- ip.Packet
+	// TUN I/O
+	toTun   ip.Writer
 	fromTun chan Packet
 	fromMgr chan connpool.Message
 
@@ -151,7 +151,7 @@ type handler struct {
 func NewHandler(
 	tcpStream connpool.MuxTunnel,
 	dispatcherClosing *int32,
-	toTun chan<- ip.Packet,
+	toTun ip.Writer,
 	id tunnel.ConnID,
 	remove func(),
 	rndSource rand.Source,
@@ -160,7 +160,7 @@ func NewHandler(
 		MuxTunnel:         tcpStream,
 		id:                id,
 		remove:            remove,
-		ToTun:             toTun,
+		toTun:             toTun,
 		fromMgr:           make(chan connpool.Message, ioChannelSize),
 		dispatcherClosing: dispatcherClosing,
 		fromTun:           make(chan Packet, ioChannelSize),
@@ -223,9 +223,8 @@ func (h *handler) adjustReceiveWindow() {
 }
 
 func (h *handler) sendToTun(ctx context.Context, pkt Packet) {
-	select {
-	case <-ctx.Done():
-	case h.ToTun <- pkt:
+	if err := h.toTun.Write(ctx, pkt); err != nil {
+		dlog.Errorf(ctx, "!! TUN %s: %v", h.id, err)
 	}
 }
 

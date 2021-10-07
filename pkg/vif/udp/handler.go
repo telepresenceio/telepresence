@@ -13,60 +13,81 @@ import (
 
 type DatagramHandler interface {
 	tunnel.Handler
-	NewDatagram(ctx context.Context, dg Datagram)
+	HandleDatagram(ctx context.Context, dg Datagram)
+}
+
+type timedHandler struct {
+	id        tunnel.ConnID
+	idleTimer *time.Timer
+	idleLock  sync.Mutex
+	remove    func()
+}
+
+func (h *timedHandler) resetIdle() bool {
+	h.idleLock.Lock()
+	stopped := h.idleTimer.Stop()
+	if stopped {
+		h.idleTimer.Reset(idleDuration)
+	}
+	h.idleLock.Unlock()
+	return stopped
+}
+
+func (h *timedHandler) Close(_ context.Context) {
+	h.remove()
 }
 
 type handler struct {
-	connpool.MuxTunnel
-	id        tunnel.ConnID
-	remove    func()
-	toTun     chan<- ip.Packet
+	timedHandler
+	muxTunnel connpool.MuxTunnel
+	toTun     ip.Writer
 	fromTun   chan Datagram
-	idleTimer *time.Timer
-	idleLock  sync.Mutex
 }
 
 const ioChannelSize = 0x40
-const idleDuration = time.Second
+const idleDuration = 5 * time.Second
 
-func (h *handler) NewDatagram(ctx context.Context, dg Datagram) {
+func NewHandler(muxTunnel connpool.MuxTunnel, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
+	return &handler{
+		timedHandler: timedHandler{
+			id:     id,
+			remove: remove,
+		},
+		muxTunnel: muxTunnel,
+		toTun:     toTun,
+		fromTun:   make(chan Datagram, ioChannelSize),
+	}
+}
+
+func (h *handler) HandleDatagram(ctx context.Context, dg Datagram) {
 	select {
 	case <-ctx.Done():
 	case h.fromTun <- dg:
 	}
 }
 
-func (h *handler) Close(_ context.Context) {
-	h.remove()
-}
-
-func NewHandler(muxTunnel connpool.MuxTunnel, toTun chan<- ip.Packet, id tunnel.ConnID, remove func()) DatagramHandler {
-	return &handler{
-		MuxTunnel: muxTunnel,
-		id:        id,
-		toTun:     toTun,
-		remove:    remove,
-		fromTun:   make(chan Datagram, ioChannelSize),
-	}
-}
-
 func (h *handler) HandleMessage(ctx context.Context, mdg connpool.Message) {
-	payload := mdg.Payload()
-	pkt := NewDatagram(HeaderLen+len(payload), h.id.Destination(), h.id.Source())
+	h.handlePayload(ctx, mdg.Payload())
+}
+
+func (h *handler) handlePayload(ctx context.Context, payload []byte) {
+	sendUDPToTun(ctx, h.id, payload, h.toTun)
+}
+
+func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
+	pkt := NewDatagram(HeaderLen+len(payload), id.Destination(), id.Source())
 	ipHdr := pkt.IPHeader()
 	ipHdr.SetChecksum()
 
 	udpHdr := Header(ipHdr.Payload())
-	udpHdr.SetSourcePort(h.id.DestinationPort())
-	udpHdr.SetDestinationPort(h.id.SourcePort())
+	udpHdr.SetSourcePort(id.DestinationPort())
+	udpHdr.SetDestinationPort(id.SourcePort())
 	udpHdr.SetPayloadLen(uint16(len(payload)))
 	copy(udpHdr.Payload(), payload)
 	udpHdr.SetChecksum(ipHdr)
 
-	select {
-	case <-ctx.Done():
-		return
-	case h.toTun <- pkt:
+	if err := toTun.Write(ctx, pkt); err != nil {
+		dlog.Errorf(ctx, "!! TUN %s: %v", id, err)
 	}
 }
 
@@ -86,12 +107,13 @@ func (h *handler) writeLoop(ctx context.Context) {
 			return
 		case dg := <-h.fromTun:
 			if !h.resetIdle() {
+				dg.SoftRelease()
 				return
 			}
 			dlog.Debugf(ctx, "<- TUN %s", dg)
 			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			err := h.Send(ctx, connpool.NewMessage(h.id, udpHdr.Payload()))
+			err := h.muxTunnel.Send(ctx, connpool.NewMessage(h.id, udpHdr.Payload()))
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {
@@ -101,14 +123,4 @@ func (h *handler) writeLoop(ctx context.Context) {
 			}
 		}
 	}
-}
-
-func (h *handler) resetIdle() bool {
-	h.idleLock.Lock()
-	stopped := h.idleTimer.Stop()
-	if stopped {
-		h.idleTimer.Reset(idleDuration)
-	}
-	h.idleLock.Unlock()
-	return stopped
 }

@@ -3,32 +3,31 @@ package udp
 import (
 	"context"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
 type dnsInterceptor struct {
-	handler
+	timedHandler
+	toTun   ip.Writer
+	fromTun chan Datagram
 	dnsConn *net.UDPConn
 }
 
 // NewDnsInterceptor returns a handler that exchanges messages directly with the given dnsConn
 // instead of passing them on to the traffic-manager
-//
-// TODO: Get rid of most of this. We can use the kube-system/kube-dns service directly for everything except the tel2_search domain
-func NewDnsInterceptor(muxTunnel connpool.MuxTunnel, toTun chan<- ip.Packet, id tunnel.ConnID, remove func(), dnsAddr *net.UDPAddr) (DatagramHandler, error) {
+func NewDnsInterceptor(toTun ip.Writer, id tunnel.ConnID, remove func(), dnsAddr *net.UDPAddr) (DatagramHandler, error) {
 	h := &dnsInterceptor{
-		handler: handler{
-			MuxTunnel: muxTunnel,
-			id:        id,
-			toTun:     toTun,
-			remove:    remove,
-			fromTun:   make(chan Datagram, ioChannelSize),
+		timedHandler: timedHandler{
+			id:     id,
+			remove: remove,
 		},
+		toTun:   toTun,
+		fromTun: make(chan Datagram, ioChannelSize),
 	}
 	var err error
 	if h.dnsConn, err = net.DialUDP("udp", nil, dnsAddr); err != nil {
@@ -41,35 +40,52 @@ func (h *dnsInterceptor) Close(ctx context.Context) {
 	if h.dnsConn != nil {
 		_ = h.dnsConn.Close()
 	}
-	h.handler.Close(ctx)
+	h.timedHandler.Close(ctx)
+}
+
+func (h *dnsInterceptor) HandleDatagram(ctx context.Context, dg Datagram) {
+	select {
+	case <-ctx.Done():
+	case h.fromTun <- dg:
+	}
 }
 
 func (h *dnsInterceptor) Start(ctx context.Context) error {
 	h.idleTimer = time.NewTimer(idleDuration)
-	go h.readLoop(ctx)
-	go h.writeLoop(ctx)
+	go func() {
+		defer h.Close(ctx)
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+		go h.connToTun(ctx, &wg)
+		go h.tunToConn(ctx, &wg)
+		wg.Wait()
+	}()
 	return nil
 }
 
-func (h *dnsInterceptor) readLoop(ctx context.Context) {
+func (h *dnsInterceptor) connToTun(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
 	b := make([]byte, 0x400)
 	for ctx.Err() == nil {
 		n, err := h.dnsConn.Read(b)
 		if err != nil {
 			return
 		}
-		if !h.resetIdle() {
-			return
-		}
 		if n > 0 {
-			dlog.Debugf(ctx, "<- DNS %s, len %d", h.id.ReplyString(), n)
-			h.HandleMessage(ctx, connpool.NewMessage(h.id, b[:n]))
+			dlog.Tracef(ctx, "<- DNS %s, len %d", h.id.ReplyString(), n)
+			sendUDPToTun(ctx, h.id, b[:n], h.toTun)
 		}
 	}
 }
 
-func (h *dnsInterceptor) writeLoop(ctx context.Context) {
-	defer h.Close(ctx)
+func (h *dnsInterceptor) tunToConn(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+	defer func() {
+		if err := h.dnsConn.Close(); err != nil {
+			dlog.Errorf(ctx, "failed to close dnsConn: %v", err)
+		}
+		h.dnsConn = nil
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,18 +93,19 @@ func (h *dnsInterceptor) writeLoop(ctx context.Context) {
 		case <-h.idleTimer.C:
 			return
 		case dg := <-h.fromTun:
-			if !h.resetIdle() {
-				return
-			}
 			payload := dg.Header().Payload()
 			pn := len(payload)
-			dlog.Debugf(ctx, "-> DNS %s, len %d", h.id, pn)
+			dlog.Tracef(ctx, "-> DNS %s, len %d", h.id, pn)
 			for n := 0; n < pn; {
 				wn, err := h.dnsConn.Write(payload[n:])
 				if err != nil && ctx.Err() == nil {
-					dlog.Errorf(ctx, "%s failed to write TCP: %v", h.id, err)
+					dlog.Errorf(ctx, "!! DNS %s, failed to write TCP: %v", h.id, err)
 				}
 				n += wn
+			}
+			dg.SoftRelease()
+			if !h.resetIdle() {
+				return
 			}
 		}
 	}

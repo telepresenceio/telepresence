@@ -71,9 +71,6 @@ type tunRouter struct {
 	// are obtained using a connpool.ConnID.
 	handlers *tunnel.Pool
 
-	// toTunCh  is where handlers post packages intended to be written to the TUN device
-	toTunCh chan ip.Packet
-
 	// fragmentMap is when concatenating ipv4 fragments
 	fragmentMap map[uint16][]*buffer.Data
 
@@ -125,7 +122,6 @@ func newTunRouter(ctx context.Context) (*tunRouter, error) {
 	return &tunRouter{
 		dev:         td,
 		handlers:    tunnel.NewPool(),
-		toTunCh:     make(chan ip.Packet, 100),
 		cfgComplete: make(chan struct{}),
 		fragmentMap: make(map[uint16][]*buffer.Data),
 		rndSource:   rand.NewSource(time.Now().UnixNano()),
@@ -310,28 +306,6 @@ var blockedUDPPorts = map[uint16]bool{
 func (t *tunRouter) run(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
-	// writer
-	g.Go("TUN writer", func(c context.Context) error {
-		for atomic.LoadInt32(&t.closing) < 2 {
-			select {
-			case <-c.Done():
-				t.stop(c)
-				return nil
-			case pkt := <-t.toTunCh:
-				dlog.Debugf(c, "-> TUN %s", pkt)
-				_, err := t.dev.WritePacket(pkt.Data(), 0)
-				pkt.SoftRelease()
-				if err != nil {
-					if atomic.LoadInt32(&t.closing) == 2 || c.Err() != nil {
-						err = nil
-					}
-					return err
-				}
-			}
-		}
-		return nil
-	})
-
 	g.Go("MGR stream", func(c context.Context) error {
 		dlog.Debug(c, "Waiting until manager gRPC is configured")
 		select {
@@ -370,6 +344,18 @@ func (t *tunRouter) run(c context.Context) error {
 		}
 
 		dlog.Debug(c, "TUN read loop starting")
+
+		// bufCh is just a small buffer to enable better parallel processing between
+		// the actual TUN reader loop and the package handlers.
+		bufCh := make(chan *buffer.Data, 100)
+		defer close(bufCh)
+
+		go func() {
+			for data := range bufCh {
+				t.handlePacket(c, data)
+			}
+		}()
+
 		for atomic.LoadInt32(&t.closing) < 2 {
 			data := buffer.DataPool.Get(buffer.DataPool.MTU)
 			for {
@@ -383,10 +369,10 @@ func (t *tunRouter) run(c context.Context) error {
 				}
 				if n > 0 {
 					data.SetLength(n)
+					bufCh <- data
 					break
 				}
 			}
-			t.handlePacket(c, data)
 		}
 		return nil
 	})
@@ -400,6 +386,13 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		}
 	}()
 
+	reply := func(pkt ip.Packet) {
+		_, err := t.dev.WritePacket(pkt.Data(), 0)
+		if err != nil {
+			dlog.Errorf(c, "TUN write failed: %v", err)
+		}
+	}
+
 	ipHdr, err := ip.ParseHeader(data.Buf())
 	if err != nil {
 		dlog.Error(c, "Unable to parse package header")
@@ -408,13 +401,15 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 
 	if ipHdr.PayloadLen() > buffer.DataPool.MTU-ipHdr.HeaderLen() {
 		// Package is too large for us.
-		t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.MustFragment)
+		dlog.Error(c, "Package exceeds MTU")
+		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.MustFragment))
 		return
 	}
 
 	if ipHdr.Version() == ipv4.Version {
 		v4Hdr := ipHdr.(ip.V4Header)
 		if v4Hdr.Flags()&ipv4.MoreFragments != 0 || v4Hdr.FragmentOffset() != 0 {
+			dlog.Debug(c, "Package concat")
 			data = v4Hdr.ConcatFragments(data, t.fragmentMap)
 			if data == nil {
 				return
@@ -436,12 +431,12 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		if ip4 := dst.To4(); ip4 != nil && ip4[2] == 0 && ip4[3] == 0 {
 			// Write to the a subnet's zero address. Not sure why this is happening but there's no point in
 			// passing them on.
-			t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.HostUnreachable)
+			reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.HostUnreachable))
 			return
 		}
 		dg := udp.DatagramFromData(ipHdr, data)
 		if blockedUDPPorts[dg.Header().SourcePort()] || blockedUDPPorts[dg.Header().DestinationPort()] {
-			t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.PortUnreachable)
+			reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.PortUnreachable))
 			return
 		}
 		data = nil
@@ -452,7 +447,30 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		dlog.Debugf(c, "<- TUN %s", pkt)
 	default:
 		// An L4 protocol that we don't handle.
-		t.toTunCh <- icmp.DestinationUnreachablePacket(ipHdr, icmp.ProtocolUnreachable)
+		dlog.Debugf(c, "Unhandled protocol %d", ipHdr.L4Protocol())
+		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.ProtocolUnreachable))
+	}
+}
+
+type vifWriter struct {
+	*vif.Device
+}
+
+func (w vifWriter) Write(ctx context.Context, pkt ip.Packet) (err error) {
+	dlog.Tracef(ctx, "-> TUN %s", pkt)
+	d := pkt.Data()
+	l := len(d.Buf())
+	o := 0
+	for {
+		var n int
+		if n, err = w.WritePacket(d, o); err != nil {
+			return err
+		}
+		l -= n
+		if l == 0 {
+			return nil
+		}
+		o += n
 	}
 }
 
@@ -467,7 +485,7 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 
 	connID := tunnel.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
 	wf, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
-		return tcp.NewHandler(t.muxTunnel, &t.closing, t.toTunCh, connID, remove, t.rndSource), nil
+		return tcp.NewHandler(t.muxTunnel, &t.closing, vifWriter{t.dev}, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
@@ -481,14 +499,15 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 	udpHdr := dg.Header()
 	connID := tunnel.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
 	uh, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
+		w := vifWriter{t.dev}
 		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
-			return udp.NewDnsInterceptor(t.muxTunnel, t.toTunCh, connID, remove, t.dnsLocalAddr)
+			return udp.NewDnsInterceptor(w, connID, remove, t.dnsLocalAddr)
 		}
-		return udp.NewHandler(t.muxTunnel, t.toTunCh, connID, remove), nil
+		return udp.NewHandler(t.muxTunnel, w, connID, remove), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
 		return
 	}
-	uh.(udp.DatagramHandler).NewDatagram(c, dg)
+	uh.(udp.DatagramHandler).HandleDatagram(c, dg)
 }
