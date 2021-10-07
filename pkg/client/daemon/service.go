@@ -162,7 +162,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			},
 		},
 		scoutClient:   scout.NewScout(c, "daemon"),
-		scout:         make(chan scout.ScoutReport),
+		scout:         make(chan scout.ScoutReport, 25),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 	}
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
