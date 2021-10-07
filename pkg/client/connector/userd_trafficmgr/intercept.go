@@ -324,6 +324,8 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
+	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
+	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
 	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
 	defer cancel()
 	<-tm.startup

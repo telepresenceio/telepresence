@@ -103,6 +103,14 @@ message InterceptSpec {
 
   // extra ports that will be forwarded to the intercepting client
   repeated int32 extra_ports = 15;
+
+  // The delay imposed by a call roundtrip between the traffic-agent and
+  // the client on the workstation. This delay is added to the dial_timeout
+  // when the workstation performs a dial on behalf of the traffic-agent.
+  int64 roundtrip_latency = 16;
+
+  // The dial timeout to use when a dial is made on the intercepting workstation.
+  int64 dial_timeout = 17;
 }
 
 enum InterceptDispositionType {

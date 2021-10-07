@@ -104,16 +104,20 @@ type Timeouts struct {
 	PrivateApply time.Duration `json:"apply,omitempty" yaml:"apply,omitempty"`
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
 	PrivateClusterConnect time.Duration `json:"clusterConnect,omitempty" yaml:"clusterConnect,omitempty"`
+	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
+	PrivateEndpointDial time.Duration `json:"endpointDial,omitempty" yaml:"endpointDial,omitempty"`
+	// PrivateHelm is how long to wait for any helm operation.
+	PrivateHelm time.Duration `json:"helm,omitempty" yaml:"helm,omitempty"`
 	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
 	PrivateIntercept time.Duration `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	// PrivateRoundtripLatency is how much to add  to the EndpointDial timeout when establishing a remote connection.
+	PrivateRoundtripLatency time.Duration `json:"roundtripLatency,omitempty" yaml:"roundtripLatency,omitempty"`
 	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
 	PrivateProxyDial time.Duration `json:"proxyDial,omitempty" yaml:"proxyDial,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
 	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty" yaml:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty" yaml:"trafficManagerConnect,omitempty"`
-	// PrivateHelm is how long to wait for any helm operation.
-	PrivateHelm time.Duration `json:"helm,omitempty" yaml:"helm,omitempty"`
 }
 
 type TimeoutID int
@@ -122,11 +126,13 @@ const (
 	TimeoutAgentInstall TimeoutID = iota
 	TimeoutApply
 	TimeoutClusterConnect
+	TimeoutEndpointDial
+	TimeoutHelm
 	TimeoutIntercept
 	TimeoutProxyDial
+	TimeoutRoundtripLatency
 	TimeoutTrafficManagerAPI
 	TimeoutTrafficManagerConnect
-	TimeoutHelm
 )
 
 type timeoutContext struct {
@@ -157,16 +163,20 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateApply
 	case TimeoutClusterConnect:
 		timeoutVal = t.PrivateClusterConnect
+	case TimeoutEndpointDial:
+		timeoutVal = t.PrivateEndpointDial
+	case TimeoutHelm:
+		timeoutVal = t.PrivateHelm
 	case TimeoutIntercept:
 		timeoutVal = t.PrivateIntercept
 	case TimeoutProxyDial:
 		timeoutVal = t.PrivateProxyDial
+	case TimeoutRoundtripLatency:
+		timeoutVal = t.PrivateRoundtripLatency
 	case TimeoutTrafficManagerAPI:
 		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
 		timeoutVal = t.PrivateTrafficManagerConnect
-	case TimeoutHelm:
-		timeoutVal = t.PrivateHelm
 	default:
 		panic("should not happen")
 	}
@@ -203,21 +213,27 @@ func (e timeoutErr) Error() string {
 	case TimeoutClusterConnect:
 		yamlName = "clusterConnect"
 		humanName = "cluster connect"
+	case TimeoutEndpointDial:
+		yamlName = "endpointDial"
+		humanName = "tunnel endpoint dial with known IP"
+	case TimeoutHelm:
+		yamlName = "helm"
+		humanName = "helm operation"
 	case TimeoutIntercept:
 		yamlName = "intercept"
 		humanName = "intercept"
 	case TimeoutProxyDial:
 		yamlName = "proxyDial"
 		humanName = "proxy dial"
+	case TimeoutRoundtripLatency:
+		yamlName = "roundtripDelay"
+		humanName = "additional delay for tunnel roundtrip"
 	case TimeoutTrafficManagerAPI:
 		yamlName = "trafficManagerAPI"
 		humanName = "traffic manager gRPC API"
 	case TimeoutTrafficManagerConnect:
 		yamlName = "trafficManagerConnect"
 		humanName = "port-forward connection to the traffic manager"
-	case TimeoutHelm:
-		yamlName = "helm"
-		humanName = "helm operation"
 	default:
 		panic("should not happen")
 	}
@@ -256,16 +272,20 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			dp = &t.PrivateApply
 		case "clusterConnect":
 			dp = &t.PrivateClusterConnect
+		case "endpointDial":
+			dp = &t.PrivateEndpointDial
+		case "helm":
+			dp = &t.PrivateHelm
 		case "intercept":
 			dp = &t.PrivateIntercept
 		case "proxyDial":
 			dp = &t.PrivateProxyDial
+		case "roundtripLatency":
+			dp = &t.PrivateRoundtripLatency
 		case "trafficManagerAPI":
 			dp = &t.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
 			dp = &t.PrivateTrafficManagerConnect
-		case "helm":
-			dp = &t.PrivateHelm
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -295,11 +315,13 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 const defaultTimeoutsAgentInstall = 120 * time.Second
 const defaultTimeoutsApply = 1 * time.Minute
 const defaultTimeoutsClusterConnect = 20 * time.Second
+const defaultTimeoutsEndpointDial = 3 * time.Second
+const defaultTimeoutsHelm = 30 * time.Second
 const defaultTimeoutsIntercept = 5 * time.Second
 const defaultTimeoutsProxyDial = 5 * time.Second
+const defaultTimeoutsRoundtripLatency = 2 * time.Second
 const defaultTimeoutsTrafficManagerAPI = 15 * time.Second
 const defaultTimeoutsTrafficManagerConnect = 60 * time.Second
-const defaultTimeoutsHelm = 30 * time.Second
 
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
 func (t Timeouts) MarshalYAML() (interface{}, error) {
@@ -313,20 +335,26 @@ func (t Timeouts) MarshalYAML() (interface{}, error) {
 	if t.PrivateClusterConnect != 0 && t.PrivateClusterConnect != defaultTimeoutsClusterConnect {
 		tm["clusterConnect"] = t.PrivateClusterConnect.String()
 	}
+	if t.PrivateEndpointDial != 0 && t.PrivateEndpointDial != defaultTimeoutsEndpointDial {
+		tm["endpointDial"] = t.PrivateEndpointDial.String()
+	}
+	if t.PrivateHelm != 0 && t.PrivateHelm != defaultTimeoutsHelm {
+		tm["helm"] = t.PrivateHelm.String()
+	}
 	if t.PrivateIntercept != 0 && t.PrivateIntercept != defaultTimeoutsIntercept {
 		tm["intercept"] = t.PrivateIntercept.String()
 	}
 	if t.PrivateProxyDial != 0 && t.PrivateProxyDial != defaultTimeoutsProxyDial {
 		tm["proxyDial"] = t.PrivateProxyDial.String()
 	}
+	if t.PrivateRoundtripLatency != 0 && t.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
+		tm["roundtripLatency"] = t.PrivateRoundtripLatency.String()
+	}
 	if t.PrivateTrafficManagerAPI != 0 && t.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
 		tm["trafficManagerAPI"] = t.PrivateTrafficManagerAPI.String()
 	}
 	if t.PrivateTrafficManagerConnect != 0 && t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		tm["trafficManagerConnect"] = t.PrivateTrafficManagerConnect.String()
-	}
-	if t.PrivateHelm != 0 && t.PrivateHelm != defaultTimeoutsHelm {
-		tm["helm"] = t.PrivateHelm.String()
 	}
 	return tm, nil
 }
@@ -342,20 +370,26 @@ func (t *Timeouts) merge(o *Timeouts) {
 	if o.PrivateClusterConnect != 0 {
 		t.PrivateClusterConnect = o.PrivateClusterConnect
 	}
+	if o.PrivateEndpointDial != 0 {
+		t.PrivateEndpointDial = o.PrivateEndpointDial
+	}
+	if o.PrivateHelm != 0 {
+		t.PrivateHelm = o.PrivateHelm
+	}
 	if o.PrivateIntercept != 0 {
 		t.PrivateIntercept = o.PrivateIntercept
 	}
 	if o.PrivateProxyDial != 0 {
 		t.PrivateProxyDial = o.PrivateProxyDial
 	}
+	if o.PrivateRoundtripLatency != 0 {
+		t.PrivateRoundtripLatency = o.PrivateRoundtripLatency
+	}
 	if o.PrivateTrafficManagerAPI != 0 {
 		t.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
 	}
 	if o.PrivateTrafficManagerConnect != 0 {
 		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
-	}
-	if o.PrivateHelm != 0 {
-		t.PrivateHelm = o.PrivateHelm
 	}
 }
 
@@ -638,11 +672,13 @@ func GetDefaultConfig(c context.Context) Config {
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 			PrivateApply:                 defaultTimeoutsApply,
 			PrivateClusterConnect:        defaultTimeoutsClusterConnect,
+			PrivateEndpointDial:          defaultTimeoutsEndpointDial,
+			PrivateHelm:                  defaultTimeoutsHelm,
 			PrivateIntercept:             defaultTimeoutsIntercept,
 			PrivateProxyDial:             defaultTimeoutsProxyDial,
+			PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 			PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 			PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
-			PrivateHelm:                  defaultTimeoutsHelm,
 		},
 		LogLevels: LogLevels{
 			UserDaemon: logrus.InfoLevel,
