@@ -177,5 +177,8 @@ func (id ConnID) ReplyString() string {
 
 // String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort
 func (id ConnID) String() string {
+	if len(id) < 13 {
+		return "bogus ConnID"
+	}
 	return fmt.Sprintf("%s %s:%d -> %s:%d", protoString(id.Protocol()), id.Source(), id.SourcePort(), id.Destination(), id.DestinationPort())
 }
