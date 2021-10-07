@@ -646,6 +646,8 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
+const tpMountsEnv = "TELEPRESENCE_MOUNTS"
+
 func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
 	envFile := is.args.envFile
 	if envFile == "" {
@@ -691,6 +693,31 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
+
+	tpMounts := is.env[tpMountsEnv]
+	for _, path := range strings.Split(tpMounts, ":") {
+		mountPointEscaped := strings.Replace(is.mountPoint, `"`, `""`, -1)
+		destination := strings.Replace(path, `"`, `""`, -1)
+
+		// paths are absolute and begin with a /
+		// e.g.:
+		//
+		//   Given:
+		//   is.mountPoint = /tmp/telfs-123456
+		//   path = /opt/foo/bar.baz
+		//
+		//   Then:
+		//
+		//   destination = /opt/foo/bar.baz
+		//   source = /tmp/telfs-123456/opt/foo/bar.baz
+		//
+		source := mountPointEscaped + destination
+
+		mountArg := fmt.Sprintf(`type=bind,"source=%s","destination=%s"`, source, destination)
+
+		ourArgs = append(ourArgs, "--mount", mountArg)
+	}
+
 	return proc.Run(ctx, nil, "docker", append(ourArgs, args...)...)
 }
 
@@ -743,7 +770,7 @@ func (is *interceptState) writeEnvJSON() error {
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
 
 const (
-	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter 
+	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter
 	your cluster.  Please %s the ingress to use.`
 	ingressQ1 = `1/4: What's your ingress' IP address?
      You may use an IP address or a DNS name (this is usually a
