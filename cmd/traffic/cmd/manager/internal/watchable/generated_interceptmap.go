@@ -77,6 +77,20 @@ func (tm *InterceptMap) LoadAll() map[string]*manager.InterceptInfo {
 	return ret
 }
 
+// LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
+// function returns true. The map is locked during the evaluation of the filter.
+func (tm *InterceptMap) LoadAllMatching(filter func(string, *manager.InterceptInfo) bool) map[string]*manager.InterceptInfo {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	ret := make(map[string]*manager.InterceptInfo)
+	for k, v := range tm.value {
+        if filter(k, v) {
+    		ret[k] = proto.Clone(v).(*manager.InterceptInfo)
+        }
+	}
+	return ret
+}
+
 // Load returns a deepcopy of the value for a specific key.
 func (tm *InterceptMap) Load(key string) (value *manager.InterceptInfo, ok bool) {
 	tm.lock.RLock()

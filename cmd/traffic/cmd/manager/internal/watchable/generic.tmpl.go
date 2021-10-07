@@ -78,6 +78,20 @@ func (tm *MAPTYPE) LoadAll() map[string]VALTYPE {
 	return ret
 }
 
+// LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
+// function returns true. The map is locked during the evaluation of the filter.
+func (tm *MAPTYPE) LoadAllMatching(filter func(string, VALTYPE) bool) map[string]VALTYPE {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	ret := make(map[string]VALTYPE)
+	for k, v := range tm.value {
+        if filter(k, v) {
+    		ret[k] = proto.Clone(v).(VALTYPE)
+        }
+	}
+	return ret
+}
+
 // Load returns a deepcopy of the value for a specific key.
 func (tm *MAPTYPE) Load(key string) (value VALTYPE, ok bool) {
 	tm.lock.RLock()
