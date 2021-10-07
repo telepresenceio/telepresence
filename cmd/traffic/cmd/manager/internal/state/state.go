@@ -31,6 +31,7 @@ type SessionState interface {
 }
 
 type sessionState struct {
+	sync.Mutex
 	done       <-chan struct{}
 	cancel     context.CancelFunc
 	lastMarked time.Time
@@ -60,35 +61,34 @@ type agentTunnel struct {
 
 type clientSessionState struct {
 	sessionState
-	name           string
-	pool           *tunnel.Pool
-	muxTunnel      connpool.MuxTunnel
-	agentTunnelsMu sync.Mutex
-	agentTunnels   map[string]*agentTunnel
+	name         string
+	pool         *tunnel.Pool
+	muxTunnel    connpool.MuxTunnel
+	agentTunnels map[string]*agentTunnel
 }
 
 func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, muxTunnel connpool.MuxTunnel) {
-	cs.agentTunnelsMu.Lock()
+	cs.Lock()
 	cs.agentTunnels[agentSessionID] = &agentTunnel{
 		name:      name,
 		namespace: namespace,
 		muxTunnel: muxTunnel,
 	}
-	cs.agentTunnelsMu.Unlock()
+	cs.Unlock()
 }
 
 func (cs *clientSessionState) deleteAgentTunnel(agentSessionID string) {
-	cs.agentTunnelsMu.Lock()
+	cs.Lock()
 	delete(cs.agentTunnels, agentSessionID)
-	cs.agentTunnelsMu.Unlock()
+	cs.Unlock()
 }
 
 // getRandomAgentTunnel will return the tunnel of an intercepted agent provided all intercepted
 // agents live in the same namespace. The method will return nil if the client currently has no
 // intercepts or if it has several intercepts that span more than one namespace.
 func (cs *clientSessionState) getRandomAgentTunnel() (tunnel *agentTunnel) {
-	cs.agentTunnelsMu.Lock()
-	defer cs.agentTunnelsMu.Unlock()
+	cs.Lock()
+	defer cs.Unlock()
 	prevNs := ""
 	for _, agentTunnel := range cs.agentTunnels {
 		tunnel = agentTunnel
@@ -106,14 +106,14 @@ func (cs *clientSessionState) getRandomAgentTunnel() (tunnel *agentTunnel) {
 // getInterceptedAgents returns the session ID of each agent currently intercepted
 // by this client
 func (cs *clientSessionState) getInterceptedAgents() []string {
-	cs.agentTunnelsMu.Lock()
+	cs.Lock()
 	agentSessionIDs := make([]string, len(cs.agentTunnels))
 	i := 0
 	for agentSession := range cs.agentTunnels {
 		agentSessionIDs[i] = agentSession
 		i++
 	}
-	cs.agentTunnelsMu.Unlock()
+	cs.Unlock()
 	return agentSessionIDs
 }
 
