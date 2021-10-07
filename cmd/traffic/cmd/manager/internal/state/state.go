@@ -659,7 +659,7 @@ func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) 
 					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
 						// Dispatch directly to agent and let the dial happen there
 						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
-						return newConnForward(release, agentTunnel.muxTunnel), nil
+						return newMuxTunnelForward(release, agentTunnel.muxTunnel), nil
 					}
 					return connpool.NewDialer(id, cs.muxTunnel, release), nil
 				})
@@ -672,20 +672,20 @@ func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) 
 	}
 }
 
-type connForward struct {
+type muxTunnelForward struct {
 	release     func()
 	toMuxTunnel connpool.MuxTunnel
 }
 
-func newConnForward(release func(), toStream connpool.MuxTunnel) *connForward {
-	return &connForward{release: release, toMuxTunnel: toStream}
+func newMuxTunnelForward(release func(), toStream connpool.MuxTunnel) *muxTunnelForward {
+	return &muxTunnelForward{release: release, toMuxTunnel: toStream}
 }
 
-func (cf *connForward) Close(_ context.Context) {
+func (cf *muxTunnelForward) Close(_ context.Context) {
 	cf.release()
 }
 
-func (cf *connForward) HandleMessage(ctx context.Context, msg connpool.Message) {
+func (cf *muxTunnelForward) HandleMessage(ctx context.Context, msg connpool.Message) {
 	dlog.Debugf(ctx, ">> FRWD %s to agent", msg.ID())
 	if err := cf.toMuxTunnel.Send(ctx, msg); err != nil {
 		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", msg.ID(), err)
@@ -700,7 +700,7 @@ func (cf *connForward) HandleMessage(ctx context.Context, msg connpool.Message) 
 	}
 }
 
-func (cf *connForward) Start(_ context.Context) error {
+func (cf *muxTunnelForward) Start(_ context.Context) error {
 	return nil
 }
 
@@ -755,7 +755,7 @@ func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionI
 			if ensureForward {
 				// Ensure that a forward tunnel exists that the client can use for responses
 				_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (tunnel.Handler, error) {
-					return newConnForward(release, muxTunnel), nil
+					return newMuxTunnelForward(release, muxTunnel), nil
 				})
 				if err != nil {
 					dlog.Error(ctx, err)
