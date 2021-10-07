@@ -186,6 +186,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 		case snapshot, ok := <-snapshotCh:
 			if !ok {
 				// The request has been canceled.
+				dlog.Debug(ctx, "WatchAgents request cancelled")
 				return nil
 			}
 			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
@@ -200,6 +201,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			}
 		case <-m.state.SessionDone(session.GetSessionId()):
 			// Manager believes this session has ended.
+			dlog.Debug(ctx, "WatchAgents session cancelled")
 			return nil
 		}
 	}

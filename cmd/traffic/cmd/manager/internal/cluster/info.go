@@ -2,12 +2,15 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/blang/semver"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -267,7 +270,7 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 	ci := oi.clusterInfo()
 	oi.accLock.Unlock()
 	if err := oiStream.Send(ci); err != nil {
-		return err
+		return status.Error(codes.Internal, fmt.Sprintf("WatchClusterInfo failed to send initial update, %v", err))
 	}
 
 	for ctx.Err() == nil {
@@ -277,7 +280,7 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 		oi.accLock.Unlock()
 		dlog.Debugf(ctx, "WatchClusterInfo sending update")
 		if err := oiStream.Send(ci); err != nil {
-			return err
+			return status.Error(codes.Internal, fmt.Sprintf("WatchClusterInfo failed to send update, %v", err))
 		}
 	}
 	return nil

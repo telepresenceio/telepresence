@@ -539,13 +539,13 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 			return nil
 		}
 
-		new := proto.Clone(cur).(*rpc.InterceptInfo)
-		apply(new)
+		newInfo := proto.Clone(cur).(*rpc.InterceptInfo)
+		apply(newInfo)
 
-		swapped := s.intercepts.CompareAndSwap(new.Id, cur, new)
+		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
 		if swapped {
 			// Success!
-			return new
+			return newInfo
 		}
 	}
 }
