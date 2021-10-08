@@ -222,6 +222,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 			}),
 			`[` +
+				`{"op":"replace","path":"/spec/containers/0/ports/0/name","value":"tm-http"},` +
 				`{"op":"add","path":"/spec/containers/-","value":{` +
 				`"name":"traffic-agent",` +
 				`"image":"docker.io/datawire/tel2:2.3.1",` +
@@ -238,10 +239,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`],` +
 				`"resources":{},` +
 				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
-				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}},` +
-				`"securityContext":{"runAsUser":7777,"runAsGroup":7777,"runAsNonRoot":true}` +
+				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}}` +
 				`}},` +
-				`{"op":"replace","path":"/spec/containers/0/ports/0/name","value":"tm-http"},` +
 				`{"op":"add","path":"/spec/volumes/-","value":{` +
 				`"name":"traffic-annotations",` +
 				`"downwardAPI":{"items":[{"path":"annotations","fieldRef":{"fieldPath":"metadata.annotations"}}]}` +
@@ -271,6 +270,19 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 			}),
 			`[` +
+				`{"op":"add","path":"/spec/initContainers","value":[]},` +
+				`{"op":"add","path":"/spec/initContainers/-","value":{` +
+				`"name":"tel-agent-init",` +
+				`"image":"docker.io/datawire/tel2:2.3.1",` +
+				`"args":["agent-init"],` +
+				`"env":[` +
+				`{"name":"APP_PORT","value":"8888"},` +
+				`{"name":"AGENT_PORT","value":"9900"},` +
+				`{"name":"AGENT_PROTOCOL","value":"TCP"}` +
+				`],` +
+				`"resources":{},` +
+				`"securityContext":{"capabilities":{"add":["NET_ADMIN"]}}` +
+				`}},` +
 				`{"op":"add","path":"/spec/containers/-","value":{` +
 				`"name":"traffic-agent",` +
 				`"image":"docker.io/datawire/tel2:2.3.1",` +
@@ -289,19 +301,6 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
 				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}},` +
 				`"securityContext":{"runAsUser":7777,"runAsGroup":7777,"runAsNonRoot":true}` +
-				`}},` +
-				`{"op":"add","path":"/spec/initContainers","value":[]},` +
-				`{"op":"add","path":"/spec/initContainers/-","value":{` +
-				`"name":"tel-agent-init",` +
-				`"image":"docker.io/datawire/tel2:2.3.1",` +
-				`"args":["agent-init"],` +
-				`"env":[` +
-				`{"name":"APP_PORT","value":"8888"},` +
-				`{"name":"AGENT_PORT","value":"9900"},` +
-				`{"name":"AGENT_PROTOCOL","value":"TCP"}` +
-				`],` +
-				`"resources":{},` +
-				`"securityContext":{"capabilities":{"add":["NET_ADMIN"]}}` +
 				`}},` +
 				`{"op":"add","path":"/spec/volumes/-","value":{` +
 				`"name":"traffic-annotations",` +
@@ -336,6 +335,18 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 			}),
 			`[` +
+				`{"op":"add","path":"/spec/initContainers/-","value":{` +
+				`"name":"tel-agent-init",` +
+				`"image":"docker.io/datawire/tel2:2.3.1",` +
+				`"args":["agent-init"],` +
+				`"env":[` +
+				`{"name":"APP_PORT","value":"8888"},` +
+				`{"name":"AGENT_PORT","value":"9900"},` +
+				`{"name":"AGENT_PROTOCOL","value":"TCP"}` +
+				`],` +
+				`"resources":{},` +
+				`"securityContext":{"capabilities":{"add":["NET_ADMIN"]}}` +
+				`}},` +
 				`{"op":"add","path":"/spec/containers/-","value":{` +
 				`"name":"traffic-agent",` +
 				`"image":"docker.io/datawire/tel2:2.3.1",` +
@@ -354,18 +365,6 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
 				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}},` +
 				`"securityContext":{"runAsUser":7777,"runAsGroup":7777,"runAsNonRoot":true}` +
-				`}},` +
-				`{"op":"add","path":"/spec/initContainers/-","value":{` +
-				`"name":"tel-agent-init",` +
-				`"image":"docker.io/datawire/tel2:2.3.1",` +
-				`"args":["agent-init"],` +
-				`"env":[` +
-				`{"name":"APP_PORT","value":"8888"},` +
-				`{"name":"AGENT_PORT","value":"9900"},` +
-				`{"name":"AGENT_PROTOCOL","value":"TCP"}` +
-				`],` +
-				`"resources":{},` +
-				`"securityContext":{"capabilities":{"add":["NET_ADMIN"]}}` +
 				`}},` +
 				`{"op":"add","path":"/spec/volumes/-","value":{` +
 				`"name":"traffic-annotations",` +
@@ -456,7 +455,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 				},
 			}),
-			`[{"op":"add","path":"/spec/containers/-","value":{` +
+			`[{"op":"replace","path":"/spec/containers/0/ports/0/name","value":"tm-http"},` +
+				`{"op":"add","path":"/spec/containers/-","value":{` +
 				`"name":"traffic-agent",` +
 				`"image":"docker.io/datawire/tel2:2.3.1",` +
 				`"args":["agent"],` +
@@ -477,10 +477,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`{"name":"some-token","readOnly":true,"mountPath":"/var/run/secrets/kubernetes.io/serviceaccount"},` +
 				`{"name":"traffic-annotations","mountPath":"/tel_pod_info"}` +
 				`],` +
-				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}},` +
-				`"securityContext":{"runAsUser":7777,"runAsGroup":7777,"runAsNonRoot":true}` +
+				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}}` +
 				`}},` +
-				`{"op":"replace","path":"/spec/containers/0/ports/0/name","value":"tm-http"},` +
 				`{"op":"add","path":"/spec/volumes/-","value":{` +
 				`"name":"traffic-annotations",` +
 				`"downwardAPI":{"items":[{"path":"annotations","fieldRef":{"fieldPath":"metadata.annotations"}}]}` +

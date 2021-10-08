@@ -122,14 +122,16 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	dlog.Infof(ctx, "Injecting %s into pod %s", install.AgentContainerName, refPodName)
 
 	var patches []patchOperation
-	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, podName, podNamespace, patches)
-	if err != nil {
-		return nil, err
-	}
+	setGID := false
 	if servicePort.TargetPort.Type == intstr.Int || svc.Spec.ClusterIP == "None" {
 		patches = addInitContainer(ctx, &pod, servicePort, &appPort, patches)
+		setGID = true
 	} else {
 		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
+	}
+	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, setGID, podName, podNamespace, patches)
+	if err != nil {
+		return nil, err
 	}
 	patches = addAgentVolume(&pod, patches)
 	return patches, nil
@@ -200,6 +202,7 @@ func addAgentContainer(
 	svcPort *corev1.ServicePort,
 	appContainer *corev1.Container,
 	appPort *corev1.ContainerPort,
+	setGID bool,
 	podName, namespace string,
 	patches []patchOperation,
 ) ([]patchOperation, error) {
@@ -269,7 +272,9 @@ func addAgentContainer(
 			appContainer,
 			containerPort,
 			int(appPort.ContainerPort),
-			env.ManagerNamespace)})
+			env.ManagerNamespace,
+			setGID,
+		)})
 
 	return patches, nil
 }
