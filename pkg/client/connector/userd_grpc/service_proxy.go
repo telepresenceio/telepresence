@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
+	"sync"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -155,12 +156,105 @@ func (p *mgrProxy) AgentTunnel(server managerrpc.Manager_AgentTunnelServer) erro
 	return errors.New("must call manager.AgentTunnel from an agent (intercepted Pod), not from a client (workstation)")
 }
 
-func (m *mgrProxy) Tunnel(_ managerrpc.Manager_TunnelServer) error {
-	return status.Error(codes.Unimplemented, "Tunnel not yet implemented")
+type tmReceiver interface {
+	Recv() (*managerrpc.TunnelMessage, error)
 }
 
-func (m *mgrProxy) WatchDial(_ *managerrpc.SessionInfo, stream managerrpc.Manager_WatchDialServer) error {
-	return status.Error(codes.Unimplemented, "WatchDial not yet implemented")
+type tmSender interface {
+	Send(*managerrpc.TunnelMessage) error
+}
+
+func recvLoop(ctx context.Context, who string, in tmReceiver, out chan<- *managerrpc.TunnelMessage, wg *sync.WaitGroup) {
+	defer func() {
+		dlog.Debugf(ctx, "%s Recv loop ended", who)
+		wg.Done()
+	}()
+	dlog.Debugf(ctx, "%s Recv loop started", who)
+	for {
+		payload, err := in.Recv()
+		if err != nil {
+			if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
+				dlog.Errorf(ctx, "Tunnel %s.Recv() failed: %v", who, err)
+			}
+			return
+		}
+		dlog.Tracef(ctx, "<- %s %d", who, len(payload.Payload))
+		select {
+		case <-ctx.Done():
+			return
+		case out <- payload:
+		}
+	}
+}
+
+func sendLoop(ctx context.Context, who string, out tmSender, in <-chan *managerrpc.TunnelMessage, wg *sync.WaitGroup) {
+	defer func() {
+		dlog.Debugf(ctx, "%s Send loop ended", who)
+		wg.Done()
+	}()
+	dlog.Debugf(ctx, "%s Send loop started", who)
+	if outC, ok := out.(interface{ CloseSend() error }); ok {
+		defer func() {
+			if err := outC.CloseSend(); err != nil {
+				dlog.Errorf(ctx, "CloseSend() failed: %v", err)
+			}
+		}()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case payload := <-in:
+			if payload == nil {
+				return
+			}
+			if err := out.Send(payload); err != nil {
+				if !errors.Is(err, net.ErrClosed) {
+					dlog.Errorf(ctx, "Tunnel %s.Send() failed: %v", who, err)
+				}
+				return
+			}
+			dlog.Tracef(ctx, "-> %s %d", who, len(payload.Payload))
+		}
+	}
+}
+
+func (p *mgrProxy) Tunnel(fhClient managerrpc.Manager_TunnelServer) error {
+	ctx := fhClient.Context()
+	fhManager, err := p.client.Tunnel(ctx, p.callOptions...)
+	if err != nil {
+		return err
+	}
+	mgrToClient := make(chan *managerrpc.TunnelMessage)
+	clientToMgr := make(chan *managerrpc.TunnelMessage)
+
+	wg := sync.WaitGroup{}
+	wg.Add(4)
+	go recvLoop(ctx, "manager", fhManager, mgrToClient, &wg)
+	go sendLoop(ctx, "manager", fhManager, clientToMgr, &wg)
+	go recvLoop(ctx, "client", fhClient, clientToMgr, &wg)
+	go sendLoop(ctx, "client", fhClient, mgrToClient, &wg)
+	wg.Wait()
+	return nil
+}
+
+func (p *mgrProxy) WatchDial(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchDialServer) error {
+	cli, err := p.client.WatchDial(srv.Context(), arg, p.callOptions...)
+	if err != nil {
+		return err
+	}
+	for {
+		request, err := cli.Recv()
+		if err != nil {
+			if err == io.EOF || srv.Context().Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if err = srv.Send(request); err != nil {
+			return err
+		}
+	}
 }
 
 func (p *mgrProxy) LookupHost(ctx context.Context, arg *managerrpc.LookupHostRequest) (*managerrpc.LookupHostResponse, error) {
