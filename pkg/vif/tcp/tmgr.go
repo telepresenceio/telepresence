@@ -112,6 +112,45 @@ func (h *handler) readFromMgrLoop(ctx context.Context) {
 	}
 }
 
+// readFromMgrMux sends the packets read from the fromMgr channel to the TUN device
+// Deprecated
+func (h *handler) readFromMgrMux(ctx context.Context) {
+	defer close(h.readyToFin)
+
+	// We use a timer that we reset on each iteration instead of a ticker to prevent drift between
+	// the select loop and the ticker's interval. Otherwise, suppose we spend 499ms processing
+	// a message from fromMgr, a ticker would only give us a 1ms wait before checking h.isClosing
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		timer.Stop()
+		select {
+		case <-timer.C:
+		default:
+		}
+
+		timer.Reset(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			if atomic.LoadInt32(&h.isClosing) > 0 {
+				return
+			}
+			continue
+		case cm := <-h.fromMgr:
+			if cm == nil {
+				return
+			}
+			if ctrl, ok := cm.(connpool.Control); ok {
+				h.handleControl(ctx, ctrl)
+				continue
+			}
+			h.processPayload(ctx, cm.Payload())
+		}
+	}
+}
+
 // writeToMgrLoop sends the packets read from the toMgrCh channel to the traffic-manager device
 func (h *handler) writeToMgrLoop(ctx context.Context) {
 	// the time to wait until we flush in spite of not getting a PSH

@@ -229,7 +229,7 @@ func (h *handler) Start(ctx context.Context) error {
 	if h.muxTunnel != nil {
 		h.fromMgr = make(chan connpool.Message, ioChannelSize)
 		h.readyToFin = make(chan interface{})
-		go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packets
+		go h.readFromMgrMux(ctx) // Needs to start here to handle initial control packets
 	}
 	return nil
 }
@@ -335,43 +335,6 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 	h.setSequenceLastAcked(tcpHdr.AckNumber())
 	h.sendToTun(ctx, pkt)
 	h.pushToAckWait(ctx, 1, pkt)
-}
-
-// writeToTunLoop sends the packets read from the fromMgr channel to the TUN device
-// Deprecated
-func (h *handler) writeToTunLoop(ctx context.Context) {
-	defer close(h.readyToFin)
-	// We use a timer that we reset on each iteration instead of a ticker to prevent drift between
-	// the select loop and the ticker's interval. Otherwise, suppose we spend 499ms processing
-	// a message from fromMgr, a ticker would only give us a 1ms wait before checking h.isClosing
-	timer := time.NewTimer(500 * time.Millisecond)
-	defer timer.Stop()
-	for {
-		timer.Stop()
-		select {
-		case <-timer.C:
-		default:
-		}
-		timer.Reset(500 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-			if atomic.LoadInt32(&h.isClosing) > 0 {
-				return
-			}
-			continue
-		case cm := <-h.fromMgr:
-			if cm == nil {
-				return
-			}
-			if ctrl, ok := cm.(connpool.Control); ok {
-				h.handleControl(ctx, ctrl)
-				continue
-			}
-			h.processPayload(ctx, cm.Payload())
-		}
-	}
 }
 
 func (h *handler) processPayload(ctx context.Context, data []byte) {
