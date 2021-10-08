@@ -318,14 +318,18 @@ func (t *tunRouter) run(c context.Context) error {
 		if err != nil {
 			return err
 		}
-		tunnel := connpool.NewMuxTunnel(clientTunnel)
-		if err = tunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
+		muxTunnel := connpool.NewMuxTunnel(clientTunnel)
+		if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
 			return err
 		}
-		if err = tunnel.Send(c, connpool.VersionControl()); err != nil {
+		if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
 			return err
 		}
-		t.muxTunnel = tunnel
+		_, err = muxTunnel.ReadPeerVersion(c)
+		if err != nil {
+			return err
+		}
+		t.muxTunnel = muxTunnel
 		dlog.Debug(c, "MGR read loop starting")
 		err = t.muxTunnel.DialLoop(c, t.handlers)
 		var recvErr *client.RecvEOF

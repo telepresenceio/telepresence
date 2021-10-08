@@ -508,6 +508,10 @@ func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
 	if err != nil {
 		return err
 	}
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to read client tunnel version: %v", err)
+	}
 	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
 	}
@@ -524,6 +528,10 @@ func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
 	clientSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
+	}
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to read agent tunnel version: %v", err)
 	}
 	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)

@@ -262,6 +262,10 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 		err = fmt.Errorf("failed to send agent tunnel version: %s", err)
 		return nil, err
 	}
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	go func() {
 		pool := tunnel.GetPool(ctx)

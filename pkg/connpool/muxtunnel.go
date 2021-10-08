@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"net"
 	"sync/atomic"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -48,6 +49,7 @@ type MuxTunnel interface {
 	Send(context.Context, Message) error
 	Receive(context.Context) (Message, error)
 	CloseSend() error
+	ReadPeerVersion(context.Context) (uint16, error)
 }
 
 type muxTunnel struct {
@@ -57,15 +59,36 @@ type muxTunnel struct {
 	syncRatio   uint32 // send and check sync after each syncRatio message
 	ackWindow   uint32 // maximum permitted difference between sent and received ack
 	peerVersion uint32
+	pushBack    Message
 }
-
-const tunnelVersion = 1 // preceded by version 0 which didn't do synchronization
 
 func NewMuxTunnel(stream BidiStream) MuxTunnel {
 	return &muxTunnel{stream: stream, syncRatio: 8, ackWindow: 1}
 }
 
+func (s *muxTunnel) ReadPeerVersion(ctx context.Context) (uint16, error) {
+	cm, err := s.stream.Recv()
+	if err != nil {
+		return 0, err
+	}
+	msg := FromConnMessage(cm)
+	if ctrl, ok := msg.(Control); ok && ctrl.Code() == version {
+		peerVersion := ctrl.version()
+		atomic.StoreUint32(&s.peerVersion, uint32(peerVersion))
+		dlog.Debugf(ctx, "setting tunnel's peer version to %d", peerVersion)
+		return peerVersion, nil
+	}
+	s.pushBack = msg
+	return 0, nil
+}
+
 func (s *muxTunnel) Receive(ctx context.Context) (msg Message, err error) {
+	if s.pushBack != nil {
+		msg = s.pushBack
+		s.pushBack = nil
+		return msg, nil
+	}
+
 	for err = ctx.Err(); err == nil; err = ctx.Err() {
 		var cm *rpc.ConnMessage
 		if cm, err = s.stream.Recv(); err != nil {
@@ -74,11 +97,6 @@ func (s *muxTunnel) Receive(ctx context.Context) (msg Message, err error) {
 		msg = FromConnMessage(cm)
 		if ctrl, ok := msg.(Control); ok {
 			switch ctrl.Code() {
-			case version:
-				peerVersion := ctrl.version()
-				atomic.StoreUint32(&s.peerVersion, uint32(peerVersion))
-				dlog.Debugf(ctx, "setting tunnel's peer version to %d", peerVersion)
-				continue
 			case syncRequest:
 				if err = s.stream.Send(SyncResponseControl(ctrl).TunnelMessage()); err != nil {
 					return nil, fmt.Errorf("failed to send sync response: %w", err)
@@ -149,8 +167,8 @@ func (s *muxTunnel) ReadLoop(ctx context.Context) (<-chan Message, <-chan error)
 		for ctx.Err() == nil {
 			msg, err := s.Receive(ctx)
 			if err != nil {
-				if ctx.Err() == nil {
-					errCh <- client.WrapRecvErr(err, "read from grpc.ClientStream failed")
+				if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
+					errCh <- fmt.Errorf("read from MuxTunnel failed: %w", err)
 				}
 				return
 			}
