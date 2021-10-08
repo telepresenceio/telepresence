@@ -16,6 +16,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+// BidiStream
+// Deprecated
 type BidiStream interface {
 	Send(*rpc.ConnMessage) error
 	Recv() (*rpc.ConnMessage, error)
@@ -43,6 +45,7 @@ type BidiStream interface {
 // its tunnel peer and close the connection.
 //
 // When #6 happens, the MuxTunnel will simply close.
+// Deprecated
 type MuxTunnel interface {
 	DialLoop(ctx context.Context, pool *tunnel.Pool) error
 	ReadLoop(ctx context.Context) (<-chan Message, <-chan error)

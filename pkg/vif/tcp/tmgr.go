@@ -12,6 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+// handleControl for versions < 2.4.5
+// Deprecated
 func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 	switch ctrl.Code() {
 	case connpool.Connect:
@@ -188,6 +190,8 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 	}
 }
 
+// sendConnControl for versions < 2.4.5
+// Deprecated
 func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode) error {
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
 	if err := h.muxTunnel.Send(ctx, connpool.NewControl(h.id, code, nil)); err != nil {

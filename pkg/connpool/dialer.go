@@ -32,6 +32,7 @@ const (
 )
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections
+// Deprecated
 type dialer struct {
 	id        tunnel.ConnID
 	release   func()
@@ -49,6 +50,7 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
+// Deprecated
 func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
@@ -65,6 +67,7 @@ func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) Handle
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
+// Deprecated
 func HandlerFromConn(connID tunnel.ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {

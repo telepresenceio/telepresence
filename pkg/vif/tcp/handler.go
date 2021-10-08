@@ -117,10 +117,6 @@ type handler struct {
 	// oooQueue is where out-of-order packets are placed until they can be processed
 	oooQueue *queueElement
 
-	// synPacket is the initial syn packet received on a connect request. It is
-	// dropped once the manager responds to the connect attempt
-	synPacket Packet
-
 	// wfState is the current workflow state
 	wfState state
 
@@ -147,16 +143,24 @@ type handler struct {
 	sendLock      sync.Mutex
 	sendCondition *sync.Cond
 
-	muxTunnel connpool.MuxTunnel
-	fromMgr   chan connpool.Message
-
-	// isClosing indicates whether Close() has been called on the handler
-	isClosing int32
-	// readyToFin will be closed once it is safe for the handler to send a FIN packet and terminate the connection
-	readyToFin chan interface{}
-
 	// random generator for initial sequence number
 	rnd *rand.Rand
+
+	// synPacket is the initial syn packet received on a connect request. It is
+	// dropped once the manager responds to the connect attempt
+	// Deprecated
+	synPacket Packet
+
+	muxTunnel connpool.MuxTunnel    // Deprecated
+	fromMgr   chan connpool.Message // Deprecated
+
+	// isClosing indicates whether Close() has been called on the TUN-device
+	// Deprecated
+	isClosing int32
+
+	// readyToFin will be closed once it is safe for the handler to send a FIN packet and terminate the connection
+	// Deprecated
+	readyToFin chan interface{}
 }
 
 func NewHandler(
@@ -174,13 +178,13 @@ func NewHandler(
 		id:                id,
 		remove:            remove,
 		toTun:             toTun,
-		fromMgr:           make(chan connpool.Message, ioChannelSize),
 		dispatcherClosing: dispatcherClosing,
 		fromTun:           make(chan Packet, ioChannelSize),
 		toMgrCh:           make(chan Packet, ioChannelSize),
 		toMgrMsgCh:        make(chan tunnel.Message),
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
+		fromMgr:           make(chan connpool.Message, ioChannelSize),
 		readyToFin:        make(chan interface{}),
 	}
 	h.sendCondition = sync.NewCond(&h.sendLock)
@@ -334,6 +338,7 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 }
 
 // writeToTunLoop sends the packets read from the fromMgr channel to the TUN device
+// Deprecated
 func (h *handler) writeToTunLoop(ctx context.Context) {
 	defer close(h.readyToFin)
 	// We use a timer that we reset on each iteration instead of a ticker to prevent drift between

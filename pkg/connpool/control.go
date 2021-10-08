@@ -9,6 +9,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+// ControlCode designates the type of a Control message
+// Deprecated
 type ControlCode byte
 
 const (
@@ -57,6 +59,8 @@ func (c ControlCode) String() string {
 	}
 }
 
+// Control is a special message that contains tunnel control information
+// Deprecated
 type Control interface {
 	Message
 	Code() ControlCode
@@ -65,6 +69,8 @@ type Control interface {
 	version() uint16
 }
 
+// control implements Control
+// Deprecated
 type control struct {
 	code    ControlCode
 	id      tunnel.ConnID

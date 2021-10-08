@@ -5,20 +5,28 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+// Message a message on the multiplexed tunnel
+// Deprecated
 type Message interface {
 	ID() tunnel.ConnID
 	Payload() []byte
 	TunnelMessage() *manager.ConnMessage
 }
 
+// message implements Message
+// Deprecated
 type message struct {
 	msg *manager.ConnMessage
 }
 
+// NewMessage
+// Deprecated
 func NewMessage(id tunnel.ConnID, payload []byte) Message {
 	return &message{msg: &manager.ConnMessage{ConnId: []byte(id), Payload: payload}}
 }
 
+// FromConnMessage
+// Deprecated
 func FromConnMessage(cm *manager.ConnMessage) Message {
 	ctrl := cm.GetConnId()
 	if len(ctrl) == 2 {

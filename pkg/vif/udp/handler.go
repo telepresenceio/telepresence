@@ -40,7 +40,7 @@ func (h *timedHandler) Close(_ context.Context) {
 type handler struct {
 	timedHandler
 	stream    tunnel.Stream
-	muxTunnel connpool.MuxTunnel
+	muxTunnel connpool.MuxTunnel // Deprecated
 	toTun     ip.Writer
 	fromTun   chan Datagram
 }
