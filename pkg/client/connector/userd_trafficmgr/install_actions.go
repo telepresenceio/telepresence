@@ -380,7 +380,9 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 				ContainerPort: 9900,
 			},
 			int(ata.ContainerPortNumber),
-			ata.trafficManagerNamespace))
+			ata.trafficManagerNamespace,
+			false,
+		))
 	return nil
 }
 
