@@ -3,7 +3,6 @@ package tcp
 import (
 	"context"
 	"encoding/binary"
-	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -52,9 +51,11 @@ func (s state) String() (txt string) {
 	return txt
 }
 
-const maxReceiveWindow = uint64(0x40000)
-const ioChannelSize = 0x40
-const maxAckWaits = 0x400
+const myWindowScale = 8
+const maxReceiveWindow = 4096 << myWindowScale // 1MB
+
+var maxSegmentSize = buffer.DataPool.MTU - (20 + HeaderLen) // Ethernet MTU of 1500 - 20 byte IP header and 20 byte TCP header
+var ioChannelSize = maxReceiveWindow / maxSegmentSize
 
 type queueElement struct {
 	sequence uint32
@@ -107,7 +108,7 @@ type handler struct {
 	// Channel to use when sending packets to the traffic-manager
 	toMgrCh chan Packet
 
-	// Channel to use when sending maessages to the traffic-manager
+	// Channel to use when sending messages to the traffic-manager
 	toMgrMsgCh chan tunnel.Message
 
 	// queue where unacked elements are placed until they are acked
@@ -123,18 +124,24 @@ type handler struct {
 	// seq is the sequence that we provide in the packets we send to TUN
 	seq uint32
 
-	// lastAck is the last ackNumber that we received from TUN
-	lastAck uint32
+	// seqAcked is the last sequence acked by the peer
+	seqAcked uint32
 
 	// finalSeq is the ack sent with FIN when a connection is closing.
 	finalSeq uint32
 
-	// sendWindow and rcvWnd controls the size of the send and receive window
-	sendWindow uint64
-	rcvWnd     uint64
+	// myWindow and is the actual size of my window
+	myWindow int64
 
-	// windowScale is the negotiated number of bits to shift the windowSize of a packet
-	windowScale uint8
+	// peerSeqAcked was the last ack sent to the peer
+	peerSeqAcked uint32
+
+	// peerWindow is the actual size of the peers window
+	peerWindow int64
+
+	// peerWindowScale is the number of bits to shift the windowSize of received packet to
+	// determine the actual peerWindow
+	peerWindowScale uint8
 
 	// peerMaxSegmentSize is the maximum size of a segment sent to the peer (not counting IP-header)
 	peerMaxSegmentSize uint16
@@ -182,6 +189,7 @@ func NewHandler(
 		fromTun:           make(chan Packet, ioChannelSize),
 		toMgrCh:           make(chan Packet, ioChannelSize),
 		toMgrMsgCh:        make(chan tunnel.Message),
+		myWindow:          maxReceiveWindow,
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
 		fromMgr:           make(chan connpool.Message, ioChannelSize),
@@ -234,27 +242,14 @@ func (h *handler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (h *handler) adjustReceiveWindow() {
-	queueSize := len(h.toMgrCh)
-	maxWindowSize := uint64(math.MaxUint16) << h.windowScale
-	windowSize := maxReceiveWindow
-	if windowSize > maxWindowSize {
-		windowSize = maxWindowSize
-	}
-	if queueSize > ioChannelSize/4 {
-		windowSize -= uint64(queueSize) * (maxReceiveWindow / ioChannelSize)
-	}
-	h.setReceiveWindow(windowSize)
-}
-
 func (h *handler) sendToTun(ctx context.Context, pkt Packet) {
 	if err := h.toTun.Write(ctx, pkt); err != nil {
 		dlog.Errorf(ctx, "!! TUN %s: %v", h.id, err)
 	}
 }
 
-func (h *handler) newResponse(ipPlayloadLen int, withAck bool) Packet {
-	pkt := NewPacket(ipPlayloadLen, h.id.Destination(), h.id.Source(), withAck)
+func (h *handler) newResponse(ipPayloadLen int, withAck bool) Packet {
+	pkt := NewPacket(ipPayloadLen, h.id.Destination(), h.id.Source(), withAck)
 	ipHdr := pkt.IPHeader()
 	ipHdr.SetL4Protocol(ipproto.TCP)
 	ipHdr.SetChecksum()
@@ -263,7 +258,7 @@ func (h *handler) newResponse(ipPlayloadLen int, withAck bool) Packet {
 	tcpHdr.SetDataOffset(5)
 	tcpHdr.SetSourcePort(h.id.DestinationPort())
 	tcpHdr.SetDestinationPort(h.id.SourcePort())
-	h.receiveWindowToHeader(tcpHdr)
+	h.myWindowToHeader(tcpHdr)
 	return pkt
 }
 
@@ -272,7 +267,7 @@ func (h *handler) sendAck(ctx context.Context) {
 	tcpHdr := pkt.Header()
 	tcpHdr.SetACK(true)
 	tcpHdr.SetSequence(h.sequence())
-	tcpHdr.SetAckNumber(h.sequenceLastAcked())
+	tcpHdr.SetAckNumber(h.peerSequenceAcked())
 	tcpHdr.SetChecksum(pkt.IPHeader())
 	h.sendToTun(ctx, pkt)
 }
@@ -283,7 +278,7 @@ func (h *handler) sendFin(ctx context.Context, expectAck bool) {
 	tcpHdr.SetFIN(true)
 	tcpHdr.SetACK(true)
 	tcpHdr.SetSequence(h.sequence())
-	tcpHdr.SetAckNumber(h.sequenceLastAcked())
+	tcpHdr.SetAckNumber(h.peerSequenceAcked())
 	tcpHdr.SetChecksum(pkt.IPHeader())
 	if expectAck {
 		h.pushToAckWait(ctx, 1, pkt)
@@ -302,11 +297,7 @@ func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
 
 func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 	hl := HeaderLen
-	hl += 4 // for the Maximum Segment Size option
-
-	if h.windowScale != 0 {
-		hl += 4 // for the Window Scale option
-	}
+	hl += 8 // for the Maximum Segment Size option and for the Window Scale option
 
 	pkt := h.newResponse(hl, true)
 	tcpHdr := pkt.Header()
@@ -321,18 +312,16 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 	opts := tcpHdr.OptionBytes()
 	opts[0] = byte(maximumSegmentSize)
 	opts[1] = 4
-	binary.BigEndian.PutUint16(opts[2:], uint16(buffer.DataPool.MTU-HeaderLen))
+	binary.BigEndian.PutUint16(opts[2:], uint16(maxSegmentSize))
 
-	if h.windowScale != 0 {
-		opts[4] = byte(windowScale)
-		opts[5] = 3
-		opts[6] = h.windowScale
-		opts[7] = byte(noOp)
-	}
+	opts[4] = byte(windowScale)
+	opts[5] = 3
+	opts[6] = myWindowScale
+	opts[7] = byte(noOp)
 
 	tcpHdr.SetChecksum(pkt.IPHeader())
 
-	h.setSequenceLastAcked(tcpHdr.AckNumber())
+	h.setPeerSequenceAcked(tcpHdr.AckNumber())
 	h.sendToTun(ctx, pkt)
 	h.pushToAckWait(ctx, 1, pkt)
 }
@@ -342,22 +331,19 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 	n := len(data)
 	for n > start {
 		h.sendLock.Lock()
-		window := h.sendWindow
-		aqz := h.ackWaitQueueSize
-		for window == 0 || aqz > maxAckWaits {
-			if window == 0 {
+		window := int(h.peerWindow) - int(h.sequence()-h.seqAcked)
+		for window <= 0 {
+			if window <= 0 {
 				// The intended receiver is currently not accepting data. We must
 				// wait for the window to increase.
 				dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
 			}
-			if aqz > maxAckWaits {
-				// The intended receiver is currently not accepting data. We must
-				// wait for the window to increase.
-				dlog.Debugf(ctx, "   CON %s Await ACK queue is full", h.id)
-			}
 			h.sendCondition.Wait()
-			window = h.sendWindow
-			aqz = h.ackWaitQueueSize
+			if h.state() != stateEstablished {
+				h.sendLock.Unlock()
+				return
+			}
+			window = int(h.peerWindow) - int(h.sequence()-h.seqAcked)
 		}
 		h.sendLock.Unlock()
 
@@ -365,8 +351,8 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 		if mxSend > int(h.peerMaxSegmentSize) {
 			mxSend = int(h.peerMaxSegmentSize)
 		}
-		if mxSend > int(window) {
-			mxSend = int(window)
+		if mxSend > window {
+			mxSend = window
 		}
 
 		pkt := h.newResponse(HeaderLen+mxSend, true)
@@ -377,7 +363,7 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 
 		tcpHdr.SetACK(true)
 		tcpHdr.SetSequence(h.sequence())
-		tcpHdr.SetAckNumber(h.sequenceLastAcked())
+		tcpHdr.SetAckNumber(h.peerSequenceAcked())
 
 		end := start + mxSend
 		copy(tcpHdr.Payload(), data[start:end])
@@ -389,8 +375,7 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 
 		// Decrease the window size with the bytes that we just sent unless it's already updated
 		// from a received packet
-		window -= window - uint64(mxSend)
-		atomic.CompareAndSwapUint64(&h.sendWindow, window, window)
+		atomic.CompareAndSwapInt64(&h.peerWindow, int64(window), int64(window-mxSend))
 		start = end
 	}
 }
@@ -418,12 +403,8 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 			h.peerMaxSegmentSize = binary.BigEndian.Uint16(synOpt.data())
 			dlog.Tracef(ctx, "   CON %s maximum segment size %d", h.id, h.peerMaxSegmentSize)
 		case windowScale:
-			h.windowScale = synOpt.data()[0]
-			dlog.Tracef(ctx, "   CON %s window scale %d", h.id, h.windowScale)
-			maxWindowSize := uint64(math.MaxUint16) << h.windowScale
-			if maxReceiveWindow > maxWindowSize {
-				h.setReceiveWindow(maxWindowSize)
-			}
+			h.peerWindowScale = synOpt.data()[0]
+			dlog.Tracef(ctx, "   CON %s window scale %d", h.id, h.peerWindowScale)
 		case selectiveAckPermitted:
 			dlog.Tracef(ctx, "   CON %s selective acknowledgments permitted", h.id)
 		default:
@@ -476,7 +457,7 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 	go h.writeToMgrLoop(ctx)
 
 	pl := len(tcpHdr.Payload())
-	h.setSequenceLastAcked(tcpHdr.Sequence() + uint32(pl))
+	h.setPeerSequenceAcked(tcpHdr.Sequence() + uint32(pl))
 	if pl != 0 {
 		h.setSequence(h.sequence() + uint32(pl))
 		h.pushToAckWait(ctx, uint32(pl), pkt)
@@ -516,7 +497,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	}
 
 	sq := tcpHdr.Sequence()
-	lastAck := h.sequenceLastAcked()
+	lastAck := h.peerSequenceAcked()
 	payloadLen := len(tcpHdr.Payload())
 	switch {
 	case sq == lastAck:
@@ -551,15 +532,15 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	switch {
 	case payloadLen > 0:
-		h.setSequenceLastAcked(lastAck + uint32(payloadLen))
+		h.setPeerSequenceAcked(lastAck + uint32(payloadLen))
 		if !h.sendToMgr(ctx, pkt) {
 			return quitByContext
 		}
 		release = false
 	case tcpHdr.FIN():
-		h.setSequenceLastAcked(lastAck + 1)
+		h.setPeerSequenceAcked(lastAck + 1)
 	default:
-		// don't ack acks
+		// don't ack an ack
 		return pleaseContinue
 	}
 	h.sendAck(ctx)
@@ -610,7 +591,7 @@ func (h *handler) processPackets(ctx context.Context) {
 }
 
 func (h *handler) processPacket(ctx context.Context, pkt Packet) bool {
-	h.sendWindowFromHeader(pkt.Header())
+	h.peerWindowFromHeader(ctx, pkt.Header())
 	var end quitReason
 	switch h.state() {
 	case stateIdle:
@@ -705,8 +686,12 @@ func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 	h.sendLock.Lock()
 	// ack-queue is guaranteed to be sorted descending on sequence so we cut from the packet with
 	// a sequence less than or equal to the received sequence.
+	sq := h.sequence()
+	oldWindow := int(h.peerWindow) - int(sq-h.seqAcked)
+	h.seqAcked = seq
+	newWindow := int(h.peerWindow) - int(sq-h.seqAcked)
+
 	el := h.ackWaitQueue
-	oldSz := h.ackWaitQueueSize
 	var prev *queueElement
 	for el != nil && el.sequence > seq {
 		prev = el
@@ -729,13 +714,14 @@ func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 		dlog.Tracef(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
 	}
 	h.sendLock.Unlock()
-	if oldSz > maxAckWaits && h.ackWaitQueueSize <= maxAckWaits {
+	if oldWindow <= 0 && newWindow > 0 {
+		dlog.Debugf(ctx, "   CON %s, TCP window %d after ack", h.id, newWindow)
 		h.sendCondition.Signal()
 	}
 }
 
 func (h *handler) processNextOutOfOrderPacket(ctx context.Context) (bool, bool) {
-	seq := h.sequenceLastAcked()
+	seq := h.peerSequenceAcked()
 	var prev *queueElement
 	for el := h.oooQueue; el != nil; el = el.next {
 		if el.sequence == seq {
@@ -767,8 +753,15 @@ func (h *handler) state() state {
 }
 
 func (h *handler) setState(ctx context.Context, s state) {
-	dlog.Debugf(ctx, "   CON %s, state %s -> %s", h.id, h.state(), s)
-	atomic.StoreInt32((*int32)(&h.wfState), int32(s))
+	oldState := h.state()
+	if oldState != s {
+		dlog.Debugf(ctx, "   CON %s, state %s -> %s", h.id, h.state(), s)
+		atomic.StoreInt32((*int32)(&h.wfState), int32(s))
+		if oldState == stateEstablished {
+			// Unblock any sender when moving from stateEstablished
+			h.sendCondition.Signal()
+		}
+	}
 }
 
 // sequence is the sequence number of the packets that this client
@@ -785,29 +778,36 @@ func (h *handler) setSequence(v uint32) {
 	atomic.StoreUint32(&h.seq, v)
 }
 
-// sequenceLastAcked is the last received sequence that this client has ACKed
-func (h *handler) sequenceLastAcked() uint32 {
-	return atomic.LoadUint32(&h.lastAck)
+// peerSequenceAcked was the last ack sent to the peer
+func (h *handler) peerSequenceAcked() uint32 {
+	return atomic.LoadUint32(&h.peerSeqAcked)
 }
 
-func (h *handler) setSequenceLastAcked(v uint32) {
-	atomic.StoreUint32(&h.lastAck, v)
+func (h *handler) setPeerSequenceAcked(v uint32) {
+	atomic.StoreUint32(&h.peerSeqAcked, v)
 }
 
-func (h *handler) sendWindowFromHeader(tcpHeader Header) {
+func (h *handler) peerWindowFromHeader(ctx context.Context, tcpHeader Header) {
 	h.sendLock.Lock()
-	oldSz := h.sendWindow
-	h.sendWindow = uint64(tcpHeader.WindowSize()) << h.windowScale
+	sq := h.sequence()
+	oldWindow := int(h.peerWindow) - int(sq-h.seqAcked)
+	h.peerWindow = int64(tcpHeader.WindowSize()) << h.peerWindowScale
+	newWindow := int(h.peerWindow) - int(sq-h.seqAcked)
 	h.sendLock.Unlock()
-	if oldSz == 0 && h.sendWindow > 0 {
+	if oldWindow <= 0 && newWindow > 0 {
+		dlog.Debugf(ctx, "   CON %s, TCP window %d after window update", h.id, newWindow)
 		h.sendCondition.Signal()
 	}
 }
 
-func (h *handler) receiveWindowToHeader(tcpHeader Header) {
-	tcpHeader.SetWindowSize(uint16(atomic.LoadUint64(&h.rcvWnd) >> h.windowScale))
+func (h *handler) myWindowToHeader(tcpHeader Header) {
+	tcpHeader.SetWindowSize(uint16(h.receiveWindow() >> myWindowScale))
 }
 
-func (h *handler) setReceiveWindow(v uint64) {
-	atomic.StoreUint64(&h.rcvWnd, v)
+func (h *handler) receiveWindow() int {
+	return int(atomic.LoadInt64(&h.myWindow))
+}
+
+func (h *handler) setReceiveWindow(v int) {
+	atomic.StoreInt64(&h.myWindow, int64(v))
 }

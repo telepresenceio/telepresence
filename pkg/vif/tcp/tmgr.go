@@ -21,7 +21,6 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 		h.setState(ctx, stateSynSent)
 		h.setSequence(uint32(h.RandomSequence()))
 		h.setReceiveWindow(maxReceiveWindow)
-		h.windowScale = 6
 		h.sendSyn(ctx, 0, false)
 	case connpool.ConnectOK:
 		synPacket := h.synPacket
@@ -78,6 +77,20 @@ func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 	case <-ctx.Done():
 		return false
 	}
+}
+
+func (h *handler) adjustReceiveWindow() {
+	// Adjust window size based on current queue sizes.
+	queueFactor := ioChannelSize - (len(h.toMgrCh) + len(h.fromTun))
+	windowSize := 0
+	if queueFactor > 0 {
+		// Make window size dependent on the number o element on the queue
+		windowSize = queueFactor * (maxReceiveWindow / ioChannelSize)
+
+		// Strip the last 8 bits so that we don't change so often
+		windowSize &^= 0xff
+	}
+	h.setReceiveWindow(windowSize)
 }
 
 // readFromMgrLoop sends the packets read from the fromMgr channel to the TUN device
