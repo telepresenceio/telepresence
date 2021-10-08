@@ -448,18 +448,18 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		switch synOpt.kind() {
 		case maximumSegmentSize:
 			h.peerMaxSegmentSize = binary.BigEndian.Uint16(synOpt.data())
-			dlog.Debugf(ctx, "   CON %s maximum segment size %d", h.id, h.peerMaxSegmentSize)
+			dlog.Tracef(ctx, "   CON %s maximum segment size %d", h.id, h.peerMaxSegmentSize)
 		case windowScale:
 			h.windowScale = synOpt.data()[0]
-			dlog.Debugf(ctx, "   CON %s window scale %d", h.id, h.windowScale)
+			dlog.Tracef(ctx, "   CON %s window scale %d", h.id, h.windowScale)
 			maxWindowSize := uint64(math.MaxUint16) << h.windowScale
 			if maxReceiveWindow > maxWindowSize {
 				h.setReceiveWindow(maxWindowSize)
 			}
 		case selectiveAckPermitted:
-			dlog.Debugf(ctx, "   CON %s selective acknowledgments permitted", h.id)
+			dlog.Tracef(ctx, "   CON %s selective acknowledgments permitted", h.id)
 		default:
-			dlog.Debugf(ctx, "   CON %s option %d with len %d", h.id, synOpt.kind(), synOpt.len())
+			dlog.Tracef(ctx, "   CON %s option %d with len %d", h.id, synOpt.kind(), synOpt.len())
 		}
 	}
 
@@ -621,7 +621,7 @@ func (h *handler) processPackets(ctx context.Context) {
 	for {
 		select {
 		case pkt := <-h.fromTun:
-			dlog.Debugf(ctx, "<- TUN %s", pkt)
+			dlog.Tracef(ctx, "<- TUN %s", pkt)
 			if !h.processPacket(ctx, pkt) {
 				return
 			}
@@ -729,7 +729,7 @@ func (h *handler) pushToAckWait(ctx context.Context, seqAdd uint32, pkt Packet) 
 		next:     h.ackWaitQueue,
 	}
 	h.ackWaitQueueSize++
-	dlog.Debugf(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
+	dlog.Tracef(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
 	h.sendLock.Unlock()
 }
 
@@ -758,7 +758,7 @@ func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 				break
 			}
 		}
-		dlog.Debugf(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
+		dlog.Tracef(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
 	}
 	h.sendLock.Unlock()
 	if oldSz > maxAckWaits && h.ackWaitQueueSize <= maxAckWaits {

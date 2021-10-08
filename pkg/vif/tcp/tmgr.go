@@ -121,7 +121,7 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 	var mgrWrite func(payload []byte) bool
 	if h.muxTunnel != nil {
 		mgrWrite = func(payload []byte) bool {
-			dlog.Debugf(ctx, "-> MGR %s, len %d", h.id, len(payload))
+			dlog.Tracef(ctx, "-> MGR %s, len %d", h.id, len(payload))
 			if err := h.muxTunnel.Send(ctx, connpool.NewMessage(h.id, payload)); err != nil {
 				if ctx.Err() == nil && atomic.LoadInt32(h.dispatcherClosing) == 0 && h.state() < stateFinWait2 {
 					dlog.Errorf(ctx, "   CON %s failed to write to dispatcher's remote endpoint: %v", h.id, err)

@@ -454,7 +454,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 	case ipproto.ICMP:
 	case ipproto.ICMPV6:
 		pkt := icmp.PacketFromData(ipHdr, data)
-		dlog.Debugf(c, "<- TUN %s", pkt)
+		dlog.Tracef(c, "<- TUN %s", pkt)
 	default:
 		// An L4 protocol that we don't handle.
 		dlog.Debugf(c, "Unhandled protocol %d", ipHdr.L4Protocol())
@@ -488,7 +488,7 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
 	connID := tunnel.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
-	dlog.Debugf(c, "<- TUN %s", pkt)
+	dlog.Tracef(c, "<- TUN %s", pkt)
 	if !tcpHdr.SYN() {
 		// Only a SYN packet can create a new connection. For all other packets, the connection must already exist
 		wf := t.handlers.Get(connID)
