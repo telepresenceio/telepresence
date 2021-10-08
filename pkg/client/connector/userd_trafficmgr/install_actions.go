@@ -338,6 +338,9 @@ type addTrafficAgentAction struct {
 
 	// The name of the namespace where the traffic manager that "owns" this agent is to be found.
 	trafficManagerNamespace string
+
+	// Whether the container's GID should be set explicitly.
+	setGID bool
 }
 
 var _ partialAction = (*addTrafficAgentAction)(nil)
@@ -381,7 +384,7 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 			},
 			int(ata.ContainerPortNumber),
 			ata.trafficManagerNamespace,
-			false,
+			ata.setGID,
 		))
 	return nil
 }
