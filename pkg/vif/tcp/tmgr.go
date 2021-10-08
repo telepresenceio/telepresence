@@ -9,6 +9,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
@@ -49,6 +50,17 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 	}
 }
 
+func (h *handler) handleStreamControl(ctx context.Context, ctrl tunnel.Message) {
+	switch ctrl.Code() {
+	case tunnel.DialOK:
+	case tunnel.DialReject, tunnel.Disconnect:
+		h.Close(ctx)
+	case tunnel.KeepAlive:
+	}
+}
+
+// HandleMessage for versions < 2.4.5
+// Deprecated
 func (h *handler) HandleMessage(ctx context.Context, msg connpool.Message) {
 	select {
 	case <-ctx.Done():
@@ -58,11 +70,43 @@ func (h *handler) HandleMessage(ctx context.Context, msg connpool.Message) {
 
 func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 	select {
-	case h.toMgr <- pkt:
+	case h.toMgrCh <- pkt:
 		h.adjustReceiveWindow()
 		return true
 	case <-ctx.Done():
 		return false
+	}
+}
+
+// readFromMgrLoop sends the packets read from the fromMgr channel to the TUN device
+func (h *handler) readFromMgrLoop(ctx context.Context) {
+	fromMgrCh, fromMgrErrs := tunnel.ReadLoop(ctx, h.stream)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-fromMgrErrs:
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+			return
+		case m := <-fromMgrCh:
+			if m == nil {
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			if m.Code() != tunnel.Normal {
+				h.handleStreamControl(ctx, m)
+				continue
+			}
+			h.processPayload(ctx, m.Payload())
+		}
 	}
 }
 
@@ -74,15 +118,29 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 	// Threshold when we flush in spite of not getting a PSH
 	const maxBufSize = 0x10000
 
-	mgrWrite := func(payload []byte) bool {
-		dlog.Debugf(ctx, "-> MGR %s, len %d", h.id, len(payload))
-		if err := h.Send(ctx, connpool.NewMessage(h.id, payload)); err != nil {
-			if ctx.Err() == nil && atomic.LoadInt32(h.dispatcherClosing) == 0 && h.state() < stateFinWait2 {
-				dlog.Errorf(ctx, "   CON %s failed to write to dispatcher's remote endpoint: %v", h.id, err)
+	var mgrWrite func(payload []byte) bool
+	if h.muxTunnel != nil {
+		mgrWrite = func(payload []byte) bool {
+			dlog.Debugf(ctx, "-> MGR %s, len %d", h.id, len(payload))
+			if err := h.muxTunnel.Send(ctx, connpool.NewMessage(h.id, payload)); err != nil {
+				if ctx.Err() == nil && atomic.LoadInt32(h.dispatcherClosing) == 0 && h.state() < stateFinWait2 {
+					dlog.Errorf(ctx, "   CON %s failed to write to dispatcher's remote endpoint: %v", h.id, err)
+				}
+				return true
 			}
-			return true
+			return false
 		}
-		return false
+	} else {
+		defer close(h.toMgrMsgCh)
+		tunnel.WriteLoop(ctx, h.stream, h.toMgrMsgCh)
+		mgrWrite = func(payload []byte) bool {
+			select {
+			case <-ctx.Done():
+				return true
+			case h.toMgrMsgCh <- tunnel.NewMessage(tunnel.Normal, payload):
+				return false
+			}
+		}
 	}
 
 	flushTimer := time.NewTimer(flushDelay)
@@ -105,7 +163,7 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 			if buf.Len() > 0 {
 				sendBuf()
 			}
-		case pkt := <-h.toMgr:
+		case pkt := <-h.toMgrCh:
 			h.adjustReceiveWindow()
 			tcpHdr := pkt.Header()
 			payload := tcpHdr.Payload()
@@ -131,10 +189,16 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 }
 
 func (h *handler) sendConnControl(ctx context.Context, code connpool.ControlCode) error {
-	pkt := connpool.NewControl(h.id, code, nil)
 	dlog.Debugf(ctx, "-> MGR %s, code %s", h.id, code)
-	if err := h.Send(ctx, pkt); err != nil {
+	if err := h.muxTunnel.Send(ctx, connpool.NewControl(h.id, code, nil)); err != nil {
 		return fmt.Errorf("failed to send control packet: %w", err)
 	}
 	return nil
+}
+
+func (h *handler) sendStreamControl(ctx context.Context, code tunnel.MessageCode) {
+	select {
+	case <-ctx.Done():
+	case h.toMgrMsgCh <- tunnel.NewMessage(code, nil):
+	}
 }

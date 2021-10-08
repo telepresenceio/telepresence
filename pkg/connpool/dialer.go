@@ -49,7 +49,7 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) tunnel.Handler {
+func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
@@ -65,7 +65,7 @@ func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) tunnel
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
-func HandlerFromConn(connID tunnel.ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) tunnel.Handler {
+func HandlerFromConn(connID tunnel.ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
@@ -170,7 +170,6 @@ func (h *dialer) drop() {
 
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
-	dlog.Debugf(ctx, "-> GRPC %s", ctrl)
 	err := h.muxTunnel.Send(ctx, ctrl)
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
@@ -267,7 +266,6 @@ func (h *dialer) writeLoop(ctx context.Context) {
 			}
 			payload := dg.Payload()
 			pn := len(payload)
-			dlog.Debugf(ctx, "<- GRPC %s, len %d", h.id, pn)
 			for n := 0; n < pn; {
 				wn, err := h.conn.Write(payload[n:])
 				if err != nil {
@@ -275,7 +273,7 @@ func (h *dialer) writeLoop(ctx context.Context) {
 					dlog.Errorf(ctx, "!! CONN %s, write: %v", h.id, err)
 					return
 				}
-				dlog.Debugf(ctx, "-> CONN %s, len %d", h.id, wn)
+				dlog.Tracef(ctx, "-> CONN %s, len %d", h.id, wn)
 				n += wn
 			}
 		}

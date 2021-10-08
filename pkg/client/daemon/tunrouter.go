@@ -325,16 +325,22 @@ func (t *tunRouter) run(c context.Context) error {
 		if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
 			return err
 		}
-		_, err = muxTunnel.ReadPeerVersion(c)
+		peerVersion, err := muxTunnel.ReadPeerVersion(c)
 		if err != nil {
 			return err
 		}
-		t.muxTunnel = muxTunnel
-		dlog.Debug(c, "MGR read loop starting")
-		err = t.muxTunnel.DialLoop(c, t.handlers)
-		var recvErr *client.RecvEOF
-		if errors.As(err, &recvErr) {
-			<-c.Done()
+		// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
+		if peerVersion < 2 {
+			t.muxTunnel = muxTunnel
+			dlog.Debug(c, "MGR read loop starting")
+			err = t.muxTunnel.DialLoop(c, t.handlers)
+			var recvErr *client.RecvEOF
+			if errors.As(err, &recvErr) {
+				<-c.Done()
+			}
+		} else {
+			dlog.Debug(c, "closing since a more recent system detected")
+			err = muxTunnel.CloseSend()
 		}
 		return err
 	})
@@ -481,18 +487,32 @@ func (w vifWriter) Write(ctx context.Context, pkt ip.Packet) (err error) {
 func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
-	if tcpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
-		// Ignore TCP packets intended for the DNS resolver for now
-		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
+	connID := tunnel.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
+	dlog.Debugf(c, "<- TUN %s", pkt)
+	if !tcpHdr.SYN() {
+		// Only a SYN packet can create a new connection. For all other packets, the connection must already exist
+		wf := t.handlers.Get(connID)
+		if wf == nil {
+			pkt.Release()
+		} else {
+			wf.(tcp.PacketHandler).HandlePacket(c, pkt)
+		}
 		return
 	}
 
-	connID := tunnel.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
+	if tcpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
+		// Ignore TCP packets intended for the DNS resolver for now
+		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
+		pkt.Release()
+		return
+	}
+
 	wf, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
-		return tcp.NewHandler(t.muxTunnel, &t.closing, vifWriter{t.dev}, connID, remove, t.rndSource), nil
+		return tcp.NewHandler(t.streamCreator(connID), t.muxTunnel, &t.closing, vifWriter{t.dev}, connID, remove, t.rndSource), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
+		pkt.Release()
 		return
 	}
 	wf.(tcp.PacketHandler).HandlePacket(c, pkt)
@@ -507,11 +527,35 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
 			return udp.NewDnsInterceptor(w, connID, remove, t.dnsLocalAddr)
 		}
-		return udp.NewHandler(t.muxTunnel, w, connID, remove), nil
+		stream, err := t.maybeOpenStream(c, connID)
+		if err != nil {
+			return nil, err
+		}
+		return udp.NewHandler(stream, t.muxTunnel, w, connID, remove), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
 		return
 	}
 	uh.(udp.DatagramHandler).HandleDatagram(c, dg)
+}
+
+func (t *tunRouter) maybeOpenStream(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
+	if t.muxTunnel != nil {
+		// tunnelVersion <= 2, so use the multiplexing tunnel
+		return nil, nil
+	}
+	return t.streamCreator(id)(c)
+}
+
+func (t *tunRouter) streamCreator(id tunnel.ConnID) tcp.StreamCreator {
+	return func(c context.Context) (tunnel.Stream, error) {
+		dlog.Debugf(c, "Opening tunnel for id %s", id)
+		ct, err := t.managerClient.Tunnel(c)
+		if err != nil {
+			return nil, err
+		}
+		tc := client.GetConfig(c).Timeouts
+		return tunnel.NewClientStream(c, ct, id, t.session.SessionId, tc.Get(client.TimeoutRoundtripLatency), tc.Get(client.TimeoutEndpointDial))
+	}
 }

@@ -39,6 +39,7 @@ func (h *timedHandler) Close(_ context.Context) {
 
 type handler struct {
 	timedHandler
+	stream    tunnel.Stream
 	muxTunnel connpool.MuxTunnel
 	toTun     ip.Writer
 	fromTun   chan Datagram
@@ -47,12 +48,13 @@ type handler struct {
 const ioChannelSize = 0x40
 const idleDuration = 5 * time.Second
 
-func NewHandler(muxTunnel connpool.MuxTunnel, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
+func NewHandler(stream tunnel.Stream, muxTunnel connpool.MuxTunnel, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
 	return &handler{
 		timedHandler: timedHandler{
 			id:     id,
 			remove: remove,
 		},
+		stream:    stream,
 		muxTunnel: muxTunnel,
 		toTun:     toTun,
 		fromTun:   make(chan Datagram, ioChannelSize),
@@ -113,7 +115,12 @@ func (h *handler) writeLoop(ctx context.Context) {
 			dlog.Debugf(ctx, "<- TUN %s", dg)
 			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			err := h.muxTunnel.Send(ctx, connpool.NewMessage(h.id, udpHdr.Payload()))
+			var err error
+			if h.muxTunnel != nil {
+				err = h.muxTunnel.Send(ctx, connpool.NewMessage(h.id, udpHdr.Payload()))
+			} else {
+				err = h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
+			}
 			dg.SoftRelease()
 			if err != nil {
 				if ctx.Err() == nil {

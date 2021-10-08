@@ -198,8 +198,8 @@ func (s *muxTunnel) DialLoop(ctx context.Context, pool *tunnel.Pool) error {
 			}
 			id := msg.ID()
 			dlog.Debugf(ctx, "<- MGR %s, len %d", id.ReplyString(), len(msg.Payload()))
-			if conn := pool.Get(id); conn != nil {
-				conn.(Handler).HandleMessage(ctx, msg)
+			if conn, ok := pool.Get(id).(Handler); ok {
+				conn.HandleMessage(ctx, msg)
 			}
 		}
 	}
@@ -216,20 +216,24 @@ func (s *muxTunnel) handleControl(ctx context.Context, ctrl Control, pool *tunne
 	dlog.Debugf(ctx, "<- MGR %s, code %s", id.ReplyString(), code)
 
 	if code != Connect {
-		if conn := pool.Get(id); conn != nil {
-			conn.(Handler).HandleMessage(ctx, ctrl)
+		if conn, ok := pool.Get(id).(Handler); ok {
+			conn.HandleMessage(ctx, ctrl)
 		} else if !(code == Disconnect || code == DisconnectOK || code == ReadClosed || code == WriteClosed) {
 			dlog.Errorf(ctx, "control packet of type %s lost because no connection was active", code)
 		}
 		return
 	}
 
-	conn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
+	bConn, _, err := pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 		return NewDialer(id, s, release), nil
 	})
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
-	conn.(Handler).HandleMessage(ctx, ctrl)
+	if conn, ok := bConn.(Handler); ok {
+		conn.HandleMessage(ctx, ctrl)
+	} else {
+		dlog.Errorf(ctx, "Found handler of incorrect type. Expected conpool.Handler, got %T", bConn)
+	}
 }

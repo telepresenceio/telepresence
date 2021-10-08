@@ -76,14 +76,20 @@ const (
 )
 
 type PacketHandler interface {
-	tunnel.Handler
+	connpool.Handler
 
 	// HandlePacket handles a packet that was read from the TUN device
 	HandlePacket(ctx context.Context, pkt Packet)
 }
 
+type StreamCreator func(ctx context.Context) (tunnel.Stream, error)
+
 type handler struct {
-	connpool.MuxTunnel
+	streamCreator StreamCreator
+
+	// Handle will have either a connection specific stream or a muxTunnel (the old style)
+	// depending on what the handler is talking to
+	stream tunnel.Stream
 
 	// id identifies this connection. It contains source and destination IPs and ports
 	id tunnel.ConnID
@@ -94,13 +100,15 @@ type handler struct {
 	// TUN I/O
 	toTun   ip.Writer
 	fromTun chan Packet
-	fromMgr chan connpool.Message
 
 	// the dispatcher signals its intent to close in dispatcherClosing. 0 == running, 1 == closing, 2 == closed
 	dispatcherClosing *int32
 
-	// Channel to use when sending messages to the traffic-manager
-	toMgr chan Packet
+	// Channel to use when sending packets to the traffic-manager
+	toMgrCh chan Packet
+
+	// Channel to use when sending maessages to the traffic-manager
+	toMgrMsgCh chan tunnel.Message
 
 	// queue where unacked elements are placed until they are acked
 	ackWaitQueue     *queueElement
@@ -139,6 +147,9 @@ type handler struct {
 	sendLock      sync.Mutex
 	sendCondition *sync.Cond
 
+	muxTunnel connpool.MuxTunnel
+	fromMgr   chan connpool.Message
+
 	// isClosing indicates whether Close() has been called on the handler
 	isClosing int32
 	// readyToFin will be closed once it is safe for the handler to send a FIN packet and terminate the connection
@@ -149,7 +160,8 @@ type handler struct {
 }
 
 func NewHandler(
-	tcpStream connpool.MuxTunnel,
+	streamCreator StreamCreator,
+	muxTunnel connpool.MuxTunnel,
 	dispatcherClosing *int32,
 	toTun ip.Writer,
 	id tunnel.ConnID,
@@ -157,15 +169,16 @@ func NewHandler(
 	rndSource rand.Source,
 ) PacketHandler {
 	h := &handler{
-		MuxTunnel:         tcpStream,
+		streamCreator:     streamCreator,
+		muxTunnel:         muxTunnel,
 		id:                id,
 		remove:            remove,
 		toTun:             toTun,
 		fromMgr:           make(chan connpool.Message, ioChannelSize),
 		dispatcherClosing: dispatcherClosing,
 		fromTun:           make(chan Packet, ioChannelSize),
-		toMgr:             make(chan Packet, ioChannelSize),
-		rcvWnd:            maxReceiveWindow,
+		toMgrCh:           make(chan Packet, ioChannelSize),
+		toMgrMsgCh:        make(chan tunnel.Message),
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
 		readyToFin:        make(chan interface{}),
@@ -200,17 +213,25 @@ func (h *handler) Start(ctx context.Context) error {
 	go h.processResends(ctx)
 	go func() {
 		defer func() {
-			_ = h.sendConnControl(ctx, connpool.Disconnect)
+			if h.muxTunnel != nil {
+				_ = h.sendConnControl(ctx, connpool.Disconnect)
+			} else if h.stream != nil {
+				_ = h.stream.CloseSend(ctx)
+			}
 			h.remove()
 		}()
 		h.processPackets(ctx)
 	}()
-	go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packets
+	if h.muxTunnel != nil {
+		h.fromMgr = make(chan connpool.Message, ioChannelSize)
+		h.readyToFin = make(chan interface{})
+		go h.writeToTunLoop(ctx) // Needs to start here to handle initial control packets
+	}
 	return nil
 }
 
 func (h *handler) adjustReceiveWindow() {
-	queueSize := len(h.toMgr)
+	queueSize := len(h.toMgrCh)
 	maxWindowSize := uint64(math.MaxUint16) << h.windowScale
 	windowSize := maxReceiveWindow
 	if windowSize > maxWindowSize {
@@ -343,63 +364,66 @@ func (h *handler) writeToTunLoop(ctx context.Context) {
 				h.handleControl(ctx, ctrl)
 				continue
 			}
-			data := cm.Payload()
-			start := 0
-			n := len(data)
-			for n > start {
-				h.sendLock.Lock()
-				window := h.sendWindow
-				aqz := h.ackWaitQueueSize
-				for window == 0 || aqz > maxAckWaits {
-					if window == 0 {
-						// The intended receiver is currently not accepting data. We must
-						// wait for the window to increase.
-						dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
-					}
-					if aqz > maxAckWaits {
-						// The intended receiver is currently not accepting data. We must
-						// wait for the window to increase.
-						dlog.Debugf(ctx, "   CON %s Await ACK queue is full", h.id)
-					}
-					h.sendCondition.Wait()
-					window = h.sendWindow
-					aqz = h.ackWaitQueueSize
-				}
-				h.sendLock.Unlock()
-
-				mxSend := n - start
-				if mxSend > int(h.peerMaxSegmentSize) {
-					mxSend = int(h.peerMaxSegmentSize)
-				}
-				if mxSend > int(window) {
-					mxSend = int(window)
-				}
-
-				pkt := h.newResponse(HeaderLen+mxSend, true)
-				ipHdr := pkt.IPHeader()
-				tcpHdr := pkt.Header()
-				ipHdr.SetPayloadLen(HeaderLen + mxSend)
-				ipHdr.SetChecksum()
-
-				tcpHdr.SetACK(true)
-				tcpHdr.SetSequence(h.sequence())
-				tcpHdr.SetAckNumber(h.sequenceLastAcked())
-
-				end := start + mxSend
-				copy(tcpHdr.Payload(), data[start:end])
-				tcpHdr.SetPSH(end == n)
-				tcpHdr.SetChecksum(ipHdr)
-
-				h.sendToTun(ctx, pkt)
-				h.pushToAckWait(ctx, uint32(mxSend), pkt)
-
-				// Decrease the window size with the bytes that we just sent unless it's already updated
-				// from a received packet
-				window -= window - uint64(mxSend)
-				atomic.CompareAndSwapUint64(&h.sendWindow, window, window)
-				start = end
-			}
+			h.processPayload(ctx, cm.Payload())
 		}
+	}
+}
+
+func (h *handler) processPayload(ctx context.Context, data []byte) {
+	start := 0
+	n := len(data)
+	for n > start {
+		h.sendLock.Lock()
+		window := h.sendWindow
+		aqz := h.ackWaitQueueSize
+		for window == 0 || aqz > maxAckWaits {
+			if window == 0 {
+				// The intended receiver is currently not accepting data. We must
+				// wait for the window to increase.
+				dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
+			}
+			if aqz > maxAckWaits {
+				// The intended receiver is currently not accepting data. We must
+				// wait for the window to increase.
+				dlog.Debugf(ctx, "   CON %s Await ACK queue is full", h.id)
+			}
+			h.sendCondition.Wait()
+			window = h.sendWindow
+			aqz = h.ackWaitQueueSize
+		}
+		h.sendLock.Unlock()
+
+		mxSend := n - start
+		if mxSend > int(h.peerMaxSegmentSize) {
+			mxSend = int(h.peerMaxSegmentSize)
+		}
+		if mxSend > int(window) {
+			mxSend = int(window)
+		}
+
+		pkt := h.newResponse(HeaderLen+mxSend, true)
+		ipHdr := pkt.IPHeader()
+		tcpHdr := pkt.Header()
+		ipHdr.SetPayloadLen(HeaderLen + mxSend)
+		ipHdr.SetChecksum()
+
+		tcpHdr.SetACK(true)
+		tcpHdr.SetSequence(h.sequence())
+		tcpHdr.SetAckNumber(h.sequenceLastAcked())
+
+		end := start + mxSend
+		copy(tcpHdr.Payload(), data[start:end])
+		tcpHdr.SetPSH(end == n)
+		tcpHdr.SetChecksum(ipHdr)
+
+		h.sendToTun(ctx, pkt)
+		h.pushToAckWait(ctx, uint32(mxSend), pkt)
+
+		// Decrease the window size with the bytes that we just sent unless it's already updated
+		// from a received packet
+		window -= window - uint64(mxSend)
+		atomic.CompareAndSwapUint64(&h.sendWindow, window, window)
+		start = end
 	}
 }
 
@@ -439,17 +463,27 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		}
 	}
 
-	if h.state() == stateIdle {
-		h.synPacket = syn
-		if err := h.sendConnControl(ctx, connpool.Connect); err != nil {
-			dlog.Error(ctx, err)
-			h.synPacket = nil
-			h.sendToTun(ctx, syn.Reset())
-			return quitByUs
-		}
-	}
 	h.setSequence(uint32(h.RandomSequence()))
 	h.setState(ctx, stateSynReceived)
+	if h.muxTunnel != nil {
+		h.synPacket = syn
+		err = h.sendConnControl(ctx, connpool.Connect)
+	} else {
+		// Reply to the SYN, then establish a connection. We send a reset if that fails.
+		h.sendSynReply(ctx, syn)
+		defer syn.Release()
+		if h.stream, err = h.streamCreator(ctx); err == nil {
+			go h.readFromMgrLoop(ctx)
+		}
+	}
+	if err != nil {
+		h.synPacket = nil
+		dlog.Error(ctx, err)
+		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
+			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
+		}
+		return quitByUs
+	}
 	return pleaseContinue
 }
 
@@ -532,7 +566,11 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	case sq == lastAck-1 && payloadLen == 0:
 		// keep alive
 		h.sendAck(ctx)
-		_ = h.sendConnControl(ctx, connpool.KeepAlive)
+		if h.muxTunnel != nil {
+			_ = h.sendConnControl(ctx, connpool.KeepAlive)
+		} else {
+			h.sendStreamControl(ctx, tunnel.KeepAlive)
+		}
 		return pleaseContinue
 	default:
 		// resend of already acknowledged packet. Just ignore
