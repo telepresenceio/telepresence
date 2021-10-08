@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
@@ -101,6 +102,13 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 	go lookupHostWaitLoop(ctx, manager, session, lrStream)
+
+	// Deal with dial requests from the manager
+	dialerStream, err := manager.WatchDial(ctx, session)
+	if err != nil {
+		return err
+	}
+	go tunnel.DialWaitLoop(ctx, manager, dialerStream, session.SessionId)
 
 	// Deal with log-level changes
 	logLevelStream, err := manager.WatchLogLevel(ctx, &empty.Empty{})

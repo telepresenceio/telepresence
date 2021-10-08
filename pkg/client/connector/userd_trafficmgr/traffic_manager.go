@@ -200,6 +200,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
+	g.Go("dial-request-watcher", tm.dialRequestWatcher)
 	return g.Wait()
 }
 
