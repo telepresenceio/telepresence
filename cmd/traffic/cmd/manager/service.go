@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -545,12 +546,33 @@ func readTunnelSessionID(ctx context.Context, server connpool.MuxTunnel) (*rpc.S
 	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
-func (m *Manager) Tunnel(_ rpc.Manager_TunnelServer) error {
-	return status.Error(codes.Unimplemented, "Tunnel not yet implemented")
+func (m *Manager) Tunnel(server rpc.Manager_TunnelServer) error {
+	ctx := server.Context()
+	stream, err := tunnel.NewServerStream(ctx, server)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
+	}
+	return m.state.Tunnel(ctx, stream)
 }
 
-func (m *Manager) WatchDial(_ *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
-	return status.Error(codes.Unimplemented, "WatchDial not yet implemented")
+func (m *Manager) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	dlog.Debugf(ctx, "WatchDial called")
+	lrCh := m.state.WatchDial(session.SessionId)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return nil
+		case lr := <-lrCh:
+			if lr == nil {
+				return nil
+			}
+			if err := stream.Send(lr); err != nil {
+				dlog.Errorf(ctx, "WatchDial.Send() failed: %v", err)
+				return nil
+			}
+		}
+	}
 }
 
 func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {

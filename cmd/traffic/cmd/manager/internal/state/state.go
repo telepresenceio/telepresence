@@ -28,17 +28,97 @@ type SessionState interface {
 	Done() <-chan struct{}
 	LastMarked() time.Time
 	SetLastMarked(lastMarked time.Time)
+	Dials() <-chan *rpc.DialRequest
+	EstablishBidiPipe(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
+	OnConnect(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
+}
+
+type awaitingBidiPipe struct {
+	stream     tunnel.Stream
+	bidiPipeCh chan tunnel.Endpoint
 }
 
 type sessionState struct {
 	sync.Mutex
-	done       <-chan struct{}
-	cancel     context.CancelFunc
-	lastMarked time.Time
+	done                <-chan struct{}
+	cancel              context.CancelFunc
+	lastMarked          time.Time
+	awaitingBidiPipeMap map[tunnel.ConnID]*awaitingBidiPipe
+	dials               chan *rpc.DialRequest
+}
+
+// EstablishBidiPipe registers the given stream as waiting for a matching stream to arrive in a call
+// to Tunnel, sends a DialRequest to the owner of this sessionState, and then waits. When the call
+// arrives, a BidiPipe connecting the two streams is returned.
+func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
+	// Dispatch directly to agent and let the dial happen there
+	bidiPipeCh := make(chan tunnel.Endpoint)
+	id := stream.ID()
+	abp := &awaitingBidiPipe{stream: stream, bidiPipeCh: bidiPipeCh}
+
+	ss.Lock()
+	if ss.awaitingBidiPipeMap == nil {
+		ss.awaitingBidiPipeMap = map[tunnel.ConnID]*awaitingBidiPipe{id: abp}
+	} else {
+		ss.awaitingBidiPipeMap[id] = abp
+	}
+	ss.Unlock()
+
+	// Send dial request to the client/agent
+	select {
+	case <-ss.done:
+		return nil, status.Error(codes.Canceled, "session cancelled")
+	case ss.dials <- &rpc.DialRequest{ConnId: []byte(id), RoundtripLatency: int64(stream.RoundtripLatency()), DialTimeout: int64(stream.DialTimeout())}:
+	}
+
+	// Wait for the client/agent to connect. Allow extra time for the call
+	ctx, cancel := context.WithTimeout(ctx, stream.DialTimeout()+stream.RoundtripLatency())
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return nil, status.Error(codes.DeadlineExceeded, "timeout while establishing bidipipe")
+	case <-ss.done:
+		return nil, status.Error(codes.Canceled, "session cancelled")
+	case bidi := <-bidiPipeCh:
+		return bidi, nil
+	}
+}
+
+// OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
+// If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
+// method that registered the waiting stream. Otherwise this method returns nil.
+func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
+	id := stream.ID()
+	ss.Lock()
+	abp, ok := ss.awaitingBidiPipeMap[id]
+	if ok {
+		delete(ss.awaitingBidiPipeMap, id)
+	}
+	ss.Unlock()
+
+	if !ok {
+		return nil, nil
+	}
+	dlog.Debugf(ctx, "   FWD %s, connect session %s with %s", id, abp.stream.SessionID(), stream.SessionID())
+	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream)
+	bidiPipe.Start(ctx)
+
+	defer close(abp.bidiPipeCh)
+	select {
+	case <-ss.done:
+		return nil, status.Error(codes.Canceled, "session cancelled")
+	case abp.bidiPipeCh <- bidiPipe:
+		return bidiPipe, nil
+	}
 }
 
 func (ss *sessionState) Cancel() {
 	ss.cancel()
+	close(ss.dials)
+}
+
+func (ss *sessionState) Dials() <-chan *rpc.DialRequest {
+	return ss.dials
 }
 
 func (ss *sessionState) Done() <-chan struct{} {
@@ -143,7 +223,7 @@ type State struct {
 	clients          watchable.ClientMap                  // info for client sessions
 	sessions         map[string]SessionState              // info for all sessions
 	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
-	listeners        map[string]tunnel.Handler            // listeners for all intercepts
+	listeners        map[string]connpool.Handler          // listeners for all intercepts
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
 	logLevelCond     sync.Cond
@@ -155,7 +235,7 @@ func NewState(ctx context.Context) *State {
 		sessions:         make(map[string]SessionState),
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
-		listeners:        make(map[string]tunnel.Handler),
+		listeners:        make(map[string]connpool.Handler),
 		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
 		logLevelCond:     sync.Cond{L: &sync.Mutex{}},
 	}
@@ -355,6 +435,7 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 			done:       ctx.Done(),
 			cancel:     cancel,
 			lastMarked: now,
+			dials:      make(chan *rpc.DialRequest),
 		},
 		name:         client.Name,
 		pool:         tunnel.NewPool(),
@@ -405,6 +486,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 			done:       ctx.Done(),
 			cancel:     cancel,
 			lastMarked: now,
+			dials:      make(chan *rpc.DialRequest),
 		},
 		lookups:         make(chan *rpc.LookupHostRequest),
 		lookupResponses: make(map[string]chan *rpc.LookupHostResponse),
@@ -670,6 +752,84 @@ func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) 
 			handler.(connpool.Handler).HandleMessage(ctx, msg)
 		}
 	}
+}
+
+func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
+	sessionID := stream.SessionID()
+	s.mu.Lock()
+	ss, ok := s.sessions[sessionID]
+	s.mu.Unlock()
+	if !ok {
+		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	}
+
+	bidiPipe, err := ss.OnConnect(ctx, stream)
+	if err != nil {
+		return err
+	}
+
+	if bidiPipe != nil {
+		// A peer awaited this stream. Wait for the bidiPipe to finish
+		<-bidiPipe.Done()
+		return nil
+	}
+
+	// The session is either the telepresence client or a traffic-agent.
+	//
+	// A client will want to extend the tunnel to a dialer in an intercepted traffic-agent or, if no
+	// intercept is active, to a dialer here in the traffic-agent.
+	//
+	// A traffic-agent must always extend the tunnel to the client that it is currently intercepted
+	// by, and hence, start by sending the sessionID of that client on the tunnel.
+	var peerSession SessionState
+	if _, ok := ss.(*agentSessionState); ok {
+		// traffic-agent, so obtain the desired client session
+		m, err := stream.Receive(ctx)
+		if err != nil {
+			return status.Errorf(codes.FailedPrecondition, "failed to read first message from agent tunnel %q: %v", sessionID, err)
+		}
+		if m.Code() != tunnel.Session {
+			return status.Errorf(codes.FailedPrecondition, "unable to read ClientSession from agent %q", sessionID)
+		}
+		peerID := tunnel.GetSession(m)
+		s.mu.Lock()
+		peerSession = s.sessions[peerID]
+		s.mu.Unlock()
+	} else {
+		peerSession = s.getRandomAgentSession(sessionID)
+	}
+
+	var endPoint tunnel.Endpoint
+	if peerSession != nil {
+		var err error
+		if endPoint, err = peerSession.EstablishBidiPipe(ctx, stream); err != nil {
+			return err
+		}
+	} else {
+		endPoint = tunnel.NewDialer(stream)
+		endPoint.Start(ctx)
+	}
+	<-endPoint.Done()
+	return nil
+}
+
+func (s *State) getRandomAgentSession(clientSessionID string) (agent SessionState) {
+	if agentIDs := s.getAgentsInterceptedByClient(clientSessionID); len(agentIDs) > 0 {
+		s.mu.Lock()
+		agent = s.sessions[agentIDs[0]]
+		s.mu.Unlock()
+	}
+	return
+}
+
+func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
+	s.mu.Lock()
+	ss, ok := s.sessions[sessionID]
+	s.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return ss.Dials()
 }
 
 type muxTunnelForward struct {
