@@ -411,7 +411,7 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 	tcpHdr := syn.Header()
 	if tcpHdr.RST() {
 		dlog.Errorf(ctx, "   CON %s, got RST while idle", h.id)
-		return quitByUs
+		return quitByReset
 	}
 	if !tcpHdr.SYN() {
 		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
@@ -504,7 +504,6 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 }
 
 func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
-	state := h.state()
 	release := true
 	defer func() {
 		if release {
@@ -514,7 +513,6 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	tcpHdr := pkt.Header()
 	if tcpHdr.RST() {
-		h.setState(ctx, stateIdle)
 		return quitByReset
 	}
 
@@ -525,19 +523,16 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	ackNbr := tcpHdr.AckNumber()
 	h.onAckReceived(ctx, ackNbr)
-	if state == stateTimedWait {
-		h.setState(ctx, stateIdle)
-		return quitByPeer
-	}
 
 	sq := tcpHdr.Sequence()
 	lastAck := h.peerSequenceAcked()
 	payloadLen := len(tcpHdr.Payload())
+	state := h.state()
 	switch {
 	case sq == lastAck:
 		if state == stateFinWait1 && ackNbr == h.finalSeq && !tcpHdr.FIN() {
-			h.setState(ctx, stateFinWait2)
-			return pleaseContinue
+			h.setState(ctx, stateTimedWait)
+			return quitByUs
 		}
 	case sq > lastAck:
 		if sq <= h.lastKnown {
@@ -572,9 +567,6 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 		// resend of already acknowledged packet. Just ignore
 		dlog.Debug(ctx, "client resends already acked packet")
 		return pleaseContinue
-	}
-	if tcpHdr.RST() {
-		return quitByReset
 	}
 
 	switch {
