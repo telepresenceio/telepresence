@@ -230,7 +230,7 @@ jobs:
             # points to a broken IP
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:/c/Program Files/SSHFS-Win/bin:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
-          no_output_timeout: &testsTimeout 27m
+          no_output_timeout: &testsTimeout 30m
       - cleanup-kluster:
           platform: windows
       - save-logs
