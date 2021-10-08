@@ -127,6 +127,19 @@ type handler struct {
 	// seqAcked is the last sequence acked by the peer
 	seqAcked uint32
 
+	// lastKnown is generally the same as last ACK except for when packets are lost when sending them
+	// to the manager. Those packets are not ACKed so we need to keep track of what we loose to prevent
+	// treating subsequent packets as out-of-order since they must be considered lost as well.
+	lastKnown uint32
+
+	// packetLostTimer starts on first packet loss and is reset when a packet succeeds. The connection is
+	// closed if the timer fires.
+	packetLostTimer *time.Timer
+
+	// Packets lost counts the total number of packets that are lost, regardless of if they were
+	// recovered again.
+	packetsLost int64
+
 	// finalSeq is the ack sent with FIN when a connection is closing.
 	finalSeq uint32
 
@@ -206,6 +219,7 @@ func (h *handler) RandomSequence() int32 {
 func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
 	select {
 	case <-ctx.Done():
+		dlog.Debugf(ctx, "!! TUN %s discarded because context is cancelled", pkt)
 	case h.fromTun <- pkt:
 	}
 }
@@ -457,14 +471,15 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 	go h.writeToMgrLoop(ctx)
 
 	pl := len(tcpHdr.Payload())
-	h.setPeerSequenceAcked(tcpHdr.Sequence() + uint32(pl))
 	if pl != 0 {
-		h.setSequence(h.sequence() + uint32(pl))
-		h.pushToAckWait(ctx, uint32(pl), pkt)
-		if !h.sendToMgr(ctx, pkt) {
-			return quitByContext
-		}
+		h.lastKnown = tcpHdr.Sequence() + uint32(pl)
 		release = false
+		if h.sendToMgr(ctx, pkt) {
+			h.setPeerSequenceAcked(h.lastKnown)
+			h.sendAck(ctx)
+		} else {
+			h.packetsLost++
+		}
 	}
 	return pleaseContinue
 }
@@ -506,8 +521,21 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 			return pleaseContinue
 		}
 	case sq > lastAck:
+		if sq <= h.lastKnown {
+			// Previous packet lost by us. Don't ack this one, just treat it
+			// as the next lost packet.
+			if payloadLen > 0 {
+				lk := tcpHdr.Sequence() + uint32(payloadLen)
+				if lk > h.lastKnown {
+					h.lastKnown = lk
+					h.packetsLost++
+				}
+			}
+			return pleaseContinue
+		}
 		// Oops. Packet loss! Let sender know by sending an ACK so that we ack the receipt
 		// and also tell the sender about our expected number
+		dlog.Debugf(ctx, "   CON %s, ack-diff %d", pkt, sq-lastAck)
 		h.sendAck(ctx)
 		h.addOutOfOrderPacket(ctx, pkt)
 		release = false
@@ -532,11 +560,13 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	switch {
 	case payloadLen > 0:
-		h.setPeerSequenceAcked(lastAck + uint32(payloadLen))
-		if !h.sendToMgr(ctx, pkt) {
-			return quitByContext
-		}
 		release = false
+		if h.sendToMgr(ctx, pkt) {
+			h.setPeerSequenceAcked(h.lastKnown)
+		} else {
+			h.packetsLost++
+			return pleaseContinue
+		}
 	case tcpHdr.FIN():
 		h.setPeerSequenceAcked(lastAck + 1)
 	default:

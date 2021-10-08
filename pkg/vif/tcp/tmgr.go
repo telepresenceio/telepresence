@@ -73,8 +73,20 @@ func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 	select {
 	case h.toMgrCh <- pkt:
 		h.adjustReceiveWindow()
+		if h.packetLostTimer != nil {
+			h.packetLostTimer.Stop()
+			h.packetLostTimer = nil
+		}
 		return true
-	case <-ctx.Done():
+	default:
+		// Manager doesn't keep up. Packet loss!
+		dlog.Debugf(ctx, "-> MGR %s packet lost!", pkt)
+		pkt.Release()
+		if h.packetLostTimer == nil {
+			h.packetLostTimer = time.AfterFunc(5*time.Second, func() {
+				h.Close(ctx)
+			})
+		}
 		return false
 	}
 }
