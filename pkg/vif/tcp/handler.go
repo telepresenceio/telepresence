@@ -105,11 +105,18 @@ type handler struct {
 	// the dispatcher signals its intent to close in dispatcherClosing. 0 == running, 1 == closing, 2 == closed
 	dispatcherClosing *int32
 
+	// Channel to use when receiving messages to the traffic-manager
+	tunDone chan struct{}
+
 	// Channel to use when sending packets to the traffic-manager
 	toMgrCh chan Packet
 
 	// Channel to use when sending messages to the traffic-manager
 	toMgrMsgCh chan tunnel.Message
+
+	// Waitgroup that the processPackets (reader of TUN packets) and readFromMgrLoop (reader of packets from
+	// the traffic manager) will signal when they are tunDone.
+	wg sync.WaitGroup
 
 	// queue where unacked elements are placed until they are acked
 	ackWaitQueue     *queueElement
@@ -208,6 +215,7 @@ func NewHandler(
 		myWindow:          maxReceiveWindow,
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
+		tunDone:           make(chan struct{}),
 		fromMgr:           make(chan connpool.Message, ioChannelSize),
 		readyToFin:        make(chan interface{}),
 	}
@@ -223,33 +231,49 @@ func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
 	select {
 	case <-ctx.Done():
 		dlog.Debugf(ctx, "!! TUN %s discarded because context is cancelled", pkt)
+	case <-h.tunDone:
+		dlog.Debugf(ctx, "!! TUN %s discarded because TCP handler's input processing was cancelled", pkt)
 	case h.fromTun <- pkt:
 	}
 }
 
 func (h *handler) Close(ctx context.Context) {
 	if h.state() == stateEstablished || h.state() == stateSynReceived {
-		atomic.StoreInt32(&h.isClosing, 1)
-		// Wait for the fromMgr queue to drain before sending a FIN
-		<-h.readyToFin
-
+		if h.muxTunnel != nil {
+			// Wait for the fromMgr queue to drain before sending a FIN
+			atomic.StoreInt32(&h.isClosing, 1)
+			<-h.readyToFin
+		}
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
 	}
 }
 
 func (h *handler) Start(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 	go h.processResends(ctx)
 	go func() {
+		defer cancel()
+		defer func() {
+			h.remove()
+			// Drain any incoming to unblock
+			for {
+				select {
+				case <-h.fromTun:
+				default:
+					return
+				}
+			}
+		}()
 		defer func() {
 			if h.muxTunnel != nil {
 				_ = h.sendConnControl(ctx, connpool.Disconnect)
 			} else if h.stream != nil {
 				_ = h.stream.CloseSend(ctx)
 			}
-			h.remove()
 		}()
 		h.processPackets(ctx)
+		h.wg.Wait()
 	}()
 	if h.muxTunnel != nil {
 		h.fromMgr = make(chan connpool.Message, ioChannelSize)
@@ -380,6 +404,15 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 			window = int(h.peerWindow) - int(h.sequence()-h.seqAcked)
 		}
 		h.sendLock.Unlock()
+
+		// Give up if done is closed
+		select {
+		case <-ctx.Done():
+			return
+		case <-h.tunDone:
+			return
+		default:
+		}
 
 		mxSend := n - start
 		if mxSend > int(h.peerMaxSegmentSize) {
@@ -565,7 +598,9 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 		return pleaseContinue
 	default:
 		// resend of already acknowledged packet. Just ignore
-		dlog.Debug(ctx, "client resends already acked packet")
+		if payloadLen > 0 {
+			dlog.Debugf(ctx, "   CON %s, resends already acked len=%d, sq=%d", h.id, payloadLen, sq)
+		}
 		return pleaseContinue
 	}
 
@@ -608,52 +643,58 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 }
 
 func (h *handler) processPackets(ctx context.Context) {
-	for {
-		select {
-		case pkt := <-h.fromTun:
-			dlog.Tracef(ctx, "<- TUN %s", pkt)
-			if !h.processPacket(ctx, pkt) {
-				return
-			}
-			for {
-				continueProcessing, next := h.processNextOutOfOrderPacket(ctx)
-				if !continueProcessing {
-					return
+	h.wg.Add(1)
+	defer h.wg.Done()
+	defer func() {
+		close(h.tunDone)
+		h.setState(ctx, stateIdle)
+		h.sendLock.Lock()
+		h.ackWaitQueue = nil
+		h.oooQueue = nil
+		h.sendLock.Unlock()
+		if h.stream != nil {
+			go func() {
+				if err := h.stream.CloseSend(ctx); err != nil {
+					dlog.Errorf(ctx, "!! CON %s CloseSend() failed %v", h.id, err)
 				}
-				if !next {
-					break
-				}
-			}
-		case <-ctx.Done():
-			h.setState(ctx, stateIdle)
-			return
+			}()
+		}
+	}()
+
+	process := func(ctx context.Context, pkt Packet) bool {
+		h.peerWindowFromHeader(ctx, pkt.Header())
+		var end quitReason
+		switch h.state() {
+		case stateIdle:
+			end = h.idle(ctx, pkt)
+		case stateSynReceived:
+			end = h.synReceived(ctx, pkt)
+		default:
+			end = h.handleReceived(ctx, pkt)
+		}
+		switch end {
+		case quitByReset, quitByContext:
+			return false
+		case quitByUs, quitByPeer, quitByBoth:
+			h.processFinalPackets(ctx)
+			return false
+		default:
+			return true
 		}
 	}
+	h.processPacketsWithProcessor(ctx, process)
 }
 
-func (h *handler) processPacket(ctx context.Context, pkt Packet) bool {
-	h.peerWindowFromHeader(ctx, pkt.Header())
-	var end quitReason
-	switch h.state() {
-	case stateIdle:
-		end = h.idle(ctx, pkt)
-	case stateSynReceived:
-		end = h.synReceived(ctx, pkt)
-	default:
-		end = h.handleReceived(ctx, pkt)
-	}
-	switch end {
-	case quitByReset, quitByContext:
-		h.setState(ctx, stateIdle)
-		return false
-	case quitByUs, quitByPeer, quitByBoth:
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
-		h.processPackets(ctx)
-		return false
-	default:
-		return true
-	}
+func (h *handler) processFinalPackets(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	defer h.setState(ctx, stateIdle)
+
+	h.processPacketsWithProcessor(ctx, func(ctx context.Context, pkt Packet) bool {
+		h.peerWindowFromHeader(ctx, pkt.Header())
+		end := h.handleReceived(ctx, pkt)
+		return end == pleaseContinue
+	})
 }
 
 const initialResendDelay = 2
@@ -663,6 +704,33 @@ type resend struct {
 	packet Packet
 	secs   int
 	next   *resend
+}
+
+func (h *handler) processPacketsWithProcessor(ctx context.Context, process func(ctx context.Context, pkt Packet) bool) {
+	for {
+		select {
+		case pkt := <-h.fromTun:
+			if !process(ctx, pkt) {
+				return
+			}
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				continueProcessing, next := h.processNextOutOfOrderPacket(ctx, process)
+				if !continueProcessing {
+					return
+				}
+				if !next {
+					break
+				}
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (h *handler) copyPacket(orig Packet) Packet {
@@ -684,6 +752,8 @@ func (h *handler) processResends(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-h.tunDone:
 			return
 		case <-ticker.C:
 		}
@@ -762,8 +832,8 @@ func (h *handler) onAckReceived(ctx context.Context, seq uint32) {
 	}
 }
 
-func (h *handler) processNextOutOfOrderPacket(ctx context.Context) (bool, bool) {
-	seq := h.peerSequenceAcked()
+func (h *handler) processNextOutOfOrderPacket(ctx context.Context, process func(ctx context.Context, pkt Packet) bool) (bool, bool) {
+	seq := h.peerSequenceToAck()
 	var prev *queueElement
 	for el := h.oooQueue; el != nil; el = el.next {
 		if el.sequence == seq {
@@ -773,7 +843,7 @@ func (h *handler) processNextOutOfOrderPacket(ctx context.Context) (bool, bool) 
 				h.oooQueue = el.next
 			}
 			dlog.Debugf(ctx, "   CON %s, Processing out-of-order packet %s", h.id, el.packet)
-			return h.processPacket(ctx, el.packet), true
+			return process(ctx, el.packet), true
 		}
 		prev = el
 	}

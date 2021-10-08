@@ -107,10 +107,14 @@ func (h *handler) adjustReceiveWindow() {
 
 // readFromMgrLoop sends the packets read from the fromMgr channel to the TUN device
 func (h *handler) readFromMgrLoop(ctx context.Context) {
+	h.wg.Add(1)
+	defer h.wg.Done()
 	fromMgrCh, fromMgrErrs := tunnel.ReadLoop(ctx, h.stream)
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-h.tunDone:
 			return
 		case err := <-fromMgrErrs:
 			if err != nil {
@@ -124,6 +128,8 @@ func (h *handler) readFromMgrLoop(ctx context.Context) {
 
 			select {
 			case <-ctx.Done():
+				return
+			case <-h.tunDone:
 				return
 			default:
 			}
@@ -229,11 +235,16 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 			if buf.Len() > 0 {
 				sendBuf()
 			}
+		case <-h.tunDone:
+			return
 		case pkt := <-h.toMgrCh:
+			if pkt == nil {
+				return
+			}
 			h.adjustReceiveWindow()
 			tcpHdr := pkt.Header()
 			payload := tcpHdr.Payload()
-			if tcpHdr.PSH() || buf.Len()+len(payload) > maxBufSize {
+			if tcpHdr.PSH() || buf.Len()+len(payload) >= maxBufSize {
 				if buf.Len() == 0 {
 					if mgrWrite(payload) { // save extra copying by bypassing buf.
 						return
