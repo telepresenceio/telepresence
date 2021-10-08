@@ -109,6 +109,10 @@ func (h Header) SetDataOffset(offset int) {
 	h[12] = (h[12] & 0x0f) | uint8(offset<<4)
 }
 
+func (h Header) NoFlags() bool {
+	return h[13] == 0 && !h.NS()
+}
+
 func (h Header) NS() bool {
 	return h[12]&0b00000001 != 0
 }

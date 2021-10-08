@@ -146,6 +146,9 @@ type handler struct {
 	// myWindow and is the actual size of my window
 	myWindow int64
 
+	// peerSeqToAck is the peer sequence that will be acked on next send
+	peerSeqToAck uint32
+
 	// peerSeqAcked was the last ack sent to the peer
 	peerSeqAcked uint32
 
@@ -256,7 +259,39 @@ func (h *handler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (h *handler) sendToTun(ctx context.Context, pkt Packet) {
+func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32) {
+	h.sendLock.Lock()
+	defer h.sendLock.Unlock()
+	ackNbr := h.peerSequenceToAck()
+	seq := h.sequence()
+	tcpHdr := pkt.Header()
+	if seqAdd > 0 {
+		sq := h.addSequence(seqAdd)
+		h.ackWaitQueue = &queueElement{
+			sequence: sq,
+			cTime:    time.Now(),
+			packet:   pkt,
+			next:     h.ackWaitQueue,
+		}
+		wz := int(h.peerWindow) - int(sq-h.seqAcked)
+		h.ackWaitQueueSize++
+		if h.ackWaitQueueSize%200 == 0 {
+			dlog.Tracef(ctx, "   CON %s, Ack-queue size %d, seq %d peer window size %d",
+				h.id, h.ackWaitQueueSize, h.ackWaitQueue.sequence, wz)
+		}
+	} else {
+		defer pkt.Release()
+		if ackNbr == h.peerSequenceAcked() && tcpHdr.NoFlags() {
+			// Redundant, skip it
+			return
+		}
+	}
+
+	tcpHdr.SetACK(true)
+	tcpHdr.SetSequence(seq)
+	tcpHdr.SetAckNumber(ackNbr)
+	tcpHdr.SetChecksum(pkt.IPHeader())
+	h.setPeerSequenceAcked(ackNbr)
 	if err := h.toTun.Write(ctx, pkt); err != nil {
 		dlog.Errorf(ctx, "!! TUN %s: %v", h.id, err)
 	}
@@ -277,28 +312,19 @@ func (h *handler) newResponse(ipPayloadLen int, withAck bool) Packet {
 }
 
 func (h *handler) sendAck(ctx context.Context) {
-	pkt := h.newResponse(HeaderLen, false)
-	tcpHdr := pkt.Header()
-	tcpHdr.SetACK(true)
-	tcpHdr.SetSequence(h.sequence())
-	tcpHdr.SetAckNumber(h.peerSequenceAcked())
-	tcpHdr.SetChecksum(pkt.IPHeader())
-	h.sendToTun(ctx, pkt)
+	h.sendToTun(ctx, h.newResponse(HeaderLen, false), 0)
 }
 
 func (h *handler) sendFin(ctx context.Context, expectAck bool) {
 	pkt := h.newResponse(HeaderLen, true)
 	tcpHdr := pkt.Header()
 	tcpHdr.SetFIN(true)
-	tcpHdr.SetACK(true)
-	tcpHdr.SetSequence(h.sequence())
-	tcpHdr.SetAckNumber(h.peerSequenceAcked())
-	tcpHdr.SetChecksum(pkt.IPHeader())
+	l := uint32(0)
 	if expectAck {
-		h.pushToAckWait(ctx, 1, pkt)
+		l = 1
 		h.finalSeq = h.sequence()
 	}
-	h.sendToTun(ctx, pkt)
+	h.sendToTun(ctx, pkt, l)
 }
 
 func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
@@ -306,19 +332,18 @@ func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
 	if !synHdr.SYN() {
 		return
 	}
-	h.sendSyn(ctx, synHdr.Sequence()+1, true)
+	h.setPeerSequenceToAck(synHdr.Sequence() + 1)
+	h.sendSyn(ctx)
 }
 
-func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
+func (h *handler) sendSyn(ctx context.Context) {
 	hl := HeaderLen
 	hl += 8 // for the Maximum Segment Size option and for the Window Scale option
 
 	pkt := h.newResponse(hl, true)
 	tcpHdr := pkt.Header()
 	tcpHdr.SetSYN(true)
-	tcpHdr.SetACK(ack)
-	tcpHdr.SetSequence(h.sequence())
-	tcpHdr.SetAckNumber(ackNumber)
+	tcpHdr.SetWindowSize(maxReceiveWindow >> myWindowScale) // The SYN packet itself is not subject to scaling
 
 	// adjust data offset to account for options
 	tcpHdr.SetDataOffset(hl / 4)
@@ -332,12 +357,7 @@ func (h *handler) sendSyn(ctx context.Context, ackNumber uint32, ack bool) {
 	opts[5] = 3
 	opts[6] = myWindowScale
 	opts[7] = byte(noOp)
-
-	tcpHdr.SetChecksum(pkt.IPHeader())
-
-	h.setPeerSequenceAcked(tcpHdr.AckNumber())
-	h.sendToTun(ctx, pkt)
-	h.pushToAckWait(ctx, 1, pkt)
+	h.sendToTun(ctx, pkt, 1)
 }
 
 func (h *handler) processPayload(ctx context.Context, data []byte) {
@@ -375,17 +395,10 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 		ipHdr.SetPayloadLen(HeaderLen + mxSend)
 		ipHdr.SetChecksum()
 
-		tcpHdr.SetACK(true)
-		tcpHdr.SetSequence(h.sequence())
-		tcpHdr.SetAckNumber(h.peerSequenceAcked())
-
 		end := start + mxSend
 		copy(tcpHdr.Payload(), data[start:end])
 		tcpHdr.SetPSH(end == n)
-		tcpHdr.SetChecksum(ipHdr)
-
-		h.sendToTun(ctx, pkt)
-		h.pushToAckWait(ctx, uint32(mxSend), pkt)
+		h.sendToTun(ctx, pkt, uint32(mxSend))
 
 		// Decrease the window size with the bytes that we just sent unless it's already updated
 		// from a received packet
@@ -401,14 +414,20 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		return quitByUs
 	}
 	if !tcpHdr.SYN() {
-		h.sendToTun(ctx, syn.Reset())
+		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
+			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
+		}
+		syn.Release()
 		return quitByUs
 	}
 
 	synOpts, err := options(tcpHdr)
 	if err != nil {
 		dlog.Error(ctx, err)
-		h.sendToTun(ctx, syn.Reset())
+		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
+			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
+		}
+		syn.Release()
 		return quitByUs
 	}
 	for _, synOpt := range synOpts {
@@ -466,7 +485,7 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 		return pleaseContinue
 	}
 
-	h.ackReceived(ctx, tcpHdr.AckNumber())
+	h.onAckReceived(ctx, tcpHdr.AckNumber())
 	h.setState(ctx, stateEstablished)
 	go h.writeToMgrLoop(ctx)
 
@@ -475,7 +494,7 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 		h.lastKnown = tcpHdr.Sequence() + uint32(pl)
 		release = false
 		if h.sendToMgr(ctx, pkt) {
-			h.setPeerSequenceAcked(h.lastKnown)
+			h.setPeerSequenceToAck(h.lastKnown)
 			h.sendAck(ctx)
 		} else {
 			h.packetsLost++
@@ -505,7 +524,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	}
 
 	ackNbr := tcpHdr.AckNumber()
-	h.ackReceived(ctx, ackNbr)
+	h.onAckReceived(ctx, ackNbr)
 	if state == stateTimedWait {
 		h.setState(ctx, stateIdle)
 		return quitByPeer
@@ -560,15 +579,15 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	switch {
 	case payloadLen > 0:
+		h.lastKnown = tcpHdr.Sequence() + uint32(payloadLen)
 		release = false
-		if h.sendToMgr(ctx, pkt) {
-			h.setPeerSequenceAcked(h.lastKnown)
-		} else {
+		if !h.sendToMgr(ctx, pkt) {
 			h.packetsLost++
 			return pleaseContinue
 		}
+		h.setPeerSequenceToAck(h.lastKnown)
 	case tcpHdr.FIN():
-		h.setPeerSequenceAcked(lastAck + 1)
+		h.setPeerSequenceToAck(lastAck + 1)
 	default:
 		// don't ack an ack
 		return pleaseContinue
@@ -654,6 +673,19 @@ type resend struct {
 	next   *resend
 }
 
+func (h *handler) copyPacket(orig Packet) Packet {
+	origHdr := orig.Header()
+	ipLen := HeaderLen + orig.PayloadLen()
+	pkt := h.newResponse(ipLen, true)
+	ipHdr := pkt.IPHeader()
+	tcpHdr := pkt.Header()
+	ipHdr.SetPayloadLen(ipLen)
+	ipHdr.SetChecksum()
+	copy(tcpHdr.Payload(), origHdr.Payload())
+	tcpHdr.SetPSH(origHdr.PSH())
+	return pkt
+}
+
 func (h *handler) processResends(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -673,6 +705,7 @@ func (h *handler) processResends(ctx context.Context) {
 			if deadLine.Before(now) {
 				el.retries++
 				if el.retries > maxResends {
+					el.packet.Release()
 					dlog.Errorf(ctx, "   CON %s, packet resent %d times, giving up", h.id, maxResends)
 					// Drop from queue and point to next
 					el = el.next
@@ -692,29 +725,17 @@ func (h *handler) processResends(ctx context.Context) {
 		}
 		h.sendLock.Unlock()
 		for resends != nil {
-			dlog.Debugf(ctx, "   CON %s, Resending %s after having waited for %d seconds", h.id, resends.packet, resends.secs)
-			h.sendToTun(ctx, resends.packet)
+			pkt := h.copyPacket(resends.packet)
+			dlog.Debugf(ctx, "   CON %s resent after %d seconds", pkt, resends.secs)
+			h.sendToTun(ctx, pkt, uint32(len(pkt.Header().Payload())))
 			resends = resends.next
 		}
 	}
 }
 
-func (h *handler) pushToAckWait(ctx context.Context, seqAdd uint32, pkt Packet) {
+func (h *handler) onAckReceived(ctx context.Context, seq uint32) {
 	h.sendLock.Lock()
-	h.ackWaitQueue = &queueElement{
-		sequence: h.addSequence(seqAdd),
-		cTime:    time.Now(),
-		packet:   pkt,
-		next:     h.ackWaitQueue,
-	}
-	h.ackWaitQueueSize++
-	dlog.Tracef(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
-	h.sendLock.Unlock()
-}
-
-func (h *handler) ackReceived(ctx context.Context, seq uint32) {
-	h.sendLock.Lock()
-	// ack-queue is guaranteed to be sorted descending on sequence so we cut from the packet with
+	// ack-queue is guaranteed to be sorted descending on sequence, so we cut from the packet with
 	// a sequence less than or equal to the received sequence.
 	sq := h.sequence()
 	oldWindow := int(h.peerWindow) - int(sq-h.seqAcked)
@@ -741,7 +762,6 @@ func (h *handler) ackReceived(ctx context.Context, seq uint32) {
 				break
 			}
 		}
-		dlog.Tracef(ctx, "   CON %s, Ack-queue size %d", h.id, h.ackWaitQueueSize)
 	}
 	h.sendLock.Unlock()
 	if oldWindow <= 0 && newWindow > 0 {
@@ -769,12 +789,26 @@ func (h *handler) processNextOutOfOrderPacket(ctx context.Context) (bool, bool) 
 }
 
 func (h *handler) addOutOfOrderPacket(ctx context.Context, pkt Packet) {
-	dlog.Debugf(ctx, "   CON %s, Keeping out-of-order packet %s", h.id, pkt)
-	h.oooQueue = &queueElement{
-		sequence: pkt.Header().Sequence(),
+	hdr := pkt.Header()
+	sq := hdr.Sequence()
+
+	var prev *queueElement
+	for el := h.oooQueue; el != nil; el = el.next {
+		if el.sequence == sq {
+			return
+		}
+		prev = el
+	}
+	dlog.Debugf(ctx, "   CON %s, out-of-order", pkt)
+	el := &queueElement{
+		sequence: sq,
 		cTime:    time.Now(),
 		packet:   pkt,
-		next:     h.oooQueue,
+	}
+	if prev == nil {
+		h.oooQueue = el
+	} else {
+		prev.next = el
 	}
 }
 
@@ -806,6 +840,15 @@ func (h *handler) addSequence(v uint32) uint32 {
 
 func (h *handler) setSequence(v uint32) {
 	atomic.StoreUint32(&h.seq, v)
+}
+
+// peerSequenceToAck is the received sequence that this will ack on next send
+func (h *handler) peerSequenceToAck() uint32 {
+	return atomic.LoadUint32(&h.peerSeqToAck)
+}
+
+func (h *handler) setPeerSequenceToAck(v uint32) {
+	atomic.StoreUint32(&h.peerSeqToAck, v)
 }
 
 // peerSequenceAcked was the last ack sent to the peer

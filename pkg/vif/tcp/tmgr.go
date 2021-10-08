@@ -21,7 +21,7 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 		h.setState(ctx, stateSynSent)
 		h.setSequence(uint32(h.RandomSequence()))
 		h.setReceiveWindow(maxReceiveWindow)
-		h.sendSyn(ctx, 0, false)
+		h.sendSyn(ctx)
 	case connpool.ConnectOK:
 		synPacket := h.synPacket
 		h.synPacket = nil
