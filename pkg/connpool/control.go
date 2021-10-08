@@ -142,11 +142,11 @@ func SyncResponseControl(request Control) Control {
 
 func VersionControl() Control {
 	payload := make([]byte, 2)
-	binary.BigEndian.PutUint16(payload, tunnelVersion)
+	binary.BigEndian.PutUint16(payload, tunnel.Version)
 	return &control{id: tunnel.NewZeroID(), code: version, payload: payload}
 }
 
-// version returns the tunnel version that this Control represents or zero if
+// version returns the muxTunnel version that this Control represents or zero if
 // this isn't a version Control.
 func (c *control) version() uint16 {
 	if c.code == version {

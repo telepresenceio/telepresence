@@ -6,6 +6,8 @@ import (
 	"io"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
@@ -151,6 +153,14 @@ func (p *mgrProxy) ClientTunnel(fhDaemon managerrpc.Manager_ClientTunnelServer) 
 
 func (p *mgrProxy) AgentTunnel(server managerrpc.Manager_AgentTunnelServer) error {
 	return errors.New("must call manager.AgentTunnel from an agent (intercepted Pod), not from a client (workstation)")
+}
+
+func (m *mgrProxy) Tunnel(_ managerrpc.Manager_TunnelServer) error {
+	return status.Error(codes.Unimplemented, "Tunnel not yet implemented")
+}
+
+func (m *mgrProxy) WatchDial(_ *managerrpc.SessionInfo, stream managerrpc.Manager_WatchDialServer) error {
+	return status.Error(codes.Unimplemented, "WatchDial not yet implemented")
 }
 
 func (p *mgrProxy) LookupHost(ctx context.Context, arg *managerrpc.LookupHostRequest) (*managerrpc.LookupHostResponse, error) {

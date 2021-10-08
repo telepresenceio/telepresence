@@ -545,6 +545,14 @@ func readTunnelSessionID(ctx context.Context, server connpool.MuxTunnel) (*rpc.S
 	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
+func (m *Manager) Tunnel(_ rpc.Manager_TunnelServer) error {
+	return status.Error(codes.Unimplemented, "Tunnel not yet implemented")
+}
+
+func (m *Manager) WatchDial(_ *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
+	return status.Error(codes.Unimplemented, "WatchDial not yet implemented")
+}
+
 func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
