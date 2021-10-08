@@ -28,14 +28,16 @@ import (
 )
 
 func Main() error {
-	gitDescBytes, err := exec.Command("git", "describe", "--tags", "--match=v*").Output()
+	cmd := exec.Command("git", "describe", "--tags", "--match=v*")
+	cmd.Stderr = os.Stderr
+	gitDescBytes, err := cmd.Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to git describe: %w", err)
 	}
 	gitDescStr := strings.TrimSuffix(strings.TrimPrefix(string(gitDescBytes), "v"), "\n")
 	gitDescVer, err := semver.Parse(gitDescStr)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to parse semver %s: %w", gitDescStr, err)
 	}
 	gitDescVer.Patch++
 
@@ -44,18 +46,20 @@ func Main() error {
 		// gitDescVer.Pre[0] contains the number of commits since the last tag and the
 		// shortHash with a 'g' appended.  Since the first section isn't relevant,
 		// we get the shortHash this way since we don't need that extra information.
-		shortHash, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+		cmd = exec.Command("git", "rev-parse", "--short", "HEAD")
+		cmd.Stderr = os.Stderr
+		shortHash, err := cmd.Output()
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to git rev-parse: %w", err)
 		}
 		if _, err := fmt.Printf("v%d.%d.%d-%s-%s\n", gitDescVer.Major, gitDescVer.Minor, gitDescVer.Patch, os.Args[1], shortHash); err != nil {
-			return err
+			return fmt.Errorf("unable to printf: %w", err)
 		}
 		return nil
 	}
 
 	if _, err := fmt.Printf("v%s-%d\n", gitDescVer, time.Now().Unix()); err != nil {
-		return err
+		return fmt.Errorf("unable to printf: %w", err)
 	}
 
 	return nil
