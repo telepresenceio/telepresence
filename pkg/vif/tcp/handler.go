@@ -590,11 +590,13 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	case sq == lastAck-1 && payloadLen == 0:
 		// keep alive
 		h.sendAck(ctx)
-		if h.muxTunnel != nil {
-			_ = h.sendConnControl(ctx, connpool.KeepAlive)
-		} else {
-			h.sendStreamControl(ctx, tunnel.KeepAlive)
-		}
+		go func() {
+			if h.muxTunnel != nil {
+				_ = h.sendConnControl(ctx, connpool.KeepAlive)
+			} else {
+				h.sendStreamControl(ctx, tunnel.KeepAlive)
+			}
+		}()
 		return pleaseContinue
 	default:
 		// resend of already acknowledged packet. Just ignore
