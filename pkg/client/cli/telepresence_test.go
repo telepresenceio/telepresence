@@ -242,8 +242,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require := ts.Require()
 		ctx := testContext(t)
 
-		logDir := t.TempDir()
-		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
+		logDir, err := filelocation.AppUserLogDir(ctx)
+		require.NoError(err)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
 		_, stderr = telepresenceContext(ctx, "quit")
@@ -294,9 +294,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx := testContext(t)
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
 		os.Setenv("KUBECONFIG", kubeconfigFileName)
-		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
-
 		logDir, err := filelocation.AppUserLogDir(ctx)
+		require.NoError(err)
 		logFile := filepath.Join(logDir, "daemon.log")
 		require.NoError(err)
 
