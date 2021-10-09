@@ -155,8 +155,8 @@ func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots
 	defer cancel() // Drop the gRPC connection if we leave this function
 	for {
 		snapshot, err := stream.Recv()
-		if err != nil {
-			dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
+		if err != nil && !errors.Is(err, io.EOF) {
+			dlog.Errorf(ctx, "stream Recv: %+v", err)
 			return
 		}
 		snapshots <- snapshot
@@ -168,7 +168,7 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 		lr, err := lookupHostStream.Recv()
 		if err != nil {
 			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-				dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
+				dlog.Debugf(ctx, "lookup request stream recv: %+v", err)
 			}
 			return
 		}
@@ -224,8 +224,8 @@ func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLe
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
 		if err != nil {
-			if ctx.Err() == nil {
-				dlog.Debugf(ctx, "log-level stream recv: %+v", err) // May be io.EOF
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Debugf(ctx, "log-level stream recv: %+v", err)
 			}
 			return
 		}
