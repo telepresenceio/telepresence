@@ -88,6 +88,7 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 	copy(udpHdr.Payload(), payload)
 	udpHdr.SetChecksum(ipHdr)
 
+	defer pkt.Release()
 	if err := toTun.Write(ctx, pkt); err != nil {
 		dlog.Errorf(ctx, "!! TUN %s: %v", id, err)
 	}
@@ -109,7 +110,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			return
 		case dg := <-h.fromTun:
 			if !h.resetIdle() {
-				dg.SoftRelease()
+				dg.Release()
 				return
 			}
 			dlog.Debugf(ctx, "<- TUN %s", dg)
@@ -121,7 +122,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			} else {
 				err = h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
 			}
-			dg.SoftRelease()
+			dg.Release()
 			if err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "failed to send ConnMessage: %v", err)

@@ -43,10 +43,6 @@ func (p *datagram) SetDataAndIPHeader(data *buffer.Data, ipHdr ip.Header) {
 	p.data = data
 }
 
-func (p *datagram) SoftRelease() {
-	p.Release()
-}
-
 func (p *datagram) Release() {
 	buffer.DataPool.Put(p.data)
 }

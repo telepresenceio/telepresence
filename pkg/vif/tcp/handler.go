@@ -444,6 +444,7 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 	tcpHdr := syn.Header()
 	if tcpHdr.RST() {
 		dlog.Errorf(ctx, "   CON %s, got RST while idle", h.id)
+		syn.Release()
 		return quitByReset
 	}
 	if !tcpHdr.SYN() {

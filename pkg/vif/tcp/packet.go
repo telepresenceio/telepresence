@@ -46,12 +46,6 @@ func (p *packet) SetDataAndIPHeader(data *buffer.Data, ipHdr ip.Header) {
 	p.data = data
 }
 
-func (p *packet) SoftRelease() {
-	if !p.withAck {
-		p.Release()
-	}
-}
-
 func (p *packet) Release() {
 	buffer.DataPool.Put(p.data)
 }

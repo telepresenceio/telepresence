@@ -103,7 +103,7 @@ func (h *dnsInterceptor) tunToConn(ctx context.Context, wg *sync.WaitGroup) {
 				}
 				n += wn
 			}
-			dg.SoftRelease()
+			dg.Release()
 			if !h.resetIdle() {
 				return
 			}

@@ -12,7 +12,6 @@ import (
 type Packet interface {
 	IPHeader() Header
 	Data() *buffer.Data
-	SoftRelease()
 	Release()
 	SetDataAndIPHeader(*buffer.Data, Header)
 }
