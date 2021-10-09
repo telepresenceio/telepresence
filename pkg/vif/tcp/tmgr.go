@@ -117,10 +117,7 @@ func (h *handler) readFromMgrLoop(ctx context.Context) {
 		case <-h.tunDone:
 			return
 		case err := <-fromMgrErrs:
-			if err != nil {
-				dlog.Error(ctx, err)
-			}
-			return
+			dlog.Error(ctx, err)
 		case m := <-fromMgrCh:
 			if m == nil {
 				return

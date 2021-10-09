@@ -230,10 +230,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 			endReason = "it was idle for too long"
 			return
 		case err := <-errCh:
-			if err != nil {
-				dlog.Error(ctx, err)
-			}
-			return
+			dlog.Error(ctx, err)
 		case dg := <-incoming:
 			if dg == nil {
 				// h.incoming was closed by the reader and is now drained.

@@ -51,11 +51,11 @@ func doPipe(ctx context.Context, a, b Stream, wg *sync.WaitGroup) {
 		case <-ctx.Done():
 			return
 		case err := <-errCh:
-			if err != nil {
-				dlog.Error(ctx, err)
-			}
-			return
+			dlog.Error(ctx, err)
 		case m := <-rdCh:
+			if m == nil {
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
