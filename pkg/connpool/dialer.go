@@ -84,7 +84,7 @@ func HandlerFromConn(connID tunnel.ConnID, muxTunnel MuxTunnel, release func(), 
 	}
 }
 
-func (h *dialer) Start(ctx context.Context) error {
+func (h *dialer) Start(ctx context.Context) {
 	// Set up the idle timer to close and release this handler when it's been idle for a while.
 	h.idleTimer = time.NewTimer(h.getTTL())
 
@@ -102,7 +102,6 @@ func (h *dialer) Start(ctx context.Context) error {
 
 	// Start writeLoop so that initial control packets can be handled
 	go h.writeLoop(ctx)
-	return nil
 }
 
 func (h *dialer) getTTL() time.Duration {

@@ -860,8 +860,7 @@ func (cf *muxTunnelForward) HandleMessage(ctx context.Context, msg connpool.Mess
 	}
 }
 
-func (cf *muxTunnelForward) Start(_ context.Context) error {
-	return nil
+func (cf *muxTunnelForward) Start(_ context.Context) {
 }
 
 func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, muxTunnel connpool.MuxTunnel) error {

@@ -94,10 +94,9 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 	}
 }
 
-func (h *handler) Start(ctx context.Context) error {
+func (h *handler) Start(ctx context.Context) {
 	h.idleTimer = time.NewTimer(idleDuration)
 	go h.writeLoop(ctx)
-	return nil
 }
 
 func (h *handler) writeLoop(ctx context.Context) {

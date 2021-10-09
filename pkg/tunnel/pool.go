@@ -17,7 +17,7 @@ type Handler interface {
 	// Close closes the handle
 	Close(context.Context)
 
-	Start(ctx context.Context) error
+	Start(ctx context.Context)
 }
 
 func NewPool() *Pool {
@@ -78,10 +78,7 @@ func (p *Pool) GetOrCreate(ctx context.Context, id ConnID, createHandler Handler
 		// Toss newly created handler. It's not started anyway.
 		return old, true, nil
 	}
-	if err = handler.Start(handlerCtx); err != nil {
-		release()
-		return nil, false, err
-	}
+	handler.Start(handlerCtx)
 	dlog.Debugf(ctx, "++ POOL %s, count now is %d", id, count)
 	return handler, false, nil
 }

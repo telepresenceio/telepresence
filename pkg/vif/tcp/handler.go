@@ -249,7 +249,7 @@ func (h *handler) Close(ctx context.Context) {
 	}
 }
 
-func (h *handler) Start(ctx context.Context) error {
+func (h *handler) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	go h.processResends(ctx)
 	go func() {
@@ -280,7 +280,6 @@ func (h *handler) Start(ctx context.Context) error {
 		h.readyToFin = make(chan interface{})
 		go h.readFromMgrMux(ctx) // Needs to start here to handle initial control packets
 	}
-	return nil
 }
 
 func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32) {

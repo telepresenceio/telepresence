@@ -50,7 +50,7 @@ func (h *dnsInterceptor) HandleDatagram(ctx context.Context, dg Datagram) {
 	}
 }
 
-func (h *dnsInterceptor) Start(ctx context.Context) error {
+func (h *dnsInterceptor) Start(ctx context.Context) {
 	h.idleTimer = time.NewTimer(idleDuration)
 	go func() {
 		defer h.Close(ctx)
@@ -60,7 +60,6 @@ func (h *dnsInterceptor) Start(ctx context.Context) error {
 		go h.tunToConn(ctx, &wg)
 		wg.Wait()
 	}()
-	return nil
 }
 
 func (h *dnsInterceptor) connToTun(ctx context.Context, wg *sync.WaitGroup) {
