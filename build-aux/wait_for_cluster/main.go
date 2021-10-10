@@ -26,7 +26,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("Unable to build clientset: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	return client.Retry(ctx, "connect", func(ctx context.Context) error {
 		fmt.Println("Trying to connect to cluster...")
