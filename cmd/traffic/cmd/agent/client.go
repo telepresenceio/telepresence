@@ -155,8 +155,10 @@ func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots
 	defer cancel() // Drop the gRPC connection if we leave this function
 	for {
 		snapshot, err := stream.Recv()
-		if err != nil && !errors.Is(err, io.EOF) {
-			dlog.Errorf(ctx, "stream Recv: %+v", err)
+		if err != nil {
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Errorf(ctx, "stream Recv: %+v", err)
+			}
 			return
 		}
 		snapshots <- snapshot
