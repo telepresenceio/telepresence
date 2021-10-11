@@ -282,7 +282,7 @@ func (h *handler) Start(ctx context.Context) {
 	}
 }
 
-func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32) {
+func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32, forceAck bool) {
 	h.sendLock.Lock()
 	defer h.sendLock.Unlock()
 	ackNbr := h.peerSequenceToAck()
@@ -304,7 +304,7 @@ func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32) {
 		}
 	} else {
 		defer pkt.Release()
-		if ackNbr == h.peerSequenceAcked() && tcpHdr.NoFlags() {
+		if !forceAck && ackNbr == h.peerSequenceAcked() && tcpHdr.NoFlags() {
 			// Redundant, skip it
 			return
 		}
@@ -335,7 +335,11 @@ func (h *handler) newResponse(ipPayloadLen int, withAck bool) Packet {
 }
 
 func (h *handler) sendAck(ctx context.Context) {
-	h.sendToTun(ctx, h.newResponse(HeaderLen, false), 0)
+	h.sendToTun(ctx, h.newResponse(HeaderLen, false), 0, false)
+}
+
+func (h *handler) forceSendAck(ctx context.Context) {
+	h.sendToTun(ctx, h.newResponse(HeaderLen, false), 0, true)
 }
 
 func (h *handler) sendFin(ctx context.Context, expectAck bool) {
@@ -347,7 +351,7 @@ func (h *handler) sendFin(ctx context.Context, expectAck bool) {
 		l = 1
 		h.finalSeq = h.sequence()
 	}
-	h.sendToTun(ctx, pkt, l)
+	h.sendToTun(ctx, pkt, l, true)
 }
 
 func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
@@ -380,7 +384,7 @@ func (h *handler) sendSyn(ctx context.Context) {
 	opts[5] = 3
 	opts[6] = myWindowScale
 	opts[7] = byte(noOp)
-	h.sendToTun(ctx, pkt, 1)
+	h.sendToTun(ctx, pkt, 1, true)
 }
 
 func (h *handler) processPayload(ctx context.Context, data []byte) {
@@ -430,7 +434,7 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 		end := start + mxSend
 		copy(tcpHdr.Payload(), data[start:end])
 		tcpHdr.SetPSH(end == n)
-		h.sendToTun(ctx, pkt, uint32(mxSend))
+		h.sendToTun(ctx, pkt, uint32(mxSend), false)
 
 		// Decrease the window size with the bytes that we just sent unless it's already updated
 		// from a received packet
@@ -588,8 +592,8 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 		release = false
 		return pleaseContinue
 	case sq == lastAck-1 && payloadLen == 0:
-		// keep alive
-		h.sendAck(ctx)
+		// keep alive, force is needed because the ackNbr is unchanged
+		h.forceSendAck(ctx)
 		go func() {
 			if h.muxTunnel != nil {
 				_ = h.sendConnControl(ctx, connpool.KeepAlive)
@@ -791,7 +795,7 @@ func (h *handler) processResends(ctx context.Context) {
 		for resends != nil {
 			pkt := h.copyPacket(resends.packet)
 			dlog.Debugf(ctx, "   CON %s resent after %d seconds", pkt, resends.secs)
-			h.sendToTun(ctx, pkt, uint32(len(pkt.Header().Payload())))
+			h.sendToTun(ctx, pkt, uint32(len(pkt.Header().Payload())), false)
 			resends = resends.next
 		}
 	}

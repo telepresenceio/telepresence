@@ -397,17 +397,15 @@ func (s *State) ExpireSessions(ctx context.Context, moment time.Time) {
 
 // SessionDone returns a channel that is closed when the session with the given ID terminates.  If
 // there is no such currently-live session, then an already-closed channel is returned.
-func (s *State) SessionDone(id string) <-chan struct{} {
+func (s *State) SessionDone(id string) (<-chan struct{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sess, ok := s.sessions[id]
 	if !ok {
-		ret := make(chan struct{})
-		close(ret)
-		return ret
+		return nil, status.Errorf(codes.NotFound, "session %q not found", id)
 	}
-	return sess.Done()
+	return sess.Done(), nil
 }
 
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////

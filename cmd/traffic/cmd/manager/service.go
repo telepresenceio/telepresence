@@ -182,6 +182,10 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	dlog.Debug(ctx, "WatchAgents called")
 
 	snapshotCh := m.state.WatchAgents(ctx, nil)
+	sessionDone, err := m.state.SessionDone(session.GetSessionId())
+	if err != nil {
+		return err
+	}
 	for {
 		select {
 		case snapshot, ok := <-snapshotCh:
@@ -200,7 +204,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
-		case <-m.state.SessionDone(session.GetSessionId()):
+		case <-sessionDone:
 			// Manager believes this session has ended.
 			dlog.Debug(ctx, "WatchAgents session cancelled")
 			return nil
@@ -257,7 +261,10 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		defer close(ch)
 		sessionDone = ch
 	} else {
-		sessionDone = m.state.SessionDone(sessionID)
+		var err error
+		if sessionDone, err = m.state.SessionDone(sessionID); err != nil {
+			return err
+		}
 	}
 
 	snapshotCh := m.state.WatchIntercepts(ctx, filter)
