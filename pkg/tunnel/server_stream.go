@@ -12,7 +12,7 @@ func NewServerStream(ctx context.Context, grpcStream GRPCStream) (Stream, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read initial StreamInfo message: %w", err)
 	}
-	if m.Code() != StreamInfo {
+	if m.Code() != streamInfo {
 		return nil, errors.New("initial message was not StreamInfo")
 	}
 	if err = setConnectInfo(m, s); err != nil {

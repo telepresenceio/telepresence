@@ -14,22 +14,24 @@ type MessageCode byte
 
 const (
 	Normal = MessageCode(iota)
-	StreamInfo
-	StreamOK
+	streamInfo
+	streamOK
+	closeSend
 	DialOK
 	DialReject
 	Disconnect
 	KeepAlive
 	Session
-	closeSend
 )
 
 func (c MessageCode) String() string {
 	switch c {
-	case StreamInfo:
+	case streamInfo:
 		return "STREAM_INFO"
-	case StreamOK:
+	case streamOK:
 		return "STREAM_OK"
+	case closeSend:
+		return "CLOSE_SEND"
 	case DialOK:
 		return "DIAL_OK"
 	case DialReject:
@@ -40,8 +42,6 @@ func (c MessageCode) String() string {
 		return "KEEP_ALIVE"
 	case Session:
 		return "SESSION"
-	case closeSend:
-		return "CLOSE_SEND"
 	default:
 		return fmt.Sprintf("** unknown control code: %d **", c)
 	}
@@ -86,7 +86,7 @@ func NewMessage(code MessageCode, payload []byte) Message {
 
 func StreamInfoMessage(id ConnID, sessionID string, callDelay, dialTimeout time.Duration) Message {
 	b := bytes.Buffer{}
-	b.WriteByte(byte(StreamInfo))
+	b.WriteByte(byte(streamInfo))
 
 	buf := make([]byte, 8)
 	n := binary.PutUvarint(buf, uint64(Version))
@@ -111,7 +111,7 @@ func StreamInfoMessage(id ConnID, sessionID string, callDelay, dialTimeout time.
 }
 
 func StreamOKMessage() Message {
-	m := makeMessage(StreamOK, 4)
+	m := makeMessage(streamOK, 4)
 	n := binary.PutUvarint(m.Payload(), uint64(Version))
 	return m[:n+1]
 }

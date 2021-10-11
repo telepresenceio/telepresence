@@ -28,7 +28,7 @@ func NewClientStream(ctx context.Context, grpcStream GRPClientCStream, id ConnID
 		_ = s.CloseSend(ctx)
 		return nil, fmt.Errorf("failed to read initial StreamOK message: %w", err)
 	}
-	if m.Code() != StreamOK {
+	if m.Code() != streamOK {
 		_ = s.CloseSend(ctx)
 		return nil, errors.New("initial message was not StreamOK")
 	}
