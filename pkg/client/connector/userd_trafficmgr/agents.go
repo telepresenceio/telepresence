@@ -63,10 +63,8 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 		for err == nil && ctx.Err() == nil {
 			snapshot, err := stream.Recv()
 			if err != nil {
-				if ctx.Err() == nil {
-					if !errors.Is(err, io.EOF) {
-						dlog.Errorf(ctx, "manager.WatchAgents recv: %v", err)
-					}
+				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+					dlog.Errorf(ctx, "manager.WatchAgents recv: %v", err)
 				}
 				tm.setCurrentAgents(nil)
 				break
