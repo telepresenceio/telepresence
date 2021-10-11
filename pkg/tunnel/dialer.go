@@ -186,7 +186,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 				endReason = "the connection was closed"
 				endLevel = dlog.LogLevelDebug
 			default:
-				endReason = fmt.Sprintf("a read error occured: %v", err)
+				endReason = fmt.Sprintf("a read error occurred: %v", err)
 			}
 			h.startDisconnect(ctx)
 			return
@@ -252,7 +252,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 				wn, err := h.conn.Write(payload[n:])
 				if err != nil {
 					h.startDisconnect(ctx)
-					endReason = fmt.Sprintf("a write error occured: %v", err)
+					endReason = fmt.Sprintf("a write error occurred: %v", err)
 					return
 				}
 				dlog.Tracef(ctx, "-> CONN %s, len %d", id, wn)
