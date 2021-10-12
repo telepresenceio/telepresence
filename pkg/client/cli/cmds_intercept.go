@@ -696,8 +696,8 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 
 	tpMounts := is.env[tpMountsEnv]
 	for _, path := range strings.Split(tpMounts, ":") {
-		mountPointEscaped := strings.Replace(is.mountPoint, `"`, `""`, -1)
-		destination := strings.Replace(path, `"`, `""`, -1)
+		mountPointEscaped := strings.ReplaceAll(is.mountPoint, `"`, `""`)
+		destination := strings.ReplaceAll(path, `"`, `""`)
 
 		// paths are absolute and begin with a /
 		// e.g.:
