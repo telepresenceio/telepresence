@@ -305,7 +305,7 @@ func TestStream_Xfer(t *testing.T) {
 			}
 		}()
 		go func() {
-			wg.Done()
+			defer wg.Done()
 			var a, b Stream
 			for a == nil || b == nil {
 				select {
