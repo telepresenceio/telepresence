@@ -3,11 +3,14 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/blang/semver"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -55,14 +58,19 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 
-	dlog.Infof(ctx, "Connected to Manager %s", ver.Version)
+	verStr := strings.TrimPrefix(ver.Version, "v")
+	dlog.Infof(ctx, "Connected to Manager %s", verStr)
+	mgrVer, err := semver.Parse(verStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
+	}
 
 	session, err := manager.ArriveAsAgent(ctx, info)
 	if err != nil {
 		return err
 	}
 
-	state.SetManager(session, manager)
+	state.SetManager(session, manager, mgrVer)
 
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'

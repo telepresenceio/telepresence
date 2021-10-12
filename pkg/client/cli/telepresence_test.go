@@ -78,7 +78,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	if !isCi {
 		suffix = strconv.Itoa(os.Getpid())
 	}
-	ts.testVersion = fmt.Sprintf("v2.0.0-gotest.%s", suffix)
+	ts.testVersion = fmt.Sprintf("v2.4.5-gotest.%s", suffix)
 	ts.namespace = fmt.Sprintf("telepresence-%s", suffix)
 	ts.managerTestNamespace = fmt.Sprintf("ambassador-%s", suffix)
 

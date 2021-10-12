@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blang/semver"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
@@ -30,8 +32,9 @@ type Forwarder struct {
 	manager     manager.ManagerClient
 	sessionInfo *manager.SessionInfo
 
-	intercept *manager.InterceptInfo
-	muxTunnel connpool.MuxTunnel
+	intercept  *manager.InterceptInfo
+	muxTunnel  connpool.MuxTunnel
+	mgrVersion semver.Version
 }
 
 func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort int32) *Forwarder {
@@ -42,12 +45,13 @@ func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort int32) *For
 	}
 }
 
-func (f *Forwarder) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient) {
+func (f *Forwarder) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sessionInfo = sessionInfo
 	f.manager = manager
 	f.muxTunnel = nil // any existing tunnel is lost when a reconnect happens
+	f.mgrVersion = version
 }
 
 func (f *Forwarder) Serve(ctx context.Context) error {
@@ -259,13 +263,18 @@ func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manag
 		err = fmt.Errorf("failed to send client sessionID: %s", err)
 		return nil, err
 	}
-	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
-		err = fmt.Errorf("failed to send agent tunnel version: %s", err)
-		return nil, err
-	}
-	peerVersion, err := muxTunnel.ReadPeerVersion(ctx)
-	if err != nil {
-		return nil, err
+	var peerVersion uint16
+	if f.mgrVersion.LE(semver.MustParse("2.4.2")) {
+		peerVersion = 0
+	} else {
+		if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
+			err = fmt.Errorf("failed to send agent tunnel version: %s", err)
+			return nil, err
+		}
+		peerVersion, err = muxTunnel.ReadPeerVersion(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if peerVersion >= 2 {
 		// Versions >= 2 no longer use the multiplexing tunnel. Instead, each connection gets its own tunnel.Stream

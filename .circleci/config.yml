@@ -195,7 +195,7 @@ jobs:
       - run:
           name: Build dev image
           command: |
-            TAG="2.0.0-gotest.$CIRCLE_SHA1"
+            TAG="2.4.5-gotest.$CIRCLE_SHA1"
             TELEPRESENCE_VERSION="v${TAG}" make image
             mkdir -p /tmp/workspace
             docker save "datawire/tel2:${TAG}" > /tmp/workspace/tel2-image.tar

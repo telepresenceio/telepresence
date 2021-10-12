@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/blang/semver"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
@@ -11,7 +13,7 @@ import (
 
 type State interface {
 	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
-	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient)
+	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 }
 
 // State of the Traffic Agent.
@@ -39,8 +41,8 @@ func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP stri
 	}
 }
 
-func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient) {
-	s.forwarder.SetManager(sessionInfo, manager)
+func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+	s.forwarder.SetManager(sessionInfo, manager, version)
 }
 
 func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {

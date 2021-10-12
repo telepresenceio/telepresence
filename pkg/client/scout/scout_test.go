@@ -319,7 +319,7 @@ func TestInstallID(t *testing.T) {
 
 func TestReport(t *testing.T) {
 	const (
-		mockVersion     = "v2.0.0-test"
+		mockVersion     = "v2.4.5-test"
 		mockApplication = "telepresence2"
 		mockInstallID   = "00000000-1111-2222-3333-444444444444"
 		mockMode        = "test-mode"

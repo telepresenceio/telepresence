@@ -7,11 +7,14 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/blang/semver"
 	"golang.org/x/net/ipv4"
 	"google.golang.org/grpc"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -313,6 +316,16 @@ func (t *tunRouter) run(c context.Context) error {
 			return nil
 		case <-t.cfgComplete:
 		}
+		ver, err := t.managerClient.Version(c, &empty.Empty{})
+		if err != nil {
+			return err
+		}
+		verStr := strings.TrimPrefix(ver.Version, "v")
+		dlog.Infof(c, "Connected to Manager %s", verStr)
+		mgrVer, err := semver.Parse(verStr)
+		if err != nil {
+			return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
+		}
 
 		clientTunnel, err := t.managerClient.ClientTunnel(c)
 		if err != nil {
@@ -322,12 +335,15 @@ func (t *tunRouter) run(c context.Context) error {
 		if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
 			return err
 		}
-		if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
-			return err
-		}
-		peerVersion, err := muxTunnel.ReadPeerVersion(c)
-		if err != nil {
-			return err
+
+		var peerVersion uint16
+		if mgrVer.LE(semver.MustParse("2.4.2")) {
+			peerVersion = 0
+		} else {
+			peerVersion, err = muxTunnel.ReadPeerVersion(c)
+			if err != nil {
+				return err
+			}
 		}
 		// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
 		if peerVersion < 2 {

@@ -62,7 +62,6 @@ type muxTunnel struct {
 	syncRatio   uint32 // send and check sync after each syncRatio message
 	ackWindow   uint32 // maximum permitted difference between sent and received ack
 	peerVersion uint32
-	pushBack    Message
 }
 
 func NewMuxTunnel(stream BidiStream) MuxTunnel {
@@ -81,17 +80,10 @@ func (s *muxTunnel) ReadPeerVersion(ctx context.Context) (uint16, error) {
 		dlog.Debugf(ctx, "setting tunnel's peer version to %d", peerVersion)
 		return peerVersion, nil
 	}
-	s.pushBack = msg
-	return 0, nil
+	return 0, fmt.Errorf("first message was not peer version")
 }
 
 func (s *muxTunnel) Receive(ctx context.Context) (msg Message, err error) {
-	if s.pushBack != nil {
-		msg = s.pushBack
-		s.pushBack = nil
-		return msg, nil
-	}
-
 	for err = ctx.Err(); err == nil; err = ctx.Err() {
 		var cm *rpc.ConnMessage
 		if cm, err = s.stream.Recv(); err != nil {
