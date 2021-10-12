@@ -105,8 +105,8 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 	})
 }
 
-func upgradeExisting(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Infof(ctx, "Existing Traffic Manager found, upgrading to %s...", client.Version())
+func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
+	dlog.Infof(ctx, "Existing Traffic Manager %s found, upgrading to %s...", existingVer, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
@@ -175,15 +175,16 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 		client.InvalidateCache()
 		return nil
 	}
+	ver := releaseVer(existing)
 	if shouldManageRelease(ctx, existing) && shouldUpgradeRelease(ctx, existing) {
-		err = upgradeExisting(ctx, chrt, helmConfig, namespace)
+		err = upgradeExisting(ctx, ver, chrt, helmConfig, namespace)
 		if err != nil {
 			return err
 		}
 		client.InvalidateCache()
 		return nil
 	}
-	dlog.Info(ctx, "Existing Traffic Manager not owned by cli or does not need upgrade, will not modify")
+	dlog.Infof(ctx, "Existing Traffic Manager %s not owned by cli or does not need upgrade, will not modify", ver)
 	return nil
 }
 
