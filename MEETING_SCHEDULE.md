@@ -1,13 +1,13 @@
 # Community Meeting Schedule
 
-## Office Hours
+## Meet the Maintainers
 
-We hold Ambassador Developer Office Hours once a week typically on Thursdays. Every four to six weeks we dedicate one session to meeting the maintainers of Telepresence.  These sessions are a way to connect in person to share updates and listen to feedback from the community. 
+Every four to six weeks we dedicate one session to meeting the maintainers of Telepresence.  These sessions are a way to connect in person to share updates and listen to feedback from the community. 
 
-For the latest Ambassador Developer Office Hours information, [visit the website](https://www.getambassador.io/about-us/events/oss-contributors-meetings/).
+For the latest information, [visit the website](https://www.getambassador.io/about-us/events/meet-the-maintainers/).
 
 
-**Zoom Meeting Link**: https://us02web.zoom.us/j/81261393224?pwd=TTJaTGhvL1BrczhRdE01SEVLTkx5QT09
+**Zoom Meeting Link**: https://us02web.zoom.us/j/81261393224
 
 **Recordings**: http://bit.ly/AmbassadorOfficeHoursRecordings
 
