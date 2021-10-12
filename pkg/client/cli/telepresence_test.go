@@ -581,7 +581,7 @@ func (cs *connectedSuite) TestD_GetClusterID() {
 	defer cancel()
 	trafficManagerSvc := fmt.Sprintf("traffic-manager.%s:8081", cs.tpSuite.managerTestNamespace)
 	conn, err := grpc.DialContext(c, trafficManagerSvc, grpc.WithInsecure(), grpc.WithBlock())
-	cs.NoError(err, fmt.Sprintf("error connecting to %s: %s", trafficManagerSvc, err))
+	cs.Require().NoError(err, fmt.Sprintf("error connecting to %s: %s", trafficManagerSvc, err))
 	defer conn.Close()
 
 	mgr := manager.NewManagerClient(conn)
