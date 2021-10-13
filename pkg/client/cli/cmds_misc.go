@@ -94,7 +94,7 @@ func quitCommand() *cobra.Command {
 
 		Short: "Tell telepresence daemon to quit",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return quit(cmd.Context())
+			return cliutil.QuitDaemon(cmd.Context())
 		},
 	}
 }
