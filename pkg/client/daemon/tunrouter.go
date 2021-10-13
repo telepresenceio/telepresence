@@ -483,7 +483,7 @@ func (t *tunRouter) handlePacket(c context.Context, data *buffer.Data) {
 		dlog.Tracef(c, "<- TUN %s", pkt)
 	default:
 		// An L4 protocol that we don't handle.
-		dlog.Debugf(c, "Unhandled protocol %d", ipHdr.L4Protocol())
+		dlog.Tracef(c, "Unhandled protocol %d", ipHdr.L4Protocol())
 		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.ProtocolUnreachable))
 	}
 }
