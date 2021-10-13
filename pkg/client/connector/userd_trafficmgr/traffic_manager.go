@@ -46,6 +46,10 @@ type trafficManager struct {
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
 
+	// Latest retrieved cloudAPIKey
+	cloudAPIKey     string
+	cloudAPIKeyLock sync.Mutex
+
 	// manager client
 	managerClient manager.ManagerClient
 	managerErr    error         // if managerClient is nil, why it's nil
@@ -198,6 +202,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
+	g.Go("refresh-cloud-APIKey", tm.refreshCloudAPIKey)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
@@ -379,17 +384,37 @@ func (tm *trafficManager) remain(c context.Context) error {
 			_, _ = tm.managerClient.Depart(dcontext.WithoutCancel(c), tm.session())
 			return nil
 		case <-ticker.C:
+			tm.cloudAPIKeyLock.Lock()
+			apiKey := tm.cloudAPIKey
+			tm.cloudAPIKeyLock.Unlock()
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session: tm.session(),
-				ApiKey: func() string {
-					// Discard any errors; including an apikey with this request
-					// is optional.  We might not even be logged in.
-					tok, _ := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false)
-					return tok
-				}(),
+				ApiKey:  apiKey,
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)
+			}
+		}
+	}
+}
+
+func (tm *trafficManager) refreshCloudAPIKey(c context.Context) error {
+	<-tm.startup
+	ticker := time.NewTicker(30 * time.Second)
+	defer func() {
+		ticker.Stop()
+	}()
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case <-ticker.C:
+			// Discard any errors; including an apikey with this request
+			// is optional.  We might not even be logged in.
+			if apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false); err == nil {
+				tm.cloudAPIKeyLock.Lock()
+				tm.cloudAPIKey = apiKey
+				tm.cloudAPIKeyLock.Unlock()
 			}
 		}
 	}

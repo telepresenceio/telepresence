@@ -120,8 +120,20 @@ func DidLaunchDaemon(ctx context.Context) bool {
 	return launched
 }
 
-func QuitDaemon(ctx context.Context) error {
-	err := WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+// QuitDaemon shuts down the root daemon. When it shuts down, it will tell the connector to shut down.
+func QuitDaemon(ctx context.Context) (err error) {
+	defer func() {
+		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
+		// shut down the connector, then this is a no-op.
+		if cerr := QuitConnector(ctx); !(cerr == nil || errors.Is(err, ErrNoConnector)) {
+			if err == nil {
+				err = cerr
+			} else {
+				fmt.Fprintf(os.Stderr, "Error when quitting connector: %v\n", cerr)
+			}
+		}
+	}()
+	err = WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 		fmt.Print("Telepresence Root Daemon quitting...")
 		_, err := daemonClient.Quit(ctx, &empty.Empty{})
 		return err
