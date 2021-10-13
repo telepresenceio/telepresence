@@ -30,8 +30,11 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 
 	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), o.router.dev)
 	if err == errResolveDNotConfigured {
-		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
+		err = nil
+		if c.Err() == nil {
+			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
+			err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
+		}
 	}
 	return err
 }
