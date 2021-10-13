@@ -113,6 +113,10 @@ type tunRouter struct {
 	// the traffic manager and the managerClient has been connected.
 	cfgComplete chan struct{}
 
+	// tmVerOk will be closed as soon as the correct tunnel version has been negotiated with
+	// the traffic manager
+	tmVerOk chan struct{}
+
 	// rndSource is the source for the random number generator in the TCP handlers
 	rndSource rand.Source
 }
@@ -126,13 +130,14 @@ func newTunRouter(ctx context.Context) (*tunRouter, error) {
 		dev:         td,
 		handlers:    tunnel.NewPool(),
 		cfgComplete: make(chan struct{}),
+		tmVerOk:     make(chan struct{}),
 		fragmentMap: make(map[uint16][]*buffer.Data),
 		rndSource:   rand.NewSource(time.Now().UnixNano()),
 	}, nil
 }
 
 func (t *tunRouter) configured() <-chan struct{} {
-	return t.cfgComplete
+	return t.tmVerOk
 }
 
 func (t *tunRouter) configureDNS(_ context.Context, dnsLocalAddr *net.UDPAddr) {
@@ -340,6 +345,9 @@ func (t *tunRouter) run(c context.Context) error {
 		if mgrVer.LE(semver.MustParse("2.4.2")) {
 			peerVersion = 0
 		} else {
+			if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
+				return err
+			}
 			peerVersion, err = muxTunnel.ReadPeerVersion(c)
 			if err != nil {
 				return err
@@ -348,6 +356,7 @@ func (t *tunRouter) run(c context.Context) error {
 		// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
 		if peerVersion < 2 {
 			t.muxTunnel = muxTunnel
+			close(t.tmVerOk)
 			dlog.Debug(c, "MGR read loop starting")
 			err = t.muxTunnel.DialLoop(c, t.handlers)
 			var recvErr *client.RecvEOF
@@ -355,6 +364,7 @@ func (t *tunRouter) run(c context.Context) error {
 				<-c.Done()
 			}
 		} else {
+			close(t.tmVerOk)
 			dlog.Debug(c, "closing since a more recent system detected")
 			err = muxTunnel.CloseSend()
 		}
@@ -366,7 +376,7 @@ func (t *tunRouter) run(c context.Context) error {
 		select {
 		case <-c.Done():
 			return nil
-		case <-t.cfgComplete:
+		case <-t.tmVerOk:
 		}
 
 		dlog.Debug(c, "TUN read loop starting")
@@ -558,7 +568,7 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 
 func (t *tunRouter) maybeOpenStream(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 	if t.muxTunnel != nil {
-		// tunnelVersion < 2, so use the multiplexing tunnel
+		// tunnelVersion <= 2, so use the multiplexing tunnel
 		return nil, nil
 	}
 	return t.streamCreator(id)(c)
