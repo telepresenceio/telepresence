@@ -558,7 +558,7 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 
 func (t *tunRouter) maybeOpenStream(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 	if t.muxTunnel != nil {
-		// tunnelVersion <= 2, so use the multiplexing tunnel
+		// tunnelVersion < 2, so use the multiplexing tunnel
 		return nil, nil
 	}
 	return t.streamCreator(id)(c)

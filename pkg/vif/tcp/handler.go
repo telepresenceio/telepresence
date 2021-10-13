@@ -394,11 +394,9 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 		h.sendLock.Lock()
 		window := int(h.peerWindow) - int(h.sequence()-h.seqAcked)
 		for window <= 0 {
-			if window <= 0 {
-				// The intended receiver is currently not accepting data. We must
-				// wait for the window to increase.
-				dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
-			}
+			// The intended receiver is currently not accepting data. We must
+			// wait for the window to increase.
+			dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
 			h.sendCondition.Wait()
 			if h.state() != stateEstablished {
 				h.sendLock.Unlock()
