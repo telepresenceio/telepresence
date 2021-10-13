@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -169,7 +170,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 	dlog.Debug(ctx, "Depart called")
 
-	m.state.RemoveSession(session.GetSessionId())
+	m.state.RemoveSession(ctx, session.GetSessionId())
 
 	return &empty.Empty{}, nil
 }
@@ -181,11 +182,16 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	dlog.Debug(ctx, "WatchAgents called")
 
 	snapshotCh := m.state.WatchAgents(ctx, nil)
+	sessionDone, err := m.state.SessionDone(session.GetSessionId())
+	if err != nil {
+		return err
+	}
 	for {
 		select {
 		case snapshot, ok := <-snapshotCh:
 			if !ok {
 				// The request has been canceled.
+				dlog.Debug(ctx, "WatchAgents request cancelled")
 				return nil
 			}
 			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
@@ -198,8 +204,9 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
-		case <-m.state.SessionDone(session.GetSessionId()):
+		case <-sessionDone:
 			// Manager believes this session has ended.
+			dlog.Debug(ctx, "WatchAgents session cancelled")
 			return nil
 		}
 	}
@@ -254,7 +261,10 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		defer close(ch)
 		sessionDone = ch
 	} else {
-		sessionDone = m.state.SessionDone(sessionID)
+		var err error
+		if sessionDone, err = m.state.SessionDone(sessionID); err != nil {
+			return err
+		}
 	}
 
 	snapshotCh := m.state.WatchIntercepts(ctx, filter)
@@ -500,35 +510,43 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
 	ctx := server.Context()
-	tunnel := connpool.NewTunnel(server)
-	sessionInfo, err := readTunnelSessionID(ctx, tunnel)
+	muxTunnel := connpool.NewMuxTunnel(server)
+	sessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	if err = tunnel.Send(ctx, connpool.VersionControl()); err != nil {
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to read client tunnel version: %v", err)
+	}
+	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
 	}
-	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), tunnel)
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), muxTunnel)
 }
 
 func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
 	ctx := server.Context()
-	tunnel := connpool.NewTunnel(server)
-	agentSessionInfo, err := readTunnelSessionID(ctx, tunnel)
+	muxTunnel := connpool.NewMuxTunnel(server)
+	agentSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	clientSessionInfo, err := readTunnelSessionID(ctx, tunnel)
+	clientSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	if err = tunnel.Send(ctx, connpool.VersionControl()); err != nil {
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to read agent tunnel version: %v", err)
+	}
+	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
 	}
-	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, tunnel)
+	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, muxTunnel)
 }
 
-func readTunnelSessionID(ctx context.Context, server connpool.Tunnel) (*rpc.SessionInfo, error) {
+func readTunnelSessionID(ctx context.Context, server connpool.MuxTunnel) (*rpc.SessionInfo, error) {
 	// Initial message must be the session info that this bidi stream should be attached to
 	msg, err := server.Receive(ctx)
 	if err != nil {
@@ -543,36 +561,70 @@ func readTunnelSessionID(ctx context.Context, server connpool.Tunnel) (*rpc.Sess
 	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
+func (m *Manager) Tunnel(server rpc.Manager_TunnelServer) error {
+	ctx := server.Context()
+	stream, err := tunnel.NewServerStream(ctx, server)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
+	}
+	return m.state.Tunnel(ctx, stream)
+}
+
+func (m *Manager) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	dlog.Debugf(ctx, "WatchDial called")
+	lrCh := m.state.WatchDial(session.SessionId)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return nil
+		case lr := <-lrCh:
+			if lr == nil {
+				return nil
+			}
+			if err := stream.Send(lr); err != nil {
+				dlog.Errorf(ctx, "WatchDial.Send() failed: %v", err)
+				return nil
+			}
+		}
+	}
+}
+
 func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
 	sessionID := request.GetSession().GetSessionId()
-	response := &rpc.LookupHostResponse{}
-	ips, err := m.state.AgentsLookup(ctx, sessionID, request)
+
+	ips, count, err := m.state.AgentsLookup(ctx, sessionID, request)
 	if err != nil {
-		return nil, err
-	}
-	if len(ips) > 0 {
-		dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
-		response.Ips = ips.BytesSlice()
-		return response, nil
+		dlog.Errorf(ctx, "AgentLookup: %v", err)
+	} else if count > 0 {
+		if len(ips) == 0 {
+			dlog.Debugf(ctx, "LookupHost on agents: %s -> NOT FOUND", request.Host)
+		} else {
+			dlog.Debugf(ctx, "LookupHost on agents: %s -> %s", request.Host, ips)
+		}
 	}
 
-	// Either we aren't intercepting any agents, or none of them was able to find the given host. Let's
-	// try from the manager too.
-	addrs, err := net.LookupHost(request.Host)
-	if err != nil {
-		response.Ips = [][]byte{}
-		dlog.Debugf(ctx, "LookupHost response %s -> NOT FOUND", request.Host)
-		return response, nil
+	if count == 0 {
+		if addrs, err := net.DefaultResolver.LookupHost(ctx, request.Host); err != nil {
+			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+				dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> NOT FOUND", request.Host)
+			} else {
+				dlog.Errorf(ctx, "LookupHost on traffic-manager LookupHost: %v", err)
+			}
+		} else {
+			ips = make(iputil.IPs, len(addrs))
+			for i, addr := range addrs {
+				ips[i] = iputil.Parse(addr)
+			}
+			dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> %s", request.Host, ips)
+		}
 	}
-	ips = make(iputil.IPs, len(addrs))
-	for i, addr := range addrs {
-		ips[i] = iputil.Parse(addr)
+	if ips == nil {
+		ips = iputil.IPs{}
 	}
-	dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
-	response.Ips = ips.BytesSlice()
-	return response, nil
+	return &rpc.LookupHostResponse{Ips: ips.BytesSlice()}, nil
 }
 
 func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.LookupHostAgentResponse) (*empty.Empty, error) {
@@ -728,6 +780,6 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 }
 
 // expire removes stale sessions.
-func (m *Manager) expire() {
-	m.state.ExpireSessions(m.clock.Now().Add(-15 * time.Second))
+func (m *Manager) expire(ctx context.Context) {
+	m.state.ExpireSessions(ctx, m.clock.Now().Add(-15*time.Second))
 }

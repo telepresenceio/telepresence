@@ -43,22 +43,27 @@ func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
 }
 
 func releaseNeedsCleanup(ctx context.Context, rel *release.Release) bool {
-	dlog.Debugf(ctx, "Traffic Manager release was found to be in status %s", rel.Info.Status)
+	dlog.Debugf(ctx, "Traffic Manager release %s was found to be in status %s", releaseVer(rel), rel.Info.Status)
 	return rel.Info.Status != release.StatusDeployed
 }
 
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
-	chartVersion, err := semver.Parse(strings.TrimPrefix(rel.Chart.Metadata.Version, "v"))
+	ver := releaseVer(rel)
+	chartVersion, err := semver.Parse(ver)
 	if err != nil {
-		dlog.Errorf(ctx, "Could not parse version %s for chart: %v", rel.Chart.Metadata.Version, err)
+		dlog.Errorf(ctx, "Could not parse version %s for chart: %v", ver, err)
 		return false
 	}
 	cliVersion := client.Semver()
 	if chartVersion.GT(cliVersion) {
-		dlog.Warnf(ctx, "You are using Telepresence v%s, but Traffic Manager v%s is installed on the cluster.", cliVersion, chartVersion)
+		dlog.Warnf(ctx, "You are using Telepresence %s, but Traffic Manager %s is installed on the cluster.", cliVersion, ver)
 		return false
 	}
 	// At this point we could also do chartVersion != cliVersion, since chartVersion <= cliVersion
 	// But this makes it really clear that we're only doing the upgrade if chartVersion < cliVersion
 	return chartVersion.LT(cliVersion)
+}
+
+func releaseVer(rel *release.Release) string {
+	return strings.TrimPrefix(rel.Chart.Metadata.Version, "v")
 }

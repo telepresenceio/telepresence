@@ -77,6 +77,20 @@ func (tm *AgentMap) LoadAll() map[string]*manager.AgentInfo {
 	return ret
 }
 
+// LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
+// function returns true. The map is locked during the evaluation of the filter.
+func (tm *AgentMap) LoadAllMatching(filter func(string, *manager.AgentInfo) bool) map[string]*manager.AgentInfo {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	ret := make(map[string]*manager.AgentInfo)
+	for k, v := range tm.value {
+        if filter(k, v) {
+    		ret[k] = proto.Clone(v).(*manager.AgentInfo)
+        }
+	}
+	return ret
+}
+
 // Load returns a deepcopy of the value for a specific key.
 func (tm *AgentMap) Load(key string) (value *manager.AgentInfo, ok bool) {
 	tm.lock.RLock()

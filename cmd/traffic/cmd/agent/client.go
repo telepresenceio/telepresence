@@ -2,10 +2,15 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/blang/semver"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -15,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
@@ -52,14 +58,19 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 
-	dlog.Infof(ctx, "Connected to Manager %s", ver.Version)
+	verStr := strings.TrimPrefix(ver.Version, "v")
+	dlog.Infof(ctx, "Connected to Manager %s", verStr)
+	mgrVer, err := semver.Parse(verStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
+	}
 
 	session, err := manager.ArriveAsAgent(ctx, info)
 	if err != nil {
 		return err
 	}
 
-	state.SetManager(session, manager)
+	state.SetManager(session, manager, mgrVer)
 
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'
@@ -99,6 +110,13 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 	go lookupHostWaitLoop(ctx, manager, session, lrStream)
+
+	// Deal with dial requests from the manager
+	dialerStream, err := manager.WatchDial(ctx, session)
+	if err != nil {
+		return err
+	}
+	go tunnel.DialWaitLoop(ctx, manager, dialerStream, session.SessionId)
 
 	// Deal with log-level changes
 	logLevelStream, err := manager.WatchLogLevel(ctx, &empty.Empty{})
@@ -146,7 +164,9 @@ func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots
 	for {
 		snapshot, err := stream.Recv()
 		if err != nil {
-			dlog.Errorf(ctx, "stream Recv: %+v", err) // May be io.EOF
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Errorf(ctx, "stream Recv: %+v", err)
+			}
 			return
 		}
 		snapshots <- snapshot
@@ -157,32 +177,44 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 	for ctx.Err() == nil {
 		lr, err := lookupHostStream.Recv()
 		if err != nil {
-			if ctx.Err() == nil {
-				dlog.Debugf(ctx, "lookup request stream recv: %+v", err) // May be io.EOF
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Debugf(ctx, "lookup request stream recv: %+v", err)
 			}
 			return
 		}
-		dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
-		addrs, err := net.LookupHost(lr.Host)
-		r := rpc.LookupHostResponse{}
-		if err == nil {
-			ips := make(iputil.IPs, len(addrs))
-			for i, addr := range addrs {
-				ips[i] = iputil.Parse(addr)
-			}
-			dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
-			r.Ips = ips.BytesSlice()
+		go lookupAndRespond(ctx, manager, session, lr)
+	}
+}
+
+func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
+	dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
+	response := rpc.LookupHostAgentResponse{
+		Session:  session,
+		Request:  lr,
+		Response: &rpc.LookupHostResponse{},
+	}
+
+	addrs, err := net.DefaultResolver.LookupHost(ctx, lr.Host)
+	switch {
+	case err != nil:
+		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+			dlog.Debugf(ctx, "Lookup response for %s -> NOT FOUND", lr.Host)
+		} else {
+			dlog.Errorf(ctx, "LookupHost: %v", err)
 		}
-		response := rpc.LookupHostAgentResponse{
-			Session:  session,
-			Request:  lr,
-			Response: &r,
+	case len(addrs) > 0:
+		ips := make(iputil.IPs, len(addrs))
+		for i, addr := range addrs {
+			ips[i] = iputil.Parse(addr)
 		}
-		if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
-			if ctx.Err() == nil {
-				dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
-			}
-			return
+		dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
+		response.Response.Ips = ips.BytesSlice()
+	default:
+		dlog.Debugf(ctx, "Lookup response for %s -> EMPTY", lr.Host)
+	}
+	if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
+		if ctx.Err() == nil {
+			dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
 		}
 	}
 }
@@ -202,8 +234,8 @@ func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLe
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
 		if err != nil {
-			if ctx.Err() == nil {
-				dlog.Debugf(ctx, "log-level stream recv: %+v", err) // May be io.EOF
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Debugf(ctx, "log-level stream recv: %+v", err)
 			}
 			return
 		}

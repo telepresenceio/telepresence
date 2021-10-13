@@ -13,10 +13,10 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
-	"github.com/telepresenceio/telepresence/v2/pkg/tun"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (o *outbound) tryResolveD(c context.Context, dev *tun.Device) error {
+func (o *outbound) tryResolveD(c context.Context, dev *vif.Device) error {
 	// Connect to ResolveD via DBUS.
 	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")

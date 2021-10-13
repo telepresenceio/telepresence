@@ -286,7 +286,7 @@ func runNatTableCmd(c context.Context, args ...string) error {
 const tpDNSChain = "telepresence-dns"
 
 // routeDNS creates a new chain in the "nat" table with two rules in it. One rule ensures
-// that all packages sent to the currently configured DNS service are rerouted to our local
+// that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
 func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr) (err error) {
@@ -295,7 +295,7 @@ func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr
 	if err = runNatTableCmd(c, "-N", tpDNSChain); err != nil {
 		return err
 	}
-	// Alter locally generated packages before routing
+	// Alter locally generated packets before routing
 	if err = runNatTableCmd(c, "-I", "OUTPUT", "1", "-j", tpDNSChain); err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr
 		return err
 	}
 
-	// This rule redirects all packages intended for the DNS service to our local DNS service
+	// This rule redirects all packets intended for the DNS service to our local DNS service
 	return runNatTableCmd(c, "-A", tpDNSChain,
 		"-p", "udp",
 		"--dest", dnsIP.String()+"/32",

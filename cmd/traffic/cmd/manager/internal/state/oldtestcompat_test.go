@@ -7,13 +7,8 @@ import (
 )
 
 func (s *State) IsPresent(sessionID string) bool {
-	select {
-	case <-s.SessionDone(sessionID):
-		// SessionDone returns an already-closed channel if the session doesn't exist.
-		return false
-	default:
-		return true
-	}
+	_, err := s.SessionDone(sessionID)
+	return err == nil
 }
 
 func (s *State) HasClient(sessionID string) bool {

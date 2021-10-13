@@ -103,6 +103,14 @@ message InterceptSpec {
 
   // extra ports that will be forwarded to the intercepting client
   repeated int32 extra_ports = 15;
+
+  // The delay imposed by a call roundtrip between the traffic-agent and
+  // the client on the workstation. This delay is added to the dial_timeout
+  // when the workstation performs a dial on behalf of the traffic-agent.
+  int64 roundtrip_latency = 16;
+
+  // The dial timeout to use when a dial is made on the intercepting workstation.
+  int64 dial_timeout = 17;
 }
 
 enum InterceptDispositionType {
@@ -322,10 +330,22 @@ message AmbassadorCloudConnection {
 }
 
 // ConnMessage is a payload intended for a connection with a given id.
+// Deprecated. Telepresence now uses connection specific Tunnels and TunnelMessages
 message ConnMessage {
   // conn_id is composed of L4 protocol, source IP, source port, destination IP and destination port
   bytes conn_id = 1;
   bytes payload = 5;
+}
+
+// TunnelMessage is a message sent over a Tunnel. First byte indicates type of message
+message TunnelMessage {
+  bytes payload = 1;
+}
+
+message DialRequest {
+  bytes conn_id = 1;
+  int64 roundtrip_latency = 2;
+  int64 dial_timeout = 3;
 }
 
 // LookupHost request sent from a client
@@ -475,4 +495,22 @@ service Manager {
 
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);
+
+  // A Tunnel represents one single connection where the client or
+  // traffic-agent represents one end (the client-side) and the
+  // traffic-manager represents the other (the server side). The first
+  // message that a client sends when the tunnel is established is will
+  // always contain the session ID, connection ID, and timeouts used by
+  // the dialer endpoints.
+  rpc Tunnel(stream TunnelMessage) returns (stream TunnelMessage);
+
+  // WatchDial makes it possible for the client side to receive
+  // DialRequests from the traffic-manager. Requests are sent when an
+  // intercepted traffic-agent creates a Tunnel that needs to be extended
+  // to the Telepresence client on the workstation, or the other way around,
+  // when that client creates a tunnel that needs to be extended to an
+  // intercepted traffic agent. The receiver of the request dials a
+  // connection and responds with a Tunnel. The manager then connects the
+  // two tunnels.
+  rpc WatchDial(SessionInfo) returns (stream DialRequest);
 }

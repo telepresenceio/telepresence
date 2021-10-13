@@ -78,7 +78,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	if !isCi {
 		suffix = strconv.Itoa(os.Getpid())
 	}
-	ts.testVersion = fmt.Sprintf("v2.0.0-gotest.%s", suffix)
+	ts.testVersion = fmt.Sprintf("v2.4.5-gotest.%s", suffix)
 	ts.namespace = fmt.Sprintf("telepresence-%s", suffix)
 	ts.managerTestNamespace = fmt.Sprintf("ambassador-%s", suffix)
 
@@ -242,8 +242,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require := ts.Require()
 		ctx := testContext(t)
 
-		logDir := t.TempDir()
-		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
+		logDir, err := filelocation.AppUserLogDir(ctx)
+		require.NoError(err)
 		_, stderr := telepresenceContext(ctx, "connect")
 		require.Empty(stderr)
 		_, stderr = telepresenceContext(ctx, "quit")
@@ -294,9 +294,8 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		ctx := testContext(t)
 		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
 		os.Setenv("KUBECONFIG", kubeconfigFileName)
-		ctx = filelocation.WithAppUserLogDir(ctx, tmpDir)
-
 		logDir, err := filelocation.AppUserLogDir(ctx)
+		require.NoError(err)
 		logFile := filepath.Join(logDir, "daemon.log")
 		require.NoError(err)
 
@@ -582,7 +581,7 @@ func (cs *connectedSuite) TestD_GetClusterID() {
 	defer cancel()
 	trafficManagerSvc := fmt.Sprintf("traffic-manager.%s:8081", cs.tpSuite.managerTestNamespace)
 	conn, err := grpc.DialContext(c, trafficManagerSvc, grpc.WithInsecure(), grpc.WithBlock())
-	cs.NoError(err, fmt.Sprintf("error connecting to %s: %s", trafficManagerSvc, err))
+	cs.Require().NoError(err, fmt.Sprintf("error connecting to %s: %s", trafficManagerSvc, err))
 	defer conn.Close()
 
 	mgr := manager.NewManagerClient(conn)

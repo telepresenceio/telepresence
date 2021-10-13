@@ -106,7 +106,7 @@ func (is *installSuite) SetupSuite() {
 	if !isCI {
 		suffix = strconv.Itoa(os.Getpid())
 	}
-	is.testVersion = fmt.Sprintf("v2.0.0-gotest.%s", suffix)
+	is.testVersion = fmt.Sprintf("v2.4.5-gotest.%s", suffix)
 	is.namespace = fmt.Sprintf("telepresence-%s", suffix)
 	is.managerNamespace = fmt.Sprintf("ambassador-%s", suffix)
 

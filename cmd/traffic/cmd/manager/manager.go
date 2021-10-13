@@ -102,7 +102,7 @@ func (m *Manager) runInterceptGCLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			m.expire()
+			m.expire(ctx)
 		case <-ctx.Done():
 			return nil
 		}

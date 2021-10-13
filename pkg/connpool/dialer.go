@@ -10,6 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
@@ -31,10 +32,11 @@ const (
 )
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections
+// Deprecated
 type dialer struct {
-	id        ConnID
+	id        tunnel.ConnID
 	release   func()
-	tunnel    Tunnel
+	muxTunnel MuxTunnel
 	incoming  chan Message
 	conn      net.Conn
 	idleTimer *time.Timer
@@ -48,14 +50,15 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the connpool.Pool to ensure that it gets properly released.
-func NewDialer(connID ConnID, tunnel Tunnel, release func()) Handler {
+// Deprecated
+func NewDialer(connID tunnel.ConnID, muxTunnel MuxTunnel, release func()) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
 	}
 	return &dialer{
 		id:        connID,
-		tunnel:    tunnel,
+		muxTunnel: muxTunnel,
 		release:   release,
 		incoming:  make(chan Message, handlerBufferSize),
 		connected: notConnected,
@@ -64,14 +67,15 @@ func NewDialer(connID ConnID, tunnel Tunnel, release func()) Handler {
 }
 
 // HandlerFromConn is like NewHandler but initializes the handler with an already existing connection.
-func HandlerFromConn(connID ConnID, tunnel Tunnel, release func(), conn net.Conn) Handler {
+// Deprecated
+func HandlerFromConn(connID tunnel.ConnID, muxTunnel MuxTunnel, release func(), conn net.Conn) Handler {
 	ttl := tcpConnTTL
 	if connID.Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
 	}
 	return &dialer{
 		id:        connID,
-		tunnel:    tunnel,
+		muxTunnel: muxTunnel,
 		release:   release,
 		incoming:  make(chan Message, handlerBufferSize),
 		connected: halfConnected,
@@ -96,7 +100,7 @@ func (h *dialer) Start(ctx context.Context) {
 		h.sendTCD(ctx, Connect)
 	}
 
-	// Start writeLoop so that initial control packages can be handled
+	// Start writeLoop so that initial control packets can be handled
 	go h.writeLoop(ctx)
 }
 
@@ -143,7 +147,7 @@ func (h *dialer) handleControl(ctx context.Context, cm Control) {
 	}
 }
 
-// HandleMessage sends a package to the underlying TCP/UDP connection
+// HandleMessage sends a packet to the underlying TCP/UDP connection
 func (h *dialer) HandleMessage(ctx context.Context, dg Message) {
 	select {
 	case <-ctx.Done():
@@ -168,8 +172,7 @@ func (h *dialer) drop() {
 
 func (h *dialer) sendTCD(ctx context.Context, code ControlCode) {
 	ctrl := NewControl(h.id, code, nil)
-	dlog.Debugf(ctx, "-> GRPC %s", ctrl)
-	err := h.tunnel.Send(ctx, ctrl)
+	err := h.muxTunnel.Send(ctx, ctrl)
 	if err != nil {
 		dlog.Errorf(ctx, "failed to send control message: %v", err)
 	}
@@ -223,7 +226,7 @@ func (h *dialer) readLoop(ctx context.Context) {
 		}
 		if n > 0 {
 			dlog.Debugf(ctx, "<- CONN %s, len %d", h.id, n)
-			err = h.tunnel.Send(ctx, NewMessage(h.id, b[:n]))
+			err = h.muxTunnel.Send(ctx, NewMessage(h.id, b[:n]))
 			if err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "!! GRPC %s, send: %v", h.id, err)
@@ -265,7 +268,6 @@ func (h *dialer) writeLoop(ctx context.Context) {
 			}
 			payload := dg.Payload()
 			pn := len(payload)
-			dlog.Debugf(ctx, "<- GRPC %s, len %d", h.id, pn)
 			for n := 0; n < pn; {
 				wn, err := h.conn.Write(payload[n:])
 				if err != nil {
@@ -273,7 +275,7 @@ func (h *dialer) writeLoop(ctx context.Context) {
 					dlog.Errorf(ctx, "!! CONN %s, write: %v", h.id, err)
 					return
 				}
-				dlog.Debugf(ctx, "-> CONN %s, len %d", h.id, wn)
+				dlog.Tracef(ctx, "-> CONN %s, len %d", h.id, wn)
 				n += wn
 			}
 		}

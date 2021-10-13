@@ -2,7 +2,9 @@ package userd_trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -59,23 +61,24 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 			err = fmt.Errorf("manager.WatchAgents dial: %w", err)
 		}
 		for err == nil && ctx.Err() == nil {
-			if snapshot, err := stream.Recv(); err != nil {
-				if ctx.Err() == nil {
+			snapshot, err := stream.Recv()
+			if err != nil {
+				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
 					dlog.Errorf(ctx, "manager.WatchAgents recv: %v", err)
-					break
 				}
-			} else {
-				tm.setCurrentAgents(snapshot.Agents)
+				tm.setCurrentAgents(nil)
+				break
+			}
+			tm.setCurrentAgents(snapshot.Agents)
 
-				// Notify waiters for agents
-				for _, agent := range snapshot.Agents {
-					fullName := agent.Name + "." + agent.Namespace
-					if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
-						if ch, ok := chUt.(chan *manager.AgentInfo); ok {
-							dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
-							ch <- agent
-							close(ch)
-						}
+			// Notify waiters for agents
+			for _, agent := range snapshot.Agents {
+				fullName := agent.Name + "." + agent.Namespace
+				if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
+					if ch, ok := chUt.(chan *manager.AgentInfo); ok {
+						dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
+						ch <- agent
+						close(ch)
 					}
 				}
 			}

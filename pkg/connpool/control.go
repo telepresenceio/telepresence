@@ -6,8 +6,11 @@ import (
 	"fmt"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+// ControlCode designates the type of a Control message
+// Deprecated
 type ControlCode byte
 
 const (
@@ -56,6 +59,8 @@ func (c ControlCode) String() string {
 	}
 }
 
+// Control is a special message that contains tunnel control information
+// Deprecated
 type Control interface {
 	Message
 	Code() ControlCode
@@ -64,9 +69,11 @@ type Control interface {
 	version() uint16
 }
 
+// control implements Control
+// Deprecated
 type control struct {
 	code    ControlCode
-	id      ConnID
+	id      tunnel.ConnID
 	payload []byte
 }
 
@@ -74,7 +81,7 @@ func (c *control) Code() ControlCode {
 	return c.code
 }
 
-func (c *control) ID() ConnID {
+func (c *control) ID() tunnel.ConnID {
 	return c.id
 }
 
@@ -115,7 +122,7 @@ func (c *control) TunnelMessage() *manager.ConnMessage {
 	return &manager.ConnMessage{ConnId: []byte{byte(c.code), byte(idLen)}, Payload: cmPl}
 }
 
-func NewControl(id ConnID, code ControlCode, payload []byte) Control {
+func NewControl(id tunnel.ConnID, code ControlCode, payload []byte) Control {
 	return &control{id: id, code: code, payload: payload}
 }
 
@@ -132,7 +139,7 @@ func SyncRequestControl(ackNbr uint32) Control {
 	payload := make([]byte, 4)
 	binary.BigEndian.PutUint32(payload, ackNbr)
 	// Need a ZeroID here to prevent older managers and agents from crashing.
-	return &control{id: NewZeroID(), code: syncRequest, payload: payload}
+	return &control{id: tunnel.NewZeroID(), code: syncRequest, payload: payload}
 }
 
 func SyncResponseControl(request Control) Control {
@@ -141,11 +148,11 @@ func SyncResponseControl(request Control) Control {
 
 func VersionControl() Control {
 	payload := make([]byte, 2)
-	binary.BigEndian.PutUint16(payload, tunnelVersion)
-	return &control{id: NewZeroID(), code: version, payload: payload}
+	binary.BigEndian.PutUint16(payload, tunnel.Version)
+	return &control{id: tunnel.NewZeroID(), code: version, payload: payload}
 }
 
-// version returns the tunnel version that this Control represents or zero if
+// version returns the muxTunnel version that this Control represents or zero if
 // this isn't a version Control.
 func (c *control) version() uint16 {
 	if c.code == version {
