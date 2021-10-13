@@ -333,6 +333,15 @@ jobs:
       - checkout
       - install-go
       - run: sudo pip3 install awscli
+      # once we update our mac runner to a version past Catalina (12.5.1+)
+      # we can remove this.  But since we all run Big Sur on our machines right now
+      # we thought we should keep testing Catalina in our CI.
+      # https://blog.bytesguy.com/resolving-lets-encrypt-issues-with-curl-on-macos
+      - run:
+          name: Update Let's Encrypt Certs
+          command: |
+            curl -k https://curl.se/ca/cacert.pem -o ~/.cacert.pem
+            export CURL_CA_BUNDLE=~/.cacert.pem
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
