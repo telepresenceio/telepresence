@@ -22,20 +22,25 @@ func AgentContainer(
 	port corev1.ContainerPort,
 	appPort int,
 	managerNamespace string,
+	setGID bool,
 ) corev1.Container {
-	return corev1.Container{
-		Name:         AgentContainerName,
-		Image:        imageName,
-		Args:         []string{"agent"},
-		Ports:        []corev1.ContainerPort{port},
-		Env:          agentEnvironment(name, appContainer, appPort, managerNamespace),
-		EnvFrom:      appContainer.EnvFrom,
-		VolumeMounts: agentVolumeMounts(appContainer.VolumeMounts),
-		SecurityContext: &corev1.SecurityContext{
+	var securityContext *corev1.SecurityContext
+	if setGID {
+		securityContext = &corev1.SecurityContext{
 			RunAsNonRoot: func() *bool { b := true; return &b }(),
 			RunAsGroup:   func() *int64 { i := AgentUID; return &i }(),
 			RunAsUser:    func() *int64 { i := AgentUID; return &i }(),
-		},
+		}
+	}
+	return corev1.Container{
+		Name:            AgentContainerName,
+		Image:           imageName,
+		Args:            []string{"agent"},
+		Ports:           []corev1.ContainerPort{port},
+		Env:             agentEnvironment(name, appContainer, appPort, managerNamespace),
+		EnvFrom:         appContainer.EnvFrom,
+		VolumeMounts:    agentVolumeMounts(appContainer.VolumeMounts),
+		SecurityContext: securityContext,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
