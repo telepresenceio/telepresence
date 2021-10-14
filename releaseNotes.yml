@@ -59,6 +59,16 @@ items:
           the user understand what each question was asking for. Additionally, a default was
           added to each question to give the user examples of correct input.
 
+      - type: feature
+        title: Support for intercepting headless services
+        body: >-
+          Intercepting headless services is now officially supported.  You can request a
+          headless service on whatever port it exposes and get a response from the
+          intercept. This leverages the same approach as intercepting numeric ports when
+          using the mutating webhook injector, mainly requires the <code>initContainer</code>
+          to have <code>NET_ADMIN</code> capabilities.
+        docs: reference/cluster-config/#note-on-intercepting-headless-services
+
       - type: change
         title: Use one tunnel per connection instead of multiplexing into one tunnel
         body: >-

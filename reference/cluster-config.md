@@ -284,3 +284,9 @@ spec:
           ports:
             - containerPort: 8080
 ```
+
+### Note on Intercepting Headless Services
+<Alert severity="info">
+Note that this utilizes the <code>initContainer</code> that requires `NET_ADMIN` capabilities.
+If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
+</Alert>
