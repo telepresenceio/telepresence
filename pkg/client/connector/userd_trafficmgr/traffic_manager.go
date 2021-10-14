@@ -405,17 +405,17 @@ func (tm *trafficManager) refreshCloudAPIKey(c context.Context) error {
 		ticker.Stop()
 	}()
 	for {
+		// Discard any errors; including an apikey with this request
+		// is optional.  We might not even be logged in.
+		if apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false); err == nil {
+			tm.cloudAPIKeyLock.Lock()
+			tm.cloudAPIKey = apiKey
+			tm.cloudAPIKeyLock.Unlock()
+		}
 		select {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			// Discard any errors; including an apikey with this request
-			// is optional.  We might not even be logged in.
-			if apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false); err == nil {
-				tm.cloudAPIKeyLock.Lock()
-				tm.cloudAPIKey = apiKey
-				tm.cloudAPIKeyLock.Unlock()
-			}
 		}
 	}
 }
