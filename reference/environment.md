@@ -1,5 +1,5 @@
 ---
-Description: "How Telepresence can import environment variables from your Kubernetes cluster to use with code running on your laptop."
+description: "How Telepresence can import environment variables from your Kubernetes cluster to use with code running on your laptop."
 ---
 
 # Environment Variables
@@ -19,7 +19,7 @@ There are three options available to do this:
 
 3. `telepresence intercept [service] --port [port] -- [COMMAND]`
 
-  This will run a command locally with the pod's environment variables set on your laptop as long as the intercept is active.  This can be used in conjunction with a local server command, such as `python [FILENAME]` or `node [FILENAME]` to run a service locally while using the environment variables that were set on the pod via a ConfigMap or other means.
+  This will run a command locally with the pod's environment variables set on your laptop.  Once the command quits the intercept is stopped (as if `telepresence leave [service]` was run).  This can be used in conjunction with a local server command, such as `python [FILENAME]` or `node [FILENAME]` to run a service locally while using the environment variables that were set on the pod via a ConfigMap or other means.
 
   Another use would be running a subshell, Bash for example:
 
