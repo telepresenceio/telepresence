@@ -41,6 +41,8 @@ items:
           (<code> traffic-manager</code> and/or pods containing a <code>
           traffic-agent</code> container).  This flag is set to <code>false</code>
           by default.
+        docs: reference/client
+        image: telepresence-2.4.5-pod-yaml.png
 
       - type: feature
         title: Anonymize pod name + namespace when using gather-logs command
@@ -50,14 +52,16 @@ items:
           sensitive names with simple names (e.g. pod-1, namespace-2) to maintain
           relationships between the objects without exposing the real names of your
           objects. This flag is set to <code>false</code> by default.
+        docs: reference/client
+        image: telepresence-2.4.5-logs-anonymize.png
 
       - type: feature
         title: Added context and defaults to ingress questions when creating a preview URL
         body: >-
-          Previously, we refered to OSI model layers when asking these questions, but this
-          terminology is not commonly used. This was changed to instead use context to help
-          the user understand what each question was asking for. Additionally, a default was
-          added to each question to give the user examples of correct input.
+          Previously, we referred to OSI model layers when asking these questions, but this
+          terminology is not commonly used. The questions now provide a clearer context for the user, along with a default answer as an example.
+        docs: howtos/intercepts/#4-personal-intercept
+        image: telepresence-2.4.5-preview-url-questions.png
 
       - type: feature
         title: Support for intercepting headless services
