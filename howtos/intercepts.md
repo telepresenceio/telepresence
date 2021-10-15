@@ -310,12 +310,11 @@ will be routed to your cluster as usual.
             header("x-telepresence-intercept-id") ~= regexp("<intercept id>:example-service")
          Preview URL            : https://<random domain name>.preview.edgestack.me
          Layer 5 Hostname       : dev-environment.edgestack.me
+   ```
 
-  ```
-
-  <Alert severity="info">
+   <Alert severity="info">
       These questions were modified for clarity and given defaults in release 2.4.5.
-  </Alert>
+   </Alert>
 
 4. Start your local service as [in the previous
    step](#start-local-instance).
