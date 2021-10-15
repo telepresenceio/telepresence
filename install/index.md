@@ -2,7 +2,7 @@ import Platform from '@src/components/Platform';
 
 # Install
 
-Install Telepresence by running the commands below for your OS.
+Install Telepresence by running the commands below for your OS. If you are not the administrator of your cluster, you will need [administrative RBAC permissions](../reference/rbac#administrating-telepresence) to install and use Telepresence in your cluster.
 
 <Platform.TabGroup>
 <Platform.MacOSTab>

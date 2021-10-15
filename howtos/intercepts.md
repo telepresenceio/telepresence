@@ -29,7 +29,6 @@ import QSCards from '../quick-start/qs-cards'
 </Alert>
 
 ## Prerequisites
-
 You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
 and set up
 ([Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#verify-kubectl-configuration) /
@@ -168,7 +167,7 @@ cluster.
 ## 3. Intercept your service with a global intercept {#3-global-intercept}
 
 In this section, we will go through the steps required for you to
-create a [global intercept](../../concepts/intercepts/#global-intercept) that
+create a [global intercept](../../concepts/intercepts/?intercept=global) that
 intercepts all traffic going to a service in your cluster and route it
 to your local environment instead.  In the [next
 section](#4-personal-intercept), we will instead create a personal
@@ -270,7 +269,7 @@ When working on a development environment with multiple engineers, you
 don't want your intercepts to impact your teammates.  Telepresence
 offers a solution to this: instead of creating a global intercept, you
 can create a [personal
-intercept](../../concepts/intercepts/#personal-intercept) that only
+intercept](../../concepts/intercepts/?intercept=personal) that only
 interepts a subset of the traffic going to the service.  This is the
 default if you are [logged in to Ambassador Cloud with
 Telepresence](../../reference/client/login/).  Additionally if you are
@@ -330,39 +329,39 @@ will be routed to your cluster as usual.
 
    ```console
    $ telepresence intercept example-service --port 8080:http --env-file ~/example-service-intercept.env
-   To create a preview URL, telepresence needs to know how cluster
-   ingress works for this service.  Please Confirm the ingress to use.
+      To create a preview URL, telepresence needs to know how requests enter 
+	    your cluster. Please Select the ingress to use.
 
-   1/4: What's your ingress' layer 3 (IP) address?
-        You may use an IP address or a DNS name (this is usually a
-        "service.namespace" DNS name).
+      1/4: What's your ingress' IP address?
+           You may use an IP address or a DNS name (this is usually a
+           "service.namespace" DNS name).
 
-          [default: -]: ambassador.ambassador
+             [default: example-service.default]: ambassador.ambassador
 
-   2/4: What's your ingress' layer 4 address (TCP port number)?
+      2/4: What's your ingress' TCP port number?
 
-          [default: -]: 443
+             [default: 80]: 443
 
-   3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
 
-          [default: n]: y
+             [default: n]: y
 
-   4/4: If required by your ingress, specify a different layer 5 hostname
-        (TLS-SNI, HTTP "Host" header) to access this service.
+      4/4: If required by your ingress, specify a different hostname
+           (TLS-SNI, HTTP "Host" header) to be used in requests.
 
-          [default: ambassador.ambassador]: dev-environment.edgestack.me
+             [default: ambassador.ambassador]: dev-environment.edgestack.me
 
-   Using Deployment example-service
-   intercepted
-       Intercept name         : example-service
-       State                  : ACTIVE
-       Workload kind          : Deployment
-       Destination            : 127.0.0.1:8080
-       Service Port Identifier: http
-       Intercepting           : HTTP requests that match all of:
-         header("x-telepresence-intercept-id") ~= regexp("<intercept id>:example-service")
-       Preview URL            : https://<random domain name>.preview.edgestack.me
-       Layer 5 Hostname       : dev-environment.edgestack.me
+      Using Deployment example-service
+      intercepted
+         Intercept name         : example-service
+         State                  : ACTIVE
+         Workload kind          : Deployment
+         Destination            : 127.0.0.1:8080
+         Service Port Identifier: http
+         Intercepting           : HTTP requests that match all of:
+            header("x-telepresence-intercept-id") ~= regexp("<intercept id>:example-service")
+         Preview URL            : https://<random domain name>.preview.edgestack.me
+         Layer 5 Hostname       : dev-environment.edgestack.me
    ```
 
 4. Start your local service as [in the previous

@@ -328,25 +328,25 @@ easily share the services you’re working on with your teammates.
   ```
     $ telepresence intercept dataprocessingservice --port 3000
 
-      To create a preview URL, telepresence needs to know how cluster
-      ingress works for this service.  Please Select the ingress to use.
+      To create a preview URL, telepresence needs to know how requests enter 
+	    your cluster. Please Select the ingress to use.
 
-      1/4: What's your ingress' layer 3 (IP) address?
+      1/4: What's your ingress' IP address?
            You may use an IP address or a DNS name (this is usually a
            "service.namespace" DNS name).
 
-             [no default]: verylargejavaservice.default
+             [default: dataprocessingservice.default]: verylargejavaservice.default
 
-      2/4: What's your ingress' layer 4 address (TCP port number)?
+      2/4: What's your ingress' TCP port number?
 
-             [no default]: 8080
+             [default: 80]: 8080
 
       3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
 
              [default: n]:
 
-      4/4: If required by your ingress, specify a different layer 5 hostname
-           (TLS-SNI, HTTP "Host" header) to access this service.
+      4/4: If required by your ingress, specify a different hostname
+           (TLS-SNI, HTTP "Host" header) to be used in requests.
 
              [default: verylargejavaservice.default]:
 

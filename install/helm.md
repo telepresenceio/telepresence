@@ -27,7 +27,7 @@ When you run the Helm chart, it installs all the components required for the Tel
    kubectl create namespace ambassador
    ```
 
-2. Install the Telepresenc Traffic Manager with the following command:
+2. Install the Telepresence Traffic Manager with the following command:
 
    ```shell
    helm install traffic-manager --namespace ambassador datawire/telepresence
@@ -68,14 +68,10 @@ Upgrading the Traffic Manager is the same as upgrading any other Helm chart; for
 
 ```shell
 helm repo up
-helm upgrade ambassador datawire/telepresence --reuse-values --namespace traffic-manager
+helm upgrade traffic-manager datawire/telepresence --reuse-values --namespace ambassador
 ```
 
-Alternatively, if you wished to upgrade it, say, to `v2.4.1`:
-```shell
-helm repo up
-helm upgrade ambassador datawire/telepresence --reuse-values --namespace traffic-manager --version v2.4.1
-```
+If you want to upgrade the Traffic-Manager to a specific version, add a `--version` flag with the version number to the upgrade command. For example: `--version v2.4.1`
 
 ## RBAC
 
