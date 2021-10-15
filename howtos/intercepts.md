@@ -3,7 +3,7 @@ description: "Telepresence help you develop Kubernetes services locally without 
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from '../quick-start/qs-tabs'
+import Platform from '@src/components/Platform';
 
 # Intercept a Service
 
@@ -23,7 +23,30 @@ The following quick overview on creating an intercept assumes you have a deploym
 
 1. Install Telepresence if needed.
 
-<QSTabs/>
+   <Platform.TabGroup>
+   <Platform.MacOSTab>
+
+   ```shell
+   # 1. Download the latest binary (~60 MB):
+   sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+   # 2. Make the binary executable:
+   sudo chmod a+x /usr/local/bin/telepresence
+   ```
+
+   </Platform.MacOSTab>
+   <Platform.GNULinuxTab>
+
+   ```shell
+   # 1. Download the latest binary (~50 MB):
+   sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+   # 2. Make the binary executable:
+   sudo chmod a+x /usr/local/bin/telepresence
+   ```
+
+   </Platform.GNULinuxTab>
+   </Platform.TabGroup>
 
 1. In your terminal run `telepresence login`. This logs you into the Ambassador Cloud, which will track your intercepts and let you share them with colleagues.
 
