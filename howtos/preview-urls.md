@@ -100,10 +100,6 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
   ```
 
-  <Alert severity="info">
-      These questions were modified for clarity and given defaults in release 2.4.5.
-  </Alert>
-
 4. Start your local environment using the environment variables retrieved in the previous step.
 
   Here are a few options to pass the environment variables to your local process:
