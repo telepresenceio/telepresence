@@ -312,10 +312,6 @@ will be routed to your cluster as usual.
          Layer 5 Hostname       : dev-environment.edgestack.me
    ```
 
-   <Alert severity="info">
-      These questions were modified for clarity and given defaults in release 2.4.5.
-   </Alert>
-
 4. Start your local service as [in the previous
    step](#start-local-instance).
 
