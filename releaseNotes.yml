@@ -67,7 +67,7 @@ items:
           intercept. This leverages the same approach as intercepting numeric ports when
           using the mutating webhook injector, mainly requires the <code>initContainer</code>
           to have <code>NET_ADMIN</code> capabilities.
-        docs: reference/cluster-config/#note-on-intercepting-headless-services
+        docs: reference/intercepts/#intercepting-headless-services
 
       - type: change
         title: Use one tunnel per connection instead of multiplexing into one tunnel
