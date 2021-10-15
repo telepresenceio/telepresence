@@ -781,5 +781,5 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 
 // expire removes stale sessions.
 func (m *Manager) expire(ctx context.Context) {
-	m.state.ExpireSessions(ctx, m.clock.Now().Add(-30*time.Second))
+	m.state.ExpireSessions(ctx, m.clock.Now().Add(-15*time.Second))
 }
