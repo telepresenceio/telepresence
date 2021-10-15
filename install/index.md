@@ -4,7 +4,7 @@ import NightlyVersionTabs from './nightly-version-tabs'
 
 # Install
 
-Install Telepresence by running the commands below for your OS. If you are not the administrator of your cluster, you will need these [RBAC permissions](../reference/rbac#administrating-telepresence) to install and use Telepresence in your cluster.
+Install Telepresence by running the commands below for your OS. If you are not the administrator of your cluster, you will need [administrative RBAC permissions](../reference/rbac#administrating-telepresence) to install and use Telepresence in your cluster.
 
 <QSTabs/>
 
