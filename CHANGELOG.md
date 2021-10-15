@@ -8,7 +8,11 @@
 
 - Feature: The `gather-logs` command added two new flags. One for anonymizing pod names + namespaces and the other for getting the pod yaml of the `traffic-manager` and any pod that contains a `traffic-agent`.
 
+- Change: Use one tunnel per connection instead of multiplexing into one tunnel. This client will still be backwards compatible with older `traffic-manager`s that only support multiplexing.
+
 - Bugfix: Telepresence will now log that the kubernetes server version is unsupported when using a version older than 1.17.
+
+- Bugfix: Telepresence only adds the security context when necessary: intercepting a headless service or using a numeric port with the webhook agent injector.
 
 ### 2.4.4 (September 27, 2021)
 
