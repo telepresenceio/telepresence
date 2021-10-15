@@ -310,10 +310,6 @@ easily share the services you’re working on with your teammates.
           Layer 5 Hostname: verylargejavaservice.default
   ```
 
-  <Alert severity="info">
-      These questions were modified for clarity and given defaults in release 2.4.5.
-  </Alert>
-
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
 
 5. Now go again to [http://verylargejavaservice:8080](http://verylargejavaservice:8080), it’s still <strong style="color:green">green</strong>.
