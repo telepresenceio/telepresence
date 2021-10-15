@@ -4,7 +4,8 @@ import Alert from '@material-ui/lab/Alert';
 
 For the most part, Telepresence doesn't require any special
 configuration in the cluster and can be used right away in any
-cluster (as long as the user has adequate [RBAC permissions](../rbac)).
+cluster (as long as the user has adequate [RBAC permissions](../rbac)
+and the cluster's server version is `1.17.0` or higher).
 
 However, some advanced features do require some configuration in the
 cluster.
@@ -243,6 +244,12 @@ reconfigure the pod's firewall rules to redirect traffic to the Traffic Agent.
 <Alert severity="info">
 Note that this <code>initContainer</code> requires `NET_ADMIN` capabilities.
 If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
+</Alert>
+
+<Alert severity="info">
+This requires the Traffic Agent to run as GID <code>7777</code>. By default, this is disabled on openshift clusters.
+To enable running as GID <code>7777</code> on a specific openshift namespace, run:
+<code>oc adm policy add-scc-to-group anyuid system:serviceaccounts:$NAMESPACE</code>
 </Alert>
 
 For example, the following service is using a numeric port, so Telepresence would inject an initContainer into it:

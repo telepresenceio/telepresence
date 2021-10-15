@@ -1,6 +1,6 @@
 # Migrate from legacy Telepresence
 
-Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence 1](/docs/v1/) when working with local instances of your services.
+Telepresence (formerly referenced as Telepresence 2, which is the current major version) has different mechanics and requires a different mental model from [legacy Telepresence 1](../../../v1/discussion/overview) when working with local instances of your services.
 
 In legacy Telepresence, a pod running a service was swapped with a pod running the Telepresence proxy. This proxy received traffic intended for the service, and sent the traffic onward to the target workstation or laptop. We called this mechanism "swap-deployment".
 
@@ -64,7 +64,6 @@ are supported).
 | Legacy Telepresence Command                      | Telepresence Command                       |
 |--------------------------------------------------|--------------------------------------------|
 | --swap-deployment $workload                      | intercept $workload                        |
-| --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
 | --expose localPort[:remotePort]                  | intercept --port localPort[:remotePort]    |
 | --swap-deployment $workload --run-shell          | intercept $workload -- bash                |
 | --swap-deployment $workload --run $cmd           | intercept $workload -- $cmd                |

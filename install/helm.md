@@ -68,14 +68,10 @@ Upgrading the Traffic Manager is the same as upgrading any other Helm chart; for
 
 ```shell
 helm repo up
-helm upgrade ambassador datawire/telepresence --reuse-values --namespace traffic-manager
+helm upgrade traffic-manager datawire/telepresence --reuse-values --namespace ambassador
 ```
 
-Alternatively, if you wished to upgrade it, say, to `v2.4.1`:
-```shell
-helm repo up
-helm upgrade ambassador datawire/telepresence --reuse-values --namespace traffic-manager --version v2.4.1
-```
+If you want to upgrade the Traffic-Manager to a specific version, add a `--version` flag with the version number to the upgrade command. For example: `--version v2.4.1`
 
 ## RBAC
 
