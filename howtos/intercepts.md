@@ -3,7 +3,7 @@ description: "Start using Telepresence in your own environment. Follow these ste
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from '../quick-start/qs-tabs'
+import Platform from '@src/components/Platform';
 import QSCards from '../quick-start/qs-cards'
 
 # Intercept a service in your own environment
@@ -20,7 +20,7 @@ import QSCards from '../quick-start/qs-cards'
 
 </div>
 
-<Alert severity="info">For a detailed walk-though on creating intercepts using our sample app, follow the <a href="../../quick-start/qs-node/">quick start guide</a>.</Alert>
+<Alert severity="info">For a detailed walk-though on creating intercepts using our sample app, follow the <a href="../../quick-start/demo-node/">quick start guide</a>.</Alert>
 
 ## Prerequisites
 You’ll need [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/) or `oc` installed
@@ -39,7 +39,34 @@ This guide assumes you have a Kubernetes deployment and service accessible publi
 
 ## 1. Install the Telepresence CLI
 
-<QSTabs/>
+<Platform.TabGroup>
+<Platform.MacOSTab>
+
+```shell
+# Install via brew:
+brew install datawire/blackbird/telepresence
+
+# OR install manually:
+# 1. Download the latest binary (~60 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+```
+
+</Platform.MacOSTab>
+<Platform.GNULinuxTab>
+
+```shell
+# 1. Download the latest binary (~50 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+```
+
+</Platform.GNULinuxTab>
+</Platform.TabGroup>
 
 ## 2. Test Telepresence
 

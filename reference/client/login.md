@@ -1,4 +1,4 @@
-# `telepresence login`
+# Telepresence Login
 
 ```console
 $ telepresence login --help
