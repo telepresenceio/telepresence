@@ -85,6 +85,14 @@ items:
           to let users know when they are using Telepresence with a cluster it doesn't support.
         docs: reference/cluster-config
 
+      - type: bugfix
+        title: Traffic Agent security context is now only added when necessary
+        body: >-
+          When creating an intercept, Telepresence will now only set the traffic agent's GID
+          when strictly necessary (i.e. when using headless services or numeric ports). This mitigates
+          an issue on openshift clusters where the traffic agent can fail to be created due to
+          openshift's security policies banning arbitrary GIDs.
+
   - version: 2.4.4
     date: '2021-09-27'
     notes:
