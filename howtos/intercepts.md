@@ -8,19 +8,6 @@ import QSCards from '../quick-start/qs-cards'
 
 # Intercept a service in your own environment
 
-<div class="docs-article-toc">
-
-### Contents
-
-* [Prerequisites](#prerequisites)
-* [1. Install the Telepresence CLI](#1-install)
-* [2. Test Telepresence](#2-test)
-* [3. Intercept your service with a global intercept](#3-global-intercept)
-* [4. Intercept your service with a personal intercept and a preview URL](#4-personal-intercept)
-* [What's next?](#whats-next)
-
-</div>
-
 <Alert severity="info">
 
   For a detailed walk-though on creating intercepts using our sample
@@ -46,7 +33,7 @@ This guide assumes you have a Kubernetes deployment and service
 accessible publicly by an ingress controller and that you can run a
 copy of that service on your laptop.
 
-## 1. Install the Telepresence CLI {#1-install}
+## 1. Install the Telepresence CLI
 
 <Platform.TabGroup>
 <Platform.MacOSTab>
@@ -102,7 +89,7 @@ Remove-Item telepresence
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
-## 2. Test Telepresence {#2-test}
+## 2. Test Telepresence
 
 Telepresence connects your local workstation to a remote Kubernetes
 cluster.
@@ -165,7 +152,7 @@ cluster.
 
 </Alert>
 
-## 3. Intercept your service with a global intercept {#3-global-intercept}
+## 3. Intercept your service with a global intercept
 
 In this section, we will go through the steps required for you to
 create a [global intercept](../../concepts/intercepts/?intercept=global) that
@@ -264,7 +251,7 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-## 4. Intercept your service with a personal intercept and a preview URL {#4-personal-intercept}
+## 4. Intercept your service with a personal intercept and a preview URL
 
 When working on a development environment with multiple engineers, you
 don't want your intercepts to impact your teammates.  Telepresence
@@ -401,6 +388,6 @@ You can now:
 - Set breakpoints in your IDE to investigate bugs.
 
 ...and all of this **without impacting your teammates!**
-## <img class="os-logo" src="../../images/logo.png"/> What's Next? {#whats-next}
+## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
 <QSCards/>
