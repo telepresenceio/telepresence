@@ -24,7 +24,7 @@ You can append `--help` to each command below to get even more information about
 | `leave` | Stops an active intercept: `telepresence leave hello` |
 | `preview` | Create or remove [preview URLs](../../howtos/preview-urls) for existing intercepts: `telepresence preview create <currently intercepted service name>` |
 | `loglevel` | Temporarily change the log-level of the traffic-manager, traffic-agents, and user and root daemons |
-| `gather-logs` | Gather logs from traffic-manager, traffic-agents, user, and root daemons, and export them into a zip file that can be shared with others or included with a github issue |
+| `gather-logs` | Gather logs from traffic-manager, traffic-agents, user, and root daemons, and export them into a zip file that can be shared with others or included with a github issue. Use `--get-pod-yaml` to include the yaml for the `traffic-manager` and `traffic-agent`s. Use `--anonymize` to replace the actual pod names + namespaces used for the `traffic-manager` and pods containing `traffic-agent`s in the logs. |
 | `version` | Show version of Telepresence CLI + Traffic-Manager (if connected) |
 | `uninstall` | Uninstalls Telepresence from your cluster, using the `--agent` flag to target the Traffic Agent for a specific workload, the `--all-agents` flag to remove all Traffic Agents from all workloads, or the `--everything` flag to remove all Traffic Agents and the Traffic Manager.
 | `dashboard` | Reopens the Ambassador Cloud dashboard in your browser |

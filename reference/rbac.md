@@ -41,7 +41,83 @@ After creating `config.yaml` in your current directory, export the file's locati
 
 ## Administrating Telepresence
 
-[Telepresence administration](/products/telepresence/) requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator.
+Telepresence administration requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator. The following permissions are needed for the installation and use of Telepresence:
+
+```yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: telepresence-admin
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telepresence-admin-role
+rules:
+  - apiGroups:
+      - ""
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "create", "delete", "watch"]
+  - apiGroups:
+      - ""
+    resources: ["services"]
+    verbs: ["get", "list", "update", "create", "delete"]
+  - apiGroups:
+      - ""
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+  - apiGroups:
+      - "apps"
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "update", "create", "delete", "watch"]
+  - apiGroups:
+      - "getambassador.io"
+    resources: ["hosts", "mappings"]
+    verbs: ["*"]
+  - apiGroups:
+      - ""
+    resources: ["endpoints"]
+    verbs: ["get", "list"]
+  - apiGroups:
+      - "rbac.authorization.k8s.io"
+    resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups:
+      - ""
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create"]
+  - apiGroups:
+      - ""
+    resources: ["secrets"]
+    verbs: ["get", "create", "list", "delete"]
+  - apiGroups:
+      - ""
+    resources: ["serviceaccounts"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups:
+      - "admissionregistration.k8s.io"
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups:
+      - ""
+    resources: ["nodes"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: telepresence-clusterrolebinding
+subjects:
+  - name: telepresence-admin
+    kind: ServiceAccount
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  name: telepresence-admin-role
+  kind: ClusterRole
+```
 
 There are two ways to install the traffic-manager: Using `telepresence connect` and installing the [helm chart](../../install/helm/).
 
@@ -68,12 +144,12 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  resources: ["pods"]
-  verbs: ["get", "list", "create", "watch", "delete"]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list", "create", "delete"]
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "watch", "update"]
+  verbs: ["get", "list", "update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]
@@ -81,7 +157,7 @@ rules:
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update"]
+  verbs: ["get", "list", "update", "patch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]
@@ -89,6 +165,10 @@ rules:
 - apiGroups:
   - ""
   resources: ["endpoints"]
+  verbs: ["get", "list"]
+- apiGroups:
+  - "rbac.authorization.k8s.io"
+  resources: ["clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
 - apiGroups:
   - ""
