@@ -11,6 +11,8 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -447,7 +450,7 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 	_ = tm.clearIntercepts(c)
 	switch ur.UninstallType {
 	case rpc.UninstallRequest_UNSPECIFIED:
-		return nil, errors.New("invalid uninstall request")
+		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
 	case rpc.UninstallRequest_NAMED_AGENTS:
 		var selectedAgents []*manager.AgentInfo
 		for _, di := range ur.Agents {
@@ -464,6 +467,7 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 			}
 			if !found {
 				result.ErrorText = fmt.Sprintf("unable to find a workload named %s.%s with an agent installed", di, namespace)
+				result.ErrorCategory = int32(errcat.User)
 			}
 		}
 		agents = selectedAgents
@@ -472,12 +476,14 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 		if len(agents) > 0 {
 			if err := tm.removeManagerAndAgents(c, true, agents); err != nil {
 				result.ErrorText = err.Error()
+				result.ErrorCategory = int32(errcat.GetCategory(err))
 			}
 		}
 	default:
 		// Cancel all communication with the manager
 		if err := tm.removeManagerAndAgents(c, false, agents); err != nil {
 			result.ErrorText = err.Error()
+			result.ErrorCategory = int32(errcat.GetCategory(err))
 		}
 	}
 	return result, nil

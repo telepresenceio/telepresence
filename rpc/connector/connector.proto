@@ -136,6 +136,7 @@ message UninstallRequest {
 
 message UninstallResult {
   string error_text = 1;
+  int32 error_category = 2;
 }
 
 message CreateInterceptRequest {
