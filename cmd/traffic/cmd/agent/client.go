@@ -125,6 +125,13 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	}
 	go logLevelWaitLoop(ctx, logLevelStream)
 
+	// Deal with health-check requests
+	healthCheckStream, err := manager.HealthCheckBiStream(ctx)
+	if err != nil {
+		return err
+	}
+	go healthCheckWaitLoop(ctx, healthCheckStream)
+
 	// Loop calling Remain
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -244,5 +251,26 @@ func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLe
 			duration = ll.Duration.AsDuration()
 		}
 		timedLevel.Set(ctx, ll.LogLevel, duration)
+	}
+}
+
+func healthCheckWaitLoop(ctx context.Context, healthCheckStream rpc.Manager_HealthCheckBiStreamClient) {
+	for ctx.Err() == nil {
+		// Recieve empty message
+		_, err := healthCheckStream.Recv()
+		if err != nil {
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Debugf(ctx, "log-level stream recv: %+v", err)
+			}
+			return
+		}
+		// Respond with healthCheck
+		err = healthCheckStream.Send(&rpc.HealthMessage{Healthy: healthCheck()})
+		if err != nil {
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Debugf(ctx, "log-level stream recv: %+v", err)
+			}
+			return
+		}
 	}
 }

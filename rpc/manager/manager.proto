@@ -329,6 +329,18 @@ message AmbassadorCloudConnection {
   bool can_connect = 1;
 }
 
+// HealthMessage is sent by the agent to the traffic manager
+// on request if the agent passes health check
+message  HealthMessage{
+  bool healthy = 1;
+}
+
+// HealthReport is sent by the traffic manager to the client
+// after the client requests a health check
+message  HealthReport{
+  repeated HealthMessage healthMessages = 1;
+}
+
 // ConnMessage is a payload intended for a connection with a given id.
 // Deprecated. Telepresence now uses connection specific Tunnels and TunnelMessages
 message ConnMessage {
@@ -495,6 +507,12 @@ service Manager {
 
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);
+
+  // HealthCheckBiStream lets the traffic manager ask for health check
+  rpc HealthCheckBiStream(stream HealthMessage) returns (stream google.protobuf.Empty);
+
+  // HealthCheckBiStream lets the traffic manager ask for health check
+  rpc DoHealthCheck(google.protobuf.Empty) returns (HealthReport);
 
   // A Tunnel represents one single connection where the client or
   // traffic-agent represents one end (the client-side) and the

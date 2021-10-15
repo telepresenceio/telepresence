@@ -287,3 +287,7 @@ func Main(ctx context.Context, args ...string) error {
 	// Wait for exit
 	return g.Wait()
 }
+
+func healthCheck() bool {
+	return true
+}
