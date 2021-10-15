@@ -246,6 +246,12 @@ Note that this <code>initContainer</code> requires `NET_ADMIN` capabilities.
 If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
 </Alert>
 
+<Alert severity="info">
+This requires the Traffic Agent to run as GID <code>7777</code>. By default, this is disabled on openshift clusters.
+To enable running as GID <code>7777</code> on a specific openshift namespace, run:
+<code>oc adm policy add-scc-to-group anyuid system:serviceaccounts:$NAMESPACE</code>
+</Alert>
+
 For example, the following service is using a numeric port, so Telepresence would inject an initContainer into it:
 ```yaml
 apiVersion: v1
@@ -284,9 +290,3 @@ spec:
           ports:
             - containerPort: 8080
 ```
-
-### Note on Intercepting Headless Services
-<Alert severity="info">
-Note that this utilizes the <code>initContainer</code> that requires `NET_ADMIN` capabilities.
-If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
-</Alert>
