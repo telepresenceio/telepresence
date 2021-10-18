@@ -96,6 +96,9 @@ type tunRouter struct {
 	// Subnets configured by the user
 	alsoProxySubnets []*net.IPNet
 
+	// Subnets configured not to be proxied
+	doNotProxySubnets []*net.IPNet
+
 	// Subnets that the router is currently configured with. Managed, and only used in
 	// the refreshSubnets() method.
 	curSubnets []*net.IPNet
@@ -218,6 +221,14 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 				apSn := iputil.IPNetFromRPC(ap)
 				dlog.Infof(ctx, "Adding also-proxy subnet %s", apSn)
 				t.alsoProxySubnets[i] = apSn
+			}
+		}
+		if len(mi.DoNotProxySubnets) > 0 {
+			t.doNotProxySubnets = make([]*net.IPNet, len(mi.DoNotProxySubnets))
+			for i, dp := range mi.DoNotProxySubnets {
+				dpSn := iputil.IPNetFromRPC(dp)
+				dlog.Infof(ctx, "Adding do-not-proxy subnet %s", dpSn)
+				t.doNotProxySubnets[i] = dpSn
 			}
 		}
 		t.dnsIP = mi.Dns.RemoteIp

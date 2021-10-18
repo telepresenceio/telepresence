@@ -78,4 +78,8 @@ message OutboundInfo {
   repeated manager.IPNet also_proxy_subnets = 5;
 
   reserved 4;
+
+  // never_proxy_subnets are subnets that the daemon should not proxy but resolve
+  // via the underlying network interface.
+  repeated manager.IPNet never_proxy_subnets = 6;
 }
