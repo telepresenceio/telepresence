@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 // OpenTun creates a new TUN device and ensures that it is up and running.
@@ -22,6 +23,17 @@ func (t *Device) AddSubnet(ctx context.Context, subnet *net.IPNet) error {
 // is associated with the device.
 func (t *Device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return t.removeSubnet(ctx, subnet)
+}
+
+// AddStaticRoute adds a specific route. This can be used to prevent certain IP addresses
+// from being routed to the TUN device.
+func (t *Device) AddStaticRoute(ctx context.Context, route routing.Route) error {
+	return t.addStaticRoute(ctx, route)
+}
+
+// RemoveStaticRoute removes a specific route added via AddStaticRoute.
+func (t *Device) RemoveStaticRoute(ctx context.Context, route routing.Route) error {
+	return t.removeStaticRoute(ctx, route)
 }
 
 // Name returns the name of this device, e.g. "tun0"

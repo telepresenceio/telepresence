@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/user"
 	"sync"
@@ -189,7 +190,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 	tm.callbacks.RegisterManagerServer(userd_grpc.NewManagerProxy(tm.managerClient))
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
+	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo(c)); err != nil {
 		tm.managerClient = nil
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
@@ -484,9 +485,36 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
-func (tm *trafficManager) getOutboundInfo() *daemon.OutboundInfo {
+func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+	neverProxy := []*manager.IPNet{}
+	url, err := url.Parse(tm.Server)
+	if err != nil {
+		// This really shouldn't happen as we are connected to the server
+		dlog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", tm.Server, err)
+	} else {
+		hostname := url.Hostname()
+		rawIP := iputil.Parse(hostname)
+		ips := []net.IP{rawIP}
+		if rawIP == nil {
+			var err error
+			ips, err = net.LookupIP(hostname)
+			if err != nil {
+				dlog.Errorf(ctx, "Unable to do DNS lookup for k8s server %s: %v", hostname, err)
+				ips = []net.IP{}
+			}
+		}
+		for _, ip := range ips {
+			mask := net.CIDRMask(128, 128)
+			if ipv4 := ip.To4(); ipv4 != nil {
+				mask = net.CIDRMask(32, 32)
+			}
+			ipnet := &net.IPNet{IP: ip, Mask: mask}
+			neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))
+		}
+	}
 	info := &daemon.OutboundInfo{
-		Session: tm.sessionInfo,
+		Session:           tm.sessionInfo,
+		NeverProxySubnets: neverProxy,
 	}
 
 	if tm.DNS != nil {

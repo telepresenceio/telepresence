@@ -247,6 +247,13 @@ func (o *outbound) getInfo() *rpc.OutboundInfo {
 		}
 	}
 
+	if len(o.router.neverProxySubnets) > 0 {
+		info.NeverProxySubnets = make([]*manager.IPNet, len(o.router.neverProxySubnets))
+		for i, np := range o.router.neverProxySubnets {
+			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np.RoutedNet)
+		}
+	}
+
 	return &info
 }
 

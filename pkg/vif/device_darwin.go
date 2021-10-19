@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 const sysProtoControl = 2
@@ -82,6 +83,18 @@ func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
 	}
 	return withRouteSocket(func(s int) error {
 		return t.routeClear(s, 1, subnet, to)
+	})
+}
+
+func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
+	return withRouteSocket(func(s int) error {
+		return t.routeAdd(s, 1, route.RoutedNet, route.Gateway)
+	})
+}
+
+func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
+	return withRouteSocket(func(s int) error {
+		return t.routeClear(s, 1, route.RoutedNet, route.Gateway)
 	})
 }
 

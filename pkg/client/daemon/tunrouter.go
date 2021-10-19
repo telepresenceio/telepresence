@@ -32,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/icmp"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/tcp"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/udp"
 )
@@ -99,11 +100,11 @@ type tunRouter struct {
 	alsoProxySubnets []*net.IPNet
 
 	// Subnets configured not to be proxied
-	doNotProxySubnets []*net.IPNet
-
+	neverProxySubnets []routing.Route
 	// Subnets that the router is currently configured with. Managed, and only used in
 	// the refreshSubnets() method.
-	curSubnets []*net.IPNet
+	curSubnets      []*net.IPNet
+	curStaticRoutes []routing.Route
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -150,6 +151,48 @@ func (t *tunRouter) configureDNS(_ context.Context, dnsLocalAddr *net.UDPAddr) {
 	t.dnsLocalAddr = dnsLocalAddr
 }
 
+func (t *tunRouter) reconcileStaticRoutes(ctx context.Context) error {
+	desired := []routing.Route{}
+
+	// We're not going to add static routes unless they're actually needed
+	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
+	for _, r := range t.neverProxySubnets {
+		for _, s := range t.curSubnets {
+			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
+				desired = append(desired, r)
+				break
+			}
+		}
+	}
+
+adding:
+	for _, r := range desired {
+		for _, c := range t.curStaticRoutes {
+			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
+				continue adding
+			}
+		}
+		if err := t.dev.AddStaticRoute(ctx, r); err != nil {
+			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
+		}
+	}
+
+removing:
+	for _, c := range t.curStaticRoutes {
+		for _, r := range desired {
+			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
+				continue removing
+			}
+		}
+		if err := t.dev.RemoveStaticRoute(ctx, c); err != nil {
+			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
+		}
+	}
+	t.curStaticRoutes = desired
+
+	return nil
+}
+
 func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 	// Create a unique slice of all desired subnets.
 	desired := make([]*net.IPNet, len(t.clusterSubnets)+len(t.alsoProxySubnets))
@@ -192,7 +235,8 @@ func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
 		}
 	}
-	return nil
+
+	return t.reconcileStaticRoutes(ctx)
 }
 
 func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
@@ -225,12 +269,16 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 				t.alsoProxySubnets[i] = apSn
 			}
 		}
-		if len(mi.DoNotProxySubnets) > 0 {
-			t.doNotProxySubnets = make([]*net.IPNet, len(mi.DoNotProxySubnets))
-			for i, dp := range mi.DoNotProxySubnets {
-				dpSn := iputil.IPNetFromRPC(dp)
-				dlog.Infof(ctx, "Adding do-not-proxy subnet %s", dpSn)
-				t.doNotProxySubnets[i] = dpSn
+		if len(mi.NeverProxySubnets) > 0 {
+			t.neverProxySubnets = make([]routing.Route, len(mi.NeverProxySubnets))
+			for i, np := range mi.NeverProxySubnets {
+				npSn := iputil.IPNetFromRPC(np)
+				dlog.Infof(ctx, "Adding never-proxy subnet %s", npSn)
+				route, err := routing.GetRoute(ctx, npSn)
+				if err != nil {
+					return fmt.Errorf("unable to get route for %s: %w", iputil.IPNetFromRPC(np), err)
+				}
+				t.neverProxySubnets[i] = route
 			}
 		}
 		t.dnsIP = mi.Dns.RemoteIp
@@ -326,6 +374,12 @@ func (t *tunRouter) stop(c context.Context) {
 		<-cc.Done()
 	}
 	if atomic.CompareAndSwapInt32(&t.closing, 1, 2) {
+		for _, np := range t.curStaticRoutes {
+			err := t.dev.RemoveStaticRoute(c, np)
+			if err != nil {
+				dlog.Warnf(c, "error removing route %s: %v", np, err)
+			}
+		}
 		t.dev.Close()
 	}
 }

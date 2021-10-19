@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 // This device will require that wintun.dll is available to the loader.
@@ -153,6 +154,43 @@ $job | Receive-Job
 	cmd.DisableLogging = true
 	_ = cmd.Run()
 	t.dns = server
+	return nil
+}
+
+func maskToIP(mask net.IPMask) (ip net.IP) {
+	copy(ip[:], mask)
+	return ip
+}
+
+func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
+	mask := maskToIP(route.RoutedNet.Mask)
+	cmd := dexec.CommandContext(ctx,
+		"route",
+		"ADD",
+		route.RoutedNet.IP.String(),
+		"MASK",
+		mask.String(),
+		route.Gateway.String(),
+	)
+	cmd.DisableLogging = true
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to create route %s: %w", route, err)
+	}
+	return nil
+}
+
+func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
+	cmd := dexec.CommandContext(ctx,
+		"route",
+		"delete",
+		route.RoutedNet.IP.String(),
+	)
+	cmd.DisableLogging = true
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to delete route %s: %w", route, err)
+	}
 	return nil
 }
 
