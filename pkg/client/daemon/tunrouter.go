@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -248,56 +250,68 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 }
 
 func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
-	infoStream, err := t.managerClient.WatchClusterInfo(ctx, t.session)
-	if err != nil {
-		return fmt.Errorf("error when calling WatchClusterInfo: %w", err)
-	}
-
 	cfgComplete := t.cfgComplete
-	for {
-		mgrInfo, err := infoStream.Recv()
+	backoff := 100 * time.Millisecond
+
+	for ctx.Err() == nil {
+		infoStream, err := t.managerClient.WatchClusterInfo(ctx, t.session)
 		if err != nil {
-			if ctx.Err() != nil {
-				return nil
+			err = fmt.Errorf("error when calling WatchClusterInfo: %w", err)
+			dlog.Warn(ctx, err)
+		}
+
+		for err == nil && ctx.Err() == nil {
+			mgrInfo, err := infoStream.Recv()
+			if err != nil {
+				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+					dlog.Errorf(ctx, "WatchClusterInfo recv: %v", err)
+				}
+				break
 			}
-			return client.WrapRecvErr(err, "error when reading WatchClusterInfo")
-		}
+			dlog.Debugf(ctx, "WatchClusterInfo update")
 
-		subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
-		if mgrInfo.ServiceSubnet != nil {
-			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
-			dlog.Infof(ctx, "Adding service subnet %s", cidr)
-			subnets = append(subnets, cidr)
-		}
-
-		for _, sn := range mgrInfo.PodSubnets {
-			cidr := iputil.IPNetFromRPC(sn)
-			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
-			subnets = append(subnets, cidr)
-		}
-
-		t.clusterSubnets = subnets
-		if err := t.refreshSubnets(ctx); err != nil {
-			dlog.Error(ctx, err)
-		}
-
-		if cfgComplete != nil {
-			// Only set clusterDNS when it hasn't been explicitly set with the --dns option
-			if t.dnsIP == nil {
-				dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
-				t.dnsIP = mgrInfo.KubeDnsIp
+			subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
+			if mgrInfo.ServiceSubnet != nil {
+				cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
+				dlog.Infof(ctx, "Adding service subnet %s", cidr)
+				subnets = append(subnets, cidr)
 			}
-			dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
-			t.clusterDomain = mgrInfo.ClusterDomain
-			if t.clusterDomain == "" {
-				// Traffic manager predates 2.4.3 and doesn't report a cluster domain. Only thing
-				// left to do then is to assume it's the standard one.
-				t.clusterDomain = "cluster.local."
+
+			for _, sn := range mgrInfo.PodSubnets {
+				cidr := iputil.IPNetFromRPC(sn)
+				dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+				subnets = append(subnets, cidr)
 			}
-			close(cfgComplete)
-			cfgComplete = nil
+
+			t.clusterSubnets = subnets
+			if err := t.refreshSubnets(ctx); err != nil {
+				dlog.Error(ctx, err)
+			}
+
+			if cfgComplete != nil {
+				// Only set clusterDNS when it hasn't been explicitly set with the --dns option
+				if t.dnsIP == nil {
+					dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
+					t.dnsIP = mgrInfo.KubeDnsIp
+				}
+				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
+				t.clusterDomain = mgrInfo.ClusterDomain
+				if t.clusterDomain == "" {
+					// Traffic manager predates 2.4.3 and doesn't report a cluster domain. Only thing
+					// left to do then is to assume it's the standard one.
+					t.clusterDomain = "cluster.local."
+				}
+				close(cfgComplete)
+				cfgComplete = nil
+			}
+		}
+		dtime.SleepWithContext(ctx, backoff)
+		backoff *= 2
+		if backoff > 3*time.Second {
+			backoff = 3 * time.Second
 		}
 	}
+	return nil
 }
 
 func (t *tunRouter) stop(c context.Context) {
@@ -332,54 +346,56 @@ func (t *tunRouter) run(c context.Context) error {
 			return nil
 		case <-t.cfgComplete:
 		}
-		ver, err := t.managerClient.Version(c, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		verStr := strings.TrimPrefix(ver.Version, "v")
-		dlog.Infof(c, "Connected to Manager %s", verStr)
-		mgrVer, err := semver.Parse(verStr)
-		if err != nil {
-			return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
-		}
-
-		clientTunnel, err := t.managerClient.ClientTunnel(c)
-		if err != nil {
-			return err
-		}
-		muxTunnel := connpool.NewMuxTunnel(clientTunnel)
-		if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
-			return err
-		}
-
-		var peerVersion uint16
-		if mgrVer.LE(semver.MustParse("2.4.2")) {
-			peerVersion = 0
-		} else {
-			if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
-				return err
-			}
-			peerVersion, err = muxTunnel.ReadPeerVersion(c)
+		return client.Retry(c, "MGR stream", func(c context.Context) error {
+			ver, err := t.managerClient.Version(c, &empty.Empty{})
 			if err != nil {
 				return err
 			}
-		}
-		// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
-		if peerVersion < 2 {
-			t.muxTunnel = muxTunnel
-			close(t.tmVerOk)
-			dlog.Debug(c, "MGR read loop starting")
-			err = t.muxTunnel.DialLoop(c, t.handlers)
-			var recvErr *client.RecvEOF
-			if errors.As(err, &recvErr) {
-				<-c.Done()
+			verStr := strings.TrimPrefix(ver.Version, "v")
+			dlog.Infof(c, "Connected to Manager %s", verStr)
+			mgrVer, err := semver.Parse(verStr)
+			if err != nil {
+				return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
 			}
-		} else {
-			close(t.tmVerOk)
-			dlog.Debug(c, "closing since a more recent system detected")
-			err = muxTunnel.CloseSend()
-		}
-		return err
+
+			clientTunnel, err := t.managerClient.ClientTunnel(c)
+			if err != nil {
+				return err
+			}
+			muxTunnel := connpool.NewMuxTunnel(clientTunnel)
+			if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
+				return err
+			}
+
+			var peerVersion uint16
+			if mgrVer.LE(semver.MustParse("2.4.2")) {
+				peerVersion = 0
+			} else {
+				if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
+					return err
+				}
+				peerVersion, err = muxTunnel.ReadPeerVersion(c)
+				if err != nil {
+					return err
+				}
+			}
+			// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
+			if peerVersion < 2 {
+				t.muxTunnel = muxTunnel
+				close(t.tmVerOk)
+				dlog.Debug(c, "MGR read loop starting")
+				err = t.muxTunnel.DialLoop(c, t.handlers)
+				var recvErr *client.RecvEOF
+				if errors.As(err, &recvErr) {
+					<-c.Done()
+				}
+			} else {
+				close(t.tmVerOk)
+				dlog.Debug(c, "closing since a more recent system detected")
+				err = muxTunnel.CloseSend()
+			}
+			return err
+		})
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {
