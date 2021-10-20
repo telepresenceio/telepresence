@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -331,6 +332,57 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			retryCount++
 			return false
 		}, 10*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
+	})
+
+	ts.Run("API Server is proxied", func() {
+		t := ts.T()
+		require := ts.Require()
+
+		tmpDir := t.TempDir()
+		origKubeconfigFileName := os.Getenv("DTEST_KUBECONFIG")
+		kubeconfigFileName := filepath.Join(tmpDir, "kubeconfig")
+
+		var cfg *api.Config
+		cfg, err := clientcmd.LoadFromFile(origKubeconfigFileName)
+		require.NoError(err, "Unable to read DTEST_KUBECONFIG")
+		require.NoError(err, api.MinifyConfig(cfg), "unable to minify config")
+		var cluster *api.Cluster
+		for _, c := range cfg.Clusters {
+			cluster = c
+			break
+		}
+		require.NotNilf(cluster, "unable to get cluster from config")
+		url, err := url.Parse(cluster.Server)
+		require.NoError(err)
+		hostname := url.Hostname()
+		rawIP := net.ParseIP(hostname)
+		ips := []net.IP{rawIP}
+		apiServers := []string{}
+		if rawIP == nil {
+			var err error
+			ips, err = net.LookupIP(hostname)
+			require.NoError(err)
+		}
+		for _, ip := range ips {
+			apiServers = append(apiServers, fmt.Sprintf("\"%s/24\"", ip))
+		}
+
+		cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{
+			Raw: []byte(fmt.Sprintf(`{"also-proxy":[%s]}`, strings.Join(apiServers, ","))),
+		}}
+
+		require.NoError(clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
+
+		ctx := testContext(t)
+		defer os.Setenv("KUBECONFIG", origKubeconfigFileName)
+		os.Setenv("KUBECONFIG", kubeconfigFileName)
+
+		_, stderr := telepresenceContext(ctx, "connect")
+		require.Empty(stderr)
+		defer func() {
+			_, stderr = telepresenceContext(ctx, "quit")
+			require.Empty(stderr)
+		}()
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
