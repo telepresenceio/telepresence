@@ -342,6 +342,7 @@ jobs:
           command: |
             curl -k https://curl.se/ca/cacert.pem -o ~/.cacert.pem
             export CURL_CA_BUNDLE=~/.cacert.pem
+            export AWS_CA_BUNDLE=~/.cacert.pem
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
           [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
