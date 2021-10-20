@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.4.6 (TBD)
+
+- Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
+
 ### 2.4.5 (October 15, 2021)
 
 - Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.
