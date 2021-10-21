@@ -388,8 +388,12 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 		require.Empty(stderr)
 		require.Contains(stdout, fmt.Sprintf("Also Proxy: (%d subnets)", len(ips)))
 		for _, ip := range ips {
-			require.Contains(stdout, fmt.Sprintf("- %s/24", ip))
+			rng := make(net.IP, len(ip))
+			copy(rng[:], ip)
+			rng[len(rng)-1] = 0
+			require.Contains(stdout, fmt.Sprintf("- %s/24", rng), fmt.Sprintf("Expecting to find '- %s/24'", rng))
 		}
+		require.Contains(stdout, "networking to the cluster is enabled")
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
