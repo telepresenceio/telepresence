@@ -276,7 +276,10 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 				dlog.Infof(ctx, "Adding never-proxy subnet %s", npSn)
 				route, err := routing.GetRoute(ctx, npSn)
 				if err != nil {
-					return fmt.Errorf("unable to get route for %s: %w", iputil.IPNetFromRPC(np), err)
+					dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s (%v);"+
+						"if this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services",
+						iputil.IPNetFromRPC(np), err)
+					continue
 				}
 				t.neverProxySubnets[i] = route
 			}
@@ -284,20 +287,14 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 		t.dnsIP = mi.Dns.RemoteIp
 
 		dgroup.ParentGroup(ctx).Go("watch-cluster-info", func(ctx context.Context) error {
-			err := t.watchClusterInfo(ctx)
-			var recvErr *client.RecvEOF
-			if errors.As(err, &recvErr) {
-				// If the remote end, which is the connector, has hung up mid-stream, that usually means that
-				// the daemon will be shutting down soon too.
-				<-ctx.Done()
-			}
-			return err
+			t.watchClusterInfo(ctx)
+			return nil
 		})
 	}
 	return nil
 }
 
-func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
+func (t *tunRouter) watchClusterInfo(ctx context.Context) {
 	cfgComplete := t.cfgComplete
 	backoff := 100 * time.Millisecond
 
@@ -359,7 +356,6 @@ func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
 			backoff = 3 * time.Second
 		}
 	}
-	return nil
 }
 
 func (t *tunRouter) stop(c context.Context) {

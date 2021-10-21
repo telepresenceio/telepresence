@@ -486,6 +486,11 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
 func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
+	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
+	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
+	// the cluster, since an open tunnel to the traffic-manager (via the API server) is itself required
+	// to communicate with the cluster.
 	neverProxy := []*manager.IPNet{}
 	url, err := url.Parse(tm.Server)
 	if err != nil {

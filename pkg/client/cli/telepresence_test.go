@@ -383,6 +383,13 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			_, stderr = telepresenceContext(ctx, "quit")
 			require.Empty(stderr)
 		}()
+
+		stdout, stderr := telepresence(ts.T(), "status")
+		require.Empty(stderr)
+		require.Contains(stdout, fmt.Sprintf("Also Proxy: (%d subnets)", len(ips)))
+		for _, ip := range ips {
+			require.Contains(stdout, fmt.Sprintf("- %s/24", ip))
+		}
 	})
 
 	ts.Run("Webhook Agent Image From Config", func() {
