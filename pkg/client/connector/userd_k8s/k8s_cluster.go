@@ -189,7 +189,7 @@ func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object,
 	return obj, nil
 }
 
-// FindPodFromDeployName returns a pod with the given name-hex-hex
+// FindPodFromSelector returns a pod with the given name-hex-hex
 func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*kates.Pod, error) {
 	pods, err := kc.Pods(c, namespace)
 	if err != nil {
