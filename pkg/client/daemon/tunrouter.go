@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -30,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/icmp"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/tcp"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/udp"
 )
@@ -96,9 +99,12 @@ type tunRouter struct {
 	// Subnets configured by the user
 	alsoProxySubnets []*net.IPNet
 
+	// Subnets configured not to be proxied
+	neverProxySubnets []routing.Route
 	// Subnets that the router is currently configured with. Managed, and only used in
 	// the refreshSubnets() method.
-	curSubnets []*net.IPNet
+	curSubnets      []*net.IPNet
+	curStaticRoutes []routing.Route
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -145,6 +151,48 @@ func (t *tunRouter) configureDNS(_ context.Context, dnsLocalAddr *net.UDPAddr) {
 	t.dnsLocalAddr = dnsLocalAddr
 }
 
+func (t *tunRouter) reconcileStaticRoutes(ctx context.Context) error {
+	desired := []routing.Route{}
+
+	// We're not going to add static routes unless they're actually needed
+	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
+	for _, r := range t.neverProxySubnets {
+		for _, s := range t.curSubnets {
+			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
+				desired = append(desired, r)
+				break
+			}
+		}
+	}
+
+adding:
+	for _, r := range desired {
+		for _, c := range t.curStaticRoutes {
+			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
+				continue adding
+			}
+		}
+		if err := t.dev.AddStaticRoute(ctx, r); err != nil {
+			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
+		}
+	}
+
+removing:
+	for _, c := range t.curStaticRoutes {
+		for _, r := range desired {
+			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
+				continue removing
+			}
+		}
+		if err := t.dev.RemoveStaticRoute(ctx, c); err != nil {
+			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
+		}
+	}
+	t.curStaticRoutes = desired
+
+	return nil
+}
+
 func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 	// Create a unique slice of all desired subnets.
 	desired := make([]*net.IPNet, len(t.clusterSubnets)+len(t.alsoProxySubnets))
@@ -187,7 +235,8 @@ func (t *tunRouter) refreshSubnets(ctx context.Context) error {
 			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
 		}
 	}
-	return nil
+
+	return t.reconcileStaticRoutes(ctx)
 }
 
 func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
@@ -220,71 +269,91 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 				t.alsoProxySubnets[i] = apSn
 			}
 		}
+		if len(mi.NeverProxySubnets) > 0 {
+			t.neverProxySubnets = make([]routing.Route, len(mi.NeverProxySubnets))
+			for i, np := range mi.NeverProxySubnets {
+				npSn := iputil.IPNetFromRPC(np)
+				dlog.Infof(ctx, "Adding never-proxy subnet %s", npSn)
+				route, err := routing.GetRoute(ctx, npSn)
+				if err != nil {
+					dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s (%v);"+
+						"if this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services",
+						iputil.IPNetFromRPC(np), err)
+					continue
+				}
+				t.neverProxySubnets[i] = route
+			}
+		}
 		t.dnsIP = mi.Dns.RemoteIp
 
 		dgroup.ParentGroup(ctx).Go("watch-cluster-info", func(ctx context.Context) error {
-			err := t.watchClusterInfo(ctx)
-			var recvErr *client.RecvEOF
-			if errors.As(err, &recvErr) {
-				// If the remote end, which is the connector, has hung up mid-stream, that usually means that
-				// the daemon will be shutting down soon too.
-				<-ctx.Done()
-			}
-			return err
+			t.watchClusterInfo(ctx)
+			return nil
 		})
 	}
 	return nil
 }
 
-func (t *tunRouter) watchClusterInfo(ctx context.Context) error {
-	infoStream, err := t.managerClient.WatchClusterInfo(ctx, t.session)
-	if err != nil {
-		return fmt.Errorf("error when calling WatchClusterInfo: %w", err)
-	}
-
+func (t *tunRouter) watchClusterInfo(ctx context.Context) {
 	cfgComplete := t.cfgComplete
-	for {
-		mgrInfo, err := infoStream.Recv()
+	backoff := 100 * time.Millisecond
+
+	for ctx.Err() == nil {
+		infoStream, err := t.managerClient.WatchClusterInfo(ctx, t.session)
 		if err != nil {
-			if ctx.Err() != nil {
-				return nil
+			err = fmt.Errorf("error when calling WatchClusterInfo: %w", err)
+			dlog.Warn(ctx, err)
+		}
+
+		for err == nil && ctx.Err() == nil {
+			mgrInfo, err := infoStream.Recv()
+			if err != nil {
+				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+					dlog.Errorf(ctx, "WatchClusterInfo recv: %v", err)
+				}
+				break
 			}
-			return client.WrapRecvErr(err, "error when reading WatchClusterInfo")
-		}
+			dlog.Debugf(ctx, "WatchClusterInfo update")
 
-		subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
-		if mgrInfo.ServiceSubnet != nil {
-			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
-			dlog.Infof(ctx, "Adding service subnet %s", cidr)
-			subnets = append(subnets, cidr)
-		}
-
-		for _, sn := range mgrInfo.PodSubnets {
-			cidr := iputil.IPNetFromRPC(sn)
-			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
-			subnets = append(subnets, cidr)
-		}
-
-		t.clusterSubnets = subnets
-		if err := t.refreshSubnets(ctx); err != nil {
-			dlog.Error(ctx, err)
-		}
-
-		if cfgComplete != nil {
-			// Only set clusterDNS when it hasn't been explicitly set with the --dns option
-			if t.dnsIP == nil {
-				dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
-				t.dnsIP = mgrInfo.KubeDnsIp
+			subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
+			if mgrInfo.ServiceSubnet != nil {
+				cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
+				dlog.Infof(ctx, "Adding service subnet %s", cidr)
+				subnets = append(subnets, cidr)
 			}
-			dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
-			t.clusterDomain = mgrInfo.ClusterDomain
-			if t.clusterDomain == "" {
-				// Traffic manager predates 2.4.3 and doesn't report a cluster domain. Only thing
-				// left to do then is to assume it's the standard one.
-				t.clusterDomain = "cluster.local."
+
+			for _, sn := range mgrInfo.PodSubnets {
+				cidr := iputil.IPNetFromRPC(sn)
+				dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+				subnets = append(subnets, cidr)
 			}
-			close(cfgComplete)
-			cfgComplete = nil
+
+			t.clusterSubnets = subnets
+			if err := t.refreshSubnets(ctx); err != nil {
+				dlog.Error(ctx, err)
+			}
+
+			if cfgComplete != nil {
+				// Only set clusterDNS when it hasn't been explicitly set with the --dns option
+				if t.dnsIP == nil {
+					dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
+					t.dnsIP = mgrInfo.KubeDnsIp
+				}
+				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
+				t.clusterDomain = mgrInfo.ClusterDomain
+				if t.clusterDomain == "" {
+					// Traffic manager predates 2.4.3 and doesn't report a cluster domain. Only thing
+					// left to do then is to assume it's the standard one.
+					t.clusterDomain = "cluster.local."
+				}
+				close(cfgComplete)
+				cfgComplete = nil
+			}
+		}
+		dtime.SleepWithContext(ctx, backoff)
+		backoff *= 2
+		if backoff > 3*time.Second {
+			backoff = 3 * time.Second
 		}
 	}
 }
@@ -301,6 +370,12 @@ func (t *tunRouter) stop(c context.Context) {
 		<-cc.Done()
 	}
 	if atomic.CompareAndSwapInt32(&t.closing, 1, 2) {
+		for _, np := range t.curStaticRoutes {
+			err := t.dev.RemoveStaticRoute(c, np)
+			if err != nil {
+				dlog.Warnf(c, "error removing route %s: %v", np, err)
+			}
+		}
 		t.dev.Close()
 	}
 }
@@ -321,54 +396,56 @@ func (t *tunRouter) run(c context.Context) error {
 			return nil
 		case <-t.cfgComplete:
 		}
-		ver, err := t.managerClient.Version(c, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		verStr := strings.TrimPrefix(ver.Version, "v")
-		dlog.Infof(c, "Connected to Manager %s", verStr)
-		mgrVer, err := semver.Parse(verStr)
-		if err != nil {
-			return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
-		}
-
-		clientTunnel, err := t.managerClient.ClientTunnel(c)
-		if err != nil {
-			return err
-		}
-		muxTunnel := connpool.NewMuxTunnel(clientTunnel)
-		if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
-			return err
-		}
-
-		var peerVersion uint16
-		if mgrVer.LE(semver.MustParse("2.4.2")) {
-			peerVersion = 0
-		} else {
-			if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
-				return err
-			}
-			peerVersion, err = muxTunnel.ReadPeerVersion(c)
+		return client.Retry(c, "MGR stream", func(c context.Context) error {
+			ver, err := t.managerClient.Version(c, &empty.Empty{})
 			if err != nil {
 				return err
 			}
-		}
-		// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
-		if peerVersion < 2 {
-			t.muxTunnel = muxTunnel
-			close(t.tmVerOk)
-			dlog.Debug(c, "MGR read loop starting")
-			err = t.muxTunnel.DialLoop(c, t.handlers)
-			var recvErr *client.RecvEOF
-			if errors.As(err, &recvErr) {
-				<-c.Done()
+			verStr := strings.TrimPrefix(ver.Version, "v")
+			dlog.Infof(c, "Connected to Manager %s", verStr)
+			mgrVer, err := semver.Parse(verStr)
+			if err != nil {
+				return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
 			}
-		} else {
-			close(t.tmVerOk)
-			dlog.Debug(c, "closing since a more recent system detected")
-			err = muxTunnel.CloseSend()
-		}
-		return err
+
+			clientTunnel, err := t.managerClient.ClientTunnel(c)
+			if err != nil {
+				return err
+			}
+			muxTunnel := connpool.NewMuxTunnel(clientTunnel)
+			if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
+				return err
+			}
+
+			var peerVersion uint16
+			if mgrVer.LE(semver.MustParse("2.4.2")) {
+				peerVersion = 0
+			} else {
+				if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
+					return err
+				}
+				peerVersion, err = muxTunnel.ReadPeerVersion(c)
+				if err != nil {
+					return err
+				}
+			}
+			// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
+			if peerVersion < 2 {
+				t.muxTunnel = muxTunnel
+				close(t.tmVerOk)
+				dlog.Debug(c, "MGR read loop starting")
+				err = t.muxTunnel.DialLoop(c, t.handlers)
+				var recvErr *client.RecvEOF
+				if errors.As(err, &recvErr) {
+					<-c.Done()
+				}
+			} else {
+				close(t.tmVerOk)
+				dlog.Debug(c, "closing since a more recent system detected")
+				err = muxTunnel.CloseSend()
+			}
+			return err
+		})
 	})
 
 	g.Go("TUN reader", func(c context.Context) error {

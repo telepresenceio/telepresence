@@ -58,7 +58,7 @@ func (t *Device) newRouteMessage(rtm, seq int, subnet *net.IPNet, gw net.IP) *ro
 		ID:      uintptr(os.Getpid()),
 		Seq:     seq,
 		Type:    rtm,
-		Flags:   unix.RTF_UP | unix.RTF_STATIC | unix.RTF_CLONING,
+		Flags:   unix.RTF_UP | unix.RTF_STATIC | unix.RTF_CLONING | unix.RTF_GATEWAY,
 		Addrs: []route.Addr{
 			unix.RTAX_DST:     toRouteAddr(subnet.IP),
 			unix.RTAX_GATEWAY: toRouteAddr(gw),
