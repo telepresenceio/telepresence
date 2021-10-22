@@ -1726,15 +1726,15 @@ func (hs *helmSuite) TestZ_Uninstall() {
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 	telepresenceContext(ctx, "quit")
 	hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace1))
+	// Helm uninstall does deletions asynchronously, which means the rbac might not be cleaned
+	// up immediately, so we do a quick sleep before validating that they were indeed removed.
+	// Helm currently has no method to wait for deletions to be finished before returning, but
+	// I think this should be sufficient since rbac is cleaned up super quickly.
+	time.Sleep(5 * time.Second)
 	// Make sure the RBAC was cleaned up by uninstall
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer"))
-	// There seems to sometimes be a delay when rapidly changing contexts, so let's
-	// ensure these commands use the correct context
-	// TODO: if we stop seeing issues here, whenever we are using kubectl directly in these
-	// tests that need a non-default context, we should do it manually and stop depending on
-	// setting the context since it seems flakey.
-	hs.Error(run(ctx, "kubectl", "get", "namespaces", "--context", "telepresence-test-developer"))
-	hs.Error(run(ctx, "kubectl", "get", "deploy", "-n", hs.managerNamespace1, "--context", "telepresence-test-developer"))
+	hs.Error(run(ctx, "kubectl", "get", "namespaces"))
+	hs.Error(run(ctx, "kubectl", "get", "deploy", "-n", hs.managerNamespace1))
 }
 
 func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, appNamespaces ...string) error {
