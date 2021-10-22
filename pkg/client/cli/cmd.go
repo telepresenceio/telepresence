@@ -30,8 +30,6 @@ Unless the daemons are already started, an attempt will be made to start them.
 This will involve a call to sudo unless this command is run as root (not
 recommended) which in turn may result in a password prompt.`
 
-// TODO: Provide a link in the help text to more info about telepresence
-
 // global options
 var dnsIP string
 var mappedNamespaces []string
