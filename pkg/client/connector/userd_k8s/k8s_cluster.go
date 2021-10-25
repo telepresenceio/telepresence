@@ -340,7 +340,3 @@ func (kc *Cluster) GetClusterId(ctx context.Context) string {
 func (kc *Cluster) Client() *kates.Client {
 	return kc.client
 }
-
-func (kc *Cluster) GetManagerNamespace() string {
-	return kc.kubeconfigExtension.Manager.Namespace
-}
