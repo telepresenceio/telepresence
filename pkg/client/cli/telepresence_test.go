@@ -924,6 +924,7 @@ func (cs *connectedSuite) TestN_ToPodPortForwarding() {
 
 func (cs *connectedSuite) TestO_LargeRequest() {
 	require := cs.Require()
+	ctx := testContext(cs.T())
 	client := &http.Client{Timeout: 30 * time.Second}
 	b := make([]byte, 1024*1024*5)
 	b[0] = '!'
@@ -931,9 +932,14 @@ func (cs *connectedSuite) TestO_LargeRequest() {
 	for i := range b[2:] {
 		b[i+2] = 'A'
 	}
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("http://hello-0.%s/put", cs.ns()), bytes.NewBuffer(b))
-	require.NoError(err)
 
+	// Ensure the service is accessible before we do the put request
+	helloSvc := fmt.Sprintf("http://hello-0.%s", cs.ns())
+	cs.Eventually(func() bool {
+		return run(ctx, "curl", "--silent", helloSvc) == nil
+	}, 30*time.Second, 3*time.Second)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/put", helloSvc), bytes.NewBuffer(b))
+	require.NoError(err)
 	resp, err := client.Do(req)
 	require.NoError(err)
 	defer resp.Body.Close()
@@ -1726,15 +1732,16 @@ func (hs *helmSuite) TestZ_Uninstall() {
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "default"))
 	telepresenceContext(ctx, "quit")
 	hs.NoError(run(ctx, "helm", "uninstall", "traffic-manager", "-n", hs.managerNamespace1))
-	// Helm uninstall does deletions asynchronously, which means the rbac might not be cleaned
-	// up immediately, so we do a quick sleep before validating that they were indeed removed.
-	// Helm currently has no method to wait for deletions to be finished before returning, but
-	// I think this should be sufficient since rbac is cleaned up super quickly.
-	time.Sleep(5 * time.Second)
-	// Make sure the RBAC was cleaned up by uninstall
 	hs.NoError(run(ctx, "kubectl", "config", "use-context", "telepresence-test-developer"))
-	hs.Error(run(ctx, "kubectl", "get", "namespaces"))
-	hs.Error(run(ctx, "kubectl", "get", "deploy", "-n", hs.managerNamespace1))
+	// Since helm uninstall is async, we wrap these checks in an Eventually
+	// to ensure the RBAC *eventually* goes away since it might not be
+	// instantaneous
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "get", "namespaces") != nil
+	}, 30*time.Second, 5*time.Second)
+	hs.Eventually(func() bool {
+		return run(ctx, "kubectl", "get", "deploy", "-n", hs.managerNamespace1) != nil
+	}, 30*time.Second, 5*time.Second)
 }
 
 func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, appNamespaces ...string) error {
