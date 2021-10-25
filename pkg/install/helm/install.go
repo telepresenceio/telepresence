@@ -45,9 +45,9 @@ func getValues(ctx context.Context) map[string]interface{} {
 		"systemaPort": cloudConfig.SystemaPort,
 		"createdBy":   releaseOwner,
 	}
-	if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
+	if !clientConfig.Grpc.MaxReceiveSize.IsZero() {
 		values["grpc"] = map[string]interface{}{
-			"maxReceiveSize": mxRecvSize.String(),
+			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
 	if imgConfig.WebhookAgentImage != "" {

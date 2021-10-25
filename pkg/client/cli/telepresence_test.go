@@ -2122,8 +2122,7 @@ func testContextWithConfig(t testing.TB, addConfig *client.Config) context.Conte
 	config.Images.Registry = registry
 	config.Images.WebhookRegistry = registry
 
-	mz, _ := resource.ParseQuantity("10Mi")
-	config.Grpc.MaxReceiveSize = &mz
+	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
 
 	if addConfig != nil {
