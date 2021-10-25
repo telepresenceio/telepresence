@@ -23,8 +23,10 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 		return Route{}, fmt.Errorf("unable to run 'route -n get %s': %w", ip, err)
 	}
 	match := findInterfaceRe.FindStringSubmatch(string(out))
+	// This might fail because no "gateway" is listed. The problem is that without a gateway IP we can't
+	// route to the network anyway, so we should just return an error.
 	if match == nil {
-		return Route{}, fmt.Errorf("unexpected error: %s did not match output of route: %s", findInterfaceRegex, out)
+		return Route{}, fmt.Errorf("%s did not match output of route:\n%s", findInterfaceRegex, out)
 	}
 	ifaceName := match[2]
 	iface, err := net.InterfaceByName(ifaceName)

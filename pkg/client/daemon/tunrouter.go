@@ -270,18 +270,19 @@ func (t *tunRouter) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo
 			}
 		}
 		if len(mi.NeverProxySubnets) > 0 {
-			t.neverProxySubnets = make([]routing.Route, len(mi.NeverProxySubnets))
-			for i, np := range mi.NeverProxySubnets {
+			t.neverProxySubnets = []routing.Route{}
+			for _, np := range mi.NeverProxySubnets {
 				npSn := iputil.IPNetFromRPC(np)
 				dlog.Infof(ctx, "Adding never-proxy subnet %s", npSn)
 				route, err := routing.GetRoute(ctx, npSn)
 				if err != nil {
-					dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s (%v);"+
-						"if this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services",
+					dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s. "+
+						"If this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services. "+
+						"Error: %v",
 						iputil.IPNetFromRPC(np), err)
 					continue
 				}
-				t.neverProxySubnets[i] = route
+				t.neverProxySubnets = append(t.neverProxySubnets, route)
 			}
 		}
 		t.dnsIP = mi.Dns.RemoteIp
