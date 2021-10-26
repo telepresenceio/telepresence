@@ -17,4 +17,4 @@ The Telepresence Contributors Meeting is held on the first Wednesday of every mo
 
 New contributors are always welcome! Check out our [contributor's guide](DEVELOPING.md) to learn how you can help make Telepresence better.
 
-**Zoom Meeting Link**: https://us02web.zoom.us/j/86999933724 
+**Zoom Meeting Link**: https://us02web.zoom.us/j/86999933724
