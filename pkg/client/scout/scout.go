@@ -132,6 +132,18 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 	baseMeta["mode"] = mode
 	baseMeta["trace_id"] = uuid.New()
 	baseMeta["goos"] = runtime.GOOS
+
+	// Discover how Telepresence was installed based on the binary's location
+	var installMethod string
+	execPath, err := os.Executable()
+	if err != nil {
+		dlog.Errorf(ctx, "scout error getting executable: %s", err)
+		installMethod = "undetermined"
+	} else {
+		installMethod = GetInstallMechanism(ctx, execPath)
+	}
+	baseMeta["install_method"] = installMethod
+
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence2",
@@ -148,6 +160,23 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 			// Fixed (growing) metadata passed with every report
 			BaseMetadata: baseMeta,
 		},
+	}
+}
+
+// GetInstallMechanism returns how the binary was installed based on its location.
+func GetInstallMechanism(ctx context.Context, execPath string) string {
+	binaryPath, err := filepath.EvalSymlinks(execPath)
+	if err != nil {
+		dlog.Infof(ctx, "scout error following symlink %s: %s", execPath, err)
+		return "undetermined"
+	}
+	switch {
+	case runtime.GOOS == "darwin" && strings.Contains(binaryPath, "Cellar"):
+		return "brew"
+	case strings.Contains(binaryPath, "docker"):
+		return "docker"
+	default:
+		return "website"
 	}
 }
 
