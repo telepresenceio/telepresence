@@ -46,6 +46,7 @@ import (
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	_ "github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -1050,6 +1051,71 @@ func (cs *connectedSuite) TestP_SuccessfullyInterceptsHeadlessService() {
 			)
 		})
 	}
+}
+
+func (cs *connectedSuite) TestQ_ManualAgent() {
+	require := cs.Require()
+	ctx := testContext(cs.T())
+
+	stdout, stderr := telepresence(cs.T(), "genyaml", "container", "--container-name", "echo-container", "--port", "8080", "--output", "-", "--input", "k8s/echo-manual-inject-deploy.yaml")
+	require.Empty(stderr)
+	container := map[string]interface{}{}
+	require.NoError(yaml.Unmarshal([]byte(stdout), &container))
+
+	stdout, stderr = telepresence(cs.T(), "genyaml", "volume", "--output", "-", "--input", "k8s/echo-manual-inject-deploy.yaml")
+	require.Empty(stderr)
+	volume := map[string]interface{}{}
+	require.NoError(yaml.Unmarshal([]byte(stdout), &volume))
+
+	f, err := os.Open("k8s/echo-manual-inject-deploy.yaml")
+	require.NoError(err)
+	defer f.Close()
+	b, err := io.ReadAll(f)
+	require.NoError(err)
+	deploy := map[string]interface{}{}
+	require.NoError(yaml.Unmarshal(b, &deploy))
+
+	podTemplate := deploy["spec"].(map[string]interface{})["template"].(map[string]interface{})
+	podSpec := podTemplate["spec"].(map[string]interface{})
+	cons := podSpec["containers"].([]interface{})
+	podSpec["containers"] = append(cons, container)
+	podSpec["volumes"] = []interface{}{volume}
+	podTemplate["metadata"].(map[string]interface{})["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
+
+	f, err = os.Open("k8s/echo-manual-inject-svc.yaml")
+	require.NoError(err)
+	defer f.Close()
+	svc, err := io.ReadAll(f)
+	require.NoError(err)
+
+	tmpDir := cs.T().TempDir()
+	yamlFile := filepath.Join(tmpDir, "deployment.yaml")
+	f, err = os.Create(yamlFile)
+	require.NoError(err)
+	_, err = f.Write(svc)
+	require.NoError(err)
+	_, err = f.Write([]byte("\n---\n"))
+	require.NoError(err)
+	b, err = yaml.Marshal(&deploy)
+	require.NoError(err)
+	_, err = f.Write(b)
+	require.NoError(err)
+	f.Close()
+
+	require.NoError(cs.tpSuite.kubectl(ctx, "apply", "-f", yamlFile, "--context", "default"))
+	defer func() {
+		require.NoError(cs.tpSuite.kubectl(ctx, "delete", "-f", yamlFile, "--context", "default"))
+	}()
+	require.NoError(cs.tpSuite.waitForService(ctx, "manual-inject", 80))
+
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
+	require.Empty(stderr)
+	require.Regexp(regexp.MustCompile(`.*manual-inject\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
+
+	_, stderr = telepresence(cs.T(), "intercept", "manual-inject", "--namespace", cs.ns(), "--port", "9094")
+	require.Empty(stderr)
+	_, stderr = telepresence(cs.T(), "leave", "manual-inject-"+cs.ns())
+	require.Empty(stderr)
 }
 
 func (cs *connectedSuite) TestZ_Uninstall() {
