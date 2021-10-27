@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -18,6 +19,7 @@ type listInfo struct {
 	onlyInterceptable bool
 	debug             bool
 	namespace         string
+	json              bool
 }
 
 func listCommand() *cobra.Command {
@@ -35,6 +37,7 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+	flags.BoolVarP(&s.json, "json", "j", false, "output as json array")
 	return cmd
 }
 
@@ -93,12 +96,20 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	for _, workload := range r.Workloads {
-		if workload.Name == "" {
-			// Local-only, so use name of intercept
-			fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, workload.InterceptInfo.Spec.Name)
-		} else {
-			fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, workload.Name, state(workload))
+	if s.json {
+		msg, err := json.Marshal(r.Workloads)
+		if err != nil {
+			fmt.Fprintf(stdout, "json marshal error: %v", err)
+		}
+		fmt.Fprintf(stdout, "%s", msg)
+	} else {
+		for _, workload := range r.Workloads {
+			if workload.Name == "" {
+				// Local-only, so use name of intercept
+				fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, workload.InterceptInfo.Spec.Name)
+			} else {
+				fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, workload.Name, state(workload))
+			}
 		}
 	}
 	return nil
