@@ -59,7 +59,7 @@ func run() error {
 		err := client.Retry(ctx, "kubeception", func(ctx context.Context) error {
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			kubeconfig, err := kubeceptionRequest(ctx, cli, "PUT", token, clusterName, map[string]string{"wait": "true", "timeoutSecs": "7200", "version": "1.19"})
+			kubeconfig, err := kubeceptionRequest(ctx, cli, "PUT", token, clusterName, map[string]string{"wait": "true", "timeoutSecs": "7200", "version": "1.19", "provider": "preview"})
 			if err != nil {
 				return err
 			}
