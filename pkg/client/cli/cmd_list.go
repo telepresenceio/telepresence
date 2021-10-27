@@ -100,8 +100,9 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		msg, err := json.Marshal(r.Workloads)
 		if err != nil {
 			fmt.Fprintf(stdout, "json marshal error: %v", err)
+		} else {
+			fmt.Fprintf(stdout, "%s", msg)
 		}
-		fmt.Fprintf(stdout, "%s", msg)
 	} else {
 		for _, workload := range r.Workloads {
 			if workload.Name == "" {
