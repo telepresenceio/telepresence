@@ -197,6 +197,61 @@ func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber
 
 var agentNotFound = errors.New("no such agent")
 
+func (ki *installer) getSvcForInjectedPod(
+	c context.Context,
+	namespace,
+	name,
+	svcName,
+	portNameOrNumber string,
+	podTemplate *kates.PodTemplateSpec,
+	obj kates.Object,
+) (*kates.Service, error) {
+	a := podTemplate.ObjectMeta.Annotations
+	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
+	// agent is injected using a mutating webhook, or manually. Get its service and skip the rest
+	svc, err := install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find pod from svc.
+	// On fail, assume agent not present and roll (only if injected via webhook; rolling a manually managed deployment will do no good)
+	pod, err := ki.FindPodFromSelector(c, namespace, svc.Spec.Selector)
+	if err != nil {
+		if webhookInjected {
+			dlog.Warnf(c, "Error finding pod for %s, rolling and proceeding anyway: %v", name, err)
+			err = ki.rolloutRestart(c, obj)
+			if err != nil {
+				return nil, err
+			}
+			return svc, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	// Check pod for agent. If missing and webhookInjected, roll pod
+	roll := true
+	for _, containter := range pod.Spec.Containers {
+		if containter.Name == install.AgentContainerName {
+			roll = false
+			break
+		}
+	}
+	if roll {
+		if webhookInjected {
+			err = ki.rolloutRestart(c, obj)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// The user claims to have manually added the agent but we can't find it; report the error.
+			return nil, fmt.Errorf("the %s annotation is set but no traffic agent was found in %s", install.ManualInjectAnnotation, name)
+		}
+	}
+	return svc, nil
+}
+
 // This does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
@@ -214,40 +269,18 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
 
 	var svc *kates.Service
-	if a := podTemplate.ObjectMeta.Annotations; a != nil && a[install.InjectAnnotation] == "enabled" {
-		// agent is injected using a mutating webhook. Get its service and skip the rest
-		svc, err = install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
+	a := podTemplate.ObjectMeta.Annotations
+	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
+	manuallyManaged := a != nil && a[install.ManualInjectAnnotation] == "true"
+	if webhookInjected != manuallyManaged {
+		svc, err := ki.getSvcForInjectedPod(c, namespace, name, svcName, portNameOrNumber, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
-
-		// Find pod from svc. On fail, assume agent not present and roll
-		pod, err := ki.FindPodFromSelector(c, namespace, svc.Spec.Selector)
-		if err != nil {
-			dlog.Warnf(c, "Error finding pod for %s, rolling and proceeding anyway: %v", name, err)
-			err = ki.rolloutRestart(c, obj)
-			if err != nil {
-				return "", "", err
-			}
-			return string(svc.GetUID()), kind, nil
-		}
-
-		// Check pod for agent. If missing, roll pod
-		roll := true
-		for _, containter := range pod.Spec.Containers {
-			if containter.Name == install.AgentContainerName {
-				roll = false
-				break
-			}
-		}
-		if roll {
-			err = ki.rolloutRestart(c, obj)
-			if err != nil {
-				return "", "", err
-			}
-		}
-
 		return string(svc.GetUID()), kind, nil
+	} else if webhookInjected {
+		// If both are true that's likely to cause issues, since there may be two traffic agents on the pod.
+		return "", "", fmt.Errorf("workload is misconfigured; only one of %s and %s may be set at a time, but both are", install.InjectAnnotation, install.ManualInjectAnnotation)
 	}
 
 	var agentContainer *kates.Container

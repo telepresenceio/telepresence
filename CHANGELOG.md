@@ -11,6 +11,7 @@
 
 - Feature: Added a json flag for the "telepresence list" command. This will aid automation.
 
+
 ### 2.4.5 (October 15, 2021)
 
 - Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.

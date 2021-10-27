@@ -53,6 +53,8 @@ deployment:
                 fieldPath: status.podIP
           - name: _TEL_AGENT_APP_PORT
             value: "8080"
+          - name: _TEL_AGENT_PORT
+            value: "9900"
           - name: _TEL_AGENT_MANAGER_HOST
             value: traffic-manager.ambassador
           image: localhost:5000/tel2:{{.Version}}

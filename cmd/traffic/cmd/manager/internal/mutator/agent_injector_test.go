@@ -235,6 +235,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
 				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
 				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_PORT","value":"9900"},` +
 				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
 				`],` +
 				`"resources":{},` +
@@ -295,6 +296,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
 				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
 				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_PORT","value":"9900"},` +
 				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
 				`],` +
 				`"resources":{},` +
@@ -359,6 +361,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
 				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
 				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_PORT","value":"9900"},` +
 				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
 				`],` +
 				`"resources":{},` +
@@ -468,6 +471,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
 				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
 				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_PORT","value":"9900"},` +
 				`{"name":"_TEL_AGENT_APP_MOUNTS","value":"/tel_app_mounts"},` +
 				`{"name":"TELEPRESENCE_MOUNTS","value":"/var/run/secrets/kubernetes.io/serviceaccount"},` +
 				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
