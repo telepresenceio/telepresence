@@ -165,6 +165,9 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 
 // GetInstallMechanism returns how the binary was installed based on its location.
 func GetInstallMechanism(ctx context.Context, execPath string) string {
+	// Some package managers, like brew, symlink binaries into /usr/local/bin .
+	// We want to use the actual location of the executable when reporting metrics
+	// so we follow the symlink to get the actual binary path.
 	binaryPath, err := filepath.EvalSymlinks(execPath)
 	if err != nil {
 		dlog.Infof(ctx, "scout error following symlink %s: %s", execPath, err)
