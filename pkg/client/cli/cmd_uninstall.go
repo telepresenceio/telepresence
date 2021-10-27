@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -76,7 +75,11 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if r.ErrorText != "" {
-			return errors.New(r.ErrorText)
+			ec := errcat.Unknown
+			if r.ErrorCategory != 0 {
+				ec = errcat.Category(r.ErrorCategory)
+			}
+			return ec.New(r.ErrorText)
 		}
 
 		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
