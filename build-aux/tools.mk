@@ -66,7 +66,12 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 #
 tools/shellcheck = $(TOOLSBINDIR)/shellcheck
 SHELLCHECK_VERSION=0.7.2
-SHELLCHECK_TXZ = https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(GOHOSTOS).$(shell uname -m).tar.xz
+SHELLCHECK_ARCH=$(shell uname -m)
+# shellcheck uses the same binary on Intel and Apple Silicon macs
+ifeq ($(GOHOSTOS),darwin)
+SHELLCHECK_ARCH=x86_64
+endif
+SHELLCHECK_TXZ = https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(GOHOSTOS).$(SHELLCHECK_ARCH).tar.xz
 $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 	mkdir -p $(@D)
 	curl -sfL $(SHELLCHECK_TXZ) -o $@

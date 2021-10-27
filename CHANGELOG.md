@@ -2,6 +2,8 @@
 
 ### 2.4.6 (TBD)
 
+- Feature: Telepresence CLI is now built and published for Apple silicon Macs.
+
 - Changelog: `--help` text now includes a link to https://www.telepresence.io/ so users who download Telepresence via Brew or some other mechanism are able to find the documentation easily.
 
 - Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.

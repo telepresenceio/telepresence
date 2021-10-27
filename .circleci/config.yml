@@ -342,9 +342,23 @@ jobs:
           command: |
             curl -k https://curl.se/ca/cacert.pem -o ~/.cacert.pem
             export CURL_CA_BUNDLE=~/.cacert.pem
-      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
-      - run: |
-          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+            export AWS_CA_BUNDLE=~/.cacert.pem
+      - run:
+          name: "Publish macos (arch amd64)"
+          command: |
+            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable
+      - run:
+          name: "Publish macos (arch arm64)"
+          command: |
+            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make push-executable
+      - run:
+          name: "Promote macos (arch amd64)"
+          command: |
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make promote-to-stable
+      - run:
+          name: "Promote macos (arch arm64)"
+          command: |
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make promote-to-stable
 
   "release-windows":
     executor:
