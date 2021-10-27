@@ -272,12 +272,15 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, po
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
 	manuallyManaged := a != nil && a[install.ManualInjectAnnotation] == "true"
-	if webhookInjected || manuallyManaged {
+	if webhookInjected != manuallyManaged {
 		svc, err := ki.getSvcForInjectedPod(c, namespace, name, svcName, portNameOrNumber, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
 		return string(svc.GetUID()), kind, nil
+	} else if webhookInjected {
+		// If both are true that's likely to cause issues, since there may be two traffic agents on the pod.
+		return "", "", fmt.Errorf("workload is misconfigured; only one of %s and %s may be set at a time, but both are", install.InjectAnnotation, install.ManualInjectAnnotation)
 	}
 
 	var agentContainer *kates.Container

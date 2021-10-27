@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,10 +40,9 @@ It is recommended that you not do this unless strictly necessary. Instead, we su
 		},
 	}
 	cmd.PersistentFlags().StringVar(&info.inputFile, "input", "",
-		"Path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc)")
-	cmd.PersistentFlags().StringVar(&info.outputFile, "output", "",
-		"Path to the file to place the output in.")
-	_ = cmd.MarkPersistentFlagRequired("output")
+		"Path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin.")
+	cmd.PersistentFlags().StringVar(&info.outputFile, "output", "-",
+		"Path to the file to place the output in. Defaults to '-' which means stdout.")
 	_ = cmd.MarkPersistentFlagRequired("input")
 	cmd.AddCommand(
 		genContainerSubCommand(&info),
