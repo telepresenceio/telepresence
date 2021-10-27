@@ -156,6 +156,10 @@ func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 		sliceEqual(kf.flagArgs, okf.flagArgs)
 }
 
+func (kf *Config) GetManagerNamespace() string {
+	return kf.kubeconfigExtension.Manager.Namespace
+}
+
 func sliceEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

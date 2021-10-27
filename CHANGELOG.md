@@ -6,6 +6,9 @@
 
 - Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
 
+- Feature: Telepresence now supports manually injecting the traffic-agent YAML into workload manifests.
+  Use the `genyaml` command to create the sidecar YAML, then add the `telepresence.getambassador.io/manually-injected: "true"` annotation to to your pods to allow Telepresence to intercept them.
+
 ### 2.4.5 (October 15, 2021)
 
 - Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.

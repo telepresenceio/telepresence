@@ -3,8 +3,11 @@ package client
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/sethvargo/go-envconfig"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 type Env struct {
@@ -83,6 +86,9 @@ func LoadEnv(ctx context.Context) (*Env, error) {
 	var env Env
 	if err := envconfig.Process(ctx, &env); err != nil {
 		return nil, err
+	}
+	if env.AgentImage == "" {
+		env.AgentImage = "tel2:" + strings.TrimPrefix(version.Version, "v")
 	}
 	return &env, nil
 }

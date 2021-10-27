@@ -56,6 +56,8 @@ deployment:
                 fieldPath: status.podIP
           - name: _TEL_AGENT_APP_PORT
             value: "8080"
+          - name: _TEL_AGENT_PORT
+            value: "9900"
           - name: _TEL_AGENT_APP_MOUNTS
             value: /tel_app_mounts
           - name: TELEPRESENCE_MOUNTS
