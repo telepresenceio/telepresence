@@ -1,9 +1,9 @@
 # This script is generated automatically by the release automation code in the
 # Telepresence repository:
-class Telepresence < Formula
+class __FORMULA_NAME__ < Formula
   desc "Local dev environment attached to a remote Kubernetes cluster"
   homepage "https://telepresence.io"
-  url "https://app.getambassador.io/download/tel2/darwin/amd64/__NEW_VERSION__/telepresence"
+  url "https://app.getambassador.io/download/tel2/darwin/__ARCH__/__NEW_VERSION__/telepresence"
   sha256 "__TARBALL_HASH__"
 
   # macfuse is a cask and formula can't depend on casks, so we can't actually
