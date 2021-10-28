@@ -177,7 +177,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			defaultSvcFinder,
 		},
 		{
-			"Skip Precondition: No port specified",
+			"Error Precondition: No port specified",
 			toAdmissionRequest(podResource, corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 					install.InjectAnnotation: "enabled",
@@ -189,11 +189,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 			}),
 			"",
-			"",
+			"found no Service with a port that matches any container in this workload",
 			defaultSvcFinder,
 		},
 		{
-			"Skip Precondition: Sidecar has port collision",
+			"Error Precondition: Sidecar has port collision",
 			toAdmissionRequest(podResource, corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -213,7 +213,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 			}),
 			"",
-			"",
+			"is exposing the same port (9900) as the traffic-agent sidecar",
 			defaultSvcFinder,
 		},
 		{

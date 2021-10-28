@@ -84,8 +84,9 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	portNameOrNumber := pod.Annotations[install.ServicePortAnnotation]
 	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, portNameOrNumber, svc)
 	if err != nil {
+		err := fmt.Errorf("unable to find port to intercept; try the %s annotation: %w", install.ServicePortAnnotation, err)
 		dlog.Error(ctx, err)
-		return nil, nil
+		return nil, err
 	}
 	if appContainer.Name == install.AgentContainerName {
 		dlog.Infof(ctx, "service %s/%s is already pointing at agent container %s; skipping", svc.Namespace, svc.Name, appContainer.Name)
@@ -96,9 +97,9 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	ports := appContainer.Ports
 	for i := range ports {
 		if ports[i].ContainerPort == env.AgentPort {
-			dlog.Infof(ctx, "the %s pod container %s is exposing the same port (%d) as the %s sidecar; skipping",
-				refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
-			return nil, nil
+			err := fmt.Errorf("the %s pod container %s is exposing the same port (%d) as the %s sidecar", refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
+			dlog.Info(ctx, err)
+			return nil, err
 		}
 	}
 
