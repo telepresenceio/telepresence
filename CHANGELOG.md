@@ -4,15 +4,14 @@
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
 
-- Changelog: `--help` text now includes a link to https://www.telepresence.io/ so users who download Telepresence via Brew or some other mechanism are able to find the documentation easily.
-
-- Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
-
 - Feature: Telepresence now supports manually injecting the traffic-agent YAML into workload manifests.
   Use the `genyaml` command to create the sidecar YAML, then add the `telepresence.getambassador.io/manually-injected: "true"` annotation to to your pods to allow Telepresence to intercept them.
 
 - Feature: Added a json flag for the "telepresence list" command. This will aid automation.
 
+- Change: `--help` text now includes a link to https://www.telepresence.io/ so users who download Telepresence via Brew or some other mechanism are able to find the documentation easily.
+
+- Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
 
 ### 2.4.5 (October 15, 2021)
 
