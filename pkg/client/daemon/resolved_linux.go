@@ -77,9 +77,8 @@ func (o *outbound) tryResolveD(c context.Context, dev *vif.Device) error {
 				initDone <- struct{}{}
 				return errResolveDNotConfigured
 			}
-			dnsServer = dns.NewServer(c, listeners, nil, o.resolveInCluster)
-			close(initDone)
-			return dnsServer.Run(c)
+			dnsServer = dns.NewServer(listeners, nil, o.resolveInCluster, &o.dnsCache)
+			return dnsServer.Run(c, initDone)
 		}
 	})
 
@@ -93,7 +92,6 @@ func (o *outbound) tryResolveD(c context.Context, dev *vif.Device) error {
 		cmdC, cmdCancel := context.WithTimeout(c, 2*time.Second)
 		defer cmdCancel()
 		for cmdC.Err() == nil {
-			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
 			if dnsServer.RequestCount() > 0 {
 				// The query went all way through. Start processing search paths systemd-resolved style
@@ -101,7 +99,8 @@ func (o *outbound) tryResolveD(c context.Context, dev *vif.Device) error {
 				o.processSearchPaths(g, o.updateLinkDomains)
 				return nil
 			}
-			dns.Flush(c)
+			o.flushDNS()
+			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 		}
 		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured

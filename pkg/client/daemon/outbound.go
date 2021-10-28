@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	dns2 "github.com/miekg/dns"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dgroup"
@@ -19,11 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
-
-type awaitLookupResult struct {
-	done   chan struct{}
-	result iputil.IPs
-}
 
 // outbound does stuff, idk, I didn't write it.
 //
@@ -42,9 +36,7 @@ type outbound struct {
 
 	searchPathCh chan []string
 
-	// dnsQueriesInProgress unique set of DNS queries currently in progress.
-	dnsInProgress  map[string]*awaitLookupResult
-	dnsQueriesLock sync.Mutex
+	dnsCache sync.Map
 
 	dnsConfig *rpc.DNSConfig
 
@@ -67,13 +59,12 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan<-
 		dnsConfig: &rpc.DNSConfig{
 			LocalIp: iputil.Parse(dnsIPStr),
 		},
-		noSearch:      noSearch,
-		namespaces:    make(map[string]struct{}),
-		domains:       make(map[string]struct{}),
-		dnsInProgress: make(map[string]*awaitLookupResult),
-		search:        []string{""},
-		searchPathCh:  make(chan []string, 5),
-		scout:         scout,
+		noSearch:     noSearch,
+		namespaces:   make(map[string]struct{}),
+		domains:      make(map[string]struct{}),
+		search:       []string{""},
+		searchPathCh: make(chan []string, 5),
+		scout:        scout,
 	}
 
 	var err error
@@ -83,16 +74,19 @@ func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan<-
 	return ret, nil
 }
 
-// On a macOS, Docker uses its own search-path for single label names. This means that the search path that is declared
-// in the macOS resolver is ignored although the rest of the DNS-resolution works OK. Since the search-path is likely to
-// change during a session, a stable fake domain is needed to emulate the search-path. That fake-domain can then be used
-// in the search path declared in the Docker config. The "tel2-search" domain fills this purpose and a request for
-// "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
+// tel2SubDomain aims to fix a search-path problem when using Docker on non-linux systems where
+// Docker uses its own search-path for single label names. This means that the search path that
+// is declared in the macOS resolver is ignored although the rest of the DNS-resolution works OK.
+// Since the search-path is likely to change during a session, a stable fake domain is needed to
+// emulate the search-path. That fake-domain can then be used in the search path declared in the
+// Docker config.
+//
+// The "tel2-search" domain fills this purpose and a request for "<single label name>.tel2-search."
+// will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
 const tel2SubDomainDot = tel2SubDomain + "."
 
-var localhostIPv6 = []net.IP{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
-var localhostIPv4 = []net.IP{{127, 0, 0, 1}}
+var localhostIPs = []net.IP{{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
 func (o *outbound) shouldDoClusterLookup(query string) bool {
 	if strings.HasSuffix(query, "."+o.router.clusterDomain) && strings.Count(query, ".") < 4 {
@@ -117,7 +111,7 @@ func (o *outbound) shouldDoClusterLookup(query string) bool {
 	return true
 }
 
-func (o *outbound) resolveInCluster(c context.Context, qType uint16, query string) (results []net.IP) {
+func (o *outbound) resolveInCluster(c context.Context, query string) (results []net.IP) {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -129,10 +123,7 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		// But it does, so I need this in order to be
 		// productive at home.  We should really
 		// root-cause this, because it's weird.
-		if qType == dns2.TypeAAAA {
-			return localhostIPv6
-		}
-		return localhostIPv4
+		return localhostIPs
 	}
 
 	if !o.shouldDoClusterLookup(query) {
@@ -153,34 +144,9 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 		}
 	}()
 
-	var firstLookupResult *awaitLookupResult
-	o.dnsQueriesLock.Lock()
-	awaitResult := o.dnsInProgress[query]
-	if awaitResult == nil {
-		firstLookupResult = &awaitLookupResult{done: make(chan struct{})}
-		o.dnsInProgress[query] = firstLookupResult
-	}
-	o.dnsQueriesLock.Unlock()
-
-	if awaitResult != nil {
-		// Wait for this query to complete. Then return its value
-		select {
-		case <-awaitResult.done:
-			return awaitResult.result
-		case <-c.Done():
-			return nil
-		}
-	}
-
 	// Give the cluster lookup a reasonable timeout.
 	c, cancel := context.WithTimeout(c, o.dnsConfig.LookupTimeout.AsDuration())
-	defer func() {
-		cancel()
-		o.dnsQueriesLock.Lock()
-		delete(o.dnsInProgress, query)
-		o.dnsQueriesLock.Unlock()
-		close(firstLookupResult.done)
-	}()
+	defer cancel()
 
 	queryWithNoTrailingDot := query[:len(query)-1]
 	dlog.Debugf(c, "LookupHost %q", queryWithNoTrailingDot)
@@ -199,7 +165,6 @@ func (o *outbound) resolveInCluster(c context.Context, qType uint16, query strin
 	for i, ip := range response.Ips {
 		ips[i] = ip
 	}
-	firstLookupResult.result = ips
 	return ips
 }
 
@@ -303,6 +268,13 @@ func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Co
 				}
 			}
 		}
+	})
+}
+
+func (o *outbound) flushDNS() {
+	o.dnsCache.Range(func(key, _ interface{}) bool {
+		o.dnsCache.Delete(key)
+		return true
 	})
 }
 

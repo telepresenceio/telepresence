@@ -11,6 +11,8 @@
 
 - Bugfix: Outbound connections are now properly closed when the peer closes.
 
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
 ### 2.4.6 (November 2, 2021)

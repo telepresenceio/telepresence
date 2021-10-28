@@ -30,8 +30,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 			return nil
 		case <-o.router.configured():
 			o.processSearchPaths(g, o.updateRouterDNS)
-			v := dns.NewServer(c, []net.PacketConn{listener}, nil, o.resolveInCluster)
-			return v.Run(c)
+			return dns.NewServer([]net.PacketConn{listener}, nil, o.resolveInCluster, &o.dnsCache).Run(c, make(chan struct{}))
 		}
 	})
 	return g.Wait()
@@ -52,6 +51,7 @@ func (o *outbound) updateRouterDNS(c context.Context, paths []string) error {
 	o.namespaces = namespaces
 	o.search = search
 	o.domainsLock.Unlock()
+	o.flushDNS()
 	err := o.router.dev.SetDNS(c, o.router.dnsIP, search)
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)

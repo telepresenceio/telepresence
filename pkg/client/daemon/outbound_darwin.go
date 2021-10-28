@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
@@ -170,7 +169,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		for namespace := range o.domains {
 			_ = os.Remove(namespaceResolverFile(resolverDirName, namespace))
 		}
-		dns.Flush(dcontext.HardContext(c))
+		o.flushDNS()
 	}()
 
 	// Start local DNS server
@@ -184,8 +183,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 			o.processSearchPaths(g, func(c context.Context, paths []string) error {
 				return o.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
 			})
-			v := dns.NewServer(c, []net.PacketConn{listener}, nil, o.resolveInCluster)
-			return v.Run(c)
+			return dns.NewServer([]net.PacketConn{listener}, nil, o.resolveInCluster, &o.dnsCache).Run(c, make(chan struct{}))
 		}
 	})
 	return g.Wait()
@@ -267,7 +265,7 @@ func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resol
 	if err = rf.write(resolverFileName); err != nil {
 		return err
 	}
-	dns.Flush(c)
+	o.flushDNS()
 	return nil
 }
 
