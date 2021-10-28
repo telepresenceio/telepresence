@@ -94,7 +94,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		if svcName == "" {
 			return nil, fmt.Errorf("multiple services found")
 		}
-		if svcName == "some-name" {
+		if svcName == defaultSvc.Name {
 			return defaultSvc, nil
 		}
 		return nil, fmt.Errorf("no services found")
@@ -268,11 +268,65 @@ func TestTrafficAgentInjector(t *testing.T) {
 			defaultSvcFinder,
 		},
 		{
-			"Apply Patch: Multiple services",
+			"Error Precondition: Multiple services",
 			toAdmissionRequest(podResource, corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
+					},
+					Labels: map[string]string{
+						"service": "some-name",
+					},
+					Namespace: "some-ns",
+					Name:      "some-name"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "some-app-name",
+						Image: "some-app-image",
+						Ports: []corev1.ContainerPort{{
+							Name: "http", ContainerPort: 8888},
+						}},
+					},
+				},
+			}),
+			"",
+			"multiple services found",
+			multiSvcFinder,
+		},
+		{
+			"Error Precondition: Invalid service name",
+			toAdmissionRequest(podResource, corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						install.InjectAnnotation:      "enabled",
+						install.ServiceNameAnnotation: "khruangbin",
+					},
+					Labels: map[string]string{
+						"service": "some-name",
+					},
+					Namespace: "some-ns",
+					Name:      "some-name"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "some-app-name",
+						Image: "some-app-image",
+						Ports: []corev1.ContainerPort{{
+							Name: "http", ContainerPort: 8888},
+						}},
+					},
+				},
+			}),
+			"",
+			"no services found",
+			multiSvcFinder,
+		},
+		{
+			"Apply Patch: Multiple services",
+			toAdmissionRequest(podResource, corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						install.InjectAnnotation:      "enabled",
+						install.ServiceNameAnnotation: defaultSvc.Name,
 					},
 					Labels: map[string]string{
 						"service": "some-name",

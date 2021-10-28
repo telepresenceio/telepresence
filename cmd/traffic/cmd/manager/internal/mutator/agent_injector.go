@@ -74,7 +74,8 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		return nil, fmt.Errorf("failed to create new kates client: %w", err)
 	}
 
-	svc, err := findMatchingService(ctx, client, "", "", podNamespace, pod.Labels)
+	svcName := pod.Annotations[install.ServiceNameAnnotation]
+	svc, err := findMatchingService(ctx, client, "", svcName, podNamespace, pod.Labels)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil, err
