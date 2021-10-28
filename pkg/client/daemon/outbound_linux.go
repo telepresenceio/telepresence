@@ -129,6 +129,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
 	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(o.dnsConfig.LocalIp).String(), "53"))
+	sourcePort := conn.LocalAddr().(*net.UDPAddr)
 	if err != nil {
 		return err
 	}
@@ -176,7 +177,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
+			err := routeDNS(c, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr), sourcePort)
 			if err != nil {
 				return err
 			}
@@ -292,7 +293,7 @@ const tpDNSChain = "telepresence-dns"
 // that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
-func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr) (err error) {
+func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr, sourcePort *net.UDPAddr) (err error) {
 	// create the chain
 	unrouteDNS(c)
 	if err = runNatTableCmd(c, "-N", tpDNSChain); err != nil {
@@ -309,6 +310,14 @@ func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr
 		"-p", "udp",
 		"--source", fallback.IP.String(),
 		"--sport", strconv.Itoa(fallback.Port),
+		"-j", "RETURN",
+	); err != nil {
+		return err
+	}
+
+	if err = runNatTableCmd(c, "-A", tpDNSChain,
+		"-p", "udp",
+		"--sport", strconv.Itoa(sourcePort.Port),
 		"-j", "RETURN",
 	); err != nil {
 		return err
