@@ -166,7 +166,7 @@ promote-to-stable: ## (Release) Update stable.txt in S3
 		--key tel2/$(GOHOSTOS)/$(GOARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
-	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION))
+	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) $GOARCH
 endif
 
 # Prerequisites:
