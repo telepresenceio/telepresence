@@ -1,0 +1,52 @@
+ - title: Quick Start
+   link: quick-start
+ - title: Install Telepresence
+   items:
+     - title: Install
+       link: install/
+     - title: Upgrade
+       link: install/upgrade/
+ - title: Core Concepts
+   items:
+     - title: The changing development workflow
+       link: concepts/devworkflow
+     - title: The developer experience and the inner dev loop
+       link: concepts/devloop
+     - title: "Making the remote local: Faster feedback, collaboration and debugging"
+       link: concepts/faster
+     - title: Context Propagation
+       link: concepts/context-prop
+ - title: How Do I...
+   items:
+     - title: Intercept a Service
+       link: howtos/intercepts
+     - title: Share Dev Environments with Preview URLs
+       link: howtos/preview-urls
+     - title: Proxy Outbound Traffic to My Cluster
+       link: howtos/outbound
+ - title: Technical Reference
+   items:
+     - title: Architecture
+       link: reference/architecture
+     - title: Client Reference
+       link: reference/client
+     - title: Laptop-side configuration
+       link: reference/config
+     - title: Cluster-side configuration
+       link: reference/cluster-config
+     - title: Environment Variables
+       link: reference/environment
+     - title: Intercepts
+       link: reference/intercepts
+     - title: Volume Mounts
+       link: reference/volume
+     - title: DNS Resolution
+       link: reference/dns
+     - title: RBAC
+       link: reference/rbac
+ - title: FAQs
+   link: faqs
+ - title: Troubleshooting
+   link: troubleshooting
+ - title: Community
+   link: community
