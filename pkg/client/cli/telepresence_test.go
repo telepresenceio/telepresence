@@ -1822,6 +1822,7 @@ func (hs *helmSuite) helmInstall(ctx context.Context, managerNamespace string, a
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
 		"-f", helmValues,
+		"--wait",
 	)
 	if err == nil {
 		err = hs.tpSuite.capturePodLogs(ctx, "traffic-manager", managerNamespace)

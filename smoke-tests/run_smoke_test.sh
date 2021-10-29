@@ -353,6 +353,7 @@ fi
 
 VERYLARGEJAVASERVICE=verylargejavaservice.default:8080
 $TELEPRESENCE connect >"$output_location"
+$TELEPRESENCE loglevel debug --duration 5m >"$output_location"
 
 # When the sevice is initially deployed, it can take a few seconds (~7)
 # before the service is actually running, so we build in a few retries
