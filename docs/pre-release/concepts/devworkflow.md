@@ -1,0 +1,7 @@
+# The changing development workflow
+
+A changing workflow is one of the main challenges for developers adopting Kubernetes. Software development itself isn’t the challenge. Developers can continue to [code using the languages and tools with which they are most productive and comfortable](https://www.getambassador.io/resources/kubernetes-local-dev-toolkit/). That’s the beauty of containerized development.
+
+However, the cloud-native, Kubernetes-based approach to development means adopting a new development workflow and development environment. Beyond the basics, such as figuring out how to containerize software, [how to run containers in Kubernetes](https://www.getambassador.io/docs/kubernetes/latest/concepts/appdev/), and how to deploy changes into containers, for example, Kubernetes adds complexity before it delivers efficiency. The promise of a “quicker way to develop software” applies at least within the traditional aspects of the inner dev loop, where the single developer codes, builds and tests their software. But both within the inner dev loop and once code is pushed into version control to trigger the outer dev loop, the developer experience changes considerably from what many developers are used to.
+
+In this new paradigm, new steps are added to the inner dev loop, and more broadly, the developer begins to share responsibility for the full life cycle of their software. Inevitably this means taking new workflows and tools on board to ensure that the full life cycle continues full speed ahead.
