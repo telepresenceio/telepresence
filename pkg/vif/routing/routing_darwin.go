@@ -8,6 +8,7 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 const findInterfaceRegex = "gateway:\\s+([0-9.]+)\\s+.*interface:\\s+([a-z0-9]+)"
@@ -38,7 +39,7 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 		return Route{}, fmt.Errorf("unable to get interface addresses for interface %s: %w", ifaceName, err)
 	}
 	gateway := match[1]
-	gatewayIp := net.ParseIP(gateway)
+	gatewayIp := iputil.Parse(gateway)
 	if gatewayIp == nil {
 		return Route{}, fmt.Errorf("unable to parse gateway %s", gateway)
 	}

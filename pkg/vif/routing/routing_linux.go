@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 const findInterfaceRegex = "[0-9.]+ via ([0-9.]+) dev ([a-z0-9]+) src ([0-9.]+)"
@@ -25,7 +26,7 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	if match == nil {
 		return Route{}, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, out)
 	}
-	gatewayIP := net.ParseIP(match[1])
+	gatewayIP := iputil.Parse(match[1])
 	if gatewayIP == nil {
 		return Route{}, fmt.Errorf("unable to parse gateway IP %s", match[1])
 	}
@@ -33,7 +34,7 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	if err != nil {
 		return Route{}, fmt.Errorf("unable to get interface %s: %w", match[2], err)
 	}
-	localIP := net.ParseIP(match[3])
+	localIP := iputil.Parse(match[3])
 	if localIP == nil {
 		return Route{}, fmt.Errorf("unable to parse local IP %s", match[3])
 	}
