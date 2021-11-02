@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.6 (TBD)
+### 2.4.6 (November 2, 2021)
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
 
