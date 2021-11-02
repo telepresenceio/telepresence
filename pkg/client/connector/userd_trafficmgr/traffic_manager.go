@@ -518,6 +518,7 @@ func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundI
 			mask := net.CIDRMask(128, 128)
 			if ipv4 := ip.To4(); ipv4 != nil {
 				mask = net.CIDRMask(32, 32)
+				ip = ipv4
 			}
 			ipnet := &net.IPNet{IP: ip, Mask: mask}
 			neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))

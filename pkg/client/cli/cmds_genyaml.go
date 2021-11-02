@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 type genYAMLInfo struct {
@@ -200,9 +202,19 @@ func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("unable to get k8s config: %w", err)
 	}
+
+	registry := cfg.Images.Registry
+	agentImage := cfg.Images.AgentImage
+	// Use sane defaults if the user hasn't configured the registry and/or image
+	if registry == "" {
+		registry = "datawire"
+	}
+	if agentImage == "" {
+		agentImage = "tel2:" + strings.TrimPrefix(version.Version, "v")
+	}
 	agentContainer := install.AgentContainer(
 		i.serviceName,
-		fmt.Sprintf("%s/%s", cfg.Images.Registry, cfg.Images.AgentImage),
+		fmt.Sprintf("%s/%s", registry, agentImage),
 		container,
 		corev1.ContainerPort{
 			Protocol:      corev1.Protocol(i.appProto),

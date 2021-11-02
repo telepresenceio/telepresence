@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
@@ -28,11 +29,13 @@ func (t *Device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) error {
 // AddStaticRoute adds a specific route. This can be used to prevent certain IP addresses
 // from being routed to the TUN device.
 func (t *Device) AddStaticRoute(ctx context.Context, route routing.Route) error {
+	dlog.Debugf(ctx, "Adding static route %s", route)
 	return t.addStaticRoute(ctx, route)
 }
 
 // RemoveStaticRoute removes a specific route added via AddStaticRoute.
 func (t *Device) RemoveStaticRoute(ctx context.Context, route routing.Route) error {
+	dlog.Debugf(ctx, "Dropping static route %s", route)
 	return t.removeStaticRoute(ctx, route)
 }
 

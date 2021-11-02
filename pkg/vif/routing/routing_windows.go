@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
@@ -29,11 +30,11 @@ $obj.InterfaceIndex[0]
 		return Route{}, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %w", ip, err)
 	}
 	lines := strings.Split(string(out), "\n")
-	localIP := net.ParseIP(strings.TrimSpace(lines[0]))
+	localIP := iputil.Parse(strings.TrimSpace(lines[0]))
 	if localIP == nil {
 		return Route{}, fmt.Errorf("unable to parse IP from %s", lines[0])
 	}
-	gatewayIP := net.ParseIP(strings.TrimSpace(lines[1]))
+	gatewayIP := iputil.Parse(strings.TrimSpace(lines[1]))
 	if gatewayIP == nil {
 		return Route{}, fmt.Errorf("unable to parse gateway IP from %s", lines[1])
 	}
