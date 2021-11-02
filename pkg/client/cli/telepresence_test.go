@@ -337,6 +337,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 
 	ts.Run("API Server is proxied", func() {
 		t := ts.T()
+		t.Skip()
 		require := ts.Require()
 
 		tmpDir := t.TempDir()
