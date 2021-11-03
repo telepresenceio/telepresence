@@ -1944,13 +1944,33 @@ func (ts *telepresenceSuite) buildExecutable(c context.Context) (string, error) 
 }
 
 func (ts *telepresenceSuite) setupKubeConfig(ctx context.Context) {
+	require := ts.Require()
 	kubeconfig := dtest.Kubeconfig(ctx)
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
 	os.Setenv("KUBECONFIG", kubeconfig)
 	err := run(ctx, "kubectl", "create", "namespace", ts.namespace)
-	ts.NoError(err)
+	require.NoError(err)
 	err = run(ctx, "kubectl", "apply", "-f", "k8s/client_rbac.yaml")
-	ts.NoError(err)
+	require.NoError(err)
+
+	var cfg *api.Config
+	cfg, err = clientcmd.LoadFromFile(kubeconfig)
+	require.NoError(err, "Unable to read %s", kubeconfig)
+
+	var defaultUser *api.AuthInfo
+	for _, ai := range cfg.AuthInfos {
+		if ai.Username == "default" {
+			defaultUser = ai
+			break
+		}
+	}
+	require.NotNil(defaultUser, "no default user")
+	t := ts.T()
+	certsDir := t.TempDir()
+	clientKeyFile := filepath.Join(certsDir, "client.key")
+	clientCertFile := filepath.Join(certsDir, "client.crt")
+	require.NoError(os.WriteFile(clientKeyFile, defaultUser.ClientKeyData, 0600))
+	require.NoError(os.WriteFile(clientCertFile, defaultUser.ClientCertificateData, 0600))
 
 	// This is how we create a user that has their rbac restricted to what we have in
 	// k8s/client_rbac.yaml. We do this by creating a service account and then getting
@@ -1962,6 +1982,10 @@ func (ts *telepresenceSuite) setupKubeConfig(ctx context.Context) {
 	token, err := base64.StdEncoding.DecodeString(encSecret)
 	ts.NoError(err)
 	err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--token", string(token))
+	ts.NoError(err)
+	err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--client-key", clientKeyFile, "--embed-certs=true")
+	ts.NoError(err)
+	err = run(ctx, "kubectl", "config", "set-credentials", "telepresence-test-developer", "--client-certificate", clientCertFile, "--embed-certs=true")
 	ts.NoError(err)
 	err = run(ctx, "kubectl", "config", "set-context", "telepresence-test-developer", "--user", "telepresence-test-developer", "--cluster", "default")
 	ts.NoError(err)
