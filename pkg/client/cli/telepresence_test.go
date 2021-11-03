@@ -1959,7 +1959,7 @@ func (ts *telepresenceSuite) setupKubeConfig(ctx context.Context) {
 
 	var defaultUser *api.AuthInfo
 	for _, ai := range cfg.AuthInfos {
-		if ai.Username == "default" {
+		if ai.Username == "" {
 			defaultUser = ai
 			break
 		}
