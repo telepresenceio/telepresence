@@ -26,6 +26,8 @@ type Env struct {
 
 	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
 	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,default="`
+
+	lookuper envconfig.Lookuper
 }
 
 func (env Env) Get(key string) string {
@@ -47,7 +49,10 @@ func (env Env) Get(key string) string {
 		return env.ManagerNamespace
 
 	default:
-		return os.Getenv(key)
+		if v, ok := env.lookuper.Lookup(key); ok {
+			return v
+		}
+		return ""
 	}
 }
 
@@ -67,9 +72,13 @@ func GetEnv(ctx context.Context) *Env {
 }
 
 func LoadEnv(ctx context.Context) (*Env, error) {
-	if os.Getenv("TELEPRESENCE_LOGIN_DOMAIN") == "" {
+	return LoadEnvWith(ctx, envconfig.OsLookuper())
+}
+
+func LoadEnvWith(ctx context.Context, lookuper envconfig.Lookuper) (*Env, error) {
+	if _, ok := lookuper.Lookup("TELEPRESENCE_LOGIN_DOMAIN"); !ok {
 		loginDomain := "auth.datawire.io"
-		if os.Getenv("SYSTEMA_ENV") == "staging" {
+		if se, ok := lookuper.Lookup("SYSTEMA_ENV"); ok && se == "staging" {
 			// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
 			// to the config.yml and get rid of that env var and all the related ones.
 			// But I (donnyyung) am about to be on vacation for a week so don't want
@@ -81,8 +90,9 @@ func LoadEnv(ctx context.Context) (*Env, error) {
 	}
 
 	var env Env
-	if err := envconfig.Process(ctx, &env); err != nil {
+	if err := envconfig.ProcessWith(ctx, &env, lookuper); err != nil {
 		return nil, err
 	}
+	env.lookuper = lookuper
 	return &env, nil
 }
