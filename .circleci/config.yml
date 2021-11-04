@@ -76,7 +76,7 @@ commands:
       - run:
           name: "Create cluster"
           command: |
-            go run ./build-aux/kubeception create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig"
+            go run ./build-aux/kubeception create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1:0:7}" > "$HOME/kubeconfig"
             export KUBECONFIG="$HOME/kubeconfig"
             go run ./build-aux/wait_for_cluster "$KUBECONFIG"
             KUBECTL=kubectl
@@ -100,7 +100,7 @@ commands:
           name: "Destroy cluster"
           command: |
             # We don't allow the destroy to fail the build; if the kluster couldn't be destroyed now, it'll just be cleaned up when it times out
-            go run ./build-aux/kubeception destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1}" > "$HOME/kubeconfig" || true
+            go run ./build-aux/kubeception destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1:0:7}" > "$HOME/kubeconfig" || true
 
   "install-sshfs-win":
     steps:
@@ -195,7 +195,7 @@ jobs:
       - run:
           name: Build dev image
           command: |
-            TAG="2.4.5-gotest.$CIRCLE_SHA1"
+            TAG="2.4.5-gotest.${CIRCLE_SHA1:0:7}"
             TELEPRESENCE_VERSION="v${TAG}" make image
             mkdir -p /tmp/workspace
             docker save "datawire/tel2:${TAG}" > /tmp/workspace/tel2-image.tar

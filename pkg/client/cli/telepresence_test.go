@@ -77,7 +77,12 @@ func (ts *telepresenceSuite) SetupSuite() {
 	log.SetOutput(io.Discard)
 
 	suffix, isCi := os.LookupEnv("CIRCLE_SHA1")
-	if !isCi {
+	if isCi {
+		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
+		if len(suffix) > 7 {
+			suffix = suffix[:7]
+		}
+	} else {
 		suffix = strconv.Itoa(os.Getpid())
 	}
 	ts.testVersion = fmt.Sprintf("v2.4.5-gotest.%s", suffix)

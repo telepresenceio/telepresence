@@ -103,9 +103,16 @@ func (is *installSuite) SetupSuite() {
 
 	suffix, isCI := os.LookupEnv("CIRCLE_SHA1")
 	is.isCI = isCI
-	if !isCI {
+	if isCI {
+		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
+		if len(suffix) > 7 {
+			suffix = suffix[:7]
+		}
+	} else {
 		suffix = strconv.Itoa(os.Getpid())
 	}
+	suffix += "-install-test" // Avoid namespace collision with other integration tests
+
 	is.testVersion = fmt.Sprintf("v2.4.5-gotest.%s", suffix)
 	is.namespace = fmt.Sprintf("telepresence-%s", suffix)
 	is.managerNamespace = fmt.Sprintf("ambassador-%s", suffix)
