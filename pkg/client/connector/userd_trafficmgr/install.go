@@ -28,7 +28,14 @@ type installer struct {
 	*userd_k8s.Cluster
 }
 
-func newTrafficManagerInstaller(kc *userd_k8s.Cluster) (*installer, error) {
+type Installer interface {
+	userd_k8s.ResourceFinder
+	EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error)
+	EnsureManager(c context.Context) error
+	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
+}
+
+func NewTrafficManagerInstaller(kc *userd_k8s.Cluster) (Installer, error) {
 	return &installer{Cluster: kc}, nil
 }
 
@@ -38,9 +45,9 @@ func managerImageName(ctx context.Context) string {
 	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry, strings.TrimPrefix(client.Version(), "v"))
 }
 
-// removeManager will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
+// RemoveManagerAndAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.
-func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
+func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
 	// Removes the manager and all agents from the cluster
 	var errs []error
 	var errsLock sync.Mutex
@@ -167,7 +174,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 // the port to-be-intercepted has changed. It raises an error if either of these
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
-func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber string) error {
+func checkSvcSame(_ context.Context, obj kates.Object, svcName, portNameOrNumber string) error {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -252,11 +259,11 @@ func (ki *installer) getSvcForInjectedPod(
 	return svc, nil
 }
 
-// This does a lot of things but at a high level it ensures that the traffic agent
+// EnsureAgent does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
+func (ki *installer) EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
 	obj, err := ki.FindWorkload(c, namespace, name)
 	if err != nil {
 		return "", "", err
@@ -752,6 +759,6 @@ func addAgentToWorkload(
 	return object, matchingService, nil
 }
 
-func (ki *installer) ensureManager(c context.Context) error {
+func (ki *installer) EnsureManager(c context.Context) error {
 	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.Client(), ki.GetManagerNamespace())
 }

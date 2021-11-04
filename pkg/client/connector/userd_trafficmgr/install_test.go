@@ -142,7 +142,7 @@ func (is *installSuite) Test_findTrafficManager_notPresent() {
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 	version.Version = "v0.0.0-bogus"
 
@@ -187,14 +187,14 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesFailedInstall() {
 
 	defer is.removeManager(is.managerNamespace)
 
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.Error(ti.ensureManager(ctx))
+	require.Error(ti.EnsureManager(ctx))
 	restoreVersion()
 
 	require.Eventually(func() bool {
-		err = ti.ensureManager(ctx)
+		err = ti.EnsureManager(ctx)
 		return err == nil
 	}, 20*time.Second, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
 }
@@ -208,15 +208,15 @@ func (is *installSuite) Test_ensureTrafficManager_toleratesLeftoverState() {
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
 
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.EnsureManager(ctx))
 	defer is.removeManager(is.managerNamespace)
 	err = dexec.CommandContext(ctx, "../../../../tools/bin/helm", "--kubeconfig", is.kubeConfig, "--namespace", is.managerNamespace, "uninstall", "--keep-history", "traffic-manager").Run()
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.EnsureManager(ctx))
 	require.Eventually(func() bool {
 		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
 		if err != nil {
@@ -235,16 +235,16 @@ func (is *installSuite) Test_ensureTrafficManager_canUninstall() {
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
 
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx))
-	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
+	require.NoError(ti.EnsureManager(ctx))
+	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
 	// We want to make sure that we can re-install the agent after it's been uninstalled,
-	// so try to ensureManager again.
-	require.NoError(ti.ensureManager(ctx))
+	// so try to EnsureManager again.
+	require.NoError(ti.EnsureManager(ctx))
 	// Uninstall the agent one last time -- this should behave the same way as the previous uninstall
-	require.NoError(ti.removeManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
+	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_upgrades() {
@@ -256,17 +256,17 @@ func (is *installSuite) Test_ensureTrafficManager_upgrades() {
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
 
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.EnsureManager(ctx))
 	defer is.removeManager(is.managerNamespace)
 
 	version.Version = "v3.0.0-bogus"
 	restoreVersion := func() { version.Version = is.testVersion }
 	defer restoreVersion()
 
-	require.Error(ti.ensureManager(ctx))
+	require.Error(ti.EnsureManager(ctx))
 
 	require.Eventually(func() bool {
 		deploy, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
@@ -277,7 +277,7 @@ func (is *installSuite) Test_ensureTrafficManager_upgrades() {
 	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
 
 	restoreVersion()
-	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.EnsureManager(ctx))
 }
 
 func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
@@ -304,10 +304,10 @@ func (is *installSuite) Test_ensureTrafficManager_doesNotChangeExistingHelm() {
 
 	defer is.removeManager(is.managerNamespace)
 
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 
-	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.EnsureManager(ctx))
 
 	kc.Client().InvalidateCache()
 	dep, err := ti.FindDeployment(ctx, is.managerNamespace, install.ManagerAppName)
@@ -357,9 +357,9 @@ func (is *installSuite) Test_ensureTrafficManager_notPresent() {
 	require.NoError(err)
 	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
 	require.NoError(err)
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
-	require.NoError(ti.ensureManager(ctx))
+	require.NoError(ti.EnsureManager(ctx))
 }
 
 func (is *installSuite) initContext() context.Context {
@@ -399,9 +399,9 @@ func (is *installSuite) findTrafficManagerPresent(namespace string) {
 	defer waitCancel()
 
 	require.NoError(kc.WaitUntilReady(waitCtx))
-	ti, err := newTrafficManagerInstaller(kc)
+	ti, err := NewTrafficManagerInstaller(kc)
 	require.NoError(err)
-	require.NoError(ti.ensureManager(c))
+	require.NoError(ti.EnsureManager(c))
 	require.Eventually(func() bool {
 		dep, err := ti.FindDeployment(c, namespace, install.ManagerAppName)
 		v := strings.TrimPrefix(version.Version, "v")
