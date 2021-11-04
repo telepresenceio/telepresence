@@ -92,6 +92,7 @@ func (is *installSuite) removeManager(namespace string) {
 }
 
 func TestE2E(t *testing.T) {
+	t.Skip()
 	dtest.WithMachineLock(dlog.NewTestContext(t, false), func(ctx context.Context) {
 		suite.Run(t, new(installSuite))
 	})

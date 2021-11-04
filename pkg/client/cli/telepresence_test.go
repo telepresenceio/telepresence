@@ -55,6 +55,7 @@ import (
 const serviceCount = 4
 
 func TestTelepresence(t *testing.T) {
+	t.Skip()
 	ctx := testContext(t)
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
 		suite.Run(t, new(telepresenceSuite))
