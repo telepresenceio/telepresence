@@ -146,3 +146,17 @@ Error: rendered manifests contain a resource that already exists. Unable to cont
 ```
 
 To fix this error, fix the overlap either by removing `b` from the first install, or from the second.
+
+## Pod CIDRs
+
+The traffic manager is responsible for keeping track of what CIDRs the cluster uses for the pods. The Telepresence client uses this
+information to configure the network so that it provides access to the pods. In some cases, the traffic-manager will not be able to retrieve
+this information, or will do it in a way that is inefficient. To remedy this, the strategy that the traffic manager uses can be configured
+using the `podCIDRStrategy`.
+
+|Value|Meaning|
+|-----|-------|
+|`auto`|First try `nodePodCIDRs` and if that fails, try `coverPodIPs`|
+|`nodePodCIDRs`|Obtain the CIDRs from the`podCIDR` and `podCIDRs` of all `Node` resource specifications.|
+|`coverPodIPs`|Obtain all IPs from the `podIP` and `podIPs` of all `Pod` resource statuses and calculate the CIDRs needed to cover them.|
+|`environment`|Pick the CIDRs from the traffic manager's `POD_CIDRS` environment variable. Use `podCIDRs` to set that variable.|

@@ -352,7 +352,7 @@ func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*core
 	return agentPods, nil
 }
 
-// GetTrafficAgentPods gets all pods in the manager's namespace that have
+// GetTrafficManagerPods gets all pods in the manager's namespace that have
 // `traffic-manager` in the name
 func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error) {
 	clientset := managerutil.GetK8sClientset(ctx)
