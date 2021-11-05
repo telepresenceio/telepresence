@@ -107,7 +107,14 @@ func withDaemon(ctx context.Context, maybeStart bool, dnsIP string, fn func(cont
 	defer conn.Close()
 	ctx = context.WithValue(ctx, daemonConnCtxKey{}, conn)
 	ctx = context.WithValue(ctx, daemonStartedCtxKey{}, started)
+
 	daemonClient := daemon.NewDaemonClient(conn)
+	if !started {
+		// Ensure that the already running daemon has the correct version
+		if err := versionCheck(ctx, "Root", daemonClient); err != nil {
+			return err
+		}
+	}
 
 	return fn(ctx, daemonClient)
 }
@@ -120,8 +127,11 @@ func DidLaunchDaemon(ctx context.Context) bool {
 	return launched
 }
 
+type quitting struct{}
+
 // QuitDaemon shuts down the root daemon. When it shuts down, it will tell the connector to shut down.
 func QuitDaemon(ctx context.Context) (err error) {
+	ctx = context.WithValue(ctx, quitting{}, true)
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
 		// shut down the connector, then this is a no-op.
