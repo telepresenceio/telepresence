@@ -4,7 +4,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/docker/docker/pkg/term"
+	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

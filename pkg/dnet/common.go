@@ -333,3 +333,12 @@ func (c *bufferedConn) Wait() error {
 	}
 	return nil
 }
+
+func isClosedChan(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
