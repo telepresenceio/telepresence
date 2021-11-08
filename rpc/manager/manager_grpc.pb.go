@@ -92,6 +92,10 @@ type ManagerClient interface {
 	WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error)
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error)
+	// HealthCheckBiStream lets the traffic manager ask for health check
+	HealthCheckBiStream(ctx context.Context, opts ...grpc.CallOption) (Manager_HealthCheckBiStreamClient, error)
+	// HealthCheckBiStream lets the traffic manager ask for health check
+	DoHealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthReport, error)
 	// A Tunnel represents one single connection where the client or
 	// traffic-agent represents one end (the client-side) and the
 	// traffic-manager represents the other (the server side). The first
@@ -493,8 +497,48 @@ func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
 	return m, nil
 }
 
+func (c *managerClient) HealthCheckBiStream(ctx context.Context, opts ...grpc.CallOption) (Manager_HealthCheckBiStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], "/telepresence.manager.Manager/HealthCheckBiStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerHealthCheckBiStreamClient{stream}
+	return x, nil
+}
+
+type Manager_HealthCheckBiStreamClient interface {
+	Send(*HealthMessage) error
+	Recv() (*emptypb.Empty, error)
+	grpc.ClientStream
+}
+
+type managerHealthCheckBiStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerHealthCheckBiStreamClient) Send(m *HealthMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *managerHealthCheckBiStreamClient) Recv() (*emptypb.Empty, error) {
+	m := new(emptypb.Empty)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *managerClient) DoHealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthReport, error) {
+	out := new(HealthReport)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/DoHealthCheck", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], "/telepresence.manager.Manager/Tunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], "/telepresence.manager.Manager/Tunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +569,7 @@ func (x *managerTunnelClient) Recv() (*TunnelMessage, error) {
 }
 
 func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchDialClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], "/telepresence.manager.Manager/WatchDial", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], "/telepresence.manager.Manager/WatchDial", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -633,6 +677,10 @@ type ManagerServer interface {
 	WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error
+	// HealthCheckBiStream lets the traffic manager ask for health check
+	HealthCheckBiStream(Manager_HealthCheckBiStreamServer) error
+	// HealthCheckBiStream lets the traffic manager ask for health check
+	DoHealthCheck(context.Context, *emptypb.Empty) (*HealthReport, error)
 	// A Tunnel represents one single connection where the client or
 	// traffic-agent represents one end (the client-side) and the
 	// traffic-manager represents the other (the server side). The first
@@ -727,6 +775,12 @@ func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLoo
 }
 func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLogLevel not implemented")
+}
+func (UnimplementedManagerServer) HealthCheckBiStream(Manager_HealthCheckBiStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method HealthCheckBiStream not implemented")
+}
+func (UnimplementedManagerServer) DoHealthCheck(context.Context, *emptypb.Empty) (*HealthReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DoHealthCheck not implemented")
 }
 func (UnimplementedManagerServer) Tunnel(Manager_TunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
@@ -1210,6 +1264,50 @@ func (x *managerWatchLogLevelServer) Send(m *LogLevelRequest) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Manager_HealthCheckBiStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerServer).HealthCheckBiStream(&managerHealthCheckBiStreamServer{stream})
+}
+
+type Manager_HealthCheckBiStreamServer interface {
+	Send(*emptypb.Empty) error
+	Recv() (*HealthMessage, error)
+	grpc.ServerStream
+}
+
+type managerHealthCheckBiStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerHealthCheckBiStreamServer) Send(m *emptypb.Empty) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *managerHealthCheckBiStreamServer) Recv() (*HealthMessage, error) {
+	m := new(HealthMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Manager_DoHealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).DoHealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/DoHealthCheck",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).DoHealthCheck(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_Tunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(ManagerServer).Tunnel(&managerTunnelServer{stream})
 }
@@ -1332,6 +1430,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "AgentLookupHostResponse",
 			Handler:    _Manager_AgentLookupHostResponse_Handler,
 		},
+		{
+			MethodName: "DoHealthCheck",
+			Handler:    _Manager_DoHealthCheck_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1370,6 +1472,12 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchLogLevel",
 			Handler:       _Manager_WatchLogLevel_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "HealthCheckBiStream",
+			Handler:       _Manager_HealthCheckBiStream_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 		{
 			StreamName:    "Tunnel",

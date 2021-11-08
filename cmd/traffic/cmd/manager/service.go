@@ -783,3 +783,46 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 func (m *Manager) expire(ctx context.Context) {
 	m.state.ExpireSessions(ctx, m.clock.Now().Add(-15*time.Second))
 }
+
+func (m *Manager) HealthCheckBiStream(bistream rpc.Manager_HealthCheckBiStreamServer) error {
+	ctx := bistream.Context()
+	ch := m.state.HealthCheckPS.Subscribe()
+	defer m.state.HealthCheckPS.Unsubscribe(ch)
+
+	for {
+		select {
+		case <-ctx.Done():
+			break
+		case chGroup := <-ch:
+			go func() {
+				defer chGroup.Wg.Done()
+
+				// request HealthCheck from agent
+				err := bistream.Send(&empty.Empty{})
+				if err != nil {
+					dlog.Error(ctx, err)
+					return
+				}
+				responce, err := bistream.Recv()
+				if err != nil {
+					dlog.Error(ctx, err)
+					return
+				}
+
+				// report responce
+				chGroup.Ch <- responce
+			}()
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) DoHealthCheck(ctx context.Context, _ *empty.Empty) (*rpc.HealthReport, error) {
+	chGroup := m.state.HealthCheckPS.Publish()
+	results := rpc.HealthReport{}
+	for msg := range chGroup.Ch {
+		results.HealthMessages = append(results.HealthMessages, msg)
+	}
+	return &results, nil
+}

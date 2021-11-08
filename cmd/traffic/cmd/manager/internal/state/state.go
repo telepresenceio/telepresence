@@ -227,6 +227,7 @@ type State struct {
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
 	logLevelCond     sync.Cond
+	HealthCheckPS    *PubSub
 }
 
 func NewState(ctx context.Context) *State {
@@ -238,6 +239,7 @@ func NewState(ctx context.Context) *State {
 		listeners:        make(map[string]connpool.Handler),
 		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
 		logLevelCond:     sync.Cond{L: &sync.Mutex{}},
+		HealthCheckPS:    NewPubSub(),
 	}
 }
 
