@@ -15,6 +15,7 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -110,18 +111,27 @@ func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingInte
 		}
 		return true
 	})
+
 	for _, key := range mountsToDelete {
 		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
-			mountPoint := key.(string)
-			if err := os.Remove(mountPoint); err != nil {
-				if os.IsNotExist(err) {
+			// Execute the removal in a separate go-routine so that we don't hang the daemon in case
+			// the removal hangs on a "resource busy".
+			go func(mountPoint string) {
+				if runtime.GOOS == "darwin" {
+					//  macFUSE will sometimes not unmount in a timely manner so we do this to avoid "resource busy" and
+					//  "Device not configured" errors.
+					_ = dexec.CommandContext(ctx, "umount", mountPoint).Run()
+				}
+				err := os.Remove(mountPoint)
+				switch {
+				case err == nil:
+					dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
+				case os.IsNotExist(err):
 					dlog.Infof(ctx, "File system mount %q no longer exists", mountPoint)
-				} else {
+				default:
 					dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
 				}
-			} else {
-				dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
-			}
+			}(key.(string))
 		}
 	}
 }
