@@ -182,13 +182,13 @@ func (c *handledConn) LocalAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-handleconnection-client",
-			addr: "local",
+			net:  "tp-handleconnection",
+			addr: "localrole=client,localhostname=acloud",
 		}
 	} else {
 		return addr{
-			net:  "tp-handleconnection-server",
-			addr: "local",
+			net:  "tp-handleconnection",
+			addr: "localrole=server,localhostname=manager",
 		}
 	}
 }
@@ -198,13 +198,13 @@ func (c *handledConn) RemoteAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-handleconnection-client",
-			addr: "remote",
+			net:  "tp-handleconnection",
+			addr: "localrole=client,remotehostname=manager",
 		}
 	} else {
 		return addr{
-			net:  "tp-handleconnection-server",
-			addr: "remote",
+			net:  "tp-handleconnection",
+			addr: "localrole=client,remotehostname=acloud",
 		}
 	}
 }

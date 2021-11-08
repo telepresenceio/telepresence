@@ -129,13 +129,13 @@ func (c *reverseConn) LocalAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-reverseconnection-client",
-			addr: "local",
+			net:  "tp-reverseconnection",
+			addr: "localrole=client,localhostname=manager",
 		}
 	} else {
 		return addr{
-			net:  "tp-reverseconnection-server",
-			addr: "local",
+			net:  "tp-reverseconnection",
+			addr: "localrole=server,localhostname=acloud",
 		}
 	}
 }
@@ -145,13 +145,13 @@ func (c *reverseConn) RemoteAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-reverseconnection-client",
-			addr: "remote",
+			net:  "tp-reverseconnection",
+			addr: "localrole=client,remotehostname=acloud",
 		}
 	} else {
 		return addr{
-			net:  "tp-reverseconnection-server",
-			addr: "remote",
+			net:  "tp-reverseconnection",
+			addr: "localrole=server,remotehostname=manager",
 		}
 	}
 }
