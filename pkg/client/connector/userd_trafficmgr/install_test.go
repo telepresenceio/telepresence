@@ -165,6 +165,8 @@ func (is *installSuite) Test_ensureTrafficManager_updateFromLegacy() {
 	err = cmd.Run()
 	require.NoError(err)
 
+	cmd = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", is.kubeConfig, "-n", is.managerNamespace, "rollout", "status", "-w", "deploy/traffic-manager")
+	require.NoError(cmd.Run())
 	is.findTrafficManagerPresent(is.managerNamespace)
 }
 
