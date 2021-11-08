@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -23,12 +20,7 @@ type processInfo struct {
 	exe  string
 }
 
-func waitCloseAndKill(ctx context.Context, cmd *dexec.Cmd, peer io.Closer, closing *int32, _ **time.Timer) {
-	<-ctx.Done()
-	atomic.StoreInt32(closing, 1)
-
-	_ = peer.Close()
-
+func killProcess(ctx context.Context, cmd *dexec.Cmd) {
 	pes := make([]*processInfo, 0, 100)
 	err := eachProcess(func(pe *windows.ProcessEntry32) bool {
 		pes = append(pes, &processInfo{
