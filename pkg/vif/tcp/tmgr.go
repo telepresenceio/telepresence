@@ -108,7 +108,10 @@ func (h *handler) adjustReceiveWindow() {
 // readFromMgrLoop sends the packets read from the fromMgr channel to the TUN device
 func (h *handler) readFromMgrLoop(ctx context.Context) {
 	h.wg.Add(1)
-	defer h.wg.Done()
+	defer func() {
+		h.Close(ctx)
+		h.wg.Done()
+	}()
 	fromMgrCh, fromMgrErrs := tunnel.ReadLoop(ctx, h.stream)
 	for {
 		select {
