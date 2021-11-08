@@ -1008,6 +1008,8 @@ func (cs *connectedSuite) TestP_SuccessfullyInterceptsHeadlessService() {
 				telepresence(cs.T(), "leave", "echo-headless-"+cs.ns())
 				if test.webhook {
 					require.NoError(dropWebhookAnnotation(ctx, "statefulset", "echo-headless", cs.tpSuite.namespace))
+					// Give the annotation drop some time to take effect, or the next run will often fail with a "the object has been modified" error
+					dtime.SleepWithContext(ctx, 2*time.Second)
 				} else {
 					telepresence(cs.T(), "uninstall", "--agent", "echo-headless", "-n", cs.tpSuite.namespace)
 				}
