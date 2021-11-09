@@ -227,8 +227,9 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		}()
 
 		opts := []grpc.ServerOption{}
-		if mxRecvSize := client.GetConfig(c).Grpc.MaxReceiveSize; mxRecvSize != nil {
-			if mz, ok := mxRecvSize.AsInt64(); ok {
+		cfg := client.GetConfig(c)
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
 				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 			}
 		}

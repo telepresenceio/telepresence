@@ -89,8 +89,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg.Timeouts.PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
 	cfg.Cloud.RefreshMessages += 10 * time.Minute
 	cfg.LogLevels.UserDaemon = logrus.TraceLevel
-	mrSize, _ := resource.ParseQuantity("20Mi")
-	cfg.Grpc.MaxReceiveSize = &mrSize
+	cfg.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("20Mi")
 	cfgBytes, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
 

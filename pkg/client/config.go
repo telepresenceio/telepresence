@@ -582,11 +582,11 @@ func (cloud *Cloud) merge(o *Cloud) {
 type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
-	MaxReceiveSize *resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
+	MaxReceiveSize resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
 }
 
 func (g *Grpc) merge(o *Grpc) {
-	if o.MaxReceiveSize != nil {
+	if !o.MaxReceiveSize.IsZero() {
 		g.MaxReceiveSize = o.MaxReceiveSize
 	}
 }
@@ -611,7 +611,7 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 			if err != nil {
 				dlog.Warningf(parseContext, "unable to parse quantity %q: %v", v.Value, withLoc(err.Error(), ms[i]))
 			} else {
-				g.MaxReceiveSize = &val
+				g.MaxReceiveSize = val
 			}
 		default:
 			if parseContext != nil {
@@ -625,7 +625,7 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
 func (g Grpc) MarshalYAML() (interface{}, error) {
 	cm := make(map[string]interface{})
-	if g.MaxReceiveSize != nil {
+	if !g.MaxReceiveSize.IsZero() {
 		cm["maxReceiveSize"] = g.MaxReceiveSize.String()
 	}
 	return cm, nil

@@ -36,6 +36,12 @@ type Callbacks struct {
 	SetDNSSearchPath func(ctx context.Context, in *daemon.Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
+type ResourceFinder interface {
+	FindDeployment(c context.Context, namespace, name string) (*kates.Deployment, error)
+	FindPod(c context.Context, namespace, name string) (*kates.Pod, error)
+	FindSvc(c context.Context, namespace, name string) (*kates.Service, error)
+}
+
 // k8sCluster is a Kubernetes cluster reference
 type Cluster struct {
 	*Config

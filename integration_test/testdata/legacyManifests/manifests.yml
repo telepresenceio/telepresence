@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: NAMESPACE
+  name: {{.ManagerNamespace}}
 spec:
   finalizers:
   - kubernetes
@@ -10,7 +10,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 spec:
   clusterIP: None
   ports:
@@ -28,7 +28,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: agent-injector
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 spec:
   ports:
   - name: https
@@ -44,7 +44,7 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: agent-injector-webhook-NAMESPACE
+  name: agent-injector-webhook-{{.ManagerNamespace}}
 webhooks:
 - admissionReviewVersions:
   - v1
@@ -52,7 +52,7 @@ webhooks:
     caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZGVENDQXYyZ0F3SUJBZ0lFRHY3S3NEQU5CZ2txaGtpRzl3MEJBUXNGQURBYk1Sa3dGd1lEVlFRS0V4Qm4KWlhSaGJXSmhjM05oWkc5eUxtbHZNQjRYRFRJeE1EZ3hOekV6TlRjeU5Gb1hEVEl5TURneE56RXpOVGN5TkZvdwpHekVaTUJjR0ExVUVDaE1RWjJWMFlXMWlZWE56WVdSdmNpNXBiekNDQWlJd0RRWUpLb1pJaHZjTkFRRUJCUUFECmdnSVBBRENDQWdvQ2dnSUJBTGFHZjgyTW1nQVk3RDZ1bXhsVFl2N20relV1N3l5eFVaeE8vNDBNUzRvdlRFUlkKeDBMSm1jZE9NRWtOVWNIYUFQVHFRTHZwY0R1Y3NkQkYvRGNDMVhGaDRQdEY5V2FuYU1OU1dEV25vNFMxVTZCMApMZUZGWGhURjJUek5IUXovelplaEpVZGVHTVlVanJGVkdPaDYrM25pL0ZjT2pkRzh6blQ3Q3V0N1dOWEZXZUVqCk14c0F3RUd6UTcrdVRYZjdRWGFwV3YxQlpXa2dZZDBjbktTbm1DU3ROTVdiVEx6R2JrWGhmWDZJMG5zenYzV3MKYWhRZXl0ekcxMzlac21EM0F4Wmp1ZVZ2TEFoQTZDaGJyVi96VEJqYVpqTWl0TThHWEZMN1Zhb2FUamlIV0dwOAo1OHRmUWRvSTFxNXBCZzNSVHVKOW9CZjJaRXFtVk1vKzlzU1BJSUZEOHlSN1E1Z1N6akJubC8zTHIrV2puWmlICk9oaExLYS9SUnhXWGIzZ2lFYmVtd09Cb2laSVh4UVZUc0NFcFAwODFFWGR1R2tXYTQ5MmdKM01MTjBVbVpMQmUKN2t1dXVWbGdCZW40MEVkRkJ1ZkpRWFFHRlRxQ01wRkUxTytsY0ZJbks0NUhqUXN0UCtIT3g0ODFYU01MV3Y2eQp6L1gvUFM2WkdNeFhuQStlU3M5UEtJeUF4b2VxK1JGYzZLMm10NCtzZG1JS1RNS2dxOUxBV09lcjhRVmtJUjNuCmVkQlFMK1pDUnc1TGNhRHhpbllKWGFtSlc5TWlHV2dBVzU0bVJLWGhGVlpQeUZZVE9ZTkFER1hwTDNLQ3IvbHcKSlRrSWZBUzJNZmViaUROMUREUnhTNENSbjRxVStteFE0anAwWGFWZW9DYnZ2QU9Vd1lxcy82d21GYk9SQWdNQgpBQUdqWVRCZk1BNEdBMVVkRHdFQi93UUVBd0lDaERBZEJnTlZIU1VFRmpBVUJnZ3JCZ0VGQlFjREFnWUlLd1lCCkJRVUhBd0V3RHdZRFZSMFRBUUgvQkFVd0F3RUIvekFkQmdOVkhRNEVGZ1FVTWU1YWRGeHN0SDB0UDNlOGFheVgKV3k2Ymp6TXdEUVlKS29aSWh2Y05BUUVMQlFBRGdnSUJBSW1nZ0UzT28rYUZidWpRQ0l2L2RPbHZlWU4xZjJRTwoxdjVUSThDNXhRdmxCRnNYdWttbDhtYVQ3RCtpK3U3UWVCRGxtbVY1NVMvV25mL2lMMWJDNGJmZ2U0dmZVdzRWCkErNXd6eXdybVdONndYbFBlNlh2cGpFQlJ0U2VDbGYvMy9vRmROb3ZtVENraXpGd1V3VW56akJwN3QvTWNFeTkKN3dYSFl6RGJaMDcwemdueHNjZDV0cWFEeGNaNUJKajhneDF5M2phWXM5YUQ4Yi9VcXB0R1Nib0tXKzNJZkhxSApma00xakNLVUYwRHdlaGU4WE13cEl4OEU5dXM0YXhXMEVUTlVxOC9ib0ZCOElnYzNSSFpveUtCSjJ4SmEzMUlYClZQN0xlR25kdGo1eHlON3dmYXlnQklyYzJXZ1dXckNFRmxxdHRTbC9XVWYzS1RBMERHRVJhZFhqOGp4OHVDRXMKTVAvM2FXT1BRVXBNMUs3ZnpuQmFaN3JIdGRyNzRXa3hSYjdCZVozMWFWYTdLdXFkYmtRSGJCRWZyQ01WWCtXMgo0UFdscXg1T2V0NDBqbDhNTTQvRXJ4UW93YzIzN3BYS0QvV1Fzb05aYnZjdmRka21pTTFYR2tSOGRXamk3RG5QCjc1MHA1ZEd2RDBRNWpEODJBM3NTY1RPYVBOZjRFOExac0lHbG9LTExiT2l1d1VkTXUxdCt6WG5jMFJWenBudXoKQjhjcWExL1pxS2FDMHBja1JXTXJwS2pucHYwWlE2c3RMbFlPSHNVTzRFOTlVTEtWUm85TjRuQ3F0eDVyL3BPRApCNmdqRGdPa2xNdHJ3RVNtWDZYQTlzQ2VaUUJZL2I1YjExUElJQ2xlS2NlWG9ZZ1hzdTVhMXFQN3VlVzkyMEtyCjAyMHZoOXlnR25MRwotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
     service:
       name: agent-injector
-      namespace: NAMESPACE
+      namespace: {{.ManagerNamespace}}
       path: /traffic-agent
       port: 443
   failurePolicy: Ignore
@@ -82,13 +82,13 @@ data:
 kind: Secret
 metadata:
   name: mutator-webhook-tls
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 type: Opaque
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: traffic-manager-NAMESPACE
+  name: traffic-manager-{{.ManagerNamespace}}
 rules:
 - apiGroups:
   - ""
@@ -117,15 +117,15 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: traffic-manager-NAMESPACE
+  name: traffic-manager-{{.ManagerNamespace}}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: traffic-manager-NAMESPACE
+  name: traffic-manager-{{.ManagerNamespace}}
 subjects:
 - kind: ServiceAccount
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -134,7 +134,7 @@ metadata:
     app: traffic-manager
     telepresence: manager
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
@@ -215,7 +215,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 rules:
 - apiGroups:
   - ""
@@ -228,7 +228,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -236,10 +236,10 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: traffic-manager
-  namespace: NAMESPACE
+  namespace: {{.ManagerNamespace}}
