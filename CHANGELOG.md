@@ -2,6 +2,8 @@
 
 ### 2.4.7 (TBD)
 
+- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
+
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
 
 ### 2.4.6 (November 2, 2021)

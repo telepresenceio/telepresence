@@ -56,6 +56,11 @@ func Test_legacyCommands(t *testing.T) {
 			outputTP2Command:   "intercept myserver --port 80 --docker-run -- -i -t nginx:latest",
 		},
 		{
+			name:               "swapDeploymentGlobalFlag",
+			inputLegacyCommand: "telepresence --as system:serviceaccount:default:telepresence-test-developer --swap-deployment myserver --expose 9090 --run python3 -m http.server 9090",
+			outputTP2Command:   "intercept myserver --port 9090 --as system:serviceaccount:default:telepresence-test-developer -- python3 -m http.server 9090",
+		},
+		{
 			name:               "runCommand",
 			inputLegacyCommand: "telepresence --run curl http://myservice:8080/",
 			outputTP2Command:   "connect -- curl http://myservice:8080/",
@@ -78,6 +83,7 @@ func Test_legacyCommands(t *testing.T) {
 		},
 	}
 
+	initGlobalFlagGroups()
 	for _, tc := range testCases {
 		tcName := tc.name
 		tc := tc
@@ -87,8 +93,8 @@ func Test_legacyCommands(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assert.Equal(t, msg, tc.msg)
-			assert.Equal(t, genTPCmd, tc.outputTP2Command)
+			assert.Equal(t, tc.msg, msg)
+			assert.Equal(t, tc.outputTP2Command, genTPCmd)
 		})
 	}
 }
