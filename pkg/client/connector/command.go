@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
@@ -313,6 +314,7 @@ func run(c context.Context) error {
 	if s.sharedState, err = sharedstate.NewState(c, ProcessName); err != nil {
 		return err
 	}
+
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
@@ -333,7 +335,21 @@ func run(c context.Context) error {
 	dlog.Info(c, "")
 
 	svcCh := make(chan *grpc.Server, 1)
+
+	grpcQuitCh := make(chan func()) // Channel uses to propagate the grpcQuit cancel function. It must originate inside "server-grpc".
 	g.Go("server-grpc", func(c context.Context) (err error) {
+		// Prevent that the gRPC server is stopped before the "background-manager" completes. Termination goes like this:
+		//
+		// 1. s.cancel() is called. That starts the "quit" goroutine which exits and causes all other goroutines in the group to soft-cancel.
+		// 2. The "background-manager" will then call grpcQuit() to cancel the grpcSoft context (which stems from the hard context of c, and
+		//    hence isn't cancelled just yet).
+		// 3. The canceling of grpcSoft shuts down the gRPC server that is started at the end of this function gracefully.
+		// 4. If the server doesn't shut down, the hard context of c will eventually kill it after the SoftShutdownTimeout declared in
+		//    the group.
+		grpcSoft, grpcQuit := context.WithCancel(dcontext.WithSoftness(dcontext.HardContext(c)))
+		grpcQuitCh <- grpcQuit
+		close(grpcQuitCh)
+
 		defer func() {
 			close(svcCh)
 			if perr := derror.PanicToError(recover()); perr != nil {
@@ -377,7 +393,7 @@ func run(c context.Context) error {
 			Handler: svc,
 		}
 		dlog.Info(c, "gRPC server started")
-		return sc.Serve(c, grpcListener)
+		return sc.Serve(grpcSoft, grpcListener)
 	})
 
 	// background-init handles the work done by the initial connector.Connect RPC call.  This
@@ -420,8 +436,10 @@ func run(c context.Context) error {
 	//  - watch the intercepts (manager.WatchIntercepts) and then
 	//    + (3) listen on the appropriate local ports and forward them to the intercepted
 	//      Services, and
-	//    + (4) mount the appropriate remote valumes.
+	//    + (4) mount the appropriate remote volumes.
 	g.Go("background-manager", func(c context.Context) error {
+		grpcQuit := <-grpcQuitCh
+		defer grpcQuit()
 		mgr, _ := s.sharedState.GetTrafficManagerBlocking(c)
 		if mgr == nil {
 			return nil
