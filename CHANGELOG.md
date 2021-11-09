@@ -6,6 +6,8 @@
 
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
 
+- Bugfix: Outbound connections are now properly closed when the peer closes.
+
 ### 2.4.6 (November 2, 2021)
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
