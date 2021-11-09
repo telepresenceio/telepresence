@@ -289,10 +289,6 @@ func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Co
 			case <-c.Done():
 				return nil
 			case paths := <-o.searchPathCh:
-				if len(o.searchPathCh) > 0 {
-					// Only interested in the last one
-					continue
-				}
 				if !unchanged(paths) {
 					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
 					prevPaths = make([]string, len(paths))
