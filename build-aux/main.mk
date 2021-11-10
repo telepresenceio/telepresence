@@ -24,6 +24,14 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
+# Build statically on linux platforms so that the binary can be used in
+# alpine containers and the like, where libc is different.
+ifeq ($(GOHOSTOS),linux)
+CGO_ENABLED=0
+else
+CGO_ENABLED=1
+endif
+
 .PHONY: FORCE
 FORCE:
 
@@ -89,7 +97,7 @@ PKG_VERSION = $(shell go list ./pkg/version)
 .PHONY: build
 build: pkg/install/helm/telepresence-chart.tgz ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	CGO_ENABLED=0 go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
 .ko.yaml: .ko.yaml.in base-image
 	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
