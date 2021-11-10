@@ -38,7 +38,6 @@ generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
 generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.gz
-	rm -rf ./rpc/vendor
 	find ./rpc -name '*.go' -delete
 	$(tools/protoc) \
 	  \
