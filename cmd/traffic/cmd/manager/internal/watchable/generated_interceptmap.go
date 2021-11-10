@@ -66,15 +66,19 @@ func (tm *InterceptMap) unlockedIsClosed() bool {
 	}
 }
 
-// LoadAll returns a deepcopy of all key/value pairs in the map.
-func (tm *InterceptMap) LoadAll() map[string]*manager.InterceptInfo {
-	tm.lock.RLock()
-	defer tm.lock.RUnlock()
+func (tm *InterceptMap) unlockedLoadAll() map[string]*manager.InterceptInfo {
 	ret := make(map[string]*manager.InterceptInfo, len(tm.value))
 	for k, v := range tm.value {
 		ret[k] = proto.Clone(v).(*manager.InterceptInfo)
 	}
 	return ret
+}
+
+// LoadAll returns a deepcopy of all key/value pairs in the map.
+func (tm *InterceptMap) LoadAll() map[string]*manager.InterceptInfo {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	return tm.unlockedLoadAll()
 }
 
 // LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
@@ -84,9 +88,9 @@ func (tm *InterceptMap) LoadAllMatching(filter func(string, *manager.InterceptIn
 	defer tm.lock.RUnlock()
 	ret := make(map[string]*manager.InterceptInfo)
 	for k, v := range tm.value {
-        if filter(k, v) {
-    		ret[k] = proto.Clone(v).(*manager.InterceptInfo)
-        }
+		if filter(k, v) {
+			ret[k] = proto.Clone(v).(*manager.InterceptInfo)
+		}
 	}
 	return ret
 }
@@ -228,17 +232,17 @@ func (tm *InterceptMap) Close() {
 
 // internalSubscribe returns a channel (that blocks on both ends), that is written to on each map
 // update.  If the map is already Close()ed, then this returns nil.
-func (tm *InterceptMap) internalSubscribe(ctx context.Context) <-chan InterceptMapUpdate {
+func (tm *InterceptMap) internalSubscribe(ctx context.Context) (<-chan InterceptMapUpdate, map[string]*manager.InterceptInfo) {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
 	tm.unlockedInit()
 
 	ret := make(chan InterceptMapUpdate)
 	if tm.unlockedIsClosed() {
-		return nil
+		return nil, nil
 	}
 	tm.subscribers[ret] = ret
-	return ret
+	return ret, tm.unlockedLoadAll()
 }
 
 // Subscribe returns a channel that will emits a complete snapshot of the map immediately after the
@@ -264,7 +268,7 @@ func (tm *InterceptMap) Subscribe(ctx context.Context) <-chan InterceptMapSnapsh
 // new snapshot to be emitted.  If the value for a key changes from satisfying the predicate to not
 // satisfying it, then this is treated as a delete operation, and a new snapshot is generated.
 func (tm *InterceptMap) SubscribeSubset(ctx context.Context, include func(string, *manager.InterceptInfo) bool) <-chan InterceptMapSnapshot {
-	upstream := tm.internalSubscribe(ctx)
+	upstream, initialSnapshot := tm.internalSubscribe(ctx)
 	downstream := make(chan InterceptMapSnapshot)
 
 	if upstream == nil {
@@ -273,7 +277,7 @@ func (tm *InterceptMap) SubscribeSubset(ctx context.Context, include func(string
 	}
 
 	tm.wg.Add(1)
-	go tm.coalesce(ctx, include, upstream, downstream)
+	go tm.coalesce(ctx, include, upstream, downstream, initialSnapshot)
 
 	return downstream
 }
@@ -283,6 +287,7 @@ func (tm *InterceptMap) coalesce(
 	includep func(string, *manager.InterceptInfo) bool,
 	upstream <-chan InterceptMapUpdate,
 	downstream chan<- InterceptMapSnapshot,
+	initialSnapshot map[string]*manager.InterceptInfo,
 ) {
 	defer tm.wg.Done()
 	defer close(downstream)
@@ -306,7 +311,7 @@ func (tm *InterceptMap) coalesce(
 	// received from 'upstream', with any entries removed that do not satisfy the predicate
 	// 'includep'.
 	cur := make(map[string]*manager.InterceptInfo)
-	for k, v := range tm.LoadAll() {
+	for k, v := range initialSnapshot {
 		if includep(k, v) {
 			cur[k] = v
 		}
