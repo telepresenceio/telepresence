@@ -101,7 +101,7 @@ require (
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jmoiron/sqlx v1.3.4 // indirect
-	github.com/josharian/intern v1.0.0 // indirect
+	github.com/josharian/intern v1.0.1-0.20211109044230-42b52b674af5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
@@ -186,7 +186,7 @@ require (
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 // https://github.com/grpc/grpc-go/pull/4567
-replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316
+replace google.golang.org/grpc v1.42.0 => github.com/datawire/grpc-go v1.42.1-0.20211110181314-0ac2bf075645
 
 // We need inherit these from github.com/datawire/ambassador.git's
 // go.mod; because ambassador.git depends on k8s.io/kubernetes, and
