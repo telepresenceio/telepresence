@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -664,18 +665,21 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 }
 
 // StartLocalHttpEchoServer starts a local http server that echoes a line with the given name and
-// the current URL path. A function that cancels the server is returned.
-func StartLocalHttpEchoServer(ctx context.Context, name string, port int) context.CancelFunc {
+// the current URL path. The port is returned together with function that cancels the server.
+func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", "localhost:0")
+	require.NoError(getT(ctx), err, "failed to listen on localhost")
 	go func() {
 		sc := &dhttp.ServerConfig{
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "%s from intercept at %s", name, r.URL.Path)
 			}),
 		}
-		_ = sc.ListenAndServe(ctx, fmt.Sprintf(":%d", port))
+		_ = sc.Serve(ctx, l)
 	}()
-	return cancel
+	return l.Addr().(*net.TCPAddr).Port, cancel
 }
 
 func WithConfig(c context.Context, addConfig *client.Config) context.Context {

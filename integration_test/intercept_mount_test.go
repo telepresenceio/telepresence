@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	goRuntime "runtime"
+	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -37,8 +38,9 @@ func (s *interceptMountSuite) SetupSuite() {
 		s.Require().NoError(err)
 	}
 	ctx := s.Context()
-	s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName(), 9010)
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", s.mountPoint, "--port", "9010")
+	var port int
+	port, s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", s.mountPoint, "--port", strconv.Itoa(port))
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 }
 
