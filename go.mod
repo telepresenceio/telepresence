@@ -172,3 +172,36 @@ replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 // https://github.com/grpc/grpc-go/pull/4567
 replace google.golang.org/grpc v1.38.0 => github.com/datawire/grpc-go v1.38.0-dev.0.20210626184227-5ef87f395316
+
+// We need inherit these from github.com/datawire/ambassador.git's
+// go.mod; because ambassador.git depends on k8s.io/kubernetes, and
+// because kubernetes.git folks haven't figured out how to manage
+// local sub-Go-modules as well as us Telepresence folks have.
+// https://news.ycombinator.com/item?id=27827389
+replace (
+	k8s.io/api v0.0.0 => k8s.io/api v0.22.3
+	k8s.io/apiextensions-apiserver v0.0.0 => k8s.io/apiextensions-apiserver v0.22.3
+	k8s.io/apimachinery v0.0.0 => k8s.io/apimachinery v0.22.3
+	k8s.io/apiserver v0.0.0 => k8s.io/apiserver v0.22.3
+	k8s.io/cli-runtime v0.0.0 => k8s.io/cli-runtime v0.22.3
+	k8s.io/client-go v0.0.0 => k8s.io/client-go v0.22.3
+	k8s.io/cloud-provider v0.0.0 => k8s.io/cloud-provider v0.22.3
+	k8s.io/cluster-bootstrap v0.0.0 => k8s.io/cluster-bootstrap v0.22.3
+	k8s.io/code-generator v0.0.0 => k8s.io/code-generator v0.22.3
+	k8s.io/component-base v0.0.0 => k8s.io/component-base v0.22.3
+	k8s.io/component-helpers v0.0.0 => k8s.io/component-helpers v0.22.3
+	k8s.io/controller-manager v0.0.0 => k8s.io/controller-manager v0.22.3
+	k8s.io/cri-api v0.0.0 => k8s.io/cri-api v0.22.3
+	k8s.io/csi-translation-lib v0.0.0 => k8s.io/csi-translation-lib v0.22.3
+	k8s.io/kube-aggregator v0.0.0 => k8s.io/kube-aggregator v0.22.3
+	k8s.io/kube-controller-manager v0.0.0 => k8s.io/kube-controller-manager v0.22.3
+	k8s.io/kube-proxy v0.0.0 => k8s.io/kube-proxy v0.22.3
+	k8s.io/kube-scheduler v0.0.0 => k8s.io/kube-scheduler v0.22.3
+	k8s.io/kubectl v0.0.0 => k8s.io/kubectl v0.22.3
+	k8s.io/kubelet v0.0.0 => k8s.io/kubelet v0.22.3
+	k8s.io/legacy-cloud-providers v0.0.0 => k8s.io/legacy-cloud-providers v0.22.3
+	k8s.io/metrics v0.0.0 => k8s.io/metrics v0.22.3
+	k8s.io/mount-utils v0.0.0 => k8s.io/mount-utils v0.22.3
+	k8s.io/pod-security-admission v0.0.0 => k8s.io/pod-security-admission v0.22.3
+	k8s.io/sample-apiserver v0.0.0 => k8s.io/sample-apiserver v0.22.3
+)
