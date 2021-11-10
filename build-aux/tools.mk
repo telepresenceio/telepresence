@@ -26,6 +26,15 @@ GOARCH?=$(GOHOSTARCH)
 
 export PATH := $(abspath $(TOOLSBINDIR)):$(PATH)
 
+go-mod-tidy: $(patsubst $(TOOLSSRCDIR)/%/go.mod,go-mod-tidy/tools/%,$(wildcard $(TOOLSSRCDIR)/*/go.mod))
+
+.PHONY: go-mod-tidy/tools/%
+go-mod-tidy/tools/%:
+	rm -f $(TOOLSSRCDIR)/$*/go.sum
+	cd $(TOOLSSRCDIR)/$* && GOFLAGS=-mod=mod go mod tidy
+	cd $(TOOLSSRCDIR)/$* && GOFLAGS=-mod=mod go mod vendor
+	rm -rf $(TOOLSSRCDIR)/$*/vendor
+
 clobber: clobber-tools
 
 .PHONY: clobber-tools

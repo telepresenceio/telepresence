@@ -222,6 +222,19 @@ check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA)
 	# telepresence, run without requiring any outside dependencies.
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=29m ./...
 
+.PHONY: go-mod-tidy go-mod-tidy/main
+go-mod-tidy: go-mod-tidy/main ## (QA) Run `go mod tidy` in all relevant directories
+go-mod-tidy/main:
+	rm -f rpc/go.sum
+	cd rpc && GOFLAGS=-mod=mod go mod tidy
+	cd rpc && GOFLAGS=-mod=mod go mod vendor
+	rm -rf rpc/vendor
+
+	rm -f go.sum
+	GOFLAGS=-mod=mod go mod tidy
+	GOFLAGS=-mod=mod go mod vendor
+	rm -rf vendor
+
 .PHONY: _login
 _login:
 	docker login --username "$$TELEPRESENCE_REGISTRY_USERNAME" --password "$$TELEPRESENCE_REGISTRY_PASSWORD"
