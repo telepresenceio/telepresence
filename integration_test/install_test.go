@@ -58,6 +58,7 @@ func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
 	cmd.Stdout = out
 	cmd.Stderr = out
 	require.NoError(cmd.Run())
+	require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "rollout", "status", "-w", "deploy/traffic-manager"))
 
 	is.findTrafficManagerPresent(ctx, is.ManagerNamespace())
 }
