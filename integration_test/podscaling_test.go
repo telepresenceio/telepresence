@@ -100,6 +100,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 
 	// Wait for second pod to arrive
 	assert.Eventually(func() bool { return len(helloPods()) == 2 }, 5*time.Second, time.Second)
+	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Delete the currently intercepted pod
 	require.NoError(s.Kubectl(ctx, "delete", "pod", currentPod))
@@ -107,13 +108,15 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	// Wait for that pod to disappear
 	assert.Eventually(
 		func() bool {
-			for _, zp := range helloPods() {
+			pods := helloPods()
+			for _, zp := range pods {
 				if zp == currentPod {
 					return false
 				}
 			}
-			return true
+			return len(pods) == 2
 		}, 15*time.Second, time.Second)
+	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Verify that intercept is still active
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `-` + s.AppNamespace() + `\s+State\s*: ([^\n]+)\n`))

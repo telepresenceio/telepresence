@@ -36,7 +36,7 @@ func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	s.Contains(stdout, "Kubernetes context:")
 	s.Regexp(`Telepresence proxy:\s+ON`, stdout)
 	if s.T().Failed() {
-		s.CapturePodLogs(ctx, "traffic-manager", "", s.ManagerNamespace())
+		s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 	}
 	itest.TelepresenceQuitOk(ctx)
 }

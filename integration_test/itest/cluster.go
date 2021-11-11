@@ -330,7 +330,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	var pods string
 	for i := 0; ; i++ {
 		var err error
-		pods, err = KubectlOut(ctx, ns, "get", "pods", "-l", "app="+app, "-o", "jsonpath={.items[*].metadata.name}")
+		pods, err = KubectlOut(ctx, ns, "get", "pods", "--field-selector", "status.phase=Running", "-l", app, "-o", "jsonpath={.items[*].metadata.name}")
 		if err != nil {
 			dlog.Errorf(ctx, "failed to get %s pod in namespace %s: %v", app, ns, err)
 			return
@@ -401,7 +401,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
-			s.CapturePodLogs(ctx, "traffic-manager", "", managerNamespace)
+			s.CapturePodLogs(ctx, "app=traffic-manager", "", managerNamespace)
 		}
 	}
 	return err

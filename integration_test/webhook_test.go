@@ -90,5 +90,5 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 	require.NoError(err)
 	s.Equal("imageFromConfig:0.0.1", image)
 	s.Equal(s.Registry(), actualRegistry)
-	s.CapturePodLogs(ctx, "traffic-manager", "", s.ManagerNamespace())
+	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 }

@@ -47,7 +47,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 			}
 			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", strconv.Itoa(svcPort))
 			require.Contains(stdout, "Using StatefulSet echo-headless")
-			s.CapturePodLogs(ctx, "echo-headless", "traffic-agent", s.AppNamespace())
+			s.CapturePodLogs(ctx, "service=echo-headless", "traffic-agent", s.AppNamespace())
 
 			defer func() {
 				itest.TelepresenceOk(ctx, "leave", "echo-headless-"+s.AppNamespace())
