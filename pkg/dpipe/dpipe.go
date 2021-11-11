@@ -28,6 +28,7 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 
 	ctx = dlog.WithField(ctx, "dexec.pid", cmd.Process.Pid)
 	dlog.Infof(ctx, "started command %s", cmdLine)
+	defer dlog.Infof(ctx, "ended command %s", cmdName)
 	runFinished := make(chan error)
 	go func() {
 		defer close(runFinished)
