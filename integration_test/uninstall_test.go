@@ -24,7 +24,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	stdout, err := names()
 	require.NoError(err)
 	require.Equal(2, len(strings.Split(stdout, " ")), "the string %q doesn't contain a service and a deployment", stdout)
-	s.CapturePodLogs(ctx, "traffic-manager", s.ManagerNamespace())
+	s.CapturePodLogs(ctx, "traffic-manager", "", s.ManagerNamespace())
 
 	// Add webhook agent to test webhook uninstall
 	jobname := "echo-auto-inject"

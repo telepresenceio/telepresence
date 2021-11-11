@@ -43,7 +43,7 @@ const TestUser = "telepresence-test-developer"
 const TestUserAccount = "system:serviceaccount:default:" + TestUser
 
 type Cluster interface {
-	CapturePodLogs(ctx context.Context, app, ns string)
+	CapturePodLogs(ctx context.Context, app, container, ns string)
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
@@ -326,7 +326,7 @@ func (s *cluster) TelepresenceVersion() string {
 	return s.testVersion
 }
 
-func (s *cluster) CapturePodLogs(ctx context.Context, app, ns string) {
+func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
 		var err error
@@ -358,14 +358,18 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, ns string) {
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, pod+"-"+ns+".log"))
+		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", pod, dtime.Now().Format("20060102T150405"))))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
 			return
 		}
 
-		cmd := Command(ctx, "kubectl", "--namespace", ns, "logs", "-f", pod)
+		args := []string{"--namespace", ns, "logs", "-f", pod}
+		if container != "" {
+			args = append(args, "-c", container)
+		}
+		cmd := Command(ctx, "kubectl", args...)
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 		go func(pod string) {
@@ -397,7 +401,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
-			s.CapturePodLogs(ctx, "traffic-manager", managerNamespace)
+			s.CapturePodLogs(ctx, "traffic-manager", "", managerNamespace)
 		}
 	}
 	return err
