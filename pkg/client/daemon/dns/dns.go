@@ -239,10 +239,11 @@ func (s *Server) Run(c context.Context, initDone chan<- struct{}) error {
 	s.ctx = c
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	for _, listener := range s.listeners {
-		srv := &dns.Server{PacketConn: listener, Handler: s}
+		srv := &dns.Server{PacketConn: listener, Handler: s, ReadTimeout: time.Second}
 		g.Go(listener.LocalAddr().String(), func(c context.Context) error {
 			go func() {
 				<-c.Done()
+				dlog.Debugf(c, "Shutting down DNS server")
 				_ = srv.ShutdownContext(dcontext.HardContext(c))
 			}()
 			return srv.ActivateAndServe()
