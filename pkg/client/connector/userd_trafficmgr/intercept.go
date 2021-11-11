@@ -482,7 +482,9 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 			sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
 			exe = "sshfs-win"
 		}
-		return dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+		err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+		time.Sleep(time.Second)
+		return err
 	}, 3*time.Second, 6*time.Second)
 
 	if err != nil && ctx.Err() == nil {
