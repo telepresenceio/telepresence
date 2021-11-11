@@ -39,7 +39,6 @@ func (s *helmSuite) TearDownSuite() {
 
 func (s *helmSuite) Test_HelmCanInterceptInManagedNamespace() {
 	ctx := s.Context()
-	// Lifted from TestF_SuccessfullyInterceptsDeploymentWithProbes
 	defer itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+s.AppNamespace())
 
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", s.ServiceName(), "--port", "9090")

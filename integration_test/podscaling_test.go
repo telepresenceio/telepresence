@@ -142,7 +142,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
-	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
 	st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
