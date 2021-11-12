@@ -466,7 +466,12 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 					},
 				}
 				if err = ki.Client().Delete(c, pod, nil); err != nil {
-					return err
+					if kates.IsNotFound(err) || kates.IsConflict(err) {
+						// If an intercept creates a new pod by installing an agent, and the agent is then uninstalled shortly after, the
+						// old pod may still show up here during removal, and even after it has been removed if the removal completed
+						// after we obtained the pods list. This is OK. This pod will not be in our way.
+						continue
+					}
 				}
 			}
 		}
