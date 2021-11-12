@@ -312,7 +312,9 @@ already exist for this service`, kind, obj.GetName())
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
-		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
+		if portNameOrNumber != "" {
+			dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
+		}
 		matchingSvc, err := install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
