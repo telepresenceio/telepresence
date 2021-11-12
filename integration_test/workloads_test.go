@@ -13,9 +13,17 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	defer func() {
 		_ = s.Kubectl(ctx, "delete", "svc,"+strings.ToLower(tp), svc)
 	}()
+	require := s.Require()
+
+	require.Eventually(
+		func() bool {
+			return strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace()), svc)
+		},
+		6*time.Second, // waitFor
+		2*time.Second, // polling interval
+	)
 
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", "--port", port, svc)
-	require := s.Require()
 	require.Contains(stdout, "Using "+tp+" "+svc)
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 	require.Contains(stdout, svc+": intercepted")
@@ -30,7 +38,7 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 			return !strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents"), svc)
 		},
 		30*time.Second, // waitFor
-		1*time.Second,  // polling interval
+		2*time.Second,  // polling interval
 	)
 }
 

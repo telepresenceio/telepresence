@@ -18,7 +18,7 @@ type helmAndService struct {
 }
 
 func WithHelmAndService(h SingleService, f func(HelmAndService)) {
-	h.GetT().Run("Test_Helm", func(t *testing.T) {
+	h.HarnessT().Run("Test_Helm", func(t *testing.T) {
 		ctx := withT(h.HarnessContext(), t)
 		s := &helmAndService{SingleService: h}
 		s.PushHarness(ctx, s.setup, s.tearDown)

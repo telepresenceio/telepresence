@@ -1,6 +1,8 @@
 package integration_test
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +27,9 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Scale down to zero pods
 	require.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "0"))
 
+	// Wait until the pods have terminated.
+	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 30*time.Second, 2*time.Second)
+
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
 	require.Eventually(func() bool {
@@ -42,6 +47,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
+	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 30*time.Second, 2*time.Second)
 
 	// Verify that intercept becomes active
 	require.Eventually(func() bool {
@@ -67,24 +73,10 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	require := s.Require()
 	ctx := s.Context()
 
-	// Terminating is not a state, so you may want to wrap calls to this function in an eventually
-	// to give any pods that are terminating the chance to complete.
-	// https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-	helloPods := func() []string {
-		pods, err := s.KubectlOut(ctx, "get", "pods",
-			"--field-selector", "status.phase==Running",
-			"-l", "app="+s.ServiceName(),
-			"-o", "jsonpath={.items[*].metadata.name}")
-		assert.NoError(err)
-		pods = strings.TrimSpace(pods)
-		dlog.Infof(ctx, "Pods = '%s'", pods)
-		return strings.Split(pods, " ")
-	}
-
 	// Wait for exactly one active pod
 	var currentPod string
 	require.Eventually(func() bool {
-		currentPods := helloPods()
+		currentPods := s.runningPods(ctx)
 		if len(currentPods) == 1 {
 			currentPod = currentPods[0]
 			return true
@@ -99,7 +91,8 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}()
 
 	// Wait for second pod to arrive
-	assert.Eventually(func() bool { return len(helloPods()) == 2 }, 5*time.Second, time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, 5*time.Second, time.Second)
+	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Delete the currently intercepted pod
 	require.NoError(s.Kubectl(ctx, "delete", "pod", currentPod))
@@ -107,13 +100,15 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	// Wait for that pod to disappear
 	assert.Eventually(
 		func() bool {
-			for _, zp := range helloPods() {
+			pods := s.runningPods(ctx)
+			for _, zp := range pods {
 				if zp == currentPod {
 					return false
 				}
 			}
-			return true
+			return len(pods) == 2
 		}, 15*time.Second, time.Second)
+	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Verify that intercept is still active
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `-` + s.AppNamespace() + `\s+State\s*: ([^\n]+)\n`))
@@ -142,8 +137,34 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}, 15*time.Second, time.Second)
 
 	// Verify that volume mount is restored
-	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
 	st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+// Terminating is not a state, so you may want to wrap calls to this function in an eventually
+// to give any pods that are terminating the chance to complete.
+// https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+func (s *interceptMountSuite) runningPods(ctx context.Context) (pods []string) {
+	out, err := s.KubectlOut(ctx, "get", "pods", "--no-headers",
+		"--field-selector", "status.phase=Running",
+		"-l", "app="+s.ServiceName())
+	s.NoError(err)
+	if strings.HasPrefix(out, "No resources found") {
+		return nil
+	}
+	sc := bufio.NewScanner(strings.NewReader(out))
+	for sc.Scan() {
+		txt := sc.Text()
+		// Terminating is not a state: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+		if strings.Contains(txt, "Terminating") {
+			continue
+		}
+		txt = strings.TrimSpace(txt)
+		if spi := strings.IndexByte(txt, ' '); spi > 0 {
+			pods = append(pods, txt[:spi])
+		}
+	}
+	return pods
 }

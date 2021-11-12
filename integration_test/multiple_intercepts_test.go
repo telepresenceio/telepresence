@@ -19,12 +19,18 @@ import (
 type multipleInterceptsSuite struct {
 	itest.Suite
 	itest.MultipleServices
-	cancelService []context.CancelFunc
+	servicePort   []int
+	serviceCancel []context.CancelFunc
 }
 
 func init() {
 	itest.AddMultipleServicesSuite("", "hello", func(h itest.MultipleServices) suite.TestingSuite {
-		return &multipleInterceptsSuite{Suite: itest.Suite{Harness: h}, MultipleServices: h, cancelService: make([]context.CancelFunc, h.ServiceCount())}
+		return &multipleInterceptsSuite{
+			Suite:            itest.Suite{Harness: h},
+			MultipleServices: h,
+			servicePort:      make([]int, h.ServiceCount()),
+			serviceCancel:    make([]context.CancelFunc, h.ServiceCount()),
+		}
 	})
 }
 
@@ -32,7 +38,7 @@ func (s *multipleInterceptsSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	for i := 0; i < s.ServiceCount(); i++ {
-		s.cancelService[i] = itest.StartLocalHttpEchoServer(ctx, fmt.Sprintf("%s-%d", s.Name(), i), 9000+i)
+		s.servicePort[i], s.serviceCancel[i] = itest.StartLocalHttpEchoServer(ctx, fmt.Sprintf("%s-%d", s.Name(), i))
 	}
 
 	wg := sync.WaitGroup{}
@@ -41,8 +47,7 @@ func (s *multipleInterceptsSuite) SetupSuite() {
 		go func(i int) {
 			defer wg.Done()
 			svc := fmt.Sprintf("%s-%d", s.Name(), i)
-			port := strconv.Itoa(9000 + i)
-			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), svc, "--mount", "false", "--port", port)
+			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), svc, "--mount", "false", "--port", strconv.Itoa(s.servicePort[i]))
 			s.Contains(stdout, "Using Deployment "+svc)
 		}(i)
 	}
@@ -54,7 +59,7 @@ func (s *multipleInterceptsSuite) TearDownSuite() {
 	for i := 0; i < s.ServiceCount(); i++ {
 		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d-%s", s.Name(), i, s.AppNamespace()))
 	}
-	for _, cancel := range s.cancelService {
+	for _, cancel := range s.serviceCancel {
 		if cancel != nil {
 			cancel()
 		}
@@ -115,7 +120,7 @@ func (s *multipleInterceptsSuite) Test_Intercepts() {
 }
 
 func (s *multipleInterceptsSuite) Test_ReportsPortConflict() {
-	_, stderr, err := itest.Telepresence(s.Context(), "intercept", "--namespace", s.AppNamespace(), "--mount", "false", "--port", "9001", "dummy-name")
+	_, stderr, err := itest.Telepresence(s.Context(), "intercept", "--namespace", s.AppNamespace(), "--mount", "false", "--port", strconv.Itoa(s.servicePort[1]), "dummy-name")
 	s.Error(err)
-	s.Contains(stderr, fmt.Sprintf("Port 127.0.0.1:9001 is already in use by intercept %s-1-%s", s.Name(), s.AppNamespace()))
+	s.Contains(stderr, fmt.Sprintf("Port 127.0.0.1:%d is already in use by intercept %s-1-%s", s.servicePort[1], s.Name(), s.AppNamespace()))
 }

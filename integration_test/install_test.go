@@ -48,6 +48,8 @@ func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
 	require := is.Require()
 	ctx := is.Context()
 
+	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
+
 	f, err := os.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
 	manifest := string(f)
@@ -58,6 +60,7 @@ func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
 	cmd.Stdout = out
 	cmd.Stderr = out
 	require.NoError(cmd.Run())
+	require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "rollout", "status", "-w", "deploy/traffic-manager"))
 
 	is.findTrafficManagerPresent(ctx, is.ManagerNamespace())
 }
@@ -72,12 +75,11 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 
 	// We'll call this further down, but defer it to prevent polluting other tests if we don't leave this function gracefully
 	defer restoreVersion()
-
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	ctx = itest.WithConfig(ctx, &client.Config{
 		Timeouts: client.Timeouts{
-			PrivateHelm: 10 * time.Second,
+			PrivateHelm: 30 * time.Second,
 		},
 	})
 	ti := is.installer(ctx)
@@ -91,7 +93,7 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	}, 20*time.Second, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
 }
 
-func (is *installSuite) Test_EnsureTrafficManager_toleratesLeftoverState() {
+func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	require := is.Require()
 	ctx := is.Context()
 
@@ -125,6 +127,11 @@ func (is *installSuite) Test_RemoveManagerAndAgents_canUninstall() {
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades() {
+	// TODO: In order to properly check that an upgrade works, we need to install
+	//  an older version first, which in turn will entail building that version
+	//  and publishing an image fore it. The way the test looks right now, it just
+	//  terminates with a timeout error.
+	is.T().Skip()
 	require := is.Require()
 	ctx := is.Context()
 	ti := is.installer(ctx)
@@ -136,12 +143,6 @@ func (is *installSuite) Test_EnsureManager_upgrades() {
 	version.Version = "v3.0.0-bogus"
 	restoreVersion := func() { version.Version = sv }
 	defer restoreVersion()
-
-	ctx = itest.WithConfig(ctx, &client.Config{
-		Timeouts: client.Timeouts{
-			PrivateHelm: 10 * time.Second,
-		},
-	})
 	require.Error(ti.EnsureManager(ctx))
 
 	require.Eventually(func() bool {
@@ -150,7 +151,7 @@ func (is *installSuite) Test_EnsureManager_upgrades() {
 			return false
 		}
 		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
-	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
+	}, 30*time.Second, 5*time.Second, "timeout waiting for deployment to update")
 
 	restoreVersion()
 	require.NoError(ti.EnsureManager(ctx))
@@ -208,8 +209,6 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 }
 
 func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace string) {
-	defer is.UninstallTrafficManager(ctx, namespace)
-
 	kc := is.cluster(ctx, namespace)
 	watcherErr := make(chan error)
 	watchCtx, watchCancel := context.WithCancel(ctx)
