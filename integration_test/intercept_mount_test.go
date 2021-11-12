@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	goRuntime "runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -48,6 +49,11 @@ func (s *interceptMountSuite) TearDownSuite() {
 	ctx := s.Context()
 	itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
 	s.cancelLocal()
+	s.Eventually(func() bool {
+		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
+	}, 10*time.Second, time.Second)
+
 	// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 	go func() {
 		time.Sleep(2 * time.Second)
