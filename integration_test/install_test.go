@@ -127,6 +127,11 @@ func (is *installSuite) Test_RemoveManagerAndAgents_canUninstall() {
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades() {
+	// TODO: In order to properly check that an upgrade works, we need to install
+	//  an older version first, which in turn will entail building that version
+	//  and publishing an image fore it. The way the test looks right now, it just
+	//  terminates with a timeout error.
+	is.T().Skip()
 	require := is.Require()
 	ctx := is.Context()
 	ti := is.installer(ctx)
