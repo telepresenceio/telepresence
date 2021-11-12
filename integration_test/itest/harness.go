@@ -16,7 +16,7 @@ type Harness interface {
 
 	HarnessContext() context.Context
 	SetupSuite()
-	GetT() *testing.T
+	HarnessT() *testing.T
 	PopHarness()
 }
 
@@ -51,7 +51,7 @@ func (h *harness) HarnessContext() context.Context {
 }
 
 func (h *harness) RunSuite(s suite.TestingSuite) {
-	suite.Run(h.GetT(), s)
+	suite.Run(h.HarnessT(), s)
 }
 
 // SetupSuite calls all functions that has been added with AddSetup in the order they
@@ -66,7 +66,7 @@ func (h *harness) SetupSuite() {
 	}
 	h.wasSetup = true
 	if err := h.GeneralError(); err != nil {
-		h.GetT().Fatal(err) // Immediately fail the test if a general error has been set
+		h.HarnessT().Fatal(err) // Immediately fail the test if a general error has been set
 	}
 	uds := h.upAndDowns
 	for i := range uds {
@@ -114,6 +114,6 @@ func failOnPanic(ctx context.Context) {
 	}
 }
 
-func (h *harness) GetT() *testing.T {
+func (h *harness) HarnessT() *testing.T {
 	return getT(h.HarnessContext())
 }
