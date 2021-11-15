@@ -399,6 +399,10 @@ jobs:
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag make push-images push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-linux-artifacts
 
   "publish-nightly-windows":
     executor:
@@ -415,6 +419,10 @@ jobs:
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag make push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-windows-artifacts
 
   "publish-nightly-macos":
     executor: vm-macos
@@ -428,12 +436,20 @@ jobs:
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make push-executable
           TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-macos-amd64-artifacts
     - run:
         name: "Publish nightly macos (arch arm64)"
         command: |
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make push-executable
           TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-macos-arm64-artifacts
 
 #  "release-finalize":
 #    executor: vm-linux
