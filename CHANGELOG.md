@@ -2,6 +2,9 @@
 
 ### 2.4.7 (TBD)
 
+- Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
+  This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
+
 - Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
 
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
