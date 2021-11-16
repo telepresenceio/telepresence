@@ -536,7 +536,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}
 	}()
 
-	if is.args.previewEnabled && is.args.cmdLineIngress {
+	if is.args.previewEnabled && is.args.cmdLineIngress && is.args.previewSpec.Ingress == nil {
 		ingress := &manager.IngressInfo{}
 		ingress.Host = is.args.ingressHost
 		ingress.Port = is.args.ingressPort
