@@ -13,6 +13,8 @@
 
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
+- Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
+
 ### 2.4.6 (November 2, 2021)
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
