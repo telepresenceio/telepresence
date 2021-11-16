@@ -41,6 +41,8 @@ images:
   registry: testregistry.io
   agentImage: ambassador-telepresence-client-image:0.0.1
   webhookAgentImage: ambassador-telepresence-webhook-image:0.0.2
+telepresenceAPI:
+  port: 1234
 `,
 	}
 
@@ -77,6 +79,7 @@ images:
 	assert.Equal(t, "testregistry.io", cfg.Images.Registry)                                      // from user
 	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.AgentImage)         // from user
 	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.WebhookAgentImage) // from user
+	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                              // from user
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
@@ -90,6 +93,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg.Cloud.RefreshMessages += 10 * time.Minute
 	cfg.LogLevels.UserDaemon = logrus.TraceLevel
 	cfg.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("20Mi")
+	cfg.TelepresenceAPI.Port = 4567
 	cfgBytes, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
 

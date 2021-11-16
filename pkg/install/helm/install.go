@@ -68,6 +68,11 @@ func getValues(ctx context.Context) map[string]interface{} {
 		}
 		values["agentInjector"] = map[string]interface{}{"agentImage": agentImage}
 	}
+	if clientConfig.TelepresenceAPI.Port != 0 {
+		values["telepresenceAPI"] = map[string]interface{}{
+			"port": clientConfig.TelepresenceAPI.Port,
+		}
+	}
 	return values
 }
 
