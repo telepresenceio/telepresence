@@ -541,7 +541,12 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		ingress.Host = is.args.ingressHost
 		ingress.Port = is.args.ingressPort
 		ingress.UseTls = is.args.ingressTLS
-		ingress.L5Host = is.args.ingressL5
+		if ingress.L5Host == "" {
+			ingress.L5Host = is.args.ingressHost
+		} else {
+			ingress.L5Host = is.args.ingressL5
+		}
+
 		is.args.previewSpec.Ingress = ingress
 	}
 
