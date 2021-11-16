@@ -128,7 +128,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 				expectedSvc := tc.OutputService.DeepCopy()
 				sanitizeService(expectedSvc)
 
-				actualWrk, actualSvc, actualErr := addAgentToWorkload(ctx,
+				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(ctx,
 					tc.InputPortName,
 					managerImageName(ctx), // ignore extensions
 					env.ManagerNamespace,

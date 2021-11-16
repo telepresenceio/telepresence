@@ -309,6 +309,7 @@ already exist for this service`, kind, obj.GetName())
 	}
 
 	update := true
+	updateSvc := false
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
@@ -319,7 +320,7 @@ already exist for this service`, kind, obj.GetName())
 		if err != nil {
 			return "", "", err
 		}
-		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.GetManagerNamespace(), obj, matchingSvc)
+		obj, svc, updateSvc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.GetManagerNamespace(), telepresenceAPIPort, obj, matchingSvc)
 		if err != nil {
 			return "", "", err
 		}
@@ -351,7 +352,7 @@ already exist for this service`, kind, obj.GetName())
 		if err := ki.Client().Update(c, obj, obj); err != nil {
 			return "", "", err
 		}
-		if svc != nil {
+		if updateSvc {
 			if err := ki.Client().Update(c, svc, svc); err != nil {
 				return "", "", err
 			}
@@ -594,17 +595,18 @@ func addAgentToWorkload(
 ) (
 	kates.Object,
 	*kates.Service,
+	bool,
 	error,
 ) {
 	podTemplate, err := install.GetPodTemplateFromObject(object)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	cns := podTemplate.Spec.Containers
 	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, matchingService)
 	if err != nil {
-		return nil, nil, install.ObjErrorf(object, err.Error())
+		return nil, nil, false, install.ObjErrorf(object, err.Error())
 	}
 	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
 		matchingService.Name,
@@ -657,7 +659,7 @@ func addAgentToWorkload(
 		}
 	}
 	if containerPort.Number == 0 {
-		return nil, nil, install.ObjErrorf(object, "unable to add: the container port cannot be determined")
+		return nil, nil, false, install.ObjErrorf(object, "unable to add: the container port cannot be determined")
 	}
 	if containerPort.Name == "" {
 		containerPort.Name = fmt.Sprintf("tx-%d", containerPort.Number)
@@ -733,7 +735,7 @@ func addAgentToWorkload(
 
 	// Apply the actions on the workload.
 	if err = workloadMod.Do(object); err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	annotations := object.GetAnnotations()
 	if object.GetAnnotations() == nil {
@@ -741,29 +743,29 @@ func addAgentToWorkload(
 	}
 	annotations[annTelepresenceActions], err = workloadMod.MarshalAnnotation()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	object.SetAnnotations(annotations)
 	explainDo(c, workloadMod, object)
 
 	// Apply the actions on the Service.
+	updateService := false
 	if serviceMod != nil {
 		if err = serviceMod.Do(matchingService); err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		if matchingService.Annotations == nil {
 			matchingService.Annotations = make(map[string]string)
 		}
 		matchingService.Annotations[annTelepresenceActions], err = serviceMod.MarshalAnnotation()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		explainDo(c, serviceMod, matchingService)
-	} else {
-		matchingService = nil
+		updateService = true
 	}
 
-	return object, matchingService, nil
+	return object, matchingService, updateService, nil
 }
 
 func (ki *installer) EnsureManager(c context.Context) error {
