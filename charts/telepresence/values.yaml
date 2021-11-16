@@ -171,6 +171,15 @@ agentInjector:
     sideEffects: None
     timeoutSeconds: 5
 
+################################################################################
+## Telepresence API Server Configuration
+################################################################################
+telepresenceAPI:
+  # Default: false
+  create: false
+  # The port on agent's localhost where the API service can be found
+  # Default: 0
+  port: 0
 
 ################################################################################
 ## User Configuration
