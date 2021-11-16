@@ -159,7 +159,8 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 
 	flags.StringVarP(&args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
-	flags.BoolVarP(&args.cmdLineIngress, "cmd-ingress", "i", false, "if set, uses cmd flags instead of opening a dialogue for ingress settings.\nUses --ingressHost, --ingressPort, --ingressTLS, and --ingressL5")
+	flags.BoolVarP(&args.cmdLineIngress, "cmd-ingress", "i", false, "if set, uses cmd flags instead of opening a dialogue for ingress settings."+
+		"Uses --ingressHost, --ingressPort, --ingressTLS, and --ingressL5")
 	flags.StringVar(&args.ingressHost, "ingressHost", "", "if cmd-ingress is set, this value will be used as the ingress hostname")
 	flags.Int32Var(&args.ingressPort, "ingressPort", 80, "if cmd-ingress is set, this value will be used as the ingress port")
 	flags.BoolVar(&args.ingressTLS, "ingressTLS", false, "if cmd-ingress is set, this value set encryption")
