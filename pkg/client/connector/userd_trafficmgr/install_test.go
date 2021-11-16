@@ -20,7 +20,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -92,11 +91,15 @@ func TestAddAgentToWorkload(t *testing.T) {
 	}
 	ctx = client.WithConfig(ctx, cfg)
 
-	// We use the MachineLock here since we have to reset + set the config.yml
+	// We use the MachineLock here since we have to set and reset the version.Version
 	dtest.WithMachineLock(ctx, func(ctx context.Context) {
-		// Specify the registry used in the test data
-		configDir := t.TempDir()
-		err = prepareConfig(ctx, configDir)
+		sv := version.Version
+		defer func() { version.Version = sv }()
+
+		testCfg := *cfg
+		testCfg.TelepresenceAPI.Port = 9191
+		testCfg.Images.Registry = "localhost:5000"
+		ctx = client.WithConfig(ctx, &testCfg)
 
 		for tcName, tc := range testcases {
 			tcName := tcName // "{version-dir}/{yaml-base-name}"
@@ -107,19 +110,6 @@ func TestAddAgentToWorkload(t *testing.T) {
 			}
 
 			t.Run(tcName+"/install", func(t *testing.T) {
-				ctx := dlog.NewTestContext(t, true)
-				env, err := client.LoadEnv(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ctx = client.WithEnv(ctx, env)
-				ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-				cfg, err = client.LoadConfig(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ctx = client.WithConfig(ctx, cfg)
-
 				version.Version = tc.InputVersion
 
 				expectedWrk := deepCopyObject(tc.OutputWorkload)
@@ -132,6 +122,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 					tc.InputPortName,
 					managerImageName(ctx), // ignore extensions
 					env.ManagerNamespace,
+					uint16(client.GetConfig(ctx).TelepresenceAPI.Port),
 					deepCopyObject(tc.InputWorkload),
 					tc.InputService.DeepCopy(),
 				)
@@ -169,40 +160,38 @@ func TestAddAgentToWorkload(t *testing.T) {
 				}
 			})
 		}
+
+		// Part 3: Run the testcases in "uninstall" mode ///////////////////////
+		for tcName, tc := range testcases {
+			tc := tc
+			t.Run(tcName+"/uninstall", func(t *testing.T) {
+				version.Version = tc.InputVersion
+
+				expectedWrk := deepCopyObject(tc.InputWorkload)
+				sanitizeWorkload(expectedWrk)
+
+				expectedSvc := tc.InputService.DeepCopy()
+				sanitizeService(expectedSvc)
+
+				actualWrk := deepCopyObject(tc.OutputWorkload)
+				_, actualErr := undoObjectMods(ctx, actualWrk)
+				if !assert.NoError(t, actualErr) {
+					return
+				}
+				sanitizeWorkload(actualWrk)
+
+				actualSvc := tc.OutputService.DeepCopy()
+				actualErr = undoServiceMods(ctx, actualSvc)
+				if !assert.NoError(t, actualErr) {
+					return
+				}
+				sanitizeService(actualSvc)
+
+				assert.Equal(t, expectedWrk, actualWrk)
+				assert.Equal(t, expectedSvc, actualSvc)
+			})
+		}
 	})
-
-	// Part 3: Run the testcases in "uninstall" mode ///////////////////////
-
-	for tcName, tc := range testcases {
-		tc := tc
-		t.Run(tcName+"/uninstall", func(t *testing.T) {
-			ctx := dlog.NewTestContext(t, true)
-			version.Version = tc.InputVersion
-
-			expectedWrk := deepCopyObject(tc.InputWorkload)
-			sanitizeWorkload(expectedWrk)
-
-			expectedSvc := tc.InputService.DeepCopy()
-			sanitizeService(expectedSvc)
-
-			actualWrk := deepCopyObject(tc.OutputWorkload)
-			_, actualErr := undoObjectMods(ctx, actualWrk)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-			sanitizeWorkload(actualWrk)
-
-			actualSvc := tc.OutputService.DeepCopy()
-			actualErr = undoServiceMods(ctx, actualSvc)
-			if !assert.NoError(t, actualErr) {
-				return
-			}
-			sanitizeService(actualSvc)
-
-			assert.Equal(t, expectedWrk, actualWrk)
-			assert.Equal(t, expectedSvc, actualSvc)
-		})
-	}
 }
 
 func sanitizeWorkload(obj kates.Object) {
@@ -282,19 +271,4 @@ func loadFile(filename, inputVersion string) (workload kates.Object, service *ka
 	}
 
 	return workload, dat.Service, dat.InterceptPort, nil
-}
-
-// prepareConfig resets the config + sets the registry. Only use within
-// withMachineLock
-func prepareConfig(ctx context.Context, configDir string) error {
-	config, err := os.Create(filepath.Join(configDir, "config.yml"))
-	if err != nil {
-		return err
-	}
-	_, err = config.WriteString("images:\n  registry: localhost:5000\n")
-	if err != nil {
-		return err
-	}
-	config.Close()
-	return nil
 }
