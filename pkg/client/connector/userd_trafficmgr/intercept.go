@@ -301,8 +301,9 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
-	var result *rpc.InterceptResult
-	if result = tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
+	cfg := client.GetConfig(c)
+	result := tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, uint16(cfg.TelepresenceAPI.Port))
+	if result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}
 

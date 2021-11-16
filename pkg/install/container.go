@@ -21,6 +21,7 @@ func AgentContainer(
 	appContainer *corev1.Container,
 	port corev1.ContainerPort,
 	appPort int,
+	apiPort int,
 	managerNamespace string,
 	setGID bool,
 ) corev1.Container {
@@ -37,7 +38,7 @@ func AgentContainer(
 		Image:           imageName,
 		Args:            []string{"agent"},
 		Ports:           []corev1.ContainerPort{port},
-		Env:             agentEnvironment(name, appContainer, appPort, managerNamespace, port),
+		Env:             agentEnvironment(name, appContainer, appPort, apiPort, managerNamespace, port),
 		EnvFrom:         appContainer.EnvFrom,
 		VolumeMounts:    agentVolumeMounts(appContainer.VolumeMounts),
 		SecurityContext: securityContext,
@@ -82,8 +83,8 @@ func InitContainer(imageName string, port corev1.ContainerPort, appPort int) cor
 	}
 }
 
-func agentEnvironment(agentName string, appContainer *kates.Container, appPort int, managerNamespace string, port corev1.ContainerPort) []corev1.EnvVar {
-	appEnv := appEnvironment(appContainer)
+func agentEnvironment(agentName string, appContainer *kates.Container, appPort, apiPort int, managerNamespace string, port corev1.ContainerPort) []corev1.EnvVar {
+	appEnv := appEnvironment(appContainer, apiPort)
 	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+7)
 	copy(env, appEnv)
 	env = append(env,
@@ -160,15 +161,21 @@ func agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 	return agentMounts
 }
 
-func appEnvironment(appContainer *kates.Container) []corev1.EnvVar {
+func appEnvironment(appContainer *kates.Container, apiPort int) []corev1.EnvVar {
 	appEnv := appContainer.Env
 	envCount := len(appEnv)
-	envCopy := make([]corev1.EnvVar, envCount+1)
+	envCopy := make([]corev1.EnvVar, envCount, envCount+2)
 	copy(envCopy, appEnv)
-	envCopy[envCount] = corev1.EnvVar{
+	if apiPort != 0 {
+		envCopy = append(envCopy, corev1.EnvVar{
+			Name:  "TELEPRESENCE_API_PORT",
+			Value: strconv.Itoa(apiPort),
+		})
+	}
+	envCopy = append(envCopy, corev1.EnvVar{
 		Name:  "TELEPRESENCE_CONTAINER",
 		Value: appContainer.Name,
-	}
+	})
 	return envCopy
 }
 

@@ -97,7 +97,6 @@ func TestAddAgentToWorkload(t *testing.T) {
 		defer func() { version.Version = sv }()
 
 		testCfg := *cfg
-		testCfg.TelepresenceAPI.Port = 9191
 		testCfg.Images.Registry = "localhost:5000"
 		ctx = client.WithConfig(ctx, &testCfg)
 
@@ -118,11 +117,15 @@ func TestAddAgentToWorkload(t *testing.T) {
 				expectedSvc := tc.OutputService.DeepCopy()
 				sanitizeService(expectedSvc)
 
+				apiPort := uint16(0)
+				if tcName == "cur/deployment-tpapi" {
+					apiPort = 9901
+				}
 				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(ctx,
 					tc.InputPortName,
 					managerImageName(ctx), // ignore extensions
 					env.ManagerNamespace,
-					uint16(client.GetConfig(ctx).TelepresenceAPI.Port),
+					apiPort,
 					deepCopyObject(tc.InputWorkload),
 					tc.InputService.DeepCopy(),
 				)

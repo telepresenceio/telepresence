@@ -21,6 +21,7 @@ type Env struct {
 	AgentRegistry    string            `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
 	AgentImage       string            `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 	AgentPort        int32             `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
+	APIPort          int32             `env:"TELEPRESENCE_API_PORT,default="`
 	MaxReceiveSize   resource.Quantity `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
 
 	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`

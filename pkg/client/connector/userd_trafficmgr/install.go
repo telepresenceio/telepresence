@@ -30,7 +30,7 @@ type installer struct {
 
 type Installer interface {
 	userd_k8s.ResourceFinder
-	EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error)
+	EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
 	EnsureManager(c context.Context) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
@@ -263,7 +263,8 @@ func (ki *installer) getSvcForInjectedPod(
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
+func (ki *installer) EnsureAgent(c context.Context,
+	namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
 	obj, err := ki.FindWorkload(c, namespace, name)
 	if err != nil {
 		return "", "", err
@@ -591,6 +592,7 @@ func addAgentToWorkload(
 	portNameOrNumber string,
 	agentImageName string,
 	trafficManagerNamespace string,
+	telepresenceAPIPort uint16,
 	object kates.Object, matchingService *kates.Service,
 ) (
 	kates.Object,
@@ -676,6 +678,14 @@ func addAgentToWorkload(
 		}
 	}
 
+	var addTPEnvAction *addTPEnvironmentAction
+	if telepresenceAPIPort != 0 {
+		addTPEnvAction = &addTPEnvironmentAction{
+			ContainerName: container.Name,
+			Env:           map[string]string{"TELEPRESENCE_API_PORT": strconv.Itoa(int(telepresenceAPIPort))},
+		}
+	}
+
 	// Figure what modifications we need to make.
 	workloadMod := &workloadActions{
 		Version:                   version,
@@ -690,8 +700,10 @@ func addAgentToWorkload(
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
 			ContainerPortNumber:     containerPort.Number,
+			APIPortNumber:           telepresenceAPIPort,
 			ImageName:               agentImageName,
 		},
+		AddTPEnvironmentAction: addTPEnvAction,
 	}
 	// Depending on whether the Service refers to the port by name or by number, we either need
 	// to patch the names in the deployment, or the number in the service.

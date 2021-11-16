@@ -93,8 +93,8 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string) *rpc.InterceptResult {
-	svcUID, kind, err := tm.EnsureAgent(c, namespace, agentName, svcName, svcPortIdentifier, agentImageName)
+func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
+	svcUID, kind, err := tm.EnsureAgent(c, namespace, agentName, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
