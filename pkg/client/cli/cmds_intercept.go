@@ -57,6 +57,14 @@ type interceptArgs struct {
 	extRequiresLogin bool                        // pre-extracted from extState
 
 	cmdline []string // Args[1:]
+
+	// if set, uses ingress cmd inputs instead of dialogue for ingress settings
+	cmdLineIngress bool
+	// ingress cmd inputs
+	ingressHost string
+	ingressPort int32
+	ingressTLS  bool
+	ingressL5   string
 }
 
 // safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
@@ -150,6 +158,12 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
 	flags.StringVarP(&args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+
+	flags.BoolVarP(&args.cmdLineIngress, "cmd-ingress", "-i", false, "if set, uses cmd flags instead of opening a dialogue for ingress settings.\nUses --ingressHost, --ingressPort, --ingressTLS, and --ingressL5")
+	flags.StringVar(&args.ingressHost, "ingressHost", "", "if cmd-ingress is set, this value will be used as the ingress hostname")
+	flags.Int32Var(&args.ingressPort, "ingressPort", 80, "if cmd-ingress is set, this value will be used as the ingress port")
+	flags.BoolVar(&args.ingressTLS, "ingressTLS", false, "if cmd-ingress is set, this value set encryption")
+	flags.StringVar(&args.ingressL5, "ingressL5", "", "if cmd-ingress is set, this value will be used as the L5 hostname")
 
 	var extErr error
 	args.extState, extErr = extensions.LoadExtensions(ctx, flags)
@@ -521,6 +535,15 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
 		}
 	}()
+
+	if is.args.cmdLineIngress {
+		ingress := &manager.IngressInfo{}
+		ingress.Host = is.args.ingressHost
+		ingress.Port = is.args.ingressPort
+		ingress.UseTls = is.args.ingressTLS
+		ingress.L5Host = is.args.ingressL5
+		is.args.previewSpec.Ingress = ingress
+	}
 
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
