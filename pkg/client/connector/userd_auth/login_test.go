@@ -203,7 +203,6 @@ func TestLoginFlow(t *testing.T) {
 			&client.Env{
 				LoginAuthURL:       mockOauth2Server.AuthUrl(),
 				LoginTokenURL:      mockOauth2Server.TokenUrl(),
-				LoginClientID:      "",
 				LoginCompletionURL: mockCompletionUrl,
 				UserInfoURL:        mockOauth2Server.UserInfoUrl(),
 			})
