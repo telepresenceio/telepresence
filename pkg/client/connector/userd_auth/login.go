@@ -238,7 +238,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			case <-l.refreshTimer.C:
 				dlog.Infoln(ctx, "refreshing access token...")
 				if token, err := l.getToken(ctx); err != nil {
-					dlog.Infof(ctx, "could not refresh assess token: %v", err)
+					dlog.Infof(ctx, "could not refresh access token: %v", err)
 				} else if token != "" {
 					dlog.Infof(ctx, "got new access token")
 				}
