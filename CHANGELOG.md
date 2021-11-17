@@ -5,6 +5,10 @@
 - Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
   consumed or not from a message queue where the intercept headers are added to the messages.
 
+- Bugfix: The tunneled network connections between Telepresence and
+  Ambassador Cloud now behave more like ordinary TCP connections,
+  especially around timeouts.
+
 ### 2.4.7 (November 24, 2021)
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
@@ -24,13 +28,13 @@
 
 - Bugfix: The DNS-resolver will trap recursive resolution attempts (may happen when the cluster runs in a docker-container on the client).
 
-- Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the 
+- Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the
   cluster runs in a docker-container on the client).
 
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
 - Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
-  original Helm chart when we release so this fix will only affect our nightly builds. 
+  original Helm chart when we release so this fix will only affect our nightly builds.
 
 - Bugfix: The configured webhookRegistry is now propagated to the webhook installer even if no webhookAgentImage has been set.
 
