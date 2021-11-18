@@ -50,23 +50,24 @@ func getValues(ctx context.Context) map[string]interface{} {
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
-	if imgConfig.WebhookAgentImage != "" {
-		parts := strings.Split(imgConfig.WebhookAgentImage, ":")
-		image := imgConfig.WebhookAgentImage
-		tag := ""
-		if len(parts) > 1 {
-			image = parts[0]
-			tag = parts[1]
+	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" {
+		agentImage := make(map[string]interface{})
+		if imgConfig.WebhookAgentImage != "" {
+			parts := strings.Split(imgConfig.WebhookAgentImage, ":")
+			image := imgConfig.WebhookAgentImage
+			tag := ""
+			if len(parts) > 1 {
+				image = parts[0]
+				tag = parts[1]
+			}
+			agentImage["name"] = image
+			agentImage["tag"] = tag
 		}
-		values["agentInjector"] = map[string]interface{}{
-			"agentImage": map[string]interface{}{
-				"registry": imgConfig.WebhookRegistry,
-				"name":     image,
-				"tag":      tag,
-			},
+		if imgConfig.WebhookRegistry != "" {
+			agentImage["registry"] = imgConfig.WebhookRegistry
 		}
+		values["agentInjector"] = map[string]interface{}{"agentImage": agentImage}
 	}
-
 	return values
 }
 
