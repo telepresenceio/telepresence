@@ -538,7 +538,7 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 					return ingress, nil
 				} else {
 					return nil, fmt.Errorf("the address provided for the L5 hostname, %s, must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
-						ingressHost)
+						ingressL5)
 				}
 			}
 		} else {
