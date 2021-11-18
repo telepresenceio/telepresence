@@ -20,6 +20,9 @@
 
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
+- Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
+  original Helm chart when we release so this fix will only affect our nightly builds. 
+
 ### 2.4.6 (November 2, 2021)
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
