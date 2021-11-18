@@ -11,6 +11,13 @@
 
 - Bugfix: Outbound connections are now properly closed when the peer closes.
 
+- Bugfix: The DNS-resolver will trap recursive resolution attempts (may happen when the cluster runs in a docker-container on the client).
+
+- Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the 
+  cluster runs in a docker-container on the client).
+
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
 ### 2.4.6 (November 2, 2021)

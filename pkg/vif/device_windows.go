@@ -148,11 +148,6 @@ $job | Receive-Job
 		// Log the error, but don't actually fail on it: This is all just a fallback for SetDNS, so the domains might actually be working
 		dlog.Errorf(ctx, "Failed to set NetworkAdapterConfiguration DNS Domain: %v. Will proceed, but namespace mapping might not be functional.", err)
 	}
-
-	dlog.Debug(ctx, "Calling ipconfig /flushdns")
-	cmd = dexec.CommandContext(ctx, "ipconfig", "/flushdns")
-	cmd.DisableLogging = true
-	_ = cmd.Run()
 	t.dns = server
 	return nil
 }

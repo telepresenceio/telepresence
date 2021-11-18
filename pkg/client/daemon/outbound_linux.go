@@ -78,7 +78,7 @@ func (o *outbound) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
+func (o *outbound) resolveInSearch(c context.Context, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -88,12 +88,12 @@ func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string
 
 	if o.shouldApplySearch(query) {
 		for _, s := range o.search {
-			if ips := o.resolveInCluster(c, qType, query+s); len(ips) > 0 {
+			if ips := o.resolveInCluster(c, query+s); len(ips) > 0 {
 				return ips
 			}
 		}
 	}
-	return o.resolveInCluster(c, qType, query)
+	return o.resolveInCluster(c, query)
 }
 
 func (o *outbound) runOverridingServer(c context.Context) error {
@@ -160,12 +160,10 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 				o.namespaces = namespaces
 				o.search = search
 				o.domainsLock.Unlock()
-				dns.Flush(c)
+				o.flushDNS()
 				return nil
 			})
-			v := dns.NewServer(c, listeners, conn, o.resolveInSearch)
-			close(serverStarted)
-			return v.Run(c)
+			return dns.NewServer(listeners, conn, o.resolveInSearch, &o.dnsCache).Run(c, serverStarted)
 		}
 	})
 
@@ -183,9 +181,9 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 			defer func() {
 				c := context.Background()
 				unrouteDNS(c)
-				dns.Flush(c)
+				o.flushDNS()
 			}()
-			dns.Flush(c)
+			o.flushDNS()
 			<-serverDone // Stay alive until DNS server is done
 		}
 		return nil
