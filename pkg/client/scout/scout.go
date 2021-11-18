@@ -134,13 +134,9 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 	baseMeta["goos"] = runtime.GOOS
 
 	// Discover how Telepresence was installed based on the binary's location
-	var installMethod string
-	execPath, err := os.Executable()
+	installMethod, err := client.GetInstallMechanism()
 	if err != nil {
 		dlog.Errorf(ctx, "scout error getting executable: %s", err)
-		installMethod = "undetermined"
-	} else {
-		installMethod = GetInstallMechanism(ctx, execPath)
 	}
 	baseMeta["install_method"] = installMethod
 
@@ -160,26 +156,6 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 			// Fixed (growing) metadata passed with every report
 			BaseMetadata: baseMeta,
 		},
-	}
-}
-
-// GetInstallMechanism returns how the binary was installed based on its location.
-func GetInstallMechanism(ctx context.Context, execPath string) string {
-	// Some package managers, like brew, symlink binaries into /usr/local/bin .
-	// We want to use the actual location of the executable when reporting metrics
-	// so we follow the symlink to get the actual binary path.
-	binaryPath, err := filepath.EvalSymlinks(execPath)
-	if err != nil {
-		dlog.Infof(ctx, "scout error following symlink %s: %s", execPath, err)
-		return "undetermined"
-	}
-	switch {
-	case runtime.GOOS == "darwin" && strings.Contains(binaryPath, "Cellar"):
-		return "brew"
-	case strings.Contains(binaryPath, "docker"):
-		return "docker"
-	default:
-		return "website"
 	}
 }
 
