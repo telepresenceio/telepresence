@@ -40,6 +40,13 @@ type dnsValue struct {
 	wait      chan struct{}
 }
 
+// cacheTTL is the time to live for an entry in the local DNS cache.
+const cacheTTL = 60 * time.Second
+
+func (dv *dnsValue) expired() bool {
+	return time.Since(dv.created) > cacheTTL
+}
+
 // NewServer returns a new dns.Server
 func NewServer(listeners []net.PacketConn, fallback *dns.Conn, resolve Resolver, cache *sync.Map) *Server {
 	s := &Server{
@@ -82,7 +89,7 @@ func (s *Server) resolveThruCache(q *dns.Question) []dns.RR {
 			return nil
 		}
 		<-oldDv.wait
-		if time.Since(oldDv.created) < 60*time.Second {
+		if !oldDv.expired() {
 			return copyRRs(oldDv.answer, q.Qtype)
 		}
 		s.cache.Store(q.Name, newDv)
@@ -106,7 +113,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) []dns.RR {
 			}
 		}
 		<-oldDv.wait
-		if time.Since(oldDv.created) < 60*time.Second {
+		if !oldDv.expired() {
 			return copyRRs(oldDv.answer, q.Qtype)
 		}
 		s.cache.Store(q.Name, newDv)
@@ -185,6 +192,10 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 }
 
+// dnsTTL is the number of seconds that a found DNS record should be allowed to live in the callers cache. We
+// keep this low to avoid such caching.
+const dnsTTL = 4
+
 func (s *Server) resolveQuery(q *dns.Question, dv *dnsValue) []dns.RR {
 	atomic.StoreInt32(&dv.recursion, int32(q.Qtype))
 	defer func() {
@@ -199,23 +210,17 @@ func (s *Server) resolveQuery(q *dns.Question, dv *dnsValue) []dns.RR {
 			break
 		}
 
-		// The host is known. Return a result for the correct query type. The result might be empty for the given
-		// query type and that is OK.
-		// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
 		answer := make([]dns.RR, 0, len(ips))
 		for _, ip := range ips {
-			// if we don't give back the same domain
-			// requested, then mac dns seems to return an
-			// nxdomain
 			var rr dns.RR
 			if ip4 := ip.To4(); ip4 != nil {
 				rr = &dns.A{
-					Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 5},
+					Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: dnsTTL},
 					A:   ip4,
 				}
 			} else {
 				rr = &dns.AAAA{
-					Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 5},
+					Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: dnsTTL},
 					AAAA: ip,
 				}
 			}
@@ -231,6 +236,10 @@ func (s *Server) resolveQuery(q *dns.Question, dv *dnsValue) []dns.RR {
 	if len(dv.answer) == 0 {
 		s.cache.Delete(q.Name) // Don't cache unless the entry is found.
 	}
+
+	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
+	// also be empty if no RRs were found for the given query type and that is OK.
+	// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
 	return copyRRs(dv.answer, q.Qtype)
 }
 

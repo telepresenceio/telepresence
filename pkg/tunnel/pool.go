@@ -147,7 +147,7 @@ func (p *Pool) GetOrCreateTCP(ctx context.Context, id ConnID, createHandler Hand
 			return p.GetOrCreate(ctx, id, createHandler)
 		}
 		if err := blocker.Reset(ctx, initialPacket); err != nil {
-			dlog.Errorf(ctx, "failed to send RST after recursion block")
+			dlog.Errorf(ctx, "failed to send RST after recursion block: %v", err)
 		}
 		return nil, false, errRecursion
 	}

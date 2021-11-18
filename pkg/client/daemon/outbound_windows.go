@@ -51,8 +51,8 @@ func (o *outbound) updateRouterDNS(c context.Context, paths []string) error {
 	o.namespaces = namespaces
 	o.search = search
 	o.domainsLock.Unlock()
-	o.flushDNS()
 	err := o.router.dev.SetDNS(c, o.router.dnsIP, search)
+	o.flushDNS()
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)
 	}
