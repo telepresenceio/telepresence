@@ -102,6 +102,12 @@ type handler struct {
 	toTun   ip.Writer
 	fromTun chan Packet
 
+	// recursionWaiter blocks connects to the same destination during connect to prevent endless
+	// recursions when the destination runs on the local host (in a Docker container) and forwards
+	// connects that aren't routed to Telepresence TUN-device
+	establishedCh chan struct{}
+	establishedOk bool
+
 	// the dispatcher signals its intent to close in dispatcherClosing. 0 == running, 1 == closing, 2 == closed
 	dispatcherClosing *int32
 
@@ -212,6 +218,7 @@ func NewHandler(
 		fromTun:           make(chan Packet, ioChannelSize),
 		toMgrCh:           make(chan Packet, ioChannelSize),
 		toMgrMsgCh:        make(chan tunnel.Message),
+		establishedCh:     make(chan struct{}),
 		myWindow:          maxReceiveWindow,
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
@@ -247,6 +254,25 @@ func (h *handler) Close(ctx context.Context) {
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
 	}
+	select {
+	case <-h.establishedCh:
+		// already closed
+	default:
+		close(h.establishedCh)
+	}
+}
+
+func (h *handler) InitDone() <-chan struct{} {
+	return h.establishedCh
+}
+
+func (h *handler) Proceed() bool {
+	return h.establishedOk // This isn't a state. It's a permanent indication that the connection attempt succeeded.
+}
+
+// Reset replies to the sender of the initialPacket with a RST packet.
+func (h *handler) Reset(ctx context.Context, initialPacket ip.Packet) error {
+	return h.toTun.Write(ctx, initialPacket.(Packet).Reset())
 }
 
 func (h *handler) Start(ctx context.Context) {

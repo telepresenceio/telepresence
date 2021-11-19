@@ -142,6 +142,50 @@ func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) 
 	return nil
 }
 
+// SftpServer creates a listener on the next available port, writes that port on the
+// given channel, and then starts accepting connections on that port. Each connection
+// starts a sftp-server that communicates with that connection using its stdin and stdout.
+func SftpServer(ctx context.Context, sftpPortCh chan<- int32) error {
+	defer close(sftpPortCh)
+
+	// start an sftp-server for remote sshfs mounts
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp4", ":0")
+	if err != nil {
+		return err
+	}
+
+	// Accept doesn't actually return when the context is cancelled so
+	// it's explicitly closed here.
+	go func() {
+		<-ctx.Done()
+		_ = l.Close()
+	}()
+
+	_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
+	if err != nil {
+		return err
+	}
+	sftpPortCh <- int32(sftpPort)
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			if ctx.Err() == nil {
+				return fmt.Errorf("listener on sftp-server connection failed: %v", err)
+			}
+			return nil
+		}
+		go func() {
+			dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
+			err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+		}()
+	}
+}
+
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
 
@@ -194,44 +238,7 @@ func Main(ctx context.Context, args ...string) error {
 	sftpPortCh := make(chan int32)
 	if config.HasMounts(ctx, info.Environment) && user == "" {
 		g.Go("sftp-server", func(ctx context.Context) error {
-			defer close(sftpPortCh)
-
-			// start an sftp-server for remote sshfs mounts
-			lc := net.ListenConfig{}
-			l, err := lc.Listen(ctx, "tcp4", ":0")
-			if err != nil {
-				return err
-			}
-
-			// Accept doesn't actually return when the context is cancelled so
-			// it's explicitly closed here.
-			go func() {
-				<-ctx.Done()
-				_ = l.Close()
-			}()
-
-			_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
-			if err != nil {
-				return err
-			}
-			sftpPortCh <- int32(sftpPort)
-
-			for {
-				conn, err := l.Accept()
-				if err != nil {
-					if ctx.Err() == nil {
-						return fmt.Errorf("listener on sftp-server connection failed: %v", err)
-					}
-					return nil
-				}
-				go func() {
-					dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
-					err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
-					if err != nil {
-						dlog.Error(ctx, err)
-					}
-				}()
-			}
+			return SftpServer(ctx, sftpPortCh)
 		})
 	} else {
 		close(sftpPortCh)

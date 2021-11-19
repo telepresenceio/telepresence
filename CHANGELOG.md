@@ -11,9 +11,22 @@
 
 - Bugfix: Outbound connections are now properly closed when the peer closes.
 
+- Bugfix: The DNS-resolver will trap recursive resolution attempts (may happen when the cluster runs in a docker-container on the client).
+
+- Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the 
+  cluster runs in a docker-container on the client).
+
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
 
 - Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
+
+- Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
+  original Helm chart when we release so this fix will only affect our nightly builds. 
+
+- Bugfix: The configured webhookRegistry is now propagated to the webhook installer even if no webhookAgentImage has been set.
+
 
 ### 2.4.6 (November 2, 2021)
 

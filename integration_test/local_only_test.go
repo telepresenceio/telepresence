@@ -19,7 +19,7 @@ func (s *singleServiceSuite) Test_LocalOnlyIntercept() {
 	// service can be resolve with unqualified name
 	s.Eventually(func() bool {
 		return itest.Run(ctx, "curl", "--silent", "--max-time", "2", s.ServiceName()) == nil
-	}, 30*time.Second, 3*time.Second, "services not reachable using unqualified name")
+	}, 30*time.Second, 3*time.Second, "service is not reachable using unqualified name")
 
 	stdout = itest.TelepresenceOk(ctx, "leave", "mylocal")
 	s.Empty(stdout)

@@ -54,6 +54,8 @@ func (h *handler) handleControl(ctx context.Context, ctrl connpool.Control) {
 func (h *handler) handleStreamControl(ctx context.Context, ctrl tunnel.Message) {
 	switch ctrl.Code() {
 	case tunnel.DialOK:
+		h.establishedOk = true
+		close(h.establishedCh)
 	case tunnel.DialReject, tunnel.Disconnect:
 		h.Close(ctx)
 	case tunnel.KeepAlive:

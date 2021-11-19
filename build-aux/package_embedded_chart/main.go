@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/datawire/dlib/dexec"
 )
@@ -30,7 +31,8 @@ func run() error {
 		return fmt.Errorf("failed to stat tools/bin/helm (%v); try running \"make tools/bin/helm\"", err)
 	}
 	version := os.Args[1]
-	err = dexec.CommandContext(context.Background(), helm, "package", chartSource, "--version="+version).Run()
+	version = strings.TrimPrefix(version, "v")
+	err = dexec.CommandContext(context.Background(), helm, "package", chartSource, "--version="+version, "--app-version="+version).Run()
 	if err != nil {
 		return fmt.Errorf("error from helm package: %w", err)
 	}
