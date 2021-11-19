@@ -531,22 +531,23 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 			if ingress.L5Host == "" { // if L5Host is not present
 				ingress.L5Host = ingressHost
 				return ingress, nil
-
 			} else { // if L5Host is present
 				if hostRx.MatchString(ingressL5) {
 					ingress.L5Host = ingressL5
 					return ingress, nil
 				} else {
-					return nil, fmt.Errorf("the address provided for the L5 hostname, %s, must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
+					return nil, fmt.Errorf("the address provided by --ingress-l5, %s, must match the regex"+
+						" [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
 						ingressL5)
 				}
 			}
 		} else {
-			return nil, fmt.Errorf("the port number provided, %v, must be a positive integer",
+			return nil, fmt.Errorf("the port number provided by --ingress-port, %v, must be a positive integer",
 				ingressPort)
 		}
 	}
-	return nil, fmt.Errorf("the address provided for the hostname, %s, must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
+	return nil, fmt.Errorf("the address provided by --ingress-host, %s, must match the regex"+
+		" [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
 		ingressHost)
 }
 
