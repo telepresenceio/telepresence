@@ -94,10 +94,16 @@ base-image: base-image/Dockerfile # Intentionally not in 'make help'
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
+ifeq ($(GOHOSTOS),darwin)
+	sdkroot=SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path)
+else
+	sdkroot=
+endif
+
 .PHONY: build
 build: pkg/install/helm/telepresence-chart.tgz ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	CGO_ENABLED=$(CGO_ENABLED) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
 .ko.yaml: .ko.yaml.in base-image
 	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
