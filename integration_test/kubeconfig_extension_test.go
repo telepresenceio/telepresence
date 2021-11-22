@@ -132,7 +132,12 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 			}, 15*time.Second, 2*time.Second, "cluster is not connected")
 			newRoute, err := routing.GetRoute(ctx, testIP)
 			if t.expectEq {
-				require.True((newRoute.Interface == nil && originalRoute.Interface == nil) || (newRoute.Interface.Name == originalRoute.Interface.Name))
+				if originalRoute.Interface != nil {
+					require.NotNil(newRoute.Interface)
+					require.Equal(originalRoute.Interface.Name, newRoute.Interface.Name)
+				} else {
+					require.Nil(newRoute.Interface)
+				}
 			} else {
 				require.NoError(err)
 				require.NotNil(newRoute.Interface)
