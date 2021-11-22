@@ -260,6 +260,9 @@ jobs:
           no_output_timeout: *testsTimeout
       - cleanup-kluster:
           platform: macos
+      - run:
+          name: "Test arm64 build"
+          command: GOARCH=arm64 make build
       - save-logs
 
   "build-and-test":
