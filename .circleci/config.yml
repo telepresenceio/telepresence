@@ -22,7 +22,7 @@ executors:
 
   "vm-macos":
     macos:
-      xcode: "12.4.0" # macOS 10.15.5
+      xcode: "12.5.1" # macOS 11.4.0
 
 commands:
 
