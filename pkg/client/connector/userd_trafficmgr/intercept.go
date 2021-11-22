@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -27,7 +29,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
 type forwardKey struct {
@@ -169,7 +173,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			} else {
 				intercepts = snapshot.Intercepts
 			}
-			tm.setCurrentIntercepts(intercepts)
+			tm.setCurrentIntercepts(ctx, intercepts)
 
 			// allNames contains the names of all intercepts, irrespective of their status
 			allNames := make(map[string]struct{})
@@ -248,9 +252,10 @@ func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 	return intercepts
 }
 
-func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptInfo) {
+func (tm *trafficManager) setCurrentIntercepts(ctx context.Context, intercepts []*manager.InterceptInfo) {
 	tm.currentInterceptsLock.Lock()
 	tm.currentIntercepts = intercepts
+	tm.reconcileAPIServers(ctx)
 	tm.currentInterceptsLock.Unlock()
 }
 
@@ -517,4 +522,100 @@ func (tm *trafficManager) clearIntercepts(c context.Context) error {
 		}
 	}
 	return nil
+}
+
+// reconcileAPIServers start/stop API servers as needed based on the TELEPRESENCE_API_PORT environment variable
+// of the currently intercepted agent's env.
+func (tm *trafficManager) reconcileAPIServers(ctx context.Context) {
+	wantedPorts := make(map[int]struct{})
+	wantedMatchers := make(map[string]*manager.InterceptInfo)
+	agents := tm.getCurrentAgents()
+
+	agentAPIPort := func(is *manager.InterceptSpec) int {
+		for _, a := range agents {
+			if a.Name == is.Agent && a.Namespace == is.Namespace {
+				if ps, ok := a.Environment["TELEPRESENCE_API_PORT"]; ok {
+					port, err := strconv.ParseUint(ps, 10, 16)
+					if err == nil {
+						return int(port)
+					}
+					dlog.Errorf(ctx, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, a.Name, a.Namespace, err)
+				}
+				return 0
+			}
+		}
+		dlog.Errorf(ctx, "no agent found for intercept %s", is.Name)
+		return 0
+	}
+
+	for _, ic := range tm.currentIntercepts {
+		if ic.Disposition == manager.InterceptDispositionType_ACTIVE {
+			if port := agentAPIPort(ic.Spec); port > 0 {
+				wantedPorts[port] = struct{}{}
+				wantedMatchers[ic.Id] = ic
+			}
+		}
+	}
+	for p, as := range tm.currentAPIServers {
+		if _, ok := wantedPorts[p]; !ok {
+			as.cancel()
+			delete(tm.currentAPIServers, p)
+		}
+	}
+	for p := range wantedPorts {
+		if _, ok := tm.currentAPIServers[p]; !ok {
+			tm.newAPIServerForPort(ctx, p)
+		}
+	}
+	for id := range tm.currentMatchers {
+		if _, ok := wantedMatchers[id]; !ok {
+			delete(tm.currentMatchers, id)
+		}
+	}
+	for id, ic := range wantedMatchers {
+		if _, ok := tm.currentMatchers[id]; !ok {
+			tm.newMatcher(ic)
+		}
+	}
+}
+
+func (tm *trafficManager) newAPIServerForPort(ctx context.Context, port int) {
+	s := restapi.NewServer(tm, true)
+	as := apiServer{Server: s}
+	ctx, as.cancel = context.WithCancel(ctx)
+	if tm.currentAPIServers == nil {
+		tm.currentAPIServers = map[int]apiServer{port: as}
+	} else {
+		tm.currentAPIServers[port] = as
+	}
+	go func() {
+		if err := s.ListenAndServe(ctx, port); err != nil {
+			dlog.Error(ctx, err)
+		}
+	}()
+}
+
+func (tm *trafficManager) newMatcher(ic *manager.InterceptInfo) {
+	m := header.NewMatcher(ic.Headers)
+	if tm.currentMatchers == nil {
+		tm.currentMatchers = map[string]header.Matcher{ic.Id: m}
+	} else {
+		tm.currentMatchers[ic.Id] = m
+	}
+}
+
+func (tm *trafficManager) Intercepts(ctx context.Context, callerID string, h http.Header) (bool, error) {
+	tm.currentInterceptsLock.Lock()
+	defer tm.currentInterceptsLock.Unlock()
+	m := tm.currentMatchers[callerID]
+	if m == nil {
+		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
+		return false, nil
+	}
+	if m.Matches(h) {
+		dlog.Debugf(ctx, "%s: %s matches %s", callerID, m, header.Stringer(h))
+		return true, nil
+	}
+	dlog.Debugf(ctx, "%s: %s does not match %s", callerID, m, header.Stringer(h))
+	return false, nil
 }
