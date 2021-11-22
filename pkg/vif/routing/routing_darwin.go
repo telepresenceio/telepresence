@@ -5,15 +5,100 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"syscall"
 
 	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"golang.org/x/net/route"
+	"golang.org/x/sys/unix"
 )
 
 const findInterfaceRegex = "gateway:\\s+([0-9.]+)\\s+.*interface:\\s+([a-z0-9]+)"
 
 var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
+
+func GetRoutingTable(ctx context.Context) ([]Route, error) {
+	b, err := route.FetchRIB(syscall.AF_UNSPEC, route.RIBTypeRoute, 0)
+	if err != nil {
+		return nil, err
+	}
+	msgs, err := route.ParseRIB(route.RIBTypeRoute, b)
+	if err != nil {
+		return nil, err
+	}
+	routes := []Route{}
+	for _, msg := range msgs {
+		rm := msg.(*route.RouteMessage)
+		if rm.Flags&unix.RTF_UP == 0 {
+			continue
+		}
+		dst, gw, mask := rm.Addrs[unix.RTAX_DST], rm.Addrs[unix.RTAX_GATEWAY], rm.Addrs[unix.RTAX_NETMASK]
+		if dst == nil || gw == nil || mask == nil {
+			continue
+		}
+		iface, err := net.InterfaceByIndex(rm.Index)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get interface at index %d: %w", rm.Index, err)
+		}
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		switch a := dst.(type) {
+		case *route.Inet4Addr:
+			localIP, err := interfaceLocalIP(iface, true)
+			if err != nil {
+				return nil, err
+			}
+			mask, ok := mask.(*route.Inet4Addr)
+			if !ok {
+				continue
+			}
+			gw, ok := gw.(*route.Inet4Addr)
+			if !ok {
+				continue
+			}
+			routes = append(routes, Route{
+				Interface: iface,
+				Gateway:   net.IP(gw.IP[:]),
+				LocalIP:   localIP,
+				RoutedNet: &net.IPNet{
+					IP:   net.IP(a.IP[:]),
+					Mask: net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3]),
+				},
+			})
+		case *route.Inet6Addr:
+			localIP, err := interfaceLocalIP(iface, false)
+			if err != nil {
+				return nil, err
+			}
+			mask, ok := mask.(*route.Inet6Addr)
+			if !ok {
+				continue
+			}
+			gw, ok := gw.(*route.Inet6Addr)
+			if !ok {
+				continue
+			}
+			i := 0
+			for _, b := range [16]byte(mask.IP) {
+				if b == 0 {
+					break
+				}
+				i++
+			}
+			routes = append(routes, Route{
+				Interface: iface,
+				Gateway:   net.IP(gw.IP[:]),
+				LocalIP:   localIP,
+				RoutedNet: &net.IPNet{
+					IP:   net.IP(a.IP[:]),
+					Mask: net.CIDRMask(i*8, 128),
+				},
+			})
+		}
+	}
+	return routes, nil
+}
 
 func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	ip := routedNet.IP
@@ -34,27 +119,19 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	if err != nil {
 		return Route{}, fmt.Errorf("unable to get interface object for interface %s: %w", ifaceName, err)
 	}
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return Route{}, fmt.Errorf("unable to get interface addresses for interface %s: %w", ifaceName, err)
-	}
 	gateway := match[1]
 	gatewayIp := iputil.Parse(gateway)
 	if gatewayIp == nil {
 		return Route{}, fmt.Errorf("unable to parse gateway %s", gateway)
 	}
-	for _, addr := range addrs {
-		ip, _, err := net.ParseCIDR(addr.String())
-		if err != nil {
-			dlog.Warnf(ctx, "unable to parse address %s: %v", addr.String(), err)
-		} else {
-			return Route{
-				RoutedNet: routedNet,
-				LocalIP:   ip,
-				Interface: iface,
-				Gateway:   gatewayIp,
-			}, nil
-		}
+	localIP, err := interfaceLocalIP(iface, ip.To4() != nil)
+	if err != nil {
+		return Route{}, err
 	}
-	return Route{}, fmt.Errorf("interface %s has no local addresses; do not know how to route", ifaceName)
+	return Route{
+		RoutedNet: routedNet,
+		LocalIP:   localIP,
+		Interface: iface,
+		Gateway:   gatewayIp,
+	}, nil
 }
