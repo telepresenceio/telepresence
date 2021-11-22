@@ -11,7 +11,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 )
@@ -78,14 +80,35 @@ ifaces:
 	return vpnIfaces
 }
 
-func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) error {
-	ctx := cmd.Context()
+func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
+	var (
+		ctx          = cmd.Context()
+		sc           = scout.NewScout(ctx, "cli")
+		configIssues = false
+		vpnMasks     = false
+		clusterMasks = false
+		reader       = bufio.NewReader(cmd.InOrStdin())
+	)
 	cliutil.QuitDaemon(ctx)
-	reader := bufio.NewReader(cmd.InOrStdin())
+
+	defer func() {
+		if err != nil {
+			sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_error", scout.ScoutMeta{Key: "error", Value: err.Error()})
+		} else {
+			if configIssues {
+				sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_fail",
+					scout.ScoutMeta{Key: "vpn_masks", Value: vpnMasks},
+					scout.ScoutMeta{Key: "cluster_masks", Value: clusterMasks},
+				)
+			} else {
+				sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_pass")
+			}
+		}
+	}()
 
 	fmt.Fprintln(cmd.OutOrStdout(), "Please disconnect from your VPN now and hit enter once you're disconnected...")
 	reader.ReadString('\n')
-	err := waitForNetwork(ctx)
+	err = waitForNetwork(ctx)
 	if err != nil {
 		return err
 	}
@@ -137,7 +160,6 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	instructions := []string{}
-	corrective := false
 	for _, tp := range []string{podType, svcType} {
 		for _, sn := range subnets[tp] {
 			ok := true
@@ -147,16 +169,18 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) error {
 				}
 				if rt.Routes(sn.IP) || sn.Contains(rt.RoutedNet.IP) {
 					ok = false
-					corrective = true
+					configIssues = true
 					snSz, _ := sn.Mask.Size()
 					rtSz, _ := rt.RoutedNet.Mask.Size()
 					if rtSz > snSz {
+						vpnMasks = true
 						instructions = append(instructions,
 							fmt.Sprintf("%s %s subnet %s being masked by VPN-routed CIDR %s. This usually means that Telepresence will not be able to connect to your cluster. To resolve:", bad, tp, sn, rt.RoutedNet),
 							fmt.Sprintf("\t* Move %s subnet %s to a subnet not mapped by the VPN", tp, sn),
 							fmt.Sprintf("\t\t* If this is not possible, consider shrinking the mask of the %s CIDR (e.g. from /16 to /8), or disabling split-tunneling", rt.RoutedNet),
 						)
 					} else {
+						clusterMasks = true
 						instructions = append(instructions,
 							fmt.Sprintf("%s %s subnet %s is masking VPN-routed CIDR %s. This usually means Telepresence will be able to connect to your cluster, but hosts on your VPN may be inaccessible while telepresence is connected; to resolve:", bad, tp, sn, rt.RoutedNet),
 							fmt.Sprintf("\t* Move %s subnet %s to a subnet not mapped by the VPN", tp, sn),
@@ -175,7 +199,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) error {
 	for _, instruction := range instructions {
 		fmt.Fprintln(cmd.OutOrStdout(), instruction)
 	}
-	if corrective {
+	if configIssues {
 		fmt.Fprintln(cmd.OutOrStdout(), "\nPlease see https://www.telepresence.io/docs/latest/reference/vpn for more info on these corrective actions, as well as examples")
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nStill having issues? Please create a new github issue at https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md\n",
