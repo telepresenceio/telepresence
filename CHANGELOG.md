@@ -5,6 +5,8 @@
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
   This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
 
+- Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
+
 - Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
 
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
@@ -27,6 +29,7 @@
 
 - Bugfix: The configured webhookRegistry is now propagated to the webhook installer even if no webhookAgentImage has been set.
 
+- Bugfix: Login logs the user in when their access token has expired, instead of having no effect.
 
 ### 2.4.6 (November 2, 2021)
 
