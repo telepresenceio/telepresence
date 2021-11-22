@@ -10,10 +10,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agentinit"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 func doMain(fn func(ctx context.Context, args ...string) error, logLevel string, args ...string) {
-	ctx := makeBaseLogger(context.Background(), logLevel)
+	ctx := log.MakeBaseLogger(context.Background(), logLevel)
 
 	if err := fn(ctx, args...); err != nil {
 		dlog.Errorf(ctx, "quit: %v", err)
