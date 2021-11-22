@@ -207,6 +207,9 @@ message InterceptInfo {
   // A human-friendly description of what the spec.mechanism_args say.
   // This is set by the agent's call to ReviewIntercept.
   string mechanism_args_desc = 12;
+
+  // Headers used by the workstation API-server
+  map<string,string> headers = 14;
 }
 
 message SessionInfo {
@@ -260,6 +263,9 @@ message ReviewInterceptRequest {
   // A human-friendly description of what the
   // InterceptSpec.mechanism_args say.
   string mechanism_args_desc = 7;
+
+  // Headers used by the workstation API-server
+  map<string,string> headers = 8;
 }
 
 message RemainRequest {

@@ -498,6 +498,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.PodIp = rIReq.PodIp
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
+			intercept.Headers = rIReq.Headers
 		}
 	})
 
