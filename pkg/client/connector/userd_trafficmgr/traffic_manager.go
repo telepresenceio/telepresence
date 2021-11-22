@@ -524,6 +524,9 @@ func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundI
 			neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))
 		}
 	}
+	for _, np := range tm.NeverProxy {
+		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
+	}
 	info := &daemon.OutboundInfo{
 		Session:           tm.sessionInfo,
 		NeverProxySubnets: neverProxy,
