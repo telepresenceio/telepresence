@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -30,6 +31,7 @@ type Config struct {
 	AppPort     int32  `env:"_TEL_AGENT_APP_PORT,required"`
 	ManagerHost string `env:"_TEL_AGENT_MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"_TEL_AGENT_MANAGER_PORT,default=8081"`
+	APIPort     int32  `env:"TELEPRESENCE_API_PORT,default="`
 }
 
 var skipKeys = map[string]bool{
@@ -277,6 +279,12 @@ func Main(ctx context.Context, args ...string) error {
 
 		sftpPort := <-sftpPortCh
 		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
+
+		if config.APIPort != 0 {
+			dgroup.ParentGroup(ctx).Go("API-server", func(ctx context.Context) error {
+				return restapi.NewServer(state.AgentState(), false).ListenAndServe(ctx, int(config.APIPort))
+			})
+		}
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {
