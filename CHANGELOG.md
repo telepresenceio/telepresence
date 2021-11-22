@@ -27,7 +27,6 @@
 
 - Bugfix: The configured webhookRegistry is now propagated to the webhook installer even if no webhookAgentImage has been set.
 
-- Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
 
 ### 2.4.6 (November 2, 2021)
 

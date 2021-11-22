@@ -65,8 +65,7 @@ func daemonStatus(cmd *cobra.Command) error {
 		fmt.Fprintf(out, "    Exclude suffixes: %v\n", dns.ExcludeSuffixes)
 		fmt.Fprintf(out, "    Include suffixes: %v\n", dns.IncludeSuffixes)
 		fmt.Fprintf(out, "    Timeout         : %v\n", dns.LookupTimeout.AsDuration())
-		fmt.Fprintf(out, "  Also Proxy : (%d subnets)\n", len(status.OutboundConfig.AlsoProxySubnets))
-		fmt.Fprintf(out, "  Never Proxy: (%d subnets)\n", len(status.OutboundConfig.NeverProxySubnets))
+		fmt.Fprintf(out, "  Also Proxy: (%d subnets)\n", len(status.OutboundConfig.AlsoProxySubnets))
 		for _, subnet := range status.OutboundConfig.AlsoProxySubnets {
 			fmt.Fprintf(out, "    - %s\n", iputil.IPNetFromRPC(subnet))
 		}
