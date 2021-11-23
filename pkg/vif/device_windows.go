@@ -153,6 +153,7 @@ $job | Receive-Job
 }
 
 func maskToIP(mask net.IPMask) (ip net.IP) {
+	ip = make(net.IP, len(mask))
 	copy(ip[:], mask)
 	return ip
 }
@@ -168,9 +169,12 @@ func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error 
 		route.Gateway.String(),
 	)
 	cmd.DisableLogging = true
-	err := cmd.Run()
+	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to create route %s: %w", route, err)
+	}
+	if !strings.Contains(string(out), "OK!") {
+		return fmt.Errorf("failed to create route %s: %s", route, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
@@ -178,7 +182,7 @@ func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error 
 func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
 	cmd := dexec.CommandContext(ctx,
 		"route",
-		"delete",
+		"DELETE",
 		route.RoutedNet.IP.String(),
 	)
 	cmd.DisableLogging = true
