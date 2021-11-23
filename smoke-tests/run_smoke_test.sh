@@ -347,6 +347,10 @@ echo
 if [[ -z $TELEPRESENCE_LICENSE ]]; then
     echo "To run air-gapped License Tests set TELEPRESENCE_LICENSE"
 else
+    if kubectl get secrets -n ambassador systema-license >"$output_location" 2>&1; then
+        echo "systema-license secret already exists in ambassador namespace. Remove it before proceeding"
+        exit 1
+    fi
     echo "Using License: "
     echo "${TELEPRESENCE_LICENSE}"
     # In an air-gapped scenario you need to provide an image to use for
