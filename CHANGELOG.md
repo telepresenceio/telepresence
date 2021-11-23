@@ -5,6 +5,10 @@
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
   This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
 
+- Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
+
+- Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
+
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
 
 - Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
