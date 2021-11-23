@@ -7,6 +7,8 @@
 
 - Change: The environment variable TELEPRESENCE_LOGIN_CLIENT_ID is no longer used.
 
+- Feature: There is a new subcommand, `test-vpn`, that can be used to diagnose connectivity issues with a VPN.
+
 - Bugfix: The tunneled network connections between Telepresence and
   Ambassador Cloud now behave more like ordinary TCP connections,
   especially around timeouts.
