@@ -10,9 +10,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-const findInterfaceRegex = "[0-9.]+ via ([0-9.]+) dev ([a-z0-9]+) src ([0-9.]+)"
+const findInterfaceRegex = "[0-9.]+( via (?P<gw>[0-9.]+))? dev (?P<dev>[a-z0-9]+) src (?P<src>[0-9.]+)"
 
-var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
+var (
+	findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
+	gwidx           = findInterfaceRe.SubexpIndex("gw")
+	devIdx          = findInterfaceRe.SubexpIndex("dev")
+	srcIdx          = findInterfaceRe.SubexpIndex("src")
+)
 
 func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	ip := routedNet.IP
@@ -26,17 +31,21 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	if match == nil {
 		return Route{}, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, out)
 	}
-	gatewayIP := iputil.Parse(match[1])
-	if gatewayIP == nil {
-		return Route{}, fmt.Errorf("unable to parse gateway IP %s", match[1])
+	var gatewayIP net.IP
+	gw := match[gwidx]
+	if gw != "" {
+		gatewayIP = iputil.Parse(gw)
+		if gatewayIP == nil {
+			return Route{}, fmt.Errorf("unable to parse gateway IP %s", gw)
+		}
 	}
-	iface, err := net.InterfaceByName(match[2])
+	iface, err := net.InterfaceByName(match[devIdx])
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to get interface %s: %w", match[2], err)
+		return Route{}, fmt.Errorf("unable to get interface %s: %w", match[devIdx], err)
 	}
-	localIP := iputil.Parse(match[3])
+	localIP := iputil.Parse(match[srcIdx])
 	if localIP == nil {
-		return Route{}, fmt.Errorf("unable to parse local IP %s", match[3])
+		return Route{}, fmt.Errorf("unable to parse local IP %s", match[srcIdx])
 	}
 	return Route{
 		Gateway:   gatewayIP,

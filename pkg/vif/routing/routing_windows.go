@@ -24,7 +24,7 @@ $obj.NextHop
 $obj.InterfaceIndex[0]
 `, ip)
 	cmd := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
-	cmd.DisableLogging = true
+	// cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {
 		return Route{}, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %w", ip, err)
