@@ -7,9 +7,13 @@
 
 - Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
 
-- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
+- Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
 
 - Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
+
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
+- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
 
 - Bugfix: Outbound connections are now properly closed when the peer closes.
 
@@ -18,11 +22,7 @@
 - Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the 
   cluster runs in a docker-container on the client).
 
-- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
-
 - Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
-
-- Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
 
 - Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
   original Helm chart when we release so this fix will only affect our nightly builds. 
