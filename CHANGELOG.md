@@ -31,8 +31,6 @@
 
 - Bugfix: Login logs the user in when their access token has expired, instead of having no effect.
 
-- Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
-
 ### 2.4.6 (November 2, 2021)
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
