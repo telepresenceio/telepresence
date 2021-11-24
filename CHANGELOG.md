@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.7 (TBD)
+### 2.4.7 (November 24, 2021)
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
   This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
