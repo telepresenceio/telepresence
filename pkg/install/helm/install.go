@@ -70,8 +70,7 @@ func getValues(ctx context.Context) map[string]interface{} {
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
 		values["telepresenceAPI"] = map[string]interface{}{
-			"create": true,
-			"port":   clientConfig.TelepresenceAPI.Port,
+			"port": clientConfig.TelepresenceAPI.Port,
 		}
 	}
 	return values

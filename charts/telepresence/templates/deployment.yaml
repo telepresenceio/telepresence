@@ -47,7 +47,7 @@ spec:
             value: {{ .Values.systemaPort | quote }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.agentInjector.agentImage.registry }}
-          {{- if .Values.telepresenceAPI.create }}
+          {{- if .Values.telepresenceAPI.port }}
           - name: TELEPRESENCE_API_PORT
             value: {{ .Values.telepresenceAPI.port | quote }}
           {{- end }}
