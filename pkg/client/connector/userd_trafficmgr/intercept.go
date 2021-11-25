@@ -574,7 +574,7 @@ func (tm *trafficManager) reconcileAPIServers(ctx context.Context) {
 	}
 	for id, ic := range wantedMatchers {
 		if _, ok := tm.currentMatchers[id]; !ok {
-			tm.newMatcher(ic)
+			tm.newMatcher(ctx, ic)
 		}
 	}
 }
@@ -595,8 +595,12 @@ func (tm *trafficManager) newAPIServerForPort(ctx context.Context, port int) {
 	}()
 }
 
-func (tm *trafficManager) newMatcher(ic *manager.InterceptInfo) {
-	m := header.NewMatcher(ic.Headers)
+func (tm *trafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
+	m, err := header.NewMatcher(ic.Headers)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
 	if tm.currentMatchers == nil {
 		tm.currentMatchers = map[string]header.Matcher{ic.Id: m}
 	} else {

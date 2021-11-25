@@ -57,29 +57,33 @@ func (r rxMatcher) Op() string {
 	return "=~"
 }
 
-// NewValueMatcher returns a ValueMatcher that is either an exact text matcher or a regexp matcher. A
-// string that has no regexp-meta characters or that cannot be compiled into a regexp will yield an
-// exact text matcher.
-func NewValueMatcher(v string) ValueMatcher {
+// NewValueMatcher returns a ValueMatcher that is either an exact text matcher or a regexp matcher. The latter
+// is chosen when the given string contains regexp meta characters. An error is returned if the string contains
+// meta characters but cannot be compiled into a regexp.
+func NewValueMatcher(v string) (ValueMatcher, error) {
 	if regexp.QuoteMeta(v) == v {
-		return textMatcher(v)
+		return textMatcher(v), nil
 	}
 	rx, err := regexp.Compile(v)
 	if err != nil {
-		return textMatcher(v)
+		return nil, err
 	}
-	return rxMatcher{rx}
+	return rxMatcher{rx}, nil
 }
 
 type matcher map[string]ValueMatcher
 
 // NewMatcher creates a new Matcher. The given match results in a set of ValueMatcher instances.
-func NewMatcher(hs map[string]string) Matcher {
+func NewMatcher(hs map[string]string) (Matcher, error) {
 	hm := make(matcher, len(hs))
 	for k, v := range hs {
-		hm[textproto.CanonicalMIMEHeaderKey(k)] = NewValueMatcher(v)
+		vm, err := NewValueMatcher(v)
+		if err != nil {
+			return nil, fmt.Errorf("the value of match %s=%s is invalid: %w", k, v, err)
+		}
+		hm[textproto.CanonicalMIMEHeaderKey(k)] = vm
 	}
-	return hm
+	return hm, nil
 }
 
 func (m matcher) Map() map[string]string {
