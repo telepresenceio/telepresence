@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -329,6 +330,7 @@ type addTrafficAgentAction struct {
 	ContainerPortName   string          `json:"container_port_name"`
 	ContainerPortProto  corev1.Protocol `json:"container_port_proto"`
 	ContainerPortNumber uint16          `json:"app_port"`
+	APIPortNumber       uint16          `json:"api_port,omitempty"`
 
 	// The image name of the agent to add
 	ImageName string `json:"image_name"`
@@ -383,6 +385,7 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 				ContainerPort: 9900,
 			},
 			int(ata.ContainerPortNumber),
+			int(ata.APIPortNumber),
 			ata.trafficManagerNamespace,
 			ata.setGID,
 		))
@@ -545,6 +548,85 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) er
 	return nil
 }
 
+// addTPEnvironmentAction  /////////////////////////////////////////////////////
+type addTPEnvironmentAction struct {
+	ContainerName string `json:"container_name"`
+	Env           map[string]string
+}
+
+func (ae *addTPEnvironmentAction) Do(obj kates.Object) error {
+	cn, err := ae.getContainer(obj)
+	if err != nil {
+		return err
+	}
+	env := ae.Env
+	keys := make([]string, len(env))
+	i := 0
+	for k := range env {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		cn.Env = append(cn.Env, corev1.EnvVar{Name: k, Value: env[k]})
+	}
+	return nil
+}
+
+func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj kates.Object) error {
+	cn, err := ae.getContainer(obj)
+	if err != nil {
+		return err
+	}
+	cEnv := make([]corev1.EnvVar, 0, len(cn.Env))
+	for _, env := range cn.Env {
+		if _, ok := ae.Env[env.Name]; !ok {
+			cEnv = append(cEnv, env)
+		}
+	}
+	if len(cEnv) == 0 {
+		cEnv = nil
+	}
+	cn.Env = cEnv
+	return nil
+}
+
+func (ae *addTPEnvironmentAction) ExplainDo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "add environment %v to container %s", ae.Env, ae.ContainerName)
+}
+
+func (ae *addTPEnvironmentAction) ExplainUndo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "remove environment %v from container %s", ae.Env, ae.ContainerName)
+}
+
+func (ae *addTPEnvironmentAction) IsDone(obj kates.Object) bool {
+	cn, err := ae.getContainer(obj)
+	if err != nil {
+		return false
+	}
+	count := 0
+	for _, ev := range cn.Env {
+		if _, ok := ae.Env[ev.Name]; ok {
+			count++
+		}
+	}
+	return count == len(ae.Env)
+}
+
+func (ae *addTPEnvironmentAction) getContainer(obj kates.Object) (*kates.Container, error) {
+	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	if err != nil {
+		return nil, err
+	}
+	cns := tplSpec.Spec.Containers
+	for i := range cns {
+		if cn := &cns[i]; cn.Name == ae.ContainerName {
+			return cn, nil
+		}
+	}
+	return nil, install.ObjErrorf(obj, "does not contain a %q container", ae.ContainerName)
+}
+
 // hideContainerPortAction /////////////////////////////////////////////////////
 
 // A hideContainerPortAction will replace the symbolic name of a container port
@@ -653,6 +735,7 @@ type workloadActions struct {
 	HideContainerPort         *hideContainerPortAction `json:"hide_container_port,omitempty"`
 	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 	AddInitContainer          *addInitContainerAction  `json:"add_init_container,omitempty"`
+	AddTPEnvironmentAction    *addTPEnvironmentAction  `json:"add_tp_env,omitempty"`
 }
 
 var _ completeAction = (*workloadActions)(nil)
@@ -666,6 +749,9 @@ func (d *workloadActions) actions() (actions multiAction) {
 	}
 	if d.AddInitContainer != nil {
 		actions = append(actions, d.AddInitContainer)
+	}
+	if d.AddTPEnvironmentAction != nil {
+		actions = append(actions, d.AddTPEnvironmentAction)
 	}
 	return actions
 }

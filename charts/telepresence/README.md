@@ -69,8 +69,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | clientRbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `false`                                                                                  |
 | clientRbac.namespaces          | The namespaces to give users access to.                                                                                 | `["ambassador"]`                                                                                           |
 | managerRbac.create              | Create RBAC resources for traffic-manager with this release.                                                           | `true`                                                                                            |
-| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false`
-| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]`
+| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false` |
+| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]` |
+| telepresenceAPI.port     | The port on agent's localhost where the Telepresence API server can be found                              | |
 
 
 ## License Key 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -106,6 +107,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		expectedPatch string
 		expectedError string
 		serviceFinder svcFinder
+		envAdditions  *managerutil.Env
 	}{
 		{
 			"Skip Precondition: Not the right type of resource",
@@ -117,6 +119,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Error Precondition: Fail to unmarshall",
@@ -124,6 +127,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"could not deserialize pod object",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Skip Precondition: No annotation",
@@ -133,6 +137,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Skip Precondition: No name/namespace",
@@ -144,6 +149,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Skip Precondition: Sidecar already injected",
@@ -175,6 +181,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Error Precondition: No port specified",
@@ -191,6 +198,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"found no Service with a port that matches any container in this workload",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Error Precondition: Sidecar has port collision",
@@ -215,6 +223,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"is exposing the same port (9900) as the traffic-agent sidecar",
 			defaultSvcFinder,
+			nil,
 		},
 		{
 			"Apply Patch: Named port",
@@ -266,6 +275,63 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`]`,
 			"",
 			defaultSvcFinder,
+			nil,
+		},
+		{
+			"Apply Patch: Telepresence API Port",
+			toAdmissionRequest(podResource, corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						install.InjectAnnotation: "enabled",
+					},
+					Labels: map[string]string{
+						"service": "some-name",
+					},
+					Namespace: "some-ns",
+					Name:      "some-name"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "some-app-name",
+						Image: "some-app-image",
+						Ports: []corev1.ContainerPort{{
+							Name: "http", ContainerPort: 8888},
+						}},
+					},
+				},
+			}),
+			`[` +
+				`{"op":"replace","path":"/spec/containers/0/ports/0/name","value":"tm-http"},` +
+				`{"op":"replace","path":"/spec/containers/0/env","value":[]},{"op":"add","path":"/spec/containers/0/env/-","value":{"name":"TELEPRESENCE_API_PORT","value":"9981"}},` +
+				`{"op":"add","path":"/spec/containers/-","value":{` +
+				`"name":"traffic-agent",` +
+				`"image":"docker.io/datawire/tel2:2.3.1",` +
+				`"args":["agent"],` +
+				`"ports":[{"name":"http","containerPort":9900,"protocol":"TCP"}],` +
+				`"env":[` +
+				`{"name":"TELEPRESENCE_API_PORT","value":"9981"},` +
+				`{"name":"TELEPRESENCE_CONTAINER","value":"some-app-name"},` +
+				`{"name":"_TEL_AGENT_LOG_LEVEL","value":"info"},` +
+				`{"name":"_TEL_AGENT_NAME","value":"some-name"},` +
+				`{"name":"_TEL_AGENT_NAMESPACE","valueFrom":{"fieldRef":{"fieldPath":"metadata.namespace"}}},` +
+				`{"name":"_TEL_AGENT_POD_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},` +
+				`{"name":"_TEL_AGENT_APP_PORT","value":"8888"},` +
+				`{"name":"_TEL_AGENT_PORT","value":"9900"},` +
+				`{"name":"_TEL_AGENT_MANAGER_HOST","value":"traffic-manager.default"}` +
+				`],` +
+				`"resources":{},` +
+				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
+				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}}` +
+				`}},` +
+				`{"op":"add","path":"/spec/volumes/-","value":{` +
+				`"name":"traffic-annotations",` +
+				`"downwardAPI":{"items":[{"path":"annotations","fieldRef":{"fieldPath":"metadata.annotations"}}]}` +
+				`}}` +
+				`]`,
+			"",
+			defaultSvcFinder,
+			&managerutil.Env{
+				APIPort: 9981,
+			},
 		},
 		{
 			"Error Precondition: Multiple services",
@@ -292,6 +358,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"multiple services found",
 			multiSvcFinder,
+			nil,
 		},
 		{
 			"Error Precondition: Invalid service name",
@@ -319,6 +386,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			"no services found",
 			multiSvcFinder,
+			nil,
 		},
 		{
 			"Apply Patch: Multiple services",
@@ -371,6 +439,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`]`,
 			"",
 			multiSvcFinder,
+			nil,
 		},
 		{
 			"Apply Patch: Numeric port",
@@ -433,6 +502,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`]`,
 			"",
 			numericPortSvcFinder,
+			nil,
 		},
 		{
 			"Apply Patch: Numeric port with init containers",
@@ -498,6 +568,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`]`,
 			"",
 			numericPortSvcFinder,
+			nil,
 		},
 		{
 			"Apply Patch: Numeric port re-processing",
@@ -554,6 +625,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`]`,
 			"",
 			numericPortSvcFinder,
+			nil,
 		},
 		{
 			"Apply Patch: volumes are copied",
@@ -612,12 +684,27 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`]`,
 			"",
 			defaultSvcFinder,
+			nil,
 		},
 	}
 
 	for _, test := range tests {
 		test := test // pin it
+		ctx := ctx
 		t.Run(test.name, func(t *testing.T) {
+			if test.envAdditions != nil {
+				env := managerutil.GetEnv(ctx)
+				newEnv := *env
+				ne := reflect.ValueOf(&newEnv).Elem()
+				ae := reflect.ValueOf(test.envAdditions).Elem()
+				for i := ae.NumField() - 1; i >= 0; i-- {
+					ef := ae.Field(i)
+					if (ef.Kind() == reflect.String || ef.Kind() == reflect.Int32) && !ef.IsZero() {
+						ne.Field(i).Set(ef)
+					}
+				}
+				ctx = managerutil.WithEnv(ctx, &newEnv)
+			}
 			fms := findMatchingService
 			defer func() {
 				findMatchingService = fms

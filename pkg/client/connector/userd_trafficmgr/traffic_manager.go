@@ -30,14 +30,21 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
 type Callbacks struct {
 	GetCloudAPIKey        func(context.Context, string, bool) (string, error)
 	RegisterManagerServer func(server manager.ManagerServer)
 	SetOutboundInfo       func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+}
+
+type apiServer struct {
+	restapi.Server
+	cancel context.CancelFunc
 }
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -70,6 +77,8 @@ type trafficManager struct {
 	// currentIntercepts is the latest snapshot returned by the intercept watcher
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
+	currentMatchers       map[string]header.Matcher
+	currentAPIServers     map[int]apiServer
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo

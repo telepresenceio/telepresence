@@ -221,6 +221,7 @@ func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
 			ContainerPort: int32(i.agentPort),
 		},
 		i.appPort,
+		cfg.TelepresenceAPI.Port,
 		k8sConfig.GetManagerNamespace(),
 		false,
 	)
