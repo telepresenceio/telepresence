@@ -177,7 +177,7 @@ func Test_server_intercepts(t *testing.T) {
 				defer wg.Done()
 				assert.NoError(t, restapi.NewServer(tt.agent, tt.client).Serve(c, ln))
 			}()
-			rq, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+restapi.EndPontConsumeHere, nil)
+			rq, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+restapi.EndPointConsumeHere, nil)
 			for k, v := range tt.headers {
 				rq.Header.Set(k, v)
 			}

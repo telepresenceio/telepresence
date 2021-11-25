@@ -13,7 +13,7 @@ import (
 
 const HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
 const HeaderInterceptID = "x-telepresence-intercept-id"
-const EndPontConsumeHere = "/consume-here"
+const EndPointConsumeHere = "/consume-here"
 
 type AgentState interface {
 	// Intercepts returns true if the agent currently intercepts the given Header
@@ -57,8 +57,8 @@ func (s *server) intercepts(c context.Context, h http.Header) (bool, error) {
 // Serve starts the API server. It terminates when the given context is done.
 func (s *server) Serve(c context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc(EndPontConsumeHere, func(w http.ResponseWriter, r *http.Request) {
-		dlog.Debugf(c, "Received %s", EndPontConsumeHere)
+	mux.HandleFunc(EndPointConsumeHere, func(w http.ResponseWriter, r *http.Request) {
+		dlog.Debugf(c, "Received %s", EndPointConsumeHere)
 		w.Header().Set("Content-Type", "text/plain")
 		intercepted, err := s.intercepts(c, r.Header)
 		if err != nil {
