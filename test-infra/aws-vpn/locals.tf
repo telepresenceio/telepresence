@@ -4,7 +4,7 @@ data "aws_availability_zones" "available" {
 
 locals {
   global_tags = {
-    "environment" = "josec-vpn-test"
+    "environment" = "${var.child_subdomain}-eks-vpn"
   }
   availability_zones = [for x in ["a", "b", "c"] : "${var.aws_region}${x}"]
   prefix             = "tp-test-vpn-"
