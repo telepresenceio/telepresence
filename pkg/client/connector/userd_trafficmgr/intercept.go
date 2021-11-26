@@ -16,6 +16,7 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
@@ -304,10 +305,22 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		spec.Mechanism = "tcp"
 	}
 
+	cfg := client.GetConfig(c)
+	apiPort := uint16(cfg.TelepresenceAPI.Port)
+	if apiPort == 0 {
+		// Default to the API port declared by the traffic-manager
+		apiInfo, err := tm.managerClient.GetTelepresenceAPI(c, &empty.Empty{})
+		if err != nil {
+			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
+			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager")
+		} else {
+			apiPort = uint16(apiInfo.Port)
+		}
+	}
+
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
-	cfg := client.GetConfig(c)
-	result := tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, uint16(cfg.TelepresenceAPI.Port))
+	result := tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
 	if result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}

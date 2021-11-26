@@ -308,6 +308,11 @@ message LogsResponse {
   map<string, string> pod_yaml = 3;
 }
 
+message TelepresenceAPIInfo {
+  // The port that the TelepresenceAPI is using, or 0 if it's not enabled
+  int32 port = 1;
+}
+
 // VersionInfo2 is different than telepresence.common.VersionInfo in
 // that it does not contain an 'api_version' integer.
 message VersionInfo2 {
@@ -413,6 +418,9 @@ service Manager {
   // GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
   // by the agents.
   rpc GetCloudConfig(google.protobuf.Empty) returns (AmbassadorCloudConfig);
+
+  // GetTelepresenceAPI returns information about the TelepresenceAPI server
+  rpc GetTelepresenceAPI(google.protobuf.Empty) returns (TelepresenceAPIInfo);
 
   // Presence
 
