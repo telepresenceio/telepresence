@@ -55,6 +55,6 @@ resource "aws_acm_certificate_validation" "vpn_server" {
   ]
 
   timeouts {
-    create = "1m"
+    create = "10m"
   }
 }
