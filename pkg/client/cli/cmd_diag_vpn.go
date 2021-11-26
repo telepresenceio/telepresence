@@ -204,7 +204,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nStill having issues? Please create a new github issue at https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md\n",
 		"Please make sure to add the following to your issue:\n",
-		"* Attach the zipfile resulting from running `telepresence gather_logs`\n",
+		"* Run `telepresence loglevel debug`, try to connect, then run `telepresence gather_logs`. It will produce a zipfile that you should attach to the issue.\n",
 		"* Which VPN client are you using?\n",
 		"* Which VPN server are you using?\n",
 		"* How is your VPN pushing DNS configuration? It may be useful to add the contents of /etc/resolv.conf")
