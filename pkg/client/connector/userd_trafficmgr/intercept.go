@@ -312,7 +312,7 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		apiInfo, err := tm.managerClient.GetTelepresenceAPI(c, &empty.Empty{})
 		if err != nil {
 			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
-			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager")
+			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
 		} else {
 			apiPort = uint16(apiInfo.Port)
 		}
