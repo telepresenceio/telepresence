@@ -125,6 +125,12 @@ func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.Amba
 	return &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}, nil
 }
 
+// GetTelepresenceAPI returns information about the TelepresenceAPI server
+func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.TelepresenceAPIInfo, error) {
+	env := managerutil.GetEnv(ctx)
+	return &rpc.TelepresenceAPIInfo{Port: env.APIPort}, nil
+}
+
 // ArriveAsClient establishes a session between a client and the Manager.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
