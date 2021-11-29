@@ -178,7 +178,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	// of the telepresence binary
 	loginClientID := "telepresence-cli"
 	if execMechanism, err := client.GetInstallMechanism(); err != nil {
-		dlog.Errorf(ctx, "login worker unable to get extension path, using default: %s", err)
+		dlog.Errorf(ctx, "login worker errored getting extension path, using default %s: %s", loginClientID, err)
 	} else if execMechanism == "docker" {
 		loginClientID = "docker-desktop"
 	}

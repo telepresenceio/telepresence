@@ -37,7 +37,7 @@ func GetInstallMechanism() (string, error) {
 // required for GetInstallMechanism, but enables us to test it since we can
 // control the path passed in.
 func GetMechanismFromPath(execPath string) (string, error) {
-	// Some package managers, like brew, synlink binaries into /usr/local/bin.
+	// Some package managers, like brew, symlink binaries into /usr/local/bin.
 	// We want to use the actual location of the executable when reporting metrics
 	// so we follow the symlink to get the actual binary path
 	mechanism := "undetermined"
