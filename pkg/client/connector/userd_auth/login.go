@@ -548,7 +548,12 @@ func (l *loginExecutor) httpHandler(ctx context.Context, w http.ResponseWriter, 
 	var sb strings.Builder
 	sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
 	if errorName == "" && code != "" {
-		w.Header().Set("Location", client.GetEnv(ctx).LoginCompletionURL)
+		completionURL := client.GetEnv(ctx).LoginCompletionURL
+		// Attribute login to the correct client
+		if mech, _ := client.GetInstallMechanism(); mech == "docker" {
+			completionURL += "?client=docker-desktop"
+		}
+		w.Header().Set("Location", completionURL)
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		sb.WriteString("<h1>Authentication Successful</h1>")
 		sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")
