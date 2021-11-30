@@ -16,7 +16,6 @@ type Env struct {
 	LoginAuthURL       string `env:"TELEPRESENCE_LOGIN_AUTH_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/auth"`
 	LoginTokenURL      string `env:"TELEPRESENCE_LOGIN_TOKEN_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
 	LoginCompletionURL string `env:"TELEPRESENCE_LOGIN_COMPLETION_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/completion"`
-	LoginClientID      string `env:"TELEPRESENCE_LOGIN_CLIENT_ID,default=telepresence-cli"`
 	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
 
 	ManagerNamespace string `env:"TELEPRESENCE_MANAGER_NAMESPACE,default=ambassador"`
@@ -40,8 +39,6 @@ func (env Env) Get(key string) string {
 		return env.LoginTokenURL
 	case "TELEPRESENCE_LOGIN_COMPLETION_URL":
 		return env.LoginCompletionURL
-	case "TELEPRESENCE_LOGIN_CLIENT_ID":
-		return env.LoginClientID
 	case "TELEPRESENCE_USER_INFO_URL":
 		return env.UserInfoURL
 
