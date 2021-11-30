@@ -1,188 +1,116 @@
 package dnet
 
 import (
-	"bytes"
 	"net"
-	"os"
-	"sync"
-	"time"
 
 	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 )
 
-// AmbassadorCloudTunnel is the intersection of these two interfaces:
+// ambassadorCloudTunnel is the intersection of these two interfaces:
 //
 //   systema.SystemAProxy_ReverseConnectionClient
 //   systema.SystemAProxy_ReverseConnectionServer
-type AmbassadorCloudTunnel interface {
+type ambassadorCloudTunnel interface {
 	Send(*systema.Chunk) error
 	Recv() (*systema.Chunk, error)
 }
 
+// reverseConn is an unbufferedConn implementation that uses a gRPC
+// "/telepresence.systema/SystemAProxy/ReverseConnection" stream as the underlying transport.
+//
 type reverseConn struct {
-	conn AmbassadorCloudTunnel
-
-	waitOnce sync.Once
-	wait     chan struct{}
-	waitErr  error
-
-	closeOnce sync.Once
-	closed    chan struct{}
-
-	readMu       sync.Mutex
-	readBuff     bytes.Buffer
-	readDeadline pipeDeadline
-	readErr      error
-
-	writeMu       sync.Mutex
-	writeDeadline pipeDeadline
-	writeErr      error
+	conn  ambassadorCloudTunnel
+	close func()
 }
 
-// WrapAmbassadorCloudTunnel takes a systema.SystemAProxy_ReverseConnectionClient or
-// systema.SystemAProxy_ReverseConnectionServer and wraps it so that it can be used as a net.Conn.
-func WrapAmbassadorCloudTunnel(impl AmbassadorCloudTunnel) Conn {
-	return &reverseConn{
-		conn: impl,
-
-		wait:          make(chan struct{}),
-		closed:        make(chan struct{}),
-		readDeadline:  makePipeDeadline(),
-		writeDeadline: makePipeDeadline(),
-	}
+// WrapAmbassadorCloudTunnelClient takes a systema.SystemAProxy_ReverseConnectionClient and wraps it
+// so that it can be used as a net.Conn.
+//
+// It is important to call `.Close()` when you are done with the connection, in order to release
+// resources associated with it.  The GC will not be able to collect it if you do not call
+// `.Close()`.
+func WrapAmbassadorCloudTunnelClient(impl systema.SystemAProxy_ReverseConnectionClient) Conn {
+	return wrapUnbufferedConn(reverseConn{conn: impl})
 }
 
-// Read implements net.Conn.
-func (c *reverseConn) Read(b []byte) (int, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
-	for c.readBuff.Len() == 0 {
-		if c.readErr == nil {
-			switch {
-			case isClosedChan(c.closed):
-				c.readErr = os.ErrClosed
-			case isClosedChan(c.readDeadline.wait()):
-				c.readErr = os.ErrDeadlineExceeded
-			}
-		}
-		if c.readErr != nil {
-			return 0, c.readErr
-		}
-
-		chunk, err := c.conn.Recv()
-		if chunk != nil && len(chunk.Content) > 0 {
-			c.readBuff.Write(chunk.Content)
-		}
-		if err != nil && c.readErr == nil {
-			c.waitOnce.Do(func() { c.waitErr = err; close(c.wait) })
-			c.readErr = err
-		}
-	}
-	return c.readBuff.Read(b)
+// WrapAmbassadorCloudTunnel takes a systema.SystemAProxy_ReverseConnectionServer and wraps it so
+// that it can be used as a net.Conn.
+//
+// It is important to call `.Close()` when you are done with the connection, in order to release
+// resources associated with it.  The GC will not be able to collect it if you do not call
+// `.Close()`.
+func WrapAmbassadorCloudTunnelServer(impl systema.SystemAProxy_ReverseConnectionServer, closeFn func()) net.Conn {
+	return wrapUnbufferedConn(reverseConn{conn: impl, close: closeFn})
 }
 
-// Write implements net.Conn.
-func (c *reverseConn) Write(b []byte) (int, error) {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+// Recv implements unbufferedConn.
+func (c reverseConn) Recv() ([]byte, error) {
+	chunk, err := c.conn.Recv()
 
-	if c.writeErr == nil {
-		switch {
-		case isClosedChan(c.closed):
-			c.writeErr = os.ErrClosed
-		case isClosedChan(c.writeDeadline.wait()):
-			c.writeErr = os.ErrDeadlineExceeded
-		}
-	}
-	if c.writeErr != nil {
-		return 0, c.writeErr
+	var data []byte
+	if chunk != nil && len(chunk.Content) > 0 {
+		data = chunk.Content
 	}
 
-	err := c.conn.Send(&systema.Chunk{
-		Content: b,
+	return data, err
+}
+
+// Send implements unbufferedConn.
+func (c reverseConn) Send(data []byte) error {
+	return c.conn.Send(&systema.Chunk{
+		Content: data,
 	})
-	if err != nil {
-		c.waitOnce.Do(func() { c.waitErr = err; close(c.wait) })
-		c.writeErr = err
-		return 0, err
+}
+
+// CloseOnce implements unbufferedConn.
+func (c reverseConn) CloseOnce() error {
+	var err error
+	if client, isClient := c.conn.(grpc.ClientStream); isClient {
+		err = client.CloseSend()
 	}
-	return len(b), nil
+	if c.close != nil {
+		c.close()
+	}
+	return err
 }
 
-// Close implements net.Conn.
-func (c *reverseConn) Close() error {
-	c.closeOnce.Do(func() {
-		if client, isClient := c.conn.(grpc.ClientStream); isClient {
-			c.writeMu.Lock()
-			defer c.writeMu.Unlock()
-			_ = client.CloseSend()
-		}
-		c.waitOnce.Do(func() { close(c.wait) })
-	})
-	return nil
+// MTU implements unbufferedConn.
+func (c reverseConn) MTU() int {
+	// 3MiB; assume the other end's gRPC library uses the go-grpc default 4MiB, plus plenty of
+	// room for overhead.
+	return 3 * 1024 * 1024
 }
 
-// LocalAddr implements net.Conn.
-func (c *reverseConn) LocalAddr() net.Addr {
+// LocalAddr implements unbufferedConn.
+func (c reverseConn) LocalAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-reverseconnection-client",
-			addr: "local",
+			net:  "tp-reverseconnection",
+			addr: "localrole=client,localhostname=manager",
 		}
 	} else {
 		return addr{
-			net:  "tp-reverseconnection-server",
-			addr: "local",
+			net:  "tp-reverseconnection",
+			addr: "localrole=server,localhostname=acloud",
 		}
 	}
 }
 
-// RemoteAddr implements net.Conn.
-func (c *reverseConn) RemoteAddr() net.Addr {
+// RemoteAddr implements unbufferedConn.
+func (c reverseConn) RemoteAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
 		return addr{
-			net:  "tp-reverseconnection-client",
-			addr: "remote",
+			net:  "tp-reverseconnection",
+			addr: "localrole=client,remotehostname=acloud",
 		}
 	} else {
 		return addr{
-			net:  "tp-reverseconnection-server",
-			addr: "remote",
+			net:  "tp-reverseconnection",
+			addr: "localrole=server,remotehostname=manager",
 		}
 	}
-}
-
-// SetDeadline implements net.Conn.
-func (c *reverseConn) SetDeadline(t time.Time) error {
-	_ = c.SetReadDeadline(t)
-	_ = c.SetWriteDeadline(t)
-	return nil
-}
-
-// SetReadDeadline implements net.Conn.
-func (c *reverseConn) SetReadDeadline(t time.Time) error {
-	if isClosedChan(c.closed) {
-		c.readDeadline.set(t)
-	}
-	return nil
-}
-
-// SetWriteDeadline implements net.Conn.
-func (c *reverseConn) SetWriteDeadline(t time.Time) error {
-	if isClosedChan(c.closed) {
-		c.writeDeadline.set(t)
-	}
-	return nil
-}
-
-// Wait waits until either the connection is Close()d, or one of Read() or Write() encounters an
-// error (*not* counting errors caused by deadlines).  If this returns because Close() was called,
-// nil is returned; otherwise the triggering error is returned.
-func (c *reverseConn) Wait() error {
-	<-c.wait
-	return c.waitErr
 }

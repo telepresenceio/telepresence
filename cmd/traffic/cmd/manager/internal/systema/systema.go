@@ -38,7 +38,10 @@ type server struct {
 func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionServer) error {
 	ctx := rawconn.Context()
 
-	interceptID, systemaConn, err := dnet.AcceptFromAmbassadorCloud(rawconn)
+	closed := make(chan struct{})
+	interceptID, systemaConn, err := dnet.AcceptFromAmbassadorCloud(rawconn, func() {
+		close(closed)
+	})
 	if err != nil {
 		return fmt.Errorf("HandleConnection: accept: %w", err)
 	}
@@ -53,7 +56,6 @@ func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionSe
 	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
-
 	grp.Go("pump-recv", func(_ context.Context) error {
 		if _, err := io.Copy(interceptConn, systemaConn); err != nil {
 			err = fmt.Errorf("HandleConnection: pump cluster<-systema: %w", err)
@@ -70,8 +72,10 @@ func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionSe
 		}
 		return nil
 	})
+	// Don't grp.Wait().
 
-	return grp.Wait()
+	<-closed
+	return nil
 }
 
 // ConnectToSystemA initiates a connection to System A.
@@ -116,7 +120,7 @@ func ConnectToSystemA(ctx context.Context,
 					return err
 				}
 				dlog.Info(ctx, "connection to System A established")
-				rconn := dnet.WrapAmbassadorCloudTunnel(rconnInner)
+				rconn := dnet.WrapAmbassadorCloudTunnelClient(rconnInner)
 				if err := addConn(rconn); err != nil {
 					return err
 				}
