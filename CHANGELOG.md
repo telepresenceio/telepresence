@@ -5,6 +5,8 @@
 - Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
   consumed or not from a message queue where the intercept headers are added to the messages.
 
+- Change: The environment variable TELEPRESENCE_LOGIN_CLIENT_ID is no longer used.
+
 - Bugfix: The tunneled network connections between Telepresence and
   Ambassador Cloud now behave more like ordinary TCP connections,
   especially around timeouts.
