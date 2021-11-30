@@ -6,15 +6,16 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"syscall"
+
+	"golang.org/x/sys/windows"
+	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
 
 func GetRoutingTable(ctx context.Context) ([]Route, error) {
-	table, err := winipcfg.GetIPForwardTable2(syscall.AF_UNSPEC)
+	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get routing table: %w", err)
 	}

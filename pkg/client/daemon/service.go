@@ -129,10 +129,7 @@ func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.C
 		if mgrInfo.ServiceSubnet != nil {
 			svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
 		}
-		for _, sn := range mgrInfo.PodSubnets {
-			podSubnets = append(podSubnets, sn)
-		}
-
+		podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
 	}
 	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }

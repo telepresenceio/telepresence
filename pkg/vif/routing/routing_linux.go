@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+
+	//nolint:depguard // sys/unix does not have NetlinkRIB
 	"syscall"
 	"unsafe"
 

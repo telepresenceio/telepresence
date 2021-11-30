@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-	"syscall"
+
+	"golang.org/x/net/route"
+	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"golang.org/x/net/route"
-	"golang.org/x/sys/unix"
 )
 
 const findInterfaceRegex = "gateway:\\s+([0-9.]+)\\s+.*interface:\\s+([a-z0-9]+)"
@@ -18,7 +18,7 @@ const findInterfaceRegex = "gateway:\\s+([0-9.]+)\\s+.*interface:\\s+([a-z0-9]+)
 var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
 
 func GetRoutingTable(ctx context.Context) ([]Route, error) {
-	b, err := route.FetchRIB(syscall.AF_UNSPEC, route.RIBTypeRoute, 0)
+	b, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 				continue
 			}
 			i := 0
-			for _, b := range [16]byte(mask.IP) {
+			for _, b := range mask.IP {
 				if b == 0 {
 					break
 				}

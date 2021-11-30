@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	empty "google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -15,7 +17,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 )
 
 type vpnDiagInfo struct {
@@ -89,7 +90,10 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		clusterMasks = false
 		reader       = bufio.NewReader(cmd.InOrStdin())
 	)
-	cliutil.QuitDaemon(ctx)
+	err = cliutil.QuitDaemon(ctx)
+	if err != nil {
+		return err
+	}
 
 	defer func() {
 		if err != nil {
@@ -107,7 +111,10 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	}()
 
 	fmt.Fprintln(cmd.OutOrStdout(), "Please disconnect from your VPN now and hit enter once you're disconnected...")
-	reader.ReadString('\n')
+	_, err = reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
 	err = waitForNetwork(ctx)
 	if err != nil {
 		return err
@@ -118,7 +125,10 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "Please connect to your VPN now and hit enter once you're connected...")
-	reader.ReadString('\n')
+	_, err = reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
 
 	err = waitForNetwork(ctx)
 	if err != nil {
@@ -175,14 +185,18 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 					if rtSz > snSz {
 						vpnMasks = true
 						instructions = append(instructions,
-							fmt.Sprintf("%s %s subnet %s being masked by VPN-routed CIDR %s. This usually means that Telepresence will not be able to connect to your cluster. To resolve:", bad, tp, sn, rt.RoutedNet),
+							fmt.Sprintf("%s %s subnet %s being masked by VPN-routed CIDR %s."+
+								"This usually means that Telepresence will not be able to connect to your cluster. To resolve:",
+								bad, tp, sn, rt.RoutedNet),
 							fmt.Sprintf("\t* Move %s subnet %s to a subnet not mapped by the VPN", tp, sn),
 							fmt.Sprintf("\t\t* If this is not possible, consider shrinking the mask of the %s CIDR (e.g. from /16 to /8), or disabling split-tunneling", rt.RoutedNet),
 						)
 					} else {
 						clusterMasks = true
 						instructions = append(instructions,
-							fmt.Sprintf("%s %s subnet %s is masking VPN-routed CIDR %s. This usually means Telepresence will be able to connect to your cluster, but hosts on your VPN may be inaccessible while telepresence is connected; to resolve:", bad, tp, sn, rt.RoutedNet),
+							fmt.Sprintf("%s %s subnet %s is masking VPN-routed CIDR %s."+
+								"This usually means Telepresence will be able to connect to your cluster, but hosts on your VPN may be inaccessible while telepresence is connected; to resolve:",
+								bad, tp, sn, rt.RoutedNet),
 							fmt.Sprintf("\t* Move %s subnet %s to a subnet not mapped by the VPN", tp, sn),
 							fmt.Sprintf("\t\t* If this is not possible, ensure that any hosts in CIDR %s are placed in the never-proxy list", rt.RoutedNet),
 						)

@@ -90,8 +90,8 @@ message OutboundInfo {
 // ClusterSubnets are the cluster subnets that the daemon has detected that need to be
 // routed
 message ClusterSubnets {
-  // podSubnets are the subnets that pods go into
-  repeated manager.IPNet podSubnets = 1;
-  // svcSubnsets are subnets that services go into
-  repeated manager.IPNet svcSubnets = 2;
+  // pod_subnets are the subnets that pods go into
+  repeated manager.IPNet pod_subnets = 1;
+  // svc_subnets are subnets that services go into
+  repeated manager.IPNet svc_subnets = 2;
 }
