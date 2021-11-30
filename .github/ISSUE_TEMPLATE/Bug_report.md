@@ -42,7 +42,7 @@ A clear and concise description of what you expected to happen.
 
 **VPN-related bugs:**
 If you're reporting an issue around telepresence connectivity when using a VPN,
-and are running Telepresence 2.4.7 or above, please also attach the output
+and are running Telepresence 2.4.8 or above, please also attach the output
 of `telepresence test-vpn`, and the following information:
  - Which VPN client are you using?
  - Which VPN server are you using?
