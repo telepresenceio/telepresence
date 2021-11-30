@@ -58,6 +58,7 @@ type loginExecutor struct {
 	loginMu               sync.Mutex
 	callbacks             chan oauth2Callback
 	tokenSource           oauth2.TokenSource
+	loginToken            chan oauth2.Token // used to pass token from login command to refresh goroutine
 	userInfo              *authdata.UserInfo
 	apikeys               map[string]map[string]string // map[env.LoginDomain]map[apikeyDescription]apikey
 	refreshTimer          *time.Timer
@@ -102,6 +103,7 @@ func NewLoginExecutor(
 		// 3 slots should be plenty given that the writes are controlled by the above
 		// refreshTimer.
 		refreshTimerReset: make(chan time.Duration, 3),
+		loginToken:        make(chan oauth2.Token),
 	}
 	ret.oauth2ConfigMu.Lock()
 	ret.loginMu.Lock()
@@ -252,6 +254,11 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				}
 			case delta := <-l.refreshTimerReset:
 				l.resetRefreshTimerUnlocked(delta)
+			case token := <-l.loginToken:
+				// If we get a token from the login process, we update the tokenSource
+				// with its value so we refresh it properly.
+				l.resetRefreshTimerUnlocked(time.Until(token.Expiry))
+				l.tokenSource = newTokenSource(ctx, l.oauth2Config, l.tokenCB, l.tokenErrCB, &token)
 			case <-ctx.Done():
 				return nil
 			}
@@ -361,6 +368,10 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return err
 		}
 
+		// We pass the token to the goroutine that ensures the token
+		// remains updated since the context used in the tokenSource above will be
+		// canceled once the login command finishes.
+		l.loginToken <- *token
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
