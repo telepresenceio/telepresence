@@ -86,7 +86,7 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 	}
 	inner, err := pf.dial(ctx, pod, podPortNumber)
 	if err != nil {
-		dlog.Errorf(ctx, "Error with k8sPortForwardDialer dial: %s", err)
+		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
 		return nil, err
 	}
 	return wrapUnbufferedConn(inner), nil

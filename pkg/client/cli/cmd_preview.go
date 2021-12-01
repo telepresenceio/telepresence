@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -37,7 +38,7 @@ func previewCommand() *cobra.Command {
 			if _, err := cliutil.EnsureLoggedIn(cmd.Context(), ""); err != nil {
 				return err
 			}
-			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					if createSpec.Ingress == nil {
 						request := manager.GetInterceptRequest{Session: connInfo.SessionInfo, Name: args[0]}
@@ -76,7 +77,7 @@ func previewCommand() *cobra.Command {
 
 		Short: "Remove a preview domain from an intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 						Session: connInfo.SessionInfo,

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -56,7 +57,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 	doQuit := false
-	err := withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+	err := withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
 			Namespace:     u.namespace,
