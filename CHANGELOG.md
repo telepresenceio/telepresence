@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.4.8 (TBD)
+### 2.4.8 (December 3, 2021)
 
 - Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
   consumed or not from a message queue where the intercept headers are added to the messages.
