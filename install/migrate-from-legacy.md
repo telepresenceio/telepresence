@@ -72,7 +72,7 @@ are supported).
 | --run $cmd                                       | connect -- $cmd                            |
 | --env-file,--env-json                            | --env-file, --env-json (haven't changed)   |
 | --context,--namespace                            | --context, --namespace (haven't changed)   |
-| --mount,--docker-mount                           | --context, --namespace (haven't changed)   |
+| --mount,--docker-mount                           | --mount, --docker-mount (haven't changed)  |
 
 ### Legacy Telepresence command limitations
 
