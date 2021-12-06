@@ -21,8 +21,30 @@ dashboard; later you will manage your preview URLs here.
 ### <img class="os-logo" src="../../images/apple.png"/> macOS
 
 ```shell
+# Intel Macs
+
+# Install via brew:
+brew install datawire/blackbird/telepresence
+
+# OR Install manually:
 # 1. Download the latest binary (~60 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
+-o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+
+# 3. Login with the CLI:
+telepresence login
+
+# Apple silicon Macs
+
+# Install via brew:
+brew install datawire/blackbird/telepresence-arm64
+
+# OR Install manually:
+# 1. Download the latest binary (~60 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/arm64/latest/telepresence \
 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:

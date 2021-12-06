@@ -52,13 +52,20 @@
      - title: Environment variables
        link: reference/environment
      - title: Intercepts
-       link: reference/intercepts
+       link: reference/intercepts/
+       items:
+         - title: Manually injecting the Traffic Agent
+           link: reference/intercepts/manual-agent
      - title: Volume mounts
        link: reference/volume
+     - title: RESTful API service
+       link: reference/restapi
      - title: DNS resolution
        link: reference/dns
      - title: RBAC
        link: reference/rbac
+     - title: Telepresence and VPNs
+       link: reference/vpn
      - title: Networking through Virtual Network Interface
        link: reference/tun-device
      - title: Connection Routing

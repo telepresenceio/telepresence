@@ -8,12 +8,26 @@ Install Telepresence by running the commands below for your OS. If you are not t
 <Platform.MacOSTab>
 
 ```shell
+# Intel Macs
+
 # Install via brew:
 brew install datawire/blackbird/telepresence
 
 # OR install manually:
 # 1. Download the latest binary (~60 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
+
+# 2. Make the binary executable:
+sudo chmod a+x /usr/local/bin/telepresence
+
+# Apple silicon Macs
+
+# Install via brew:
+brew install datawire/blackbird/telepresence-arm64
+
+# OR Install manually:
+# 1. Download the latest binary (~60 MB):
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/arm64/$dlVersion$/telepresence -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
@@ -65,7 +79,7 @@ Follow one of our [quick start guides](../quick-start/) to start using Teleprese
 ## Installing nightly versions of Telepresence
 
 We build and publish the contents of the default branch, [release/v2](https://github.com/telepresenceio/telepresence), of Telepresence
-nightly, Monday through Friday, for macOS (Intel and M1 chips), Linux, and Windows.
+nightly, Monday through Friday, for macOS (Intel and Apple silicon), Linux, and Windows.
 
 The tags are formatted like so: `vX.Y.Z-nightly-$gitShortHash`.
 
@@ -80,8 +94,12 @@ Use these URLs to download the most recent nightly build.
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
-```
+```shell
+# Intel Macs
 https://app.getambassador.io/download/tel2/darwin/amd64/nightly/telepresence
+
+# Apple silicon Macs
+https://app.getambassador.io/download/tel2/darwin/arm64/nightly/telepresence
 ```
 
 </Platform.MacOSTab>
@@ -92,6 +110,13 @@ https://app.getambassador.io/download/tel2/linux/amd64/nightly/telepresence
 ```
 
 </Platform.GNULinuxTab>
+<Platform.WindowsTab>
+
+```
+https://app.getambassador.io/download/tel2/windows/amd64/nightly/telepresence.zip
+```
+
+</Platform.WindowsTab>
 </Platform.TabGroup>
 
 ## Installing older versions of Telepresence
@@ -101,8 +126,12 @@ Use these URLs to download an older version for your OS (including older nightly
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
-```
+```shell
+# Intel Macs
 https://app.getambassador.io/download/tel2/darwin/amd64/x.y.z/telepresence
+
+# Apple silicon Macs
+https://app.getambassador.io/download/tel2/darwin/arm64/x.y.z/telepresence
 ```
 
 </Platform.MacOSTab>

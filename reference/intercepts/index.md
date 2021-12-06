@@ -176,6 +176,17 @@ User Daemon: Running
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
 
+## Skipping the ingress dialogue
+
+You can skip the ingress dialogue by setting the relevant parameters using flags. If any of the following flags are set, the dialogue will be skipped and the flag values will be used instead. If any of the required flags are missing, an error will be thrown.
+
+| Flag           | Description | Required |
+| -------------- | ------------------------------ | --- |
+| `--ingress-host` | The ip address for the ingress | yes |
+| `--ingress-port` | The port for the ingress       | yes |
+| `--ingress-tls`  | Whether tls should be used     | no  |
+| `--ingress-l5`   | Whether a different ip address should be used in request headers | no |
+
 ## Creating an intercept when a service has multiple ports
 
 If you are trying to intercept a service that has multiple ports, you
@@ -213,7 +224,7 @@ Oftentimes, there's a 1-to-1 relationship between a service and a
 workload, so telepresence is able to auto-detect which service it
 should intercept based on the workload you are trying to intercept.
 But if you use something like
-[Argo](https://www.getambassador.io/docs/argo/latest/), there may be
+[Argo](https://www.getambassador.io/docs/argo/latest/quick-start/), there may be
 two services (that use the same labels) to manage traffic between a
 canary and a stable service.
 
