@@ -1,5 +1,5 @@
 import Alert from '@material-ui/lab/Alert';
-import { ClusterConfig } from '../../../../../src/components/Docs/Telepresence';
+import { ClusterConfig } from '@src/components/Docs/Telepresence';
 
 # Cluster-side configuration
 
@@ -235,6 +235,24 @@ in the service. This is necessary when the service has multiple ports.
        containers:
 ```
 
+### Service Name Annotation
+
+A service name annotation can be added to the workload to make the Mutating Webhook select a specific Kubernetes service.
+This is necessary when the workload is exposed by multiple services.
+
+```diff
+ spec:
+   template:
+     metadata:
+       labels:
+         service: your-service
+       annotations:
+         telepresence.getambassador.io/inject-traffic-agent: enabled
++        telepresence.getambassador.io/inject-service-name: my-service
+     spec:
+       containers:
+```
+
 ### Note on Numeric Ports
 
 If the <code>targetPort</code> of your intercepted service is pointing at a port number, in addition to
@@ -251,6 +269,8 @@ This requires the Traffic Agent to run as GID <code>7777</code>. By default, thi
 To enable running as GID <code>7777</code> on a specific openshift namespace, run:
 <code>oc adm policy add-scc-to-group anyuid system:serviceaccounts:$NAMESPACE</code>
 </Alert>
+
+If you need to use numeric ports without the aforementioned capabilities, you can [manually install the agent](../intercepts/manual-agent)
 
 For example, the following service is using a numeric port, so Telepresence would inject an initContainer into it:
 ```yaml

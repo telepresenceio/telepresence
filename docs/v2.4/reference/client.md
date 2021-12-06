@@ -29,3 +29,4 @@ You can append `--help` to each command below to get even more information about
 | `uninstall` | Uninstalls Telepresence from your cluster, using the `--agent` flag to target the Traffic Agent for a specific workload, the `--all-agents` flag to remove all Traffic Agents from all workloads, or the `--everything` flag to remove all Traffic Agents and the Traffic Manager.
 | `dashboard` | Reopens the Ambassador Cloud dashboard in your browser |
 | `current-cluster-id` | Get cluster ID for your kubernetes cluster, used for [configuring license](../cluster-config#add-license-to-cluster) in an air-gapped environment |
+| `test-vpn` | Run a [configuration check](../vpn#the-test-vpn-command) on a VPN setup |

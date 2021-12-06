@@ -22,6 +22,10 @@ The service you are intercepting is likely not using TLS, however when configuri
 
 If your ingress is set to redirect HTTP requests to HTTPS and your web app uses HTTPS, but you configure the intercept to not use TLS, you will get this error when opening the preview URL.  Remove the intercept with `telepresence leave [deployment name]` and recreate it, selecting the correct port and setting `TLS` to `y` when prompted.
 
+## Connecting to a cluster via VPN doesn't work.
+
+There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](./vpn) on Telepresence and VPNs to learn more on how to fix these.
+
 ## Your GitHub organization isn't listed
 
 Ambassador Cloud needs access granted to your GitHub organization as a
