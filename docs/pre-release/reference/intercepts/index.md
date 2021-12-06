@@ -26,7 +26,7 @@ cluster.
 
 In addition to the default open-source traffic-agent, Telepresence
 already knows about the Ambassador Cloud
-[traffic-agent](ambassador-agent), which supports the `http`
+[traffic-agent][ambassador-agent], which supports the `http`
 mechanism.  The `http` mechanism operates at higher layer, working
 with layer 7 HTTP, and may intercept specific HTTP requests, allowing
 other HTTP requests through to the regular service.  This allows for
@@ -175,6 +175,17 @@ User Daemon: Running
 ```
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
+
+## Skipping the ingress dialogue
+
+You can skip the ingress dialogue by setting the relevant parameters using flags. If any of the following flags are set, the dialogue will be skipped and the flag values will be used instead. If any of the required flags are missing, an error will be thrown.
+
+| Flag           | Description | Required |
+| -------------- | ------------------------------ | --- |
+| `--ingress-host` | The ip address for the ingress | yes |
+| `--ingress-port` | The port for the ingress       | yes |
+| `--ingress-tls`  | Whether tls should be used     | no  |
+| `--ingress-l5`   | Whether a different ip address should be used in request headers | no |
 
 ## Creating an intercept when a service has multiple ports
 

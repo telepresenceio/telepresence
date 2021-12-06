@@ -29,6 +29,8 @@ cloud:
   refreshMessages: 24h # Refresh messages from cloud every 24 hours instead of the default, which is 1 week.
 grpc:
   maxReceiveSize: 10Mi
+telepresenceAPI:
+  port: 9980
 ```
 
 #### Timeouts
@@ -127,6 +129,11 @@ The size is measured in bytes. You can express it as a plain integer or as a fix
 128974848, 129e6, 129M, 123Mi
 ```
 
+#### RESTful API server
+The `telepresenceAPI` controls the behavior of Telepresence's RESTful API server that can be queried for additional information about ongoing intercepts. When present, and the `port` is set to a valid port number, it's propagated to the auto-installer so that application containers that can be intercepted gets the `TELEPRESENCE_API_PORT` environment set. The server can then be queried at `localhost:<TELEPRESENCE_API_PORT>`. In addition, the `traffic-agent` and the `user-daemon` on the workstation that performs an intercept will start the server on that port.
+If the `traffic-manager` is auto-installed, its webhook agent injector will be configured to add the `TELEPRESENCE_API_PORT` environment to the app container when the `traffic-agent` is injected.
+See [RESTful API server](../restapi) for more info.
+
 ## Per-Cluster Configuration
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.
 
@@ -177,7 +184,9 @@ clusters:
 
 
 #### AlsoProxy
-When using `also-proxy`, you provide a list of subnets after the key in your kubeconfig file to be added to the TUN device. All connections to addresses that the subnet spans will be dispatched to the cluster
+
+When using `also-proxy`, you provide a list of subnets after the key in your kubeconfig file to be added to the TUN device.
+All connections to addresses that the subnet spans will be dispatched to the cluster
 
 Here is an example kubeconfig for the subnet `1.2.3.4/32`:
 ```
@@ -192,6 +201,50 @@ clusters:
         - 1.2.3.4/32
   name: example-cluster
 ```
+
+#### NeverProxy
+
+When using `never-proxy` you provide a list of subnets after the key in your kubeconfig file. These will never be routed via the
+TUN device, even if they fall within the subnets (pod or service) for the cluster. Instead, whatever route they have before
+telepresence connects is the route they will keep.
+
+Here is an example kubeconfig for the subnet `1.2.3.4/32`:
+
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    server: https://127.0.0.1
+    extensions:
+    - name: telepresence.io
+      extension:
+        never-proxy:
+        - 1.2.3.4/32
+  name: example-cluster
+```
+
+##### Using AlsoProxy together with NeverProxy
+
+Never proxy and also proxy are implemented as routing rules, meaning that when the two conflict, regular routing routes apply.
+Usually this means that the most specific route will win.
+
+So, for example, if an `also-proxy` subnet falls within a broader `never-proxy` subnet:
+
+```yaml
+never-proxy: [10.0.0.0/16]
+also-proxy: [10.0.5.0/24]
+```
+
+Then the specific `also-proxy` of `10.0.5.0/24` will be proxied by the TUN device, whereas the rest of `10.0.0.0/16` will not.
+
+Conversely if a `never-proxy` subnet is inside a larger `also-proxy` subnet:
+
+```yaml
+also-proxy: [10.0.0.0/16]
+never-proxy: [10.0.5.0/24]
+```
+
+Then all of the also-proxy of `10.0.0.0/16` will be proxied, with the exception of the specific `never-proxy` of `10.0.5.0/24`
 
 #### Manager
 
