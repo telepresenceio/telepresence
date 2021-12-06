@@ -1,5 +1,5 @@
 import Alert from '@material-ui/lab/Alert';
-import { ClusterConfig } from '../../../../../src/components/Docs/Telepresence';
+import { ClusterConfig } from '@src/components/Docs/Telepresence';
 
 # Cluster-side configuration
 
