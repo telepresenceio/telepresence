@@ -2,7 +2,6 @@ package log
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"sort"
 	"strings"
@@ -18,12 +17,23 @@ type tbWrapper struct {
 	fields map[string]interface{}
 }
 
+type tbWriter struct {
+	*tbWrapper
+	l dlog.LogLevel
+}
+
+func (w *tbWriter) Write(data []byte) (n int, err error) {
+	w.Helper()
+	w.Log(w.l, strings.TrimSuffix(string(data), "\n")) // strip trailing newline if present, since the Log() call appends a newline
+	return len(data), nil
+}
+
 func NewTestLogger(t testing.TB, level dlog.LogLevel) dlog.Logger {
 	return &tbWrapper{TB: t, level: level}
 }
 
-func (w *tbWrapper) StdLogger(_ dlog.LogLevel) *log.Logger {
-	return log.New(io.Discard, "", 0)
+func (w *tbWrapper) StdLogger(l dlog.LogLevel) *log.Logger {
+	return log.New(&tbWriter{tbWrapper: w, l: l}, "", 0)
 }
 
 func (w *tbWrapper) WithField(key string, value interface{}) dlog.Logger {

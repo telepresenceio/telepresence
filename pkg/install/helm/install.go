@@ -45,28 +45,34 @@ func getValues(ctx context.Context) map[string]interface{} {
 		"systemaPort": cloudConfig.SystemaPort,
 		"createdBy":   releaseOwner,
 	}
-	if mxRecvSize := clientConfig.Grpc.MaxReceiveSize; mxRecvSize != nil {
+	if !clientConfig.Grpc.MaxReceiveSize.IsZero() {
 		values["grpc"] = map[string]interface{}{
-			"maxReceiveSize": mxRecvSize.String(),
+			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
-	if imgConfig.WebhookAgentImage != "" {
-		parts := strings.Split(imgConfig.WebhookAgentImage, ":")
-		image := imgConfig.WebhookAgentImage
-		tag := ""
-		if len(parts) > 1 {
-			image = parts[0]
-			tag = parts[1]
+	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" {
+		agentImage := make(map[string]interface{})
+		if imgConfig.WebhookAgentImage != "" {
+			parts := strings.Split(imgConfig.WebhookAgentImage, ":")
+			image := imgConfig.WebhookAgentImage
+			tag := ""
+			if len(parts) > 1 {
+				image = parts[0]
+				tag = parts[1]
+			}
+			agentImage["name"] = image
+			agentImage["tag"] = tag
 		}
-		values["agentInjector"] = map[string]interface{}{
-			"agentImage": map[string]interface{}{
-				"registry": imgConfig.WebhookRegistry,
-				"name":     image,
-				"tag":      tag,
-			},
+		if imgConfig.WebhookRegistry != "" {
+			agentImage["registry"] = imgConfig.WebhookRegistry
+		}
+		values["agentInjector"] = map[string]interface{}{"agentImage": agentImage}
+	}
+	if clientConfig.TelepresenceAPI.Port != 0 {
+		values["telepresenceAPI"] = map[string]interface{}{
+			"port": clientConfig.TelepresenceAPI.Port,
 		}
 	}
-
 	return values
 }
 
@@ -92,7 +98,7 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 }
 
 func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Infof(ctx, "No existing Traffic Manager found, installing %s...", client.Version())
+	dlog.Infof(ctx, "No existing Traffic Manager found in namespace %s, installing %s...", namespace, client.Version())
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -106,7 +112,7 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 }
 
 func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
-	dlog.Infof(ctx, "Existing Traffic Manager %s found, upgrading to %s...", existingVer, client.Version())
+	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, namespace, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
@@ -118,7 +124,7 @@ func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart,
 }
 
 func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, namespace string) error {
-	dlog.Info(ctx, "Uninstalling Traffic Manager")
+	dlog.Infof(ctx, "Uninstalling Traffic Manager in namespace %s", namespace)
 	uninstall := action.NewUninstall(helmConfig)
 	return timedRun(ctx, func(timeout time.Duration) error {
 		uninstall.Timeout = timeout
@@ -200,7 +206,7 @@ func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, n
 		return nil
 	}
 	if existing == nil || !shouldManageRelease(ctx, existing) {
-		dlog.Info(ctx, "Traffic Manager already deleted or not owned by cli, will not uninstall")
+		dlog.Infof(ctx, "Traffic Manager in namespace %s already deleted or not owned by cli, will not uninstall", namespace)
 		return nil
 	}
 	return uninstallExisting(ctx, helmConfig, namespace)

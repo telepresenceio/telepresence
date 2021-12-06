@@ -68,29 +68,33 @@ func (p *packet) String() string {
 	return b.String()
 }
 
-// Reset creates an ACK+RST packet for this packet.
+// Reset creates an RST response packet for this packet.
 func (p *packet) Reset() Packet {
 	incIp := p.IPHeader()
 	incTcp := p.Header()
 
-	pkt := NewPacket(HeaderLen, incIp.Source(), incIp.Destination(), false)
+	pkt := NewPacket(HeaderLen, incIp.Destination(), incIp.Source(), false)
 	iph := pkt.IPHeader()
 	iph.SetL4Protocol(ipproto.TCP)
 	iph.SetChecksum()
 
 	tcpHdr := Header(iph.Payload())
 	tcpHdr.SetDataOffset(5)
-	tcpHdr.SetSourcePort(incTcp.SourcePort())
-	tcpHdr.SetDestinationPort(incTcp.DestinationPort())
+	tcpHdr.SetSourcePort(incTcp.DestinationPort())
+	tcpHdr.SetDestinationPort(incTcp.SourcePort())
 	tcpHdr.SetRST(true)
 	tcpHdr.SetACK(true)
 
+	sqAdd := uint32(0)
+	if incTcp.SYN() {
+		sqAdd = 1
+	}
 	if incTcp.ACK() {
 		tcpHdr.SetSequence(incTcp.AckNumber())
-		tcpHdr.SetAckNumber(incTcp.Sequence() + 1)
+		tcpHdr.SetAckNumber(incTcp.Sequence() + sqAdd)
 	} else {
 		tcpHdr.SetSequence(0)
-		tcpHdr.SetAckNumber(incTcp.Sequence() + uint32(len(incTcp.Payload())))
+		tcpHdr.SetAckNumber(incTcp.Sequence() + uint32(len(incTcp.Payload())) + sqAdd)
 	}
 
 	tcpHdr.SetChecksum(iph)

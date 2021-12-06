@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -26,7 +30,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
 type forwardKey struct {
@@ -110,18 +116,27 @@ func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingInte
 		}
 		return true
 	})
+
 	for _, key := range mountsToDelete {
 		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
-			mountPoint := key.(string)
-			if err := os.Remove(mountPoint); err != nil {
-				if os.IsNotExist(err) {
+			// Execute the removal in a separate go-routine so that we don't hang the daemon in case
+			// the removal hangs on a "resource busy".
+			go func(mountPoint string) {
+				if runtime.GOOS == "darwin" {
+					//  macFUSE will sometimes not unmount in a timely manner so we do this to avoid "resource busy" and
+					//  "Device not configured" errors.
+					_ = dexec.CommandContext(ctx, "umount", mountPoint).Run()
+				}
+				err := os.Remove(mountPoint)
+				switch {
+				case err == nil:
+					dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
+				case os.IsNotExist(err):
 					dlog.Infof(ctx, "File system mount %q no longer exists", mountPoint)
-				} else {
+				default:
 					dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
 				}
-			} else {
-				dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
-			}
+			}(key.(string))
 		}
 	}
 }
@@ -159,7 +174,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			} else {
 				intercepts = snapshot.Intercepts
 			}
-			tm.setCurrentIntercepts(intercepts)
+			tm.setCurrentIntercepts(ctx, intercepts)
 
 			// allNames contains the names of all intercepts, irrespective of their status
 			allNames := make(map[string]struct{})
@@ -238,9 +253,10 @@ func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 	return intercepts
 }
 
-func (tm *trafficManager) setCurrentIntercepts(intercepts []*manager.InterceptInfo) {
+func (tm *trafficManager) setCurrentIntercepts(ctx context.Context, intercepts []*manager.InterceptInfo) {
 	tm.currentInterceptsLock.Lock()
 	tm.currentIntercepts = intercepts
+	tm.reconcileAPIServers(ctx)
 	tm.currentInterceptsLock.Unlock()
 }
 
@@ -289,10 +305,23 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		spec.Mechanism = "tcp"
 	}
 
+	cfg := client.GetConfig(c)
+	apiPort := uint16(cfg.TelepresenceAPI.Port)
+	if apiPort == 0 {
+		// Default to the API port declared by the traffic-manager
+		apiInfo, err := tm.managerClient.GetTelepresenceAPI(c, &empty.Empty{})
+		if err != nil {
+			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
+			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
+		} else {
+			apiPort = uint16(apiInfo.Port)
+		}
+	}
+
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
-	var result *rpc.InterceptResult
-	if result = tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
+	result := tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
+	if result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}
 
@@ -472,7 +501,9 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 			sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
 			exe = "sshfs-win"
 		}
-		return dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+		err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+		time.Sleep(time.Second)
+		return err
 	}, 3*time.Second, 6*time.Second)
 
 	if err != nil && ctx.Err() == nil {
@@ -504,4 +535,104 @@ func (tm *trafficManager) clearIntercepts(c context.Context) error {
 		}
 	}
 	return nil
+}
+
+// reconcileAPIServers start/stop API servers as needed based on the TELEPRESENCE_API_PORT environment variable
+// of the currently intercepted agent's env.
+func (tm *trafficManager) reconcileAPIServers(ctx context.Context) {
+	wantedPorts := make(map[int]struct{})
+	wantedMatchers := make(map[string]*manager.InterceptInfo)
+	agents := tm.getCurrentAgents()
+
+	agentAPIPort := func(is *manager.InterceptSpec) int {
+		for _, a := range agents {
+			if a.Name == is.Agent && a.Namespace == is.Namespace {
+				if ps, ok := a.Environment["TELEPRESENCE_API_PORT"]; ok {
+					port, err := strconv.ParseUint(ps, 10, 16)
+					if err == nil {
+						return int(port)
+					}
+					dlog.Errorf(ctx, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, a.Name, a.Namespace, err)
+				}
+				return 0
+			}
+		}
+		dlog.Errorf(ctx, "no agent found for intercept %s", is.Name)
+		return 0
+	}
+
+	for _, ic := range tm.currentIntercepts {
+		if ic.Disposition == manager.InterceptDispositionType_ACTIVE {
+			if port := agentAPIPort(ic.Spec); port > 0 {
+				wantedPorts[port] = struct{}{}
+				wantedMatchers[ic.Id] = ic
+			}
+		}
+	}
+	for p, as := range tm.currentAPIServers {
+		if _, ok := wantedPorts[p]; !ok {
+			as.cancel()
+			delete(tm.currentAPIServers, p)
+		}
+	}
+	for p := range wantedPorts {
+		if _, ok := tm.currentAPIServers[p]; !ok {
+			tm.newAPIServerForPort(ctx, p)
+		}
+	}
+	for id := range tm.currentMatchers {
+		if _, ok := wantedMatchers[id]; !ok {
+			delete(tm.currentMatchers, id)
+		}
+	}
+	for id, ic := range wantedMatchers {
+		if _, ok := tm.currentMatchers[id]; !ok {
+			tm.newMatcher(ctx, ic)
+		}
+	}
+}
+
+func (tm *trafficManager) newAPIServerForPort(ctx context.Context, port int) {
+	s := restapi.NewServer(tm, true)
+	as := apiServer{Server: s}
+	ctx, as.cancel = context.WithCancel(ctx)
+	if tm.currentAPIServers == nil {
+		tm.currentAPIServers = map[int]apiServer{port: as}
+	} else {
+		tm.currentAPIServers[port] = as
+	}
+	go func() {
+		if err := s.ListenAndServe(ctx, port); err != nil {
+			dlog.Error(ctx, err)
+		}
+	}()
+}
+
+func (tm *trafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
+	m, err := header.NewMatcher(ic.Headers)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
+	if tm.currentMatchers == nil {
+		tm.currentMatchers = map[string]header.Matcher{ic.Id: m}
+	} else {
+		tm.currentMatchers[ic.Id] = m
+	}
+}
+
+func (tm *trafficManager) Intercepts(ctx context.Context, callerID string, h http.Header) (bool, error) {
+	tm.currentInterceptsLock.Lock()
+	defer tm.currentInterceptsLock.Unlock()
+	m := tm.currentMatchers[callerID]
+	if m == nil {
+		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
+		return false, nil
+	}
+	if m.Matches(h) {
+		dlog.Debugf(ctx, "%s: %s matches %s", callerID, m, header.Stringer(h))
+		return true, nil
+	}
+	dlog.Debugf(ctx, "%s: %s does not match %s", callerID, m, header.Stringer(h))
+	return false, nil
 }

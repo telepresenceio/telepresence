@@ -1,0 +1,6 @@
+certs/*
+*.tfstate
+*.backup
+*.tfvars
+.terraform
+.terraform.*

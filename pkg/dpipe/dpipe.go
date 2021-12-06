@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sync/atomic"
-	"time"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
@@ -13,6 +11,10 @@ import (
 )
 
 func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs ...string) error {
+	defer func() {
+		_ = peer.Close()
+	}()
+
 	cmd := dexec.CommandContext(ctx, cmdName, cmdArgs...)
 	cmd.Stdin = peer
 	cmd.Stdout = peer
@@ -24,34 +26,24 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 		return fmt.Errorf("failed to start %s: %w", cmdLine, err)
 	}
 
-	var killTimer *time.Timer
-	closing := int32(0)
-
-	defer func() {
-		if killTimer != nil && atomic.LoadInt32(&closing) == 1 {
-			killTimer.Stop()
+	ctx = dlog.WithField(ctx, "dexec.pid", cmd.Process.Pid)
+	dlog.Infof(ctx, "started command %s", cmdLine)
+	defer dlog.Infof(ctx, "ended command %s", cmdName)
+	runFinished := make(chan error)
+	go func() {
+		defer close(runFinished)
+		if err := cmd.Wait(); err != nil {
+			if !cmd.ProcessState.Success() && ctx.Err() == nil {
+				runFinished <- err
+			}
 		}
 	}()
 
-	go waitCloseAndKill(ctx, cmd, peer, &closing, &killTimer)
-
-	ctx = dlog.WithField(ctx, "dexec.pid", cmd.Process.Pid)
-	dlog.Infof(ctx, "started command %s", cmdLine)
-	err := cmd.Wait()
-	how := "successfully"
-	if err != nil {
-		if cmd.ProcessState.Success() {
-			// Error is most likely "use of closed connection", which is normal for pipes
-			dlog.Debugf(ctx, "normal exit caused by: %v", err)
-			err = nil
-		} else if ctx.Err() != nil {
-			how = "by cancellation"
-			err = nil
-		}
+	select {
+	case <-ctx.Done():
+		killProcess(ctx, cmd)
+		return nil
+	case err := <-runFinished:
+		return err
 	}
-	if err != nil {
-		how = "with error"
-	}
-	dlog.Infof(ctx, "finished %s: %v", how, cmd.ProcessState)
-	return err
 }

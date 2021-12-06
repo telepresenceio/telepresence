@@ -41,6 +41,10 @@ func (p *mgrProxy) GetLicense(ctx context.Context, arg *empty.Empty) (*managerrp
 	return p.client.GetLicense(ctx, arg, p.callOptions...)
 }
 
+func (p *mgrProxy) GetTelepresenceAPI(ctx context.Context, arg *empty.Empty) (*managerrpc.TelepresenceAPIInfo, error) {
+	return p.client.GetTelepresenceAPI(ctx, arg, p.callOptions...)
+}
+
 func (p *mgrProxy) CanConnectAmbassadorCloud(ctx context.Context, arg *empty.Empty) (*managerrpc.AmbassadorCloudConnection, error) {
 	return p.client.CanConnectAmbassadorCloud(ctx, arg, p.callOptions...)
 }

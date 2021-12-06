@@ -24,6 +24,14 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
+# Build statically on linux platforms so that the binary can be used in
+# alpine containers and the like, where libc is different.
+ifeq ($(GOHOSTOS),linux)
+CGO_ENABLED=0
+else
+CGO_ENABLED=1
+endif
+
 .PHONY: FORCE
 FORCE:
 
@@ -86,10 +94,16 @@ base-image: base-image/Dockerfile # Intentionally not in 'make help'
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
+ifeq ($(GOHOSTOS),darwin)
+	sdkroot=SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path)
+else
+	sdkroot=
+endif
+
 .PHONY: build
 build: pkg/install/helm/telepresence-chart.tgz ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	CGO_ENABLED=0 go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
 .ko.yaml: .ko.yaml.in base-image
 	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
@@ -166,7 +180,7 @@ promote-to-stable: ## (Release) Update stable.txt in S3
 		--key tel2/$(GOHOSTOS)/$(GOARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
-	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) $GOARCH
+	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) $(GOARCH)
 endif
 
 # Prerequisites:
@@ -220,7 +234,8 @@ check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA)
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=29m ./...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -timeout=29m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test ./cmd/... ./pkg/...
 
 .PHONY: _login
 _login:

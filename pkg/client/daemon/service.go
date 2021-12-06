@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -98,6 +100,38 @@ func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empt
 
 func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
 	return &empty.Empty{}, d.outbound.setInfo(ctx, info)
+}
+
+func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
+	select {
+	case <-d.outbound.router.cfgComplete:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	// The manager can sometimes send the different subnets in different Sends, but after 5 seconds of listening to it
+	// we should expect to have everything
+	tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer tCancel()
+	infoStream, err := d.outbound.router.managerClient.WatchClusterInfo(tCtx, d.outbound.router.session)
+	if err != nil {
+		return nil, err
+	}
+	podSubnets := []*manager.IPNet{}
+	svcSubnets := []*manager.IPNet{}
+	for {
+		mgrInfo, err := infoStream.Recv()
+		if err != nil {
+			if tCtx.Err() == nil && !errors.Is(err, io.EOF) {
+				return nil, err
+			}
+			break
+		}
+		if mgrInfo.ServiceSubnet != nil {
+			svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
+		}
+		podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
+	}
+	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }
 
 func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
@@ -227,8 +261,9 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		}()
 
 		opts := []grpc.ServerOption{}
-		if mxRecvSize := client.GetConfig(c).Grpc.MaxReceiveSize; mxRecvSize != nil {
-			if mz, ok := mxRecvSize.AsInt64(); ok {
+		cfg := client.GetConfig(c)
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
 				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 			}
 		}

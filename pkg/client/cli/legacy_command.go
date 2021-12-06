@@ -35,6 +35,7 @@ type legacyCommand struct {
 	context   string
 	namespace string
 
+	globalFlags      []string
 	unsupportedFlags []string
 }
 
@@ -102,7 +103,17 @@ Parsing:
 		case v == "--run-shell":
 			lc.runShell = true
 			break Parsing
-		case strings.Contains(v, "--"):
+		case len(v) > 2 && strings.HasPrefix(v, "--"):
+			g := v[2:]
+			for _, group := range globalFlagGroups {
+				if gf := group.Flags.Lookup(g); gf != nil {
+					lc.globalFlags = append(lc.globalFlags, v)
+					if gv := getArg(i + 1); gv != "" && !strings.HasPrefix(gv, "-") {
+						lc.globalFlags = append(lc.globalFlags, gv)
+					}
+					continue Parsing
+				}
+			}
 			lc.unsupportedFlags = append(lc.unsupportedFlags, v)
 		}
 	}
@@ -156,6 +167,8 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 			}
 			cmdSlice = append(cmdSlice, "--docker-run")
 		}
+		cmdSlice = append(cmdSlice, lc.globalFlags...)
+
 		if lc.processCmd != "" {
 			cmdSlice = append(cmdSlice, "--", lc.processCmd)
 		}
@@ -166,9 +179,13 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 	// If we have a run of some kind without a swapDeployment, then
 	// we translate to a connect
 	case lc.runShell:
-		cmdSlice = append(cmdSlice, "connect", "--", "bash")
+		cmdSlice = append(cmdSlice, "connect")
+		cmdSlice = append(cmdSlice, lc.globalFlags...)
+		cmdSlice = append(cmdSlice, "--", "bash")
 	case lc.run:
-		cmdSlice = append(cmdSlice, "connect", "--", lc.processCmd)
+		cmdSlice = append(cmdSlice, "connect")
+		cmdSlice = append(cmdSlice, lc.globalFlags...)
+		cmdSlice = append(cmdSlice, "--", lc.processCmd)
 	// Either not a legacyCommand or we don't know how to translate it to Telepresence
 	default:
 		return "", nil

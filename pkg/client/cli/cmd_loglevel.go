@@ -66,7 +66,7 @@ func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) er
 		return errcat.User.New("the local-only and remote-only options are mutually exclusive")
 	}
 
-	return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+	return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
 		rq := &manager.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
 		if !lls.remoteOnly {
 			_, err := connectorClient.SetLogLevel(ctx, rq)

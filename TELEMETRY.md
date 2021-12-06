@@ -19,3 +19,6 @@ The following metrics are collected:
 | `login_interrupted`                   | A `telepresence login` has been interrupted by the user, includes a `method` trait detailing the login method.                             |
 | `login_success`                       | A `telepresence login` has succeded, includes a `method` trait detailing the login method.                                                 |
 | `used_gather_logs`                    | A `telepresence gather-logs` command has been used.                                                                                        |
+| `vpn_diag_error`                      | A `telepresence test-vpn` command has been used and has resulted in an error.                                                              |
+| `vpn_diag_fail`                       | A `telepresence test-vpn` command has been used; no error, but it reports a misconfigured network. Includes traits detailing the failure.  |
+| `vpn_diag_pass`                       | A `telepresence test-vpn` command has been used and reported no misconfigurations.                                                         |

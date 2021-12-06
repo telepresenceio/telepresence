@@ -174,9 +174,17 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Get the correct loginClientID depending on the location
+	// of the telepresence binary
+	loginClientID := "telepresence-cli"
+	if execMechanism, err := client.GetInstallMechanism(); err != nil {
+		dlog.Errorf(ctx, "login worker errored getting extension path, using default %s: %s", loginClientID, err)
+	} else if execMechanism == "docker" {
+		loginClientID = "docker-desktop"
+	}
 	env := client.GetEnv(ctx)
 	l.oauth2Config = oauth2.Config{
-		ClientID:    env.LoginClientID,
+		ClientID:    loginClientID,
 		RedirectURL: fmt.Sprintf("http://localhost:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  env.LoginAuthURL,
@@ -238,7 +246,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			case <-l.refreshTimer.C:
 				dlog.Infoln(ctx, "refreshing access token...")
 				if token, err := l.getToken(ctx); err != nil {
-					dlog.Infof(ctx, "could not refresh assess token: %v", err)
+					dlog.Infof(ctx, "could not refresh access token: %v", err)
 				} else if token != "" {
 					dlog.Infof(ctx, "got new access token")
 				}
@@ -540,7 +548,12 @@ func (l *loginExecutor) httpHandler(ctx context.Context, w http.ResponseWriter, 
 	var sb strings.Builder
 	sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
 	if errorName == "" && code != "" {
-		w.Header().Set("Location", client.GetEnv(ctx).LoginCompletionURL)
+		completionURL := client.GetEnv(ctx).LoginCompletionURL
+		// Attribute login to the correct client
+		if mech, _ := client.GetInstallMechanism(); mech == "docker" {
+			completionURL += "?client=docker-desktop"
+		}
+		w.Header().Set("Location", completionURL)
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		sb.WriteString("<h1>Authentication Successful</h1>")
 		sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")

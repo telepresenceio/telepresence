@@ -205,7 +205,10 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginR
 			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
 		}
 	} else {
-		if _, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, false); err == nil {
+		// We should refresh here because the user is explicitly logging in so
+		// even if we have cache'd user info, if they are unable to get new
+		// user info, then it should trigger the login function
+		if _, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, true); err == nil {
 			dlog.Debug(ctx, "returned")
 			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
 		}

@@ -40,5 +40,13 @@ A clear and concise description of what you expected to happen.
  - Operating system of workstation running `telepresence` commands
  - Kubernetes environment and Version [e.g. Minikube, bare metal, Google Kubernetes Engine]
 
+**VPN-related bugs:**
+If you're reporting an issue around telepresence connectivity when using a VPN,
+and are running Telepresence 2.4.8 or above, please also attach the output
+of `telepresence test-vpn`, and the following information:
+ - Which VPN client are you using?
+ - Which VPN server are you using?
+ - How is your VPN pushing DNS configuration? It may be useful to add the contents of /etc/resolv.conf
+
 **Additional context**
 Add any other context about the problem here.

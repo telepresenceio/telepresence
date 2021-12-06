@@ -1,18 +1,61 @@
 # Changelog
 
-### 2.4.6 (TBD)
+### 2.4.8 (December 3, 2021)
+
+- Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
+  consumed or not from a message queue where the intercept headers are added to the messages.
+
+- Change: The environment variable TELEPRESENCE_LOGIN_CLIENT_ID is no longer used.
+
+- Feature: There is a new subcommand, `test-vpn`, that can be used to diagnose connectivity issues with a VPN.
+
+- Bugfix: The tunneled network connections between Telepresence and
+  Ambassador Cloud now behave more like ordinary TCP connections,
+  especially around timeouts.
+
+### 2.4.7 (November 24, 2021)
+
+- Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
+  This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
+
+- Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
+
+- Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
+
+- Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
+
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
+- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
+
+- Bugfix: Outbound connections are now properly closed when the peer closes.
+
+- Bugfix: The DNS-resolver will trap recursive resolution attempts (may happen when the cluster runs in a docker-container on the client).
+
+- Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the
+  cluster runs in a docker-container on the client).
+
+- Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
+
+- Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
+  original Helm chart when we release so this fix will only affect our nightly builds.
+
+- Bugfix: The configured webhookRegistry is now propagated to the webhook installer even if no webhookAgentImage has been set.
+
+- Bugfix: Login logs the user in when their access token has expired, instead of having no effect.
+
+### 2.4.6 (November 2, 2021)
 
 - Feature: Telepresence CLI is now built and published for Apple silicon Macs.
-
-- Changelog: `--help` text now includes a link to https://www.telepresence.io/ so users who download Telepresence via Brew or some other mechanism are able to find the documentation easily.
-
-- Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
 
 - Feature: Telepresence now supports manually injecting the traffic-agent YAML into workload manifests.
   Use the `genyaml` command to create the sidecar YAML, then add the `telepresence.getambassador.io/manually-injected: "true"` annotation to to your pods to allow Telepresence to intercept them.
 
 - Feature: Added a json flag for the "telepresence list" command. This will aid automation.
 
+- Change: `--help` text now includes a link to https://www.telepresence.io/ so users who download Telepresence via Brew or some other mechanism are able to find the documentation easily.
+
+- Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
 
 ### 2.4.5 (October 15, 2021)
 

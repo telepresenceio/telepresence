@@ -1,0 +1,189 @@
+package integration_test
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"k8s.io/client-go/tools/clientcmd/api"
+
+	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
+)
+
+func getClusterIPs(cluster *api.Cluster) ([]net.IP, error) {
+	var ips []net.IP
+	svcUrl, err := url.Parse(cluster.Server)
+	if err != nil {
+		return nil, err
+	}
+	hostname := svcUrl.Hostname()
+	if rawIP := net.ParseIP(hostname); rawIP != nil {
+		ips = []net.IP{rawIP}
+	} else {
+		ips, err = net.LookupIP(hostname)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ips, nil
+}
+
+func (s *notConnectedSuite) Test_APIServerIsProxied() {
+	require := s.Require()
+	var ips []net.IP
+	ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
+		var apiServers []string
+		var err error
+		ips, err = getClusterIPs(cluster)
+		require.NoError(err)
+		for _, ip := range ips {
+			apiServers = append(apiServers, fmt.Sprintf(`%s/24`, ip))
+		}
+		return map[string]interface{}{"also-proxy": apiServers}
+	})
+
+	itest.TelepresenceOk(ctx, "connect")
+	defer itest.TelepresenceQuitOk(ctx)
+	stdout := itest.TelepresenceOk(ctx, "status")
+	require.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", len(ips)))
+	for _, ip := range ips {
+		rng := make(net.IP, len(ip))
+		copy(rng[:], ip)
+		rng[len(rng)-1] = 0
+		require.Contains(stdout, fmt.Sprintf("- %s/24", rng), fmt.Sprintf("Expecting to find '- %s/24'", rng))
+	}
+	require.Contains(stdout, "networking to the cluster is enabled")
+}
+
+func (s *notConnectedSuite) Test_NeverProxy() {
+	require := s.Require()
+	ctx := s.Context()
+	svcName := "echo-never-proxy"
+	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
+	ip, err := itest.Output(ctx, "kubectl",
+		"--namespace", s.AppNamespace(),
+		"get", "svc", svcName,
+		"-o",
+		"jsonpath={.spec.clusterIP}")
+	require.NoError(err)
+	var ips []net.IP
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
+		var err error
+		ips, err = getClusterIPs(cluster)
+		require.NoError(err)
+		return map[string]interface{}{"never-proxy": []string{ip + "/32"}}
+	})
+	itest.TelepresenceOk(ctx, "connect")
+	defer itest.TelepresenceQuitOk(ctx)
+	stdout := itest.TelepresenceOk(ctx, "status")
+	// The cluster's IP address will also be never proxied, so we gotta account for that.
+	require.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", len(ips)+1))
+	s.Eventually(func() bool {
+		return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip) != nil
+	}, 15*time.Second, 2*time.Second, fmt.Sprintf("never-proxied IP %s is reachable", ip))
+}
+
+func (s *notConnectedSuite) Test_ConflictingProxies() {
+	require := s.Require()
+	ctx := s.Context()
+
+	testIP := &net.IPNet{
+		IP:   net.ParseIP("10.128.0.32"),
+		Mask: net.CIDRMask(32, 32),
+	}
+	// We don't really care if we can't route this with TP disconnected provided the result is the same once we connect
+	originalRoute, _ := routing.GetRoute(ctx, testIP)
+	for name, t := range map[string]struct {
+		alsoProxy  []string
+		neverProxy []string
+		expectEq   bool
+	}{
+		"Never Proxy wins": {
+			alsoProxy:  []string{"10.128.0.0/16"},
+			neverProxy: []string{"10.128.0.0/24"},
+			expectEq:   true,
+		},
+		"Also Proxy wins": {
+			alsoProxy:  []string{"10.128.0.0/24"},
+			neverProxy: []string{"10.128.0.0/16"},
+			expectEq:   false,
+		},
+	} {
+		s.Run(name, func() {
+			ctx := itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
+				return map[string]interface{}{
+					"never-proxy": t.neverProxy,
+					"also-proxy":  t.alsoProxy,
+				}
+			})
+			itest.TelepresenceOk(ctx, "connect")
+			defer itest.TelepresenceQuitOk(ctx)
+			s.Eventually(func() bool {
+				return itest.Run(ctx, "curl", "--silent", "-k", "--max-time", "0.5", "https://kubernetes.default:443") == nil
+			}, 15*time.Second, 2*time.Second, "cluster is not connected")
+			newRoute, err := routing.GetRoute(ctx, testIP)
+			if t.expectEq {
+				if originalRoute.Interface != nil {
+					require.NotNil(newRoute.Interface)
+					require.Equal(originalRoute.Interface.Name, newRoute.Interface.Name)
+				} else {
+					require.Nil(newRoute.Interface)
+				}
+			} else {
+				require.NoError(err)
+				require.NotNil(newRoute.Interface)
+				if originalRoute.Interface != nil {
+					require.NotEqual(newRoute.Interface.Name, originalRoute.Interface.Name, "Expected %s not to equal %s", newRoute.Interface.Name, originalRoute.Interface.Name)
+				}
+			}
+		})
+	}
+}
+
+func (s *notConnectedSuite) Test_DNSIncludes() {
+	ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
+		return map[string]interface{}{"dns": map[string][]string{"include-suffixes": {".org"}}}
+	})
+	require := s.Require()
+	logDir, err := filelocation.AppUserLogDir(ctx)
+	require.NoError(err)
+	logFile := filepath.Join(logDir, "daemon.log")
+
+	itest.TelepresenceOk(ctx, "connect")
+	defer itest.TelepresenceQuitOk(ctx)
+
+	retryCount := 0
+	s.Eventually(func() bool {
+		// Test with ".org" suffix that was added as an include-suffix
+		host := fmt.Sprintf("zwslkjsdf-%d.org", retryCount)
+		short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		defer cancel()
+		_ = itest.Run(short, "curl", "--silent", "--connect-timeout", "0.5", host)
+
+		// Give query time to reach telepresence and produce a log entry
+		dtime.SleepWithContext(ctx, 100*time.Millisecond)
+
+		rootLog, err := os.Open(logFile)
+		require.NoError(err)
+		defer rootLog.Close()
+
+		scanFor := fmt.Sprintf(`LookupHost "%s"`, host)
+		scn := bufio.NewScanner(rootLog)
+		for scn.Scan() {
+			if strings.Contains(scn.Text(), scanFor) {
+				return true
+			}
+		}
+		retryCount++
+		return false
+	}, 10*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
+}

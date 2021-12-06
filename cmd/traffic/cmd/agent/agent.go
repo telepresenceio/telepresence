@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -30,6 +31,7 @@ type Config struct {
 	AppPort     int32  `env:"_TEL_AGENT_APP_PORT,required"`
 	ManagerHost string `env:"_TEL_AGENT_MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"_TEL_AGENT_MANAGER_PORT,default=8081"`
+	APIPort     int32  `env:"TELEPRESENCE_API_PORT,default="`
 }
 
 var skipKeys = map[string]bool{
@@ -142,6 +144,50 @@ func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) 
 	return nil
 }
 
+// SftpServer creates a listener on the next available port, writes that port on the
+// given channel, and then starts accepting connections on that port. Each connection
+// starts a sftp-server that communicates with that connection using its stdin and stdout.
+func SftpServer(ctx context.Context, sftpPortCh chan<- int32) error {
+	defer close(sftpPortCh)
+
+	// start an sftp-server for remote sshfs mounts
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp4", ":0")
+	if err != nil {
+		return err
+	}
+
+	// Accept doesn't actually return when the context is cancelled so
+	// it's explicitly closed here.
+	go func() {
+		<-ctx.Done()
+		_ = l.Close()
+	}()
+
+	_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
+	if err != nil {
+		return err
+	}
+	sftpPortCh <- int32(sftpPort)
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			if ctx.Err() == nil {
+				return fmt.Errorf("listener on sftp-server connection failed: %v", err)
+			}
+			return nil
+		}
+		go func() {
+			dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
+			err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+		}()
+	}
+}
+
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
 
@@ -194,44 +240,7 @@ func Main(ctx context.Context, args ...string) error {
 	sftpPortCh := make(chan int32)
 	if config.HasMounts(ctx, info.Environment) && user == "" {
 		g.Go("sftp-server", func(ctx context.Context) error {
-			defer close(sftpPortCh)
-
-			// start an sftp-server for remote sshfs mounts
-			lc := net.ListenConfig{}
-			l, err := lc.Listen(ctx, "tcp4", ":0")
-			if err != nil {
-				return err
-			}
-
-			// Accept doesn't actually return when the context is cancelled so
-			// it's explicitly closed here.
-			go func() {
-				<-ctx.Done()
-				_ = l.Close()
-			}()
-
-			_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
-			if err != nil {
-				return err
-			}
-			sftpPortCh <- int32(sftpPort)
-
-			for {
-				conn, err := l.Accept()
-				if err != nil {
-					if ctx.Err() == nil {
-						return fmt.Errorf("listener on sftp-server connection failed: %v", err)
-					}
-					return nil
-				}
-				go func() {
-					dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
-					err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
-					if err != nil {
-						dlog.Error(ctx, err)
-					}
-				}()
-			}
+			return SftpServer(ctx, sftpPortCh)
 		})
 	} else {
 		close(sftpPortCh)
@@ -270,6 +279,12 @@ func Main(ctx context.Context, args ...string) error {
 
 		sftpPort := <-sftpPortCh
 		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
+
+		if config.APIPort != 0 {
+			dgroup.ParentGroup(ctx).Go("API-server", func(ctx context.Context) error {
+				return restapi.NewServer(state.AgentState(), false).ListenAndServe(ctx, int(config.APIPort))
+			})
+		}
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

@@ -1,10 +1,19 @@
-# Maintainers
+# Telepresence Maintainers
 
-The current maintainers of the Telepresence project are:
+[GOVERNANCE.md](GOVERNANCE.md) describes governance guidelines and
+maintainer responsibilities.
 
-* Abhay Saxena [ark3](https://github.com/ark3), <ark3@email.com>, core maintainer
-* Rafael Schloming [rhs](https://github.com/rhs), <rhs@datawire.io>, core maintainer
-* Luke Shumaker [LukeShu](https://github.com/LukeShu), <lukeshu@datawire.io>, core maintainer
-* Richard Li [richarddli](https://github.com/richarddli), <richard@datawire.io>, documentation
+## Maintainers
 
-See [GOVERNANCE.md](GOVERNANCE.md) for governance guidelines and maintainer responsibilities.
+Maintainers are listed in alphabetical order.
+
+* Donny Yung, [donnyyung](https://github.com/donnyyung), <donaldyung@datawire.io>
+* Jose Cortes, [josecv](https://github.com/josecv), <josecortes@datawire.io>
+* Thomas Hallgren [thallgren](https://github.com/thallgren), <thomas@datawire.io>
+
+## Maintainers Emeriti
+
+* Abhay Saxena, [ark3](https://github.com/ark3), <ark3@email.com>
+* Luke Shumaker, [LukeShu](https://github.com/LukeShu), <lukeshu@datawire.io>
+* Rafael Schloming, [rhs](https://github.com/rhs), <rhs@datawire.io>
+* Richard Li, [richarddli](https://github.com/richarddli), <richard@datawire.io>

@@ -3,6 +3,7 @@ package mutator
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -74,18 +75,20 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		return nil, fmt.Errorf("failed to create new kates client: %w", err)
 	}
 
-	svc, err := findMatchingService(ctx, client, "", "", podNamespace, pod.Labels)
+	svcName := pod.Annotations[install.ServiceNameAnnotation]
+	svc, err := findMatchingService(ctx, client, "", svcName, podNamespace, pod.Labels)
 	if err != nil {
 		dlog.Error(ctx, err)
-		return nil, nil
+		return nil, err
 	}
 
 	// The ServicePortAnnotation is expected to contain a string that identifies the service port.
 	portNameOrNumber := pod.Annotations[install.ServicePortAnnotation]
 	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, portNameOrNumber, svc)
 	if err != nil {
+		err := fmt.Errorf("unable to find port to intercept; try the %s annotation: %w", install.ServicePortAnnotation, err)
 		dlog.Error(ctx, err)
-		return nil, nil
+		return nil, err
 	}
 	if appContainer.Name == install.AgentContainerName {
 		dlog.Infof(ctx, "service %s/%s is already pointing at agent container %s; skipping", svc.Namespace, svc.Name, appContainer.Name)
@@ -96,9 +99,9 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	ports := appContainer.Ports
 	for i := range ports {
 		if ports[i].ContainerPort == env.AgentPort {
-			dlog.Infof(ctx, "the %s pod container %s is exposing the same port (%d) as the %s sidecar; skipping",
-				refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
-			return nil, nil
+			err := fmt.Errorf("the %s pod container %s is exposing the same port (%d) as the %s sidecar", refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
+			dlog.Info(ctx, err)
+			return nil, err
 		}
 	}
 
@@ -129,6 +132,11 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	} else {
 		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
 	}
+	tpEnv := make(map[string]string)
+	if env.APIPort != 0 {
+		tpEnv["TELEPRESENCE_API_PORT"] = strconv.Itoa(int(env.APIPort))
+	}
+	patches = addTPEnv(&pod, appContainer, tpEnv, patches)
 	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, setGID, podName, podNamespace, patches)
 	if err != nil {
 		return nil, err
@@ -272,11 +280,53 @@ func addAgentContainer(
 			appContainer,
 			containerPort,
 			int(appPort.ContainerPort),
+			int(env.APIPort),
 			env.ManagerNamespace,
 			setGID,
 		)})
 
 	return patches, nil
+}
+
+// addTPEnv adds telepresence specific environment variables to the app container
+func addTPEnv(pod *corev1.Pod, cn *corev1.Container, env map[string]string, patches []patchOperation) []patchOperation {
+	if len(env) == 0 {
+		return patches
+	}
+	cns := pod.Spec.Containers
+	var containerPath string
+	for i := range cns {
+		if &cns[i] == cn {
+			containerPath = fmt.Sprintf("/spec/containers/%d", i)
+			break
+		}
+	}
+	keys := make([]string, len(env))
+	i := 0
+	for k := range env {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	if cn.Env == nil {
+		patches = append(patches, patchOperation{
+			Op:    "replace",
+			Path:  fmt.Sprintf("%s/%s", containerPath, "env"),
+			Value: []corev1.EnvVar{},
+		})
+	}
+	for _, k := range keys {
+		patches = append(patches, patchOperation{
+			Op:   "add",
+			Path: fmt.Sprintf("%s/%s", containerPath, "env/-"),
+			Value: corev1.EnvVar{
+				Name:      k,
+				Value:     env[k],
+				ValueFrom: nil,
+			},
+		})
+	}
+	return patches
 }
 
 // hidePorts  will replace the symbolic name of a container port with a generated name. It will perform

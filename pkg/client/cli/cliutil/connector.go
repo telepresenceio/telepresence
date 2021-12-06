@@ -81,6 +81,12 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	ctx = context.WithValue(ctx, connectorConnCtxKey{}, conn)
 	ctx = context.WithValue(ctx, connectorStartedCtxKey{}, started)
 	connectorClient := connector.NewConnectorClient(conn)
+	if !started {
+		// Ensure that the already running daemon has the correct version
+		if err := versionCheck(ctx, "User", connectorClient); err != nil {
+			return err
+		}
+	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		ShutdownOnNonError: true,

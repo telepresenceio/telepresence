@@ -3,17 +3,20 @@ package agent
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/blang/semver"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
 type State interface {
 	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
 	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
+	AgentState() restapi.AgentState
 }
 
 // State of the Traffic Agent.
@@ -28,6 +31,11 @@ type state struct {
 	sftpPort    int32
 }
 
+func (s *state) Intercepts(_ context.Context, _ string, _ http.Header) (bool, error) {
+	// The OSS agent is either intercepting or it isn't. There's no way to tell what it is that's being intercepted.
+	return s.forwarder.Intercepting(), nil
+}
+
 func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP string, sftpPort int32) State {
 	host, port := forwarder.Target()
 	return &state{
@@ -39,6 +47,10 @@ func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP stri
 		podIP:       podIP,
 		sftpPort:    sftpPort,
 	}
+}
+
+func (s *state) AgentState() restapi.AgentState {
+	return s
 }
 
 func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {

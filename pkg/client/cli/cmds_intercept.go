@@ -22,6 +22,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -57,6 +58,12 @@ type interceptArgs struct {
 	extRequiresLogin bool                        // pre-extracted from extState
 
 	cmdline []string // Args[1:]
+
+	// ingress cmd inputs
+	ingressHost string
+	ingressPort int32
+	ingressTLS  bool
+	ingressL5   string
 }
 
 // safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
@@ -150,6 +157,15 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
 	flags.StringVarP(&args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+
+	flags.StringVar(&args.ingressHost, "ingress-host", "", "If this flag is set, the ingress dialogue will be skipped,"+
+		" and this value will be used as the ingress hostname.")
+	flags.Int32Var(&args.ingressPort, "ingress-port", 0, "If this flag is set, the ingress dialogue will be skipped,"+
+		" and this value will be used as the ingress port.")
+	flags.BoolVar(&args.ingressTLS, "ingress-tls", false, "If this flag is set, the ingress dialogue will be skipped."+
+		" If the dialogue is skipped, this flag will determine if TLS is used, and will default to false.")
+	flags.StringVar(&args.ingressL5, "ingress-l5", "", "If this flag is set, the ingress dialogue will be skipped,"+
+		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
 
 	var extErr error
 	args.extState, extErr = extensions.LoadExtensions(ctx, flags)
@@ -246,7 +262,7 @@ func loginIfNeeded(ctx context.Context, args interceptArgs) error {
 func intercept(cmd *cobra.Command, args interceptArgs) error {
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
 			if err := loginIfNeeded(ctx, args); err != nil {
 				return err
 			}
@@ -258,7 +274,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 	}
 
 	// start intercept, run command, then stop the intercept
-	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
 		if err := loginIfNeeded(ctx, args); err != nil {
 			return err
 		}
@@ -505,6 +521,37 @@ func (is *interceptState) getMountPoint() (string, bool, error) {
 	return mountPoint, doMount, err
 }
 
+func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ingressL5 string) (*manager.IngressInfo, error) {
+	ingress := &manager.IngressInfo{}
+	if hostRx.MatchString(ingressHost) {
+		if ingressPort > 0 {
+			ingress.Host = ingressHost
+			ingress.Port = ingressPort
+			ingress.UseTls = ingressTLS
+
+			if ingress.L5Host == "" { // if L5Host is not present
+				ingress.L5Host = ingressHost
+				return ingress, nil
+			} else { // if L5Host is present
+				if hostRx.MatchString(ingressL5) {
+					ingress.L5Host = ingressL5
+					return ingress, nil
+				} else {
+					return nil, fmt.Errorf("the address provided by --ingress-l5, %s, must match the regex"+
+						" [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
+						ingressL5)
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("the port number provided by --ingress-port, %v, must be a positive integer",
+				ingressPort)
+		}
+	}
+	return nil, fmt.Errorf("the address provided by --ingress-host, %s, must match the regex"+
+		" [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')",
+		ingressHost)
+}
+
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	// Add whatever metadata we already have to scout
 	is.Scout.SetMetadatum("service_name", is.args.agentName)
@@ -521,6 +568,15 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
 		}
 	}()
+
+	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
+	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil && (is.args.ingressHost != "" || is.args.ingressPort != 0 || is.args.ingressTLS || is.args.ingressL5 != "") {
+		ingress, err := makeIngressInfo(is.args.ingressHost, is.args.ingressPort, is.args.ingressTLS, is.args.ingressL5)
+		if err != nil {
+			return false, err
+		}
+		is.args.previewSpec.Ingress = ingress
+	}
 
 	// Fill defaults
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {

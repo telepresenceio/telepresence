@@ -132,6 +132,33 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
+	rootCmd.InitDefaultHelpCmd()
+	AddCommandGroups(rootCmd, []CommandGroup{
+		{
+			Name:     "Session Commands",
+			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
+		},
+		{
+			Name:     "Traffic Commands",
+			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
+		},
+		{
+			Name:     "Debug Commands",
+			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
+		},
+		{
+			Name:     "Other Commands",
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+		},
+	})
+	initGlobalFlagGroups()
+	for _, group := range globalFlagGroups {
+		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
+	}
+	return rootCmd
+}
+
+func initGlobalFlagGroups() {
 	globalFlagGroups = []FlagGroup{
 		{
 			Name: "Kubernetes flags",
@@ -176,28 +203,4 @@ func Command(ctx context.Context) *cobra.Command {
 			return flags
 		}(),
 	})
-
-	rootCmd.InitDefaultHelpCmd()
-	AddCommandGroups(rootCmd, []CommandGroup{
-		{
-			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		},
-		{
-			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
-		},
-		{
-			Name:     "Debug Commands",
-			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		},
-		{
-			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand()},
-		},
-	})
-	for _, group := range globalFlagGroups {
-		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
-	}
-	return rootCmd
 }

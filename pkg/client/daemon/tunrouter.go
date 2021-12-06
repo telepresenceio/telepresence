@@ -611,9 +611,9 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 		return
 	}
 
-	wf, _, err := t.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
+	wf, _, err := t.handlers.GetOrCreateTCP(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
 		return tcp.NewHandler(t.streamCreator(connID), t.muxTunnel, &t.closing, vifWriter{t.dev}, connID, remove, t.rndSource), nil
-	})
+	}, pkt)
 	if err != nil {
 		dlog.Error(c, err)
 		pkt.Release()

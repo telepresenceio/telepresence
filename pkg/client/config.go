@@ -22,11 +22,12 @@ const configFile = "config.yml"
 
 // Config contains all configuration values for the telepresence CLI
 type Config struct {
-	Timeouts  Timeouts  `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	LogLevels LogLevels `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
-	Images    Images    `json:"images,omitempty" yaml:"images,omitempty"`
-	Cloud     Cloud     `json:"cloud,omitempty" yaml:"cloud,omitempty"`
-	Grpc      Grpc      `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	Timeouts        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
+	LogLevels       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
+	Images          Images          `json:"images,omitempty" yaml:"images,omitempty"`
+	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
+	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
@@ -36,6 +37,7 @@ func (c *Config) Merge(o *Config) {
 	c.Images.merge(&o.Images)
 	c.Cloud.merge(&o.Cloud)
 	c.Grpc.merge(&o.Grpc)
+	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -46,7 +48,7 @@ func stringKey(n *yaml.Node) (string, error) {
 	return s, nil
 }
 
-func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
+func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("config must be an object", node))
 	}
@@ -59,32 +61,22 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 		switch {
 		case kv == "timeouts":
-			err := ms[i+1].Decode(&c.Timeouts)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Timeouts)
 		case kv == "logLevels":
-			err := ms[i+1].Decode(&c.LogLevels)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.LogLevels)
 		case kv == "images":
-			err := ms[i+1].Decode(&c.Images)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Images)
 		case kv == "cloud":
-			err := ms[i+1].Decode(&c.Cloud)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Cloud)
 		case kv == "grpc":
-			err := ms[i+1].Decode(&c.Grpc)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Grpc)
+		case kv == "telepresenceAPI":
+			err = ms[i+1].Decode(&c.TelepresenceAPI)
 		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -582,11 +574,11 @@ func (cloud *Cloud) merge(o *Cloud) {
 type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
-	MaxReceiveSize *resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
+	MaxReceiveSize resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
 }
 
 func (g *Grpc) merge(o *Grpc) {
-	if o.MaxReceiveSize != nil {
+	if !o.MaxReceiveSize.IsZero() {
 		g.MaxReceiveSize = o.MaxReceiveSize
 	}
 }
@@ -611,7 +603,7 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 			if err != nil {
 				dlog.Warningf(parseContext, "unable to parse quantity %q: %v", v.Value, withLoc(err.Error(), ms[i]))
 			} else {
-				g.MaxReceiveSize = &val
+				g.MaxReceiveSize = val
 			}
 		default:
 			if parseContext != nil {
@@ -625,10 +617,20 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
 func (g Grpc) MarshalYAML() (interface{}, error) {
 	cm := make(map[string]interface{})
-	if g.MaxReceiveSize != nil {
+	if !g.MaxReceiveSize.IsZero() {
 		cm["maxReceiveSize"] = g.MaxReceiveSize.String()
 	}
 	return cm, nil
+}
+
+type TelepresenceAPI struct {
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
+}
+
+func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
+	if o.Port != 0 {
+		g.Port = o.Port
+	}
 }
 
 var parseContext context.Context
@@ -690,7 +692,8 @@ func GetDefaultConfig(c context.Context) Config {
 			SystemaHost:     defaultCloudSystemAHost,
 			SystemaPort:     defaultCloudSystemAPort,
 		},
-		Grpc: Grpc{},
+		Grpc:            Grpc{},
+		TelepresenceAPI: TelepresenceAPI{},
 	}
 	env := GetEnv(c)
 	cfg.Images.Registry = env.Registry

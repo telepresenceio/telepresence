@@ -28,7 +28,14 @@ type installer struct {
 	*userd_k8s.Cluster
 }
 
-func newTrafficManagerInstaller(kc *userd_k8s.Cluster) (*installer, error) {
+type Installer interface {
+	userd_k8s.ResourceFinder
+	EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
+	EnsureManager(c context.Context) error
+	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
+}
+
+func NewTrafficManagerInstaller(kc *userd_k8s.Cluster) (Installer, error) {
 	return &installer{Cluster: kc}, nil
 }
 
@@ -38,9 +45,9 @@ func managerImageName(ctx context.Context) string {
 	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry, strings.TrimPrefix(client.Version(), "v"))
 }
 
-// removeManager will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
+// RemoveManagerAndAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.
-func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
+func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
 	// Removes the manager and all agents from the cluster
 	var errs []error
 	var errsLock sync.Mutex
@@ -167,7 +174,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 // the port to-be-intercepted has changed. It raises an error if either of these
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
-func checkSvcSame(c context.Context, obj kates.Object, svcName, portNameOrNumber string) error {
+func checkSvcSame(_ context.Context, obj kates.Object, svcName, portNameOrNumber string) error {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -252,11 +259,12 @@ func (ki *installer) getSvcForInjectedPod(
 	return svc, nil
 }
 
-// This does a lot of things but at a high level it ensures that the traffic agent
+// EnsureAgent does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string) (string, string, error) {
+func (ki *installer) EnsureAgent(c context.Context,
+	namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
 	obj, err := ki.FindWorkload(c, namespace, name)
 	if err != nil {
 		return "", "", err
@@ -302,15 +310,18 @@ already exist for this service`, kind, obj.GetName())
 	}
 
 	update := true
+	updateSvc := false
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
-		dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
+		if portNameOrNumber != "" {
+			dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
+		}
 		matchingSvc, err := install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}
-		obj, svc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.GetManagerNamespace(), obj, matchingSvc)
+		obj, svc, updateSvc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.GetManagerNamespace(), telepresenceAPIPort, obj, matchingSvc)
 		if err != nil {
 			return "", "", err
 		}
@@ -342,7 +353,7 @@ already exist for this service`, kind, obj.GetName())
 		if err := ki.Client().Update(c, obj, obj); err != nil {
 			return "", "", err
 		}
-		if svc != nil {
+		if updateSvc {
 			if err := ki.Client().Update(c, svc, svc); err != nil {
 				return "", "", err
 			}
@@ -459,7 +470,12 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 					},
 				}
 				if err = ki.Client().Delete(c, pod, nil); err != nil {
-					return err
+					if kates.IsNotFound(err) || kates.IsConflict(err) {
+						// If an intercept creates a new pod by installing an agent, and the agent is then uninstalled shortly after, the
+						// old pod may still show up here during removal, and even after it has been removed if the removal completed
+						// after we obtained the pods list. This is OK. This pod will not be in our way.
+						continue
+					}
 				}
 			}
 		}
@@ -576,21 +592,23 @@ func addAgentToWorkload(
 	portNameOrNumber string,
 	agentImageName string,
 	trafficManagerNamespace string,
+	telepresenceAPIPort uint16,
 	object kates.Object, matchingService *kates.Service,
 ) (
 	kates.Object,
 	*kates.Service,
+	bool,
 	error,
 ) {
 	podTemplate, err := install.GetPodTemplateFromObject(object)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	cns := podTemplate.Spec.Containers
 	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, matchingService)
 	if err != nil {
-		return nil, nil, install.ObjErrorf(object, err.Error())
+		return nil, nil, false, install.ObjErrorf(object, err.Error())
 	}
 	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
 		matchingService.Name,
@@ -643,7 +661,7 @@ func addAgentToWorkload(
 		}
 	}
 	if containerPort.Number == 0 {
-		return nil, nil, install.ObjErrorf(object, "unable to add: the container port cannot be determined")
+		return nil, nil, false, install.ObjErrorf(object, "unable to add: the container port cannot be determined")
 	}
 	if containerPort.Name == "" {
 		containerPort.Name = fmt.Sprintf("tx-%d", containerPort.Number)
@@ -657,6 +675,14 @@ func addAgentToWorkload(
 			AppPortProto:  containerPort.Protocol,
 			AppPortNumber: containerPort.Number,
 			ImageName:     agentImageName,
+		}
+	}
+
+	var addTPEnvAction *addTPEnvironmentAction
+	if telepresenceAPIPort != 0 {
+		addTPEnvAction = &addTPEnvironmentAction{
+			ContainerName: container.Name,
+			Env:           map[string]string{"TELEPRESENCE_API_PORT": strconv.Itoa(int(telepresenceAPIPort))},
 		}
 	}
 
@@ -674,8 +700,10 @@ func addAgentToWorkload(
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
 			ContainerPortNumber:     containerPort.Number,
+			APIPortNumber:           telepresenceAPIPort,
 			ImageName:               agentImageName,
 		},
+		AddTPEnvironmentAction: addTPEnvAction,
 	}
 	// Depending on whether the Service refers to the port by name or by number, we either need
 	// to patch the names in the deployment, or the number in the service.
@@ -719,7 +747,7 @@ func addAgentToWorkload(
 
 	// Apply the actions on the workload.
 	if err = workloadMod.Do(object); err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	annotations := object.GetAnnotations()
 	if object.GetAnnotations() == nil {
@@ -727,31 +755,31 @@ func addAgentToWorkload(
 	}
 	annotations[annTelepresenceActions], err = workloadMod.MarshalAnnotation()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	object.SetAnnotations(annotations)
 	explainDo(c, workloadMod, object)
 
 	// Apply the actions on the Service.
+	updateService := false
 	if serviceMod != nil {
 		if err = serviceMod.Do(matchingService); err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		if matchingService.Annotations == nil {
 			matchingService.Annotations = make(map[string]string)
 		}
 		matchingService.Annotations[annTelepresenceActions], err = serviceMod.MarshalAnnotation()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		explainDo(c, serviceMod, matchingService)
-	} else {
-		matchingService = nil
+		updateService = true
 	}
 
-	return object, matchingService, nil
+	return object, matchingService, updateService, nil
 }
 
-func (ki *installer) ensureManager(c context.Context) error {
+func (ki *installer) EnsureManager(c context.Context) error {
 	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.Client(), ki.GetManagerNamespace())
 }

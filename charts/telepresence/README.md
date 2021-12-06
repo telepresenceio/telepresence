@@ -69,8 +69,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | clientRbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `false`                                                                                  |
 | clientRbac.namespaces          | The namespaces to give users access to.                                                                                 | `["ambassador"]`                                                                                           |
 | managerRbac.create              | Create RBAC resources for traffic-manager with this release.                                                           | `true`                                                                                            |
-| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false`
-| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]`
+| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false` |
+| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]` |
+| telepresenceAPI.port     | The port on agent's localhost where the Telepresence API server can be found                              | |
 
 
 ## License Key 
@@ -146,3 +147,17 @@ Error: rendered manifests contain a resource that already exists. Unable to cont
 ```
 
 To fix this error, fix the overlap either by removing `b` from the first install, or from the second.
+
+## Pod CIDRs
+
+The traffic manager is responsible for keeping track of what CIDRs the cluster uses for the pods. The Telepresence client uses this
+information to configure the network so that it provides access to the pods. In some cases, the traffic-manager will not be able to retrieve
+this information, or will do it in a way that is inefficient. To remedy this, the strategy that the traffic manager uses can be configured
+using the `podCIDRStrategy`.
+
+|Value|Meaning|
+|-----|-------|
+|`auto`|First try `nodePodCIDRs` and if that fails, try `coverPodIPs`|
+|`nodePodCIDRs`|Obtain the CIDRs from the`podCIDR` and `podCIDRs` of all `Node` resource specifications.|
+|`coverPodIPs`|Obtain all IPs from the `podIP` and `podIPs` of all `Pod` resource statuses and calculate the CIDRs needed to cover them.|
+|`environment`|Pick the CIDRs from the traffic manager's `POD_CIDRS` environment variable. Use `podCIDRs` to set that variable.|
