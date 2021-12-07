@@ -19,6 +19,51 @@ jobs:
         with:
           name: image
           path: tel2-image.tar
+  "macos_test":
+    runs-on: macos-latest
+    needs: "build_image"
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - uses: azure/setup-kubectl@v1
+        with:
+          version: 'v1.19.3'
+        id: kubectl
+      - name: "Test arm64 build"
+        run: GOARCH=arm64 make build
+      - run: make build
+      - run: |
+          brew update
+          brew install --cask macfuse
+          brew install gromgit/fuse/sshfs-mac
+          brew link --overwrite sshfs-mac
+        name: install dependencies
+      - uses: actions/download-artifact@v2
+        with:
+          name: image
+      - uses: ./.github/actions/prepare-kluster
+        with:
+          platform: macos
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          tel-image: tel2-image.tar
+        id: kluster
+      - run: |
+          # We want to validate that tests still pass, even if the metrics host
+          # points to a broken IP
+          echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make test
+        name: Run tests
+      - uses: ./.github/actions/upload-logs
+        if: always()
+      - uses: ./.github/actions/cleanup-kluster
+        with:
+          platform: macos
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+        if: always()
   "windows_test":
     runs-on: windows-2019
     needs: "build_image"
@@ -57,6 +102,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: image
+      - run: make build
       - uses: ./.github/actions/prepare-kluster
         with:
           platform: windows
@@ -104,6 +150,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: image
+      - run: make build
       - uses: ./.github/actions/prepare-kluster
         with:
           platform: linux

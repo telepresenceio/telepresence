@@ -26,7 +26,7 @@ runs:
         go run ./build-aux/kubeception create "tp-ci-${{ inputs.platform }}-${GITHUB_SHA}" > "$HOME/kubeconfig"
         export KUBECONFIG="$HOME/kubeconfig"
         go run ./build-aux/wait_for_cluster "$KUBECONFIG"
-        if [[ platform == "windows" ]]; then
+        if [[ "${{ inputs.platform }}" == "windows" ]]; then
           # With thanks to stack overflow (https://stackoverflow.com/a/13701495) for showing how to convert a unix path to a windows path
           echo "::set-output name=kubeconfig-path::$(echo $KUBECONFIG | sed -e 's/^\///' -e 's/\//\\/g' -e 's/^./\0:/')"
         else

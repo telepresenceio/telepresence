@@ -4,10 +4,9 @@ runs:
   using: composite
   steps:
     - run: |
-        LOGS=test-logs
-        if [[ $RUNNER_OS == Windows ]]; then
-          mkdir -p "$LOGS"
-        else
+        LOGS="test-logs/${{ runner.os }}"
+        mkdir -p "$LOGS"
+        if [[ $RUNNER_OS != Windows ]]; then
           rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . "$LOGS"
         fi
         for file in \
@@ -22,6 +21,6 @@ runs:
     - name: Upload logs
       uses: actions/upload-artifact@v2
       with:
-        name: test-logs
+        name: test-logs-${{ runner.os }}
         path: |
-          test-logs/*
+          test-logs/${{ runner.os }}/*
