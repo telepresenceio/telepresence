@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -513,59 +512,6 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	}
 
 	return &empty.Empty{}, nil
-}
-
-func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
-	ctx := server.Context()
-	muxTunnel := connpool.NewMuxTunnel(server)
-	sessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
-	if err != nil {
-		return err
-	}
-	_, err = muxTunnel.ReadPeerVersion(ctx)
-	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to read client tunnel version: %v", err)
-	}
-	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
-	}
-	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), muxTunnel)
-}
-
-func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
-	ctx := server.Context()
-	muxTunnel := connpool.NewMuxTunnel(server)
-	agentSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
-	if err != nil {
-		return err
-	}
-	clientSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
-	if err != nil {
-		return err
-	}
-	_, err = muxTunnel.ReadPeerVersion(ctx)
-	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to read agent tunnel version: %v", err)
-	}
-	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
-	}
-	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, muxTunnel)
-}
-
-func readTunnelSessionID(ctx context.Context, server connpool.MuxTunnel) (*rpc.SessionInfo, error) {
-	// Initial message must be the session info that this bidi stream should be attached to
-	msg, err := server.Receive(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, "failed to read session info message: %v", err)
-	}
-	var sessionInfo *rpc.SessionInfo
-	if ctrl, ok := msg.(connpool.Control); ok {
-		if sessionInfo = ctrl.SessionInfo(); sessionInfo != nil {
-			return sessionInfo, nil
-		}
-	}
-	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
 func (m *Manager) Tunnel(server rpc.Manager_TunnelServer) error {
