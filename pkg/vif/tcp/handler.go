@@ -557,11 +557,14 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 			return quitByUs
 		}
 	case sq > lastAck:
+		if payloadLen == 0 {
+			break
+		}
 		if sq <= h.lastKnown {
 			// Previous packet lost by us. Don't ack this one, just treat it
 			// as the next lost packet.
 			if payloadLen > 0 {
-				lk := tcpHdr.Sequence() + uint32(payloadLen)
+				lk := sq + uint32(payloadLen)
 				if lk > h.lastKnown {
 					h.lastKnown = lk
 					h.packetsLost++
@@ -591,7 +594,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	switch {
 	case payloadLen > 0:
-		h.lastKnown = tcpHdr.Sequence() + uint32(payloadLen)
+		h.lastKnown = sq + uint32(payloadLen)
 		release = false
 		if !h.sendToMgr(ctx, pkt) {
 			h.packetsLost++
