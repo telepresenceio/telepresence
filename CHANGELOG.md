@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.4.9 (TBD)
+
+- Bugfix: Fixed an error where access tokens were not refreshed if you login
+  while the daemons are already running.
+
 ### 2.4.8 (December 3, 2021)
 
 - Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
