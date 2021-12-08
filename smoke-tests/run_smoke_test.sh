@@ -286,6 +286,7 @@ cleanup_demo_app() {
 #### The beginning of the script                      ####
 ##########################################################
 DEBUG=${DEBUG:-0}
+CLOSED_PORT=${CLOSED_PORT:-1234}
 start_time=$(date -u +%s)
 
 check_dependencies
@@ -361,8 +362,16 @@ else
     fi
     echo "Using License Agent Image for steps 14 and 15: "
     echo "${TELEPRESENCE_LICENSE_AGENT_IMAGE}"
+    echo
 fi
 
+echo "Ensuring port $CLOSED_PORT is closed"
+output=$(curl localhost:"$CLOSED_PORT" 2>&1 | grep 'Failed to connect to localhost port')
+if [ -z "$output" ]; then
+    echo "A service is listening on $CLOSED_PORT, kill it or set CLOSED_PORT to something else."
+    exit 1
+fi
+echo
 
 helm_overrides=()
 if [[ -n $USE_CHART ]]; then
@@ -496,9 +505,27 @@ if ! curl "${curl_opts[@]}" dataprocessingservice.default:3000 >"$output_locatio
 fi
 finish_step
 
+#############################################################################
+#### Step 6 - Verify can intercept service without local process running ####
+#############################################################################
+
+$TELEPRESENCE intercept dataprocessingservice --port "$CLOSED_PORT" --preview-url=false --mechanism=tcp >"$output_location"
+sleep 1
+
+is_prop_traffic_agent false
+
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
+verify_output_empty "${output}" false
+
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
+verify_output_empty "${output}" true
+
+finish_step
+
 
 ###############################################
-#### Step 6 - Verify login prompted        ####
+#### Step 7 - Verify login prompted        ####
 ###############################################
 
 if [ -f "$config_file" ]; then
@@ -526,7 +553,7 @@ verify_output_empty "${output}" true
 finish_step
 
 ###############################################
-#### Step 7 - Verify login on own works    ####
+#### Step 8 - Verify login on own works    ####
 ###############################################
 
 login
@@ -539,7 +566,7 @@ is_prop_traffic_agent true
 finish_step
 
 #####################################################
-#### Step 8 - Verify selective preview url works ####
+#### Step 9 - Verify selective preview url works ####
 #####################################################
 
 has_intercept_id true
@@ -564,7 +591,7 @@ $TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 ###############################################################
-#### Step 9 - licensed selective intercept w/o preview url ####
+#### Step 10 - licensed selective intercept w/o preview url ####
 ###############################################################
 
 sleep 5 # avoid known agent mechanism-args race
@@ -579,7 +606,7 @@ $TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 ###############################################
-#### Step 10 - licensed intercept all      ####
+#### Step 11 - licensed intercept all      ####
 ###############################################
 
 sleep 5 # avoid known agent mechanism-args race
@@ -601,7 +628,7 @@ $TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
 ##########################################################
-#### Step 11 - licensed intercept all w/o preview url ####
+#### Step 12 - licensed intercept all w/o preview url ####
 ##########################################################
 
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all --preview-url=false)
@@ -614,9 +641,27 @@ verify_output_empty "${output}" false
 $TELEPRESENCE leave dataprocessingservice >"$output_location"
 finish_step
 
+#############################################################################
+#### Step 13 - Verify can intercept service without local process running ####
+#############################################################################
+
+$TELEPRESENCE intercept dataprocessingservice --port "$CLOSED_PORT" --preview-url=false >"$output_location"
+sleep 1
+
+is_prop_traffic_agent true
+
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
+verify_output_empty "${output}" false
+
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
+output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
+verify_output_empty "${output}" true
+
+finish_step
+
 
 ##########################################################
-#### Step 12 - licensed uninstall everything          ####
+#### Step 14 - licensed uninstall everything          ####
 ##########################################################
 
 # First we uninstall the helm chart if it was used
@@ -632,7 +677,7 @@ verify_logout
 finish_step
 
 ##########################################################
-#### Step 13 - Verify version prompts new version     ####
+#### Step 15 - Verify version prompts new version     ####
 ##########################################################
 os=$(uname -s | awk '{print tolower($0)}')
 echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
@@ -647,7 +692,7 @@ finish_step
 
 if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
-    #### Step 14 - Verify License Workflow (helm)         ####
+    #### Step 16 - Verify License Workflow (helm)         ####
     ##########################################################
     yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-tpl.yaml > smoke-tests/license-values.yaml
 
@@ -677,7 +722,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     finish_step
 
     ##########################################################
-    #### Step 15 - Verify Invalid License Behavior (helm) ####
+    #### Step 17 - Verify Invalid License Behavior (helm) ####
     ##########################################################
     $TELEPRESENCE uninstall --everything >"$output_location"
     helm uninstall traffic-manager --namespace ambassador > "$output_location" 2>&1
