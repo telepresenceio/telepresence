@@ -5,6 +5,8 @@
 - Bugfix: Fixed an error where access tokens were not refreshed if you login
   while the daemons are already running.
 
+- Bugfix: A helm upgrade using the --reuse-values flag no longer fails on a "nil pointer" error caused by a nil `telpresenceAPI` value.
+
 ### 2.4.8 (December 3, 2021)
 
 - Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
