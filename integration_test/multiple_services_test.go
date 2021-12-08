@@ -28,7 +28,7 @@ func init() {
 
 func (s *multipleServicesSuite) Test_LargeRequest() {
 	require := s.Require()
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Minute}
 	const sendSize = 1024 * 1024 * 5
 	const concurrentRequests = 3
 
