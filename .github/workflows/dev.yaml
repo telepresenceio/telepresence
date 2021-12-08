@@ -1,5 +1,6 @@
 name: "Dev build"
-on: [push]
+on:
+  - pull_request
 jobs:
   "build_image":
     runs-on: ubuntu-latest
