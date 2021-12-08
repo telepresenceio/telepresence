@@ -615,7 +615,7 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 }
 
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	switch {
 	case strings.HasPrefix(workload, "pod/"):

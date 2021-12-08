@@ -134,7 +134,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 			return false
 		}
 		return s.ServiceName()+" from intercept at /" == string(body)
-	}, 15*time.Second, time.Second)
+	}, 30*time.Second, time.Second)
 
 	// Verify that volume mount is restored
 	time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang

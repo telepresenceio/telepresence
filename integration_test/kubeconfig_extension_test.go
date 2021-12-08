@@ -185,5 +185,5 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 		}
 		retryCount++
 		return false
-	}, 10*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
+	}, 30*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
 }
