@@ -106,7 +106,7 @@ In this case, configuring the pods to be located in `10.1.0.0/19` clears the VPN
 to reach hosts inside the VPC's `10.0.0.0/19`
 
 However, it is not always possible to move the pods to a different subnet.
-In these cases, you should use the [never-proxy](./config#neverproxy) configuration to prevent certain
+In these cases, you should use the [never-proxy](../config#neverproxy) configuration to prevent certain
 hosts from being masked.
 This might be particularly important for DNS resolution. In an AWS ClientVPN VPN it is often
 customary to set the `.2` host as a DNS server (e.g. `10.0.0.2` in this case):
