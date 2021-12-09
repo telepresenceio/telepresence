@@ -24,7 +24,7 @@ If your ingress is set to redirect HTTP requests to HTTPS and your web app uses 
 
 ## Connecting to a cluster via VPN doesn't work.
 
-There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](./vpn) on Telepresence and VPNs to learn more on how to fix these.
+There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](../reference/vpn) on Telepresence and VPNs to learn more on how to fix these.
 
 ## Your GitHub organization isn't listed
 
