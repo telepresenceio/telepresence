@@ -1,10 +1,17 @@
 name: "Dev build"
 on:
-  - pull_request
+  pull_request:
+    types:
+      - labeled
 jobs:
   "build_image":
     runs-on: ubuntu-latest
+    if: ${{ github.event.label.name == 'ok to test' }}
     steps:
+      - name: Remove label
+        uses: andymckay/labeler@master
+        with:
+          remove-labels: "ok to test"
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
