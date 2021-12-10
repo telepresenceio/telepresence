@@ -2,7 +2,7 @@
 
 ### 2.4.10 (TBD)
 
-- Bugfix: Fixed a bug where --json flag would not trigger for "telepresence list" for an empty list.
+- Bugfix: Fixed a bug where the `--json` flag did not output json for `telepresence list` when there were no workloads.
 
 ### 2.4.9 (December 9, 2021)
 
