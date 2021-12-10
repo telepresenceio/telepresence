@@ -4,7 +4,7 @@
 
 - Bugfix: Fixed a bug where --json flag would not trigger for "telepresence list" for an empty list.
 
-### 2.4.9 (TBD)
+### 2.4.9 (December 9, 2021)
 
 - Bugfix: Fixed an error where access tokens were not refreshed if you login
   while the daemons are already running.
