@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.4.10 (TBD)
+
+- Bugfix: Fixed a bug where --json flag would not trigger for "telepresence list" for an empty list.
+
 ### 2.4.9 (TBD)
 
 - Bugfix: Fixed an error where access tokens were not refreshed if you login
