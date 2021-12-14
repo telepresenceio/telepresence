@@ -2,12 +2,9 @@ package daemon
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -50,7 +47,6 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	hClient       *http.Client
 	outbound      *outbound
 	cancel        context.CancelFunc
 	timedLogLevel log.TimedLevel
@@ -182,19 +178,6 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	dlog.Debug(c, "Listener opened")
 
 	d := &service{
-		hClient: &http.Client{
-			Timeout: 15 * time.Second,
-			Transport: &http.Transport{
-				// #nosec G402
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				Proxy:           nil,
-				DialContext: (&net.Dialer{
-					Timeout:   10 * time.Second,
-					KeepAlive: 1 * time.Second,
-				}).DialContext,
-				DisableKeepAlives: true,
-			},
-		},
 		scoutClient:   scout.NewScout(c, "daemon"),
 		scout:         make(chan scout.ScoutReport, 25),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
