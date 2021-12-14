@@ -16,7 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
+func (s *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	// Connect to ResolveD via DBUS.
 	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")
@@ -26,7 +26,7 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	c, cancelResolveD := context.WithCancel(c)
 	defer cancelResolveD()
 
-	listeners, err := o.dnsListeners(c)
+	listeners, err := s.dnsListeners(c)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	if err != nil {
 		return err
 	}
-	o.router.configureDNS(c, dnsResolverAddr)
+	s.configureDNS(c, dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
@@ -48,8 +48,8 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 		case <-c.Done():
 			initDone <- struct{}{}
 			return nil
-		case <-o.router.configured():
-			dnsIP := o.router.dnsIP
+		case <-s.configured():
+			dnsIP := s.dnsIP
 			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
 			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
 				dlog.Error(c, err)
@@ -62,7 +62,7 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 				c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
 				defer cancel()
 				dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
-				o.router.configureDNS(c, nil) // Don't route from TUN-device
+				s.configureDNS(c, nil) // Don't route from TUN-device
 				if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
 					dlog.Error(c, err)
 				}
@@ -72,12 +72,12 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 			// If two interfaces with DefaultRoute: yes present, the one with the
 			// routing key used and SanityCheck fails. Hence, tel2SubDomain
 			// must be used as a routing key.
-			if err = o.updateLinkDomains(c, []string{tel2SubDomain}); err != nil {
+			if err = s.updateLinkDomains(c, []string{tel2SubDomain}); err != nil {
 				dlog.Error(c, err)
 				initDone <- struct{}{}
 				return errResolveDNotConfigured
 			}
-			dnsServer = dns.NewServer(listeners, nil, o.resolveInCluster, &o.dnsCache)
+			dnsServer = dns.NewServer(listeners, nil, s.resolveInCluster, &s.dnsCache)
 			return dnsServer.Run(c, initDone)
 		}
 	})
@@ -96,10 +96,10 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 			if dnsServer.RequestCount() > 0 {
 				// The query went all way through. Start processing search paths systemd-resolved style
 				// and return nil for successful validation.
-				o.processSearchPaths(g, o.updateLinkDomains)
+				s.processSearchPaths(g, s.updateLinkDomains)
 				return nil
 			}
-			o.flushDNS()
+			s.flushDNS()
 			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
 		}
 		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
@@ -108,7 +108,7 @@ func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	return g.Wait()
 }
 
-func (o *session) updateLinkDomains(c context.Context, paths []string) error {
+func (s *session) updateLinkDomains(c context.Context, paths []string) error {
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for i, path := range paths {
@@ -120,17 +120,17 @@ func (o *session) updateLinkDomains(c context.Context, paths []string) error {
 			paths[i] = "~" + path
 		}
 	}
-	for _, sfx := range o.dnsConfig.IncludeSuffixes {
+	for _, sfx := range s.dnsConfig.IncludeSuffixes {
 		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
 	}
-	paths = append(paths, o.router.clusterDomain)
+	paths = append(paths, s.clusterDomain)
 	namespaces[tel2SubDomain] = struct{}{}
 
-	o.domainsLock.Lock()
-	o.namespaces = namespaces
-	o.search = search
-	o.domainsLock.Unlock()
-	dev := o.router.dev
+	s.domainsLock.Lock()
+	s.namespaces = namespaces
+	s.search = search
+	s.domainsLock.Unlock()
+	dev := s.dev
 	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}

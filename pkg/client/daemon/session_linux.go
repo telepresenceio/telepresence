@@ -22,26 +22,26 @@ import (
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (o *session) dnsServerWorker(c context.Context) error {
+func (s *session) dnsServerWorker(c context.Context) error {
 	if runningInDocker() {
 		// Don't bother with systemd-resolved when running in a docker container
-		return o.runOverridingServer(dgroup.WithGoroutineName(c, "/docker"))
+		return s.runOverridingServer(dgroup.WithGoroutineName(c, "/docker"))
 	}
 
-	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), o.router.dev)
+	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), s.dev)
 	if err == errResolveDNotConfigured {
 		err = nil
 		if c.Err() == nil {
 			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
+			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
 		}
 	}
 	return err
 }
 
 // shouldApplySearch returns true if search path should be applied
-func (o *session) shouldApplySearch(query string) bool {
-	if len(o.search) == 0 {
+func (s *session) shouldApplySearch(query string) bool {
+	if len(s.search) == 0 {
 		return false
 	}
 
@@ -50,12 +50,12 @@ func (o *session) shouldApplySearch(query string) bool {
 	}
 
 	// Don't apply search paths to the kubernetes zone
-	if strings.HasSuffix(query, "."+o.router.clusterDomain) {
+	if strings.HasSuffix(query, "."+s.clusterDomain) {
 		return false
 	}
 
 	// Don't apply search paths if one is already there
-	for _, s := range o.search {
+	for _, s := range s.search {
 		if strings.HasSuffix(query, s) {
 			return false
 		}
@@ -65,7 +65,7 @@ func (o *session) shouldApplySearch(query string) bool {
 	query = query[:len(query)-1]
 	if lastDot := strings.LastIndexByte(query, '.'); lastDot >= 0 {
 		tld := query[lastDot+1:]
-		if _, ok := o.namespaces[tld]; ok || tld == "svc" {
+		if _, ok := s.namespaces[tld]; ok || tld == "svc" {
 			return false
 		}
 	}
@@ -78,26 +78,26 @@ func (o *session) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (o *session) resolveInSearch(c context.Context, query string) []net.IP {
+func (s *session) resolveInSearch(c context.Context, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
-	if !o.shouldDoClusterLookup(query) {
+	if !s.shouldDoClusterLookup(query) {
 		return nil
 	}
 
-	if o.shouldApplySearch(query) {
-		for _, s := range o.search {
-			if ips := o.resolveInCluster(c, query+s); len(ips) > 0 {
+	if s.shouldApplySearch(query) {
+		for _, sp := range s.search {
+			if ips := s.resolveInCluster(c, query+sp); len(ips) > 0 {
 				return ips
 			}
 		}
 	}
-	return o.resolveInCluster(c, query)
+	return s.resolveInCluster(c, query)
 }
 
-func (o *session) runOverridingServer(c context.Context) error {
-	if o.dnsConfig.LocalIp == nil {
+func (s *session) runOverridingServer(c context.Context) error {
+	if s.dnsConfig.LocalIp == nil {
 		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -105,17 +105,17 @@ func (o *session) runOverridingServer(c context.Context) error {
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
-				o.dnsConfig.LocalIp = net.ParseIP(fields[1])
-				dlog.Infof(c, "Automatically set -dns=%s", net.IP(o.dnsConfig.LocalIp))
+				s.dnsConfig.LocalIp = net.ParseIP(fields[1])
+				dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.dnsConfig.LocalIp))
 				break
 			}
 		}
 	}
-	if o.dnsConfig.LocalIp == nil {
+	if s.dnsConfig.LocalIp == nil {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
-	listeners, err := o.dnsListeners(c)
+	listeners, err := s.dnsListeners(c)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (o *session) runOverridingServer(c context.Context) error {
 	// Create the connection later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(o.dnsConfig.LocalIp).String(), "53"))
+	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(s.dnsConfig.LocalIp).String(), "53"))
 	if err != nil {
 		return err
 	}
@@ -144,9 +144,9 @@ func (o *session) runOverridingServer(c context.Context) error {
 		select {
 		case <-c.Done():
 			return nil
-		case <-o.router.configured():
+		case <-s.configured():
 			// Server will close the listener, so no need to close it here.
-			o.processSearchPaths(g, func(c context.Context, paths []string) error {
+			s.processSearchPaths(g, func(c context.Context, paths []string) error {
 				namespaces := make(map[string]struct{})
 				search := make([]string, 0)
 				for _, path := range paths {
@@ -156,14 +156,14 @@ func (o *session) runOverridingServer(c context.Context) error {
 						namespaces[path] = struct{}{}
 					}
 				}
-				o.domainsLock.Lock()
-				o.namespaces = namespaces
-				o.search = search
-				o.domainsLock.Unlock()
-				o.flushDNS()
+				s.domainsLock.Lock()
+				s.namespaces = namespaces
+				s.search = search
+				s.domainsLock.Unlock()
+				s.flushDNS()
 				return nil
 			})
-			return dns.NewServer(listeners, conn, o.resolveInSearch, &o.dnsCache).Run(c, serverStarted)
+			return dns.NewServer(listeners, conn, s.resolveInSearch, &s.dnsCache).Run(c, serverStarted)
 		}
 	})
 
@@ -174,16 +174,16 @@ func (o *session) runOverridingServer(c context.Context) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
+			err := routeDNS(c, s.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
 			if err != nil {
 				return err
 			}
 			defer func() {
 				c := context.Background()
 				unrouteDNS(c)
-				o.flushDNS()
+				s.flushDNS()
 			}()
-			o.flushDNS()
+			s.flushDNS()
 			<-serverDone // Stay alive until DNS server is done
 		}
 		return nil
@@ -191,7 +191,7 @@ func (o *session) runOverridingServer(c context.Context) error {
 	return g.Wait()
 }
 
-func (o *session) dnsListeners(c context.Context) ([]net.PacketConn, error) {
+func (s *session) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return nil, err

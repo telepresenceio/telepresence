@@ -47,7 +47,7 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	outbound      *session
+	session       *session
 	cancel        context.CancelFunc
 	timedLogLevel log.TimedLevel
 
@@ -78,7 +78,7 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	r := &rpc.DaemonStatus{
-		OutboundConfig: d.outbound.getInfo(),
+		OutboundConfig: d.session.getInfo(),
 	}
 	return r, nil
 }
@@ -90,17 +90,17 @@ func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.outbound.setSearchPath(ctx, paths.Paths, paths.Namespaces)
+	d.session.setSearchPath(ctx, paths.Paths, paths.Namespaces)
 	return &empty.Empty{}, nil
 }
 
 func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
-	return &empty.Empty{}, d.outbound.setInfo(ctx, info)
+	return &empty.Empty{}, d.session.setInfo(ctx, info)
 }
 
 func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
 	select {
-	case <-d.outbound.router.cfgComplete:
+	case <-d.session.cfgComplete:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -108,7 +108,7 @@ func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.C
 	// we should expect to have everything
 	tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer tCancel()
-	infoStream, err := d.outbound.router.managerClient.WatchClusterInfo(tCtx, d.outbound.router.session)
+	infoStream, err := d.session.managerClient.WatchClusterInfo(tCtx, d.session.session)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		return err
 	}
 
-	d.outbound, err = newSession(c, dns, false, d.scout)
+	d.session, err = newSession(c, dns, d.scout)
 	if err != nil {
 		return err
 	}
@@ -209,8 +209,8 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-d.outbound.router.configured():
-			return d.outbound.dnsServerWorker(ctx)
+		case <-d.session.configured():
+			return d.session.dnsServerWorker(ctx)
 		}
 	})
 
@@ -220,7 +220,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	scoutUsers.Add(1)
 	g.Go("server-router", func(ctx context.Context) error {
 		defer scoutUsers.Done()
-		return d.outbound.router.run(ctx)
+		return d.session.run(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
@@ -293,7 +293,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 // quitAll shuts down the router and calls quitConnector
 func (d *service) quitAll(c context.Context) error {
-	d.outbound.router.stop(c)
+	d.session.stop(c)
 	return d.quitConnector(c)
 }
 
