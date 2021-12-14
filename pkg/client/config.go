@@ -787,11 +787,12 @@ func GetDefaultConfig(c context.Context) Config {
 			DefaultPort: defaultInterceptDefaultPort,
 		},
 	}
-	env := GetEnv(c)
-	cfg.Images.Registry = env.Registry
-	cfg.Images.WebhookRegistry = env.Registry
-	cfg.Images.AgentImage = env.AgentImage
-	cfg.Images.WebhookAgentImage = env.AgentImage
+	if env := GetEnv(c); env != nil {
+		cfg.Images.Registry = env.Registry
+		cfg.Images.WebhookRegistry = env.Registry
+		cfg.Images.AgentImage = env.AgentImage
+		cfg.Images.WebhookAgentImage = env.AgentImage
+	}
 	return cfg
 }
 
