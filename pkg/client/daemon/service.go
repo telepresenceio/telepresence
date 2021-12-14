@@ -47,7 +47,7 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	outbound      *outbound
+	outbound      *session
 	cancel        context.CancelFunc
 	timedLogLevel log.TimedLevel
 
@@ -186,7 +186,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		return err
 	}
 
-	d.outbound, err = newOutbound(c, dns, false, d.scout)
+	d.outbound, err = newSession(c, dns, false, d.scout)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
-	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.outbound are liable to do this, as it's passed into it.
+	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.session are liable to do this, as it's passed into it.
 	scoutUsers.Add(1)
 	g.Go("server-dns", func(ctx context.Context) error {
 		defer scoutUsers.Done()

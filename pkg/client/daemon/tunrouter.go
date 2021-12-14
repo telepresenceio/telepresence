@@ -37,7 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/udp"
 )
 
-// tunRouter is a router for outbound traffic that is centered around a TUN device. It's similar to a
+// tunRouter is a router for session traffic that is centered around a TUN device. It's similar to a
 // TUN-to-SOCKS5 but uses a bidirectional gRPC muxTunnel instead of SOCKS when communicating with the
 // traffic-manager. The addresses of the device are derived from IP addresses sent to it from the user
 // daemon (which in turn receives them from the cluster).

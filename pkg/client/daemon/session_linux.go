@@ -22,7 +22,7 @@ import (
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (o *outbound) dnsServerWorker(c context.Context) error {
+func (o *session) dnsServerWorker(c context.Context) error {
 	if runningInDocker() {
 		// Don't bother with systemd-resolved when running in a docker container
 		return o.runOverridingServer(dgroup.WithGoroutineName(c, "/docker"))
@@ -40,7 +40,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 }
 
 // shouldApplySearch returns true if search path should be applied
-func (o *outbound) shouldApplySearch(query string) bool {
+func (o *session) shouldApplySearch(query string) bool {
 	if len(o.search) == 0 {
 		return false
 	}
@@ -78,7 +78,7 @@ func (o *outbound) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (o *outbound) resolveInSearch(c context.Context, query string) []net.IP {
+func (o *session) resolveInSearch(c context.Context, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -96,7 +96,7 @@ func (o *outbound) resolveInSearch(c context.Context, query string) []net.IP {
 	return o.resolveInCluster(c, query)
 }
 
-func (o *outbound) runOverridingServer(c context.Context) error {
+func (o *session) runOverridingServer(c context.Context) error {
 	if o.dnsConfig.LocalIp == nil {
 		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -191,7 +191,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	return g.Wait()
 }
 
-func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
+func (o *session) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (o *outbound) tryResolveD(c context.Context, dev *vif.Device) error {
+func (o *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	// Connect to ResolveD via DBUS.
 	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")
@@ -108,7 +108,7 @@ func (o *outbound) tryResolveD(c context.Context, dev *vif.Device) error {
 	return g.Wait()
 }
 
-func (o *outbound) updateLinkDomains(c context.Context, paths []string) error {
+func (o *session) updateLinkDomains(c context.Context, paths []string) error {
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for i, path := range paths {

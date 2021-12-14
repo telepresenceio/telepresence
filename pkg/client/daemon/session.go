@@ -19,10 +19,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-// outbound does stuff, idk, I didn't write it.
+// session represents a Telepresence Daemon session.
 //
-// A zero outbound is invalid; you must use newOutbound.
-type outbound struct {
+// A zero session is invalid; you must use newSession.
+type session struct {
 	noSearch bool
 	router   *tunRouter
 
@@ -48,14 +48,14 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
 }
 
-// newOutbound returns a new properly initialized outbound object.
+// newSession returns a new properly initialized session object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan<- scout.ScoutReport) (*outbound, error) {
+func newSession(c context.Context, dnsIPStr string, noSearch bool, scout chan<- scout.ScoutReport) (*session, error) {
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
-	ret := &outbound{
+	ret := &session{
 		dnsConfig: &rpc.DNSConfig{
 			LocalIp: iputil.Parse(dnsIPStr),
 		},
@@ -88,7 +88,7 @@ const tel2SubDomainDot = tel2SubDomain + "."
 
 var localhostIPs = []net.IP{{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
-func (o *outbound) shouldDoClusterLookup(query string) bool {
+func (o *session) shouldDoClusterLookup(query string) bool {
 	if strings.HasSuffix(query, "."+o.router.clusterDomain) && strings.Count(query, ".") < 4 {
 		return false
 	}
@@ -111,7 +111,7 @@ func (o *outbound) shouldDoClusterLookup(query string) bool {
 	return true
 }
 
-func (o *outbound) resolveInCluster(c context.Context, query string) (results []net.IP) {
+func (o *session) resolveInCluster(c context.Context, query string) (results []net.IP) {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -168,7 +168,7 @@ func (o *outbound) resolveInCluster(c context.Context, query string) (results []
 	return ips
 }
 
-func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
+func (o *session) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 	if info.Dns == nil {
 		info.Dns = &rpc.DNSConfig{}
 	}
@@ -192,7 +192,7 @@ func (o *outbound) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
 	return o.router.setOutboundInfo(ctx, info)
 }
 
-func (o *outbound) getInfo() *rpc.OutboundInfo {
+func (o *session) getInfo() *rpc.OutboundInfo {
 	info := rpc.OutboundInfo{
 		Dns: &rpc.DNSConfig{
 			RemoteIp: o.router.dnsIP,
@@ -223,7 +223,7 @@ func (o *outbound) getInfo() *rpc.OutboundInfo {
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
-func (o *outbound) setSearchPath(ctx context.Context, paths, namespaces []string) {
+func (o *session) setSearchPath(ctx context.Context, paths, namespaces []string) {
 	// Provide direct access to intercepted namespaces
 	for _, ns := range namespaces {
 		paths = append(paths, ns+".svc."+o.router.clusterDomain)
@@ -234,7 +234,7 @@ func (o *outbound) setSearchPath(ctx context.Context, paths, namespaces []string
 	}
 }
 
-func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string) error) {
+func (o *session) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string) error) {
 	g.Go("SearchPaths", func(c context.Context) error {
 		var prevPaths []string
 		unchanged := func(paths []string) bool {
@@ -271,7 +271,7 @@ func (o *outbound) processSearchPaths(g *dgroup.Group, processor func(context.Co
 	})
 }
 
-func (o *outbound) flushDNS() {
+func (o *session) flushDNS() {
 	o.dnsCache.Range(func(key, _ interface{}) bool {
 		o.dnsCache.Delete(key)
 		return true

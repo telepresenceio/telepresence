@@ -10,7 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
 
-func (o *outbound) dnsServerWorker(c context.Context) error {
+func (o *session) dnsServerWorker(c context.Context) error {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	return g.Wait()
 }
 
-func (o *outbound) updateRouterDNS(c context.Context, paths []string) error {
+func (o *session) updateRouterDNS(c context.Context, paths []string) error {
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for _, path := range paths {
