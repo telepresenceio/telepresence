@@ -1,38 +1,9 @@
-name: "Integration Tests"
+name: "Unit tests"
 on:
-  pull_request_target:
-    types:
-      - labeled
+  pull_request:
 jobs:
-  "build_image":
-    runs-on: ubuntu-latest
-    if: ${{ github.event.label.name == 'ok to test' }}
-    steps:
-      - name: Remove label
-        uses: andymckay/labeler@master
-        with:
-          remove-labels: "ok to test"
-        if: always()
-      - uses: actions/checkout@v2
-        with:
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
-        with:
-          go-version: '^1.17.x'
-      - name: Build dev image
-        run: |
-          TAG="2.4.5-gotest.${GITHUB_SHA:0:7}"
-          TELEPRESENCE_VERSION="v${TAG}" make image
-          mkdir -p /tmp/workspace
-          docker save "datawire/tel2:${TAG}" > tel2-image.tar
-      - name: Upload image
-        uses: actions/upload-artifact@v2
-        with:
-          name: image
-          path: tel2-image.tar
   "macos_test":
     runs-on: macos-latest
-    needs: "build_image"
     steps:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
@@ -60,11 +31,11 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
-      - uses: azure/setup-kubectl@v1
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          version: 'v1.19.3'
-        id: kubectl
+            #- uses: azure/setup-kubectl@v1
+            #if: steps.run_result.outputs.run_result != 'success'
+            #with:
+            #version: 'v1.19.3'
+            #id: kubectl
       - name: "Test arm64 build"
         if: steps.run_result.outputs.run_result != 'success'
         run: GOARCH=arm64 make build
@@ -77,37 +48,18 @@ jobs:
           brew link --overwrite sshfs-mac
         name: install dependencies
         if: steps.run_result.outputs.run_result != 'success'
-      - uses: actions/download-artifact@v2
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          name: image
-      - uses: ./.github/actions/prepare-kluster
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          platform: macos
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          tel-image: tel2-image.tar
-        id: kluster
       - run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make check-integration
+          make check-unit
         name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
-      - uses: ./.github/actions/upload-logs
-        if: always()
-      - uses: ./.github/actions/cleanup-kluster
-        with:
-          platform: macos
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-        if: always()
 
   "windows_test":
     runs-on: windows-2019
-    needs: "build_image"
     steps:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
@@ -136,11 +88,6 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
-      - uses: azure/setup-kubectl@v1
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          version: 'v1.19.3'
-        id: kubectl
       - run: |
           choco install make
           mkdir -p build-output/bin
@@ -165,19 +112,8 @@ jobs:
           Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
           Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
           [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
-      - uses: actions/download-artifact@v2
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          name: image
       - run: make build
         if: steps.run_result.outputs.run_result != 'success'
-      - uses: ./.github/actions/prepare-kluster
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          platform: windows
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          tel-image: tel2-image.tar
-        id: kluster
       - run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
@@ -188,21 +124,13 @@ jobs:
           $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
           $ENV:DTEST_REGISTRY = "docker.io/datawire"
           $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
-          make check-integration
+          make check-unit
         if: steps.run_result.outputs.run_result != 'success'
         name: Run tests
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
-      - uses: ./.github/actions/upload-logs
-        if: always()
-      - uses: ./.github/actions/cleanup-kluster
-        with:
-          platform: windows
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-        if: always()
   "linux_test":
     runs-on: ubuntu-latest
-    needs: "build_image"
     steps:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
@@ -230,11 +158,6 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
-      - uses: azure/setup-kubectl@v1
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          version: 'v1.19.3'
-        id: kubectl
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
@@ -242,32 +165,14 @@ jobs:
           sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
         if: steps.run_result.outputs.run_result != 'success'
         name: install dependencies
-      - uses: actions/download-artifact@v2
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          name: image
       - run: make build
         if: steps.run_result.outputs.run_result != 'success'
-      - uses: ./.github/actions/prepare-kluster
-        if: steps.run_result.outputs.run_result != 'success'
-        with:
-          platform: linux
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          tel-image: tel2-image.tar
-        id: kluster
       - run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make check-integration
+          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make check-unit
         if: steps.run_result.outputs.run_result != 'success'
         name: Run tests
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
-      - uses: ./.github/actions/upload-logs
-        if: always()
-      - uses: ./.github/actions/cleanup-kluster
-        with:
-          platform: linux
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-        if: always()
