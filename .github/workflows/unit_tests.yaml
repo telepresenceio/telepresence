@@ -1,8 +1,8 @@
-name: "Unit tests"
+name: "Build and Unit test"
 on:
   pull_request:
 jobs:
-  "macos_test":
+  "macos":
     runs-on: macos-latest
     steps:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
@@ -39,15 +39,9 @@ jobs:
       - name: "Test arm64 build"
         if: steps.run_result.outputs.run_result != 'success'
         run: GOARCH=arm64 make build
-      - run: make build
+      - name: "Test amd64 build"
         if: steps.run_result.outputs.run_result != 'success'
-      - run: |
-          brew update
-          brew install --cask macfuse
-          brew install gromgit/fuse/sshfs-mac
-          brew link --overwrite sshfs-mac
-        name: install dependencies
-        if: steps.run_result.outputs.run_result != 'success'
+        run: make build
       - run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
@@ -58,7 +52,7 @@ jobs:
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
 
-  "windows_test":
+  "windows":
     runs-on: windows-2019
     steps:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
@@ -90,28 +84,8 @@ jobs:
           go-version: '^1.17.x'
       - run: |
           choco install make
-          mkdir -p build-output/bin
-          curl.exe -LO https://www.wintun.net/builds/wintun-0.12.zip
-          Expand-Archive -Path wintun-0.12.zip -DestinationPath .
-          #cp wintun/bin/amd64/wintun.dll "$ENV:SystemRoot\\system32\\wintun.dll"
-          #cp wintun/bin/amd64/wintun.dll .
-          cp wintun/bin/amd64/wintun.dll "build-output\\bin"
         if: steps.run_result.outputs.run_result != 'success'
         name: install dependencies
-      - name: "Download sshfs"
-        if: steps.run_result.outputs.run_result != 'success'
-        run: |
-          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
-          curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
-        shell: bash
-      - name: "Install sshfs"
-        if: steps.run_result.outputs.run_result != 'success'
-        shell: powershell
-        run: |
-          dir
-          Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
-          Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
-          [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
       - run: make build
         if: steps.run_result.outputs.run_result != 'success'
       - run: |
@@ -129,7 +103,7 @@ jobs:
         name: Run tests
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
-  "linux_test":
+  "linux":
     runs-on: ubuntu-latest
     steps:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
@@ -161,10 +135,7 @@ jobs:
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y sshfs socat
-          sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
-        if: steps.run_result.outputs.run_result != 'success'
-        name: install dependencies
+          sudo apt-get install -y socat
       - run: make build
         if: steps.run_result.outputs.run_result != 'success'
       - run: |
