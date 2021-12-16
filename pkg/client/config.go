@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -739,15 +741,21 @@ type configKey struct{}
 
 // WithConfig returns a context with the given Config
 func WithConfig(ctx context.Context, config *Config) context.Context {
-	return context.WithValue(ctx, configKey{}, config)
+	return context.WithValue(ctx, configKey{}, (*unsafe.Pointer)(unsafe.Pointer(&config)))
 }
 
 func GetConfig(ctx context.Context) *Config {
-	config, ok := ctx.Value(configKey{}).(*Config)
-	if !ok {
-		return nil
+	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
+		return (*Config)(atomic.LoadPointer(configPtr))
 	}
-	return config
+	return nil
+}
+
+// ReplaceConfig replaces the config last stored using WithConfig with the given Config
+func ReplaceConfig(ctx context.Context, config *Config) {
+	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
+		atomic.StorePointer(configPtr, unsafe.Pointer(config))
+	}
 }
 
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir

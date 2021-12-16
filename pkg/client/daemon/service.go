@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -183,6 +185,17 @@ func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	return &empty.Empty{}, logging.SetAndStoreTimedLevel(ctx, d.timedLogLevel, request.LogLevel, duration, ProcessName)
 }
 
+func reloadConfig(c context.Context) error {
+	newCfg, err := client.LoadConfig(c)
+	if err != nil {
+		return err
+	}
+	client.ReplaceConfig(c, newCfg)
+	log.SetLevel(c, newCfg.LogLevels.RootDaemon.String())
+	dlog.Info(c, "Configuration reloaded")
+	return nil
+}
+
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, configDir string) error {
 	if !proc.IsAdmin() {
@@ -238,6 +251,49 @@ func run(c context.Context, loggingDir, configDir string) error {
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
+	})
+
+	// Add a reload function that triggers on create and write of the config.yml file.
+	g.Go("config-reload", func(c context.Context) error {
+		configFile := client.GetConfigFile(c)
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			return err
+		}
+		defer watcher.Close()
+
+		// The directory containing the config file must be watched because editing
+		// the file will typically end with renaming the original and then creating
+		// a new file. A watcher that follows the inode will not see when the new
+		// file is created.
+		if err = watcher.Add(filepath.Dir(configFile)); err != nil {
+			return err
+		}
+
+		// The delay timer will initially sleep forever. It's reset to a very short
+		// delay when the file is modified.
+		delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+			if err := reloadConfig(c); err != nil {
+				dlog.Error(c, err)
+			}
+		})
+		defer delay.Stop()
+
+		for {
+			select {
+			case <-c.Done():
+				return nil
+			case err = <-watcher.Errors:
+				dlog.Error(c, err)
+			case event := <-watcher.Events:
+				if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
+					// The config file was created or modified. Let's defer the load just a little bit
+					// in case there are more modifications (a write out with vi will typically cause
+					// one CREATE event and at least one WRITE event).
+					delay.Reset(5 * time.Millisecond)
+				}
+			}
+		}
 	})
 
 	g.Go("session", func(c context.Context) (err error) {
