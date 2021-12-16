@@ -1,4 +1,4 @@
-package daemon
+package dns
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/datawire/dlib/dgroup"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (s *session) dnsServerWorker(c context.Context) error {
+func (s *Server) Worker(c context.Context, dev *vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return err
@@ -19,24 +19,19 @@ func (s *session) dnsServerWorker(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.configureDNS(c, dnsAddr)
+	configureDNS(s.config.RemoteIp, dnsAddr)
 
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		// No need to close listener. It's closed by the dns server.
-		select {
-		case <-c.Done():
-			return nil
-		case <-s.configured():
-			s.processSearchPaths(g, s.updateRouterDNS)
-			return dns.NewServer([]net.PacketConn{listener}, nil, s.resolveInCluster, &s.dnsCache).Run(c, make(chan struct{}))
-		}
+		s.processSearchPaths(g, s.updateRouterDNS, dev)
+		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
 	return g.Wait()
 }
 
-func (s *session) updateRouterDNS(c context.Context, paths []string) error {
+func (s *Server) updateRouterDNS(c context.Context, paths []string, dev *vif.Device) error {
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for _, path := range paths {
@@ -51,7 +46,7 @@ func (s *session) updateRouterDNS(c context.Context, paths []string) error {
 	s.namespaces = namespaces
 	s.search = search
 	s.domainsLock.Unlock()
-	err := s.dev.SetDNS(c, s.dnsIP, search)
+	err := dev.SetDNS(c, s.config.RemoteIp, search)
 	s.flushDNS()
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)

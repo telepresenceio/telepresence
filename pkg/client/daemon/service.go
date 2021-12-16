@@ -12,6 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -19,7 +21,6 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -49,6 +50,9 @@ type service struct {
 	rpc.UnsafeDaemonServer
 	session       *session
 	cancel        context.CancelFunc
+	sessionsCtx   context.Context
+	sessionLock   sync.Mutex
+	session       *session
 	timedLogLevel log.TimedLevel
 
 	scoutClient *scout.Scout           // don't use this directly; use the 'scout' chan instead
@@ -77,38 +81,73 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 }
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
-	r := &rpc.DaemonStatus{
-		OutboundConfig: d.session.getInfo(),
+	d.sessionLock.Lock()
+	defer d.sessionLock.Unlock()
+	r := &rpc.DaemonStatus{}
+	if d.session != nil {
+		r.OutboundConfig = d.session.getInfo()
 	}
 	return r, nil
 }
 
 func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
-	d.cancel()
+	d.disconnect(ctx)
 	return &empty.Empty{}, nil
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.session.setSearchPath(ctx, paths.Paths, paths.Namespaces)
+	session, err := d.currentSession()
+	if err != nil {
+		return nil, err
+	}
+	session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
 	return &empty.Empty{}, nil
 }
 
 func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
-	return &empty.Empty{}, d.session.setInfo(ctx, info)
+	d.sessionLock.Lock()
+	defer d.sessionLock.Unlock()
+	if d.session != nil {
+		return nil, status.Error(codes.AlreadyExists, "an active session exists")
+	}
+	s, err := newSession(d.sessionsCtx, d.scout, info)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	d.session = s
+	return &empty.Empty{}, nil
+}
+
+func (d *service) disconnect(ctx context.Context) {
+	d.sessionLock.Lock()
+	defer d.sessionLock.Unlock()
+	if d.session != nil {
+		d.session.stop(ctx)
+		d.session = nil
+	}
+}
+
+func (d *service) currentSession() (*session, error) {
+	d.sessionLock.Lock()
+	defer d.sessionLock.Unlock()
+	if d.session == nil {
+		return nil, status.Error(codes.Unavailable, "no active session")
+	}
+	return d.session, nil
 }
 
 func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
-	select {
-	case <-d.session.cfgComplete:
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	session, err := d.currentSession()
+	if err != nil {
+		return nil, err
 	}
+
 	// The manager can sometimes send the different subnets in different Sends, but after 5 seconds of listening to it
 	// we should expect to have everything
 	tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer tCancel()
-	infoStream, err := d.session.managerClient.WatchClusterInfo(tCtx, d.session.session)
+	infoStream, err := session.managerClient.WatchClusterInfo(tCtx, session.session)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +178,7 @@ func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 }
 
 // run is the main function when executing as the daemon
-func run(c context.Context, loggingDir, configDir, dns string) error {
+func run(c context.Context, loggingDir, configDir, _ string) error {
 	if !proc.IsAdmin() {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
@@ -182,12 +221,9 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		scout:         make(chan scout.ScoutReport, 25),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 	}
-	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
-		return err
-	}
+	defer close(d.scout)
 
-	d.session, err = newSession(c, dns, d.scout)
-	if err != nil {
+	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err
 	}
 
@@ -197,38 +233,15 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		ShutdownOnNonError:   true,
 	})
 
-	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a shutdown when it returns.
-	d.cancel = func() { g.Go(ProcessName+"-quit", d.quitAll) }
-
-	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
-	// listens varies by platform.
-	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.session are liable to do this, as it's passed into it.
-	scoutUsers.Add(1)
-	g.Go("server-dns", func(ctx context.Context) error {
-		defer scoutUsers.Done()
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-d.session.configured():
-			return d.session.dnsServerWorker(ctx)
-		}
+	g.Go("session", func(c context.Context) (err error) {
+		c, d.cancel = context.WithCancel(c)
+		d.sessionsCtx = c
+		<-c.Done()
+		return nil
 	})
 
-	// The 'Update' gRPC (below) call puts updates in to a work queue;
-	// server-router is the worker process starts the router and continuously configures
-	// it based on what is read from that work queue.
-	scoutUsers.Add(1)
-	g.Go("server-router", func(ctx context.Context) error {
-		defer scoutUsers.Done()
-		return d.session.run(ctx)
-	})
-
-	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
-	// from the connector and from the CLI.
-	scoutUsers.Add(1)
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		defer func() {
-			scoutUsers.Done()
 			// Error recovery.
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
@@ -243,7 +256,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 			}
 		}()
 
-		opts := []grpc.ServerOption{}
+		var opts []grpc.ServerOption
 		cfg := client.GetConfig(c)
 		if !cfg.Grpc.MaxReceiveSize.IsZero() {
 			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
@@ -260,68 +273,31 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		return sc.Serve(c, grpcListener)
 	})
 
-	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
+	// metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.
-	g.Go("background-metriton", func(c context.Context) error {
-		for report := range d.scout {
-			for k, v := range report.PersistentMetadata {
-				d.scoutClient.SetMetadatum(k, v)
+	g.Go("metriton", func(c context.Context) error {
+		for {
+			select {
+			case <-c.Done():
+				return nil
+			case report := <-d.scout:
+				for k, v := range report.PersistentMetadata {
+					d.scoutClient.SetMetadatum(k, v)
+				}
+				var metadata []scout.ScoutMeta
+				for k, v := range report.Metadata {
+					metadata = append(metadata, scout.ScoutMeta{
+						Key:   k,
+						Value: v,
+					})
+				}
+				d.scoutClient.Report(c, report.Action, metadata...)
 			}
-
-			var metadata []scout.ScoutMeta
-			for k, v := range report.Metadata {
-				metadata = append(metadata, scout.ScoutMeta{
-					Key:   k,
-					Value: v,
-				})
-			}
-			d.scoutClient.Report(c, report.Action, metadata...)
 		}
-		return nil
 	})
-	go func() {
-		scoutUsers.Wait()
-		close(d.scout)
-	}()
-
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)
 	}
 	return err
-}
-
-// quitAll shuts down the router and calls quitConnector
-func (d *service) quitAll(c context.Context) error {
-	d.session.stop(c)
-	return d.quitConnector(c)
-}
-
-// quitConnector ensures that the connector quits gracefully.
-func (d *service) quitConnector(c context.Context) error {
-	exists, err := client.SocketExists(client.ConnectorSocketName)
-	if err != nil {
-		// connector socket problem, so nothing to shut down
-		dlog.Errorf(c, "Daemon cannot quit connector: %v", err)
-		return nil
-	}
-	if !exists {
-		// no connector socket, so nothing to shut down
-		return nil
-	}
-
-	// Send a "quit" message from here.
-	dlog.Info(c, "Shutting down connector")
-	c, cancel := context.WithTimeout(c, 500*time.Millisecond)
-	defer cancel()
-	conn, err := client.DialSocket(c, client.ConnectorSocketName)
-	if err != nil {
-		return nil
-	}
-	defer conn.Close()
-	dlog.Debug(c, "Sending quit message to connector")
-	_, _ = connector.NewConnectorClient(conn).Quit(c, &empty.Empty{})
-	dlog.Debug(c, "Connector shutdown complete")
-	time.Sleep(200 * time.Millisecond) // Give some time to receive final log messages from connector
-	return nil
 }

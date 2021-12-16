@@ -1,4 +1,4 @@
-package daemon
+package dns
 
 import (
 	"context"
@@ -17,30 +17,30 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (s *session) dnsServerWorker(c context.Context) error {
+func (s *Server) Worker(c context.Context, dev *vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	if runningInDocker() {
 		// Don't bother with systemd-resolved when running in a docker container
-		return s.runOverridingServer(dgroup.WithGoroutineName(c, "/docker"))
+		return s.runOverridingServer(dgroup.WithGoroutineName(c, "/docker"), dev)
 	}
 
-	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), s.dev)
+	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
 	if err == errResolveDNotConfigured {
 		err = nil
 		if c.Err() == nil {
 			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
+			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev)
 		}
 	}
 	return err
 }
 
 // shouldApplySearch returns true if search path should be applied
-func (s *session) shouldApplySearch(query string) bool {
+func (s *Server) shouldApplySearch(query string) bool {
 	if len(s.search) == 0 {
 		return false
 	}
@@ -78,7 +78,7 @@ func (s *session) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (s *session) resolveInSearch(c context.Context, query string) []net.IP {
+func (s *Server) resolveInSearch(c context.Context, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -96,8 +96,8 @@ func (s *session) resolveInSearch(c context.Context, query string) []net.IP {
 	return s.resolveInCluster(c, query)
 }
 
-func (s *session) runOverridingServer(c context.Context) error {
-	if s.dnsConfig.LocalIp == nil {
+func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
+	if s.config.LocalIp == nil {
 		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -105,13 +105,13 @@ func (s *session) runOverridingServer(c context.Context) error {
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
-				s.dnsConfig.LocalIp = net.ParseIP(fields[1])
-				dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.dnsConfig.LocalIp))
+				s.config.LocalIp = net.ParseIP(fields[1])
+				dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.config.LocalIp))
 				break
 			}
 		}
 	}
-	if s.dnsConfig.LocalIp == nil {
+	if s.config.LocalIp == nil {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -128,7 +128,7 @@ func (s *session) runOverridingServer(c context.Context) error {
 	// Create the connection later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(s.dnsConfig.LocalIp).String(), "53"))
+	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(s.config.LocalIp).String(), "53"))
 	if err != nil {
 		return err
 	}
@@ -141,30 +141,25 @@ func (s *session) runOverridingServer(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
-		select {
-		case <-c.Done():
-			return nil
-		case <-s.configured():
-			// Server will close the listener, so no need to close it here.
-			s.processSearchPaths(g, func(c context.Context, paths []string) error {
-				namespaces := make(map[string]struct{})
-				search := make([]string, 0)
-				for _, path := range paths {
-					if strings.ContainsRune(path, '.') {
-						search = append(search, path)
-					} else if path != "" {
-						namespaces[path] = struct{}{}
-					}
+		// Server will close the listener, so no need to close it here.
+		s.processSearchPaths(g, func(c context.Context, paths []string, _ *vif.Device) error {
+			namespaces := make(map[string]struct{})
+			search := make([]string, 0)
+			for _, path := range paths {
+				if strings.ContainsRune(path, '.') {
+					search = append(search, path)
+				} else if path != "" {
+					namespaces[path] = struct{}{}
 				}
-				s.domainsLock.Lock()
-				s.namespaces = namespaces
-				s.search = search
-				s.domainsLock.Unlock()
-				s.flushDNS()
-				return nil
-			})
-			return dns.NewServer(listeners, conn, s.resolveInSearch, &s.dnsCache).Run(c, serverStarted)
-		}
+			}
+			s.domainsLock.Lock()
+			s.namespaces = namespaces
+			s.search = search
+			s.domainsLock.Unlock()
+			s.flushDNS()
+			return nil
+		}, dev)
+		return s.Run(c, serverStarted, listeners, conn, s.resolveInSearch)
 	})
 
 	g.Go("NAT-redirect", func(c context.Context) error {
@@ -174,7 +169,7 @@ func (s *session) runOverridingServer(c context.Context) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
+			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
 			if err != nil {
 				return err
 			}
@@ -191,7 +186,7 @@ func (s *session) runOverridingServer(c context.Context) error {
 	return g.Wait()
 }
 
-func (s *session) dnsListeners(c context.Context) ([]net.PacketConn, error) {
+func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return nil, err

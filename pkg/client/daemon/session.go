@@ -9,40 +9,34 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/blang/semver"
-	"golang.org/x/net/ipv4"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/icmp"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/tcp"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/udp"
 )
 
-// session resolves DNS names and routes outbound traffic that is centered around a TUN device. It's similar to a
-// TUN-to-SOCKS5 but uses a bidirectional gRPC muxTunnel instead of SOCKS when communicating with the
+// session resolves DNS names and routes outbound traffic that is centered around a TUN device. The router is
+// similar to a TUN-to-SOCKS5 but uses a bidirectional gRPC muxTunnel instead of SOCKS when communicating with the
 // traffic-manager. The addresses of the device are derived from IP addresses sent to it from the user
 // daemon (which in turn receives them from the cluster).
 //
@@ -70,24 +64,15 @@ import (
 //
 // A zero session is invalid; you must use newSession.
 type session struct {
-	// Namespaces, accessible using <service-name>.<namespace-name>
-	namespaces map[string]struct{}
-	domains    map[string]struct{}
-	search     []string
-
-	// The domainsLock locks usage of namespaces, domains, and search
-	domainsLock sync.RWMutex
-
-	searchPathCh chan []string
-
-	// Local DNS cache.
-	dnsCache sync.Map
-
-	dnsConfig *rpc.DNSConfig
+	cancel context.CancelFunc
 
 	scout chan<- scout.ScoutReport
+
 	// dev is the TUN device that gets configured with the subnets found in the cluster
 	dev *vif.Device
+
+	// clientConn is the connection that uses the connector's socket
+	clientConn *grpc.ClientConn
 
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
@@ -99,18 +84,17 @@ type session struct {
 	// fragmentMap is when concatenating ipv4 fragments
 	fragmentMap map[uint16][]*buffer.Data
 
-	// dnsIP is the IP of the DNS server attached to the TUN device. This is currently only
+	// The local dns server
+	dnsServer *dns.Server
+
+	// remoteDnsIP is the IP of the DNS server attached to the TUN device. This is currently only
 	// used in conjunction with systemd-resolved. The current macOS and the overriding solution
 	// will dispatch directly to the local DNS service without going through the TUN device but
 	// that may change later if we decide to dispatch to the DNS-server in the cluster.
-	dnsIP   net.IP
-	dnsPort uint16
+	remoteDnsIP net.IP
 
-	// dnsLocalAddr is the address of the local DNS server
+	// dnsLocalAddr is address of the local DNS service.
 	dnsLocalAddr *net.UDPAddr
-
-	// clusterDomain reported by the traffic-manager
-	clusterDomain string
 
 	// Cluster subnets reported by the traffic-manager
 	clusterSubnets []*net.IPNet
@@ -134,184 +118,161 @@ type session struct {
 	// session contains the manager session
 	session *manager.SessionInfo
 
-	// cfgComplete will be closed as soon as the connector has sent over the correct port to
-	// the traffic manager and the managerClient has been connected.
-	cfgComplete chan struct{}
-
-	// tmVerOk will be closed as soon as the correct tunnel version has been negotiated with
-	// the traffic manager
-	tmVerOk chan struct{}
-
 	// rndSource is the source for the random number generator in the TCP handlers
 	rndSource rand.Source
 }
 
-func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
-	lc := &net.ListenConfig{}
-	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
+// connectToManager connects to the traffic-manager and asserts that its version is compatible
+func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClient, error) {
+	// First check. Establish connection
+	clientConfig := client.GetConfig(c)
+	tos := &clientConfig.Timeouts
+	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
+	defer cancel()
+
+	var conn *grpc.ClientConn
+	conn, err := client.DialSocket(tc, client.ConnectorSocketName)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// The connector called us, and then it died which means we will die too. This is
+			// a race, but it's not an error.
+			return nil, nil, nil
+		}
+		return nil, nil, client.CheckTimeout(tc, err)
+	}
+
+	mc := manager.NewManagerClient(conn)
+	ver, err := mc.Version(c, &empty.Empty{})
+	if err != nil {
+		conn.Close()
+		return nil, nil, fmt.Errorf("failed to retrieve manager version: %w", err)
+	}
+
+	verStr := strings.TrimPrefix(ver.Version, "v")
+	dlog.Infof(c, "Connected to Manager %s", verStr)
+	mgrVer, err := semver.Parse(verStr)
+	if err != nil {
+		conn.Close()
+		return nil, nil, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+	}
+
+	if mgrVer.LE(semver.MustParse("2.4.4")) {
+		conn.Close()
+		return nil, nil, errcat.User.Newf("unsupported traffic-manager version %s. Minimum supported version is 2.4.5", mgrVer)
+	}
+	return conn, mc, nil
 }
 
 // newSession returns a new properly initialized session object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-func newSession(c context.Context, dnsIPStr string, scout chan<- scout.ScoutReport) (*session, error) {
+func newSession(c context.Context, scout chan<- scout.ScoutReport, mi *daemon.OutboundInfo) (*session, error) {
+	c, cancel := context.WithCancel(c)
+	conn, mc, err := connectToManager(c)
+	if mc == nil || err != nil {
+		cancel()
+		return nil, err
+	}
+
+	dev, err := vif.OpenTun(c)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
-	td, err := vif.OpenTun(c)
+	s := &session{
+		cancel:        cancel,
+		scout:         scout,
+		dev:           dev,
+		handlers:      tunnel.NewPool(),
+		fragmentMap:   make(map[uint16][]*buffer.Data),
+		rndSource:     rand.NewSource(time.Now().UnixNano()),
+		session:       mi.Session,
+		managerClient: mc,
+		clientConn:    conn,
+	}
+
+	if len(mi.AlsoProxySubnets) > 0 {
+		s.alsoProxySubnets = make([]*net.IPNet, len(mi.AlsoProxySubnets))
+		for i, ap := range mi.AlsoProxySubnets {
+			apSn := iputil.IPNetFromRPC(ap)
+			dlog.Infof(c, "Adding also-proxy subnet %s", apSn)
+			s.alsoProxySubnets[i] = apSn
+		}
+	}
+	if len(mi.NeverProxySubnets) > 0 {
+		s.neverProxySubnets = []routing.Route{}
+		for _, np := range mi.NeverProxySubnets {
+			npSn := iputil.IPNetFromRPC(np)
+			dlog.Infof(c, "Adding never-proxy subnet %s", npSn)
+			route, err := routing.GetRoute(c, npSn)
+			if err != nil {
+				dlog.Errorf(c, "unable to get route for never-proxied subnet %s. "+
+					"If this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services. "+
+					"Error: %v",
+					iputil.IPNetFromRPC(np), err)
+				continue
+			}
+			s.neverProxySubnets = append(s.neverProxySubnets, route)
+		}
+	}
+	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	cfgComplete := make(chan struct{})
+	g.Go("watch-cluster-info", func(ctx context.Context) error {
+		s.watchClusterInfo(ctx, cfgComplete)
+		return nil
+	})
+
+	select {
+	case <-c.Done():
+		return nil, nil
+	case <-cfgComplete:
+		g.Go("dns", func(ctx context.Context) error {
+			return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
+		})
+		g.Go("router", s.routerWorker)
+	}
+	return s, nil
+}
+
+// clusterLookup sends a LookupHost request to the traffic-manager and returns the result
+func (s *session) clusterLookup(ctx context.Context, key string) ([][]byte, error) {
+	dlog.Debugf(ctx, "LookupHost %q", key)
+	r, err := s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{
+		Session: s.session,
+		Host:    key,
+	})
+
+	// TODO: This will send a lot of scout reports per user and will not scale very well. Consider
+	//  using counters instead and send reports when the connection ends. /thomas
+	sr := scout.ScoutReport{
+		Action: "incluster_dns_query",
+		Metadata: map[string]interface{}{
+			"had_results": err == nil && len(r.Ips) > 0,
+		},
+	}
+	// Post to scout channel but never block if it's full
+	select {
+	case s.scout <- sr:
+	default:
+	}
 	if err != nil {
 		return nil, err
 	}
-	ret := &session{
-		dnsConfig: &rpc.DNSConfig{
-			LocalIp: iputil.Parse(dnsIPStr),
-		},
-		namespaces:   make(map[string]struct{}),
-		domains:      make(map[string]struct{}),
-		search:       []string{""},
-		searchPathCh: make(chan []string, 5),
-		scout:        scout,
-		dev:          td,
-		handlers:     tunnel.NewPool(),
-		cfgComplete:  make(chan struct{}),
-		tmVerOk:      make(chan struct{}),
-		fragmentMap:  make(map[uint16][]*buffer.Data),
-		rndSource:    rand.NewSource(time.Now().UnixNano()),
-	}
-	return ret, nil
-}
-
-// tel2SubDomain aims to fix a search-path problem when using Docker on non-linux systems where
-// Docker uses its own search-path for single label names. This means that the search path that
-// is declared in the macOS resolver is ignored although the rest of the DNS-resolution works OK.
-// Since the search-path is likely to change during a session, a stable fake domain is needed to
-// emulate the search-path. That fake-domain can then be used in the search path declared in the
-// Docker config.
-//
-// The "tel2-search" domain fills this purpose and a request for "<single label name>.tel2-search."
-// will be resolved as "<single label name>." using the search path of this resolver.
-const tel2SubDomain = "tel2-search"
-const tel2SubDomainDot = tel2SubDomain + "."
-
-var localhostIPs = []net.IP{{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
-
-func (s *session) shouldDoClusterLookup(query string) bool {
-	if strings.HasSuffix(query, "."+s.clusterDomain) && strings.Count(query, ".") < 4 {
-		return false
-	}
-
-	query = query[:len(query)-1] // skip last dot
-
-	// Always include configured includeSuffixes
-	for _, sfx := range s.dnsConfig.IncludeSuffixes {
-		if strings.HasSuffix(query, sfx) {
-			return true
-		}
-	}
-
-	// Skip configured excludeSuffixes
-	for _, sfx := range s.dnsConfig.ExcludeSuffixes {
-		if strings.HasSuffix(query, sfx) {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *session) resolveInCluster(c context.Context, query string) (results []net.IP) {
-	query = strings.ToLower(query)
-	query = strings.TrimSuffix(query, tel2SubDomainDot)
-
-	if query == "localhost." {
-		// BUG(lukeshu): I have no idea why a lookup
-		// for localhost even makes it to here on my
-		// home WiFi when connecting to a k3sctl
-		// cluster (but not a kubernaut.io cluster).
-		// But it does, so I need this in order to be
-		// productive at home.  We should really
-		// root-cause this, because it's weird.
-		return localhostIPs
-	}
-
-	if !s.shouldDoClusterLookup(query) {
-		return nil
-	}
-	// Don't report queries that won't be resolved in-cluster, since that'll report every single DNS query on the user's machine
-	defer func() {
-		r := scout.ScoutReport{
-			Action: "incluster_dns_query",
-			Metadata: map[string]interface{}{
-				"had_results": results != nil,
-			},
-		}
-		// Post to scout channel but never block if it's full
-		select {
-		case s.scout <- r:
-		default:
-		}
-	}()
-
-	// Give the cluster lookup a reasonable timeout.
-	c, cancel := context.WithTimeout(c, s.dnsConfig.LookupTimeout.AsDuration())
-	defer cancel()
-
-	queryWithNoTrailingDot := query[:len(query)-1]
-	dlog.Debugf(c, "LookupHost %q", queryWithNoTrailingDot)
-	response, err := s.managerClient.LookupHost(c, &manager.LookupHostRequest{
-		Session: s.session,
-		Host:    queryWithNoTrailingDot,
-	})
-	if err != nil {
-		dlog.Error(c, client.CheckTimeout(c, err))
-		return nil
-	}
-	if len(response.Ips) == 0 {
-		return nil
-	}
-	ips := make(iputil.IPs, len(response.Ips))
-	for i, ip := range response.Ips {
-		ips[i] = ip
-	}
-	return ips
-}
-
-func (s *session) setInfo(ctx context.Context, info *rpc.OutboundInfo) error {
-	if info.Dns == nil {
-		info.Dns = &rpc.DNSConfig{}
-	}
-	if oldIP := s.dnsConfig.GetLocalIp(); len(oldIP) > 0 {
-		info.Dns.LocalIp = oldIP
-	}
-	if len(info.Dns.ExcludeSuffixes) == 0 {
-		info.Dns.ExcludeSuffixes = []string{
-			".arpa",
-			".com",
-			".io",
-			".net",
-			".org",
-			".ru",
-		}
-	}
-	if info.Dns.LookupTimeout.AsDuration() <= 0 {
-		info.Dns.LookupTimeout = durationpb.New(4 * time.Second)
-	}
-	s.dnsConfig = info.Dns
-	return s.setOutboundInfo(ctx, info)
+	return r.Ips, nil
 }
 
 func (s *session) getInfo() *rpc.OutboundInfo {
-	info := rpc.OutboundInfo{
-		Dns: &rpc.DNSConfig{
-			RemoteIp: s.dnsIP,
-		},
+	info := rpc.OutboundInfo{}
+	info.Dns = s.dnsServer.GetConfig()
+	if s.dnsLocalAddr != nil {
+		info.Dns.RemoteIp = s.dnsLocalAddr.IP
 	}
-	if s.dnsConfig != nil {
-		info.Dns.LocalIp = s.dnsConfig.LocalIp
-		info.Dns.ExcludeSuffixes = s.dnsConfig.ExcludeSuffixes
-		info.Dns.IncludeSuffixes = s.dnsConfig.IncludeSuffixes
-		info.Dns.LookupTimeout = s.dnsConfig.LookupTimeout
-	}
-
 	if len(s.alsoProxySubnets) > 0 {
 		info.AlsoProxySubnets = make([]*manager.IPNet, len(s.alsoProxySubnets))
 		for i, ap := range s.alsoProxySubnets {
@@ -329,77 +290,8 @@ func (s *session) getInfo() *rpc.OutboundInfo {
 	return &info
 }
 
-// SetSearchPath updates the DNS search path used by the resolver
-func (s *session) setSearchPath(ctx context.Context, paths, namespaces []string) {
-	// Provide direct access to intercepted namespaces
-	for _, ns := range namespaces {
-		paths = append(paths, ns+".svc."+s.clusterDomain)
-	}
-	select {
-	case <-ctx.Done():
-	case s.searchPathCh <- paths:
-	}
-}
-
-func (s *session) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string) error) {
-	g.Go("SearchPaths", func(c context.Context) error {
-		var prevPaths []string
-		unchanged := func(paths []string) bool {
-			if len(paths) != len(prevPaths) {
-				return false
-			}
-			for i, path := range paths {
-				if path != prevPaths[i] {
-					return false
-				}
-			}
-			return true
-		}
-
-		for {
-			select {
-			case <-c.Done():
-				return nil
-			case paths := <-s.searchPathCh:
-				if len(s.searchPathCh) > 0 {
-					// Only interested in the last one
-					continue
-				}
-				if !unchanged(paths) {
-					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
-					prevPaths = make([]string, len(paths))
-					copy(prevPaths, paths)
-					if err := processor(c, paths); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	})
-}
-
-func (s *session) flushDNS() {
-	s.dnsCache.Range(func(key, _ interface{}) bool {
-		s.dnsCache.Delete(key)
-		return true
-	})
-}
-
-// splitToUDPAddr splits the given address into an UDPAddr. It's
-// an  error if the address is based on a hostname rather than an IP.
-func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
-	ip, port, err := iputil.SplitToIPPort(netAddr)
-	if err != nil {
-		return nil, err
-	}
-	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
-}
-func (s *session) configured() <-chan struct{} {
-	return s.tmVerOk
-}
-
-func (s *session) configureDNS(_ context.Context, dnsLocalAddr *net.UDPAddr) {
-	s.dnsPort = 53
+func (s *session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
+	s.remoteDnsIP = dnsIP
 	s.dnsLocalAddr = dnsLocalAddr
 }
 
@@ -491,64 +383,7 @@ func (s *session) refreshSubnets(ctx context.Context) error {
 	return s.reconcileStaticRoutes(ctx)
 }
 
-func (s *session) setOutboundInfo(ctx context.Context, mi *daemon.OutboundInfo) (err error) {
-	if s.managerClient == nil {
-		// First check. Establish connection
-		clientConfig := client.GetConfig(ctx)
-		tos := &clientConfig.Timeouts
-		tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
-		defer cancel()
-
-		var conn *grpc.ClientConn
-
-		conn, err = client.DialSocket(tc, client.ConnectorSocketName)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				// The connector called us, and then it died which means we will die too. This is
-				// a race, but it's not an error.
-				return nil
-			}
-			return client.CheckTimeout(tc, err)
-		}
-		s.session = mi.Session
-		s.managerClient = manager.NewManagerClient(conn)
-
-		if len(mi.AlsoProxySubnets) > 0 {
-			s.alsoProxySubnets = make([]*net.IPNet, len(mi.AlsoProxySubnets))
-			for i, ap := range mi.AlsoProxySubnets {
-				apSn := iputil.IPNetFromRPC(ap)
-				dlog.Infof(ctx, "Adding also-proxy subnet %s", apSn)
-				s.alsoProxySubnets[i] = apSn
-			}
-		}
-		if len(mi.NeverProxySubnets) > 0 {
-			s.neverProxySubnets = []routing.Route{}
-			for _, np := range mi.NeverProxySubnets {
-				npSn := iputil.IPNetFromRPC(np)
-				dlog.Infof(ctx, "Adding never-proxy subnet %s", npSn)
-				route, err := routing.GetRoute(ctx, npSn)
-				if err != nil {
-					dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s. "+
-						"If this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services. "+
-						"Error: %v",
-						iputil.IPNetFromRPC(np), err)
-					continue
-				}
-				s.neverProxySubnets = append(s.neverProxySubnets, route)
-			}
-		}
-		s.dnsIP = mi.Dns.RemoteIp
-
-		dgroup.ParentGroup(ctx).Go("watch-cluster-info", func(ctx context.Context) error {
-			s.watchClusterInfo(ctx)
-			return nil
-		})
-	}
-	return nil
-}
-
-func (s *session) watchClusterInfo(ctx context.Context) {
-	cfgComplete := s.cfgComplete
+func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struct{}) {
 	backoff := 100 * time.Millisecond
 
 	for ctx.Err() == nil {
@@ -566,39 +401,13 @@ func (s *session) watchClusterInfo(ctx context.Context) {
 				}
 				break
 			}
-			dlog.Debugf(ctx, "WatchClusterInfo update")
-
-			subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
-			if mgrInfo.ServiceSubnet != nil {
-				cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
-				dlog.Infof(ctx, "Adding service subnet %s", cidr)
-				subnets = append(subnets, cidr)
-			}
-
-			for _, sn := range mgrInfo.PodSubnets {
-				cidr := iputil.IPNetFromRPC(sn)
-				dlog.Infof(ctx, "Adding pod subnet %s", cidr)
-				subnets = append(subnets, cidr)
-			}
-
-			s.clusterSubnets = subnets
-			if err := s.refreshSubnets(ctx); err != nil {
-				dlog.Error(ctx, err)
-			}
-
+			s.onClusterInfo(ctx, mgrInfo)
 			if cfgComplete != nil {
-				// Only set clusterDNS when it hasn't been explicitly set with the --dns option
-				if s.dnsIP == nil {
-					dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(mgrInfo.KubeDnsIp))
-					s.dnsIP = mgrInfo.KubeDnsIp
-				}
+				remoteIp := net.IP(mgrInfo.KubeDnsIp)
+				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
-				s.clusterDomain = mgrInfo.ClusterDomain
-				if s.clusterDomain == "" {
-					// Traffic manager predates 2.4.3 and doesn't report a cluster domain. Only thing
-					// left to do then is to assume it's the standard one.
-					s.clusterDomain = "cluster.local."
-				}
+				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
+
 				close(cfgComplete)
 				cfgComplete = nil
 			}
@@ -608,6 +417,28 @@ func (s *session) watchClusterInfo(ctx context.Context) {
 		if backoff > 3*time.Second {
 			backoff = 3 * time.Second
 		}
+	}
+}
+
+func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+	dlog.Debugf(ctx, "WatchClusterInfo update")
+
+	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
+	if mgrInfo.ServiceSubnet != nil {
+		cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
+		dlog.Infof(ctx, "Adding service subnet %s", cidr)
+		subnets = append(subnets, cidr)
+	}
+
+	for _, sn := range mgrInfo.PodSubnets {
+		cidr := iputil.IPNetFromRPC(sn)
+		dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+		subnets = append(subnets, cidr)
+	}
+
+	s.clusterSubnets = subnets
+	if err := s.refreshSubnets(ctx); err != nil {
+		dlog.Error(ctx, err)
 	}
 }
 
@@ -631,246 +462,14 @@ func (s *session) stop(c context.Context) {
 		}
 		s.dev.Close()
 	}
+	s.cancel() // Cancel this session's go-routines
+
+	dlog.Debug(c, "Sending quit message to connector")
+	_, _ = connector.NewConnectorClient(s.clientConn).Quit(c, &empty.Empty{})
+	s.clientConn.Close()
+	dlog.Debug(c, "Connector shutdown complete")
 }
 
-var blockedUDPPorts = map[uint16]bool{
-	137: true, // NETBIOS Name Service
-	138: true, // NETBIOS Datagram Service
-	139: true, // NETBIOS
-}
-
-func (s *session) run(c context.Context) error {
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-
-	g.Go("MGR stream", func(c context.Context) error {
-		dlog.Debug(c, "Waiting until manager gRPC is configured")
-		select {
-		case <-c.Done():
-			return nil
-		case <-s.cfgComplete:
-		}
-		return client.Retry(c, "MGR stream", func(c context.Context) error {
-			ver, err := s.managerClient.Version(c, &empty.Empty{})
-			if err != nil {
-				return err
-			}
-			verStr := strings.TrimPrefix(ver.Version, "v")
-			dlog.Infof(c, "Connected to Manager %s", verStr)
-			mgrVer, err := semver.Parse(verStr)
-			if err != nil {
-				return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
-			}
-			if mgrVer.LE(semver.MustParse("2.4.4")) {
-				return errcat.User.Newf("unsupported traffic-manager version %s. Minimum supported version is 2.4.5", mgrVer)
-			}
-			close(s.tmVerOk)
-			return err
-		})
-	})
-
-	g.Go("TUN reader", func(c context.Context) error {
-		dlog.Debug(c, "Waiting until manager gRPC is configured")
-		select {
-		case <-c.Done():
-			return nil
-		case <-s.tmVerOk:
-		}
-
-		dlog.Debug(c, "TUN read loop starting")
-
-		// bufCh is just a small buffer to enable better parallel processing between
-		// the actual TUN reader loop and the packet handlers.
-		bufCh := make(chan *buffer.Data, 100)
-		defer close(bufCh)
-
-		go func() {
-			for data := range bufCh {
-				s.handlePacket(c, data)
-			}
-		}()
-
-		for atomic.LoadInt32(&s.closing) < 2 {
-			data := buffer.DataPool.Get(buffer.DataPool.MTU)
-			for {
-				n, err := s.dev.ReadPacket(data)
-				if err != nil {
-					buffer.DataPool.Put(data)
-					if c.Err() != nil || atomic.LoadInt32(&s.closing) == 2 {
-						return nil
-					}
-					return fmt.Errorf("read packet error: %w", err)
-				}
-				if n > 0 {
-					data.SetLength(n)
-					bufCh <- data
-					break
-				}
-			}
-		}
-		return nil
-	})
-	return g.Wait()
-}
-
-func (s *session) handlePacket(c context.Context, data *buffer.Data) {
-	defer func() {
-		if data != nil {
-			buffer.DataPool.Put(data)
-		}
-	}()
-
-	reply := func(pkt ip.Packet) {
-		_, err := s.dev.WritePacket(pkt.Data(), 0)
-		if err != nil {
-			dlog.Errorf(c, "TUN write failed: %v", err)
-		}
-	}
-
-	ipHdr, err := ip.ParseHeader(data.Buf())
-	if err != nil {
-		dlog.Error(c, "Unable to parse packet header")
-		return
-	}
-
-	if ipHdr.PayloadLen() > buffer.DataPool.MTU-ipHdr.HeaderLen() {
-		// Packet is too large for us.
-		dlog.Error(c, "Packet exceeds MTU")
-		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.MustFragment))
-		return
-	}
-
-	if ipHdr.Version() == ipv4.Version {
-		v4Hdr := ipHdr.(ip.V4Header)
-		if v4Hdr.Flags()&ipv4.MoreFragments != 0 || v4Hdr.FragmentOffset() != 0 {
-			dlog.Debug(c, "Packet concat")
-			data = v4Hdr.ConcatFragments(data, s.fragmentMap)
-			if data == nil {
-				return
-			}
-			v4Hdr = data.Buf()
-		}
-	} // TODO: similar for ipv6 using segments
-
-	switch ipHdr.L4Protocol() {
-	case ipproto.TCP:
-		s.tcp(c, tcp.PacketFromData(ipHdr, data))
-		data = nil
-	case ipproto.UDP:
-		dst := ipHdr.Destination()
-		if !dst.IsGlobalUnicast() {
-			// Just ignore at this point.
-			return
-		}
-		if ip4 := dst.To4(); ip4 != nil && ip4[2] == 0 && ip4[3] == 0 {
-			// Write to the a subnet's zero address. Not sure why this is happening but there's no point in
-			// passing them on.
-			reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.HostUnreachable))
-			return
-		}
-		dg := udp.DatagramFromData(ipHdr, data)
-		if blockedUDPPorts[dg.Header().SourcePort()] || blockedUDPPorts[dg.Header().DestinationPort()] {
-			reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.PortUnreachable))
-			return
-		}
-		data = nil
-		s.udp(c, dg)
-	case ipproto.ICMP:
-	case ipproto.ICMPV6:
-		pkt := icmp.PacketFromData(ipHdr, data)
-		dlog.Tracef(c, "<- TUN %s", pkt)
-	default:
-		// An L4 protocol that we don't handle.
-		dlog.Tracef(c, "Unhandled protocol %d", ipHdr.L4Protocol())
-		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.ProtocolUnreachable))
-	}
-}
-
-type vifWriter struct {
-	*vif.Device
-}
-
-func (w vifWriter) Write(ctx context.Context, pkt ip.Packet) (err error) {
-	dlog.Tracef(ctx, "-> TUN %s", pkt)
-	d := pkt.Data()
-	l := len(d.Buf())
-	o := 0
-	for {
-		var n int
-		if n, err = w.WritePacket(d, o); err != nil {
-			return err
-		}
-		l -= n
-		if l == 0 {
-			return nil
-		}
-		o += n
-	}
-}
-
-func (s *session) tcp(c context.Context, pkt tcp.Packet) {
-	ipHdr := pkt.IPHeader()
-	tcpHdr := pkt.Header()
-	connID := tunnel.NewConnID(ipproto.TCP, ipHdr.Source(), ipHdr.Destination(), tcpHdr.SourcePort(), tcpHdr.DestinationPort())
-	dlog.Tracef(c, "<- TUN %s", pkt)
-	if !tcpHdr.SYN() {
-		// Only a SYN packet can create a new connection. For all other packets, the connection must already exist
-		wf := s.handlers.Get(connID)
-		if wf == nil {
-			pkt.Release()
-		} else {
-			wf.(tcp.PacketHandler).HandlePacket(c, pkt)
-		}
-		return
-	}
-
-	if tcpHdr.DestinationPort() == s.dnsPort && ipHdr.Destination().Equal(s.dnsIP) {
-		// Ignore TCP packets intended for the DNS resolver for now
-		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
-		pkt.Release()
-		return
-	}
-
-	wf, _, err := s.handlers.GetOrCreateTCP(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
-		return tcp.NewHandler(s.streamCreator(connID), &s.closing, vifWriter{s.dev}, connID, remove, s.rndSource), nil
-	}, pkt)
-	if err != nil {
-		dlog.Error(c, err)
-		pkt.Release()
-		return
-	}
-	wf.(tcp.PacketHandler).HandlePacket(c, pkt)
-}
-
-func (s *session) udp(c context.Context, dg udp.Datagram) {
-	ipHdr := dg.IPHeader()
-	udpHdr := dg.Header()
-	connID := tunnel.NewConnID(ipproto.UDP, ipHdr.Source(), ipHdr.Destination(), udpHdr.SourcePort(), udpHdr.DestinationPort())
-	uh, _, err := s.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
-		w := vifWriter{s.dev}
-		if s.dnsLocalAddr != nil && udpHdr.DestinationPort() == s.dnsPort && ipHdr.Destination().Equal(s.dnsIP) {
-			return udp.NewDnsInterceptor(w, connID, remove, s.dnsLocalAddr)
-		}
-		stream, err := s.streamCreator(connID)(c)
-		if err != nil {
-			return nil, err
-		}
-		return udp.NewHandler(stream, w, connID, remove), nil
-	})
-	if err != nil {
-		dlog.Error(c, err)
-		return
-	}
-	uh.(udp.DatagramHandler).HandleDatagram(c, dg)
-}
-
-func (s *session) streamCreator(id tunnel.ConnID) tcp.StreamCreator {
-	return func(c context.Context) (tunnel.Stream, error) {
-		dlog.Debugf(c, "Opening tunnel for id %s", id)
-		ct, err := s.managerClient.Tunnel(c)
-		if err != nil {
-			return nil, err
-		}
-		tc := client.GetConfig(c).Timeouts
-		return tunnel.NewClientStream(c, ct, id, s.session.SessionId, tc.Get(client.TimeoutRoundtripLatency), tc.Get(client.TimeoutEndpointDial))
-	}
+func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
+	s.dnsServer.SetSearchPath(ctx, paths, namespaces)
 }

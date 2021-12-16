@@ -1,4 +1,4 @@
-package daemon
+package dns
 
 import (
 	"context"
@@ -12,11 +12,10 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (s *session) tryResolveD(c context.Context, dev *vif.Device) error {
+func (s *Server) tryResolveD(c context.Context, dev *vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	// Connect to ResolveD via DBUS.
 	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")
@@ -35,51 +34,43 @@ func (s *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	if err != nil {
 		return err
 	}
-	s.configureDNS(c, dnsResolverAddr)
+	dnsIP := net.IP(s.config.RemoteIp)
+	configureDNS(dnsIP, dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
 	// DNS resolver
 	initDone := make(chan struct{})
 
-	var dnsServer *dns.Server
 	g.Go("Server", func(c context.Context) error {
-		select {
-		case <-c.Done():
+		dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
+		if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
+			dlog.Error(c, err)
 			initDone <- struct{}{}
-			return nil
-		case <-s.configured():
-			dnsIP := s.dnsIP
-			dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
-			if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
-				dlog.Error(c, err)
-				initDone <- struct{}{}
-				return errResolveDNotConfigured
-			}
-			defer func() {
-				// It's very likely that the context is cancelled here. We use it
-				// anyway, stripped from cancellation, to retain logging.
-				c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
-				defer cancel()
-				dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
-				s.configureDNS(c, nil) // Don't route from TUN-device
-				if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
-					dlog.Error(c, err)
-				}
-				// No need to close listeners here. They are closed by the dnsServer
-			}()
-			// Some installation have default DNS configured with ~. routing path.
-			// If two interfaces with DefaultRoute: yes present, the one with the
-			// routing key used and SanityCheck fails. Hence, tel2SubDomain
-			// must be used as a routing key.
-			if err = s.updateLinkDomains(c, []string{tel2SubDomain}); err != nil {
-				dlog.Error(c, err)
-				initDone <- struct{}{}
-				return errResolveDNotConfigured
-			}
-			dnsServer = dns.NewServer(listeners, nil, s.resolveInCluster, &s.dnsCache)
-			return dnsServer.Run(c, initDone)
+			return errResolveDNotConfigured
 		}
+		defer func() {
+			// It's very likely that the context is cancelled here. We use it
+			// anyway, stripped from cancellation, to retain logging.
+			c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
+			defer cancel()
+			dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
+			configureDNS(nil, nil) // Don't route from TUN-device
+			if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
+				dlog.Error(c, err)
+			}
+			// No need to close listeners here. They are closed by the dnsServer
+		}()
+		// Some installation have default DNS configured with ~. routing path.
+		// If two interfaces with DefaultRoute: yes present, the one with the
+		// routing key used and SanityCheck fails. Hence, tel2SubDomain
+		// must be used as a routing key.
+		if err = s.updateLinkDomains(c, []string{tel2SubDomain}, dev); err != nil {
+			dlog.Error(c, err)
+			initDone <- struct{}{}
+			return errResolveDNotConfigured
+		}
+		return s.Run(c, initDone, listeners, nil, s.resolveInCluster)
 	})
 
 	g.Go("SanityCheck", func(c context.Context) error {
@@ -93,10 +84,10 @@ func (s *session) tryResolveD(c context.Context, dev *vif.Device) error {
 		defer cmdCancel()
 		for cmdC.Err() == nil {
 			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
-			if dnsServer.RequestCount() > 0 {
+			if s.RequestCount() > 0 {
 				// The query went all way through. Start processing search paths systemd-resolved style
 				// and return nil for successful validation.
-				s.processSearchPaths(g, s.updateLinkDomains)
+				s.processSearchPaths(g, s.updateLinkDomains, dev)
 				return nil
 			}
 			s.flushDNS()
@@ -108,7 +99,7 @@ func (s *session) tryResolveD(c context.Context, dev *vif.Device) error {
 	return g.Wait()
 }
 
-func (s *session) updateLinkDomains(c context.Context, paths []string) error {
+func (s *Server) updateLinkDomains(c context.Context, paths []string, dev *vif.Device) error {
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for i, path := range paths {
@@ -120,7 +111,7 @@ func (s *session) updateLinkDomains(c context.Context, paths []string) error {
 			paths[i] = "~" + path
 		}
 	}
-	for _, sfx := range s.dnsConfig.IncludeSuffixes {
+	for _, sfx := range s.config.IncludeSuffixes {
 		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
 	}
 	paths = append(paths, s.clusterDomain)
@@ -130,7 +121,6 @@ func (s *session) updateLinkDomains(c context.Context, paths []string) error {
 	s.namespaces = namespaces
 	s.search = search
 	s.domainsLock.Unlock()
-	dev := s.dev
 	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}

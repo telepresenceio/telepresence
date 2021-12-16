@@ -1,4 +1,4 @@
-package daemon
+package dns
 
 import (
 	"bufio"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type resolveFile struct {
@@ -119,7 +119,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 	r.search = ps
 }
 
-// dnsServerWorker places a file under the /etc/resolver directory so that it is picked up by the
+// Worker places a file under the /etc/resolver directory so that it is picked up by the
 // macOS resolver. The file is configured with a single nameserver that points to the local IP
 // that the Telepresence DNS server listens to. The file is removed, and the DNS is flushed when
 // the worker terminates
@@ -129,7 +129,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //   man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (s *session) dnsServerWorker(c context.Context) error {
+func (s *Server) Worker(c context.Context, dev *vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -141,7 +141,7 @@ func (s *session) dnsServerWorker(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.configureDNS(c, dnsAddr)
+	configureDNS(nil, dnsAddr)
 
 	err = os.MkdirAll(resolverDirName, 0755)
 	if err != nil {
@@ -175,21 +175,16 @@ func (s *session) dnsServerWorker(c context.Context) error {
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		select {
-		case <-c.Done():
-			return nil
-		case <-s.configured():
-			// Server will close the listener, so no need to close it here.
-			s.processSearchPaths(g, func(c context.Context, paths []string) error {
-				return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
-			})
-			return dns.NewServer([]net.PacketConn{listener}, nil, s.resolveInCluster, &s.dnsCache).Run(c, make(chan struct{}))
-		}
+		// Server will close the listener, so no need to close it here.
+		s.processSearchPaths(g, func(c context.Context, paths []string, device *vif.Device) error {
+			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
+		}, dev)
+		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
 	return g.Wait()
 }
 
-func (s *session) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
+func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
 	dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
 	rf, err := readResolveFile(resolverFileName)
 	if err != nil {
@@ -209,11 +204,11 @@ func (s *session) updateResolverFiles(c context.Context, resolverDirName, resolv
 	namespaces[tel2SubDomain] = struct{}{}
 
 	// All namespaces and include suffixes become domains
-	domains := make(map[string]struct{}, len(namespaces)+len(s.dnsConfig.IncludeSuffixes))
+	domains := make(map[string]struct{}, len(namespaces)+len(s.config.IncludeSuffixes))
 	for ns, v := range namespaces {
 		domains[ns] = v
 	}
-	for _, sfx := range s.dnsConfig.IncludeSuffixes {
+	for _, sfx := range s.config.IncludeSuffixes {
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}
 
