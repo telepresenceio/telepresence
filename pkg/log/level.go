@@ -34,7 +34,10 @@ func SetLogrusLevel(logrusLogger *logrus.Logger, logLevelStr string) {
 			logrusLogger.Errorf("%v, falling back to default %q", err, logLevel)
 		}
 	}
-	logrusLogger.SetLevel(logLevel)
-	logrusLogger.SetReportCaller(logLevel >= logrus.TraceLevel)
-	logrusLogger.Logf(logLevel, "Logging at this level %q", logLevel)
+
+	if logrusLogger.Level != logLevel {
+		logrusLogger.SetLevel(logLevel)
+		logrusLogger.SetReportCaller(logLevel >= logrus.TraceLevel)
+		logrusLogger.Logf(logLevel, "Logging at this level %q", logLevel)
+	}
 }
