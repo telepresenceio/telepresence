@@ -19,7 +19,7 @@ import (
 
 var ErrNoDaemon = errors.New("telepresence root daemon is not running")
 
-func launchDaemon(ctx context.Context, dnsIP string) error {
+func launchDaemon(ctx context.Context) error {
 	fmt.Println("Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
@@ -48,7 +48,7 @@ func launchDaemon(ctx context.Context, dnsIP string) error {
 		return err
 	}
 
-	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir, dnsIP)
+	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
 }
 
 // WithDaemon (1) ensures that the daemon is running, (2) establishes a connection to it, and (3)
@@ -67,7 +67,7 @@ func WithStartedDaemon(ctx context.Context, fn func(context.Context, daemon.Daem
 
 type daemonStartedCtxKey struct{}
 
-func withDaemon(ctx context.Context, maybeStart bool, dnsIP string, fn func(context.Context, daemon.DaemonClient) error) error {
+func withDaemon(ctx context.Context, maybeStart bool, fn func(context.Context, daemon.DaemonClient) error) error {
 	type daemonConnCtxKey struct{}
 	if untyped := ctx.Value(daemonConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
@@ -89,7 +89,7 @@ func withDaemon(ctx context.Context, maybeStart bool, dnsIP string, fn func(cont
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoDaemon
 			if maybeStart {
-				if err = launchDaemon(ctx, dnsIP); err != nil {
+				if err = launchDaemon(ctx); err != nil {
 					return fmt.Errorf("failed to launch the daemon service: %w", err)
 				}
 

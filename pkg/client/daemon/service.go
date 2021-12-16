@@ -62,13 +62,13 @@ type service struct {
 // Command returns the telepresence sub-command "daemon-foreground"
 func Command() *cobra.Command {
 	return &cobra.Command{
-		Use:    ProcessName + "-foreground <logging dir> <config dir> <dns>",
+		Use:    ProcessName + "-foreground <logging dir> <config dir>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(3),
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), args[0], args[1], args[2])
+			return run(cmd.Context(), args[0], args[1])
 		},
 	}
 }
@@ -178,7 +178,7 @@ func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 }
 
 // run is the main function when executing as the daemon
-func run(c context.Context, loggingDir, configDir, _ string) error {
+func run(c context.Context, loggingDir, configDir string) error {
 	if !proc.IsAdmin() {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
