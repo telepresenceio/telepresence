@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -17,7 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-var ErrNoDaemon = errors.New("telepresence root daemon is not running")
+var ErrNoNetwork = errors.New("telepresence network is not established")
 
 func launchDaemon(ctx context.Context) error {
 	fmt.Println("Launching Telepresence Root Daemon")
@@ -51,23 +53,23 @@ func launchDaemon(ctx context.Context) error {
 	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
 }
 
-// WithDaemon (1) ensures that the daemon is running, (2) establishes a connection to it, and (3)
+// WithNetwork (1) ensures that the daemon is running, (2) establishes a connection to it, and (3)
 // runs the given function with that connection.
 //
-// Nested calls to WithDaemon will reuse the outer connection.
-func WithDaemon(ctx context.Context, dnsIP string, fn func(context.Context, daemon.DaemonClient) error) error {
-	return withDaemon(ctx, true, dnsIP, fn)
+// Nested calls to WithNetwork will reuse the outer connection.
+func WithNetwork(ctx context.Context, fn func(context.Context, daemon.DaemonClient) error) error {
+	return withNetwork(ctx, true, fn)
 }
 
-// WithStartedDaemon is like WithDaemon, but returns ErrNoDaemon if the daemon is not already
+// WithStartedNetwork is like WithNetwork, but returns ErrNoNetwork if the daemon is not already
 // running, rather than starting it.
-func WithStartedDaemon(ctx context.Context, fn func(context.Context, daemon.DaemonClient) error) error {
-	return withDaemon(ctx, false, "", fn)
+func WithStartedNetwork(ctx context.Context, fn func(context.Context, daemon.DaemonClient) error) error {
+	return withNetwork(ctx, false, fn)
 }
 
 type daemonStartedCtxKey struct{}
 
-func withDaemon(ctx context.Context, maybeStart bool, fn func(context.Context, daemon.DaemonClient) error) error {
+func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, daemon.DaemonClient) error) error {
 	type daemonConnCtxKey struct{}
 	if untyped := ctx.Value(daemonConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
@@ -87,7 +89,7 @@ func withDaemon(ctx context.Context, maybeStart bool, fn func(context.Context, d
 			break
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			err = ErrNoDaemon
+			err = ErrNoNetwork
 			if maybeStart {
 				if err = launchDaemon(ctx); err != nil {
 					return fmt.Errorf("failed to launch the daemon service: %w", err)
@@ -119,18 +121,18 @@ func withDaemon(ctx context.Context, maybeStart bool, fn func(context.Context, d
 	return fn(ctx, daemonClient)
 }
 
-// DidLaunchDaemon returns whether WithDaemon launched the daemon or merely connected to a running
-// instance.  If there are nested calls to WithDaemon, it returns the answer for the inner-most
-// call; even if the outer-most call launches the daemon false will be returned.
-func DidLaunchDaemon(ctx context.Context) bool {
+// DidLaunchNetwork returns whether WithNetwork launched the network or merely connected to a running
+// session.  If there are nested calls to WithNetwork, it returns the answer for the inner-most
+// call; even if the outer-most call launches the network false will be returned.
+func DidLaunchNetwork(ctx context.Context) bool {
 	launched, _ := ctx.Value(daemonStartedCtxKey{}).(bool)
 	return launched
 }
 
 type quitting struct{}
 
-// QuitDaemon shuts down the root daemon. When it shuts down, it will tell the connector to shut down.
-func QuitDaemon(ctx context.Context) (err error) {
+// Disconnect shuts down a session in the root daemon. When it shuts down, it will tell the connector to shut down.
+func Disconnect(ctx context.Context, quitRootDaemon bool) (err error) {
 	ctx = context.WithValue(ctx, quitting{}, true)
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
@@ -143,17 +145,21 @@ func QuitDaemon(ctx context.Context) (err error) {
 			}
 		}
 	}()
-	err = WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-		fmt.Print("Telepresence Root Daemon quitting...")
-		_, err := daemonClient.Quit(ctx, &empty.Empty{})
+	err = WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+		fmt.Print("Telepresence Network disconnecting...")
+		var err error
+		if !quitRootDaemon {
+			if _, err = daemonClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
+				return err
+			}
+			// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
+		}
+		_, err = daemonClient.Quit(ctx, &empty.Empty{})
 		return err
 	})
-	if err == nil {
-		err = client.WaitUntilSocketVanishes("daemon", client.DaemonSocketName, 5*time.Second)
-	}
 	if err != nil {
-		if errors.Is(err, ErrNoDaemon) {
-			fmt.Println("Telepresence Root Daemon is already stopped")
+		if errors.Is(err, ErrNoNetwork) {
+			fmt.Println("Telepresence Network is already disconnected")
 			return nil
 		}
 		return err

@@ -48,7 +48,6 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	session       *session
 	cancel        context.CancelFunc
 	sessionsCtx   context.Context
 	sessionLock   sync.Mutex
@@ -93,6 +92,7 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
 	d.disconnect(ctx)
+	d.cancel()
 	return &empty.Empty{}, nil
 }
 
@@ -105,7 +105,7 @@ func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empt
 	return &empty.Empty{}, nil
 }
 
-func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
+func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	if d.session != nil {
@@ -116,6 +116,12 @@ func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	d.session = s
+	return &empty.Empty{}, nil
+}
+
+func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	dlog.Debug(ctx, "Received gRPC Disconnect")
+	d.disconnect(ctx)
 	return &empty.Empty{}, nil
 }
 
@@ -187,6 +193,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
+
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)

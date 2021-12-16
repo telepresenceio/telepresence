@@ -20,8 +20,11 @@ service Daemon {
   // Quit quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  // SetOutboundInfo provides the information needed to set up outbound connectivity
-  rpc SetOutboundInfo(OutboundInfo) returns (google.protobuf.Empty);
+  // Connect creates a new session that provides outbound connectivity to the cluster
+  rpc Connect(OutboundInfo) returns (google.protobuf.Empty);
+
+  // Disconnect disconnects the current session.
+  rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
 
   // GetClusterSubnets gets the outbound info that has been set on daemon
   rpc GetClusterSubnets(google.protobuf.Empty) returns (ClusterSubnets);

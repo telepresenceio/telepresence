@@ -39,7 +39,7 @@ import (
 type Callbacks struct {
 	GetCloudAPIKey        func(context.Context, string, bool) (string, error)
 	RegisterManagerServer func(server manager.ManagerServer)
-	SetOutboundInfo       func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	Connect               func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type apiServer struct {
@@ -197,14 +197,14 @@ func (tm *trafficManager) Run(c context.Context) error {
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	// Gotta call RegisterManagerServer before we call daemon.SetOutboundInfo which tells the
+	// Gotta call RegisterManagerServer before we call daemon.Connect which tells the
 	// daemon to use the proxy.
 	tm.callbacks.RegisterManagerServer(userd_grpc.NewManagerProxy(tm.managerClient))
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo(c)); err != nil {
+	if _, err := tm.callbacks.Connect(c, tm.getOutboundInfo(c)); err != nil {
 		tm.managerClient = nil
-		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
+		return fmt.Errorf("daemon.Connect: %w", err)
 	}
 
 	close(tm.startup)

@@ -34,16 +34,16 @@ func kubeFlagMap() map[string]string {
 //
 //  - Makes the connector.Connect gRPC call to set up networking
 func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, connector.ConnectorClient, *connector.ConnectInfo, daemon.DaemonClient) error) error {
-	return cliutil.WithDaemon(cmd.Context(), dnsIP, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
-		if cliutil.DidLaunchDaemon(ctx) {
+	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
+		if cliutil.DidLaunchNetwork(ctx) {
 			defer func() {
 				if err != nil || !retain {
-					_ = cliutil.QuitDaemon(dcontext.WithoutCancel(ctx))
+					_ = cliutil.Disconnect(dcontext.WithoutCancel(ctx), false)
 				}
 			}()
 		}
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
-			if cliutil.DidLaunchConnector(ctx) && !cliutil.DidLaunchDaemon(ctx) {
+			if cliutil.DidLaunchConnector(ctx) && !cliutil.DidLaunchNetwork(ctx) {
 				// Don't shut down the connector if we're shutting down the daemon.
 				// The daemon will shut down the connector for us, and if we shut it
 				// down early the daemon will get upset.

@@ -226,7 +226,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			RegisterManagerServer: func(mgrSrv manager.ManagerServer) {
 				manager.RegisterManagerServer(svc, mgrSrv)
 			},
-			SetOutboundInfo: daemonClient.SetOutboundInfo,
+			Connect: daemonClient.Connect,
 		})
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)

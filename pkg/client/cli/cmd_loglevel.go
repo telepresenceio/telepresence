@@ -74,7 +74,7 @@ func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) er
 				return err
 			}
 
-			err = cliutil.WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+			err = cliutil.WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 				_, err := daemonClient.SetLogLevel(ctx, rq)
 				return err
 			})
