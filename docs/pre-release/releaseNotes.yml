@@ -26,6 +26,7 @@
 #             `FOO/releaseNotes.yml`, then the image paths are
 #             relative to `FOO/release-notes/`.
 #         - docs: The path to the documentation page where additional information can be found.
+#         - href: A path from the root to a resource on the getambassador website, takes precedence over a docs link.
 
 docTitle: Telepresence Release Notes
 docDescription: >-
@@ -205,7 +206,7 @@ items:
         body: >-
           Previously, we referred to OSI model layers when asking these questions, but this
           terminology is not commonly used. The questions now provide a clearer context for the user, along with a default answer as an example.
-        docs: howtos/intercepts/#4-personal-intercept
+        docs: howtos/preview-urls
         image: telepresence-2.4.5-preview-url-questions.png
 
       - type: feature

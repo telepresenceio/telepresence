@@ -9,4 +9,4 @@ Ambassador Cloud can inform you about the required request parameters to reach a
   3. Click the **Query** button to open the pop-up menu.
   4. Toggle between **CURL**, **Headers** and **Browse**.
 
-The pre-built queries and header information should help you get started to query the desired intercepted service and manage header propagation. 
+The pre-built queries and header information will help you get started to query the desired intercepted service and manage header propagation. 

@@ -51,7 +51,7 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
 
 <DemoClusterWarning />
 
-<div class="docs-opaque-section">
+<div className="docs-opaque-section">
 
 ## 2. Try the Emojivoto application
 
@@ -72,7 +72,7 @@ The remote cluster is running the Emojivoto application, which consists of four 
 
 We'll set up a development environment locally on your workstation. We'll then use Telepresence to connect this local development environment to the remote Kubernetes cluster. To save time, the development environment we'll use is pre-packaged as a Docker container.
 
-1. Run the Docker container locally:
+1. Run the Docker container locally, by running this command inside your local terminal:
 
 <Platform.TabGroup>
 <Platform.MacOSTab>
@@ -93,10 +93,10 @@ We'll set up a development environment locally on your workstation. We'll then u
 </Platform.TabGroup>
 
 
-    <Alert severity="info">
-    Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
-    If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
-    </Alert>
+<Alert severity="info">
+Make sure that ports <strong>8080</strong> and <strong>8083</strong> are free. <br/>
+If the Docker engine is not running, the command will fail and you will see <strong>docker: unknown server OS</strong> in your terminal.
+</Alert>
 
 2. The Docker container includes a copy of the Emojivoto application that fixes the bug. Visit the [leaderboard](http://localhost:8083/leaderboard) and notice how it is different from the leaderboard in your <ExternalIp>Kubernetes cluster</ExternalIp>.
 
@@ -110,10 +110,7 @@ We'll set up a development environment locally on your workstation. We'll then u
 
 A common use case for Telepresence is to connect your local development environment to a remote cluster. This way, if your application is too big or complex to run locally, you can still develop locally. In this Quick Start, we're also going to show Telepresence can be used for integration testing, by testing our fix against the services in the remote cluster.
 
-1. First, log in to Telepresence using your API key:
-    <LoginCommand/>
-
-2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
+1. From your Docker container, create an intercept, which will tell Telepresence to send traffic to the service in your container instead of the service in the cluster:
    `telepresence intercept web --port 8080`
 
     When prompted for ingress configuration, all default values should be correct as displayed below.
@@ -154,4 +151,5 @@ Preview URLs, when created, generate an ingress request containing a custom head
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-<QSCards/>
+
+You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
