@@ -51,7 +51,7 @@ Test out the application:
 
 The bug is present in the `voting-svc` service, you'll run that service locally. To save your time, we prepared a Docker container with this service running and all you'll need to fix the bug.
 
-1. Run the Docker container locally: 
+1. Run the Docker container locally, by running this command inside your local terminal:
 
   <Platform.TabGroup>
     <Platform.MacOSTab>
