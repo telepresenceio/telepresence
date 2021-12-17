@@ -10,6 +10,10 @@
        link: install/helm/
      - title: Migrate from legacy Telepresence
        link: install/migrate-from-legacy/
+     - title: Create a local Go K8s dev environment
+       link: install/qs-go-advanced/
+     - title: Create a local Java K8s dev environment
+       link: install/qs-java-advanced/
  - title: Core concepts
    items:
      - title: The changing development workflow

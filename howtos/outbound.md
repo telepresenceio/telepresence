@@ -6,17 +6,17 @@ import Alert from '@material-ui/lab/Alert';
 
 # Proxy outbound traffic to my cluster
 
-While preview URLs are a powerful feature, there are other options to use Telepresence for proxying traffic between your laptop and the cluster.
+While preview URLs are a powerful feature, Telepresence offers other options for proxying traffic between your laptop and the cluster. This section discribes how to proxy outbound traffic and control outbound connectivity to your cluster.
 
-<Alert severity="info"> We'll assume below that you have the <a href="../../quick-start/demo-node/">quick start</a> sample web app running in your cluster so that we can test accessing the <code>web-app</code> service. That service can be substituted however for any service you are running.</Alert>
+<Alert severity="info"> This guide assumes that you have the <a href="../../quick-start/demo-node/">quick start</a> sample web app running in your cluster to test accessing the <code>web-app</code> service. You can substitute this service for any other service you are running.</Alert>
 
 ## Proxying outbound traffic
 
-Connecting to the cluster instead of running an intercept will allow you to access cluster workloads as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services using `<service name>.<namespace>`, for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
+Connecting to the cluster instead of running an intercept allows you to access cluster workloads as if your laptop was another pod in the cluster. This enables you to access other Kubernetes services using `<service name>.<namespace>`. A service running on your laptop can interact with other services on the cluster by name.
 
-Connecting to the cluster starts the background daemon on your machine and installs the [Traffic Manager pod](../../reference/architecture/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
+When you connect to your cluster, the background daemon on your machine runs and installs the [Traffic Manager deployment](../../reference/architecture/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
 
-1. Run `telepresence connect`, you will be prompted for your password to run the daemon.
+1. Run `telepresence connect` and enter your password to run the daemon.
 
   ```
   $ telepresence connect
@@ -27,7 +27,7 @@ Connecting to the cluster starts the background daemon on your machine and insta
   Connected to context default (https://<cluster public IP>)
   ```
 
-1. Run `telepresence status` to confirm that you are connected to your cluster and are proxying traffic to it.
+2. Run `telepresence status` to confirm connection to your cluster and that it is proxying traffic.
 
   ```
   $ telepresence status
@@ -45,7 +45,7 @@ Connecting to the cluster starts the background daemon on your machine and insta
     Intercepts        : 0 total
   ```
 
-1. Now try to access your service by name with `curl web-app.emojivoto:80`. Telepresence will route the request to the cluster, as if your laptop is actually running in the cluster.
+3. Access your service by name with `curl web-app.emojivoto:80`. Telepresence routes the request to the cluster, as if your laptop is actually running in the cluster.
 
   ```
   $ curl web-app.emojivoto:80
@@ -57,43 +57,33 @@ Connecting to the cluster starts the background daemon on your machine and insta
   ...
   ```
 
-3. Terminate the client with `telepresence quit` and try to access the service again, it will fail because traffic is no longer being proxied from your laptop.
+If you terminate the client with `telepresence quit` and try to access the service again, it will fail because traffic is no longer proxied from your laptop.
 
   ```
-  $ telepresence quit
-  Telepresence Daemon quitting...done
-  ```
+    $ telepresence quit
+    Telepresence Daemon quitting...done
+  ```  
 
-<Alert severity="info">When using Telepresence in this way, services must be accessed with the namespace qualified DNS name (<code>&lt;service name&gt;.&lt;namespace&gt;</code>) before starting an intercept.  After starting an intercept, only <code>&lt;service name&gt;</code> is required. Read more about these differences in DNS resolution <a href="../../reference/dns/">here</a>.</Alert>
+<Alert severity="info">When using Telepresence in this way, you need to access services with the namespace qualified DNS name (<code>&lt;service name&gt;.&lt;namespace&gt;</code>) before you start an intercept. After you start an intercept, only  <code>&lt;service name&gt;</code> is required. Read more about these differences in the  <a href="../../quick-start/demo-node/">DNS resolution reference guide</a>.</Alert>
 
 ## Controlling outbound connectivity
 
-By default, Telepresence will provide access to all Services found in all namespaces in the connected cluster. This might lead to problems if the user does not have access permissions to all namespaces via RBAC. The `--mapped-namespaces <comma separated list of namespaces>` flag was added to give the user control over exactly which namespaces will be accessible.
+By default, Telepresence provides access to all Services found in all namespaces in the connected cluster. This can lead to problems if the user does not have RBAC access permissions to all namespaces. You can use the `--mapped-namespaces <comma separated list of namespaces>` flag to control which namespaces are accessible.
 
-When using this option, it is important to include all namespaces containing services to be accessed and also all namespaces that contain services that those intercepted services might use.
+When you use the `--mapped-namespaces` flag, you need to include all namespaces containing services you want to access, as well as all namespaces that contain services related to the intercept.
 
 ### Using local-only intercepts
 
-An intercept with the flag`--local-only` can be used to control outbound connectivity to specific namespaces.
+When you develop on isolated apps or on a virtualized container, you don't need an outbound connection. However, when developing services that aren't deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service will be deployed. This is because services that aren't exposed through ingress controllers require connectivity to those services. When you provide outbound connectivity, the service can access other services in that namespace without using qualified names. A local-only intercept does not cause outbound connections to originate from the intercepted namespace. The reason for this is to establish correct origin; the connection must be routed to a `traffic-agent`of an intercepted pod. For local-only intercepts, the outbound connections originates from the `traffic-manager`.
 
-When developing services that have not yet been deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service is intended to be deployed so that it can access other services in that namespace without using qualified names. Worth noting though, is that a local-only intercept will not cause outbound connections to originate from the intercepted namespace. Only a real intercept can do that. The reason for this is that in order to establish correct origin, the connection must be routed to a `traffic-agent`of an intercepted pod. For local-only intercepts, the outbound connections will originate from the `traffic-manager`.
-
-  ```
-  $ telepresence intercept <deployment name> --namespace <namespace> --local-only
-  ```
-The resources in the given namespace can now be accessed using unqualified names as long as the intercept is active. The intercept is deactivated just like any other intercept.
+To control outbound connectivity to specific namespaces, add the `--local-only` flag:
 
   ```
-  $ telepresence leave <deployment name>
+    $ telepresence intercept <deployment name> --namespace <namespace> --local-only
   ```
-The unqualified name access is now removed provided that no other intercept is active and using the same namespace.
+The resources in the given namespace can now be accessed using unqualified names as long as the intercept is active. 
+You can deactivate the intercept with `telepresence leave <deployment name>`. This removes unqualified name access.
 
-### External dependencies (formerly `--also-proxy`)
+### Proxy outcound connectivity for laptops
 
-If you have a resource outside of the cluster that you need access to, you can leverage Headless Services to provide access. This will give you a kubernetes service formatted like all other services (`my-service.prod.svc.cluster.local`), that resolves to your resource.
-
-If the outside service has a DNS name, you can use the [ExternalName](https://kubernetes.io/docs/concepts/services-networking/service/#externalname) service type, which will create a service that can be used from within your cluster and from your local machine when connected with telepresence.
-
-If the outside service is an ip, create a [service without selectors](https://kubernetes.io/docs/concepts/services-networking/service/#services-without-selectors) and then create an endpoint of the same name.
-
-In both scenarios, Kubernetes will create a service that can be used from within your cluster and from your local machine when connected with telepresence.
+To specify additional hosts or subnets that should be resolved inside of the cluster, see [AlsoProxy](../../reference/config/#alsoproxy) for more details.
