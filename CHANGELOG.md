@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.4.10 (TBD)
+
+- Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
+
 ### 2.4.9 (December 9, 2021)
 
 - Bugfix: Fixed an error where access tokens were not refreshed if you login
