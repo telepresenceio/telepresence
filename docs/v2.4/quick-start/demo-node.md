@@ -72,7 +72,7 @@ The remote cluster is running the Emojivoto application, which consists of four 
 
 We'll set up a development environment locally on your workstation. We'll then use Telepresence to connect this local development environment to the remote Kubernetes cluster. To save time, the development environment we'll use is pre-packaged as a Docker container.
 
-1. Run the Docker container locally:
+1. Run the Docker container locally, by running this command inside your local terminal:
 
 <Platform.TabGroup>
 <Platform.MacOSTab>
@@ -110,10 +110,7 @@ If the Docker engine is not running, the command will fail and you will see <str
 
 A common use case for Telepresence is to connect your local development environment to a remote cluster. This way, if your application is too big or complex to run locally, you can still develop locally. In this Quick Start, we're also going to show Telepresence can be used for integration testing, by testing our fix against the services in the remote cluster.
 
-1. First, log in to Telepresence using your API key:
-    <LoginCommand/>
-
-2. Create an intercept, which will tell Telepresence to send traffic to the service in our container instead of the service in the cluster:
+1. From your Docker container, create an intercept, which will tell Telepresence to send traffic to the service in your container instead of the service in the cluster:
    `telepresence intercept web --port 8080`
 
     When prompted for ingress configuration, all default values should be correct as displayed below.
@@ -154,5 +151,10 @@ Preview URLs, when created, generate an ingress request containing a custom head
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
+Apply what you've learned from this guide and employ the Emojivoto application in your own local development environment. See the Creating a local Kubernetes development environment pages for [Golang](../../install/qs-go-advanced/) and [Java](../../install/qs-java-advanced) page to learn more.
 
-You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
+export const metaData = [
+{name: "Emojivoto app", path: "https://github.com/datawire/emojivoto"},
+{name: "Docker container", path: "https://github.com/datawire/demo-containers"},
+{name: "Login component", path: "https://github.com/datawire/getambassador.io/blob/master/src/components/Docs/Telepresence/Login.js"},
+]

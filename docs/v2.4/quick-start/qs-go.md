@@ -390,6 +390,10 @@ Normal traffic coming to your app gets the <strong style="color:green">green</st
   The <strong>Preview URL</strong> now shows exactly what is running on your local laptop -- in a way that can be securely shared with anyone you work with.
 </Alert>
 
+## Create a complete development environment using this demo application
+
+Apply what you've learned from this guide and employ the Emojivoto application in your own local development environment. See the [Creating a local Kubernetes development environment](../../install/qs-go-advanced/) page to learn more.
+
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
 <QSCards/>

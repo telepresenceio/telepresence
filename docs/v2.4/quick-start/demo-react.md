@@ -3,7 +3,6 @@ description: "Install Telepresence and learn to use it to intercept services run
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSCards from './qs-cards';
 import { DownloadDemo } from '../../../../../src/components/Docs/DownloadDemo';
 import { UserInterceptCommand } from '../../../../../src/components/Docs/Telepresence';
 
@@ -252,6 +251,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
   With Telepresence, these changes happen instantly.
 </Alert>
 
-## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-<QSCards/>
+## <img class="os-logo" src="../../../images/logo.png"/> What's Next?
+
+Apply what you've learned from this guide and employ the Emojivoto application in your own local development environment. See the Creating a local Kubernetes development environment pages for [Golang](../../install/qs-go-advanced/) and [Java](../../install/qs-java-advanced) page to learn more.

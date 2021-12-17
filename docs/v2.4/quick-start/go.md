@@ -51,7 +51,7 @@ Test out the application:
 
 The bug is present in the `voting-svc` service, you'll run that service locally. To save your time, we prepared a Docker container with this service running and all you'll need to fix the bug.
 
-1. Run the Docker container locally: 
+1. Run the Docker container locally, by running this command inside your local terminal:
 
   <Platform.TabGroup>
     <Platform.MacOSTab>
@@ -187,4 +187,4 @@ Preview URLs allows you to safely share your development environment. With this 
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-You've intercepted a service in one of our demo clusters, now you can use Telepresence to [intercept a service in your own environment](https://www.getambassador.io/docs/telepresence/latest/howtos/intercepts/)!
+Apply what you've learned from this guide and employ the Emojivoto application in your own local development environment. See the [Creating a local Kubernetes development environment](../../install/qs-go-advanced/) page to learn more.
