@@ -128,6 +128,14 @@ func (h *dialer) handleControl(ctx context.Context, cm Message) {
 		h.Close(ctx)
 	case KeepAlive:
 		h.resetIdle()
+	case DialOK:
+		// So how can a dialer get a DialOK from a peer? Surely, there cannot be a dialer at both ends?
+		// Well, the story goes like this:
+		// 1. A request to the service is made on the workstation.
+		// 2. This agent's listener receives a connection.
+		// 3. Since an intercept is active, the agent creates a tunnel to the workstation
+		// 4. A new dialer is attached to that tunnel (reused as a tunnel endpoint)
+		// 5. The dialer at the workstation dials and responds with DialOK, and here we are.
 	default:
 		dlog.Errorf(ctx, "!! CONN %s: unhandled connection control message: %s", h.stream.ID(), cm)
 	}
