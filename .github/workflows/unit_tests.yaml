@@ -42,13 +42,17 @@ jobs:
       - name: "Test amd64 build"
         if: steps.run_result.outputs.run_result != 'success'
         run: make build
-      - run: |
-          # We want to validate that tests still pass, even if the metrics host
-          # points to a broken IP
-          echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-          make check-unit
-        name: Run tests
+      - name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            make check-unit
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
 
@@ -94,13 +98,17 @@ jobs:
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
         if: steps.run_result.outputs.run_result != 'success'
         name: Update etc\hosts
-      - run: |
-          $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
-          $ENV:DTEST_REGISTRY = "docker.io/datawire"
-          $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
-          make check-unit
+      - name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
-        name: Run tests
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
+            $ENV:DTEST_REGISTRY = "docker.io/datawire"
+            $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
+            make check-unit
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
   "linux":
@@ -138,12 +146,16 @@ jobs:
           sudo apt-get install -y socat
       - run: make build
         if: steps.run_result.outputs.run_result != 'success'
-      - run: |
-          # We want to validate that tests still pass, even if the metrics host
-          # points to a broken IP
-          echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make check-unit
+      - name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
-        name: Run tests
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            make check-unit
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
