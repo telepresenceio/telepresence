@@ -88,13 +88,17 @@ jobs:
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
         id: kluster
-      - run: |
-          # We want to validate that tests still pass, even if the metrics host
-          # points to a broken IP
-          echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make check-integration
-        name: Run tests
+      - name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
+        uses: nick-invision/retry@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: |
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            export DTEST_KUBECONFIG=${{ steps.kluster.outputs.kubeconfig }}
+            export DTEST_REGISTRY=docker.io/datawire
+            make check-integration
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
@@ -184,13 +188,17 @@ jobs:
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
         if: steps.run_result.outputs.run_result != 'success'
         name: Update etc\hosts
-      - run: |
-          $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
-          $ENV:DTEST_REGISTRY = "docker.io/datawire"
-          $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
-          make check-integration
+      - name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
-        name: Run tests
+        uses: nick-invision/retry@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: |
+            $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
+            $ENV:DTEST_REGISTRY = "docker.io/datawire"
+            $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
+            make check-integration
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
@@ -255,13 +263,17 @@ jobs:
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
         id: kluster
-      - run: |
-          # We want to validate that tests still pass, even if the metrics host
-          # points to a broken IP
-          echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-          DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}" DTEST_REGISTRY="docker.io/datawire" make check-integration
+      - name: Run tests
         if: steps.run_result.outputs.run_result != 'success'
-        name: Run tests
+        uses: nick-invision/retry@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: |
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            export DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}"
+            export DTEST_REGISTRY="docker.io/datawire"
+            make check-integration
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
