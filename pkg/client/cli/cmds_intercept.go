@@ -539,27 +539,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}
 	}
 
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	// Add whatever metadata we already have to scout
-	is.Scout.SetMetadatum("service_name", args.agentName)
-	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
-	mechanism, _ := args.extState.Mechanism()
-	mechanismArgs, _ := args.extState.MechanismArgs()
-	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
-	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
-
-	defer func() {
-		if err != nil {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
-		} else {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
-		}
-	}()
-
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil && (is.args.ingressHost != "" || is.args.ingressPort != 0 || is.args.ingressTLS || is.args.ingressL5 != "") {
 		ingress, err := makeIngressInfo(is.args.ingressHost, is.args.ingressPort, is.args.ingressTLS, is.args.ingressL5)
@@ -587,6 +566,27 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}()
 		is.mountPoint = ir.MountPoint
 	}
+
+	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	// Add whatever metadata we already have to scout
+	is.Scout.SetMetadatum("service_name", args.agentName)
+	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
+	mechanism, _ := args.extState.Mechanism()
+	mechanismArgs, _ := args.extState.MechanismArgs()
+	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
+	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
+
+	defer func() {
+		if err != nil {
+			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+		} else {
+			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
+		}
+	}()
 
 	// Submit the request
 	r, err := is.connectorClient.CreateIntercept(ctx, ir)
