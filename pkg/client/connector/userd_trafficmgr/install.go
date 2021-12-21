@@ -65,7 +65,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.FindWorkload(c, ai.Namespace, ai.Name)
+			agent, err := ki.FindWorkload(c, ai.Namespace, ai.Name, "")
 			if err != nil {
 				if !errors2.IsNotFound(err) {
 					addError(err)
@@ -265,7 +265,7 @@ func (ki *installer) getSvcForInjectedPod(
 // associated with the workload since this is where that correlation is made.
 func (ki *installer) EnsureAgent(c context.Context,
 	namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
-	obj, err := ki.FindWorkload(c, namespace, name)
+	obj, err := ki.FindWorkload(c, namespace, name, "")
 	if err != nil {
 		return "", "", err
 	}
