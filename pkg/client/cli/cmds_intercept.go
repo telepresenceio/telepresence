@@ -331,7 +331,7 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
 			spec.TargetHost, spec.TargetPort, spec.Name)
 	case connector.InterceptError_NO_ACCEPTABLE_WORKLOAD:
-		msg = fmt.Sprintf("No interceptable deployment or replicaset matching %s found", r.ErrorText)
+		msg = fmt.Sprintf("No interceptable deployment, replicaset, or statefulset matching %s found", r.ErrorText)
 	case connector.InterceptError_AMBIGUOUS_MATCH:
 		var matches []manager.AgentInfo
 		err := json.Unmarshal([]byte(r.ErrorText), &matches)
