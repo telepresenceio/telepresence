@@ -234,38 +234,10 @@ func leaveCommand() *cobra.Command {
 	}
 }
 
-// Checks if login is necessary and then takes the necessary actions
-// depending if the cluster can connect to Ambassador Cloud
-func loginIfNeeded(ctx context.Context, args interceptArgs) error {
-	if !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin) {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, _ connector.ConnectorClient) error {
-			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				// We default to assuming they can connect to Ambassador Cloud
-				// unless the cluster tells us they can't
-				canConnect := true
-				if resp, err := managerClient.CanConnectAmbassadorCloud(ctx, &empty.Empty{}); err == nil {
-					// We got a response from the manager; trust that response.
-					canConnect = resp.CanConnect
-				}
-				if canConnect {
-					if _, err := cliutil.EnsureLoggedIn(ctx, ""); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		})
-	}
-	return nil
-}
-
 func intercept(cmd *cobra.Command, args interceptArgs) error {
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
 		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
-			if err := loginIfNeeded(ctx, args); err != nil {
-				return err
-			}
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
@@ -275,9 +247,6 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 
 	// start intercept, run command, then stop the intercept
 	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
-		if err := loginIfNeeded(ctx, args); err != nil {
-			return err
-		}
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
 			return client.WithEnsuredState(ctx, is, false, func() error {
@@ -499,11 +468,6 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	if err != nil {
 		return nil, err
 	}
-
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-	if err != nil {
-		return nil, err
-	}
 	return ir, nil
 }
 
@@ -553,11 +517,38 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 }
 
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+	ir, err := is.createRequest(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	args := is.args
+	needLogin := !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin)
+	if needLogin {
+		// We default to assuming they can connect to Ambassador Cloud
+		// unless the cluster tells us they can't
+		canConnect := true
+		if resp, err := is.managerClient.CanConnectAmbassadorCloud(ctx, &empty.Empty{}); err == nil {
+			// We got a response from the manager; trust that response.
+			canConnect = resp.CanConnect
+		}
+		if canConnect {
+			if _, err := cliutil.ClientEnsureLoggedIn(ctx, "", is.connectorClient); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
+	if err != nil {
+		return false, err
+	}
+
 	// Add whatever metadata we already have to scout
-	is.Scout.SetMetadatum("service_name", is.args.agentName)
+	is.Scout.SetMetadatum("service_name", args.agentName)
 	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
-	mechanism, _ := is.args.extState.Mechanism()
-	mechanismArgs, _ := is.args.extState.MechanismArgs()
+	mechanism, _ := args.extState.Mechanism()
+	mechanismArgs, _ := args.extState.MechanismArgs()
 	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
 	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
 
@@ -587,11 +578,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		is.args.previewSpec.Ingress = ingress
 	}
 
-	ir, err := is.createRequest(ctx)
-	if err != nil {
-		return false, err
-	}
-
 	if ir.MountPoint != "" {
 		defer func() {
 			if !acquired && runtime.GOOS != "windows" {
@@ -610,11 +596,11 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-		if is.args.agentName == "" {
+		if args.agentName == "" {
 			// local-only
 			return true, nil
 		}
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.args.agentName)
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, args.agentName)
 		var intercept *manager.InterceptInfo
 
 		// Add metadata to scout from InterceptResult
@@ -626,12 +612,12 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		// if it wasn't given on the cli by the user
 		is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 
-		if is.args.previewEnabled {
+		if args.previewEnabled {
 			intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 				Session: is.connInfo.SessionInfo,
-				Name:    is.args.name,
+				Name:    args.name,
 				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-					AddPreviewDomain: is.args.previewSpec,
+					AddPreviewDomain: args.previewSpec,
 				},
 			})
 			if err != nil {
@@ -647,19 +633,19 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 		is.env = r.Environment
 		is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
-		if is.args.envFile != "" {
+		if args.envFile != "" {
 			if err = is.writeEnvFile(); err != nil {
 				return true, err
 			}
 		}
-		if is.args.envJSON != "" {
+		if args.envJSON != "" {
 			if err = is.writeEnvJSON(); err != nil {
 				return true, err
 			}
 		}
 
 		var volumeMountProblem error
-		doMount, err := strconv.ParseBool(is.args.mount)
+		doMount, err := strconv.ParseBool(args.mount)
 		if doMount || err != nil {
 			volumeMountProblem = checkMountCapability(ctx)
 		}
