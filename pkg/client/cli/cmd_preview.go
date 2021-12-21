@@ -35,10 +35,10 @@ func previewCommand() *cobra.Command {
 
 		Short: "Create a preview domain for an existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := cliutil.EnsureLoggedIn(cmd.Context(), ""); err != nil {
-				return err
-			}
-			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+			return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+				if _, err := cliutil.ClientEnsureLoggedIn(cmd.Context(), "", connectorClient); err != nil {
+					return err
+				}
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					if createSpec.Ingress == nil {
 						request := manager.GetInterceptRequest{Session: connInfo.SessionInfo, Name: args[0]}

@@ -17,18 +17,27 @@ import (
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
-	var resp *connector.LoginResult
+	var code connector.LoginResult_Code
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		resp, err = connectorClient.Login(ctx, &connector.LoginRequest{
-			ApiKey: apikey,
-		})
+		code, err = ClientEnsureLoggedIn(ctx, apikey, connectorClient)
+		return err
+	})
+	return code, err
+}
+
+// ClientEnsureLoggedIn is like EnsureLoggedIn but uses an already acquired ConnectorClient.
+func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient connector.ConnectorClient) (connector.LoginResult_Code, error) {
+	resp, err := connectorClient.Login(ctx, &connector.LoginRequest{
+		ApiKey: apikey,
+	})
+	if err != nil {
 		if grpcStatus.Code(err) == grpcCodes.PermissionDenied {
 			err = errcat.User.New(grpcStatus.Convert(err).Message())
 		}
-		return err
-	})
-	return resp.GetCode(), err
+		return connector.LoginResult_UNSPECIFIED, err
+	}
+	return resp.GetCode(), nil
 }
 
 // Logout logs out of Ambassador Cloud.  Returns an error if not logged in.
