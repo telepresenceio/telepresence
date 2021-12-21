@@ -317,6 +317,8 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = st.String()
 	case connector.InterceptError_FAILED_TO_ESTABLISH:
 		msg = fmt.Sprintf("Failed to establish intercept: %s", r.ErrorText)
+	case connector.InterceptError_UNSUPPORTED_WORKLOAD:
+		msg = fmt.Sprintf("Unsupported workload type: %s", r.ErrorText)
 	case connector.InterceptError_NOT_FOUND:
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
 	case connector.InterceptError_MOUNT_POINT_BUSY:
@@ -516,14 +518,17 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 		ingressHost)
 }
 
-func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
-	ir, err := is.createRequest(ctx)
+// canInterceptAndLogIn queries the connector if an intercept is possible, and if it is, and if a login is needed,
+// also performs a login. This function must be called before other user interaction takes place when creating
+// an intercept. It must not be called when no user interaction is expected.
+func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connector.CreateInterceptRequest, needLogin bool) error {
+	r, err := is.connectorClient.CanIntercept(ctx, ir)
 	if err != nil {
-		return false, err
+		return fmt.Errorf("connector.CanIntercept: %w", err)
 	}
-
-	args := is.args
-	needLogin := !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin)
+	if r.Error != connector.InterceptError_UNSPECIFIED {
+		return interceptMessage(r)
+	}
 	if needLogin {
 		// We default to assuming they can connect to Ambassador Cloud
 		// unless the cluster tells us they can't
@@ -534,27 +539,52 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}
 		if canConnect {
 			if _, err := cliutil.ClientEnsureLoggedIn(ctx, "", is.connectorClient); err != nil {
-				return false, err
+				return err
 			}
 		}
 	}
+	ir.Spec.WorkloadKind = r.WorkloadKind // Speeds things up slightly when finding the workload next time
+	return nil
+}
 
-	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
-	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil && (is.args.ingressHost != "" || is.args.ingressPort != 0 || is.args.ingressTLS || is.args.ingressL5 != "") {
-		ingress, err := makeIngressInfo(is.args.ingressHost, is.args.ingressPort, is.args.ingressTLS, is.args.ingressL5)
-		if err != nil {
-			return false, err
-		}
-		is.args.previewSpec.Ingress = ingress
+func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+	ir, err := is.createRequest(ctx)
+	if err != nil {
+		return false, err
 	}
 
-	// Fill defaults
-	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
-		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, is.args.name, is.args.namespace)
-		if err != nil {
+	args := is.args
+	needLogin := !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin)
+
+	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
+	if args.previewEnabled {
+		if args.previewSpec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
+			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
+			if err != nil {
+				return false, err
+			}
+			args.previewSpec.Ingress = ingress
+		}
+
+		if args.previewSpec.Ingress == nil || needLogin {
+			// Ensure that the intercept can be made before logging in or asking the user questions about ingress
+			if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
+				return false, err
+			}
+		}
+
+		if args.previewSpec.Ingress == nil {
+			// Fill defaults
+			ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace)
+			if err != nil {
+				return false, err
+			}
+			args.previewSpec.Ingress = ingress
+		}
+	} else if needLogin {
+		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
 			return false, err
 		}
-		is.args.previewSpec.Ingress = ingress
 	}
 
 	if ir.MountPoint != "" {
@@ -594,70 +624,69 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
 
-	switch r.Error {
-	case connector.InterceptError_UNSPECIFIED:
-		if args.agentName == "" {
-			// local-only
-			return true, nil
-		}
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, args.agentName)
-		var intercept *manager.InterceptInfo
-
-		// Add metadata to scout from InterceptResult
-		is.Scout.SetMetadatum("service_uid", r.GetServiceUid())
-		is.Scout.SetMetadatum("workload_kind", r.GetWorkloadKind())
-		// Since a user can create an intercept without specifying a namespace
-		// (thus using the default in their kubeconfig), we should be getting
-		// the namespace from the InterceptResult because that adds the namespace
-		// if it wasn't given on the cli by the user
-		is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
-
-		if args.previewEnabled {
-			intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-				Session: is.connInfo.SessionInfo,
-				Name:    args.name,
-				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-					AddPreviewDomain: args.previewSpec,
-				},
-			})
-			if err != nil {
-				is.Scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
-				err = fmt.Errorf("creating preview domain: %w", err)
-				return true, err
-			}
-			is.Scout.SetMetadatum("preview_url", intercept.PreviewDomain)
-		} else {
-			intercept = r.InterceptInfo
-		}
-		is.Scout.SetMetadatum("intercept_id", intercept.Id)
-
-		is.env = r.Environment
-		is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
-		if args.envFile != "" {
-			if err = is.writeEnvFile(); err != nil {
-				return true, err
-			}
-		}
-		if args.envJSON != "" {
-			if err = is.writeEnvJSON(); err != nil {
-				return true, err
-			}
-		}
-
-		var volumeMountProblem error
-		doMount, err := strconv.ParseBool(args.mount)
-		if doMount || err != nil {
-			volumeMountProblem = checkMountCapability(ctx)
-		}
-		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
-		return true, nil
-	default:
+	if r.Error != connector.InterceptError_UNSPECIFIED {
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
 			_ = is.DeactivateState(ctx)
 			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
 		}
 		return false, interceptMessage(r)
 	}
+
+	if args.agentName == "" {
+		// local-only
+		return true, nil
+	}
+	fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, args.agentName)
+	var intercept *manager.InterceptInfo
+
+	// Add metadata to scout from InterceptResult
+	is.Scout.SetMetadatum("service_uid", r.GetServiceUid())
+	is.Scout.SetMetadatum("workload_kind", r.GetWorkloadKind())
+	// Since a user can create an intercept without specifying a namespace
+	// (thus using the default in their kubeconfig), we should be getting
+	// the namespace from the InterceptResult because that adds the namespace
+	// if it wasn't given on the cli by the user
+	is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
+
+	if args.previewEnabled {
+		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+			Session: is.connInfo.SessionInfo,
+			Name:    args.name,
+			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: args.previewSpec,
+			},
+		})
+		if err != nil {
+			is.Scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			err = fmt.Errorf("creating preview domain: %w", err)
+			return true, err
+		}
+		is.Scout.SetMetadatum("preview_url", intercept.PreviewDomain)
+	} else {
+		intercept = r.InterceptInfo
+	}
+	is.Scout.SetMetadatum("intercept_id", intercept.Id)
+
+	is.env = r.Environment
+	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
+	if args.envFile != "" {
+		if err = is.writeEnvFile(); err != nil {
+			return true, err
+		}
+	}
+	if args.envJSON != "" {
+		if err = is.writeEnvJSON(); err != nil {
+			return true, err
+		}
+	}
+
+	var volumeMountProblem error
+	doMount, err := strconv.ParseBool(args.mount)
+	if doMount || err != nil {
+		volumeMountProblem = checkMountCapability(ctx)
+	}
+	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
+	return true, nil
 }
 
 func (is *interceptState) DeactivateState(ctx context.Context) error {

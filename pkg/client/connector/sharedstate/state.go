@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -34,7 +35,13 @@ type TrafficManager interface {
 	// scenario in which both are nil.
 	GetClientNonBlocking() (manager.ManagerClient, error)
 
+	// CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
+	// only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
+	// intercept, or the workload for the intercept.
+	CanIntercept(context.Context, *connector.CreateInterceptRequest) (*connector.InterceptResult, kates.Object)
+
 	AddIntercept(context.Context, *connector.CreateInterceptRequest) (*connector.InterceptResult, error)
+
 	RemoveIntercept(context.Context, string) error
 	WorkloadInfoSnapshot(context.Context, *connector.ListRequest) *connector.WorkloadInfoSnapshot
 	Uninstall(context.Context, *connector.UninstallRequest) (*connector.UninstallResult, error)

@@ -12,6 +12,7 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -88,6 +89,30 @@ func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Con
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
 	ci, err = s.callbacks.Connect(c, cr, true), nil
+	dlog.Debug(c, "returned")
+	return
+}
+
+func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	c = s.callCtx(c, "CanIntercept")
+	dlog.Debug(c, "called")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	result, mgr := s.sharedState.GetTrafficManagerReadyToIntercept()
+	if result != nil {
+		dlog.Debug(c, "returned")
+		return result, nil
+	}
+	var wl kates.Object
+	if result, wl = mgr.CanIntercept(c, ir); result == nil {
+		var kind string
+		if wl != nil {
+			kind = wl.GetObjectKind().GroupVersionKind().Kind
+		}
+		result = &rpc.InterceptResult{
+			Error:        rpc.InterceptError_UNSPECIFIED,
+			WorkloadKind: kind,
+		}
+	}
 	dlog.Debug(c, "returned")
 	return
 }
