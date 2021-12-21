@@ -25,9 +25,8 @@ import (
 )
 
 type Callbacks struct {
-	InterceptStatus func() *rpc.InterceptResult
-	Cancel          func()
-	Connect         func(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo
+	Cancel  func()
+	Connect func(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo
 }
 
 type service struct {
@@ -96,16 +95,11 @@ func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Con
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	c = s.callCtx(c, "CreateIntercept")
 	dlog.Debug(c, "called")
-	result = s.callbacks.InterceptStatus()
+	defer func() { err = callRecovery(c, recover(), err) }()
+	result, mgr := s.sharedState.GetTrafficManagerReadyToIntercept()
 	if result != nil {
 		dlog.Debug(c, "returned")
 		return result, nil
-	}
-	defer func() { err = callRecovery(c, recover(), err) }()
-	mgr, err := s.sharedState.GetTrafficManagerBlocking(c)
-	if mgr == nil {
-		dlog.Debug(c, "returned")
-		return nil, err
 	}
 	result, err = mgr.AddIntercept(c, ir)
 	dlog.Debug(c, "returned")
@@ -115,16 +109,11 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	c = s.callCtx(c, "RemoveIntercept")
 	dlog.Debug(c, "called")
-	result = s.callbacks.InterceptStatus()
+	defer func() { err = callRecovery(c, recover(), err) }()
+	result, mgr := s.sharedState.GetTrafficManagerReadyToIntercept()
 	if result != nil {
 		dlog.Debug(c, "returned")
 		return result, nil
-	}
-	defer func() { err = callRecovery(c, recover(), err) }()
-	mgr, err := s.sharedState.GetTrafficManagerBlocking(c)
-	if mgr == nil {
-		dlog.Debug(c, "returned")
-		return nil, err
 	}
 	result = &rpc.InterceptResult{}
 	if err = mgr.RemoveIntercept(c, rr.Name); err != nil {
