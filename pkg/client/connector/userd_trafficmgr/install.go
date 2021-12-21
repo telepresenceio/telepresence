@@ -30,7 +30,7 @@ type installer struct {
 
 type Installer interface {
 	userd_k8s.ResourceFinder
-	EnsureAgent(c context.Context, namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
+	EnsureAgent(c context.Context, obj kates.Object, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
 	EnsureManager(c context.Context) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
@@ -263,18 +263,16 @@ func (ki *installer) getSvcForInjectedPod(
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) EnsureAgent(c context.Context,
-	namespace, name, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
-	obj, err := ki.FindWorkload(c, namespace, name, "")
-	if err != nil {
-		return "", "", err
-	}
+func (ki *installer) EnsureAgent(c context.Context, obj kates.Object,
+	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
 	podTemplate, err := install.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return "", "", err
 	}
 
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
+	name := obj.GetName()
+	namespace := obj.GetNamespace()
 
 	var svc *kates.Service
 	a := podTemplate.ObjectMeta.Annotations

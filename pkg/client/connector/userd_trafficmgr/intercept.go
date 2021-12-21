@@ -17,6 +17,7 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
@@ -295,9 +296,19 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			}, nil
 		}
 	}
-
 	if spec.Agent == "" {
 		return tm.AddLocalOnlyIntercept(c, spec)
+	}
+
+	obj, err := tm.FindWorkload(c, spec.Namespace, spec.Agent, spec.WorkloadKind)
+	if err != nil {
+		if errors2.IsNotFound(err) {
+			return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil
+		}
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_TRAFFIC_MANAGER_ERROR,
+			ErrorText: err.Error(),
+		}, nil
 	}
 
 	spec.Client = tm.userAndHost
@@ -320,7 +331,7 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
-	result := tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
+	result := tm.addAgent(c, obj, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
 	if result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}
