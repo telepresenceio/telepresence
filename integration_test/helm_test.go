@@ -51,7 +51,7 @@ func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	ctx := s.Context()
 	_, stderr, err := itest.Telepresence(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Error(err)
-	s.Contains(stderr, "Failed to establish intercept")
+	s.Contains(stderr, `deployments.apps "echo" is forbidden`)
 }
 
 func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {
