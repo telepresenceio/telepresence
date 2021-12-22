@@ -283,6 +283,9 @@ func (s *cluster) GlobalEnv() map[string]string {
 		includeEnv["TMP"] = yes
 		includeEnv["Path"] = yes
 		includeEnv["PATHEXT"] = yes
+		includeEnv["ProgramFiles"] = yes
+		includeEnv["ProgramData"] = yes
+		includeEnv["SystemDrive"] = yes
 		includeEnv["USERPROFILE"] = yes
 		includeEnv["USERNAME"] = yes
 		includeEnv["windir"] = yes
