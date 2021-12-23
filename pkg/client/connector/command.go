@@ -382,9 +382,8 @@ func run(c context.Context) error {
 		svc := grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(svc, userd_grpc.NewGRPCService(
 			userd_grpc.Callbacks{
-				InterceptStatus: s.interceptStatus,
-				Cancel:          s.cancel,
-				Connect:         s.connect,
+				Cancel:  s.cancel,
+				Connect: s.connect,
 			},
 			s.sharedState,
 		))

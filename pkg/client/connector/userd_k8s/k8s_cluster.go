@@ -233,21 +233,27 @@ func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Po
 	return pod, nil
 }
 
-// FindWorkload returns a workload for the given name and namespace. We
-// search in a specific order based on how we prefer workload objects:
-// 1. Deployments
-// 2. ReplicaSets
-// 3. StatefulSets
-// And return the kind as soon as we find one that matches
-func (kc *Cluster) FindWorkload(c context.Context, namespace, name string) (kates.Object, error) {
+// FindWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
+// is optional. A search is performed in the following order if it is empty:
+//
+//   1. Deployments
+//   2. ReplicaSets
+//   3. StatefulSets
+//
+// The first match is returned.
+func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (kates.Object, error) {
 	type workLoad struct {
 		kind string
 		obj  kates.Object
 	}
 	for _, wl := range []workLoad{{"Deployment", &kates.Deployment{}}, {"ReplicaSet", &kates.ReplicaSet{}}, {"StatefulSet", &kates.StatefulSet{}}} {
+		if workloadKind != "" && workloadKind != wl.kind {
+			continue
+		}
 		wl.obj.(schema.ObjectKind).SetGroupVersionKind(schema.GroupVersionKind{Kind: wl.kind})
 		wl.obj.SetName(name)
 		wl.obj.SetNamespace(namespace)
+		dlog.Debugf(c, "Get %s %s.%s", wl.kind, name, namespace)
 		if err := kc.client.Get(c, wl.obj, wl.obj); err != nil {
 			if kates.IsNotFound(err) {
 				continue
@@ -256,7 +262,10 @@ func (kc *Cluster) FindWorkload(c context.Context, namespace, name string) (kate
 		}
 		return wl.obj, nil
 	}
-	return nil, k8err.NewNotFound(corev1.Resource("workload"), name+"."+namespace)
+	if workloadKind == "" {
+		workloadKind = "workload"
+	}
+	return nil, k8err.NewNotFound(corev1.Resource(workloadKind), name+"."+namespace)
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns

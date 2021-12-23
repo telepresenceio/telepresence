@@ -25,6 +25,9 @@ service Connector {
   // anything.  It's a dry-run.
   rpc Status(ConnectRequest) returns (ConnectInfo);
 
+  // Queries the connector whether it is possible to create the given intercept.
+  rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);
+
   // Adds an intercept to a workload.  Requires having already called
   // Connect.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
@@ -161,7 +164,7 @@ enum InterceptError {
   NO_ACCEPTABLE_WORKLOAD = 8;
   AMBIGUOUS_MATCH = 9;
   FAILED_TO_ESTABLISH = 10;
-  reserved 11;
+  UNSUPPORTED_WORKLOAD = 11;
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
 }

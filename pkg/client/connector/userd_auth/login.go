@@ -411,13 +411,13 @@ func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogi
 	return true, nil
 }
 
-func (l *loginExecutor) Logout(ctx context.Context) error {
+func (l *loginExecutor) Logout(ctx context.Context) (err error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
 	env := client.GetEnv(ctx)
 	if l.tokenSource == nil && l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] == "" {
-		return fmt.Errorf("Logout: %w", ErrNotLoggedIn)
+		err = fmt.Errorf("Logout: %w", ErrNotLoggedIn)
 	}
 
 	l.resetRefreshTimer(0)
@@ -428,11 +428,14 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)
 
 	l.apikeys[env.LoginDomain] = make(map[string]string)
-	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
-		return err
+	if saveErr := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); saveErr != nil {
+		if err == nil {
+			err = saveErr
+		} else {
+			fmt.Fprintln(os.Stderr, saveErr.Error())
+		}
 	}
-
-	return nil
+	return err
 }
 
 func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
