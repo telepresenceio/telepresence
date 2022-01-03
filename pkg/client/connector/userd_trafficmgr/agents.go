@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -93,8 +94,10 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
-	svcUID, kind, err := tm.EnsureAgent(c, namespace, agentName, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
+func (tm *trafficManager) addAgent(c context.Context, workload kates.Object, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
+	svcUID, kind, err := tm.EnsureAgent(c, workload, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
+	agentName := workload.GetName()
+	namespace := workload.GetNamespace()
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{

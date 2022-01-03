@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -11,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -33,7 +35,13 @@ type TrafficManager interface {
 	// scenario in which both are nil.
 	GetClientNonBlocking() (manager.ManagerClient, error)
 
+	// CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
+	// only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
+	// intercept, or the workload for the intercept.
+	CanIntercept(context.Context, *connector.CreateInterceptRequest) (*connector.InterceptResult, kates.Object)
+
 	AddIntercept(context.Context, *connector.CreateInterceptRequest) (*connector.InterceptResult, error)
+
 	RemoveIntercept(context.Context, string) error
 	WorkloadInfoSnapshot(context.Context, *connector.ListRequest) *connector.WorkloadInfoSnapshot
 	Uninstall(context.Context, *connector.UninstallRequest) (*connector.UninstallResult, error)
@@ -121,6 +129,32 @@ func (s *State) GetTrafficManagerNonBlocking() TrafficManager {
 	default:
 		return nil
 	}
+}
+
+func (s *State) GetTrafficManagerReadyToIntercept() (*connector.InterceptResult, TrafficManager) {
+	var ie connector.InterceptError
+	switch {
+	case s.cluster == nil:
+		ie = connector.InterceptError_NO_CONNECTION
+	case s.trafficMgr == nil:
+		ie = connector.InterceptError_NO_TRAFFIC_MANAGER
+	default:
+		if mgrClient, mgrErr := s.trafficMgr.GetClientNonBlocking(); mgrClient == nil {
+			if mgrErr != nil {
+				// there was an error connecting
+				return &connector.InterceptResult{
+					Error:         connector.InterceptError_TRAFFIC_MANAGER_ERROR,
+					ErrorText:     mgrErr.Error(),
+					ErrorCategory: int32(errcat.GetCategory(mgrErr)),
+				}, nil
+			}
+			// still in the process of connecting but not connected yet
+			ie = connector.InterceptError_TRAFFIC_MANAGER_CONNECTING
+		} else {
+			return nil, s.trafficMgr
+		}
+	}
+	return &connector.InterceptResult{Error: ie}, nil
 }
 
 func (s *State) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {

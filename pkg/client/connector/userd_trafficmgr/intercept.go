@@ -17,7 +17,9 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -268,8 +270,10 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 	}
 }
 
-// AddIntercept adds one intercept
-func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+// CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
+// only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
+// intercept, or the workload for the intercept.
+func (tm *trafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object) {
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
@@ -295,8 +299,35 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			}, nil
 		}
 	}
-
 	if spec.Agent == "" {
+		return nil, nil
+	}
+
+	obj, err := tm.FindWorkload(c, spec.Namespace, spec.Agent, spec.WorkloadKind)
+	if err != nil {
+		if errors2.IsNotFound(err) {
+			return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil
+		}
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_TRAFFIC_MANAGER_ERROR,
+			ErrorText: err.Error(),
+		}, nil
+	}
+	if _, err = install.GetPodTemplateFromObject(obj); err != nil {
+		return interceptError(rpc.InterceptError_UNSUPPORTED_WORKLOAD, errcat.User.New(spec.WorkloadKind)), nil
+	}
+	return nil, obj
+}
+
+// AddIntercept adds one intercept
+func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	result, wl := tm.CanIntercept(c, ir)
+	if result != nil {
+		return result, nil
+	}
+
+	spec := ir.Spec
+	if wl == nil {
 		return tm.AddLocalOnlyIntercept(c, spec)
 	}
 
@@ -320,7 +351,7 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
-	result := tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
+	result = tm.addAgent(c, wl, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
 	if result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}

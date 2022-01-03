@@ -1,6 +1,20 @@
 # Changelog
 
-### 2.4.8 (TBD)
+### 2.4.10 (TBD)
+
+- Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
+
+- Bugfix: User will not be asked to log in or add ingress information when creating an intercept until a check has been 
+  made that the intercept is possible.
+
+### 2.4.9 (December 9, 2021)
+
+- Bugfix: Fixed an error where access tokens were not refreshed if you login
+  while the daemons are already running.
+
+- Bugfix: A helm upgrade using the --reuse-values flag no longer fails on a "nil pointer" error caused by a nil `telpresenceAPI` value.
+
+### 2.4.8 (December 3, 2021)
 
 - Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
   consumed or not from a message queue where the intercept headers are added to the messages.
