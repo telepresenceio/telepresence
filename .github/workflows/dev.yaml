@@ -37,59 +37,45 @@ jobs:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
       # It is on the roadmap though: https://github.com/github/roadmap/issues/271
-      - id: timestamp
-        run: echo "::set-output name=timestamp::$(date +%s)"
-
-      - name: Get previous run
-        uses: actions/cache@v2
-        with:
-          path: |
-            run_result
-          key: ${{ github.run_id }}-${{ github.job }}-${{ steps.timestamp.outputs.timestamp }}
-          restore-keys: |
-            ${{ github.run_id }}-${{ github.job }}-
-
-      - name: Get result from the previous run
-        id: run_result
-        run: cat run_result 2>/dev/null || echo 'not run'
-
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
       - uses: azure/setup-kubectl@v1
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
-      - name: "Test arm64 build"
-        if: steps.run_result.outputs.run_result != 'success'
-        run: GOARCH=arm64 make build
       - run: make build
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
       - run: |
           brew update
           brew install --cask macfuse
           brew install gromgit/fuse/sshfs-mac
           brew link --overwrite sshfs-mac
         name: install dependencies
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
       - uses: actions/download-artifact@v2
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           name: image
       - uses: ./.github/actions/prepare-kluster
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           platform: macos
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
         id: kluster
       - name: Run tests
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry@v2.4.0
         with:
           max_attempts: 3
@@ -116,32 +102,20 @@ jobs:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
       # It is on the roadmap though: https://github.com/github/roadmap/issues/271
-      - id: timestamp
-        run: echo "::set-output name=timestamp::$(date +%s)"
-
-      - name: Get previous run
-        uses: actions/cache@v2
-        with:
-          path: |
-            run_result
-          key: ${{ github.run_id }}-${{ github.job }}-${{ steps.timestamp.outputs.timestamp }}
-          restore-keys: |
-            ${{ github.run_id }}-${{ github.job }}-
-
-      - name: Get result from the previous run
-        shell: bash
-        id: run_result
-        run: cat run_result 2> /dev/null || echo 'not run'
-
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
       - uses: azure/setup-kubectl@v1
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
@@ -153,16 +127,16 @@ jobs:
           #cp wintun/bin/amd64/wintun.dll "$ENV:SystemRoot\\system32\\wintun.dll"
           #cp wintun/bin/amd64/wintun.dll .
           cp wintun/bin/amd64/wintun.dll "build-output\\bin"
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
       - name: "Download sshfs"
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         run: |
           curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
           curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
         shell: bash
       - name: "Install sshfs"
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         shell: powershell
         run: |
           dir
@@ -170,13 +144,13 @@ jobs:
           Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
           [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
       - uses: actions/download-artifact@v2
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           name: image
       - run: make build
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
       - uses: ./.github/actions/prepare-kluster
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           platform: windows
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
@@ -186,10 +160,10 @@ jobs:
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         name: Update etc\hosts
       - name: Run tests
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry@v2.4.0
         with:
           max_attempts: 3
@@ -215,31 +189,20 @@ jobs:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
       # It is on the roadmap though: https://github.com/github/roadmap/issues/271
-      - id: timestamp
-        run: echo "::set-output name=timestamp::$(date +%s)"
-
-      - name: Get previous run
-        uses: actions/cache@v2
-        with:
-          path: |
-            run_result
-          key: ${{ github.run_id }}-${{ github.job }}-${{ steps.timestamp.outputs.timestamp }}
-          restore-keys: |
-            ${{ github.run_id }}-${{ github.job }}-
-
-      - name: Get result from the previous run
-        id: run_result
-        run: cat run_result 2>/dev/null || echo 'not run'
-
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
       - uses: azure/setup-kubectl@v1
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
@@ -248,23 +211,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sshfs socat
           sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
       - uses: actions/download-artifact@v2
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           name: image
       - run: make build
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
       - uses: ./.github/actions/prepare-kluster
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         with:
           platform: linux
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
         id: kluster
       - name: Run tests
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry@v2.4.0
         with:
           max_attempts: 3

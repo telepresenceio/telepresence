@@ -8,42 +8,31 @@ jobs:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
       # It is on the roadmap though: https://github.com/github/roadmap/issues/271
-      - id: timestamp
-        run: echo "::set-output name=timestamp::$(date +%s)"
-
-      - name: Get previous run
-        uses: actions/cache@v2
-        with:
-          path: |
-            run_result
-          key: ${{ github.run_id }}-${{ github.job }}-${{ steps.timestamp.outputs.timestamp }}
-          restore-keys: |
-            ${{ github.run_id }}-${{ github.job }}-
-
-      - name: Get result from the previous run
-        id: run_result
-        run: cat run_result 2>/dev/null || echo 'not run'
-
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
             #- uses: azure/setup-kubectl@v1
-            #if: steps.run_result.outputs.run_result != 'success'
+            #if: steps.get_last_run.outputs.passed != 'success'
             #with:
             #version: 'v1.19.3'
             #id: kubectl
       - name: "Test arm64 build"
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         run: GOARCH=arm64 make build
       - name: "Test amd64 build"
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         run: make build
       - name: Run tests
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
@@ -62,44 +51,32 @@ jobs:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
       # It is on the roadmap though: https://github.com/github/roadmap/issues/271
-      - id: timestamp
-        run: echo "::set-output name=timestamp::$(date +%s)"
-
-      - name: Get previous run
-        uses: actions/cache@v2
-        with:
-          path: |
-            run_result
-          key: ${{ github.run_id }}-${{ github.job }}-${{ steps.timestamp.outputs.timestamp }}
-          restore-keys: |
-            ${{ github.run_id }}-${{ github.job }}-
-
-      - name: Get result from the previous run
-        shell: bash
-        id: run_result
-        run: cat run_result 2> /dev/null || echo 'not run'
-
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
       - run: |
           choco install make
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
       - run: make build
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
       - run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         name: Update etc\hosts
       - name: Run tests
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
@@ -117,26 +94,15 @@ jobs:
       # Used so we don't have to re-run tests that pass, kinda hacky but github
       # doesn't have any other alternative right now aside from re-running *all* jobs.
       # It is on the roadmap though: https://github.com/github/roadmap/issues/271
-      - id: timestamp
-        run: echo "::set-output name=timestamp::$(date +%s)"
-
-      - name: Get previous run
-        uses: actions/cache@v2
-        with:
-          path: |
-            run_result
-          key: ${{ github.run_id }}-${{ github.job }}-${{ steps.timestamp.outputs.timestamp }}
-          restore-keys: |
-            ${{ github.run_id }}-${{ github.job }}-
-
-      - name: Get result from the previous run
-        id: run_result
-        run: cat run_result 2>/dev/null || echo 'not run'
-
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
       - uses: actions/setup-go@v2
         with:
           go-version: '^1.17.x'
@@ -145,9 +111,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y socat
       - run: make build
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
       - name: Run tests
-        if: steps.run_result.outputs.run_result != 'success'
+        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
