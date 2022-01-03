@@ -280,6 +280,7 @@ func addAgentContainer(
 			appContainer,
 			containerPort,
 			int(appPort.ContainerPort),
+			install.GetAppProto(ctx, env.AppProtocolStrategy, svcPort),
 			int(env.APIPort),
 			env.ManagerNamespace,
 			setGID,

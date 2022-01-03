@@ -113,7 +113,8 @@ type genContainerInfo struct {
 	*genYAMLInfo
 	containerName string
 	serviceName   string
-	appPort       int
+	port          int
+	proto         string
 	agentPort     int
 	appProto      string
 }
@@ -129,10 +130,12 @@ func genContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&info.containerName, "container-name", "",
 		"The name of the container hosting the application you wish to intercept.")
-	cmd.Flags().IntVar(&info.appPort, "port", 0,
+	cmd.Flags().IntVar(&info.port, "port", 0,
 		"The port number you wish to intercept")
-	cmd.Flags().StringVar(&info.appProto, "protocol", string(corev1.ProtocolTCP),
-		"The protocol the app's port speaks")
+	cmd.Flags().StringVar(&info.proto, "protocol", string(corev1.ProtocolTCP),
+		`The transport protocol the port speaks, i.e. "tcp" or "udp"`)
+	cmd.Flags().StringVar(&info.appProto, "app-protocol", "",
+		`The application protocol the port speaks, i.e. "http", "grpc", "https", ...`)
 	cmd.Flags().IntVar(&info.agentPort, "agent-port", 9900,
 		"The port number you wish the agent to listen on.")
 	cmd.Flags().StringVar(&info.serviceName, "service-name", "",
@@ -217,10 +220,11 @@ func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
 		fmt.Sprintf("%s/%s", registry, agentImage),
 		container,
 		corev1.ContainerPort{
-			Protocol:      corev1.Protocol(i.appProto),
+			Protocol:      corev1.Protocol(i.proto),
 			ContainerPort: int32(i.agentPort),
 		},
-		i.appPort,
+		i.port,
+		i.appProto,
 		cfg.TelepresenceAPI.Port,
 		k8sConfig.GetManagerNamespace(),
 		false,

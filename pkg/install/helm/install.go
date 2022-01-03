@@ -50,7 +50,8 @@ func getValues(ctx context.Context) map[string]interface{} {
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
-	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" {
+	apc := clientConfig.Intercept.AppProtocolStrategy
+	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" || apc != client.Http2Probe {
 		agentImage := make(map[string]interface{})
 		if imgConfig.WebhookAgentImage != "" {
 			parts := strings.Split(imgConfig.WebhookAgentImage, ":")
@@ -66,7 +67,11 @@ func getValues(ctx context.Context) map[string]interface{} {
 		if imgConfig.WebhookRegistry != "" {
 			agentImage["registry"] = imgConfig.WebhookRegistry
 		}
-		values["agentInjector"] = map[string]interface{}{"agentImage": agentImage}
+		agentInjector := map[string]interface{}{"agentImage": agentImage}
+		values["agentInjector"] = agentInjector
+		if apc != client.Http2Probe {
+			agentInjector["appProtocolStrategy"] = apc.String()
+		}
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
 		values["telepresenceAPI"] = map[string]interface{}{

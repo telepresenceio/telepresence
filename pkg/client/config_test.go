@@ -43,6 +43,9 @@ images:
   webhookAgentImage: ambassador-telepresence-webhook-image:0.0.2
 telepresenceAPI:
   port: 1234
+intercept:
+  appProtocolStrategy: portName
+  defaultPort: 9080
 `,
 	}
 
@@ -80,6 +83,8 @@ telepresenceAPI:
 	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.AgentImage)         // from user
 	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.WebhookAgentImage) // from user
 	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                              // from user
+	assert.Equal(t, PortName, cfg.Intercept.AppProtocolStrategy)                                 // from user
+	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                             // from user
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
@@ -94,6 +99,8 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg.LogLevels.UserDaemon = logrus.TraceLevel
 	cfg.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("20Mi")
 	cfg.TelepresenceAPI.Port = 4567
+	cfg.Intercept.AppProtocolStrategy = PortName
+	cfg.Intercept.DefaultPort = 9080
 	cfgBytes, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
 
