@@ -465,6 +465,8 @@ output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingservice >"$output_location"
+# Give the mount time to be removed before we create a new intercept
+sleep 3
 $TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --mechanism=tcp >"$output_location"
 sleep 1
 
@@ -484,6 +486,26 @@ output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
 verify_output_empty "${output}" false
 
 finish_step
+
+###############################################
+#### Step 3b (temp) - Verify mount works   ####
+###############################################
+# Due to some issues with the github actions macOS executors, macfuse
+# doesn't work in our integration tests, so we ensure that mounts
+# in our smoke tests. The integration tests *do* test mounts on
+# Windows and Linux so this testing is really just to be extra cautious.
+# We can remove this whole step when/if the macfuse issue is cleared up
+# in the github actions executors
+mount_path=$(telepresence list --json | jq '.[] | select(.name=="dataprocessingservice") | .intercept_info.spec.mount_point' | sed 's/"//g')
+if [[ -z $mount_path ]]; then
+    echo "Mount path was empty and it shouldn't have been"
+    exit 1
+fi
+
+if ! stat "$mount_path"/var > "$output_location" 2>&1; then
+    echo "The mount was unsuccessful"
+    exit 1
+fi
 
 ###############################################
 #### Step 4 - Verify intercept can be left ####
