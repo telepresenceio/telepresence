@@ -230,7 +230,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check-all
-check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
+check-all: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
