@@ -28,9 +28,10 @@ type Config struct {
 	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
 	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
 }
 
-// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+// Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) Merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
@@ -38,6 +39,7 @@ func (c *Config) Merge(o *Config) {
 	c.Cloud.merge(&o.Cloud)
 	c.Grpc.merge(&o.Grpc)
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
+	c.Intercept.merge(&o.Intercept)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -72,6 +74,8 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 			err = ms[i+1].Decode(&c.Grpc)
 		case kv == "telepresenceAPI":
 			err = ms[i+1].Decode(&c.TelepresenceAPI)
+		case kv == "intercept":
+			err = ms[i+1].Decode(&c.Intercept)
 		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
@@ -633,6 +637,76 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
+// AppProtocolStrategy specifies how the application protocol for a service port is determined
+// in case the service.spec.ports.appProtocol is not set.
+type AppProtocolStrategy int
+
+var apsNames = [...]string{"http2Probe", "portName", "http", "http2"}
+
+const (
+	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior)
+	Http2Probe AppProtocolStrategy = iota
+
+	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 prob
+	// if no such guess can be made.
+	PortName
+
+	// Http means just assume HTTP/1.1
+	Http
+
+	// Http2 means just assume HTTP/2
+	Http2
+)
+
+func (aps AppProtocolStrategy) String() string {
+	return apsNames[aps]
+}
+
+func NewAppProtocolStrategy(s string) (AppProtocolStrategy, error) {
+	for i, n := range apsNames {
+		if s == n {
+			return AppProtocolStrategy(i), nil
+		}
+	}
+	return 0, fmt.Errorf("invalid AppProtcolStrategy: %q", s)
+}
+
+func (aps AppProtocolStrategy) MarshalYAML() (interface{}, error) {
+	return aps.String(), nil
+}
+
+func (aps *AppProtocolStrategy) UnmarshalYAML(node *yaml.Node) (err error) {
+	var s string
+	if err := node.Decode(&s); err != nil {
+		return err
+	}
+	var as AppProtocolStrategy
+	if as, err = NewAppProtocolStrategy(s); err != nil {
+		return err
+	}
+	*aps = as
+	return nil
+}
+
+type Intercept struct {
+	AppProtocolStrategy AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
+}
+
+func (ic *Intercept) merge(o *Intercept) {
+	if o.AppProtocolStrategy != Http2Probe {
+		ic.AppProtocolStrategy = o.AppProtocolStrategy
+	}
+}
+
+// MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
+func (ic Intercept) MarshalYAML() (interface{}, error) {
+	im := make(map[string]interface{})
+	if ic.AppProtocolStrategy != Http2Probe {
+		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
+	}
+	return im, nil
+}
+
 var parseContext context.Context
 
 type parsedFile struct{}
@@ -694,6 +768,7 @@ func GetDefaultConfig(c context.Context) Config {
 		},
 		Grpc:            Grpc{},
 		TelepresenceAPI: TelepresenceAPI{},
+		Intercept:       Intercept{},
 	}
 	env := GetEnv(c)
 	cfg.Images.Registry = env.Registry
