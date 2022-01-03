@@ -2,6 +2,8 @@
 
 ### 2.4.10 (TBD)
 
+- Change: Telepresence CI now runs in Github Actions instead of Circle CI.
+
 - Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
 
 - Bugfix: User will not be asked to log in or add ingress information when creating an intercept until a check has been 
