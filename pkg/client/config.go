@@ -637,6 +637,8 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
+const defaultInterceptDefaultPort = 8080
+
 // AppProtocolStrategy specifies how the application protocol for a service port is determined
 // in case the service.spec.ports.appProtocol is not set.
 type AppProtocolStrategy int
@@ -696,17 +698,24 @@ func (aps *AppProtocolStrategy) UnmarshalYAML(node *yaml.Node) (err error) {
 
 type Intercept struct {
 	AppProtocolStrategy AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
+	DefaultPort         int                 `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
 }
 
 func (ic *Intercept) merge(o *Intercept) {
 	if o.AppProtocolStrategy != Http2Probe {
 		ic.AppProtocolStrategy = o.AppProtocolStrategy
 	}
+	if o.DefaultPort != 0 {
+		ic.DefaultPort = o.DefaultPort
+	}
 }
 
 // MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
 func (ic Intercept) MarshalYAML() (interface{}, error) {
 	im := make(map[string]interface{})
+	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
+		im["defaultPort"] = ic.DefaultPort
+	}
 	if ic.AppProtocolStrategy != Http2Probe {
 		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
 	}
@@ -774,7 +783,9 @@ func GetDefaultConfig(c context.Context) Config {
 		},
 		Grpc:            Grpc{},
 		TelepresenceAPI: TelepresenceAPI{},
-		Intercept:       Intercept{},
+		Intercept: Intercept{
+			DefaultPort: defaultInterceptDefaultPort,
+		},
 	}
 	env := GetEnv(c)
 	cfg.Images.Registry = env.Registry
