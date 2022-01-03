@@ -649,7 +649,7 @@ const (
 	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior)
 	Http2Probe AppProtocolStrategy = iota
 
-	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 prob
+	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 probe
 	// if no such guess can be made.
 	PortName
 
