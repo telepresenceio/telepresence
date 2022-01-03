@@ -68,7 +68,7 @@ func GetAppProto(ctx context.Context, aps client.AppProtocolStrategy, p *corev1.
 		}
 		var appProto string
 		switch strings.ToLower(pn) {
-		case "tcp", "http", "https", "grpc", "http2":
+		case "http", "https", "grpc", "http2":
 			appProto = pn
 		case "h2c": // h2c is cleartext HTTP/2
 			appProto = "http2"

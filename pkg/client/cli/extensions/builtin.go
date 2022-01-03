@@ -54,7 +54,6 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 								`Supported protocols are ` +
 								`"http" (Plaintext HTTP/1.1), ` +
 								`"http2" (Plaintext HTTP/2), ` +
-								`"tcp" (Opaque TCP stream, implies --http_match=all), and ` +
 								`"tls" (TLS Encrypted data)`,
 						},
 					},
