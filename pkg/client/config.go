@@ -675,17 +675,23 @@ func (aps AppProtocolStrategy) MarshalYAML() (interface{}, error) {
 	return aps.String(), nil
 }
 
+func (aps *AppProtocolStrategy) EnvDecode(val string) (err error) {
+	var as AppProtocolStrategy
+	if val == "" {
+		as = Http2Probe
+	} else if as, err = NewAppProtocolStrategy(val); err != nil {
+		return err
+	}
+	*aps = as
+	return nil
+}
+
 func (aps *AppProtocolStrategy) UnmarshalYAML(node *yaml.Node) (err error) {
 	var s string
 	if err := node.Decode(&s); err != nil {
 		return err
 	}
-	var as AppProtocolStrategy
-	if as, err = NewAppProtocolStrategy(s); err != nil {
-		return err
-	}
-	*aps = as
-	return nil
+	return aps.EnvDecode(s)
 }
 
 type Intercept struct {

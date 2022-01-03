@@ -2,6 +2,9 @@
 
 ### 2.4.10 (TBD)
 
+- Feature: The strategy when selecting the application protocol for personal intercepts in agents injected by the 
+  mutating webhook can now be configured using the `agentInjector.appProtocolStrategy` in the Helm chart.
+
 - Feature: The strategy when selecting the application protocol for personal intercepts can now be configured using
   the `intercept.appProtocolStrategy` in the `config.yml` file.
 
