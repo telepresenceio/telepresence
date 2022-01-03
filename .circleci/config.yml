@@ -1,0 +1,243 @@
+# This configuration makes use of the following things defined in the
+# CircleCI webui:
+#
+#  - A context named "telepresence2-release".  The context sets the
+#    following environment variables:
+#     + DOCKERHUB_USERNAME
+#     + DOCKERHUB_PASSWORD
+#     + AWS_ACCESS_KEY_ID (for S3)
+#     + AWS_SECRET_ACCESS_KEY (for S3)
+#     + DEV_TELEPRESENCE_KUBECEPTION_TOKEN
+
+version: 2.1
+
+orbs:
+  win: circleci/windows@2.2.0
+
+executors:
+
+  "vm-linux":
+    machine:
+      image: "ubuntu-2004:202010-01"
+
+  "vm-macos":
+    macos:
+      xcode: "12.2.0" # macOS 10.15.5
+
+commands:
+
+  "install-go":
+    parameters:
+      version:
+        type: string
+        default: "1.17"
+    steps:
+      - run:
+          name: "Install Go << parameters.version >>"
+          command: |
+            set -x
+            if [[ $OS == Windows_NT ]]; then
+              curl https://dl.google.com/go/go<< parameters.version >>.windows-amd64.zip -o /tmp/go.zip
+              mv /c/go /c/go-112
+              unzip -q /tmp/go.zip -d /c/
+            else
+              curl https://dl.google.com/go/go<< parameters.version >>.$(uname -s | tr A-Z a-z)-amd64.tar.gz -o /tmp/go.tar.gz
+              tar -C /tmp -xzf /tmp/go.tar.gz
+              echo 'export PATH=/tmp/go/bin:$PATH' >> "$BASH_ENV"
+              if [ -z "$(/tmp/go/bin/go env GOPROXY)" ]; then
+                echo 'export GOPROXY=https://proxy.golang.org' >> "$BASH_ENV"
+              fi
+              . "$BASH_ENV"
+            fi
+            go version
+
+jobs:
+
+  "release-linux":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-go
+      - run: pip3 install awscli
+      - run:
+          name: Docker login
+          command: |
+            docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+
+  "release-macos":
+    executor: vm-macos
+    steps:
+      - checkout
+      - install-go
+      - run: sudo pip3 install awscli
+      # once we update our mac runner to a version past Catalina (12.5.1+)
+      # we can remove this.  But since we all run Big Sur on our machines right now
+      # we thought we should keep testing Catalina in our CI.
+      # UPDATE: Macfuse doesn't seem to be working on any exectutor past Catalina,
+      # so we need to figure that out...
+      # https://blog.bytesguy.com/resolving-lets-encrypt-issues-with-curl-on-macos
+      - run:
+          name: Update Let's Encrypt Certs
+          command: |
+            curl -k https://curl.se/ca/cacert.pem -o ~/.cacert.pem
+            # These work for non-sudo cases
+            export CURL_CA_BUNDLE=~/.cacert.pem
+            export AWS_CA_BUNDLE=~/.cacert.pem
+            # This makes it work when using sudo with curl
+            sudo cp ~/.cacert.pem /etc/ssl/cert.pem
+      - run:
+          name: "Publish macos (arch amd64)"
+          command: |
+            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable
+      - run:
+          name: "Publish macos (arch arm64)"
+          command: |
+            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make push-executable
+      - run:
+          name: "Promote macos (arch amd64)"
+          command: |
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make promote-to-stable
+      - run:
+          name: "Promote macos (arch arm64)"
+          command: |
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make promote-to-stable
+
+  "release-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+      - checkout
+      - install-go
+      - run: pip install awscli
+      - run: choco install make zip
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+
+  "release-chart":
+    executor: vm-linux
+    steps:
+    - checkout
+    - run: |
+        [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
+
+  "publish-nightly-linux":
+    executor: vm-linux
+    steps:
+    - checkout
+    - install-go
+    - run: pip3 install awscli
+    - run:
+        name: Docker login
+        command: |
+          docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+    - run:
+        name: "Publish nightly linux"
+        command: |
+          newTag=$(go run ./build-aux/genversion nightly)
+          TELEPRESENCE_VERSION=$newTag make push-images push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-linux-artifacts
+
+  "publish-nightly-windows":
+    executor:
+      name: win/default
+      shell: bash.exe
+    steps:
+    - checkout
+    - install-go
+    - run: pip install awscli
+    - run: choco install make zip
+    - run:
+        name: "Publish nightly windows"
+        command: |
+          newTag=$(go run ./build-aux/genversion nightly)
+          TELEPRESENCE_VERSION=$newTag make push-executable
+          TELEPRESENCE_VERSION=$newTag make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-windows-artifacts
+
+  "publish-nightly-macos":
+    executor: vm-macos
+    steps:
+    - checkout
+    - install-go
+    - run: sudo pip3 install awscli
+    - run:
+        name: "Publish nightly macos (arch amd64)"
+        command: |
+          newTag=$(go run ./build-aux/genversion nightly)
+          TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make push-executable
+          TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-macos-amd64-artifacts
+    - run:
+        name: "Publish nightly macos (arch arm64)"
+        command: |
+          newTag=$(go run ./build-aux/genversion nightly)
+          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make push-executable
+          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-macos-arm64-artifacts
+
+workflows:
+
+  'Release':
+    jobs:
+      - release-linux:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-macos:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-windows:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-chart:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+  'Nightly':
+    triggers:
+    - schedule:
+        cron: "0 0 * * 1-5"
+        filters:
+          branches:
+            only:
+              - release/v2
+    jobs:
+      - publish-nightly-linux:
+          context: telepresence2-release
+      - publish-nightly-macos:
+          context: telepresence2-release
+      - publish-nightly-windows:
+          context: telepresence2-release
