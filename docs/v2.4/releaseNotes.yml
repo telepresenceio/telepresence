@@ -38,6 +38,18 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.4.10
+    date: "TBD"
+    notes:
+      - type: change
+        title: Telepresence CI now uses Github Actions
+        body: >-
+          Telepresence now uses Github Actions for doing unit and integration testing. It is
+          now easier for contributors to run tests on PRs since maintainers can add an
+          "ok to test" label to PRs (including from forks) to run integration tests.
+        docs: https://github.com/telepresenceio/telepresence/actions
+        image: telepresence-2.4.10-actions.png
+
   - version: 2.4.9
     date: "2021-12-09"
     notes:

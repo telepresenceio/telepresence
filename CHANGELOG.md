@@ -11,6 +11,8 @@
 - Feature: The strategy when selecting the application protocol for personal intercepts can now be configured using
   the `intercept.appProtocolStrategy` in the `config.yml` file.
 
+- Change: Telepresence CI now runs in Github Actions instead of Circle CI.
+
 - Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
 
 - Bugfix: User will not be asked to log in or add ingress information when creating an intercept until a check has been 
