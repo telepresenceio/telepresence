@@ -48,6 +48,15 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 								`If this flag is given multiple times, then it will only intercept traffic that matches *all* of the specifiers. ` +
 								`(default "auto" if you are logged in with 'telepresence login', default "all" otherwise)`,
 						},
+						"protocol": {
+							Type: "string",
+							Usage: `` +
+								`Supported protocols are ` +
+								`"http" (Plaintext HTTP/1.1), ` +
+								`"http2" (Plaintext HTTP/2), ` +
+								`"tcp" (Opaque TCP stream, implies --http_match=all), and ` +
+								`"tls" (TLS Encrypted data)`,
+						},
 					},
 				},
 			},
