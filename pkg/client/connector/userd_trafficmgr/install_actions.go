@@ -327,10 +327,11 @@ func (s *svcActions) TelVersion() (semver.Version, error) {
 // pod template spec.
 type addTrafficAgentAction struct {
 	// The information of the pre-existing container port that the agent will take over.
-	ContainerPortName   string          `json:"container_port_name"`
-	ContainerPortProto  corev1.Protocol `json:"container_port_proto"`
-	ContainerPortNumber uint16          `json:"app_port"`
-	APIPortNumber       uint16          `json:"api_port,omitempty"`
+	ContainerPortName     string          `json:"container_port_name"`
+	ContainerPortProto    corev1.Protocol `json:"container_port_proto"`
+	ContainerPortAppProto string          `json:"container_port_app_proto,omitempty"`
+	ContainerPortNumber   uint16          `json:"app_port"`
+	APIPortNumber         uint16          `json:"api_port,omitempty"`
 
 	// The image name of the agent to add
 	ImageName string `json:"image_name"`
@@ -385,6 +386,7 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 				ContainerPort: 9900,
 			},
 			int(ata.ContainerPortNumber),
+			ata.ContainerPortAppProto,
 			int(ata.APIPortNumber),
 			ata.trafficManagerNamespace,
 			ata.setGID,

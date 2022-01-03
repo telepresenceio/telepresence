@@ -21,6 +21,7 @@ func AgentContainer(
 	appContainer *corev1.Container,
 	port corev1.ContainerPort,
 	appPort int,
+	appProto string,
 	apiPort int,
 	managerNamespace string,
 	setGID bool,
@@ -38,7 +39,7 @@ func AgentContainer(
 		Image:           imageName,
 		Args:            []string{"agent"},
 		Ports:           []corev1.ContainerPort{port},
-		Env:             agentEnvironment(name, appContainer, appPort, apiPort, managerNamespace, port),
+		Env:             agentEnvironment(name, appContainer, appPort, appProto, apiPort, managerNamespace, port),
 		EnvFrom:         appContainer.EnvFrom,
 		VolumeMounts:    agentVolumeMounts(appContainer.VolumeMounts),
 		SecurityContext: securityContext,
@@ -83,7 +84,14 @@ func InitContainer(imageName string, port corev1.ContainerPort, appPort int) cor
 	}
 }
 
-func agentEnvironment(agentName string, appContainer *kates.Container, appPort, apiPort int, managerNamespace string, port corev1.ContainerPort) []corev1.EnvVar {
+func agentEnvironment(
+	agentName string,
+	appContainer *kates.Container,
+	appPort int,
+	appProto string,
+	apiPort int,
+	managerNamespace string,
+	port corev1.ContainerPort) []corev1.EnvVar {
 	appEnv := appEnvironment(appContainer, apiPort)
 	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+7)
 	copy(env, appEnv)
@@ -121,6 +129,12 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort, 
 			Value: strconv.Itoa(int(port.ContainerPort)),
 		},
 	)
+	if appProto != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  EnvPrefix + "APP_PROTO",
+			Value: appProto,
+		})
+	}
 	if len(appContainer.VolumeMounts) > 0 {
 		env = append(env, corev1.EnvVar{
 			Name:  EnvPrefix + "APP_MOUNTS",
