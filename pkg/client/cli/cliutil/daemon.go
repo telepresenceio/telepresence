@@ -67,16 +67,11 @@ func WithStartedNetwork(ctx context.Context, fn func(context.Context, daemon.Dae
 	return withNetwork(ctx, false, fn)
 }
 
-type daemonStartedCtxKey struct{}
-
 func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, daemon.DaemonClient) error) error {
 	type daemonConnCtxKey struct{}
 	if untyped := ctx.Value(daemonConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		daemonClient := daemon.NewDaemonClient(conn)
-		if ctx.Value(daemonStartedCtxKey{}).(bool) {
-			ctx = context.WithValue(ctx, daemonStartedCtxKey{}, false)
-		}
 		return fn(ctx, daemonClient)
 	}
 
@@ -108,7 +103,6 @@ func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, 
 	}
 	defer conn.Close()
 	ctx = context.WithValue(ctx, daemonConnCtxKey{}, conn)
-	ctx = context.WithValue(ctx, daemonStartedCtxKey{}, started)
 
 	daemonClient := daemon.NewDaemonClient(conn)
 	if !started {
@@ -119,14 +113,6 @@ func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, 
 	}
 
 	return fn(ctx, daemonClient)
-}
-
-// DidLaunchNetwork returns whether WithNetwork launched the network or merely connected to a running
-// session.  If there are nested calls to WithNetwork, it returns the answer for the inner-most
-// call; even if the outer-most call launches the network false will be returned.
-func DidLaunchNetwork(ctx context.Context) bool {
-	launched, _ := ctx.Value(daemonStartedCtxKey{}).(bool)
-	return launched
 }
 
 type quitting struct{}
