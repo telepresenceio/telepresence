@@ -5,9 +5,6 @@ jobs:
   "macos":
     runs-on: macos-latest
     steps:
-      # Used so we don't have to re-run tests that pass, kinda hacky but github
-      # doesn't have any other alternative right now aside from re-running *all* jobs.
-      # It is on the roadmap though: https://github.com/github/roadmap/issues/271
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
@@ -48,9 +45,6 @@ jobs:
   "windows":
     runs-on: windows-2019
     steps:
-      # Used so we don't have to re-run tests that pass, kinda hacky but github
-      # doesn't have any other alternative right now aside from re-running *all* jobs.
-      # It is on the roadmap though: https://github.com/github/roadmap/issues/271
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
@@ -91,9 +85,6 @@ jobs:
   "linux":
     runs-on: ubuntu-latest
     steps:
-      # Used so we don't have to re-run tests that pass, kinda hacky but github
-      # doesn't have any other alternative right now aside from re-running *all* jobs.
-      # It is on the roadmap though: https://github.com/github/roadmap/issues/271
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0

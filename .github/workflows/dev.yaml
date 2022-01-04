@@ -34,9 +34,6 @@ jobs:
     runs-on: macos-latest
     needs: "build_image"
     steps:
-      # Used so we don't have to re-run tests that pass, kinda hacky but github
-      # doesn't have any other alternative right now aside from re-running *all* jobs.
-      # It is on the roadmap though: https://github.com/github/roadmap/issues/271
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
@@ -99,9 +96,6 @@ jobs:
     runs-on: windows-2019
     needs: "build_image"
     steps:
-      # Used so we don't have to re-run tests that pass, kinda hacky but github
-      # doesn't have any other alternative right now aside from re-running *all* jobs.
-      # It is on the roadmap though: https://github.com/github/roadmap/issues/271
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
@@ -186,9 +180,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: "build_image"
     steps:
-      # Used so we don't have to re-run tests that pass, kinda hacky but github
-      # doesn't have any other alternative right now aside from re-running *all* jobs.
-      # It is on the roadmap though: https://github.com/github/roadmap/issues/271
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0

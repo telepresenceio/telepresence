@@ -490,12 +490,11 @@ finish_step
 ###############################################
 #### Step 3b (temp) - Verify mount works   ####
 ###############################################
-# Due to some issues with the github actions macOS executors, macfuse
-# doesn't work in our integration tests, so we ensure that mounts
-# in our smoke tests. The integration tests *do* test mounts on
-# Windows and Linux so this testing is really just to be extra cautious.
-# We can remove this whole step when/if the macfuse issue is cleared up
-# in the github actions executors
+# Due to some issues with newer macOS executors (it could be a macos problem)
+# macfuse doesn't work in our integration tests, so we ensure that mounts work
+# here. The integration tests *do* test mounts on Windows and Linux so this
+# testing is really being extra cautious. We can remove this whole step if/when
+# the macfuse issue is cleared up in the macos executors.
 mount_path=$(telepresence list --json | jq '.[] | select(.name=="dataprocessingservice") | .intercept_info.spec.mount_point' | sed 's/"//g')
 if [[ -z $mount_path ]]; then
     echo "Mount path was empty and it shouldn't have been"
