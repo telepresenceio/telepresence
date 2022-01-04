@@ -2,6 +2,15 @@
 
 ### 2.4.10 (TBD)
 
+- Feature: The port used by default in the `telepresence intercept` command (8080), can now be changed by setting
+  the `intercept.defaultPort` in the `config.yml` file.
+
+- Feature: The strategy when selecting the application protocol for personal intercepts in agents injected by the 
+  mutating webhook can now be configured using the `agentInjector.appProtocolStrategy` in the Helm chart.
+
+- Feature: The strategy when selecting the application protocol for personal intercepts can now be configured using
+  the `intercept.appProtocolStrategy` in the `config.yml` file.
+
 - Change: Telepresence CI now runs in Github Actions instead of Circle CI.
 
 - Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.

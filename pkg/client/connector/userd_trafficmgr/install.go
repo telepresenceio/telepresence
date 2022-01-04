@@ -697,6 +697,7 @@ func addAgentToWorkload(
 			setGID:                  setGID,
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
+			ContainerPortAppProto:   install.GetAppProto(c, client.GetConfig(c).Intercept.AppProtocolStrategy, servicePort),
 			ContainerPortNumber:     containerPort.Number,
 			APIPortNumber:           telepresenceAPIPort,
 			ImageName:               agentImageName,
