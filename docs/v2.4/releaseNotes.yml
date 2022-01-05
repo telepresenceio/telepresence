@@ -83,7 +83,6 @@ items:
         title: Fix invalid log statement
         body: >-
           Telepresence will no longer log invalid: <code>"unhandled connection control message: code DIAL_OK"</code> errors.
->>>>>>> release/v2
   - version: 2.4.9
     date: "2021-12-09"
     notes:
