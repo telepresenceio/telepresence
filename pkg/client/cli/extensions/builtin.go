@@ -48,13 +48,12 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 								`If this flag is given multiple times, then it will only intercept traffic that matches *all* of the specifiers. ` +
 								`(default "auto" if you are logged in with 'telepresence login', default "all" otherwise)`,
 						},
-						"protocol": {
-							Type: "string",
+						"plaintext": {
+							Type: "bool",
 							Usage: `` +
-								`Supported protocols are ` +
-								`"http" (Plaintext HTTP/1.1), ` +
-								`"http2" (Plaintext HTTP/2), ` +
-								`"tls" (TLS Encrypted data)`,
+								`Use plaintext format when communicating with the interceptor process on the local workstation. Only ` +
+								`meaningful when intercepting workloads annotated with "getambassador.io/inject-originating-tls-secret" ` +
+								`to prevent that TLS is used during intercepts`,
 						},
 					},
 				},

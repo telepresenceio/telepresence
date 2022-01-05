@@ -26,7 +26,6 @@
 #             `FOO/releaseNotes.yml`, then the image paths are
 #             relative to `FOO/release-notes/`.
 #         - docs: The path to the documentation page where additional information can be found.
-#         - href: A path from the root to a resource on the getambassador website, takes precedence over a docs link.
 
 docTitle: Telepresence Release Notes
 docDescription: >-
@@ -40,8 +39,32 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 
 items:
   - version: 2.4.10
-    date: "TBD"
+    date: "(TBD)"
     notes:
+      - type: feature
+        title: Application Protocol Strategy
+        body: >-
+          The strategy used when selecting the application protocol for personal intercepts can now be configured using
+          the <code>intercept.appProtocolStrategy</code> in the <code>config.yml</code> file.
+        docs: reference/config/#intercept
+      - type: feature
+        title: Helm value for the Application Protocol Strategy
+        body: >-
+          The strategy when selecting the application protocol for personal intercepts in agents injected by the
+          mutating webhook can now be configured using the <code>agentInjector.appProtocolStrategy</code> in the Helm chart.
+        docs: install/helm
+      - type: feature
+        title: New <code>--http-plaintext</code> option
+        body: >-
+          The flag <code>--http-plaintext</code> can be used to ensure that an intercept uses plaintext http or grpc when
+          communicating with the workstation process.
+        docs: reference/intercepts/#tls
+      - type: feature
+        title: Configure the default intercept port
+        body: >-
+          The port used by default in the <code>telepresence intercept</code> command (8080), can now be changed by setting
+          the <code>intercept.defaultPort</code> in the <code>config.yml</code> file.
+        docs: reference/config/#intercept
       - type: change
         title: Telepresence CI now uses Github Actions
         body: >-
@@ -50,7 +73,16 @@ items:
           "ok to test" label to PRs (including from forks) to run integration tests.
         docs: https://github.com/telepresenceio/telepresence/actions
         image: telepresence-2.4.10-actions.png
-
+      - type: bugfix
+        title: Check conditions before asking questions
+        body: >-
+          User will not be asked to log in or add ingress information when creating an intercept until a check has been 
+          made that the intercept is possible.
+        docs: reference/intercepts/
+      - type: bugfix
+        title: Fix invalid log statement
+        body: >-
+          Telepresence will no longer log invalid: <code>"unhandled connection control message: code DIAL_OK"</code> errors.
   - version: 2.4.9
     date: "2021-12-09"
     notes:
