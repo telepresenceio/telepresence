@@ -10,6 +10,10 @@ inputs:
   tel-image:
     description: "Path to the image to load onto the cluster"
     required: true
+  github-sha:
+    description: "The sha of the PR, used for naming the kluster"
+    required: true
+    default: "temporary-sha"
 outputs:
   kubeconfig:
     description: "The resulting kubeconfig file"
@@ -23,7 +27,7 @@ runs:
       env:
         DEV_TELEPRESENCE_KUBECEPTION_TOKEN: ${{ inputs.token }}
       run: |
-        go run ./build-aux/kubeception create "tp-ci-${{ inputs.platform }}-${GITHUB_SHA}" > "$HOME/kubeconfig"
+        go run ./build-aux/kubeception create "tp-ci-${{ inputs.platform }}-${{ inputs.github-sha }}" > "$HOME/kubeconfig"
         export KUBECONFIG="$HOME/kubeconfig"
         go run ./build-aux/wait_for_cluster "$KUBECONFIG"
         if [[ "${{ inputs.platform }}" == "windows" ]]; then
