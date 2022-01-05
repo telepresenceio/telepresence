@@ -20,4 +20,4 @@ runs:
         DEV_TELEPRESENCE_KUBECEPTION_TOKEN: ${{ inputs.token }}
       run: |
         # We don't allow the destroy to fail the build; if the kluster couldn't be destroyed now, it'll just be cleaned up when it times out
-        go run ./build-aux/kubeception destroy "tp-ci-${{ inputs.platform }}-${ inputs.github-sha }" || true
+        go run ./build-aux/kubeception destroy "tp-ci-${{ inputs.platform }}-${{ inputs.github-sha }}" || true
