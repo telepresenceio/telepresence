@@ -13,7 +13,6 @@ inputs:
   github-sha:
     description: "The sha of the PR, used for naming the kluster"
     required: true
-    default: "temporary-sha"
 outputs:
   kubeconfig:
     description: "The resulting kubeconfig file"
