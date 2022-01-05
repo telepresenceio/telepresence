@@ -2,7 +2,6 @@ package cliutil
 
 import (
 	"context"
-	"errors"
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if
@@ -17,15 +17,27 @@ import (
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
-	var resp *connector.LoginResult
+	var code connector.LoginResult_Code
 	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		resp, err = connectorClient.Login(ctx, &connector.LoginRequest{
-			ApiKey: apikey,
-		})
+		code, err = ClientEnsureLoggedIn(ctx, apikey, connectorClient)
 		return err
 	})
-	return resp.GetCode(), err
+	return code, err
+}
+
+// ClientEnsureLoggedIn is like EnsureLoggedIn but uses an already acquired ConnectorClient.
+func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient connector.ConnectorClient) (connector.LoginResult_Code, error) {
+	resp, err := connectorClient.Login(ctx, &connector.LoginRequest{
+		ApiKey: apikey,
+	})
+	if err != nil {
+		if grpcStatus.Code(err) == grpcCodes.PermissionDenied {
+			err = errcat.User.New(grpcStatus.Convert(err).Message())
+		}
+		return connector.LoginResult_UNSPECIFIED, err
+	}
+	return resp.GetCode(), nil
 }
 
 // Logout logs out of Ambassador Cloud.  Returns an error if not logged in.
@@ -35,7 +47,7 @@ func Logout(ctx context.Context) error {
 		return err
 	})
 	if grpcStatus.Code(err) == grpcCodes.NotFound {
-		err = errors.New(grpcStatus.Convert(err).Message())
+		err = errcat.User.New(grpcStatus.Convert(err).Message())
 	}
 	if err != nil {
 		return err

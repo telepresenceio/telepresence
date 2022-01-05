@@ -1,0 +1,26 @@
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: app
+  spec:
+    ports:
+      - name: https
+        port: 8080
+      - name: grpc
+        port: 47555
+deployment:
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: app
+  spec:
+    template:
+      spec:
+        containers:
+          - name: app
+            imagePullPolicy: Always
+# This input yaml should be the same as deployment-mp-tc-2.input.yaml
+# except the port number has a leading 0, which a user could technically
+# have
+interceptPort: 08080

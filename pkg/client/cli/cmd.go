@@ -2,14 +2,14 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your
@@ -30,8 +30,6 @@ Unless the daemons are already started, an attempt will be made to start them.
 This will involve a call to sudo unless this command is run as root (not
 recommended) which in turn may result in a password prompt.`
 
-// TODO: Provide a link in the help text to more info about telepresence
-
 // global options
 var dnsIP string
 var mappedNamespaces []string
@@ -44,12 +42,12 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	err := fmt.Errorf("invalid subcommand %q", args[0])
+	err := errcat.User.Newf("invalid subcommand %q", args[0])
 	if cmd.SuggestionsMinimumDistance <= 0 {
 		cmd.SuggestionsMinimumDistance = 2
 	}
 	if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
-		err = fmt.Errorf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
+		err = errcat.User.Newf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
 	}
 	return cmd.FlagErrorFunc()(cmd, err)
 }
@@ -134,6 +132,33 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
+	rootCmd.InitDefaultHelpCmd()
+	AddCommandGroups(rootCmd, []CommandGroup{
+		{
+			Name:     "Session Commands",
+			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
+		},
+		{
+			Name:     "Traffic Commands",
+			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
+		},
+		{
+			Name:     "Debug Commands",
+			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
+		},
+		{
+			Name:     "Other Commands",
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+		},
+	})
+	initGlobalFlagGroups()
+	for _, group := range globalFlagGroups {
+		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
+	}
+	return rootCmd
+}
+
+func initGlobalFlagGroups() {
 	globalFlagGroups = []FlagGroup{
 		{
 			Name: "Kubernetes flags",
@@ -152,7 +177,7 @@ func Command(ctx context.Context) *cobra.Command {
 			netflags := pflag.NewFlagSet("", 0)
 			// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
 			//  that's unknown until it's been tested during the first connect attempt.
-			if runtime.GOOS != "darwin" {
+			if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 				netflags.StringVarP(&dnsIP,
 					"dns", "", "",
 					"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
@@ -178,24 +203,4 @@ func Command(ctx context.Context) *cobra.Command {
 			return flags
 		}(),
 	})
-
-	rootCmd.InitDefaultHelpCmd()
-	AddCommandGroups(rootCmd, []CommandGroup{
-		{
-			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		},
-		{
-			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
-		},
-		{
-			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand()},
-		},
-	})
-	for _, group := range globalFlagGroups {
-		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
-	}
-	return rootCmd
 }

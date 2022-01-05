@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -10,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 )
 
@@ -18,7 +17,7 @@ import (
 // license from a file and returning the string
 // representation of that value
 func getLicenseString(licenseFile string) (string, error) {
-	license, err := ioutil.ReadFile(licenseFile)
+	license, err := os.ReadFile(licenseFile)
 	if err != nil {
 		return "", err
 	}

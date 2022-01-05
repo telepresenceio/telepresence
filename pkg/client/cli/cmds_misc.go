@@ -7,8 +7,9 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -48,11 +49,11 @@ func connectCommand() *cobra.Command {
 		Short: "Connect to a cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return withConnector(cmd, true, func(_ context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
+				return withConnector(cmd, true, func(_ context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
 					return nil
 				})
 			}
-			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo) error {
+			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
 				return proc.Run(ctx, nil, args[0], args[1:]...)
 			})
 		},
@@ -66,10 +67,7 @@ func dashboardCommand() *cobra.Command {
 
 		Short: "Open the dashboard in a web page",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			env, err := client.LoadEnv(cmd.Context())
-			if err != nil {
-				return err
-			}
+			cloudCfg := client.GetConfig(cmd.Context()).Cloud
 
 			// Ensure we're logged in
 			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context(), "")
@@ -81,7 +79,7 @@ func dashboardCommand() *cobra.Command {
 				// The LoginFlow takes the user to the dashboard, so we only need to
 				// explicitly take the user to the dashboard if they were already
 				// logged in.
-				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost)); err != nil {
+				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", cloudCfg.SystemaHost)); err != nil {
 					return err
 				}
 			}
@@ -97,7 +95,7 @@ func quitCommand() *cobra.Command {
 
 		Short: "Tell telepresence daemon to quit",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return quit(cmd.Context())
+			return cliutil.QuitDaemon(cmd.Context())
 		},
 	}
 }

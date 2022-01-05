@@ -16,13 +16,17 @@ type Env struct {
 	LoginAuthURL       string `env:"TELEPRESENCE_LOGIN_AUTH_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/auth"`
 	LoginTokenURL      string `env:"TELEPRESENCE_LOGIN_TOKEN_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
 	LoginCompletionURL string `env:"TELEPRESENCE_LOGIN_COMPLETION_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/completion"`
-	LoginClientID      string `env:"TELEPRESENCE_LOGIN_CLIENT_ID,default=telepresence-cli"`
 	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
 
 	ManagerNamespace string `env:"TELEPRESENCE_MANAGER_NAMESPACE,default=ambassador"`
 
-	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
-	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
+	// This environment variable becomes the default for the images.registry and images.webhookRegistry
+	Registry string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+
+	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
+	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,default="`
+
+	lookuper envconfig.Lookuper
 }
 
 func (env Env) Get(key string) string {
@@ -35,40 +39,57 @@ func (env Env) Get(key string) string {
 		return env.LoginTokenURL
 	case "TELEPRESENCE_LOGIN_COMPLETION_URL":
 		return env.LoginCompletionURL
-	case "TELEPRESENCE_LOGIN_CLIENT_ID":
-		return env.LoginClientID
 	case "TELEPRESENCE_USER_INFO_URL":
 		return env.UserInfoURL
 
 	case "TELEPRESENCE_MANAGER_NAMESPACE":
 		return env.ManagerNamespace
 
-	case "SYSTEMA_HOST":
-		return env.SystemAHost
-	case "SYSTEMA_PORT":
-		return env.SystemAPort
-
 	default:
-		return os.Getenv(key)
+		if v, ok := env.lookuper.Lookup(key); ok {
+			return v
+		}
+		return ""
 	}
 }
 
-func maybeSetEnv(key, val string) {
-	if os.Getenv(key) == "" {
-		os.Setenv(key, val)
-	}
+type envKey struct{}
+
+// WithEnv returns a context with the given Env
+func WithEnv(ctx context.Context, env *Env) context.Context {
+	return context.WithValue(ctx, envKey{}, env)
 }
 
-func LoadEnv(ctx context.Context) (Env, error) {
-	switch os.Getenv("SYSTEMA_ENV") {
-	case "staging":
-		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "beta-auth.datawire.io")
-		maybeSetEnv("SYSTEMA_HOST", "beta-app.datawire.io")
-	default:
-		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "auth.datawire.io")
+func GetEnv(ctx context.Context) *Env {
+	env, ok := ctx.Value(envKey{}).(*Env)
+	if !ok {
+		return nil
+	}
+	return env
+}
+
+func LoadEnv(ctx context.Context) (*Env, error) {
+	return LoadEnvWith(ctx, envconfig.OsLookuper())
+}
+
+func LoadEnvWith(ctx context.Context, lookuper envconfig.Lookuper) (*Env, error) {
+	if _, ok := lookuper.Lookup("TELEPRESENCE_LOGIN_DOMAIN"); !ok {
+		loginDomain := "auth.datawire.io"
+		if se, ok := lookuper.Lookup("SYSTEMA_ENV"); ok && se == "staging" {
+			// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
+			// to the config.yml and get rid of that env var and all the related ones.
+			// But I (donnyyung) am about to be on vacation for a week so don't want
+			// to make such a huge change and then leave, so I will take care of
+			// cleaning this up once I'm back.
+			loginDomain = "beta-auth.datawire.io"
+		}
+		os.Setenv("TELEPRESENCE_LOGIN_DOMAIN", loginDomain)
 	}
 
 	var env Env
-	err := envconfig.Process(ctx, &env)
-	return env, err
+	if err := envconfig.ProcessWith(ctx, &env, lookuper); err != nil {
+		return nil, err
+	}
+	env.lookuper = lookuper
+	return &env, nil
 }

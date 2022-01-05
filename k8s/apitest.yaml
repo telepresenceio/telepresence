@@ -1,0 +1,45 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "apitest"
+spec:
+  type: ClusterIP
+  selector:
+    service: apitest
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "apitest"
+  labels:
+    service: apitest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: apitest
+  template:
+    metadata:
+      labels:
+        service: apitest
+    spec:
+      containers:
+        - name: apitest
+          image: localhost:5000/apiserveraccess:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: APP_PORT
+              value: "8080"
+            - name: LOG_LEVEL
+              value: "DEBUG"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

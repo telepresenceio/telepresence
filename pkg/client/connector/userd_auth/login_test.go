@@ -21,9 +21,9 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -162,6 +162,7 @@ func (s *MockOauth2Server) HandleUserInfo() http.Handler {
 
 func TestLoginFlow(t *testing.T) {
 	type fixture struct {
+		Context                 context.Context
 		MockSaveTokenWrapper    *MockSaveTokenWrapper
 		MockSaveUserInfoWrapper *MockSaveUserInfoWrapper
 		MockOpenURLWrapper      *MockOpenURLWrapper
@@ -190,6 +191,7 @@ func TestLoginFlow(t *testing.T) {
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
 		ctx := dlog.NewTestContext(t, false)
+
 		stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
 		scout := make(chan scout.ScoutReport)
 		t.Cleanup(func() { close(scout) })
@@ -197,20 +199,26 @@ func TestLoginFlow(t *testing.T) {
 			for range scout {
 			}
 		}()
+		ctx = client.WithEnv(ctx,
+			&client.Env{
+				LoginAuthURL:       mockOauth2Server.AuthUrl(),
+				LoginTokenURL:      mockOauth2Server.TokenUrl(),
+				LoginCompletionURL: mockCompletionUrl,
+				UserInfoURL:        mockOauth2Server.UserInfoUrl(),
+			})
+
+		cfg, err := client.LoadConfig(ctx)
+		require.NoError(t, err)
+		ctx = client.WithConfig(ctx, cfg)
+
 		return &fixture{
+			Context:                 ctx,
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,
 			MockSaveUserInfoWrapper: mockSaveUserInfoWrapper,
 			MockOpenURLWrapper:      mockOpenURLWrapper,
 			MockOauth2Server:        mockOauth2Server,
 			OpenedUrls:              openUrlChan,
 			Runner: userd_auth.NewLoginExecutor(
-				client.Env{
-					LoginAuthURL:       mockOauth2Server.AuthUrl(),
-					LoginTokenURL:      mockOauth2Server.TokenUrl(),
-					LoginClientID:      "",
-					LoginCompletionURL: mockCompletionUrl,
-					UserInfoURL:        mockOauth2Server.UserInfoUrl(),
-				},
 				saveToken,
 				saveUserInfo,
 				func(url string) error {
@@ -226,7 +234,7 @@ func TestLoginFlow(t *testing.T) {
 		return setupWithCacheFuncs(t, nil, nil)
 	}
 	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
-		grp := dgroup.NewGroup(dlog.NewTestContext(t, false), dgroup.GroupConfig{
+		grp := dgroup.NewGroup(f.Context, dgroup.GroupConfig{
 			EnableWithSoftness: true,
 			ShutdownOnNonError: true,
 		})
@@ -399,12 +407,11 @@ func TestLoginFlow(t *testing.T) {
 
 	t.Run("will remove token and user info from user cache dir when logging out", func(t *testing.T) {
 		// given
-		ctx := dlog.NewTestContext(t, false)
 		f := setupWithCacheFuncs(t, authdata.SaveTokenToUserCache, authdata.SaveUserInfoToUserCache)
 		defer f.MockOauth2Server.TearDown(t)
 
 		// a fake user cache directory
-		ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
+		ctx := filelocation.WithUserHomeDir(f.Context, t.TempDir())
 
 		// when
 		ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))

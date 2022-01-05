@@ -1,7 +1,7 @@
 package test
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,7 +13,7 @@ import (
 )
 
 func callerPackage(skip int) string {
-	pc, _, _, _ := runtime.Caller(skip) //nolint:dogsled
+	pc, _, _, _ := runtime.Caller(skip) //nolint:dogsled // stdlib, can't change it
 	name := runtime.FuncForPC(pc).Name()
 	// name is "foo.bar/baz/pkg.func1.func2"; we want
 	// "foo.bar/baz/pkg".  That is: We trim at the first dot after
@@ -31,7 +31,7 @@ func GetTestMechanisms(t *testing.T) map[string]*rpc.AgentInfo_Mechanism {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ioutil.ReadFile(filepath.Join(basedir, "testdata", "mechanisms.yaml"))
+	data, err := os.ReadFile(filepath.Join(basedir, "testdata", "mechanisms.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func GetTestAgents(t *testing.T) map[string]*rpc.AgentInfo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ioutil.ReadFile(filepath.Join(basedir, "testdata", "agents.yaml"))
+	data, err := os.ReadFile(filepath.Join(basedir, "testdata", "agents.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func GetTestClients(t *testing.T) map[string]*rpc.ClientInfo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ioutil.ReadFile(filepath.Join(basedir, "testdata", "clients.yaml"))
+	data, err := os.ReadFile(filepath.Join(basedir, "testdata", "clients.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

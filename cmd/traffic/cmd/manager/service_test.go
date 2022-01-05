@@ -11,12 +11,19 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sVersion "k8s.io/apimachinery/pkg/version"
+	fakeDiscovery "k8s.io/client-go/discovery/fake"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -269,6 +276,14 @@ func TestConnect(t *testing.T) {
 		Name:    spec.Name,  // doesn't matter...
 	})
 	a.Error(err)
+	_, err = client.Depart(ctx, aliceSess2)
+	a.NoError(err)
+	_, err = client.Depart(ctx, helloSess)
+	a.NoError(err)
+	_, err = client.Depart(ctx, demo1Sess)
+	a.NoError(err)
+	_, err = client.Depart(ctx, demo2Sess)
+	a.NoError(err)
 }
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {
@@ -279,6 +294,21 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 	bufDialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	}
+
+	fakeClient := fake.NewSimpleClientset(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "default",
+		},
+	})
+	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
+		GitVersion: "v1.17.0",
+	}
+	ctx = managerutil.WithK8SClientset(ctx, fakeClient)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
+		MaxReceiveSize:  resource.Quantity{},
+		PodCIDRStrategy: "environment",
+		PodCIDRs:        "192.168.0.0/16",
+	})
 
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {

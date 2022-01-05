@@ -14,10 +14,11 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -30,6 +31,7 @@ type Config struct {
 	AppPort     int32  `env:"_TEL_AGENT_APP_PORT,required"`
 	ManagerHost string `env:"_TEL_AGENT_MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"_TEL_AGENT_MANAGER_PORT,default=8081"`
+	APIPort     int32  `env:"TELEPRESENCE_API_PORT,default="`
 }
 
 var skipKeys = map[string]bool{
@@ -42,6 +44,7 @@ var skipKeys = map[string]bool{
 	"_TEL_AGENT_APP_PORT":     true,
 	"_TEL_AGENT_MANAGER_HOST": true,
 	"_TEL_AGENT_MANAGER_PORT": true,
+	"_TEL_AGENT_LOG_LEVEL":    true,
 
 	// Keys that aren't useful when running on the local machine
 	"HOME":     true,
@@ -73,37 +76,116 @@ func AppEnvironment() map[string]string {
 	return fullEnv
 }
 
-// svcAccPath is the path where the ServiceAccount Admission Controller automatically provides its secrets.
-const svcAccPath = "/var/run/secrets/kubernetes.io"
 const tpMountsEnv = "TELEPRESENCE_MOUNTS"
 
-func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) (bool, error) {
+func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) bool {
 	tpMounts := env[tpMountsEnv]
-	stat, err := os.Stat(svcAccPath)
-	if err != nil || !stat.IsDir() {
-		return tpMounts != "", nil
+	if tpMounts != "" {
+		dlog.Debugf(ctx, "agent mount paths: %s", tpMounts)
+		return true
 	}
+	return false
+}
 
-	// This must be included in the shared mounts unless it's already provided
-	svcAccLink := filepath.Join(cfg.AppMounts, svcAccPath)
-	if stat, err = os.Stat(svcAccLink); err == nil && stat.IsDir() {
-		return true, nil
-	}
+// AddSecretsMounts adds any token-rotating system secrets directories if they exist
+// e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
+// to the TELEPRESENCE_MOUNTS environment variable
+func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) error {
+	tpMounts := env[tpMountsEnv]
 
-	// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
-	if err = os.MkdirAll(filepath.Dir(svcAccLink), 0700); err != nil {
-		return false, err
+	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
+	secretsDir, err := os.Open("/var/run/secrets")
+	if err != nil {
+		return err
 	}
-	if err = os.Symlink(svcAccPath, svcAccLink); err != nil {
-		return false, err
+	fileInfo, err := secretsDir.ReadDir(-1)
+	if err != nil {
+		return err
 	}
-	if tpMounts == "" {
-		tpMounts = svcAccPath
-	} else {
-		tpMounts += ":" + svcAccPath
+	secretsDir.Close()
+	for _, file := range fileInfo {
+		// Directories found in /var/run/secrets get a symlink in appmounts
+		if file.IsDir() {
+			dirPath := filepath.Join("/var/run/secrets/", file.Name())
+			dlog.Debugf(ctx, "checking agent secrets mount path: %s", dirPath)
+			stat, err := os.Stat(dirPath)
+			if err != nil {
+				return err
+			}
+			if stat.IsDir() {
+				appMountsPath := filepath.Join(cfg.AppMounts, dirPath)
+				dlog.Debugf(ctx, "checking appmounts directory: %s", dirPath)
+				// Make sure the path doesn't already exist
+				_, err = os.Stat(appMountsPath)
+				if err == nil {
+					return fmt.Errorf("appmounts '%s' already exists", appMountsPath)
+				}
+				dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
+				// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
+				err = os.MkdirAll(filepath.Dir(appMountsPath), 0700)
+				if err != nil {
+					return err
+				}
+				dlog.Debugf(ctx, "create appmounts symlink: %s %s", dirPath, appMountsPath)
+				err = os.Symlink(dirPath, appMountsPath)
+				if err != nil {
+					return err
+				}
+				dlog.Infof(ctx, "new agent secrets mount path: %s", dirPath)
+				if tpMounts == "" {
+					tpMounts = dirPath
+				} else {
+					tpMounts += ":" + dirPath
+				}
+			}
+		}
 	}
 	env[tpMountsEnv] = tpMounts
-	return true, nil
+	return nil
+}
+
+// SftpServer creates a listener on the next available port, writes that port on the
+// given channel, and then starts accepting connections on that port. Each connection
+// starts a sftp-server that communicates with that connection using its stdin and stdout.
+func SftpServer(ctx context.Context, sftpPortCh chan<- int32) error {
+	defer close(sftpPortCh)
+
+	// start an sftp-server for remote sshfs mounts
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp4", ":0")
+	if err != nil {
+		return err
+	}
+
+	// Accept doesn't actually return when the context is cancelled so
+	// it's explicitly closed here.
+	go func() {
+		<-ctx.Done()
+		_ = l.Close()
+	}()
+
+	_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
+	if err != nil {
+		return err
+	}
+	sftpPortCh <- int32(sftpPort)
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			if ctx.Err() == nil {
+				return fmt.Errorf("listener on sftp-server connection failed: %v", err)
+			}
+			return nil
+		}
+		go func() {
+			dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
+			err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+		}()
+	}
 }
 
 func Main(ctx context.Context, args ...string) error {
@@ -151,52 +233,14 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	hasMounts, err := config.HasMounts(ctx, info.Environment)
-	if err != nil {
-		dlog.Errorf(ctx, "Unable to determine if agent has mounts: %v", err)
+	if err := config.AddSecretsMounts(ctx, info.Environment); err != nil {
+		dlog.Errorf(ctx, "There was a problem with agent mounts: %v", err)
 	}
 
 	sftpPortCh := make(chan int32)
-	if hasMounts && user == "" {
+	if config.HasMounts(ctx, info.Environment) && user == "" {
 		g.Go("sftp-server", func(ctx context.Context) error {
-			defer close(sftpPortCh)
-
-			// start an sftp-server for remote sshfs mounts
-			lc := net.ListenConfig{}
-			l, err := lc.Listen(ctx, "tcp4", ":0")
-			if err != nil {
-				return err
-			}
-
-			// Accept doesn't actually return when the context is cancelled so
-			// it's explicitly closed here.
-			go func() {
-				<-ctx.Done()
-				_ = l.Close()
-			}()
-
-			_, sftpPort, err := iputil.SplitToIPPort(l.Addr())
-			if err != nil {
-				return err
-			}
-			sftpPortCh <- int32(sftpPort)
-
-			for {
-				conn, err := l.Accept()
-				if err != nil {
-					if ctx.Err() == nil {
-						return fmt.Errorf("listener on sftp-server connection failed: %v", err)
-					}
-					return nil
-				}
-				go func() {
-					dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
-					err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
-					if err != nil {
-						dlog.Error(ctx, err)
-					}
-				}()
-			}
+			return SftpServer(ctx, sftpPortCh)
 		})
 	} else {
 		close(sftpPortCh)
@@ -207,7 +251,7 @@ func Main(ctx context.Context, args ...string) error {
 
 	// Manage the forwarder
 	g.Go("forward", func(ctx context.Context) error {
-		ctx = connpool.WithPool(ctx, connpool.NewPool())
+		ctx = tunnel.WithPool(ctx, tunnel.NewPool())
 		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
 		if err != nil {
 			close(forwarderChan)
@@ -235,6 +279,12 @@ func Main(ctx context.Context, args ...string) error {
 
 		sftpPort := <-sftpPortCh
 		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
+
+		if config.APIPort != 0 {
+			dgroup.ParentGroup(ctx).Go("API-server", func(ctx context.Context) error {
+				return restapi.NewServer(state.AgentState(), false).ListenAndServe(ctx, int(config.APIPort))
+			})
+		}
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

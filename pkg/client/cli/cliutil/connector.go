@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -64,13 +62,12 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 			err = ErrNoConnector
 			if maybeStart {
 				fmt.Println("Launching Telepresence User Daemon")
-				if err := proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
+				if err = proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
 					return fmt.Errorf("failed to launch the connector service: %w", err)
 				}
 
-				if err := client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-					logDir, _ := filelocation.AppUserLogDir(ctx)
-					return fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(logDir, "connector.log"))
+				if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
+					return fmt.Errorf("connector service did not start: %w", err)
 				}
 
 				maybeStart = false
@@ -84,6 +81,12 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	ctx = context.WithValue(ctx, connectorConnCtxKey{}, conn)
 	ctx = context.WithValue(ctx, connectorStartedCtxKey{}, started)
 	connectorClient := connector.NewConnectorClient(conn)
+	if !started {
+		// Ensure that the already running daemon has the correct version
+		if err := versionCheck(ctx, "User", connectorClient); err != nil {
+			return err
+		}
+	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		ShutdownOnNonError: true,

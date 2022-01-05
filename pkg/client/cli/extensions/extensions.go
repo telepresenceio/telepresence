@@ -3,9 +3,8 @@ package extensions
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -51,8 +51,14 @@ type ExtensionsState struct {
 // The basename of the extension YAML filename (i.e. the non-directory part, with the ".yml" suffix
 // removed) identifies the name of the extension.  The content of the extension YAML file must be an
 // ExtensionInfo object serialized as YAML.  See the docs for ExtensionInfo for more information.
-func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*ExtensionsState, error) {
-	es := &ExtensionsState{
+func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *ExtensionsState, err error) {
+	defer func() {
+		// Consider all errors issued here to belong to the Config category.
+		if err != nil {
+			err = errcat.Config.New(err)
+		}
+	}()
+	es = &ExtensionsState{
 		ext2file: make(map[string]string),
 		exts:     make(map[string]ExtensionInfo),
 		mech2ext: make(map[string]string),
@@ -77,7 +83,7 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*Extensi
 	}
 	// Iterate over the directories from highest-precedence to lowest-precedence.
 	for _, dir := range append([]string{userDir}, systemDirs...) {
-		fileinfos, err := ioutil.ReadDir(filepath.Join(dir, "extensions"))
+		fileinfos, err := os.ReadDir(filepath.Join(dir, "extensions"))
 		if err != nil {
 			continue
 		}
@@ -113,7 +119,7 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*Extensi
 		}
 		filename := es.ext2file[extname]
 
-		bs, err := ioutil.ReadFile(filename)
+		bs, err := os.ReadFile(filename)
 		if err != nil {
 			return nil, err
 		}
@@ -299,10 +305,12 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 	return false
 }
 
-func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (string, error) {
+// AgentImage returns the repository/name combination that will be assigned to the container
+// image attribute.
+func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if cfg.Images.AgentImage != "" {
-		return cfg.Images.AgentImage, nil
+		return fmt.Sprintf("%s/%s", cfg.Images.Registry, cfg.Images.AgentImage), nil
 	}
 	if es.cachedImage.Image != "" || es.cachedImage.Err != nil {
 		return es.cachedImage.Image, es.cachedImage.Err
@@ -311,12 +319,12 @@ func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (stri
 	if err != nil {
 		return "", err
 	}
-	image := os.Expand(es.exts[es.mech2ext[mechname]].Image, env.Get)
+	image := os.Expand(es.exts[es.mech2ext[mechname]].Image, client.GetEnv(ctx).Get)
 	if cfg.Cloud.SkipLogin {
 		msg := fmt.Sprintf(
 			`images.agentImage must be set with cloud.skipLogin in
 %s for intercepts of mechanism: %s`, client.GetConfigFile(ctx), mechname)
-		err := errors.New(msg)
+		err := errcat.Config.New(msg)
 		return "", err
 	}
 	for urlSchemeIsOneOf(image, "http", "https", "grpc+https") {
@@ -336,11 +344,11 @@ func (es *ExtensionsState) AgentImage(ctx context.Context, env client.Env) (stri
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusOK {
-					return "", fmt.Errorf("image URL %q returned HTTP %v", image, resp.StatusCode)
+					return "", errcat.NoLogs.Newf("image URL %q returned HTTP %v", image, resp.StatusCode)
 				}
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
-					return "", err
+					return "", errcat.NoLogs.New(err)
 				}
 				return strings.TrimSpace(string(body)), nil
 			}()
@@ -361,7 +369,7 @@ func (es *ExtensionsState) MechanismArgs() ([]string, error) {
 	}
 	mechdata := es.exts[es.mech2ext[mechname]].Mechanisms[mechname]
 
-	var args []string //nolint:prealloc // We have no idea how many entries .AsArgs will return.
+	var args []string
 	for flagname := range mechdata.Flags {
 		flag := es.flags.Lookup(mechname + "-" + flagname)
 		args = append(args, flag.Value.(Value).AsArgs(flagname)...)

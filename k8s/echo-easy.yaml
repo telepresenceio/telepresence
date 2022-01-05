@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: echo-easy
+  name: "echo-easy"
 spec:
   type: ClusterIP
   selector:
@@ -15,7 +15,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: echo-easy
+  name: "echo-easy"
   labels:
     service: echo-easy
 spec:

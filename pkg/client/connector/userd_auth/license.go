@@ -3,7 +3,7 @@ package userd_auth
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 
@@ -19,8 +19,9 @@ type LicenseInfo struct {
 }
 
 // getLicenseJWT does the REST call to system and returns the jwt formatted license on success
-func getLicenseJWT(ctx context.Context, env client.Env, accessToken, licenseID string) (string, string, error) {
+func getLicenseJWT(ctx context.Context, accessToken, licenseID string) (string, string, error) {
 	// Build the request.
+	env := client.GetEnv(ctx)
 	req, err := http.NewRequestWithContext(ctx,
 		http.MethodGet, fmt.Sprintf("https://%s/api/licenses/%s/formats/jwt", env.LoginDomain, licenseID), nil)
 	if err != nil {
@@ -47,7 +48,7 @@ func getLicenseJWT(ctx context.Context, env client.Env, accessToken, licenseID s
 	}
 
 	// Read the body.
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		// No need to wrap this error with the status code, the magical resp.Body reader
 		// includes it for us.
@@ -75,7 +76,7 @@ func (l *loginExecutor) GetLicense(ctx context.Context, id string) (string, stri
 		return "", "", fmt.Errorf("GetLicense: %w", ErrNotLoggedIn)
 	} else if tokenInfo, err := l.tokenSource.Token(); err != nil {
 		return "", "", err
-	} else if license, hostDomain, err := getLicenseJWT(ctx, l.env, tokenInfo.AccessToken, id); err != nil {
+	} else if license, hostDomain, err := getLicenseJWT(ctx, tokenInfo.AccessToken, id); err != nil {
 		return "", "", err
 	} else {
 		if license == "" {

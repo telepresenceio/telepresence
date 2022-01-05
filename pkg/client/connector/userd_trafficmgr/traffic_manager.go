@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/user"
 	"sync"
@@ -11,10 +12,12 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -23,16 +26,25 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
 type Callbacks struct {
-	GetCloudAPIKey  func(context.Context, string, bool) (string, error)
-	SetClient       func(client manager.ManagerClient, callOptions ...grpc.CallOption)
-	SetOutboundInfo func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	GetCloudAPIKey        func(context.Context, string, bool) (string, error)
+	RegisterManagerServer func(server manager.ManagerServer)
+	SetOutboundInfo       func(ctx context.Context, in *daemon.OutboundInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+}
+
+type apiServer struct {
+	restapi.Server
+	cancel context.CancelFunc
 }
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -42,7 +54,6 @@ type trafficManager struct {
 	callbacks  Callbacks
 
 	// local information
-	env         client.Env
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
 
@@ -66,6 +77,8 @@ type trafficManager struct {
 	// currentIntercepts is the latest snapshot returned by the intercept watcher
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
+	currentMatchers       map[string]header.Matcher
+	currentAPIServers     map[int]apiServer
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo
@@ -87,7 +100,6 @@ type interceptResult struct {
 // New returns a TrafficManager resource for the given cluster if it has a Traffic Manager service.
 func New(
 	_ context.Context,
-	env client.Env,
 	cluster *userd_k8s.Cluster,
 	installID string,
 	callbacks Callbacks,
@@ -102,13 +114,12 @@ func New(
 	}
 
 	// Ensure that we have a traffic-manager to talk to.
-	ti, err := newTrafficManagerInstaller(cluster)
+	ti, err := NewTrafficManagerInstaller(cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "new installer")
 	}
 	tm := &trafficManager{
-		installer:   ti,
-		env:         env,
+		installer:   ti.(*installer),
 		installID:   installID,
 		startup:     make(chan struct{}),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
@@ -119,7 +130,7 @@ func New(
 }
 
 func (tm *trafficManager) Run(c context.Context) error {
-	err := tm.ensureManager(c, &tm.env)
+	err := tm.EnsureManager(c)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
 		close(tm.startup)
@@ -159,7 +170,8 @@ func (tm *trafficManager) Run(c context.Context) error {
 	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
-		grpc.WithBlock()}
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError()}
 
 	conn, err = grpc.DialContext(tc, grpcAddr, opts...)
 	if err != nil {
@@ -185,14 +197,13 @@ func (tm *trafficManager) Run(c context.Context) error {
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	// Gotta call mgrProxy.SetClient before we call daemon.SetOutboundInfo which tells the
+	// Gotta call RegisterManagerServer before we call daemon.SetOutboundInfo which tells the
 	// daemon to use the proxy.
-	tm.callbacks.SetClient(tm.managerClient)
+	tm.callbacks.RegisterManagerServer(userd_grpc.NewManagerProxy(tm.managerClient))
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo()); err != nil {
+	if _, err := tm.callbacks.SetOutboundInfo(c, tm.getOutboundInfo(c)); err != nil {
 		tm.managerClient = nil
-		tm.callbacks.SetClient(nil)
 		return fmt.Errorf("daemon.SetOutboundInfo: %w", err)
 	}
 
@@ -202,6 +213,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
+	g.Go("dial-request-watcher", tm.dialRequestWatcher)
 	return g.Wait()
 }
 
@@ -448,7 +460,7 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 	_ = tm.clearIntercepts(c)
 	switch ur.UninstallType {
 	case rpc.UninstallRequest_UNSPECIFIED:
-		return nil, errors.New("invalid uninstall request")
+		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
 	case rpc.UninstallRequest_NAMED_AGENTS:
 		var selectedAgents []*manager.AgentInfo
 		for _, di := range ur.Agents {
@@ -465,29 +477,68 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 			}
 			if !found {
 				result.ErrorText = fmt.Sprintf("unable to find a workload named %s.%s with an agent installed", di, namespace)
+				result.ErrorCategory = int32(errcat.User)
 			}
 		}
 		agents = selectedAgents
 		fallthrough
 	case rpc.UninstallRequest_ALL_AGENTS:
 		if len(agents) > 0 {
-			if err := tm.removeManagerAndAgents(c, true, agents, &tm.env); err != nil {
+			if err := tm.RemoveManagerAndAgents(c, true, agents); err != nil {
 				result.ErrorText = err.Error()
+				result.ErrorCategory = int32(errcat.GetCategory(err))
 			}
 		}
 	default:
 		// Cancel all communication with the manager
-		if err := tm.removeManagerAndAgents(c, false, agents, &tm.env); err != nil {
+		if err := tm.RemoveManagerAndAgents(c, false, agents); err != nil {
 			result.ErrorText = err.Error()
+			result.ErrorCategory = int32(errcat.GetCategory(err))
 		}
 	}
 	return result, nil
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
-func (tm *trafficManager) getOutboundInfo() *daemon.OutboundInfo {
+func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
+	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
+	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
+	// the cluster, since an open tunnel to the traffic-manager (via the API server) is itself required
+	// to communicate with the cluster.
+	neverProxy := []*manager.IPNet{}
+	url, err := url.Parse(tm.Server)
+	if err != nil {
+		// This really shouldn't happen as we are connected to the server
+		dlog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", tm.Server, err)
+	} else {
+		hostname := url.Hostname()
+		rawIP := iputil.Parse(hostname)
+		ips := []net.IP{rawIP}
+		if rawIP == nil {
+			var err error
+			ips, err = net.LookupIP(hostname)
+			if err != nil {
+				dlog.Errorf(ctx, "Unable to do DNS lookup for k8s server %s: %v", hostname, err)
+				ips = []net.IP{}
+			}
+		}
+		for _, ip := range ips {
+			mask := net.CIDRMask(128, 128)
+			if ipv4 := ip.To4(); ipv4 != nil {
+				mask = net.CIDRMask(32, 32)
+				ip = ipv4
+			}
+			ipnet := &net.IPNet{IP: ip, Mask: mask}
+			neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))
+		}
+	}
+	for _, np := range tm.NeverProxy {
+		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
+	}
 	info := &daemon.OutboundInfo{
-		Session: tm.sessionInfo,
+		Session:           tm.sessionInfo,
+		NeverProxySubnets: neverProxy,
 	}
 
 	if tm.DNS != nil {

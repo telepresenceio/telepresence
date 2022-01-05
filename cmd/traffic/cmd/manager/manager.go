@@ -10,8 +10,9 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
-	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -32,12 +33,15 @@ func Main(ctx context.Context, args ...string) error {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
 
-	// Make the kates client available in the context
-	client, err := kates.NewClient(kates.ClientConfig{})
+	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		return fmt.Errorf("failed to create new kates client: %w", err)
+		return fmt.Errorf("unable to get the Kubernetes InClusterConfig: %w", err)
 	}
-	ctx = managerutil.WithKatesClient(ctx, client)
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("unable to create the Kubernetes clientset from InClusterConfig: %w", err)
+	}
+	ctx = managerutil.WithK8SClientset(ctx, clientset)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
@@ -98,7 +102,7 @@ func (m *Manager) runInterceptGCLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			m.expire()
+			m.expire(ctx)
 		case <-ctx.Done():
 			return nil
 		}

@@ -1,0 +1,245 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{.ManagerNamespace}}
+spec:
+  finalizers:
+  - kubernetes
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}
+spec:
+  clusterIP: None
+  ports:
+  - name: api
+    port: 8081
+    protocol: TCP
+    targetPort: api
+  selector:
+    app: traffic-manager
+    telepresence: manager
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-injector
+  namespace: {{.ManagerNamespace}}
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app: traffic-manager
+    telepresence: manager
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: agent-injector-webhook-{{.ManagerNamespace}}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZGVENDQXYyZ0F3SUJBZ0lFRHY3S3NEQU5CZ2txaGtpRzl3MEJBUXNGQURBYk1Sa3dGd1lEVlFRS0V4Qm4KWlhSaGJXSmhjM05oWkc5eUxtbHZNQjRYRFRJeE1EZ3hOekV6TlRjeU5Gb1hEVEl5TURneE56RXpOVGN5TkZvdwpHekVaTUJjR0ExVUVDaE1RWjJWMFlXMWlZWE56WVdSdmNpNXBiekNDQWlJd0RRWUpLb1pJaHZjTkFRRUJCUUFECmdnSVBBRENDQWdvQ2dnSUJBTGFHZjgyTW1nQVk3RDZ1bXhsVFl2N20relV1N3l5eFVaeE8vNDBNUzRvdlRFUlkKeDBMSm1jZE9NRWtOVWNIYUFQVHFRTHZwY0R1Y3NkQkYvRGNDMVhGaDRQdEY5V2FuYU1OU1dEV25vNFMxVTZCMApMZUZGWGhURjJUek5IUXovelplaEpVZGVHTVlVanJGVkdPaDYrM25pL0ZjT2pkRzh6blQ3Q3V0N1dOWEZXZUVqCk14c0F3RUd6UTcrdVRYZjdRWGFwV3YxQlpXa2dZZDBjbktTbm1DU3ROTVdiVEx6R2JrWGhmWDZJMG5zenYzV3MKYWhRZXl0ekcxMzlac21EM0F4Wmp1ZVZ2TEFoQTZDaGJyVi96VEJqYVpqTWl0TThHWEZMN1Zhb2FUamlIV0dwOAo1OHRmUWRvSTFxNXBCZzNSVHVKOW9CZjJaRXFtVk1vKzlzU1BJSUZEOHlSN1E1Z1N6akJubC8zTHIrV2puWmlICk9oaExLYS9SUnhXWGIzZ2lFYmVtd09Cb2laSVh4UVZUc0NFcFAwODFFWGR1R2tXYTQ5MmdKM01MTjBVbVpMQmUKN2t1dXVWbGdCZW40MEVkRkJ1ZkpRWFFHRlRxQ01wRkUxTytsY0ZJbks0NUhqUXN0UCtIT3g0ODFYU01MV3Y2eQp6L1gvUFM2WkdNeFhuQStlU3M5UEtJeUF4b2VxK1JGYzZLMm10NCtzZG1JS1RNS2dxOUxBV09lcjhRVmtJUjNuCmVkQlFMK1pDUnc1TGNhRHhpbllKWGFtSlc5TWlHV2dBVzU0bVJLWGhGVlpQeUZZVE9ZTkFER1hwTDNLQ3IvbHcKSlRrSWZBUzJNZmViaUROMUREUnhTNENSbjRxVStteFE0anAwWGFWZW9DYnZ2QU9Vd1lxcy82d21GYk9SQWdNQgpBQUdqWVRCZk1BNEdBMVVkRHdFQi93UUVBd0lDaERBZEJnTlZIU1VFRmpBVUJnZ3JCZ0VGQlFjREFnWUlLd1lCCkJRVUhBd0V3RHdZRFZSMFRBUUgvQkFVd0F3RUIvekFkQmdOVkhRNEVGZ1FVTWU1YWRGeHN0SDB0UDNlOGFheVgKV3k2Ymp6TXdEUVlKS29aSWh2Y05BUUVMQlFBRGdnSUJBSW1nZ0UzT28rYUZidWpRQ0l2L2RPbHZlWU4xZjJRTwoxdjVUSThDNXhRdmxCRnNYdWttbDhtYVQ3RCtpK3U3UWVCRGxtbVY1NVMvV25mL2lMMWJDNGJmZ2U0dmZVdzRWCkErNXd6eXdybVdONndYbFBlNlh2cGpFQlJ0U2VDbGYvMy9vRmROb3ZtVENraXpGd1V3VW56akJwN3QvTWNFeTkKN3dYSFl6RGJaMDcwemdueHNjZDV0cWFEeGNaNUJKajhneDF5M2phWXM5YUQ4Yi9VcXB0R1Nib0tXKzNJZkhxSApma00xakNLVUYwRHdlaGU4WE13cEl4OEU5dXM0YXhXMEVUTlVxOC9ib0ZCOElnYzNSSFpveUtCSjJ4SmEzMUlYClZQN0xlR25kdGo1eHlON3dmYXlnQklyYzJXZ1dXckNFRmxxdHRTbC9XVWYzS1RBMERHRVJhZFhqOGp4OHVDRXMKTVAvM2FXT1BRVXBNMUs3ZnpuQmFaN3JIdGRyNzRXa3hSYjdCZVozMWFWYTdLdXFkYmtRSGJCRWZyQ01WWCtXMgo0UFdscXg1T2V0NDBqbDhNTTQvRXJ4UW93YzIzN3BYS0QvV1Fzb05aYnZjdmRka21pTTFYR2tSOGRXamk3RG5QCjc1MHA1ZEd2RDBRNWpEODJBM3NTY1RPYVBOZjRFOExac0lHbG9LTExiT2l1d1VkTXUxdCt6WG5jMFJWenBudXoKQjhjcWExL1pxS2FDMHBja1JXTXJwS2pucHYwWlE2c3RMbFlPSHNVTzRFOTlVTEtWUm85TjRuQ3F0eDVyL3BPRApCNmdqRGdPa2xNdHJ3RVNtWDZYQTlzQ2VaUUJZL2I1YjExUElJQ2xlS2NlWG9ZZ1hzdTVhMXFQN3VlVzkyMEtyCjAyMHZoOXlnR25MRwotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+    service:
+      name: agent-injector
+      namespace: {{.ManagerNamespace}}
+      path: /traffic-agent
+      port: 443
+  failurePolicy: Ignore
+  matchPolicy: Equivalent
+  name: agent-injector.getambassador.io
+  namespaceSelector: {}
+  objectSelector: {}
+  reinvocationPolicy: Never
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+    scope: '*'
+  sideEffects: None
+  timeoutSeconds: 5
+---
+apiVersion: v1
+data:
+  ca.pem: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZGVENDQXYyZ0F3SUJBZ0lFRHY3S3NEQU5CZ2txaGtpRzl3MEJBUXNGQURBYk1Sa3dGd1lEVlFRS0V4Qm4KWlhSaGJXSmhjM05oWkc5eUxtbHZNQjRYRFRJeE1EZ3hOekV6TlRjeU5Gb1hEVEl5TURneE56RXpOVGN5TkZvdwpHekVaTUJjR0ExVUVDaE1RWjJWMFlXMWlZWE56WVdSdmNpNXBiekNDQWlJd0RRWUpLb1pJaHZjTkFRRUJCUUFECmdnSVBBRENDQWdvQ2dnSUJBTGFHZjgyTW1nQVk3RDZ1bXhsVFl2N20relV1N3l5eFVaeE8vNDBNUzRvdlRFUlkKeDBMSm1jZE9NRWtOVWNIYUFQVHFRTHZwY0R1Y3NkQkYvRGNDMVhGaDRQdEY5V2FuYU1OU1dEV25vNFMxVTZCMApMZUZGWGhURjJUek5IUXovelplaEpVZGVHTVlVanJGVkdPaDYrM25pL0ZjT2pkRzh6blQ3Q3V0N1dOWEZXZUVqCk14c0F3RUd6UTcrdVRYZjdRWGFwV3YxQlpXa2dZZDBjbktTbm1DU3ROTVdiVEx6R2JrWGhmWDZJMG5zenYzV3MKYWhRZXl0ekcxMzlac21EM0F4Wmp1ZVZ2TEFoQTZDaGJyVi96VEJqYVpqTWl0TThHWEZMN1Zhb2FUamlIV0dwOAo1OHRmUWRvSTFxNXBCZzNSVHVKOW9CZjJaRXFtVk1vKzlzU1BJSUZEOHlSN1E1Z1N6akJubC8zTHIrV2puWmlICk9oaExLYS9SUnhXWGIzZ2lFYmVtd09Cb2laSVh4UVZUc0NFcFAwODFFWGR1R2tXYTQ5MmdKM01MTjBVbVpMQmUKN2t1dXVWbGdCZW40MEVkRkJ1ZkpRWFFHRlRxQ01wRkUxTytsY0ZJbks0NUhqUXN0UCtIT3g0ODFYU01MV3Y2eQp6L1gvUFM2WkdNeFhuQStlU3M5UEtJeUF4b2VxK1JGYzZLMm10NCtzZG1JS1RNS2dxOUxBV09lcjhRVmtJUjNuCmVkQlFMK1pDUnc1TGNhRHhpbllKWGFtSlc5TWlHV2dBVzU0bVJLWGhGVlpQeUZZVE9ZTkFER1hwTDNLQ3IvbHcKSlRrSWZBUzJNZmViaUROMUREUnhTNENSbjRxVStteFE0anAwWGFWZW9DYnZ2QU9Vd1lxcy82d21GYk9SQWdNQgpBQUdqWVRCZk1BNEdBMVVkRHdFQi93UUVBd0lDaERBZEJnTlZIU1VFRmpBVUJnZ3JCZ0VGQlFjREFnWUlLd1lCCkJRVUhBd0V3RHdZRFZSMFRBUUgvQkFVd0F3RUIvekFkQmdOVkhRNEVGZ1FVTWU1YWRGeHN0SDB0UDNlOGFheVgKV3k2Ymp6TXdEUVlKS29aSWh2Y05BUUVMQlFBRGdnSUJBSW1nZ0UzT28rYUZidWpRQ0l2L2RPbHZlWU4xZjJRTwoxdjVUSThDNXhRdmxCRnNYdWttbDhtYVQ3RCtpK3U3UWVCRGxtbVY1NVMvV25mL2lMMWJDNGJmZ2U0dmZVdzRWCkErNXd6eXdybVdONndYbFBlNlh2cGpFQlJ0U2VDbGYvMy9vRmROb3ZtVENraXpGd1V3VW56akJwN3QvTWNFeTkKN3dYSFl6RGJaMDcwemdueHNjZDV0cWFEeGNaNUJKajhneDF5M2phWXM5YUQ4Yi9VcXB0R1Nib0tXKzNJZkhxSApma00xakNLVUYwRHdlaGU4WE13cEl4OEU5dXM0YXhXMEVUTlVxOC9ib0ZCOElnYzNSSFpveUtCSjJ4SmEzMUlYClZQN0xlR25kdGo1eHlON3dmYXlnQklyYzJXZ1dXckNFRmxxdHRTbC9XVWYzS1RBMERHRVJhZFhqOGp4OHVDRXMKTVAvM2FXT1BRVXBNMUs3ZnpuQmFaN3JIdGRyNzRXa3hSYjdCZVozMWFWYTdLdXFkYmtRSGJCRWZyQ01WWCtXMgo0UFdscXg1T2V0NDBqbDhNTTQvRXJ4UW93YzIzN3BYS0QvV1Fzb05aYnZjdmRka21pTTFYR2tSOGRXamk3RG5QCjc1MHA1ZEd2RDBRNWpEODJBM3NTY1RPYVBOZjRFOExac0lHbG9LTExiT2l1d1VkTXUxdCt6WG5jMFJWenBudXoKQjhjcWExL1pxS2FDMHBja1JXTXJwS2pucHYwWlE2c3RMbFlPSHNVTzRFOTlVTEtWUm85TjRuQ3F0eDVyL3BPRApCNmdqRGdPa2xNdHJ3RVNtWDZYQTlzQ2VaUUJZL2I1YjExUElJQ2xlS2NlWG9ZZ1hzdTVhMXFQN3VlVzkyMEtyCjAyMHZoOXlnR25MRwotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  crt.pem: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZnekNDQTJ1Z0F3SUJBZ0lFRHY3S3NUQU5CZ2txaGtpRzl3MEJBUXNGQURBYk1Sa3dGd1lEVlFRS0V4Qm4KWlhSaGJXSmhjM05oWkc5eUxtbHZNQjRYRFRJeE1EZ3hOekV6TlRjeU4xb1hEVE14TURneE56RXpOVGN5TjFvdwpRekVaTUJjR0ExVUVDaE1RWjJWMFlXMWlZWE56WVdSdmNpNXBiekVtTUNRR0ExVUVBeE1kWVdkbGJuUXRhVzVxClpXTjBiM0l1WVcxaVlYTnpZV1J2Y2k1emRtTXdnZ0lpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElDRHdBd2dnSUsKQW9JQ0FRQzdaQ2hEeXBta2hBbkNUM0dycFN4RHVISmdVYXVZRFI1UExEa3ZFRjlwVnljRWtLSjFUYmJjUVhEVQp6QWU1cUd6VmtSSWV1UFkwY3RIM3V1cndrSGViaHcrRU93M09aRlFyTE5mNFRyYVpGc09aN0N3bFlSaWF1MDk4Ck0yWU5wQk1kZThxRkFUaEllYWxwbzdjTksyRU4vZ3NtTDlmZG4zd1ZJRE5heVhRM1gxNVBzN2JsZnVvbU55clkKK29EeTRQU09GcnFuQUhXcjR3c25YMmM3cEtPSXJCYmZ5WFJsbHlLTUhiR2Z3TWUydGFUWk52K3p3d0ZrUXlEUQpGYW5yN3p5S0Y4S05RNGU4cGdGVUdoTmUyVm1WTWNSNDhoSDdCa1ZQUUN6NHI4NzJ4eWlFQ2svNUJ6K2tBNnVUCkliVUFOM3FKbDIwTmtMcEw4ejFzc1VjeHl1U0VZc1Nyb0pGb00vL1RUUWR4WmNWYmdiMDNaSE90aUJqempKTHEKOW5maXpmMXlmSU96OHJjajZKUko5bXdVNGtxZEhkT3lLeFErZWxGanlweTRQYVZPTUdqSVJlY1dadzN2a3JkVQpFWjlBL0RIc3djNmU4WVlOSldFcCtrT2R1aVI3cWNIWGJiU3daQUV0Vm03RDNuUFkrLzRMa1JKeHZMTEJFek9QCkxmWTErSkhjVXNkMHZ3S3BFaC9PQUFBSTdsaVlDNG12WktITXpSMktYOEFnc3FWazl1Y3I3dHRFa2sxOFV5aFEKcmFhRTBJOWtVdmJ3V2kxalZPcG9JcWtpajVRY01hMUtSNjJjUkh0MVFmOVprQ3k1TGdlUFBJNjJVNlFiMzA5bgpvWWlFMUEvbnVoeFlBTElxK3hoOGQvZ2F2cWF2OHBQc01BRWFQMjNzSGZScU1rWnpBd0lEQVFBQm80R21NSUdqCk1BNEdBMVVkRHdFQi93UUVBd0lIZ0RBZEJnTlZIU1VFRmpBVUJnZ3JCZ0VGQlFjREFnWUlLd1lCQlFVSEF3RXcKSFFZRFZSME9CQllFRk9UVXF0SkV0ZkN2c2NuUHFxNFZZTC9mcFFDRk1GTUdBMVVkRVFSTU1FcUNEbUZuWlc1MApMV2x1YW1WamRHOXlnaGxoWjJWdWRDMXBibXBsWTNSdmNpNWhiV0poYzNOaFpHOXlnaDFoWjJWdWRDMXBibXBsClkzUnZjaTVoYldKaGMzTmhaRzl5TG5OMll6QU5CZ2txaGtpRzl3MEJBUXNGQUFPQ0FnRUFSQ09QM1p1NlViZmYKY2NaV0V6NStpaGZDcnpkUGNHOTg2L0NETzFwaTcyK0Y1V1VKVkovMFVjS0xGNjdPWUJhdEVRdzBUdDU5NG1hQwpUTys4QlV3Qml3czJhaERyeDNwaU9mTXJaZ0dyaWt1NTYxTmlpNENpdU5nQmlGSnpIa3gwYzlXdUxNUGllOE5xCkVmbnJ3OHg4cjd6di9nZGpNYW9BcE5nakd0ay9lOU9aTk84cmFQOEYvSmxBejdWZSthSGZPajNveFF4cnFtWnkKWjdJdHJJNHd1SGFGRHNKSllzZEFJOVVBb0NESHRPL1hkMFVSaWYrbmQ4WkJ1SFRsWHd3ZDMzWjFRRmxFK3lqdQp4emR4WjRRaDIzbFVITTQvN3JIQXFhR2dyWlRrWlVtMVVPME1YSzNRaXVob0xKb04rNmRlUjZTNngvdmZoOENkCnZTQ0N3bUNCbHFURjJJOUM5azFVemtMaGlNYlF5VHNqRXU1ZzFhOElyWEVWY28rRFpxelJiMXBTMjQxZ0lLOFYKdTc4ZHFZNmtTWXlGRHdtYjltcVh0eTVlZVNqcmNkUXVBdVAvMmd4Z2c1K284WUxiRjZHWE9LazFnWXNxLy96WApOWDNnaFNyL2tmWW8zQ0N1WXdrY1g2aEtzQ1ZyN0phTThydmJsNk9oZVEwWG4vbmg1cFg3Tkw4NHU1RXdSOGtkCjY2KzRXdU1FbGNBaDZOa01MR3BBeldRQmxPRXd6d0c4eFlQckJucVFGTVFBcGRsOTFnOGtmQ1JZUHlrSTA2TWUKWUZvVmFYdm9xdFl0TWN3MWlFQmdhOHZwbWRSZVQrZTQzalQ0ckthSWlQZDJOcmRjejZpd1JEMENEWCs3ODhMeApRejU2L1YwTWhUTXYwbEw1aDRlcXVlK016N3Jpd0FFPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  key.pem: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlKS1FJQkFBS0NBZ0VBdTJRb1E4cVpwSVFKd2s5eHE2VXNRN2h5WUZHcm1BMGVUeXc1THhCZmFWY25CSkNpCmRVMjIzRUZ3MU13SHVhaHMxWkVTSHJqMk5ITFI5N3JxOEpCM200Y1BoRHNOem1SVUt5elgrRTYybVJiRG1ld3MKSldFWW1ydFBmRE5tRGFRVEhYdktoUUU0U0htcGFhTzNEU3RoRGY0TEppL1gzWjk4RlNBeldzbDBOMTllVDdPMgo1WDdxSmpjcTJQcUE4dUQwamhhNnB3QjFxK01MSjE5bk82U2ppS3dXMzhsMFpaY2lqQjJ4bjhESHRyV2syVGIvCnM4TUJaRU1nMEJXcDYrODhpaGZDalVPSHZLWUJWQm9UWHRsWmxUSEVlUElSK3daRlQwQXMrSy9POXNjb2hBcFAKK1FjL3BBT3JreUcxQURkNmlaZHREWkM2Uy9NOWJMRkhNY3JraEdMRXE2Q1JhRFAvMDAwSGNXWEZXNEc5TjJSegpyWWdZODR5UzZ2WjM0czM5Y255RHMvSzNJK2lVU2Zac0ZPSktuUjNUc2lzVVBucFJZOHFjdUQybFRqQm95RVhuCkZtY043NUszVkJHZlFQd3g3TUhPbnZHR0RTVmhLZnBEbmJva2U2bkIxMjIwc0dRQkxWWnV3OTV6MlB2K0M1RVMKY2J5eXdSTXpqeTMyTmZpUjNGTEhkTDhDcVJJZnpnQUFDTzVZbUF1SnIyU2h6TTBkaWwvQUlMS2xaUGJuSys3YgpSSkpOZkZNb1VLMm1oTkNQWkZMMjhGb3RZMVRxYUNLcElvK1VIREd0U2tldG5FUjdkVUgvV1pBc3VTNEhqenlPCnRsT2tHOTlQWjZHSWhOUVA1N29jV0FDeUt2c1lmSGY0R3I2bXIvS1Q3REFCR2o5dDdCMzBhakpHY3dNQ0F3RUEKQVFLQ0FnQVRJRURmMG5EbUVyZndSaTJDNkdQaE1aVXk4WU1ERE91NEJ2cDdMRCtndjgxeXNOUjBCbytRWVhtRApycU5uTnFLTkZiWjB2a29heGxGWjZKRU1KcUtlbENWb1NLSzdHeEJnSzc2TFVIVmdvS3NzTGFlLzFPNHU5TWxECkV2ZnFrb0dFODlxU3dySWM2NVgzKzBhMnFHUEtpdEJXZ0hHVzVDMUU5cmxuSGNLbjJDc0hGWCtvWXREQlA4WTIKeVRLYUY0MitadUY4SkJiZWlWamRGdWF4ZHJkZVBycEM4d3ZYUnBxM0ZGekp3bUpmNnFBOXIxaGYzNXBud2xZNgpCc3dHRWEvckpFdXVJV05jUk5GRDVUbHU1OTQxMVJPSmlLTi9MSCtzZkE5YS9vNndMMW1hU0hjcklxdERNVUMwCnpxN3JxNzN0QnpDUlB1RlUyU20reTBWSjlyeGwvYUxuK2VvTHkvS1ZadTNjalJSWEkvOHE5WkdKQkxQT0Z0VjUKT2NtcWpaQTg1WHNEU0dEVkk2TnMvbUJMNXVBbkc3NVdHVlVSRFh1Y3piWHloZFRYTEdyNkdkcmxtaUpWN2t3OQpOK3k3NFlFM1Q1N2ltaEZHN1NqcnplWW1QRjJocEx4NFpOMkRScmJFOTNQeEZZbGFxcDg3NS9sWWVsRWRnekVyClRGa2VKMHdxWEM3Y0xsTzI0dUF4TGkzTTc4Zkd5NXdoMEhqQVVySjNVS05BeFFtTDZwWFE1ZlljZWZtMjl2KzAKN2VKR3RWZGwvWk4rcXg2bXRQakxjWnJNU3NkK2QzaXJ4OWJCM3NsZnRkVkg4ZGdXOXdURTN6S0NJVkt1NktTUQowV2thSXF6NjFVWml4TEduZzUzWk9sY2dsdXEyR1pkTXpXejJ1QTgwck4yRkJJeTVvUUtDQVFFQStFVjdEOWNjCmRPdVpJUmNPS3YraDFJQVVOT0tUUUJKc2RvV2xRempMa21iZXRydkdHbC9taURzQzJuSjdPWlRYTGhLZndkbGYKcm5KdmJYcDlNckNsTjB2cC9tTHRmaElUWVJURFJFUjcyVUJxckh4MEprcjNoTDFXalkzRkpGTnZJMnJiNlhjRwpka0NzODEveldscWF0eW1zZWdObkpqKzcrSmU3NE5mN0c5RmltMkRJamF3R0EvU0RVY2xWNHZkRllUNDQxKys1CmNGT0Y1THo4WUpwQW00N1FZUWxIVTVJcTJSeW5XeVFPSzBxM3hlRlJuS3R2aTk5VkxIRWtwdVUxWSsxYnhLNzAKZEFuejdRVFE3Y3R6MmJrd05yR241cG9hQkdwVVJCb2VMTnBxY1Exa0JJeFZoWkNCNnc5ZHM3emNzYyt2MjlveApzQW9mRUFqVWZ0MVlVUUtDQVFFQXdUbUMrS3hNcWtocXBISmc1YkxGdUN3NUZsMXptVDYzK1JqS0wrYmNlZzVHCkYzVFpuMk5RVjFWUHhDc2RBRS9rOE04TUVoUXByRmtIMU84WE1Ncm54R2doQ0NOa0oxUzVpSjdMbE5RMndaMVIKTjJuakhOUzFLblptRFA2T3FhVit5azVkeVNJM3JjS0EvYVFoWjM0b2ZqMjJwZUVpM1d1M2NFKzQ2WVRiRFZoRwpSQXFkYzNBVVd3UVBuT3BoaXFVVWlRb1VJVFR2U3hQT0Y2TVFhSFZzcjNvT2U2M1lDcUx4QVNoVWFiSEljbkJ4CnVuVEs2N0IvVnJUTEpneVlkM0gycGtsSGpQYU5rOFh6dCtsYnNzd1lQYktiOC9BUW5TZGtIK0YxNEtGSUZSOEIKSHpnT0tPamI0TjZoeW5tUHcvSXE5ZHAwM2R6aW9JbmFjbUJSZGFaVkV3S0NBUUVBMXpJeWR3cDN5Z2lrMUgvTgpjZ3ZlVS9rb2lxYVNDQWx3SmxPMWFjMEM5MFZmYW5qY1ArUThTSDBOL2hjWkpGSVZLZ1JPb1pJdlUyQXhvVzE0CnM4VlZqOWFuWGk2VnVKOG1XUkhNSjVKTTM0VHNjZEgyUTNMYmxSMGd0dFhadWFEd1JuekxYVlFrTDcvanFaalQKc00rMEoydGg2dWlrTWcwd2UwdmFPQXc5eG1ENTNjQklWalJ6aWw0WXJYMmNpbnpXa0hHRWgvZHNmeWFHZWp3dApiZmFHWmMrbVkxWE5rMnl3NHp2by9DRUdmeFBtc3dpWTJ2bm1XQkVmSE1SOWhvUktnUEV1aUE4MktKYXY3aFFzCm5OR3ErMTkvb1FqZ2hndXczWDdreDVyejZPRHhQa2pqRnVZbEF2NjgvZWgxeWVPOFVBdTdYUStGM2hjSDBiZzEKcURsbjRRS0NBUUErNEVZY1FZVVpERU9YaTVpNFpqb3N1a2RCWGR1V0RIQzFZRG02NkxicUNPY0tEdjRaL2FsUgpJZk80OUFhVjZXbW9hdGVVc25iMUhHdU9BTmRkQzBuc0FhNXVCWVk3dmpnNW11TElaVjRFRnZzc3V3b3FnWlVLCllrakhCYmJLd1kzR3EwV2RnOEwyaWdxTGZ2Tlh5QmZKTEsvWXZyQW51VHVTRW44cmpnM3lBNzJwdW9LTjQvVGIKd1RDTGNVR1lhaXVLaEhzVWF6TkxEUUROZEVTTW1WbHFxSjg1NDlJZmMvSlUzQmpMNUF4RUlROEJDNnhVa2JSKwpOSXErc082VVA4TnhUUHM1aGFtQVlyUHlMcittS1AvaVk5S1h5SkMvY3VnRDc4djU4c0dRRGV6QmllNGhwZFNYCkVoczMxZUxRY21kRVpYZ09FaWkwOE9iaXZURUV4Y0Y5QW9JQkFRQ1J2Vk9OUzg5QlFRcEZwZ1gwbzM3OWt3N0cKQU9LdWRCemRMbVE4M3dLUmxkRVkrT2JPazkvdjlNVThpL2JtTlRwSFhYcHR6RFMxeGdDbEZUOWVrK3BkbGZwQgprVGw4ZFY0ZU5KeTlRZFlCeVlRMEFkdFdVZ0dBb3JjQllhbXNuMDYyMW83VGttQ2MwSDV2bGRBME0wS0V5OVVsCkVTMGVzQnJ4VmlpY2t1a3FYZnRDQjZmUmhqN0twc1RFb1BSRVgxU1dVNHFocG5tY1JTTGowTElMT1NEeEloWTEKc0YrczUyZ0tqM2ZZZUUvWmxkV3piOEpadG5sRXYzY091RUpSdFNyV3NGemtPQkRVWGpQOTBoeTNYTlIyd3NWSwpHd0ZISXRkNkJuT21HU3NSTlV4WDRWekRZdFZDS0F3b2VVWEpYVVY4U3FaMHlmYjM5RkpjOGptS3FkSzMKLS0tLS1FTkQgUlNBIFBSSVZBVEUgS0VZLS0tLS0K
+kind: Secret
+metadata:
+  name: mutator-webhook-tls
+  namespace: {{.ManagerNamespace}}
+type: Opaque
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traffic-manager-{{.ManagerNamespace}}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - get
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+  - get
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traffic-manager-{{.ManagerNamespace}}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traffic-manager-{{.ManagerNamespace}}
+subjects:
+- kind: ServiceAccount
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: traffic-manager
+    telepresence: manager
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: traffic-manager
+      telepresence: manager
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: traffic-manager
+        telepresence: manager
+    spec:
+      containers:
+      - env:
+        - name: LOG_LEVEL
+          value: info
+        - name: SYSTEMA_HOST
+          value: app.getambassador.io
+        - name: SYSTEMA_PORT
+          value: "443"
+        - name: CLUSTER_ID
+          value: 8672e7b3-2f32-4a4c-ba6f-a5aea4ebc189
+        - name: TELEPRESENCE_REGISTRY
+          value: docker.io/datawire
+        - name: MANAGER_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: docker.io/datawire/tel2:2.4.0
+        imagePullPolicy: IfNotPresent
+        name: traffic-manager
+        ports:
+        - containerPort: 8081
+          name: api
+          protocol: TCP
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /home/telepresence/
+          name: license
+          readOnly: true
+        - mountPath: /var/run/secrets/tls
+          name: tls
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: traffic-manager
+      serviceAccountName: traffic-manager
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: license
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: systema-license
+      - name: tls
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: mutator-webhook-tls
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traffic-manager
+subjects:
+- kind: ServiceAccount
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traffic-manager
+  namespace: {{.ManagerNamespace}}

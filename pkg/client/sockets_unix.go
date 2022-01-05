@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package client
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -28,13 +28,28 @@ const (
 func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
-		grpc.WithInsecure(),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true),
-	}, opts...)...)
-	if err != nil {
+	for firstTry := true; ; firstTry = false {
+		conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
+			grpc.WithInsecure(),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true),
+		}, opts...)...)
+		if err == nil {
+			return conn, nil
+		}
+
+		if firstTry && errors.Is(err, unix.ECONNREFUSED) {
+			// Socket exists but doesn't accept connections. This usually means that the process
+			// terminated ungracefully. To remedy this, we make an attempt to remove the socket
+			// and dial again.
+			if rmErr := os.Remove(socketName); rmErr != nil {
+				err = fmt.Errorf("%w (socket rm failed with %v)", err, rmErr)
+			} else {
+				continue
+			}
+		}
+
 		if err == context.DeadlineExceeded {
 			// grpc.DialContext doesn't wrap context.DeadlineExceeded with any useful
 			// information at all.  Fix that.
@@ -52,14 +67,13 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
 			err = fmt.Errorf("%w; this usually means that the process has locked up", err)
-		case errors.Is(err, syscall.ECONNREFUSED):
+		case errors.Is(err, unix.ECONNREFUSED):
 			err = fmt.Errorf("%w; this usually means that the process has terminated ungracefully", err)
 		case errors.Is(err, os.ErrNotExist):
 			err = fmt.Errorf("%w; this usually means that the process is not running", err)
 		}
 		return nil, err
 	}
-	return conn, nil
 }
 
 func listenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
@@ -69,7 +83,7 @@ func listenSocket(_ context.Context, processName, socketName string) (net.Listen
 	}
 	listener, err := net.Listen("unix", socketName)
 	if err != nil {
-		if errors.Is(err, syscall.EADDRINUSE) {
+		if errors.Is(err, unix.EADDRINUSE) {
 			err = fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully", socketName, processName)
 		}
 		return nil, err
@@ -85,7 +99,16 @@ func removeSocket(listener net.Listener) error {
 }
 
 // socketExists returns true if a socket is found at the given path
-func socketExists(path string) bool {
+func socketExists(path string) (bool, error) {
 	s, err := os.Stat(path)
-	return err == nil && s.Mode()&os.ModeSocket != 0
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return false, err
+	}
+	if s.Mode()&os.ModeSocket == 0 {
+		return false, fmt.Errorf("%q is not a socket", path)
+	}
+	return true, nil
 }

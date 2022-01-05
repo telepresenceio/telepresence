@@ -25,6 +25,9 @@ service Connector {
   // anything.  It's a dry-run.
   rpc Status(ConnectRequest) returns (ConnectInfo);
 
+  // Queries the connector whether it is possible to create the given intercept.
+  rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);
+
   // Adds an intercept to a workload.  Requires having already called
   // Connect.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
@@ -56,6 +59,9 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
+  // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
+  rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
+
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
@@ -69,19 +75,30 @@ message ConnectRequest {
 
 message ConnectInfo {
   enum ErrType {
-    UNSPECIFIED            = 0; // success
-    ALREADY_CONNECTED      = 2; // success
-    MUST_RESTART           = 7; // failure: would-be-success, but kubeconfig has changed
-    DISCONNECTED           = 3; // failure: Connect has not yet been called (only returned from Status)
-    CLUSTER_FAILED         = 4; // failure: error parsing kubeconfig or talking to the cluster; error_text is set
-    TRAFFIC_MANAGER_FAILED = 6; // failure: error talking to the in-cluster traffic-manager; error_text is set
-    DAEMON_FAILED          = 8; // failure: error talking to the on-laptop root daemon; error_text is set
+    UNSPECIFIED       = 0; // success
+    ALREADY_CONNECTED = 2; // success
+    MUST_RESTART      = 7; // would-be-success, but kubeconfig has changed
+
+    // failure: Connect has not yet been called (only returned from Status)
+    DISCONNECTED = 3;
+
+    // failure: error parsing kubeconfig or talking to the cluster; error_text and error_category are set
+    CLUSTER_FAILED = 4;
+
+    // failure: error talking to the in-cluster traffic-manager; error_text and error_category are set
+    TRAFFIC_MANAGER_FAILED = 6;
+
+    // failure: error talking to the on-laptop root daemon; error_text and error_category are set
+    DAEMON_FAILED = 8;
 
     reserved 1;
     reserved 5;
   }
   ErrType error = 1;
-  string error_text = 2; // only set for some error codes, see above
+
+  // only set for some error codes, see above
+  string error_text = 2;
+  int32 error_category = 12;
 
   // everything else is only set for error=UNSPECIFIED,
   // error=ALREADY_CONNECTED, or error=MUST_RESTART.
@@ -122,6 +139,7 @@ message UninstallRequest {
 
 message UninstallResult {
   string error_text = 1;
+  int32 error_category = 2;
 }
 
 message CreateInterceptRequest {
@@ -146,7 +164,7 @@ enum InterceptError {
   NO_ACCEPTABLE_WORKLOAD = 8;
   AMBIGUOUS_MATCH = 9;
   FAILED_TO_ESTABLISH = 10;
-  reserved 11;
+  UNSUPPORTED_WORKLOAD = 11;
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
 }
@@ -192,6 +210,7 @@ message InterceptResult {
   telepresence.manager.InterceptInfo intercept_info = 1;
   InterceptError error = 2;
   string error_text = 3;
+  int32 error_category = 7;
 
   // The environment of the app
   map<string,string> environment = 4;

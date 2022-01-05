@@ -3,10 +3,9 @@ package dnet
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +20,7 @@ import (
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/util"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 )
 
@@ -85,7 +84,12 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 	if err != nil {
 		return nil, err
 	}
-	return pf.dial(ctx, pod, podPortNumber)
+	inner, err := pf.dial(ctx, pod, podPortNumber)
+	if err != nil {
+		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
+		return nil, err
+	}
+	return wrapUnbufferedConn(inner), nil
 }
 
 func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kates.Pod, uint16, error) {
@@ -221,7 +225,7 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *kates.Pod) (httpstream.Connectio
 }
 
 func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port uint16) (conn *kpfConn, err error) {
-	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, %s.%s, %d)",
+	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, Pod./%s.%s, %d)",
 		pod.Name,
 		pod.Namespace,
 		port)
@@ -269,40 +273,40 @@ func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port u
 	}
 
 	conn = &kpfConn{
-		remoteAddr: net.JoinHostPort(pod.Name+"."+pod.Namespace, strconv.FormatInt(int64(port), 10)),
-
+		remoteAddr:  net.JoinHostPort(pod.Name+"."+pod.Namespace, strconv.FormatInt(int64(port), 10)),
 		errorStream: errorStream,
 		dataStream:  dataStream,
-
-		oobErrCh: make(chan struct{}),
-
-		readDeadline:  makePipeDeadline(),
-		writeDeadline: makePipeDeadline(),
 	}
-	go conn.oobWorker()
+	conn.init()
 	return conn, nil
 }
 
 type kpfConn struct {
-	remoteAddr string
+	// Configuration
 
+	remoteAddr string
+	// See the above comment about httpstream.Stream close semantics.
 	errorStream httpstream.Stream
 	dataStream  httpstream.Stream
 
+	// Internal data
+
 	oobErrCh chan struct{}
-	oobErr   error
+	oobErr   error // may only access .oobErr if .oobErrCh is closed (unless you're .oobWorker()).
 
-	readMu       sync.Mutex
-	readDeadline pipeDeadline
-	readErr      error
+	readBuff []byte
+	readErr  error
+	writeErr error
+}
 
-	writeMu       sync.Mutex
-	writeDeadline pipeDeadline
-	writeErr      error
+func (c *kpfConn) init() {
+	c.oobErrCh = make(chan struct{})
+	c.readBuff = make([]byte, c.MTU())
+	go c.oobWorker()
 }
 
 func (c *kpfConn) oobWorker() {
-	msg, err := ioutil.ReadAll(c.errorStream)
+	msg, err := io.ReadAll(c.errorStream)
 	switch {
 	case err != nil:
 		c.oobErr = fmt.Errorf("reading error stream: %w", err)
@@ -312,52 +316,47 @@ func (c *kpfConn) oobWorker() {
 	close(c.oobErrCh)
 }
 
-// Read implements net.Conn.
-func (c *kpfConn) Read(b []byte) (int, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
-
-	if c.readErr != nil {
-		return 0, c.readErr
-	}
-	switch {
-	case isClosedChan(c.oobErrCh) && c.oobErr != nil:
-		return 0, c.oobErr
-	case isClosedChan(c.readDeadline.wait()):
-		return 0, os.ErrDeadlineExceeded
-	}
-
-	n, err := c.dataStream.Read(b)
-	if err != nil {
-		c.readErr = err
-	}
-	return n, err
+// MTU implements unbufferedConn.
+func (c *kpfConn) MTU() int {
+	// 4MiB... I don't have a good reason why.  The gRPC-based unbufferedConns use an MTU of
+	// 3MiB, but we have less overhead than them, so let's go a bit bigger?
+	return 4 * 1024 * 1024
 }
 
-// Write implements net.Conn.
-func (c *kpfConn) Write(b []byte) (int, error) {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-
-	if c.writeErr != nil {
-		return 0, c.writeErr
-	}
+// Recv implements unbufferedConn.
+func (c *kpfConn) Recv() ([]byte, error) {
 	switch {
+	case c.readErr != nil:
+		return nil, c.readErr
 	case isClosedChan(c.oobErrCh) && c.oobErr != nil:
-		return 0, c.oobErr
-	case isClosedChan(c.writeDeadline.wait()):
-		return 0, os.ErrDeadlineExceeded
+		return nil, c.oobErr
+	default:
+		n, err := c.dataStream.Read(c.readBuff)
+		if err != nil {
+			c.readErr = err
+		}
+		return c.readBuff[:n], err
 	}
-
-	n, err := c.dataStream.Write(b)
-	if err != nil {
-		c.writeErr = err
-	}
-	return n, err
 }
 
-// Close implements net.Conn.
-func (c *kpfConn) Close() error {
+// Send implements unbufferedConn.
+func (c *kpfConn) Send(b []byte) error {
+	switch {
+	case c.writeErr != nil:
+		return c.writeErr
+	case isClosedChan(c.oobErrCh) && c.oobErr != nil:
+		return c.oobErr
+	default:
+		_, err := c.dataStream.Write(b)
+		if err != nil {
+			c.writeErr = err
+		}
+		return err
+	}
+}
+
+// CloseOnce implements unbufferedConn.
+func (c *kpfConn) CloseOnce() error {
 	closeErr := c.dataStream.Reset()
 	<-c.oobErrCh
 	if c.oobErr != nil {
@@ -369,19 +368,7 @@ func (c *kpfConn) Close() error {
 	return nil
 }
 
-// CloseWrite augments net.Conn.
-func (c *kpfConn) CloseWrite() error {
-	closeErr := c.dataStream.Close()
-	if isClosedChan(c.oobErrCh) && c.oobErr != nil {
-		return c.oobErr
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return nil
-}
-
-// LocalAddr implements net.Conn.
+// LocalAddr implements unbufferedConn.
 func (c *kpfConn) LocalAddr() net.Addr {
 	return addr{
 		net:  "kubectl-port-forward",
@@ -389,29 +376,10 @@ func (c *kpfConn) LocalAddr() net.Addr {
 	}
 }
 
-// RemoteAddr implements net.Conn.
+// RemoteAddr implements unbufferedConn.
 func (c *kpfConn) RemoteAddr() net.Addr {
 	return addr{
 		net:  "kubectl-port-forward",
 		addr: c.remoteAddr,
 	}
-}
-
-// SetDeadline implements net.Conn.
-func (c *kpfConn) SetDeadline(t time.Time) error {
-	c.readDeadline.set(t)
-	c.writeDeadline.set(t)
-	return nil
-}
-
-// SetReadDeadline implements net.Conn.
-func (c *kpfConn) SetReadDeadline(t time.Time) error {
-	c.readDeadline.set(t)
-	return nil
-}
-
-// SetWriteDeadline implements net.Conn.
-func (c *kpfConn) SetWriteDeadline(t time.Time) error {
-	c.writeDeadline.set(t)
-	return nil
 }

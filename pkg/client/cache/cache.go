@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -32,7 +31,7 @@ func SaveToUserCache(ctx context.Context, object interface{}, file string) error
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filepath.Join(dir, file), jsonContent, 0600)
+	return os.WriteFile(filepath.Join(dir, file), jsonContent, 0600)
 }
 
 func LoadFromUserCache(ctx context.Context, dest interface{}, file string) error {
@@ -40,7 +39,7 @@ func LoadFromUserCache(ctx context.Context, dest interface{}, file string) error
 	if err != nil {
 		return err
 	}
-	jsonContent, err := ioutil.ReadFile(filepath.Join(dir, file))
+	jsonContent, err := os.ReadFile(filepath.Join(dir, file))
 	if err != nil {
 		return err
 	}

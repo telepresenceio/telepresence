@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 type Value interface {
@@ -32,7 +34,7 @@ func (t *TypeEnum) UnmarshalJSON(dat []byte) error {
 		return err
 	}
 	if _, ok := flagTypes[TypeEnum(str)]; !ok {
-		return fmt.Errorf("invalid flag type: %q", str)
+		return errcat.Config.Newf("invalid flag type: %q", str)
 	}
 	*t = TypeEnum(str)
 	return nil

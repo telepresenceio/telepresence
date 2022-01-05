@@ -5,14 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-func getAPIKey(ctx context.Context, env client.Env, creds map[string]string, desc string) (string, error) {
+func getAPIKey(ctx context.Context, creds map[string]string, desc string) (string, error) {
 	// Build the request.
 	reqBody, err := json.Marshal(map[string]interface{}{
 		"description": desc,
@@ -21,7 +21,7 @@ func getAPIKey(ctx context.Context, env client.Env, creds map[string]string, des
 		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx,
-		http.MethodPost, fmt.Sprintf("https://%s/sso/api/apikeys", env.LoginDomain),
+		http.MethodPost, fmt.Sprintf("https://%s/sso/api/apikeys", client.GetEnv(ctx).LoginDomain),
 		bytes.NewReader(reqBody))
 	if err != nil {
 		return "", err
@@ -51,7 +51,7 @@ func getAPIKey(ctx context.Context, env client.Env, creds map[string]string, des
 
 	// Read the JSON body.  We do this _before_ checking the resp.StatusCode so that we can get
 	// the error message out of the body.
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		// No need to wrap this error with the status code, the magical resp.Body reader
 		// includes it for us.

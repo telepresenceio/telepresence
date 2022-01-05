@@ -60,16 +60,8 @@ service:
 
 # The log level of the Traffic Manager.
 #
-# Default: debug
-logLevel: debug
-
-# Telepresence requires a clusterID for identifying itself.
-# This cluster ID is just the UID of the default namespace. You can get this by
-# running `kubectl get ns default -o jsonpath='{.metadata.uid}'`
-# Telepresence will not be able to request a license without this.
-#
-# Default: ""
-clusterID: ""
+# Default: info
+logLevel: info
 
 # GRPC configuration for the Traffic Manager.
 # This is identical to the grpc configuration for local clients.
@@ -77,6 +69,31 @@ clusterID: ""
 grpc: {}
   # maxReceiveSize configures the maximum message size that the traffic manager will service.
   # maxReceiveSize: 4Mi
+
+# podCIDRs is the verbatim list of CIDRs used when the podCIDRStrategy is set to environment
+podCIDRs: []
+
+# podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
+# CIDRs the cluster is using for its pods. Valid values are:
+#
+#  nodePodCIDRs extract CIDRs from the podCIDR and podCIDRs field of the Node Spec.
+#  coverPodIPs  extract IPs from the podIP and podIPs field of the Pod Status and compute the CIDRs needed to cover those IPs.
+#  environment  use CIDRs listed in the space separated POD_CIDRS environment variable verbatim.
+#  auto         first try nodePodCIDRs and if that fails, tru coverPodIPs
+#
+# Default: auto
+podCIDRStrategy: auto
+
+# systemaHost is used by the traffic-manager when using an extension
+# or features that require a specific extension.
+#
+# Default: app.getambassador.io
+systemaHost: "app.getambassador.io"
+
+# systemaPort is the port used with systemaHost
+#
+# Default: 443
+systemaPort: "443"
 
 # Telepresence requires a license key for creating selective intercepts. In
 # normal clusters with access to the public internet, this license is managed
@@ -131,6 +148,10 @@ managerRbac:
 agentInjector:
   create: true
   name: agent-injector
+  agentImage:
+    registry: docker.io/datawire
+    name: tel2
+    tag: ""
   service:
     type: ClusterIP
     ports:
@@ -139,6 +160,8 @@ agentInjector:
       targetPort: https
   secret:
     name: mutator-webhook-tls
+  certificate:
+    regenerate: false
   webhook:
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]
@@ -147,7 +170,15 @@ agentInjector:
     failurePolicy: Ignore
     sideEffects: None
     timeoutSeconds: 5
+  appPortStrategy: http2Probe
 
+################################################################################
+## Telepresence API Server Configuration
+################################################################################
+telepresenceAPI:
+  # The port on agent's localhost where the API service can be found
+  # Default: 0
+  port: 0
 
 ################################################################################
 ## User Configuration

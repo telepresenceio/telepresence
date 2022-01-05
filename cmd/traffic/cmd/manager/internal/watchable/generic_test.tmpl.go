@@ -1,4 +1,5 @@
-//+build ignore
+//go:build ignore
+// +build ignore
 
 package watchable_test
 
@@ -68,7 +69,7 @@ func TestMAPTYPE_Delete(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"a": VALCTOR{TESTFIELD: "a"},
+				"a": {TESTFIELD: "a"},
 			},
 		},
 		watchable.MAPTYPESnapshot{State: m.LoadAll()})
@@ -195,9 +196,9 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"a": VALCTOR{TESTFIELD: "A"},
-				"b": VALCTOR{TESTFIELD: "B"},
-				"c": VALCTOR{TESTFIELD: "C"},
+				"a": {TESTFIELD: "A"},
+				"b": {TESTFIELD: "B"},
+				"c": {TESTFIELD: "C"},
 			},
 			Updates: nil,
 		},
@@ -214,12 +215,12 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"a": VALCTOR{TESTFIELD: "A"},
-				"b": VALCTOR{TESTFIELD: "B"},
-				"c": VALCTOR{TESTFIELD: "C"},
-				"d": VALCTOR{TESTFIELD: "D"},
-				"e": VALCTOR{TESTFIELD: "E"},
-				"f": VALCTOR{TESTFIELD: "F"},
+				"a": {TESTFIELD: "A"},
+				"b": {TESTFIELD: "B"},
+				"c": {TESTFIELD: "C"},
+				"d": {TESTFIELD: "D"},
+				"e": {TESTFIELD: "E"},
+				"f": {TESTFIELD: "F"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "d", Value: VALCTOR{TESTFIELD: "D"}},
@@ -236,11 +237,11 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"b": VALCTOR{TESTFIELD: "B"},
-				"c": VALCTOR{TESTFIELD: "C"},
-				"d": VALCTOR{TESTFIELD: "D"},
-				"e": VALCTOR{TESTFIELD: "E"},
-				"f": VALCTOR{TESTFIELD: "F"},
+				"b": {TESTFIELD: "B"},
+				"c": {TESTFIELD: "C"},
+				"d": {TESTFIELD: "D"},
+				"e": {TESTFIELD: "E"},
+				"f": {TESTFIELD: "F"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "a", Delete: true, Value: VALCTOR{TESTFIELD: "A"}},
@@ -255,10 +256,10 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"c": VALCTOR{TESTFIELD: "C"},
-				"d": VALCTOR{TESTFIELD: "D"},
-				"e": VALCTOR{TESTFIELD: "E"},
-				"f": VALCTOR{TESTFIELD: "F"},
+				"c": {TESTFIELD: "C"},
+				"d": {TESTFIELD: "D"},
+				"e": {TESTFIELD: "E"},
+				"f": {TESTFIELD: "F"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "b", Delete: true, Value: VALCTOR{TESTFIELD: "B"}},
@@ -274,9 +275,9 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"d": VALCTOR{TESTFIELD: "D"},
-				"e": VALCTOR{TESTFIELD: "E"},
-				"f": VALCTOR{TESTFIELD: "F"},
+				"d": {TESTFIELD: "D"},
+				"e": {TESTFIELD: "E"},
+				"f": {TESTFIELD: "F"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "c", Value: VALCTOR{TESTFIELD: "c"}},
@@ -326,9 +327,9 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"a": VALCTOR{TESTFIELD: "A"},
-				"b": VALCTOR{TESTFIELD: "B"},
-				"c": VALCTOR{TESTFIELD: "C"},
+				"a": {TESTFIELD: "A"},
+				"b": {TESTFIELD: "B"},
+				"c": {TESTFIELD: "C"},
 			},
 		},
 		snapshot)
@@ -347,9 +348,9 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"a": VALCTOR{TESTFIELD: "a"},
-				"b": VALCTOR{TESTFIELD: "B"},
-				"c": VALCTOR{TESTFIELD: "C"},
+				"a": {TESTFIELD: "a"},
+				"b": {TESTFIELD: "B"},
+				"c": {TESTFIELD: "C"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "a", Value: VALCTOR{TESTFIELD: "a"}},
@@ -364,8 +365,8 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	assertMAPTYPESnapshotEqual(t,
 		watchable.MAPTYPESnapshot{
 			State: map[string]VALTYPE{
-				"b": VALCTOR{TESTFIELD: "B"},
-				"c": VALCTOR{TESTFIELD: "C"},
+				"b": {TESTFIELD: "B"},
+				"c": {TESTFIELD: "C"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "a", Delete: true, Value: VALCTOR{TESTFIELD: "a"}},

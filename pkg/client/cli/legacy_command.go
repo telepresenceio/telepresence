@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 // Here we handle parsing legacy commands, as well as generating Telepresence
@@ -33,6 +35,7 @@ type legacyCommand struct {
 	context   string
 	namespace string
 
+	globalFlags      []string
 	unsupportedFlags []string
 }
 
@@ -100,7 +103,17 @@ Parsing:
 		case v == "--run-shell":
 			lc.runShell = true
 			break Parsing
-		case strings.Contains(v, "--"):
+		case len(v) > 2 && strings.HasPrefix(v, "--"):
+			g := v[2:]
+			for _, group := range globalFlagGroups {
+				if gf := group.Flags.Lookup(g); gf != nil {
+					lc.globalFlags = append(lc.globalFlags, v)
+					if gv := getArg(i + 1); gv != "" && !strings.HasPrefix(gv, "-") {
+						lc.globalFlags = append(lc.globalFlags, gv)
+					}
+					continue Parsing
+				}
+			}
 			lc.unsupportedFlags = append(lc.unsupportedFlags, v)
 		}
 	}
@@ -139,7 +152,7 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 		// This should be impossible based on how we currently parse commands.
 		// Just putting it here just in case the impossible happens.
 		if lc.run && lc.dockerRun {
-			return "", errors.New("--run and --docker-run are mutually exclusive")
+			return "", errcat.User.New("--run and --docker-run are mutually exclusive")
 		}
 
 		if lc.run {
@@ -154,6 +167,8 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 			}
 			cmdSlice = append(cmdSlice, "--docker-run")
 		}
+		cmdSlice = append(cmdSlice, lc.globalFlags...)
+
 		if lc.processCmd != "" {
 			cmdSlice = append(cmdSlice, "--", lc.processCmd)
 		}
@@ -164,9 +179,13 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 	// If we have a run of some kind without a swapDeployment, then
 	// we translate to a connect
 	case lc.runShell:
-		cmdSlice = append(cmdSlice, "connect", "--", "bash")
+		cmdSlice = append(cmdSlice, "connect")
+		cmdSlice = append(cmdSlice, lc.globalFlags...)
+		cmdSlice = append(cmdSlice, "--", "bash")
 	case lc.run:
-		cmdSlice = append(cmdSlice, "connect", "--", lc.processCmd)
+		cmdSlice = append(cmdSlice, "connect")
+		cmdSlice = append(cmdSlice, lc.globalFlags...)
+		cmdSlice = append(cmdSlice, "--", lc.processCmd)
 	// Either not a legacyCommand or we don't know how to translate it to Telepresence
 	default:
 		return "", nil
@@ -213,7 +232,8 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	scout := client.NewScout(cmd.Context(), "cli")
+	dlog.WithLogger(cmd.Context(), nil)
+	scout := scout.NewScout(cmd.Context(), "cli")
 
 	// Add metadata for the main legacy Telepresence commands so we can
 	// track usage and see what legacy commands people are still using.
@@ -232,7 +252,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if lc.unsupportedFlags != nil {
 		scout.SetMetadatum("unsupported_flags", lc.unsupportedFlags)
 	}
-	_ = scout.Report(cmd.Context(), "Used legacy syntax")
+	scout.Report(log.WithDiscardingLogger(cmd.Context()), "Used legacy syntax")
 
 	// Generate output to user letting them know legacy Telepresence was used,
 	// what the Telepresence command is, and runs it.

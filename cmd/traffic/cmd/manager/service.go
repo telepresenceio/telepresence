@@ -1,11 +1,14 @@
 package manager
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
+	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +16,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -22,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -70,18 +76,32 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
-	licenseData, err := ioutil.ReadFile("/home/telepresence/license")
-	if err != nil {
-		return &rpc.License{}, err
-	}
-	license := string(licenseData)
+	clusterID := m.clusterInfo.GetClusterID()
+	resp := &rpc.License{ClusterId: clusterID}
+	// We want to be able to test GetClusterID easily in our integration tests,
+	// so we return the error in the license.ErrMsg response RPC.
+	var errMsg string
 
-	hostDomainData, err := ioutil.ReadFile("/home/telepresence/hostDomain")
+	// This is the actual license used by the cluster
+	licenseData, err := os.ReadFile("/home/telepresence/license")
 	if err != nil {
-		return &rpc.License{}, err
+		errMsg += fmt.Sprintf("error reading license: %s\n", err)
+	} else {
+		resp.License = string(licenseData)
 	}
-	hostDomain := string(hostDomainData)
-	return &rpc.License{License: license, Host: hostDomain, ClusterId: managerutil.GetEnv(ctx).ClusterID}, nil
+
+	// This is the host domain associated with a license
+	hostDomainData, err := os.ReadFile("/home/telepresence/hostDomain")
+	if err != nil {
+		errMsg += fmt.Sprintf("error reading hostDomain: %s\n", err)
+	} else {
+		resp.Host = string(hostDomainData)
+	}
+
+	if errMsg != "" {
+		resp.ErrMsg = errMsg
+	}
+	return resp, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
@@ -103,6 +123,12 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
 	env := managerutil.GetEnv(ctx)
 	return &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}, nil
+}
+
+// GetTelepresenceAPI returns information about the TelepresenceAPI server
+func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.TelepresenceAPIInfo, error) {
+	env := managerutil.GetEnv(ctx)
+	return &rpc.TelepresenceAPIInfo{Port: env.APIPort}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.
@@ -150,7 +176,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 	dlog.Debug(ctx, "Depart called")
 
-	m.state.RemoveSession(session.GetSessionId())
+	m.state.RemoveSession(ctx, session.GetSessionId())
 
 	return &empty.Empty{}, nil
 }
@@ -162,11 +188,16 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	dlog.Debug(ctx, "WatchAgents called")
 
 	snapshotCh := m.state.WatchAgents(ctx, nil)
+	sessionDone, err := m.state.SessionDone(session.GetSessionId())
+	if err != nil {
+		return err
+	}
 	for {
 		select {
 		case snapshot, ok := <-snapshotCh:
 			if !ok {
 				// The request has been canceled.
+				dlog.Debug(ctx, "WatchAgents request cancelled")
 				return nil
 			}
 			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
@@ -179,8 +210,9 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
-		case <-m.state.SessionDone(session.GetSessionId()):
+		case <-sessionDone:
 			// Manager believes this session has ended.
+			dlog.Debug(ctx, "WatchAgents session cancelled")
 			return nil
 		}
 	}
@@ -235,7 +267,10 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		defer close(ch)
 		sessionDone = ch
 	} else {
-		sessionDone = m.state.SessionDone(sessionID)
+		var err error
+		if sessionDone, err = m.state.SessionDone(sessionID); err != nil {
+			return err
+		}
 	}
 
 	snapshotCh := m.state.WatchIntercepts(ctx, filter)
@@ -287,10 +322,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return m.state.AddIntercept(sessionID, apiKey, spec)
 }
 
-func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {
-	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
-	sessionID := req.GetSession().GetSessionId()
-	var interceptID string
+func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name string) (string, error) {
 	// When something without a session ID (e.g. System A) calls this function,
 	// it is sending the intercept ID as the name, so we use that.
 	//
@@ -299,12 +331,20 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 	// Or at least functions outside services (e.g. SystemA), which don't know about sessions,
 	// use in requests.
 	if sessionID == "" {
-		interceptID = req.Name
+		return name, nil
 	} else {
 		if m.state.GetClient(sessionID) == nil {
-			return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+			return "", status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 		}
-		interceptID = sessionID + ":" + req.Name
+		return sessionID + ":" + name, nil
+	}
+}
+
+func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
+	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
+	interceptID, err := m.makeinterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
+	if err != nil {
+		return nil, err
 	}
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
@@ -424,6 +464,19 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	return &empty.Empty{}, nil
 }
 
+// GetIntercept gets an intercept info from intercept name
+func (m *Manager) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
+	interceptID, err := m.makeinterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if intercept, ok := m.state.GetIntercept(interceptID); ok {
+		return intercept, nil
+	} else {
+		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", request.Name)
+	}
+}
+
 // ReviewIntercept lets an agent approve or reject an intercept.
 func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewInterceptRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, rIReq.GetSession())
@@ -451,6 +504,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.PodIp = rIReq.PodIp
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
+			intercept.Headers = rIReq.Headers
 		}
 	})
 
@@ -462,33 +516,51 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 }
 
 func (m *Manager) ClientTunnel(server rpc.Manager_ClientTunnelServer) error {
-	sessionInfo, err := readTunnelSessionID(server)
+	ctx := server.Context()
+	muxTunnel := connpool.NewMuxTunnel(server)
+	sessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	return m.state.ClientTunnel(managerutil.WithSessionInfo(server.Context(), sessionInfo), server)
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to read client tunnel version: %v", err)
+	}
+	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
+	}
+	return m.state.ClientTunnel(managerutil.WithSessionInfo(ctx, sessionInfo), muxTunnel)
 }
 
 func (m *Manager) AgentTunnel(server rpc.Manager_AgentTunnelServer) error {
-	agentSessionInfo, err := readTunnelSessionID(server)
+	ctx := server.Context()
+	muxTunnel := connpool.NewMuxTunnel(server)
+	agentSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	clientSessionInfo, err := readTunnelSessionID(server)
+	clientSessionInfo, err := readTunnelSessionID(ctx, muxTunnel)
 	if err != nil {
 		return err
 	}
-	return m.state.AgentTunnel(managerutil.WithSessionInfo(server.Context(), agentSessionInfo), clientSessionInfo, server)
+	_, err = muxTunnel.ReadPeerVersion(ctx)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to read agent tunnel version: %v", err)
+	}
+	if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to send manager tunnel version: %v", err)
+	}
+	return m.state.AgentTunnel(managerutil.WithSessionInfo(ctx, agentSessionInfo), clientSessionInfo, muxTunnel)
 }
 
-func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error) {
+func readTunnelSessionID(ctx context.Context, server connpool.MuxTunnel) (*rpc.SessionInfo, error) {
 	// Initial message must be the session info that this bidi stream should be attached to
-	cm, err := server.Recv()
+	msg, err := server.Receive(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "failed to read session info message: %v", err)
 	}
 	var sessionInfo *rpc.SessionInfo
-	if ctrl, ok := connpool.FromConnMessage(cm).(connpool.Control); ok {
+	if ctrl, ok := msg.(connpool.Control); ok {
 		if sessionInfo = ctrl.SessionInfo(); sessionInfo != nil {
 			return sessionInfo, nil
 		}
@@ -496,36 +568,70 @@ func readTunnelSessionID(server connpool.TunnelStream) (*rpc.SessionInfo, error)
 	return nil, status.Error(codes.FailedPrecondition, "first message was not session info")
 }
 
+func (m *Manager) Tunnel(server rpc.Manager_TunnelServer) error {
+	ctx := server.Context()
+	stream, err := tunnel.NewServerStream(ctx, server)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
+	}
+	return m.state.Tunnel(ctx, stream)
+}
+
+func (m *Manager) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	dlog.Debugf(ctx, "WatchDial called")
+	lrCh := m.state.WatchDial(session.SessionId)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return nil
+		case lr := <-lrCh:
+			if lr == nil {
+				return nil
+			}
+			if err := stream.Send(lr); err != nil {
+				dlog.Errorf(ctx, "WatchDial.Send() failed: %v", err)
+				return nil
+			}
+		}
+	}
+}
+
 func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
 	sessionID := request.GetSession().GetSessionId()
-	response := &rpc.LookupHostResponse{}
-	ips, err := m.state.AgentsLookup(ctx, sessionID, request)
+
+	ips, count, err := m.state.AgentsLookup(ctx, sessionID, request)
 	if err != nil {
-		return nil, err
-	}
-	if len(ips) > 0 {
-		dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
-		response.Ips = ips.BytesSlice()
-		return response, nil
+		dlog.Errorf(ctx, "AgentLookup: %v", err)
+	} else if count > 0 {
+		if len(ips) == 0 {
+			dlog.Debugf(ctx, "LookupHost on agents: %s -> NOT FOUND", request.Host)
+		} else {
+			dlog.Debugf(ctx, "LookupHost on agents: %s -> %s", request.Host, ips)
+		}
 	}
 
-	// Either we aren't intercepting any agents, or none of them was able to find the given host. Let's
-	// try from the manager too.
-	addrs, err := net.LookupHost(request.Host)
-	if err != nil {
-		response.Ips = [][]byte{}
-		dlog.Debugf(ctx, "LookupHost response %s -> NOT FOUND", request.Host)
-		return response, nil
+	if count == 0 {
+		if addrs, err := net.DefaultResolver.LookupHost(ctx, request.Host); err != nil {
+			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
+				dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> NOT FOUND", request.Host)
+			} else {
+				dlog.Errorf(ctx, "LookupHost on traffic-manager LookupHost: %v", err)
+			}
+		} else {
+			ips = make(iputil.IPs, len(addrs))
+			for i, addr := range addrs {
+				ips[i] = iputil.Parse(addr)
+			}
+			dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> %s", request.Host, ips)
+		}
 	}
-	ips = make(iputil.IPs, len(addrs))
-	for i, addr := range addrs {
-		ips[i] = iputil.Parse(addr)
+	if ips == nil {
+		ips = iputil.IPs{}
 	}
-	dlog.Debugf(ctx, "LookupHost response from agents %s -> %s", request.Host, ips)
-	response.Ips = ips.BytesSlice()
-	return response, nil
+	return &rpc.LookupHostResponse{Ips: ips.BytesSlice()}, nil
 }
 
 func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.LookupHostAgentResponse) (*empty.Empty, error) {
@@ -555,6 +661,125 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
+// GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
+// GetLogsRequest and returns them to the caller
+func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
+	resp := &rpc.LogsResponse{
+		PodLogs: make(map[string]string),
+		PodYaml: make(map[string]string),
+	}
+	var errMsg string
+	clientset := managerutil.GetK8sClientset(ctx)
+
+	// getPodLogs is a helper function for getting the logs from the container
+	// of a given pod. If we are unable to get a log for a given pod, we will
+	// instead return the error in the map, instead of the log, so that:
+	// - one failure doesn't prevent us from getting logs from other pods
+	// - it is easy to figure out why gettings logs for a given pod failed
+	getPodLogs := func(pods []*corev1.Pod, container string) {
+		wg := sync.WaitGroup{}
+		logWriteMutex := &sync.Mutex{}
+		wg.Add(len(pods))
+		for _, pod := range pods {
+			go func(pod *corev1.Pod) {
+				defer wg.Done()
+				plo := &corev1.PodLogOptions{
+					Container: container,
+				}
+				// Since the same named workload could exist in multiple namespaces
+				// we add the namespace into the name so that it's easier to make
+				// sense of the logs
+				podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
+				req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, plo)
+				podLogs, err := req.Stream(ctx)
+				if err != nil {
+					logWriteMutex.Lock()
+					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed to get logs: %s", err)
+					logWriteMutex.Unlock()
+					return
+				}
+				defer podLogs.Close()
+				buf := new(bytes.Buffer)
+				_, err = io.Copy(buf, podLogs)
+				if err != nil {
+					logWriteMutex.Lock()
+					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed writing log to buffer: %s", err)
+					logWriteMutex.Unlock()
+					return
+				}
+				logWriteMutex.Lock()
+				resp.PodLogs[podAndNs] = buf.String()
+				logWriteMutex.Unlock()
+
+				// Get the pod yaml if the user asked for it
+				if request.GetPodYaml {
+					podYaml, err := yaml.Marshal(pod)
+					if err != nil {
+						logWriteMutex.Lock()
+						resp.PodYaml[podAndNs] = fmt.Sprintf("Failed marshaling pod yaml: %s", err)
+						logWriteMutex.Unlock()
+						return
+					}
+					logWriteMutex.Lock()
+					resp.PodYaml[podAndNs] = string(podYaml)
+					logWriteMutex.Unlock()
+				}
+			}(pod)
+		}
+		wg.Wait()
+	}
+	// Get the pods that have traffic-agents
+	agentPods, err := m.clusterInfo.GetTrafficAgentPods(ctx, request.Agents)
+	if err != nil {
+		errMsg += fmt.Sprintf("error getting traffic-agent pods: %s\n", err)
+	} else {
+		getPodLogs(agentPods, "traffic-agent")
+	}
+
+	// We want to get the traffic-manager logs *last* so that if we generate
+	// any errors in the traffic-manager getting the traffic-agent pods, we
+	// want those logs to appear in what we export
+	if request.TrafficManager {
+		managerPods, err := m.clusterInfo.GetTrafficManagerPods(ctx)
+		if err != nil {
+			errMsg += fmt.Sprintf("error getting traffic-manager pods: %s\n", err)
+		} else {
+			getPodLogs(managerPods, "traffic-manager")
+		}
+	}
+
+	// If we were unable to get logs from the traffic-manager and/or traffic-agents
+	// we put that information in the errMsg.
+	if errMsg != "" {
+		resp.ErrMsg = errMsg
+	}
+	return resp, nil
+}
+
+func (m *Manager) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
+	m.state.SetTempLogLevel(ctx, request)
+	return &empty.Empty{}, nil
+}
+
+func (m *Manager) WatchLogLevel(_ *empty.Empty, stream rpc.Manager_WatchLogLevelServer) error {
+	ctx := stream.Context()
+	dlog.Debugf(ctx, "WatchLogLevel called")
+
+	ll := m.state.InitialTempLogLevel()
+	dlog.Debugf(ctx, "InitialLogLevel %v", ll)
+	for m.ctx.Err() == nil {
+		if ll != nil {
+			if err := stream.Send(ll); err != nil {
+				dlog.Errorf(ctx, "WatchLogLevel.Send() failed: %v", err)
+				break
+			}
+		}
+		ll = m.state.WaitForTempLogLevel()
+		dlog.Debugf(ctx, "AwaitedLogLevel %v", ll)
+	}
+	return nil
+}
+
 func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_WatchClusterInfoServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchClusterInfo called")
@@ -562,6 +787,6 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 }
 
 // expire removes stale sessions.
-func (m *Manager) expire() {
-	m.state.ExpireSessions(m.clock.Now().Add(-15 * time.Second))
+func (m *Manager) expire(ctx context.Context) {
+	m.state.ExpireSessions(ctx, m.clock.Now().Add(-15*time.Second))
 }

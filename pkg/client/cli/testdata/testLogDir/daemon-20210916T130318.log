@@ -1,0 +1,422 @@
+2021/09/15 16:54:57.4146 debug    : Logging at this level "debug"
+2021/09/15 16:54:57.4510 info     : ---
+2021/09/15 16:54:57.4510 info     : Telepresence daemon v2.4.2 (api v3) starting...
+2021/09/15 16:54:57.4510 info     : PID is 21428
+2021/09/15 16:54:57.4510 info     : 
+2021/09/15 16:54:57.4512 debug   daemon/server-grpc : gRPC server starting
+2021/09/15 16:54:57.4512 debug   daemon/server-router/TUN reader : Waiting until manager gRPC is configured
+2021/09/15 16:54:57.4513 debug   daemon/server-router/MGR stream : Waiting until manager gRPC is configured
+2021/09/15 16:54:57.4516 info    daemon/server-grpc : gRPC server started
+2021/09/15 16:55:05.9771 info    daemon/server-grpc/conn=2 : Adding also-proxy subnet 1.2.3.4/32
+2021/09/15 16:55:06.0502 info    daemon/watch-cluster-info : Adding service subnet 10.43.0.0/16
+2021/09/15 16:55:06.0503 info    daemon/watch-cluster-info : Adding pod subnet 10.42.0.0/24
+2021/09/15 16:55:06.0514 debug   daemon/server-router/TUN reader : TUN read loop starting
+2021/09/15 16:55:06.0517 debug   daemon/server-router/MGR stream : MGR read loop starting
+2021/09/15 16:55:06.0524 info    daemon/server-dns : Generated new /etc/resolver/telepresence.local
+2021/09/15 16:55:06.0587 info    daemon/server-dns : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="21436"
+2021/09/15 16:55:06.0591 info    daemon/server-dns :  : dexec.pid="21436" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.0727 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="21436"
+2021/09/15 16:55:06.0754 info    daemon/server-dns : started command ["killall" "mDNSResponderHelper"] : dexec.pid="21437"
+2021/09/15 16:55:06.0756 info    daemon/server-dns :  : dexec.pid="21437" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.0852 info    daemon/server-dns :  : dexec.pid="21437" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/15 16:55:06.0854 info    daemon/server-dns : finished with error: exit status 1 : dexec.pid="21437"
+2021/09/15 16:55:06.0877 info    daemon/server-dns : started command ["dscacheutil" "-flushcache"] : dexec.pid="21438"
+2021/09/15 16:55:06.0878 info    daemon/server-dns :  : dexec.pid="21438" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.0911 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="21438"
+2021/09/15 16:55:06.0912 info    daemon/server-grpc/conn=2 : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021/09/15 16:55:06.0913 info    daemon/server-grpc/conn=2 : Generated new /etc/resolver/telepresence.kube-system.local
+2021/09/15 16:55:06.0915 info    daemon/server-grpc/conn=2 : Generated new /etc/resolver/telepresence.tel2-search.local
+2021/09/15 16:55:06.0917 info    daemon/server-grpc/conn=2 : Generated new /etc/resolver/telepresence.ambassador.local
+2021/09/15 16:55:06.0918 info    daemon/server-grpc/conn=2 : Generated new /etc/resolver/telepresence.default.local
+2021/09/15 16:55:06.0919 info    daemon/server-grpc/conn=2 : Generated new /etc/resolver/telepresence.kube-node-lease.local
+2021/09/15 16:55:06.0920 info    daemon/server-grpc/conn=2 : Generated new /etc/resolver/telepresence.kube-public.local
+2021/09/15 16:55:06.0941 info    daemon/server-grpc/conn=2 : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="21439"
+2021/09/15 16:55:06.0942 info    daemon/server-grpc/conn=2 :  : dexec.pid="21439" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.1017 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="21439"
+2021/09/15 16:55:06.1039 info    daemon/server-grpc/conn=2 : started command ["killall" "mDNSResponderHelper"] : dexec.pid="21440"
+2021/09/15 16:55:06.1040 info    daemon/server-grpc/conn=2 :  : dexec.pid="21440" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.1133 info    daemon/server-grpc/conn=2 :  : dexec.pid="21440" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/15 16:55:06.1135 info    daemon/server-grpc/conn=2 : finished with error: exit status 1 : dexec.pid="21440"
+2021/09/15 16:55:06.1160 info    daemon/server-grpc/conn=2 : started command ["dscacheutil" "-flushcache"] : dexec.pid="21441"
+2021/09/15 16:55:06.1162 info    daemon/server-grpc/conn=2 :  : dexec.pid="21441" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.1194 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="21441"
+2021/09/15 16:55:06.1196 info    daemon/server-grpc/conn=2 : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021/09/15 16:55:06.1220 info    daemon/server-grpc/conn=2 : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="21442"
+2021/09/15 16:55:06.1222 info    daemon/server-grpc/conn=2 :  : dexec.pid="21442" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.1301 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="21442"
+2021/09/15 16:55:06.1320 info    daemon/server-grpc/conn=2 : started command ["killall" "mDNSResponderHelper"] : dexec.pid="21443"
+2021/09/15 16:55:06.1322 info    daemon/server-grpc/conn=2 :  : dexec.pid="21443" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.1418 info    daemon/server-grpc/conn=2 :  : dexec.pid="21443" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/15 16:55:06.1420 info    daemon/server-grpc/conn=2 : finished with error: exit status 1 : dexec.pid="21443"
+2021/09/15 16:55:06.1440 info    daemon/server-grpc/conn=2 : started command ["dscacheutil" "-flushcache"] : dexec.pid="21444"
+2021/09/15 16:55:06.1441 info    daemon/server-grpc/conn=2 :  : dexec.pid="21444" dexec.stream="stdin" dexec.err="EOF"
+2021/09/15 16:55:06.1468 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="21444"
+2021/09/15 16:55:07.6433 debug   daemon/server-dns/Server : QTYPE[1] dkaxhzczcdgyrh.cluster.local. -> NOT FOUND
+2021/09/15 16:55:07.6437 debug   daemon/server-dns/Server : QTYPE[28] dkaxhzczcdgyrh.cluster.local. -> NOT FOUND
+2021/09/15 16:55:07.6439 debug   daemon/server-dns/Server : QTYPE[1] abplynvtqbyisno.cluster.local. -> NOT FOUND
+2021/09/15 16:55:07.6440 debug   daemon/server-dns/Server : QTYPE[28] abplynvtqbyisno.cluster.local. -> NOT FOUND
+2021/09/15 16:55:07.6451 debug   daemon/server-dns/Server : QTYPE[28] mhmgkrnjch.cluster.local. -> NOT FOUND
+2021/09/15 16:55:07.6451 debug   daemon/server-dns/Server : QTYPE[1] mhmgkrnjch.cluster.local. -> NOT FOUND
+2021/09/15 17:16:30.0423 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 17:16:30.0424 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 17:16:30.0424 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 17:26:30.0387 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 17:26:30.0388 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 17:26:30.0391 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 17:36:30.0566 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 17:36:30.0568 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 17:36:30.0569 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:11:03.2070 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:11:03.2072 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:11:03.2072 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:20.5468 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:20.5472 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:20.5473 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:25.4311 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4312 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4314 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:25.4392 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4392 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4393 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:25.4396 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4397 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4398 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:25.4561 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4563 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4563 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:25.4629 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4630 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:25.4631 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:31.0581 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:31.1962 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:31.1975 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:31.4009 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:31.4028 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:31.4506 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:31.4518 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:31.4525 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:31.4537 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:31.4563 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:31.4585 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:31.4615 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:31.4653 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:31.5002 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:31.5009 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:34.7635 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:34.8072 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:35.2077 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:35.6056 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:35.6062 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:35.6111 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:35.6136 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:35.6153 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:35.6516 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:35.6546 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:35.7552 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:36.1029 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:36.1172 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:36.5508 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:36.5528 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:36.5636 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:36.5642 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:36.5646 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:36.6021 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:36.6040 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:36.6045 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:39.2544 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:39.2556 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:39.8001 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:40.2010 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:40.2037 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:40.2267 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:40.3137 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:40.3143 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:40.4043 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:42.9169 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:42.9505 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:42.9531 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:41:44.9068 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:41:44.9131 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:41:44.9148 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:58:43.1337 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:58:43.1338 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:58:43.1338 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:58:44.5317 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:58:44.5318 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:58:44.5319 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 18:58:54.9011 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 18:58:54.9019 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 18:58:54.9024 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 19:59:32.0462 debug   daemon/server-dns/Server : QTYPE[1] zhrtvzemyq.cluster.local. -> NOT FOUND
+2021/09/15 19:59:32.0462 debug   daemon/server-dns/Server : QTYPE[28] zhrtvzemyq.cluster.local. -> NOT FOUND
+2021/09/15 19:59:32.0464 debug   daemon/server-dns/Server : QTYPE[1] ybgebfqtgivhxf.cluster.local. -> NOT FOUND
+2021/09/15 19:59:32.0466 debug   daemon/server-dns/Server : QTYPE[28] ybgebfqtgivhxf.cluster.local. -> NOT FOUND
+2021/09/15 19:59:32.0469 debug   daemon/server-dns/Server : QTYPE[1] ozjolubccuuyuow.cluster.local. -> NOT FOUND
+2021/09/15 19:59:32.0486 debug   daemon/server-dns/Server : QTYPE[28] ozjolubccuuyuow.cluster.local. -> NOT FOUND
+2021/09/15 19:59:33.3811 debug   daemon/server-dns/Server : QTYPE[1] llvmprrmvyzgz.cluster.local. -> NOT FOUND
+2021/09/15 19:59:33.3819 debug   daemon/server-dns/Server : QTYPE[28] llvmprrmvyzgz.cluster.local. -> NOT FOUND
+2021/09/15 19:59:33.3829 debug   daemon/server-dns/Server : QTYPE[28] mtbdazgteqsqm.cluster.local. -> NOT FOUND
+2021/09/15 19:59:33.3830 debug   daemon/server-dns/Server : QTYPE[1] mtbdazgteqsqm.cluster.local. -> NOT FOUND
+2021/09/15 19:59:33.3832 debug   daemon/server-dns/Server : QTYPE[1] pcqfqmnpycan.cluster.local. -> NOT FOUND
+2021/09/15 19:59:33.3834 debug   daemon/server-dns/Server : QTYPE[28] pcqfqmnpycan.cluster.local. -> NOT FOUND
+2021/09/15 19:59:34.7250 debug   daemon/server-dns/Server : QTYPE[1] glqehuyh.cluster.local. -> NOT FOUND
+2021/09/15 19:59:34.7254 debug   daemon/server-dns/Server : QTYPE[28] glqehuyh.cluster.local. -> NOT FOUND
+2021/09/15 19:59:34.7264 debug   daemon/server-dns/Server : QTYPE[1] orrceyifpn.cluster.local. -> NOT FOUND
+2021/09/15 19:59:34.7266 debug   daemon/server-dns/Server : QTYPE[28] orrceyifpn.cluster.local. -> NOT FOUND
+2021/09/15 19:59:34.7271 debug   daemon/server-dns/Server : QTYPE[1] vzovgzvo.cluster.local. -> NOT FOUND
+2021/09/15 19:59:34.7275 debug   daemon/server-dns/Server : QTYPE[28] vzovgzvo.cluster.local. -> NOT FOUND
+2021/09/15 19:59:38.7444 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 19:59:38.7446 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 19:59:38.7448 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 19:59:40.1866 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 19:59:40.1868 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 19:59:40.1872 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 19:59:41.7183 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 19:59:41.7234 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 19:59:41.7318 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 19:59:42.8927 debug   daemon/server-dns/Server : QTYPE[1] fvltzbxxkxadr.cluster.local. -> NOT FOUND
+2021/09/15 19:59:42.8944 debug   daemon/server-dns/Server : QTYPE[28] fvltzbxxkxadr.cluster.local. -> NOT FOUND
+2021/09/15 19:59:42.8947 debug   daemon/server-dns/Server : QTYPE[1] uysebeufgxgohx.cluster.local. -> NOT FOUND
+2021/09/15 19:59:42.8963 debug   daemon/server-dns/Server : QTYPE[28] uysebeufgxgohx.cluster.local. -> NOT FOUND
+2021/09/15 19:59:42.8980 debug   daemon/server-dns/Server : QTYPE[1] ruhdngwdqkoydt.cluster.local. -> NOT FOUND
+2021/09/15 19:59:42.8990 debug   daemon/server-dns/Server : QTYPE[28] ruhdngwdqkoydt.cluster.local. -> NOT FOUND
+2021/09/15 20:00:10.6147 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 20:00:10.6153 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 20:00:10.6162 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 20:00:12.1148 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 20:00:12.1157 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 20:00:12.1160 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 20:00:13.6150 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 20:00:13.6157 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 20:00:13.6170 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 21:00:18.4583 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 21:00:18.4584 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 21:00:18.4585 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 21:00:18.6692 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 21:00:18.6694 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 21:00:18.6695 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 21:00:28.7959 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 21:00:28.7969 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 21:00:28.7974 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 21:00:28.7978 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 21:00:28.7987 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 21:00:28.7991 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 21:01:03.7533 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 21:01:03.7924 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 21:01:03.7930 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/15 21:01:03.7970 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/15 21:01:03.7975 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/15 21:01:03.7979 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 02:05:24.5949 debug   daemon/server-dns/Server : QTYPE[1] ysplhmngm.cluster.local. -> NOT FOUND
+2021/09/16 02:05:24.5952 debug   daemon/server-dns/Server : QTYPE[28] ysplhmngm.cluster.local. -> NOT FOUND
+2021/09/16 02:05:24.5957 debug   daemon/server-dns/Server : QTYPE[1] upbkrpiieh.cluster.local. -> NOT FOUND
+2021/09/16 02:05:24.5962 debug   daemon/server-dns/Server : QTYPE[28] upbkrpiieh.cluster.local. -> NOT FOUND
+2021/09/16 02:05:24.5967 debug   daemon/server-dns/Server : QTYPE[1] qdkbnjshqtwnc.cluster.local. -> NOT FOUND
+2021/09/16 02:05:24.5972 debug   daemon/server-dns/Server : QTYPE[28] qdkbnjshqtwnc.cluster.local. -> NOT FOUND
+2021/09/16 02:05:27.7838 debug   daemon/server-dns/Server : QTYPE[1] kexueunltwokcyn.cluster.local. -> NOT FOUND
+2021/09/16 02:05:27.7839 debug   daemon/server-dns/Server : QTYPE[28] kexueunltwokcyn.cluster.local. -> NOT FOUND
+2021/09/16 02:05:27.7847 debug   daemon/server-dns/Server : QTYPE[1] dzezptomrkwptz.cluster.local. -> NOT FOUND
+2021/09/16 02:05:27.7848 debug   daemon/server-dns/Server : QTYPE[28] dzezptomrkwptz.cluster.local. -> NOT FOUND
+2021/09/16 02:05:27.7853 debug   daemon/server-dns/Server : QTYPE[1] qywnrqtbzigoru.cluster.local. -> NOT FOUND
+2021/09/16 02:05:27.7856 debug   daemon/server-dns/Server : QTYPE[28] qywnrqtbzigoru.cluster.local. -> NOT FOUND
+2021/09/16 02:05:28.8967 debug   daemon/server-dns/Server : QTYPE[1] abrtfrjorszr.cluster.local. -> NOT FOUND
+2021/09/16 02:05:28.8971 debug   daemon/server-dns/Server : QTYPE[28] abrtfrjorszr.cluster.local. -> NOT FOUND
+2021/09/16 02:05:28.8976 debug   daemon/server-dns/Server : QTYPE[1] xkaxpuwcbjbsed.cluster.local. -> NOT FOUND
+2021/09/16 02:05:28.8980 debug   daemon/server-dns/Server : QTYPE[28] xkaxpuwcbjbsed.cluster.local. -> NOT FOUND
+2021/09/16 02:05:28.8984 debug   daemon/server-dns/Server : QTYPE[1] mowgwwxpkxf.cluster.local. -> NOT FOUND
+2021/09/16 02:05:28.8986 debug   daemon/server-dns/Server : QTYPE[28] mowgwwxpkxf.cluster.local. -> NOT FOUND
+2021/09/16 02:05:31.0843 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 02:05:31.0844 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 02:05:31.0850 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 02:05:32.5769 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 02:05:32.5771 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 02:05:32.5772 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 02:05:32.5991 debug   daemon/server-dns/Server : QTYPE[1] bagffywtesuvwbg.cluster.local. -> NOT FOUND
+2021/09/16 02:05:32.6006 debug   daemon/server-dns/Server : QTYPE[1] aluptequj.cluster.local. -> NOT FOUND
+2021/09/16 02:05:32.6007 debug   daemon/server-dns/Server : QTYPE[28] bagffywtesuvwbg.cluster.local. -> NOT FOUND
+2021/09/16 02:05:32.6011 debug   daemon/server-dns/Server : QTYPE[28] aluptequj.cluster.local. -> NOT FOUND
+2021/09/16 02:05:32.6013 debug   daemon/server-dns/Server : QTYPE[1] krtmfrzociyvajh.cluster.local. -> NOT FOUND
+2021/09/16 02:05:32.6015 debug   daemon/server-dns/Server : QTYPE[28] krtmfrzociyvajh.cluster.local. -> NOT FOUND
+2021/09/16 02:05:34.0538 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 02:05:34.0545 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 02:05:34.0562 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 02:06:02.8013 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 02:06:02.8024 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 02:06:02.8030 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 02:06:04.3044 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 02:06:04.3051 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 02:06:04.3060 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 02:06:05.8017 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 02:06:05.8030 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 02:06:05.8043 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 03:06:09.8360 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 03:06:09.8362 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 03:06:09.8364 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 03:06:10.0387 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 03:06:10.0389 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 03:06:10.0390 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 03:06:20.2387 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 03:06:20.2735 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 03:06:20.2739 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 03:06:20.2758 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 03:06:20.2777 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 03:06:20.2792 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 03:06:54.8796 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 03:06:54.9323 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 03:06:54.9350 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 03:06:54.9799 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 03:06:54.9811 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 03:06:54.9824 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:43.1738 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:43.1755 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:43.1758 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:44.6671 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:44.6671 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:44.6672 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:44.6672 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:44.6672 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:44.6673 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:45.6695 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:45.6697 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:45.6698 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:45.6701 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:45.6704 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:45.6705 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:46.6726 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:46.6728 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:46.6728 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:48.0587 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:48.0588 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:48.0589 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:49.0604 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:49.0605 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:49.0605 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:49.0606 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:49.0607 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:49.0607 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:50.5576 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:50.5742 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:50.5751 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:50.5752 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:50.5753 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:50.5754 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:52:52.0359 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 08:52:52.0359 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 08:52:52.0360 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 08:56:50.3120 debug   daemon/server-dns/Server : QTYPE[1] asfdsa.cluster.local. -> NOT FOUND
+2021/09/16 08:56:50.3121 debug   daemon/server-dns/Server : QTYPE[28] asfdsa.cluster.local. -> NOT FOUND
+2021/09/16 09:14:44.2191 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 09:14:44.2191 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 09:14:44.2192 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 09:15:02.8252 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 09:15:02.8253 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 09:15:02.8255 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 09:15:14.8137 debug   daemon/server-router/TUN writer : -> TUN icmp 10.43.0.0 -> 10.43.255.255, type destination unreachable, code 3
+2021/09/16 09:15:14.8138 debug   daemon/server-router/TUN writer : -> TUN icmp 10.42.0.0 -> 10.42.0.255, type destination unreachable, code 3
+2021/09/16 09:15:14.8139 debug   daemon/server-router/TUN writer : -> TUN icmp 1.2.3.4 -> 1.2.3.4, type destination unreachable, code 3
+2021/09/16 10:11:43.8374 info    daemon/server-grpc/conn=2 : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021/09/16 10:11:43.8466 info    daemon/server-grpc/conn=2 : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="30754"
+2021/09/16 10:11:43.8467 info    daemon/server-grpc/conn=2 :  : dexec.pid="30754" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 10:11:43.8539 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="30754"
+2021/09/16 10:11:43.8562 info    daemon/server-grpc/conn=2 : started command ["killall" "mDNSResponderHelper"] : dexec.pid="30755"
+2021/09/16 10:11:43.8563 info    daemon/server-grpc/conn=2 :  : dexec.pid="30755" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 10:11:43.8647 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="30755"
+2021/09/16 10:11:43.8713 info    daemon/server-grpc/conn=2 : started command ["dscacheutil" "-flushcache"] : dexec.pid="30756"
+2021/09/16 10:11:43.8716 info    daemon/server-grpc/conn=2 :  : dexec.pid="30756" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 10:11:43.8771 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="30756"
+2021/09/16 10:11:45.8314 debug   daemon/server-dns/Server : QTYPE[1] edhxwytfvigm.cluster.local. -> NOT FOUND
+2021/09/16 10:11:45.8317 debug   daemon/server-dns/Server : QTYPE[28] edhxwytfvigm.cluster.local. -> NOT FOUND
+2021/09/16 10:11:45.8325 debug   daemon/server-dns/Server : QTYPE[1] qkeicqx.cluster.local. -> NOT FOUND
+2021/09/16 10:11:45.8328 debug   daemon/server-dns/Server : QTYPE[28] qkeicqx.cluster.local. -> NOT FOUND
+2021/09/16 10:11:45.8331 debug   daemon/server-dns/Server : QTYPE[1] ppzsutr.cluster.local. -> NOT FOUND
+2021/09/16 10:11:45.8336 debug   daemon/server-dns/Server : QTYPE[28] ppzsutr.cluster.local. -> NOT FOUND
+2021/09/16 11:48:09.9530 info    daemon/server-grpc/conn=2 : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021/09/16 11:48:09.9698 info    daemon/server-grpc/conn=2 : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="36755"
+2021/09/16 11:48:09.9701 info    daemon/server-grpc/conn=2 :  : dexec.pid="36755" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:09.9828 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="36755"
+2021/09/16 11:48:09.9855 info    daemon/server-grpc/conn=2 : started command ["killall" "mDNSResponderHelper"] : dexec.pid="36756"
+2021/09/16 11:48:09.9857 info    daemon/server-grpc/conn=2 :  : dexec.pid="36756" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:09.9945 info    daemon/server-grpc/conn=2 :  : dexec.pid="36756" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/16 11:48:09.9947 info    daemon/server-grpc/conn=2 : finished with error: exit status 1 : dexec.pid="36756"
+2021/09/16 11:48:10.0013 info    daemon/server-grpc/conn=2 : started command ["dscacheutil" "-flushcache"] : dexec.pid="36757"
+2021/09/16 11:48:10.0015 info    daemon/server-grpc/conn=2 :  : dexec.pid="36757" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:10.0062 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="36757"
+2021/09/16 11:48:11.7403 debug   daemon/server-dns/Server : QTYPE[1] nhxiznicnn.cluster.local. -> NOT FOUND
+2021/09/16 11:48:11.7406 debug   daemon/server-dns/Server : QTYPE[28] nhxiznicnn.cluster.local. -> NOT FOUND
+2021/09/16 11:48:11.7409 debug   daemon/server-dns/Server : QTYPE[1] ajzmlhkgconl.cluster.local. -> NOT FOUND
+2021/09/16 11:48:11.7411 debug   daemon/server-dns/Server : QTYPE[28] ajzmlhkgconl.cluster.local. -> NOT FOUND
+2021/09/16 11:48:11.7417 debug   daemon/server-dns/Server : QTYPE[1] bnasvzj.cluster.local. -> NOT FOUND
+2021/09/16 11:48:11.7420 debug   daemon/server-dns/Server : QTYPE[28] bnasvzj.cluster.local. -> NOT FOUND
+2021/09/16 11:48:13.0571 info    daemon/server-grpc/conn=2 : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021/09/16 11:48:13.0635 info    daemon/server-grpc/conn=2 : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="36760"
+2021/09/16 11:48:13.0638 info    daemon/server-grpc/conn=2 :  : dexec.pid="36760" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:13.0811 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="36760"
+2021/09/16 11:48:13.0845 info    daemon/server-grpc/conn=2 : started command ["killall" "mDNSResponderHelper"] : dexec.pid="36761"
+2021/09/16 11:48:13.0847 info    daemon/server-grpc/conn=2 :  : dexec.pid="36761" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:13.0942 info    daemon/server-grpc/conn=2 :  : dexec.pid="36761" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/16 11:48:13.0944 info    daemon/server-grpc/conn=2 : finished with error: exit status 1 : dexec.pid="36761"
+2021/09/16 11:48:13.0966 info    daemon/server-grpc/conn=2 : started command ["dscacheutil" "-flushcache"] : dexec.pid="36762"
+2021/09/16 11:48:13.0967 info    daemon/server-grpc/conn=2 :  : dexec.pid="36762" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:13.0996 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="36762"
+2021/09/16 11:48:14.5843 debug   daemon/server-dns/Server : QTYPE[1] nbwrpojuplzelrv.cluster.local. -> NOT FOUND
+2021/09/16 11:48:14.5844 debug   daemon/server-dns/Server : QTYPE[28] nbwrpojuplzelrv.cluster.local. -> NOT FOUND
+2021/09/16 11:48:14.5847 debug   daemon/server-dns/Server : QTYPE[1] bjgcoyxqkza.cluster.local. -> NOT FOUND
+2021/09/16 11:48:14.5857 debug   daemon/server-dns/Server : QTYPE[28] bjgcoyxqkza.cluster.local. -> NOT FOUND
+2021/09/16 11:48:14.5864 debug   daemon/server-dns/Server : QTYPE[1] kpvwofabpbmwypp.cluster.local. -> NOT FOUND
+2021/09/16 11:48:14.5866 debug   daemon/server-dns/Server : QTYPE[28] kpvwofabpbmwypp.cluster.local. -> NOT FOUND
+2021/09/16 11:48:31.4011 info    daemon/server-grpc/conn=2 : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021/09/16 11:48:31.4074 info    daemon/server-grpc/conn=2 : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="36771"
+2021/09/16 11:48:31.4081 info    daemon/server-grpc/conn=2 :  : dexec.pid="36771" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:31.4225 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="36771"
+2021/09/16 11:48:31.4253 info    daemon/server-grpc/conn=2 : started command ["killall" "mDNSResponderHelper"] : dexec.pid="36772"
+2021/09/16 11:48:31.4256 info    daemon/server-grpc/conn=2 :  : dexec.pid="36772" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:31.4342 info    daemon/server-grpc/conn=2 :  : dexec.pid="36772" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/16 11:48:31.4344 info    daemon/server-grpc/conn=2 : finished with error: exit status 1 : dexec.pid="36772"
+2021/09/16 11:48:31.4369 info    daemon/server-grpc/conn=2 : started command ["dscacheutil" "-flushcache"] : dexec.pid="36773"
+2021/09/16 11:48:31.4370 info    daemon/server-grpc/conn=2 :  : dexec.pid="36773" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 11:48:31.4405 info    daemon/server-grpc/conn=2 : finished successfully: exit status 0 : dexec.pid="36773"
+2021/09/16 11:48:33.9617 debug   daemon/server-dns/Server : QTYPE[1] gotaavy.cluster.local. -> NOT FOUND
+2021/09/16 11:48:33.9632 debug   daemon/server-dns/Server : QTYPE[28] gotaavy.cluster.local. -> NOT FOUND
+2021/09/16 11:48:33.9631 debug   daemon/server-dns/Server : QTYPE[28] xkpgangnzunnfos.cluster.local. -> NOT FOUND
+2021/09/16 11:48:33.9635 debug   daemon/server-dns/Server : QTYPE[1] xkpgangnzunnfos.cluster.local. -> NOT FOUND
+2021/09/16 11:48:33.9647 debug   daemon/server-dns/Server : QTYPE[28] uqvemntl.cluster.local. -> NOT FOUND
+2021/09/16 11:48:33.9648 debug   daemon/server-dns/Server : QTYPE[1] uqvemntl.cluster.local. -> NOT FOUND
+2021/09/16 13:03:01.1865 debug   daemon/server-grpc/conn=3 : Received gRPC Quit
+2021/09/16 13:03:01.1870 debug   daemon/server-router/TUN reader : goroutine "/daemon/server-router/TUN reader" exited without error
+2021/09/16 13:03:01.1870 info    daemon/daemon-quit : Shutting down connector
+2021/09/16 13:03:01.1876 debug   daemon/daemon-quit : Sending quit message to connector
+2021/09/16 13:03:01.1880 debug   daemon/daemon-quit : Connector shutdown complete
+2021/09/16 13:03:01.3928 debug   daemon/daemon-quit : goroutine "/daemon/daemon-quit" exited without error
+2021/09/16 13:03:01.3931 info    daemon/server-dns/Server:shutdown_logger : shutting down (gracefully)...
+2021/09/16 13:03:01.3931 debug   daemon/server-router/MGR stream : goroutine "/daemon/server-router/MGR stream" exited without error
+2021/09/16 13:03:01.3932 info    daemon/server-router:shutdown_logger : shutting down (gracefully)...
+2021/09/16 13:03:01.3933 info    daemon/server-dns:shutdown_logger : shutting down (gracefully)...
+2021/09/16 13:03:01.3935 error   daemon/watch-cluster-info : goroutine "/daemon/watch-cluster-info" exited with error: error when reading WatchClusterInfo: rpc error: code = Unavailable desc = error reading from server: EOF
+2021/09/16 13:03:01.3936 info    daemon:shutdown_logger : shutting down (gracefully)...
+2021/09/16 13:03:01.3934 debug   daemon/server-dns/Server/127.0.0.1:54973 : goroutine "/daemon/server-dns/Server/127.0.0.1:54973" exited without error
+2021/09/16 13:03:01.3936 debug   daemon/server-router/TUN writer : goroutine "/daemon/server-router/TUN writer" exited without error
+2021/09/16 13:03:01.3940 debug   daemon/server-dns/Server : goroutine "/daemon/server-dns/Server" exited without error
+2021/09/16 13:03:01.3941 debug   daemon/server-router : goroutine "/daemon/server-router" exited without error
+2021/09/16 13:03:01.3948 debug   daemon/server-grpc : gRPC server ended
+2021/09/16 13:03:01.3950 debug   daemon/server-grpc : goroutine "/daemon/server-grpc" exited without error
+2021/09/16 13:03:01.4085 info    daemon/server-dns : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="41973"
+2021/09/16 13:03:01.4089 info    daemon/server-dns :  : dexec.pid="41973" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 13:03:01.4221 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="41973"
+2021/09/16 13:03:01.4250 info    daemon/server-dns : started command ["killall" "mDNSResponderHelper"] : dexec.pid="41974"
+2021/09/16 13:03:01.4253 info    daemon/server-dns :  : dexec.pid="41974" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 13:03:01.4335 info    daemon/server-dns :  : dexec.pid="41974" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021/09/16 13:03:01.4336 info    daemon/server-dns : finished with error: exit status 1 : dexec.pid="41974"
+2021/09/16 13:03:01.4393 info    daemon/server-dns : started command ["dscacheutil" "-flushcache"] : dexec.pid="41975"
+2021/09/16 13:03:01.4394 info    daemon/server-dns :  : dexec.pid="41975" dexec.stream="stdin" dexec.err="EOF"
+2021/09/16 13:03:01.4431 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="41975"
+2021/09/16 13:03:01.4432 debug   daemon/server-dns : goroutine "/daemon/server-dns" exited without error
+2021/09/16 13:03:01.4432 debug   daemon/background-metriton : goroutine "/daemon/background-metriton" exited without error
+2021/09/16 13:03:01.4433 info    daemon:shutdown_status :   final goroutine statuses:
+2021/09/16 13:03:01.4434 info    daemon:shutdown_status :     /daemon/background-metriton: exited without error
+2021/09/16 13:03:01.4434 info    daemon:shutdown_status :     /daemon/daemon-quit        : exited without error
+2021/09/16 13:03:01.4434 info    daemon:shutdown_status :     /daemon/server-dns         : exited without error
+2021/09/16 13:03:01.4434 info    daemon:shutdown_status :     /daemon/server-grpc        : exited without error
+2021/09/16 13:03:01.4434 info    daemon:shutdown_status :     /daemon/server-router      : exited without error
+2021/09/16 13:03:01.4435 info    daemon:shutdown_status :     /daemon/watch-cluster-info : exited with error
+2021/09/16 13:03:01.4435 error    : error when reading WatchClusterInfo: rpc error: code = Unavailable desc = error reading from server: EOF
+telepresence: error: error when reading WatchClusterInfo: rpc error: code = Unavailable desc = error reading from server: EOF

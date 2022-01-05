@@ -3,12 +3,13 @@ package cli
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 type uninstallInfo struct {
@@ -39,16 +40,16 @@ func uninstallCommand() *cobra.Command {
 
 func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 	if u.agent && u.allAgents || u.agent && u.everything || u.allAgents && u.everything {
-		return errors.New("--agent, --all-agents, or --everything are mutually exclusive")
+		return errcat.User.New("--agent, --all-agents, or --everything are mutually exclusive")
 	}
 	if !(u.agent || u.allAgents || u.everything) {
-		return errors.New("please specify --agent, --all-agents, or --everything")
+		return errcat.User.New("please specify --agent, --all-agents, or --everything")
 	}
 	switch {
 	case u.agent && len(args) == 0:
-		return errors.New("at least one argument (the name of an agent) is expected")
+		return errcat.User.New("at least one argument (the name of an agent) is expected")
 	case !u.agent && len(args) != 0:
-		return errors.New("unexpected argument(s)")
+		return errcat.User.New("unexpected argument(s)")
 	}
 	return nil
 }
@@ -56,7 +57,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 	doQuit := false
-	err := withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+	err := withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
 			Namespace:     u.namespace,
@@ -75,7 +76,11 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if r.ErrorText != "" {
-			return errors.New(r.ErrorText)
+			ec := errcat.Unknown
+			if r.ErrorCategory != 0 {
+				ec = errcat.Category(r.ErrorCategory)
+			}
+			return ec.New(r.ErrorText)
 		}
 
 		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
@@ -86,7 +91,7 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		return nil
 	})
 	if err == nil && doQuit {
-		err = quit(cmd.Context())
+		err = cliutil.QuitDaemon(cmd.Context())
 	}
 	return err
 }

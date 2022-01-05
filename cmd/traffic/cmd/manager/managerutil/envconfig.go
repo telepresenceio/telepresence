@@ -7,6 +7,7 @@ import (
 	"github.com/sethvargo/go-envconfig"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -16,13 +17,17 @@ type Env struct {
 	ServerPort  string `env:"SERVER_PORT,default=8081"`
 	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
 	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
-	ClusterID   string `env:"CLUSTER_ID,default="`
 
-	ManagerNamespace string            `env:"MANAGER_NAMESPACE,default="`
-	AgentRegistry    string            `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
-	AgentImage       string            `env:"TELEPRESENCE_AGENT_IMAGE,default="`
-	AgentPort        int32             `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
-	MaxReceiveSize   resource.Quantity `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
+	ManagerNamespace    string                     `env:"MANAGER_NAMESPACE,default="`
+	AgentRegistry       string                     `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+	AgentImage          string                     `env:"TELEPRESENCE_AGENT_IMAGE,default="`
+	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
+	APIPort             int32                      `env:"TELEPRESENCE_API_PORT,default="`
+	MaxReceiveSize      resource.Quantity          `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
+	AppProtocolStrategy client.AppProtocolStrategy `env:"TELEPRESENCE_APP_PROTO_STRATEGY,default="`
+
+	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`
+	PodCIDRs        string `env:"POD_CIDRS,default="`
 }
 
 type envKey struct{}
@@ -33,9 +38,7 @@ func LoadEnv(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 	if env.AgentImage == "" {
-		env.AgentImage = env.AgentRegistry + "/tel2:" + strings.TrimPrefix(version.Version, "v")
-	} else {
-		env.AgentImage = env.AgentRegistry + "/" + env.AgentImage
+		env.AgentImage = "tel2:" + strings.TrimPrefix(version.Version, "v")
 	}
 	return WithEnv(ctx, &env), nil
 }

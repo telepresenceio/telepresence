@@ -5,14 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
@@ -106,7 +104,7 @@ func (r *resolveFile) write(fileName string) error {
 		}
 		buf.WriteByte('\n')
 	}
-	return ioutil.WriteFile(fileName, buf.Bytes(), 0644)
+	return os.WriteFile(fileName, buf.Bytes(), 0644)
 }
 
 func (r *resolveFile) setSearchPaths(paths ...string) {
@@ -143,12 +141,15 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	if err != nil {
 		return err
 	}
+	o.router.configureDNS(c, dnsAddr)
 
 	err = os.MkdirAll(resolverDirName, 0755)
 	if err != nil {
 		return err
 	}
 
+	kubernetesZone := o.router.clusterDomain
+	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
 		port:        dnsAddr.Port,
 		domain:      kubernetesZone,
@@ -160,101 +161,15 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	}
 	dlog.Infof(c, "Generated new %s", resolverFileName)
 
-	namespaceResolverFile := func(namespace string) string {
-		return filepath.Join(resolverDirName, "telepresence."+namespace+".local")
-	}
-
-	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
-		rf, err := readResolveFile(resolverFileName)
-		if err != nil {
-			dlog.Error(c, err)
-			return
-		}
-		namespaces := make(map[string]struct{})
-		search := make([]string, 0)
-		for _, path := range paths {
-			if strings.ContainsRune(path, '.') {
-				search = append(search, path)
-			} else if path != "" {
-				namespaces[path] = struct{}{}
-			}
-		}
-		namespaces[tel2SubDomain] = struct{}{}
-
-		domains := make(map[string]struct{}, len(namespaces)+len(o.dnsConfig.IncludeSuffixes))
-		for ns, v := range namespaces {
-			domains[ns] = v
-		}
-		for _, sfx := range o.dnsConfig.IncludeSuffixes {
-			domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
-		}
-
-		// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
-		// for each namespace in its own domain file under /etc/resolver. Each file
-		// is named "telepresence.<domain>.local"
-		var removals []string
-		var additions []string
-		o.domainsLock.Lock()
-		for ns := range o.domains {
-			if _, ok := domains[ns]; !ok {
-				removals = append(removals, ns)
-			}
-		}
-		for ns := range domains {
-			if _, ok := o.domains[ns]; !ok {
-				additions = append(additions, ns)
-			}
-		}
-
-		o.search = search
-		o.namespaces = namespaces
-		o.domains = domains
-		o.domainsLock.Unlock()
-
-		for _, namespace := range removals {
-			nsFile := namespaceResolverFile(namespace)
-			dlog.Infof(c, "Removing %s", nsFile)
-			if err = os.Remove(nsFile); err != nil {
-				dlog.Error(c, err)
-			}
-		}
-		for _, namespace := range additions {
-			df := resolveFile{
-				port:        dnsAddr.Port,
-				domain:      namespace,
-				nameservers: []net.IP{dnsAddr.IP},
-			}
-			nsFile := namespaceResolverFile(namespace)
-			dlog.Infof(c, "Generated new %s", nsFile)
-			if err = df.write(nsFile); err != nil {
-				dlog.Error(c, err)
-			}
-		}
-
-		rf.setSearchPaths(search...)
-
-		// Versions prior to Big Sur will not trigger an update unless the resolver file
-		// is removed and recreated.
-		_ = os.Remove(resolverFileName)
-
-		if err = rf.write(resolverFileName); err != nil {
-			dlog.Error(c, err)
-		}
-	}
-
 	defer func() {
-		o.searchPathLock.Lock()
-		defer o.searchPathLock.Unlock()
-
 		// Remove the main resolver file
 		_ = os.Remove(resolverFileName)
 
 		// Remove each namespace resolver file
 		for namespace := range o.domains {
-			_ = os.Remove(namespaceResolverFile(namespace))
+			_ = os.Remove(namespaceResolverFile(resolverDirName, namespace))
 		}
-		dns.Flush(dcontext.HardContext(c))
+		o.flushDNS()
 	}()
 
 	// Start local DNS server
@@ -263,14 +178,97 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		select {
 		case <-c.Done():
 			return nil
-		case dnsIP := <-o.kubeDNS:
-			o.router.configureDNS(c, dnsIP, uint16(53), listener.LocalAddr().(*net.UDPAddr))
+		case <-o.router.configured():
+			// Server will close the listener, so no need to close it here.
+			o.processSearchPaths(g, func(c context.Context, paths []string) error {
+				return o.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
+			})
+			return dns.NewServer([]net.PacketConn{listener}, nil, o.resolveInCluster, &o.dnsCache).Run(c, make(chan struct{}))
 		}
-		// Server will close the listener, so no need to close it here.
-		v := dns.NewServer(c, []net.PacketConn{listener}, nil, o.resolveInCluster)
-		return v.Run(c)
 	})
-	dns.Flush(c)
-	close(o.dnsConfigured)
 	return g.Wait()
+}
+
+func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
+	dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
+	rf, err := readResolveFile(resolverFileName)
+	if err != nil {
+		return err
+	}
+	namespaces := make(map[string]struct{})
+	search := make([]string, 0)
+	for _, path := range paths {
+		if strings.ContainsRune(path, '.') {
+			search = append(search, path)
+		} else if path != "" {
+			namespaces[path] = struct{}{}
+		}
+	}
+	namespaces[tel2SubDomain] = struct{}{}
+
+	domains := make(map[string]struct{}, len(namespaces)+len(o.dnsConfig.IncludeSuffixes))
+	for ns, v := range namespaces {
+		domains[ns] = v
+	}
+	for _, sfx := range o.dnsConfig.IncludeSuffixes {
+		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
+	}
+
+	o.domainsLock.Lock()
+	defer o.domainsLock.Unlock()
+
+	// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
+	// for each namespace in its own domain file under /etc/resolver. Each file
+	// is named "telepresence.<domain>.local"
+	var removals []string
+	var additions []string
+	for ns := range o.domains {
+		if _, ok := domains[ns]; !ok {
+			removals = append(removals, ns)
+		}
+	}
+	for ns := range domains {
+		if _, ok := o.domains[ns]; !ok {
+			additions = append(additions, ns)
+		}
+	}
+
+	o.search = search
+	o.namespaces = namespaces
+	o.domains = domains
+
+	for _, namespace := range removals {
+		nsFile := namespaceResolverFile(resolverDirName, namespace)
+		dlog.Infof(c, "Removing %s", nsFile)
+		if err = os.Remove(nsFile); err != nil {
+			dlog.Error(c, err)
+		}
+	}
+	for _, namespace := range additions {
+		df := resolveFile{
+			port:        dnsAddr.Port,
+			domain:      namespace,
+			nameservers: []net.IP{dnsAddr.IP},
+		}
+		nsFile := namespaceResolverFile(resolverDirName, namespace)
+		dlog.Infof(c, "Generated new %s", nsFile)
+		if err = df.write(nsFile); err != nil {
+			dlog.Error(c, err)
+		}
+	}
+
+	rf.setSearchPaths(search...)
+
+	// Versions prior to Big Sur will not trigger an update unless the resolver file
+	// is removed and recreated.
+	_ = os.Remove(resolverFileName)
+	if err = rf.write(resolverFileName); err != nil {
+		return err
+	}
+	o.flushDNS()
+	return nil
+}
+
+func namespaceResolverFile(resolverDirName, namespace string) string {
+	return filepath.Join(resolverDirName, "telepresence."+namespace+".local")
 }

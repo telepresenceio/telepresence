@@ -28,6 +28,15 @@ rules:
   - list
   - get
   - watch
+# Needed for the `gather-logs` command to work on components in the kubernetes
+# cluster (traffic-manager + traffic-agents)
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - list
+  - get
 {{- if eq . (include "telepresence.namespace" $) }}
 - apiGroups:
   - ""
@@ -77,6 +86,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traffic-manager
+  namespace: {{ include "telepresence.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 roleRef:

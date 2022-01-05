@@ -94,7 +94,7 @@ func TestStateInternal(topT *testing.T) {
 		a.True(state.Mark(c2, clock.Now()))
 		a.False(state.Mark("asdf", clock.Now()))
 
-		state.ExpireSessions(epoch.Add(5 * time.Second))
+		state.ExpireSessions(ctx, epoch.Add(5*time.Second))
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))
@@ -106,13 +106,13 @@ func TestStateInternal(topT *testing.T) {
 		a.True(state.Mark(c2, clock.Now()))
 		a.False(state.Mark(c3, clock.Now()))
 
-		state.ExpireSessions(epoch.Add(5 * time.Second))
+		state.ExpireSessions(ctx, epoch.Add(5*time.Second))
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))
 		a.False(state.HasClient(c3))
 
-		state.RemoveSession(c2)
+		state.RemoveSession(ctx, c2)
 
 		a.True(state.HasClient(c1))
 		a.False(state.HasClient(c2))

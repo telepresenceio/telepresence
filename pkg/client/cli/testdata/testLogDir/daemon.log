@@ -1,0 +1,42 @@
+2021-09-16 13:06:43.2401 debug   Logging at this level "debug"
+2021-09-16 13:06:43.2405 info    ---
+2021-09-16 13:06:43.2405 info    Telepresence daemon v2.4.3-98-g0585bbd1-1631811285 (api v3) starting...
+2021-09-16 13:06:43.2406 info    PID is 42745
+2021-09-16 13:06:43.2406 info    
+2021-09-16 13:06:43.2407 debug   Listener opened
+2021-09-16 13:06:43.2737 info    daemon/server-grpc : gRPC server started
+2021-09-16 13:06:43.2738 debug   daemon/server-router/MGR stream : Waiting until manager gRPC is configured
+2021-09-16 13:06:43.2738 debug   daemon/server-router/TUN reader : Waiting until manager gRPC is configured
+2021-09-16 13:06:55.0000 info    daemon/server-grpc/conn=2 : Adding also-proxy subnet 1.2.3.4/32
+2021-09-16 13:06:55.0459 info    daemon/watch-cluster-info : Adding service subnet 10.43.0.0/16
+2021-09-16 13:06:55.0460 info    daemon/watch-cluster-info : Adding pod subnet 10.42.0.0/24
+2021-09-16 13:06:55.0467 info    daemon/watch-cluster-info : Setting cluster DNS to 10.43.0.10
+2021-09-16 13:06:55.0468 info    daemon/watch-cluster-info : Setting cluster domain to "cluster.local."
+2021-09-16 13:06:55.0469 debug   daemon/server-router/TUN reader : TUN read loop starting
+2021-09-16 13:06:55.0473 debug   daemon/server-router/MGR stream : MGR read loop starting
+2021-09-16 13:06:55.0477 info    daemon/server-dns : Generated new /etc/resolver/telepresence.local
+2021-09-16 13:06:55.0482 debug   daemon/server-dns/SearchPaths : [] -> [ambassador default kube-node-lease kube-public kube-system]
+2021-09-16 13:06:55.0483 info    daemon/server-dns/SearchPaths : setting search paths ambassador default kube-node-lease kube-public kube-system
+2021-09-16 13:06:55.0505 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.kube-system.local
+2021-09-16 13:06:55.0514 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.tel2-search.local
+2021-09-16 13:06:55.0520 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.ambassador.local
+2021-09-16 13:06:55.0528 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.default.local
+2021-09-16 13:06:55.0534 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.kube-node-lease.local
+2021-09-16 13:06:55.0539 info    daemon/server-dns/SearchPaths : Generated new /etc/resolver/telepresence.kube-public.local
+2021-09-16 13:06:55.0554 info    daemon/server-dns : started command ["killall" "-HUP" "mDNSResponder"] : dexec.pid="42754"
+2021-09-16 13:06:55.0557 info    daemon/server-dns :  : dexec.pid="42754" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:06:55.0697 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="42754"
+2021-09-16 13:06:55.0724 info    daemon/server-dns : started command ["killall" "mDNSResponderHelper"] : dexec.pid="42755"
+2021-09-16 13:06:55.0726 info    daemon/server-dns :  : dexec.pid="42755" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:06:55.0814 info    daemon/server-dns :  : dexec.pid="42755" dexec.stream="stdout+stderr" dexec.data="No matching processes were found\n"
+2021-09-16 13:06:55.0816 info    daemon/server-dns : finished with error: exit status 1 : dexec.pid="42755"
+2021-09-16 13:06:55.0836 info    daemon/server-dns : started command ["dscacheutil" "-flushcache"] : dexec.pid="42756"
+2021-09-16 13:06:55.0838 info    daemon/server-dns :  : dexec.pid="42756" dexec.stream="stdin" dexec.err="EOF"
+2021-09-16 13:06:55.0870 info    daemon/server-dns : finished successfully: exit status 0 : dexec.pid="42756"
+2021-09-16 13:06:55.1605 debug   daemon/server-router/MGR stream : setting tunnel's peer version to 1
+2021-09-16 13:06:56.8504 debug   daemon/server-dns/Server : QTYPE[1] kojjgoxv.cluster.local. -> NOT FOUND
+2021-09-16 13:06:56.8506 debug   daemon/server-dns/Server : QTYPE[28] kojjgoxv.cluster.local. -> NOT FOUND
+2021-09-16 13:06:56.8507 debug   daemon/server-dns/Server : QTYPE[1] vuujrnwogkmwdld.cluster.local. -> NOT FOUND
+2021-09-16 13:06:56.8513 debug   daemon/server-dns/Server : QTYPE[28] vuujrnwogkmwdld.cluster.local. -> NOT FOUND
+2021-09-16 13:06:56.8515 debug   daemon/server-dns/Server : QTYPE[1] gzmxavhqnmpqzl.cluster.local. -> NOT FOUND
+2021-09-16 13:06:56.8517 debug   daemon/server-dns/Server : QTYPE[28] gzmxavhqnmpqzl.cluster.local. -> NOT FOUND

@@ -1,0 +1,7 @@
+licenseKey:
+  # This mounts the secret into the traffic-manager
+  create: true
+  value:
+  secret:
+    # This tells the helm chart not to create the secret since you've created it yourself
+    create: true

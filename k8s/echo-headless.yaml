@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    service: echo-headless
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: echo-headless
+  labels:
+    service: echo-headless
+spec:
+  replicas: 1
+  serviceName: echo-headless
+  selector:
+    matchLabels:
+      service: echo-headless
+  template:
+    metadata:
+      labels:
+        service: echo-headless
+    spec:
+      containers:
+        - name: echo-headless
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+

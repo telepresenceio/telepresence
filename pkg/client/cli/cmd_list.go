@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -18,6 +20,7 @@ type listInfo struct {
 	onlyInterceptable bool
 	debug             bool
 	namespace         string
+	json              bool
 }
 
 func listCommand() *cobra.Command {
@@ -35,6 +38,7 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+	flags.BoolVarP(&s.json, "json", "j", false, "output as json array")
 	return cmd
 }
 
@@ -42,7 +46,7 @@ func listCommand() *cobra.Command {
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	var r *connector.WorkloadInfoSnapshot
 	var err error
-	err = withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, _ *connector.ConnectInfo) error {
+	err = withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:
@@ -54,7 +58,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = connectorClient.List(cmd.Context(), &connector.ListRequest{Filter: filter, Namespace: s.namespace})
+		r, err = connectorClient.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
 		return err
 	})
 	if err != nil {
@@ -93,12 +97,21 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	for _, workload := range r.Workloads {
-		if workload.Name == "" {
-			// Local-only, so use name of intercept
-			fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, workload.InterceptInfo.Spec.Name)
+	if s.json {
+		msg, err := json.Marshal(r.Workloads)
+		if err != nil {
+			fmt.Fprintf(stdout, "json marshal error: %v", err)
 		} else {
-			fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, workload.Name, state(workload))
+			fmt.Fprintf(stdout, "%s", msg)
+		}
+	} else {
+		for _, workload := range r.Workloads {
+			if workload.Name == "" {
+				// Local-only, so use name of intercept
+				fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, workload.InterceptInfo.Spec.Name)
+			} else {
+				fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, workload.Name, state(workload))
+			}
 		}
 	}
 	return nil

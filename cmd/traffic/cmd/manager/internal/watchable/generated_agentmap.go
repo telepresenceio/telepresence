@@ -66,13 +66,31 @@ func (tm *AgentMap) unlockedIsClosed() bool {
 	}
 }
 
+func (tm *AgentMap) unlockedLoadAll() map[string]*manager.AgentInfo {
+	ret := make(map[string]*manager.AgentInfo, len(tm.value))
+	for k, v := range tm.value {
+		ret[k] = proto.Clone(v).(*manager.AgentInfo)
+	}
+	return ret
+}
+
 // LoadAll returns a deepcopy of all key/value pairs in the map.
 func (tm *AgentMap) LoadAll() map[string]*manager.AgentInfo {
 	tm.lock.RLock()
 	defer tm.lock.RUnlock()
-	ret := make(map[string]*manager.AgentInfo, len(tm.value))
+	return tm.unlockedLoadAll()
+}
+
+// LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
+// function returns true. The map is locked during the evaluation of the filter.
+func (tm *AgentMap) LoadAllMatching(filter func(string, *manager.AgentInfo) bool) map[string]*manager.AgentInfo {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	ret := make(map[string]*manager.AgentInfo)
 	for k, v := range tm.value {
-		ret[k] = proto.Clone(v).(*manager.AgentInfo)
+		if filter(k, v) {
+			ret[k] = proto.Clone(v).(*manager.AgentInfo)
+		}
 	}
 	return ret
 }
@@ -214,17 +232,17 @@ func (tm *AgentMap) Close() {
 
 // internalSubscribe returns a channel (that blocks on both ends), that is written to on each map
 // update.  If the map is already Close()ed, then this returns nil.
-func (tm *AgentMap) internalSubscribe(ctx context.Context) <-chan AgentMapUpdate {
+func (tm *AgentMap) internalSubscribe(ctx context.Context) (<-chan AgentMapUpdate, map[string]*manager.AgentInfo) {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
 	tm.unlockedInit()
 
 	ret := make(chan AgentMapUpdate)
 	if tm.unlockedIsClosed() {
-		return nil
+		return nil, nil
 	}
 	tm.subscribers[ret] = ret
-	return ret
+	return ret, tm.unlockedLoadAll()
 }
 
 // Subscribe returns a channel that will emits a complete snapshot of the map immediately after the
@@ -250,7 +268,7 @@ func (tm *AgentMap) Subscribe(ctx context.Context) <-chan AgentMapSnapshot {
 // new snapshot to be emitted.  If the value for a key changes from satisfying the predicate to not
 // satisfying it, then this is treated as a delete operation, and a new snapshot is generated.
 func (tm *AgentMap) SubscribeSubset(ctx context.Context, include func(string, *manager.AgentInfo) bool) <-chan AgentMapSnapshot {
-	upstream := tm.internalSubscribe(ctx)
+	upstream, initialSnapshot := tm.internalSubscribe(ctx)
 	downstream := make(chan AgentMapSnapshot)
 
 	if upstream == nil {
@@ -259,7 +277,7 @@ func (tm *AgentMap) SubscribeSubset(ctx context.Context, include func(string, *m
 	}
 
 	tm.wg.Add(1)
-	go tm.coalesce(ctx, include, upstream, downstream)
+	go tm.coalesce(ctx, include, upstream, downstream, initialSnapshot)
 
 	return downstream
 }
@@ -269,13 +287,14 @@ func (tm *AgentMap) coalesce(
 	includep func(string, *manager.AgentInfo) bool,
 	upstream <-chan AgentMapUpdate,
 	downstream chan<- AgentMapSnapshot,
+	initialSnapshot map[string]*manager.AgentInfo,
 ) {
 	defer tm.wg.Done()
 	defer close(downstream)
 
 	var shutdown func()
 	shutdown = func() {
-		shutdown = func() {}
+		shutdown = func() {} // Make this function an empty one after first run to prevent calling the following goroutine multiple times
 		// Do this asyncrounously because getting the lock might block a .Store() that's
 		// waiting on us to read from 'upstream'!  We don't need to worry about separately
 		// waiting for this goroutine because we implicitly do that when we drain
@@ -292,7 +311,7 @@ func (tm *AgentMap) coalesce(
 	// received from 'upstream', with any entries removed that do not satisfy the predicate
 	// 'includep'.
 	cur := make(map[string]*manager.AgentInfo)
-	for k, v := range tm.LoadAll() {
+	for k, v := range initialSnapshot {
 		if includep(k, v) {
 			cur[k] = v
 		}
@@ -346,13 +365,24 @@ func (tm *AgentMap) coalesce(
 		}
 	}
 
+	// The following loop is reading both a tm.close channel and the ctx.Done() channel. When the
+	// tm.close channel is closed, the Map as a whole has been closed, and when ctx.Done() is closed,
+	// the subscription that started this call to coalesce has ended. If one of the the channels close,
+	// the loop must call shutdown() and then continue looping,  now in a way that never selects the
+	// closed channel. The closed channel is therefore set to `nil` so that it blocks forever, which
+	// in essence means that the only way out of the loop is to close the `upstream` channel. This
+	// happens when the subscription ends.
+	closeCh := tm.close
+	doneCh := ctx.Done()
 	for {
 		if snapshot.State == nil {
 			select {
-			case <-ctx.Done():
+			case <-doneCh:
 				shutdown()
-			case <-tm.close:
+				doneCh = nil
+			case <-closeCh:
 				shutdown()
+				closeCh = nil
 			case update, readOK := <-upstream:
 				if !readOK {
 					return
@@ -362,10 +392,12 @@ func (tm *AgentMap) coalesce(
 		} else {
 			// Same as above, but with an additional "downstream <- snapshot" case.
 			select {
-			case <-ctx.Done():
+			case <-doneCh:
 				shutdown()
-			case <-tm.close:
+				doneCh = nil
+			case <-closeCh:
 				shutdown()
+				closeCh = nil
 			case update, readOK := <-upstream:
 				if !readOK {
 					return

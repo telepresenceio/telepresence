@@ -12,23 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
-
-// quit sends the quit message to the daemon and waits for it to exit.
-func quit(ctx context.Context) error {
-	// When the daemon shuts down, it will tell the connector to shut down.
-	if err := cliutil.QuitDaemon(ctx); err != nil {
-		return err
-	}
-
-	// But also do that ourselves; to ensure the connector is killed even if daemon isn't
-	// running.  If the daemon already shut down the connector, then this is a no-op.
-	if err := cliutil.QuitConnector(ctx); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 func kubeFlagMap() map[string]string {
 	kubeFlagMap := make(map[string]string)
@@ -48,7 +33,7 @@ func kubeFlagMap() map[string]string {
 //    them down when it's done.  If they were already running, it will leave them running.)
 //
 //  - Makes the connector.Connect gRPC call to set up networking
-func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, connector.ConnectorClient, *connector.ConnectInfo) error) error {
+func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, connector.ConnectorClient, *connector.ConnectInfo, daemon.DaemonClient) error) error {
 	return cliutil.WithDaemon(cmd.Context(), dnsIP, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
 		if cliutil.DidLaunchDaemon(ctx) {
 			defer func() {
@@ -72,7 +57,7 @@ func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, conn
 			if err != nil {
 				return err
 			}
-			return f(ctx, connectorClient, connInfo)
+			return f(ctx, connectorClient, connInfo, daemonClient)
 		})
 	})
 }
@@ -90,6 +75,7 @@ func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectIn
 		}
 
 		var msg string
+		cat := errcat.Unknown
 		switch resp.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			fmt.Fprintf(stdout, "Connected to context %s (%s)\n", resp.ClusterContext, resp.ClusterServer)
@@ -102,8 +88,11 @@ func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectIn
 			msg = "Cluster configuration changed, please quit telepresence and reconnect"
 		case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
 			msg = resp.ErrorText
+			if resp.ErrorCategory != 0 {
+				cat = errcat.Category(resp.ErrorCategory)
+			}
 		}
-		return fmt.Errorf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
+		return cat.Newf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
 	})
 	if err != nil {
 		return nil, err

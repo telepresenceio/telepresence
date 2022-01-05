@@ -14,7 +14,6 @@ their services.
 helm repo add datawire https://getambassador.io
 helm install traffic-manager -n ambassador datawire/telepresence \
 --create-namespace \
---set clusterID=$(kubectl get ns default -o jsonpath='{.metadata.uid}')
 ```
 
 ## Changelog
@@ -33,6 +32,8 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | image.tag                | Override the version of the Traffic Manager to be installed.                                                            | `""` (Defined in `appVersion` Chart.yaml)                                                         |
 | image.imagePullSecrets   | The `Secret` storing any credentials needed to access the image in a private registry.                                  | `[]`                                                                                              |
 | podAnnotations           | Annotations for the Traffic Manager `Pod`                                                                               | `{}`                                                                                              |
+| podCIDRs                 | Verbatim list of CIDRs that the cluster uses for pods. Only valid together with `podCIDRStrategy: environment`                         | `[]`                                                                                           |
+| podCIDRStrategy          | Define the strategy that the traffic-manager uses to discover what CIDRs the cluster uses for pods                      | `auto`                                                                                           |
 | podSecurityContext       | The Kubernetes SecurityContext for the `Pod`                                                                            | `{}`                                                                                              |
 | securityContext          | The Kubernetes SecurityContext for the `Deployment`                                                                     | `{"readOnlyRootFilesystem": true, "runAsNonRoot": true, "runAsUser": 1000}`                       |
 | nodeSelector             | Define which `Node`s you want to the Traffic Manager to be deployed to.                                                 | `{}`                                                                                              |
@@ -41,13 +42,19 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | service.type             | The type of `Service` for the Traffic Manager.                                                                          | `ClusterIP`                                                                                       |
 | resources                | Define resource requests and limits for the Traffic Manger.                                                             | `{}`                                                                                              |
 | logLevel                 | Define the logging level of the Traffic Manager                                                                         | `debug`                                                                                           |
-| clusterID                | The ID the Traffic Manager uses to identify itself. This is just the UID of the default namespace.                      | `""`                                                                                              |
+| systemaHost           | Host to be used for features requiring extensions (formerly the SYSTEMA_HOST environment variable)                         | `app.getambassador.io`                                                                            |
+| systemaPort           | Port to be used with the `systemaHost` for features requiring extensions (formerly the SYSTEMA_HOST environment variable)                                                                                                                               | `443`                                                                                             |
 | licenseKey.create        | Create the license key `volume` and `volumeMount`. **Only required for clusters without access to the internet.**       | `false`                                                                                           |
 | licenseKey.value         | The value of the license key.                                                                                           | `""`                                                                                              |
 | licenseKey.secret.create | Define whether you want the license key `Secret` to be managed by the release or not.                                   | `true`                                                                                            |
 | licenseKey.secret.name   | The name of the `Secret` that Traffic Manager will look for.                                                            | `systema-license`                                                                                 |
 | agentInjector.create   | Create the agentInjector objects that enables the traffic-manager deployment to act as a mutating webhook to add the agent to specified pods automatically (useful if you use GitOps style CD, like Argo).                                                                                                                                       | `true`                                                                                 |
 | agentInjector.name   | Name to use with objects associated with the agent-injector.                                                                 | `agent-injector`                                                                                 |
+| agentInjector.agentImage.registry | The registry for the injected agent image                                                                      |  `docker.io/datawire`                                                                             |
+| agentInjector.agentImage.name | The name of the injected agent image                                                                               |  `tel2`                                                                                           |
+| agentInjector.agentImage.tag | The tag for the injected agent image                                                                                |  `""` (Defined in `appVersion` Chart.yaml)                                                        |
+| agentInjector.appProtocolStrategy | The strategy to use when determining the application protocol to use for intercepts | `http2Probe` |
+| agentInjector.certificate.regenerate   | Define whether you want to regenerate certificate used for mutating webhook.                                                                             | `false`                                                                                 |
 | agentInjector.service.type   | Type of service for the agent-injector.                                                                             | `ClusterIP`                                                                                 |
 | agentInjector.secret.name  | The name of the secret the agent-injector webhook uses for authorization with the kubernetes api will expose.                                                                                                    | `mutator-webhook-tls`                                                                                        |
 | agentInjector.webhook.name  | The name of the agent-injector webhook                                                                           | `agent-injector-webhook`                                                                                        |
@@ -63,8 +70,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | clientRbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `false`                                                                                  |
 | clientRbac.namespaces          | The namespaces to give users access to.                                                                                 | `["ambassador"]`                                                                                           |
 | managerRbac.create              | Create RBAC resources for traffic-manager with this release.                                                           | `true`                                                                                            |
-| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false`
-| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]`
+| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false` |
+| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]` |
+| telepresenceAPI.port     | The port on agent's localhost where the Telepresence API server can be found                              | |
 
 
 ## License Key 
@@ -140,3 +148,17 @@ Error: rendered manifests contain a resource that already exists. Unable to cont
 ```
 
 To fix this error, fix the overlap either by removing `b` from the first install, or from the second.
+
+## Pod CIDRs
+
+The traffic manager is responsible for keeping track of what CIDRs the cluster uses for the pods. The Telepresence client uses this
+information to configure the network so that it provides access to the pods. In some cases, the traffic-manager will not be able to retrieve
+this information, or will do it in a way that is inefficient. To remedy this, the strategy that the traffic manager uses can be configured
+using the `podCIDRStrategy`.
+
+|Value|Meaning|
+|-----|-------|
+|`auto`|First try `nodePodCIDRs` and if that fails, try `coverPodIPs`|
+|`nodePodCIDRs`|Obtain the CIDRs from the`podCIDR` and `podCIDRs` of all `Node` resource specifications.|
+|`coverPodIPs`|Obtain all IPs from the `podIP` and `podIPs` of all `Pod` resource statuses and calculate the CIDRs needed to cover them.|
+|`environment`|Pick the CIDRs from the traffic manager's `POD_CIDRS` environment variable. Use `podCIDRs` to set that variable.|

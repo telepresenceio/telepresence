@@ -2,7 +2,7 @@ package logging
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,7 +61,7 @@ func (rotateDaily) RotateNow(rf *RotatingFile, _ int) bool {
 }
 
 type RotatingFile struct {
-	fileMode    os.FileMode
+	fileMode    fs.FileMode
 	dirName     string
 	fileName    string
 	timeFormat  string
@@ -111,7 +111,7 @@ func OpenRotatingFile(
 	timeFormat string,
 	localTime bool,
 	captureStd bool,
-	fileMode os.FileMode,
+	fileMode fs.FileMode,
 	strategy RotationStrategy,
 	maxFiles uint16,
 ) (*RotatingFile, error) {
@@ -133,27 +133,23 @@ func OpenRotatingFile(
 		maxFiles:   maxFiles,
 	}
 
-	var info os.FileInfo
-	if info, err = os.Stat(logfilePath); err != nil {
+	// Try to open existing file for append.
+	if rf.file, err = openForAppend(logfilePath, rf.fileMode); err != nil {
 		if os.IsNotExist(err) {
-			if err = rf.openNew(nil); err == nil {
+			// There is no existing file, go ahead and create a new one.
+			if err := rf.openNew(nil); err == nil {
 				return rf, nil
 			}
 		}
 		return nil, err
 	}
-
-	si, err := GetSysInfo(logfileDir, info)
+	// We successfully opened the existing file, get it plugged in.
+	stat, err := FStat(rf.file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to stat %s: %w", logfilePath, err)
 	}
-	rf.birthTime = si.BirthTime()
-	rf.size = info.Size()
-
-	// Open existing file for append
-	if rf.file, err = openForAppend(logfilePath, rf.fileMode); err != nil {
-		return nil, err
-	}
+	rf.birthTime = stat.BirthTime()
+	rf.size = stat.Size()
 	rf.afterOpen()
 	return rf, nil
 }
@@ -209,9 +205,8 @@ func (rf *RotatingFile) Write(data []byte) (int, error) {
 
 func (rf *RotatingFile) afterOpen() {
 	if rf.captureStd {
-		err := dupToStd(rf.file)
-		if err != nil {
-			// Dup2 failed (or isn't implemented on the current platform)
+		if err := dupToStd(rf.file); err != nil {
+			// Dup2 failed
 			os.Stdout = rf.file
 			os.Stderr = rf.file
 		} else {
@@ -250,16 +245,12 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo) (err error) {
 			return fmt.Errorf("failed to createFile %s: %w", tmp, err)
 		}
 
-		stat, err := tmpFile.Stat()
+		si, err := FStat(tmpFile)
 		_ = tmpFile.Close()
 		if err != nil {
 			return fmt.Errorf("failed to stat %s: %w", tmp, err)
 		}
 
-		si, err := GetSysInfo(rf.dirName, stat)
-		if err != nil {
-			return fmt.Errorf("failed to GetSysInfo for %s: %w", rf.dirName, err)
-		}
 		if prevInfo != nil && !prevInfo.HaveSameOwnerAndGroup(si) {
 			if err = prevInfo.SetOwnerAndGroup(tmp); err != nil {
 				_ = os.Remove(tmp)
@@ -300,7 +291,7 @@ func (rf *RotatingFile) removeOldFiles() {
 	rf.removeMutex.Lock()
 	defer rf.removeMutex.Unlock()
 
-	files, err := ioutil.ReadDir(rf.dirName)
+	files, err := os.ReadDir(rf.dirName)
 	if err != nil {
 		return
 	}
@@ -339,16 +330,13 @@ func (rf *RotatingFile) removeOldFiles() {
 	}
 }
 
-func (rf *RotatingFile) rotate() (err error) {
+func (rf *RotatingFile) rotate() error {
 	var prevInfo SysInfo
 	if rf.maxFiles == 0 || rf.maxFiles > 1 {
-		prevStat, err := rf.file.Stat()
+		var err error
+		prevInfo, err = FStat(rf.file)
 		if err != nil {
 			return fmt.Errorf("failed to stat %s: %w", rf.file.Name(), err)
-		}
-		prevInfo, err = GetSysInfo(filepath.Dir(rf.dirName), prevStat)
-		if err != nil {
-			return fmt.Errorf("failed to get sysinfo for %s: %w", rf.dirName, err)
 		}
 
 		fullPath := filepath.Join(rf.dirName, rf.fileName)

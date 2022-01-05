@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -133,8 +133,6 @@ func (kc *Cluster) SetInterceptedNamespaces(c context.Context, interceptedNamesp
 	kc.updateDaemonNamespaces(c)
 }
 
-const clusterServerSuffix = ".svc.cluster.local"
-
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
@@ -167,13 +165,10 @@ func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
 	// Avoid being locked for the remainder of this function.
 	kc.accLock.Unlock()
 
-	// Provide direct access to intercepted namespaces
 	sort.Strings(namespaces)
-	for _, ns := range namespaces {
-		paths = append(paths, ns+clusterServerSuffix+".")
+	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
+	if _, err := kc.callbacks.SetDNSSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
 	}
-	dlog.Debugf(c, "posting search paths %v", paths)
-	if _, err := kc.callbacks.SetDNSSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
-		dlog.Errorf(c, "error posting search paths to %v: %v", paths, err)
-	}
+	dlog.Debug(c, "search paths posted successfully")
 }

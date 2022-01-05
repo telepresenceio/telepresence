@@ -1,7 +1,8 @@
 {{- if not .Values.rbac.only }}
 {{- $altNames := list ( printf "agent-injector.%s" .Release.Namespace ) ( printf "agent-injector.%s.svc" .Release.Namespace ) -}}
-{{- $ca := genCA "agent-injector-ca" 365 -}}
-{{- $cert := genSignedCert "agent-injector" nil $altNames 365 $ca -}}
+{{- $genCA := genCA "agent-injector-ca" 365 -}}
+{{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
+{{- $secretData := (lookup "v1" "Secret" .Release.Namespace .Values.agentInjector.secret.name).data -}}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -14,7 +15,11 @@ webhooks:
   {{- toYaml . | nindent 2 }}
 {{- end }}
   clientConfig:
-    caBundle: {{ $ca.Cert | b64enc }}
+{{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
+    caBundle: {{ get $secretData "ca.pem" }}
+{{- else }}
+    caBundle: {{ $genCA.Cert | b64enc }}
+{{- end }}
     service:
       name: {{ .Values.agentInjector.name }}
       namespace: {{ include "telepresence.namespace" . }}
@@ -31,6 +36,7 @@ webhooks:
     - pods
     scope: '*'
   failurePolicy: {{ .Values.agentInjector.webhook.failurePolicy }}
+  reinvocationPolicy: IfNeeded
   name: agent-injector.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
@@ -53,7 +59,13 @@ metadata:
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 data:
-  ca.pem: {{ $ca.Cert | b64enc }}
-  crt.pem: {{ $cert.Cert | b64enc }}
-  key.pem: {{ $cert.Key | b64enc }}
+{{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
+  ca.pem: {{ get $secretData "ca.pem" }}
+  crt.pem: {{ get $secretData "crt.pem" }}
+  key.pem: {{ get $secretData "key.pem" }}
+{{- else }}
+  ca.pem: {{ $genCA.Cert | b64enc }}
+  crt.pem: {{ $genCert.Cert | b64enc }}
+  key.pem: {{ $genCert.Key | b64enc }}
+{{- end }}
 {{- end }}

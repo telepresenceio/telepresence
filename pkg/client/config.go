@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -16,26 +14,32 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 const configFile = "config.yml"
 
+// Config contains all configuration values for the telepresence CLI
 type Config struct {
-	Timeouts  Timeouts  `json:"timeouts,omitempty"`
-	LogLevels LogLevels `json:"logLevels,omitempty"`
-	Images    Images    `json:"images,omitempty"`
-	Cloud     Cloud     `json:"cloud,omitempty"`
-	Grpc      Grpc      `json:"grpc,omitempty"`
+	Timeouts        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
+	LogLevels       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
+	Images          Images          `json:"images,omitempty" yaml:"images,omitempty"`
+	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
+	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
 }
 
-// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
-func (c *Config) merge(o *Config) {
+// Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (c *Config) Merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
 	c.Images.merge(&o.Images)
 	c.Cloud.merge(&o.Cloud)
 	c.Grpc.merge(&o.Grpc)
+	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
+	c.Intercept.merge(&o.Intercept)
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -46,7 +50,7 @@ func stringKey(n *yaml.Node) (string, error) {
 	return s, nil
 }
 
-func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
+func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("config must be an object", node))
 	}
@@ -59,32 +63,24 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 		switch {
 		case kv == "timeouts":
-			err := ms[i+1].Decode(&c.Timeouts)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Timeouts)
 		case kv == "logLevels":
-			err := ms[i+1].Decode(&c.LogLevels)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.LogLevels)
 		case kv == "images":
-			err := ms[i+1].Decode(&c.Images)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Images)
 		case kv == "cloud":
-			err := ms[i+1].Decode(&c.Cloud)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Cloud)
 		case kv == "grpc":
-			err := ms[i+1].Decode(&c.Grpc)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Grpc)
+		case kv == "telepresenceAPI":
+			err = ms[i+1].Decode(&c.TelepresenceAPI)
+		case kv == "intercept":
+			err = ms[i+1].Decode(&c.Intercept)
 		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -99,19 +95,25 @@ type Timeouts struct {
 	// make them easy to grep for (`grep Private`) later.
 
 	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
-	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty"`
+	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty" yaml:"agentInstall,omitempty"`
 	// PrivateApply is how long to wait for a k8s manifest to be applied
-	PrivateApply time.Duration `json:"apply,omitempty"`
+	PrivateApply time.Duration `json:"apply,omitempty" yaml:"apply,omitempty"`
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
-	PrivateClusterConnect time.Duration `json:"clusterConnect,omitempty"`
+	PrivateClusterConnect time.Duration `json:"clusterConnect,omitempty" yaml:"clusterConnect,omitempty"`
+	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
+	PrivateEndpointDial time.Duration `json:"endpointDial,omitempty" yaml:"endpointDial,omitempty"`
+	// PrivateHelm is how long to wait for any helm operation.
+	PrivateHelm time.Duration `json:"helm,omitempty" yaml:"helm,omitempty"`
 	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
-	PrivateIntercept time.Duration `json:"intercept,omitempty"`
+	PrivateIntercept time.Duration `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	// PrivateRoundtripLatency is how much to add  to the EndpointDial timeout when establishing a remote connection.
+	PrivateRoundtripLatency time.Duration `json:"roundtripLatency,omitempty" yaml:"roundtripLatency,omitempty"`
 	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
-	PrivateProxyDial time.Duration `json:"proxyDial,omitempty"`
+	PrivateProxyDial time.Duration `json:"proxyDial,omitempty" yaml:"proxyDial,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
+	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty" yaml:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
-	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
+	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty" yaml:"trafficManagerConnect,omitempty"`
 }
 
 type TimeoutID int
@@ -120,8 +122,11 @@ const (
 	TimeoutAgentInstall TimeoutID = iota
 	TimeoutApply
 	TimeoutClusterConnect
+	TimeoutEndpointDial
+	TimeoutHelm
 	TimeoutIntercept
 	TimeoutProxyDial
+	TimeoutRoundtripLatency
 	TimeoutTrafficManagerAPI
 	TimeoutTrafficManagerConnect
 )
@@ -145,26 +150,37 @@ func (ctx timeoutContext) Err() error {
 	return err
 }
 
-func (cfg Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (context.Context, context.CancelFunc) {
+func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 	var timeoutVal time.Duration
 	switch timeoutID {
 	case TimeoutAgentInstall:
-		timeoutVal = cfg.PrivateAgentInstall
+		timeoutVal = t.PrivateAgentInstall
 	case TimeoutApply:
-		timeoutVal = cfg.PrivateApply
+		timeoutVal = t.PrivateApply
 	case TimeoutClusterConnect:
-		timeoutVal = cfg.PrivateClusterConnect
+		timeoutVal = t.PrivateClusterConnect
+	case TimeoutEndpointDial:
+		timeoutVal = t.PrivateEndpointDial
+	case TimeoutHelm:
+		timeoutVal = t.PrivateHelm
 	case TimeoutIntercept:
-		timeoutVal = cfg.PrivateIntercept
+		timeoutVal = t.PrivateIntercept
 	case TimeoutProxyDial:
-		timeoutVal = cfg.PrivateProxyDial
+		timeoutVal = t.PrivateProxyDial
+	case TimeoutRoundtripLatency:
+		timeoutVal = t.PrivateRoundtripLatency
 	case TimeoutTrafficManagerAPI:
-		timeoutVal = cfg.PrivateTrafficManagerAPI
+		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
-		timeoutVal = cfg.PrivateTrafficManagerConnect
+		timeoutVal = t.PrivateTrafficManagerConnect
 	default:
 		panic("should not happen")
 	}
+	return timeoutVal
+}
+
+func (t *Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (context.Context, context.CancelFunc) {
+	timeoutVal := t.Get(timeoutID)
 	ctx, cancel := context.WithTimeout(ctx, timeoutVal)
 	ctx = timeoutContext{
 		Context:    ctx,
@@ -193,12 +209,21 @@ func (e timeoutErr) Error() string {
 	case TimeoutClusterConnect:
 		yamlName = "clusterConnect"
 		humanName = "cluster connect"
+	case TimeoutEndpointDial:
+		yamlName = "endpointDial"
+		humanName = "tunnel endpoint dial with known IP"
+	case TimeoutHelm:
+		yamlName = "helm"
+		humanName = "helm operation"
 	case TimeoutIntercept:
 		yamlName = "intercept"
 		humanName = "intercept"
 	case TimeoutProxyDial:
 		yamlName = "proxyDial"
 		humanName = "proxy dial"
+	case TimeoutRoundtripLatency:
+		yamlName = "roundtripDelay"
+		humanName = "additional delay for tunnel roundtrip"
 	case TimeoutTrafficManagerAPI:
 		yamlName = "trafficManagerAPI"
 		humanName = "traffic manager gRPC API"
@@ -224,7 +249,7 @@ func CheckTimeout(ctx context.Context, err error) error {
 }
 
 // UnmarshalYAML caters for the unfortunate fact that time.Duration doesn't do YAML or JSON at all.
-func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
+func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("timeouts must be an object", node))
 	}
@@ -238,19 +263,25 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		var dp *time.Duration
 		switch kv {
 		case "agentInstall":
-			dp = &d.PrivateAgentInstall
+			dp = &t.PrivateAgentInstall
 		case "apply":
-			dp = &d.PrivateApply
+			dp = &t.PrivateApply
 		case "clusterConnect":
-			dp = &d.PrivateClusterConnect
+			dp = &t.PrivateClusterConnect
+		case "endpointDial":
+			dp = &t.PrivateEndpointDial
+		case "helm":
+			dp = &t.PrivateHelm
 		case "intercept":
-			dp = &d.PrivateIntercept
+			dp = &t.PrivateIntercept
 		case "proxyDial":
-			dp = &d.PrivateProxyDial
+			dp = &t.PrivateProxyDial
+		case "roundtripLatency":
+			dp = &t.PrivateRoundtripLatency
 		case "trafficManagerAPI":
-			dp = &d.PrivateTrafficManagerAPI
+			dp = &t.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
-			dp = &d.PrivateTrafficManagerConnect
+			dp = &t.PrivateTrafficManagerConnect
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -277,34 +308,90 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
+const defaultTimeoutsAgentInstall = 120 * time.Second
+const defaultTimeoutsApply = 1 * time.Minute
+const defaultTimeoutsClusterConnect = 20 * time.Second
+const defaultTimeoutsEndpointDial = 3 * time.Second
+const defaultTimeoutsHelm = 30 * time.Second
+const defaultTimeoutsIntercept = 5 * time.Second
+const defaultTimeoutsProxyDial = 5 * time.Second
+const defaultTimeoutsRoundtripLatency = 2 * time.Second
+const defaultTimeoutsTrafficManagerAPI = 15 * time.Second
+const defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+
+// MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
+func (t Timeouts) MarshalYAML() (interface{}, error) {
+	tm := make(map[string]string)
+	if t.PrivateAgentInstall != 0 && t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
+		tm["agentInstall"] = t.PrivateAgentInstall.String()
+	}
+	if t.PrivateApply != 0 && t.PrivateApply != defaultTimeoutsApply {
+		tm["apply"] = t.PrivateApply.String()
+	}
+	if t.PrivateClusterConnect != 0 && t.PrivateClusterConnect != defaultTimeoutsClusterConnect {
+		tm["clusterConnect"] = t.PrivateClusterConnect.String()
+	}
+	if t.PrivateEndpointDial != 0 && t.PrivateEndpointDial != defaultTimeoutsEndpointDial {
+		tm["endpointDial"] = t.PrivateEndpointDial.String()
+	}
+	if t.PrivateHelm != 0 && t.PrivateHelm != defaultTimeoutsHelm {
+		tm["helm"] = t.PrivateHelm.String()
+	}
+	if t.PrivateIntercept != 0 && t.PrivateIntercept != defaultTimeoutsIntercept {
+		tm["intercept"] = t.PrivateIntercept.String()
+	}
+	if t.PrivateProxyDial != 0 && t.PrivateProxyDial != defaultTimeoutsProxyDial {
+		tm["proxyDial"] = t.PrivateProxyDial.String()
+	}
+	if t.PrivateRoundtripLatency != 0 && t.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
+		tm["roundtripLatency"] = t.PrivateRoundtripLatency.String()
+	}
+	if t.PrivateTrafficManagerAPI != 0 && t.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
+		tm["trafficManagerAPI"] = t.PrivateTrafficManagerAPI.String()
+	}
+	if t.PrivateTrafficManagerConnect != 0 && t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
+		tm["trafficManagerConnect"] = t.PrivateTrafficManagerConnect.String()
+	}
+	return tm, nil
+}
+
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
-func (d *Timeouts) merge(o *Timeouts) {
+func (t *Timeouts) merge(o *Timeouts) {
 	if o.PrivateAgentInstall != 0 {
-		d.PrivateAgentInstall = o.PrivateAgentInstall
+		t.PrivateAgentInstall = o.PrivateAgentInstall
 	}
 	if o.PrivateApply != 0 {
-		d.PrivateApply = o.PrivateApply
+		t.PrivateApply = o.PrivateApply
 	}
 	if o.PrivateClusterConnect != 0 {
-		d.PrivateClusterConnect = o.PrivateClusterConnect
+		t.PrivateClusterConnect = o.PrivateClusterConnect
+	}
+	if o.PrivateEndpointDial != 0 {
+		t.PrivateEndpointDial = o.PrivateEndpointDial
+	}
+	if o.PrivateHelm != 0 {
+		t.PrivateHelm = o.PrivateHelm
 	}
 	if o.PrivateIntercept != 0 {
-		d.PrivateIntercept = o.PrivateIntercept
+		t.PrivateIntercept = o.PrivateIntercept
 	}
 	if o.PrivateProxyDial != 0 {
-		d.PrivateProxyDial = o.PrivateProxyDial
+		t.PrivateProxyDial = o.PrivateProxyDial
+	}
+	if o.PrivateRoundtripLatency != 0 {
+		t.PrivateRoundtripLatency = o.PrivateRoundtripLatency
 	}
 	if o.PrivateTrafficManagerAPI != 0 {
-		d.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
+		t.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
 	}
 	if o.PrivateTrafficManagerConnect != 0 {
-		d.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
+		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
 	}
 }
 
 type LogLevels struct {
-	UserDaemon logrus.Level `json:"userDaemon,omitempty"`
-	RootDaemon logrus.Level `json:"rootDaemon,omitempty"`
+	UserDaemon logrus.Level `json:"userDaemon,omitempty" yaml:"userDaemon,omitempty"`
+	RootDaemon logrus.Level `json:"rootDaemon,omitempty" yaml:"rootDaemon,omitempty"`
 }
 
 // UnmarshalYAML parses the logrus log-levels
@@ -349,10 +436,10 @@ func (ll *LogLevels) merge(o *LogLevels) {
 }
 
 type Images struct {
-	Registry          string `json:"registry,omitempty"`
-	AgentImage        string `json:"agentImage,omitempty"`
-	WebhookRegistry   string `json:"webhookRegistry,omitempty"`
-	WebhookAgentImage string `json:"webhookAgentImage,omitempty"`
+	Registry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
+	AgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
+	WebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
+	WebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -403,8 +490,10 @@ func (i *Images) merge(o *Images) {
 }
 
 type Cloud struct {
-	SkipLogin       bool          `json:"skipLogin,omitempty"`
-	RefreshMessages time.Duration `json:"refreshMessages,omitempty"`
+	SkipLogin       bool          `json:"skipLogin,omitempty" yaml:"skipLogin,omitempty"`
+	RefreshMessages time.Duration `json:"refreshMessages,omitempty" yaml:"refreshMessages,omitempty"`
+	SystemaHost     string        `json:"systemaHost,omitempty" yaml:"systemaHost,omitempty"`
+	SystemaPort     string        `json:"systemaPort,omitempty" yaml:"systemaPort,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -436,6 +525,10 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 			} else {
 				cloud.RefreshMessages = duration
 			}
+		case "systemaHost":
+			cloud.SystemaHost = v.Value
+		case "systemaPort":
+			cloud.SystemaPort = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -445,23 +538,51 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-func (i *Cloud) merge(o *Cloud) {
+const defaultCloudSystemAHost = "app.getambassador.io"
+const defaultCloudSystemAPort = "443"
+const defaultCloudRefreshMessages = 24 * 7 * time.Hour
+
+// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
+func (cloud Cloud) MarshalYAML() (interface{}, error) {
+	cm := make(map[string]interface{})
+	if cloud.RefreshMessages != 0 && cloud.RefreshMessages != defaultCloudRefreshMessages {
+		cm["refreshMessages"] = cloud.RefreshMessages.String()
+	}
+	if cloud.SkipLogin {
+		cm["skipLogin"] = true
+	}
+	if cloud.SystemaHost != "" && cloud.SystemaHost != defaultCloudSystemAHost {
+		cm["systemaHost"] = cloud.SystemaHost
+	}
+	if cloud.SystemaPort != "" && cloud.SystemaPort != defaultCloudSystemAPort {
+		cm["systemaPort"] = cloud.SystemaPort
+	}
+	return cm, nil
+}
+
+func (cloud *Cloud) merge(o *Cloud) {
 	if o.SkipLogin {
-		i.SkipLogin = o.SkipLogin
+		cloud.SkipLogin = o.SkipLogin
 	}
 	if o.RefreshMessages != 0 {
-		i.RefreshMessages = o.RefreshMessages
+		cloud.RefreshMessages = o.RefreshMessages
+	}
+	if o.SystemaHost != "" {
+		cloud.SystemaHost = o.SystemaHost
+	}
+	if o.SystemaPort != "" {
+		cloud.SystemaPort = o.SystemaPort
 	}
 }
 
 type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
-	MaxReceiveSize *resource.Quantity `json:"maxReceiveSize,omitempty"`
+	MaxReceiveSize resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
 }
 
 func (g *Grpc) merge(o *Grpc) {
-	if o.MaxReceiveSize != nil {
+	if !o.MaxReceiveSize.IsZero() {
 		g.MaxReceiveSize = o.MaxReceiveSize
 	}
 }
@@ -486,7 +607,7 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 			if err != nil {
 				dlog.Warningf(parseContext, "unable to parse quantity %q: %v", v.Value, withLoc(err.Error(), ms[i]))
 			} else {
-				g.MaxReceiveSize = &val
+				g.MaxReceiveSize = val
 			}
 		default:
 			if parseContext != nil {
@@ -497,36 +618,109 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-var defaultConfig = Config{
-	Timeouts: Timeouts{
-		PrivateAgentInstall:          120 * time.Second,
-		PrivateApply:                 1 * time.Minute,
-		PrivateClusterConnect:        20 * time.Second,
-		PrivateIntercept:             5 * time.Second,
-		PrivateProxyDial:             5 * time.Second,
-		PrivateTrafficManagerAPI:     15 * time.Second,
-		PrivateTrafficManagerConnect: 60 * time.Second,
-	},
-	LogLevels: LogLevels{
-		UserDaemon: logrus.DebugLevel,
-		RootDaemon: logrus.InfoLevel,
-	},
-	Images: Images{
-		Registry:          "docker.io/datawire",
-		WebhookRegistry:   "docker.io/datawire",
-		AgentImage:        "",
-		WebhookAgentImage: "",
-	},
-	Cloud: Cloud{
-		SkipLogin:       false,
-		RefreshMessages: 24 * 7 * time.Hour,
-	},
-	Grpc: Grpc{},
+// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
+func (g Grpc) MarshalYAML() (interface{}, error) {
+	cm := make(map[string]interface{})
+	if !g.MaxReceiveSize.IsZero() {
+		cm["maxReceiveSize"] = g.MaxReceiveSize.String()
+	}
+	return cm, nil
 }
 
-var config *Config
+type TelepresenceAPI struct {
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
+}
 
-var configOnce = new(sync.Once)
+func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
+	if o.Port != 0 {
+		g.Port = o.Port
+	}
+}
+
+const defaultInterceptDefaultPort = 8080
+
+// AppProtocolStrategy specifies how the application protocol for a service port is determined
+// in case the service.spec.ports.appProtocol is not set.
+type AppProtocolStrategy int
+
+var apsNames = [...]string{"http2Probe", "portName", "http", "http2"}
+
+const (
+	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior)
+	Http2Probe AppProtocolStrategy = iota
+
+	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 probe
+	// if no such guess can be made.
+	PortName
+
+	// Http means just assume HTTP/1.1
+	Http
+
+	// Http2 means just assume HTTP/2
+	Http2
+)
+
+func (aps AppProtocolStrategy) String() string {
+	return apsNames[aps]
+}
+
+func NewAppProtocolStrategy(s string) (AppProtocolStrategy, error) {
+	for i, n := range apsNames {
+		if s == n {
+			return AppProtocolStrategy(i), nil
+		}
+	}
+	return 0, fmt.Errorf("invalid AppProtcolStrategy: %q", s)
+}
+
+func (aps AppProtocolStrategy) MarshalYAML() (interface{}, error) {
+	return aps.String(), nil
+}
+
+func (aps *AppProtocolStrategy) EnvDecode(val string) (err error) {
+	var as AppProtocolStrategy
+	if val == "" {
+		as = Http2Probe
+	} else if as, err = NewAppProtocolStrategy(val); err != nil {
+		return err
+	}
+	*aps = as
+	return nil
+}
+
+func (aps *AppProtocolStrategy) UnmarshalYAML(node *yaml.Node) (err error) {
+	var s string
+	if err := node.Decode(&s); err != nil {
+		return err
+	}
+	return aps.EnvDecode(s)
+}
+
+type Intercept struct {
+	AppProtocolStrategy AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
+	DefaultPort         int                 `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
+}
+
+func (ic *Intercept) merge(o *Intercept) {
+	if o.AppProtocolStrategy != Http2Probe {
+		ic.AppProtocolStrategy = o.AppProtocolStrategy
+	}
+	if o.DefaultPort != 0 {
+		ic.DefaultPort = o.DefaultPort
+	}
+}
+
+// MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
+func (ic Intercept) MarshalYAML() (interface{}, error) {
+	im := make(map[string]interface{})
+	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
+		im["defaultPort"] = ic.DefaultPort
+	}
+	if ic.AppProtocolStrategy != Http2Probe {
+		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
+	}
+	return im, nil
+}
 
 var parseContext context.Context
 
@@ -541,17 +735,18 @@ func withLoc(s string, n *yaml.Node) string {
 	return fmt.Sprintf("line %d: %s", n.Line, s)
 }
 
-// GetConfig returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
-// or filelocation.AppSystemConfigDirs
-//
-func GetConfig(c context.Context) *Config {
-	configOnce.Do(func() {
-		var err error
-		config, err = loadConfig(c)
-		if err != nil {
-			config = &defaultConfig
-		}
-	})
+type configKey struct{}
+
+// WithConfig returns a context with the given Config
+func WithConfig(ctx context.Context, config *Config) context.Context {
+	return context.WithValue(ctx, configKey{}, config)
+}
+
+func GetConfig(ctx context.Context) *Config {
+	config, ok := ctx.Value(configKey{}).(*Config)
+	if !ok {
+		return nil
+	}
 	return config
 }
 
@@ -561,22 +756,70 @@ func GetConfigFile(c context.Context) string {
 	return filepath.Join(dir, configFile)
 }
 
-func loadConfig(c context.Context) (*Config, error) {
-	dirs, err := filelocation.AppSystemConfigDirs(c)
+// GetDefaultConfig returns the default configuration settings
+func GetDefaultConfig(c context.Context) Config {
+	cfg := Config{
+		Timeouts: Timeouts{
+			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
+			PrivateApply:                 defaultTimeoutsApply,
+			PrivateClusterConnect:        defaultTimeoutsClusterConnect,
+			PrivateEndpointDial:          defaultTimeoutsEndpointDial,
+			PrivateHelm:                  defaultTimeoutsHelm,
+			PrivateIntercept:             defaultTimeoutsIntercept,
+			PrivateProxyDial:             defaultTimeoutsProxyDial,
+			PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
+			PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
+			PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+		},
+		LogLevels: LogLevels{
+			UserDaemon: logrus.InfoLevel,
+			RootDaemon: logrus.InfoLevel,
+		},
+		Cloud: Cloud{
+			SkipLogin:       false,
+			RefreshMessages: defaultCloudRefreshMessages,
+			SystemaHost:     defaultCloudSystemAHost,
+			SystemaPort:     defaultCloudSystemAPort,
+		},
+		Grpc:            Grpc{},
+		TelepresenceAPI: TelepresenceAPI{},
+		Intercept: Intercept{
+			DefaultPort: defaultInterceptDefaultPort,
+		},
+	}
+	env := GetEnv(c)
+	cfg.Images.Registry = env.Registry
+	cfg.Images.WebhookRegistry = env.Registry
+	cfg.Images.AgentImage = env.AgentImage
+	cfg.Images.WebhookAgentImage = env.AgentImage
+	return cfg
+}
+
+// LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
+// or filelocation.AppSystemConfigDirs
+func LoadConfig(c context.Context) (cfg *Config, err error) {
+	defer func() {
+		if err != nil {
+			err = errcat.Config.New(err)
+		}
+	}()
+
+	var dirs []string
+	dirs, err = filelocation.AppSystemConfigDirs(c)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg := defaultConfig // start with a by value copy of the default
-
+	dflt := GetDefaultConfig(c)
+	cfg = &dflt
 	readMerge := func(dir string) error {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
 		}
 		fileName := filepath.Join(dir, configFile)
-		bs, err := ioutil.ReadFile(fileName)
+		bs, err := os.ReadFile(fileName)
 		if err != nil {
-			if err == os.ErrNotExist {
+			if os.IsNotExist(err) {
 				err = nil
 			}
 			return err
@@ -589,7 +832,7 @@ func loadConfig(c context.Context) (*Config, error) {
 		if err = yaml.Unmarshal(bs, &fileConfig); err != nil {
 			return err
 		}
-		cfg.merge(&fileConfig)
+		cfg.Merge(&fileConfig)
 		return nil
 	}
 
@@ -600,10 +843,19 @@ func loadConfig(c context.Context) (*Config, error) {
 	}
 	appDir, err := filelocation.AppUserConfigDir(c)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
 		return nil, err
 	}
 	if err = readMerge(appDir); err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+
+	// Sanity check
+	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "beta-app.datawire.io" {
+		return nil, errors.New("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+	}
+
+	return cfg, nil
 }

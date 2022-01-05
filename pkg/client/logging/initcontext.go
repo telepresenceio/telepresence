@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 // loggerForTest exposes internals to initcontext_test.go
@@ -29,9 +30,9 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 	logger.ReportCaller = true
 
 	if IsTerminal(int(os.Stdout.Fd())) {
-		logger.Formatter = NewFormatter("15:04:05.0000")
+		logger.Formatter = log.NewFormatter("15:04:05.0000")
 	} else {
-		logger.Formatter = NewFormatter("2006/01/02 15:04:05.0000")
+		logger.Formatter = log.NewFormatter("2006-01-02 15:04:05.0000")
 		dir, err := filelocation.AppUserLogDir(ctx)
 		if err != nil {
 			return ctx, err
@@ -54,11 +55,14 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 
 	// Read the config and set the configured level.
 	logLevels := client.GetConfig(ctx).LogLevels
+	level := logrus.InfoLevel
 	if name == "daemon" {
-		logger.SetLevel(logLevels.RootDaemon)
+		level = logLevels.RootDaemon
 	} else if name == "connector" {
-		logger.SetLevel(logLevels.UserDaemon)
+		level = logLevels.UserDaemon
 	}
+	log.SetLogrusLevel(logger, level.String())
+	ctx = log.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }
 

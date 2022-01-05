@@ -8,9 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -23,6 +25,13 @@ func main() {
 	if dir := os.Getenv("DEV_TELEPRESENCE_LOG_DIR"); dir != "" {
 		ctx = filelocation.WithAppUserLogDir(ctx, dir)
 	}
+
+	env, err := client.LoadEnv(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
+		os.Exit(1)
+	}
+	ctx = client.WithEnv(ctx, env)
 
 	var cmd *cobra.Command
 	if isDaemon() {
@@ -45,10 +54,25 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
+		cfg, err := client.LoadConfig(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load config: %v", err)
+			os.Exit(1)
+		}
+		ctx = client.WithConfig(ctx, cfg)
 		cmd = cli.Command(ctx)
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			summarizeLogs(ctx, cmd)
+			if errcat.GetCategory(err) > errcat.NoLogs {
+				summarizeLogs(ctx, cmd)
+				// If the user gets here, it might be an actual bug that they found, so
+				// point them to the `gather-logs` command in case they want to open an
+				// issue.
+				fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
+					", please run `telepresence gather-logs` and attach the "+
+					"telepresence_logs.zip to your github issue or create a new one: "+
+					"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
+			}
 			os.Exit(1)
 		}
 	}

@@ -1,9 +1,217 @@
 # Changelog
 
-### 2.4.1 (TBD)
+### 2.4.10 (TBD)
+
+- Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 
+  communicating with the workstation process.
+
+- Feature: The port used by default in the `telepresence intercept` command (8080), can now be changed by setting
+  the `intercept.defaultPort` in the `config.yml` file.
+
+- Feature: The strategy when selecting the application protocol for personal intercepts in agents injected by the 
+  mutating webhook can now be configured using the `agentInjector.appProtocolStrategy` in the Helm chart.
+
+- Feature: The strategy when selecting the application protocol for personal intercepts can now be configured using
+  the `intercept.appProtocolStrategy` in the `config.yml` file.
+
+- Change: Telepresence CI now runs in Github Actions instead of Circle CI.
+
+- Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
+
+- Bugfix: User will not be asked to log in or add ingress information when creating an intercept until a check has been 
+  made that the intercept is possible.
+
+### 2.4.9 (December 9, 2021)
+
+- Bugfix: Fixed an error where access tokens were not refreshed if you login
+  while the daemons are already running.
+
+- Bugfix: A helm upgrade using the --reuse-values flag no longer fails on a "nil pointer" error caused by a nil `telpresenceAPI` value.
+
+### 2.4.8 (December 3, 2021)
+
+- Feature: A RESTful service was added to Telepresence, both locally to the client and to the `traffic-agent` to help determine if messages with a set of headers should be
+  consumed or not from a message queue where the intercept headers are added to the messages.
+
+- Change: The environment variable TELEPRESENCE_LOGIN_CLIENT_ID is no longer used.
+
+- Feature: There is a new subcommand, `test-vpn`, that can be used to diagnose connectivity issues with a VPN.
+
+- Bugfix: The tunneled network connections between Telepresence and
+  Ambassador Cloud now behave more like ordinary TCP connections,
+  especially around timeouts.
+
+### 2.4.7 (November 24, 2021)
+
+- Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-service-name`, that can be used to set the name of the service to be intercepted.
+  This will help disambiguate which service to intercept for when a workload is exposed by multiple services, such as can happen with Argo Rollouts
+
+- Feature: The kubeconfig extensions now support a `never-proxy` argument, analogous to `also-proxy`, that defines a set of subnets that will never be proxied via telepresence.
+
+- Feature: Added flags to "telepresence intercept" that set the ingress fields as an alternative to using the dialogue.
+
+- Change: Telepresence check the versions of the client and the daemons and ask the user to quit and restart if they don't match.
+
+- Change: Telepresence DNS now uses a very short TTL instead of explicitly flushing DNS by killing the `mDNSResponder` or doing `resolvectl flush-caches`
+
+- Bugfix: Legacy flags such as `--swap-deployment` can now be used together with global flags.
+
+- Bugfix: Outbound connections are now properly closed when the peer closes.
+
+- Bugfix: The DNS-resolver will trap recursive resolution attempts (may happen when the cluster runs in a docker-container on the client).
+
+- Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the
+  cluster runs in a docker-container on the client).
+
+- Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
+
+- Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
+  original Helm chart when we release so this fix will only affect our nightly builds.
+
+- Bugfix: The configured webhookRegistry is now propagated to the webhook installer even if no webhookAgentImage has been set.
+
+- Bugfix: Login logs the user in when their access token has expired, instead of having no effect.
+
+### 2.4.6 (November 2, 2021)
+
+- Feature: Telepresence CLI is now built and published for Apple silicon Macs.
+
+- Feature: Telepresence now supports manually injecting the traffic-agent YAML into workload manifests.
+  Use the `genyaml` command to create the sidecar YAML, then add the `telepresence.getambassador.io/manually-injected: "true"` annotation to to your pods to allow Telepresence to intercept them.
+
+- Feature: Added a json flag for the "telepresence list" command. This will aid automation.
+
+- Change: `--help` text now includes a link to https://www.telepresence.io/ so users who download Telepresence via Brew or some other mechanism are able to find the documentation easily.
+
+- Bugfix: Telepresence will no longer attempt to proxy requests to the API server when it happens to have an IP address within the CIDR range of pods/services.
+
+### 2.4.5 (October 15, 2021)
+
+- Feature: Intercepting headless services is now supported. It's now possible to request a headless service on whatever port it exposes and get a response from the intercept.
+
+- Feature: Preview url questions have more context and provide "best guess" defaults.
+
+- Feature: The `gather-logs` command added two new flags. One for anonymizing pod names + namespaces and the other for getting the pod yaml of the `traffic-manager` and any pod that contains a `traffic-agent`.
+
+- Change: Use one tunnel per connection instead of multiplexing into one tunnel. This client will still be backwards compatible with older `traffic-manager`s that only support multiplexing.
+
+- Bugfix: Telepresence will now log that the kubernetes server version is unsupported when using a version older than 1.17.
+
+- Bugfix: Telepresence only adds the security context when necessary: intercepting a headless service or using a numeric port with the webhook agent injector.
+
+### 2.4.4 (September 27, 2021)
+
+- Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
+
+- Feature: Add the command `telepresence gather-logs`, which bundles the logs for all components
+  into one zip file that can then be shared in a github issue, in slack, etc.  Use
+  `telepresence gather-logs --help` to see additional options for running the command.
+
+- Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
+
+- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
+
+- Bugfix: If a deployment annotated with webhook annotations is deployed before telepresence is installed, telepresence will now install an agent in that deployment before intercept
+
+- Bugfix: Fix an issue where the traffic-manager would sometimes go into a CPU loop.
+
+- Bugfix: The TUN-device no longer builds an unlimited internal buffer before sending it when receiving lots of TCP-packets without PSH.
+  Instead, the buffer is flushed when it reaches a size of 64K.
+
+- Bugfix: The user daemon would sometimes hang when it encountered a problem connecting to the cluster or the root daemon.
+
+- Bugfix: Telepresence correctly reports an intercept port conflict instead of panicking with segfault.
+
+### 2.4.3 (September 15, 2021)
+
+- Feature: The environment variable `TELEPRESENCE_INTERCEPT_ID` is now available in the interceptor's environment.
+
+- Bugfix: A timing related bug was fixed that sometimes caused a "daemon did not start" failure.
+
+- Bugfix: On Windows, crash stack traces and other errors were not
+  written to the log files, now they are.
+
+- Bugfix: On Linux kernel 4.11 and above, the log file rotation now
+  properly reads the birth-time of the log file.  On older kernels, it
+  continues to use the old behavior of using the change-time in place
+  of the birth-time.
+
+- Bugfix: Telepresence will no longer refer the user to the daemon logs for errors that aren't related to
+  problems that are logged there.
+
+- Bugfix: The overriding DNS resolver will no longer apply search paths when resolving "localhost".
+
+- Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being
+  hard-coded to "cluster.local".
+
+- Bugfix: "Telepresence uninstall --everything" now also uninstalls agents installed via mutating webhook
+
+- Bugfix: Downloading large files during an intercept will no longer cause timeouts and hanging traffic-agent.
+
+- Bugfix: Passing false to the intercept command's --mount flag will no longer result in a filesystem being mounted.
+
+- Bugfix: The traffic manager will establish outbound connections in parallel instead of sequentially.
+
+- Bugfix: The `telepresence status` command reports correct DNS settings instead of "Local IP: nil, Remote IP: nil"
+
+### 2.4.2 (September 1, 2021)
+
+- Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
+  temporarily for the local daemons, the `traffic-manager` and the `traffic-agents`.
+
+- Change: The default log-level is now `info` for all components of Telepresence.
+
+- Bugfix: The overriding DNS resolver will no longer apply search paths when resolving "localhost".
+
+- Bugfix: The RBAC was not updated in the helm chart to enable the traffic-manager to `get` and `list`
+  namespaces, which would impact users who use licensed features of the Telepresence extensions in an
+  air-gapped environment.
+
+- Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
+  `traffic-manager` to make the user daemon to hang indefinitely.
+
+### 2.4.1 (August 30, 2021)
+
+- Bugfix: Telepresence will now mount all directories from `/var/run/secrets`, not just the kubernetes.io ones.
+  This allows the mounting of secrets directories such as eks.amazonaws.com (for IRSA tokens)
 
 - Bugfix: The grpc.maxReceiveSize setting is now correctly propagated to all grpc servers.
   This allows users to mitigate a root daemon crash when sending a message over the default maximum size.
+
+- Bugfix: Some slight fixes to the `homebrew-package.sh` script which will enable us to run
+  it manually if we ever need to make homebrew point at an older version.
+
+- Feature: Helm chart has now feature to on demand regenerate certificate used for mutating webhook by setting value.
+  `agentInjector.certificate.regenerate`
+
+- Change: The traffic-manager now requires `get` namespace permissions to get the cluster ID instead of that value being
+  passed in as an environment variable to the traffic-manager's deployment.
+
+- Change: The traffic-manager is now installed via an embedded version of the Helm chart when `telepresence connect` is first performed on a cluster.
+  This change is transparent to the user.
+  A new configuration flag, `timeouts.helm` sets the timeouts for all helm operations performed by the Telepresence binary.
+
+- Bugfix: Telepresence will initialize the default namespace from the kubeconfig on each call instead of just doing it when connecting.
+
+- Bugfix: The timeout to keep idle outbound TCP connections alive was increased from 60 to 7200 seconds which is the same as
+  the Linux `tcp_keepalive_time` default.
+
+- Bugfix: Telepresence will now remove a socket that is the result of an ungraceful termination and retry instead of printing
+  an error saying "this usually means that the process has terminated ungracefully"
+
+- Change: Failure to report metrics is logged using loglevel info rather than error.
+
+- Bugfix: A potential deadlock situation is fixed that sometimes caused the user daemon to hang when the user
+  was logged in.
+
+- Feature: The scout reports will now include additional metadata coming from environment variables starting with
+  `TELEPRESENCE_REPORT_`.
+
+- Bugfix: The config setting `images.agentImage` is no longer required to contain the repository. The repository is
+  instead picked from `images.repository`.
+
+- Change: The `registry`, `webhookRegistry`, `agentImage` and `webhookAgentImage` settings in the `images` group of the `config.yml`
+  now get their defaults from `TELEPRESENCE_AGENT_IMAGE` and `TELEPRESENCE_REGISTRY`.
 
 ### 2.4.0 (August 4, 2021)
 
@@ -16,9 +224,9 @@
 - Bugfix: Initialization of `systemd-resolved` based DNS sets
   routing domain to improve stability in non-standard configurations.
 
-- Bugfix: Edge case error when targeting a container by port number. 
-  Before if your matching/target container was at containers list index 0, 
-  but if there was a container at index 1 with no ports, then the 
+- Bugfix: Edge case error when targeting a container by port number.
+  Before if your matching/target container was at containers list index 0,
+  but if there was a container at index 1 with no ports, then the
   "no ports" container would end up the selected one
 
 - Bugfix: A `$(NAME)` reference in the agent's environment will now be

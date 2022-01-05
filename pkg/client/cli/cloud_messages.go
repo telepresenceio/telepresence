@@ -9,14 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/spf13/cobra"
-
 	"github.com/datawire/dlib/dtime"
-
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -112,7 +110,8 @@ func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
 
 	// If the user has specified they are in an air-gapped cluster,
 	// we shouldn't try to get messages
-	if client.GetConfig(cmd.Context()).Cloud.SkipLogin {
+	cloudCfg := client.GetConfig(cmd.Context()).Cloud
+	if cloudCfg.SkipLogin {
 		return nil
 	}
 
@@ -127,11 +126,7 @@ func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
 
 	// Check if it is time to get new messages from Ambassador Cloud
 	if dtime.Now().After(cmc.NextCheck) {
-		env, err := client.LoadEnv(ctx)
-		if err != nil {
-			return err
-		}
-		systemaURL := fmt.Sprintf("https://%s:%s", env.SystemAHost, env.SystemAPort)
+		systemaURL := fmt.Sprintf("https://%s:%s", cloudCfg.SystemaHost, cloudCfg.SystemaPort)
 		resp, err := getCloudMessages(ctx, systemaURL)
 		if err != nil {
 			// We try again in an hour since we encountered an error

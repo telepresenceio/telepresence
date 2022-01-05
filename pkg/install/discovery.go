@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 )
 
 // svcPortByNameOrNumber iterates through a list of ports in a service and
@@ -19,13 +19,8 @@ import (
 func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.ServicePort {
 	svcPorts := make([]*kates.ServicePort, 0)
 	ports := svc.Spec.Ports
-	var isName bool
 	validName := validation.IsValidPortName(nameOrNumber)
-	if len(validName) > 0 {
-		isName = false
-	} else {
-		isName = true
-	}
+	isName := len(validName) == 0
 	for i := range ports {
 		port := &ports[i]
 		matchFound := false

@@ -3,11 +3,14 @@ package daemon
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -21,9 +24,12 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -44,10 +50,13 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	dns      string
-	hClient  *http.Client
-	outbound *outbound
-	cancel   context.CancelFunc
+	hClient       *http.Client
+	outbound      *outbound
+	cancel        context.CancelFunc
+	timedLogLevel log.TimedLevel
+
+	scoutClient *scout.Scout           // don't use this directly; use the 'scout' chan instead
+	scout       chan scout.ScoutReport // any-of-scoutUsers -> background-metriton
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -85,12 +94,52 @@ func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.outbound.setSearchPath(ctx, paths.Paths)
+	d.outbound.setSearchPath(ctx, paths.Paths, paths.Namespaces)
 	return &empty.Empty{}, nil
 }
 
 func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
 	return &empty.Empty{}, d.outbound.setInfo(ctx, info)
+}
+
+func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
+	select {
+	case <-d.outbound.router.cfgComplete:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	// The manager can sometimes send the different subnets in different Sends, but after 5 seconds of listening to it
+	// we should expect to have everything
+	tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer tCancel()
+	infoStream, err := d.outbound.router.managerClient.WatchClusterInfo(tCtx, d.outbound.router.session)
+	if err != nil {
+		return nil, err
+	}
+	podSubnets := []*manager.IPNet{}
+	svcSubnets := []*manager.IPNet{}
+	for {
+		mgrInfo, err := infoStream.Recv()
+		if err != nil {
+			if tCtx.Err() == nil && !errors.Is(err, io.EOF) {
+				return nil, err
+			}
+			break
+		}
+		if mgrInfo.ServiceSubnet != nil {
+			svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
+		}
+		podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
+	}
+	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
+}
+
+func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+	duration := time.Duration(0)
+	if request.Duration != nil {
+		duration = request.Duration.AsDuration()
+	}
+	return &empty.Empty{}, logging.SetAndStoreTimedLevel(ctx, d.timedLogLevel, request.LogLevel, duration, ProcessName)
 }
 
 // run is the main function when executing as the daemon
@@ -103,14 +152,36 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
+	cfg, err := client.LoadConfig(c)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	c = client.WithConfig(c, cfg)
 
-	c, err := logging.InitContext(c, ProcessName)
+	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
+	c, err = logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}
 
+	dlog.Info(c, "---")
+	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
+	dlog.Infof(c, "PID is %d", os.Getpid())
+	dlog.Info(c, "")
+
+	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
+	// before other tasks because the CLI client will only wait for a short period of time for
+	// the socket/pipe to appear before it gives up.
+	grpcListener, err := client.ListenSocket(c, ProcessName, client.DaemonSocketName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.RemoveSocket(grpcListener)
+	}()
+	dlog.Debug(c, "Listener opened")
+
 	d := &service{
-		dns: dns,
 		hClient: &http.Client{
 			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
@@ -124,14 +195,18 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 				DisableKeepAlives: true,
 			},
 		},
+		scoutClient:   scout.NewScout(c, "daemon"),
+		scout:         make(chan scout.ScoutReport, 25),
+		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 	}
-
-	d.outbound, err = newOutbound(c, dns, false)
-	if err != nil {
+	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err
 	}
 
-	c = dgroup.WithGoroutineName(c, "/daemon")
+	d.outbound, err = newOutbound(c, dns, false, d.scout)
+	if err != nil {
+		return err
+	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -139,24 +214,15 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		ShutdownOnNonError:   true,
 	})
 
-	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
+	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a shutdown when it returns.
 	d.cancel = func() { g.Go(ProcessName+"-quit", d.quitAll) }
-
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
-
-	var grpcListener net.Listener
-	defer func() {
-		if grpcListener != nil {
-			_ = client.RemoveSocket(grpcListener)
-		}
-	}()
 
 	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
 	// listens varies by platform.
+	var scoutUsers sync.WaitGroup // how many of the goroutines might write to d.scout; any that use d.outbound are liable to do this, as it's passed into it.
+	scoutUsers.Add(1)
 	g.Go("server-dns", func(ctx context.Context) error {
+		defer scoutUsers.Done()
 		select {
 		case <-ctx.Done():
 			return nil
@@ -168,32 +234,24 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 	// The 'Update' gRPC (below) call puts updates in to a work queue;
 	// server-router is the worker process starts the router and continuously configures
 	// it based on what is read from that work queue.
+	scoutUsers.Add(1)
 	g.Go("server-router", func(ctx context.Context) error {
-		return d.outbound.routerServerWorker(ctx)
+		defer scoutUsers.Done()
+		return d.outbound.router.run(ctx)
 	})
 
 	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
 	// from the connector and from the CLI.
+	scoutUsers.Add(1)
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		defer func() {
+			scoutUsers.Done()
 			// Error recovery.
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
-
-			// Tell the firewall-configurator that we won't be sending it any more
-			// updates.
-			d.outbound.noMoreUpdates()
 		}()
 
-		// Listen on unix domain socket
-		dlog.Debug(c, "gRPC server starting")
-		grpcListener, err = client.ListenSocket(c, ProcessName, client.DaemonSocketName)
-		if err != nil {
-			return err
-		}
-
-		dlog.Info(c, "gRPC server started")
 		defer func() {
 			if err != nil {
 				dlog.Errorf(c, "gRPC server ended with: %v", err)
@@ -203,8 +261,9 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		}()
 
 		opts := []grpc.ServerOption{}
-		if mxRecvSize := client.GetConfig(c).Grpc.MaxReceiveSize; mxRecvSize != nil {
-			if mz, ok := mxRecvSize.AsInt64(); ok {
+		cfg := client.GetConfig(c)
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
 				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 			}
 		}
@@ -214,8 +273,33 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
+		dlog.Info(c, "gRPC server started")
 		return sc.Serve(c, grpcListener)
 	})
+
+	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
+	// metriton don't block the functional goroutines.
+	g.Go("background-metriton", func(c context.Context) error {
+		for report := range d.scout {
+			for k, v := range report.PersistentMetadata {
+				d.scoutClient.SetMetadatum(k, v)
+			}
+
+			var metadata []scout.ScoutMeta
+			for k, v := range report.Metadata {
+				metadata = append(metadata, scout.ScoutMeta{
+					Key:   k,
+					Value: v,
+				})
+			}
+			d.scoutClient.Report(c, report.Action, metadata...)
+		}
+		return nil
+	})
+	go func() {
+		scoutUsers.Wait()
+		close(d.scout)
+	}()
 
 	err = g.Wait()
 	if err != nil {
@@ -232,7 +316,13 @@ func (d *service) quitAll(c context.Context) error {
 
 // quitConnector ensures that the connector quits gracefully.
 func (d *service) quitConnector(c context.Context) error {
-	if !client.SocketExists(client.ConnectorSocketName) {
+	exists, err := client.SocketExists(client.ConnectorSocketName)
+	if err != nil {
+		// connector socket problem, so nothing to shut down
+		dlog.Errorf(c, "Daemon cannot quit connector: %v", err)
+		return nil
+	}
+	if !exists {
 		// no connector socket, so nothing to shut down
 		return nil
 	}

@@ -1,9 +1,8 @@
 package userd_k8s
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"sort"
 
 	"github.com/spf13/pflag"
@@ -11,8 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -48,9 +48,10 @@ type managerConfig struct {
 
 // kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
 type kubeconfigExtension struct {
-	DNS       *dnsConfig       `json:"dns,omitempty"`
-	AlsoProxy []*iputil.Subnet `json:"also-proxy,omitempty"`
-	Manager   *managerConfig   `json:"manager,omitempty"`
+	DNS        *dnsConfig       `json:"dns,omitempty"`
+	AlsoProxy  []*iputil.Subnet `json:"also-proxy,omitempty"`
+	NeverProxy []*iputil.Subnet `json:"never-proxy,omitempty"`
+	Manager    *managerConfig   `json:"manager,omitempty"`
 }
 
 type Config struct {
@@ -66,7 +67,7 @@ type Config struct {
 
 const configExtension = "telepresence.io"
 
-func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
+func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -78,7 +79,7 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 	for k, v := range flagMap {
 		flagArgs = append(flagArgs, "--"+k+"="+v)
 		if err := flags.Set(k, v); err != nil {
-			return nil, fmt.Errorf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
 		}
 	}
 
@@ -89,7 +90,7 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 	}
 
 	if len(config.Contexts) == 0 {
-		return nil, errors.New("kubeconfig has no context definition")
+		return nil, errcat.Config.New("kubeconfig has no context definition")
 	}
 
 	ctxName := flagMap["context"]
@@ -99,12 +100,12 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 
 	ctx, ok := config.Contexts[ctxName]
 	if !ok {
-		return nil, fmt.Errorf("context %q does not exist in the kubeconfig", ctxName)
+		return nil, errcat.Config.Newf("context %q does not exist in the kubeconfig", ctxName)
 	}
 
 	cluster, ok := config.Clusters[ctx.Cluster]
 	if !ok {
-		return nil, fmt.Errorf("cluster %q but no entry for that cluster exists in the kubeconfig", ctx.Cluster)
+		return nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", ctx.Cluster, ctxName)
 	}
 
 	restConfig, err := configLoader.ClientConfig()
@@ -132,7 +133,7 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
 		if err = json.Unmarshal(ext.Raw, &k.kubeconfigExtension); err != nil {
-			return nil, fmt.Errorf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+			return nil, errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
 		}
 	}
 
@@ -141,19 +142,23 @@ func NewConfig(flagMap map[string]string, env client.Env) (*Config, error) {
 	}
 
 	if k.kubeconfigExtension.Manager.Namespace == "" {
-		k.kubeconfigExtension.Manager.Namespace = env.ManagerNamespace
+		k.kubeconfigExtension.Manager.Namespace = client.GetEnv(c).ManagerNamespace
 	}
 
 	return k, nil
 }
 
-// Equals determines if this instance is equal to the given instance with respect to everything but
-// Namespace.
-func (kf *Config) Equals(okf *Config) bool {
+// ContextServiceAndFlagsEqual determines if this instance is equal to the given instance with respect to context,
+// server, and flag arguments.
+func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
 		sliceEqual(kf.flagArgs, okf.flagArgs)
+}
+
+func (kf *Config) GetManagerNamespace() string {
+	return kf.kubeconfigExtension.Manager.Namespace
 }
 
 func sliceEqual(a, b []string) bool {

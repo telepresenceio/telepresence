@@ -12,6 +12,7 @@ import (
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
 // SystemAAgentClient is the client API for SystemAAgent service.
@@ -75,7 +76,7 @@ type UnsafeSystemAAgentServer interface {
 }
 
 func RegisterSystemAAgentServer(s grpc.ServiceRegistrar, srv SystemAAgentServer) {
-	s.RegisterService(&_SystemAAgent_serviceDesc, srv)
+	s.RegisterService(&SystemAAgent_ServiceDesc, srv)
 }
 
 func _SystemAAgent_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -96,7 +97,10 @@ func _SystemAAgent_ReviewIntercept_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-var _SystemAAgent_serviceDesc = grpc.ServiceDesc{
+// SystemAAgent_ServiceDesc is the grpc.ServiceDesc for SystemAAgent service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SystemAAgent_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.systema.SystemAAgent",
 	HandlerType: (*SystemAAgentServer)(nil),
 	Methods: []grpc.MethodDesc{

@@ -2,7 +2,7 @@ package connector
 
 import (
 	"context"
-	"net"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
@@ -20,13 +21,14 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -53,11 +55,9 @@ type ScoutReport = scout.ScoutReport
 
 // service represents the state of the Telepresence Connector
 type service struct {
-	env         client.Env
-	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
+	scoutClient *scout.Scout // don't use this directly; use the 'scout' chan instead
 
-	managerProxy userd_grpc.MgrProxy
-	cancel       func()
+	cancel func()
 
 	// Must hold connectMu to use the sharedState.MaybeSetXXX methods.
 	connectMu   sync.Mutex
@@ -84,20 +84,26 @@ func Command() *cobra.Command {
 	return c
 }
 
+func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
+	return &rpc.ConnectInfo{
+		Error:         t,
+		ErrorText:     err.Error(),
+		ErrorCategory: int32(errcat.GetCategory(err)),
+	}
+}
+
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo {
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	Config, err := userd_k8s.NewConfig(cr.KubeFlags, s.env)
+	config, err := userd_k8s.NewConfig(c, cr.KubeFlags)
 	if err != nil && !dryRun {
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	if cluster := s.sharedState.GetClusterNonBlocking(); cluster != nil {
-		if cluster.Config.Equals(Config) {
+		if cluster.Config.ContextServiceAndFlagsEqual(config) {
+			cluster.Config = config // namespace might have changed
 			if mns := cr.MappedNamespaces; len(mns) > 0 {
 				if len(mns) == 1 && mns[0] == "all" {
 					mns = nil
@@ -107,10 +113,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 			}
 			ingressInfo, err := cluster.DetectIngressBehavior(c)
 			if err != nil {
-				return &rpc.ConnectInfo{
-					Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-					ErrorText: err.Error(),
-				}
+				return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 			}
 			ret := &rpc.ConnectInfo{
 				Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
@@ -141,7 +144,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 		} else {
 			s.connectRequest <- parsedConnectRequest{
 				ConnectRequest: cr,
-				Config:         Config,
+				Config:         config,
 			}
 			close(s.connectRequest)
 			return <-s.connectResponse
@@ -149,7 +152,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	}
 }
 
-func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config) *rpc.ConnectInfo {
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config, svc *grpc.Server) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -165,11 +168,10 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	conn, err := client.DialSocket(c, client.DaemonSocketName)
 	if err != nil {
 		dlog.Errorf(c, "unable to connect to daemon: %+v", err)
+		s.sharedState.MaybeSetCluster(nil)
+		s.sharedState.MaybeSetTrafficManager(nil)
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_DAEMON_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
 	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
 	// prefer to let the OS close it when we exit.
@@ -193,11 +195,10 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}()
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
+		s.sharedState.MaybeSetCluster(nil)
+		s.sharedState.MaybeSetTrafficManager(nil)
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	s.sharedState.MaybeSetCluster(cluster)
 	dlog.Infof(c, "Connected to context %s (%s)", cluster.Context, cluster.Server)
@@ -218,22 +219,21 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := userd_trafficmgr.New(c,
-		s.env,
 		cluster,
 		s.scoutClient.Reporter.InstallID(),
 		userd_trafficmgr.Callbacks{
-			GetCloudAPIKey:  s.sharedState.GetCloudAPIKey,
-			SetClient:       s.managerProxy.SetClient,
+			GetCloudAPIKey: s.sharedState.GetCloudAPIKey,
+			RegisterManagerServer: func(mgrSrv manager.ManagerServer) {
+				manager.RegisterManagerServer(svc, mgrSrv)
+			},
 			SetOutboundInfo: daemonClient.SetOutboundInfo,
 		})
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
+		s.sharedState.MaybeSetTrafficManager(nil)
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 	s.sharedState.MaybeSetTrafficManager(tmgr)
 
@@ -245,19 +245,13 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		dlog.Errorf(c, "Failed to initialize session with traffic-manager: %v", err)
 		// No point in continuing without a traffic manager
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 
 	// Wait until all of the k8s watches (in the "background-k8swatch" goroutine) are running.
 	if err = cluster.WaitUntilReady(c); err != nil {
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
 	// Collect data on how long connection time took
@@ -271,10 +265,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	ingressInfo, err := cluster.DetectIngressBehavior(c)
 	if err != nil {
 		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText: err.Error(),
-		}
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
 	ret := &rpc.ConnectInfo{
@@ -290,34 +281,47 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 // run is the main function when executing as the connector
 func run(c context.Context) error {
-	c, err := logging.InitContext(c, ProcessName)
+	cfg, err := client.LoadConfig(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config: %w", err)
 	}
+	c = client.WithConfig(c, cfg)
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
-
-	env, err := client.LoadEnv(c)
+	c, err = logging.InitContext(c, ProcessName)
 	if err != nil {
 		return err
 	}
+
+	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
+	// before other tasks because the CLI client will only wait for a short period of time for
+	// the socket/pipe to appear before it gives up.
+	grpcListener, err := client.ListenSocket(c, ProcessName, client.ConnectorSocketName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.RemoveSocket(grpcListener)
+	}()
+	dlog.Debug(c, "Listener opened")
 
 	s := &service{
-		env:         env,
-		scoutClient: client.NewScout(c, "connector"),
-
-		sharedState: sharedstate.NewState(),
+		scoutClient: scout.NewScout(c, "connector"),
 
 		scout:           make(chan ScoutReport, 10),
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 	}
+	if s.sharedState, err = sharedstate.NewState(c, ProcessName); err != nil {
+		return err
+	}
+
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
-	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(env, &s.sharedState.UserNotifications, s.scout)
+	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(&s.sharedState.UserNotifications, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {
@@ -330,15 +334,24 @@ func run(c context.Context) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	var grpcListener net.Listener
-	defer func() {
-		if grpcListener != nil {
-			_ = client.RemoveSocket(grpcListener)
-		}
-	}()
+	svcCh := make(chan *grpc.Server, 1)
 
+	grpcQuitCh := make(chan func()) // Channel uses to propagate the grpcQuit cancel function. It must originate inside "server-grpc".
 	g.Go("server-grpc", func(c context.Context) (err error) {
+		// Prevent that the gRPC server is stopped before the "background-manager" completes. Termination goes like this:
+		//
+		// 1. s.cancel() is called. That starts the "quit" goroutine which exits and causes all other goroutines in the group to soft-cancel.
+		// 2. The "background-manager" will then call grpcQuit() to cancel the grpcSoft context (which stems from the hard context of c, and
+		//    hence isn't cancelled just yet).
+		// 3. The canceling of grpcSoft shuts down the gRPC server that is started at the end of this function gracefully.
+		// 4. If the server doesn't shut down, the hard context of c will eventually kill it after the SoftShutdownTimeout declared in
+		//    the group.
+		grpcSoft, grpcQuit := context.WithCancel(dcontext.WithSoftness(dcontext.HardContext(c)))
+		grpcQuitCh <- grpcQuit
+		close(grpcQuitCh)
+
 		defer func() {
+			close(svcCh)
 			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
@@ -351,13 +364,6 @@ func run(c context.Context) error {
 			}
 		}()
 
-		// Listen on unix domain socket
-		grpcListener, err = client.ListenSocket(c, ProcessName, client.ConnectorSocketName)
-		if err != nil {
-			return err
-		}
-
-		dlog.Info(c, "gRPC server started")
 		defer func() {
 			if err != nil {
 				dlog.Errorf(c, "gRPC server ended with: %v", err)
@@ -367,30 +373,31 @@ func run(c context.Context) error {
 		}()
 
 		opts := []grpc.ServerOption{}
-		if mxRecvSize := client.GetConfig(c).Grpc.MaxReceiveSize; mxRecvSize != nil {
-			if mz, ok := mxRecvSize.AsInt64(); ok {
+		cfg := client.GetConfig(c)
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
 				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 			}
 		}
 		svc := grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(svc, userd_grpc.NewGRPCService(
 			userd_grpc.Callbacks{
-				InterceptStatus: s.interceptStatus,
-				Cancel:          s.cancel,
-				Connect:         s.connect,
+				Cancel:  s.cancel,
+				Connect: s.connect,
 			},
 			s.sharedState,
 		))
-		manager.RegisterManagerServer(svc, &s.managerProxy)
+		svcCh <- svc
 
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
-		return sc.Serve(c, grpcListener)
+		dlog.Info(c, "gRPC server started")
+		return sc.Serve(grpcSoft, grpcListener)
 	})
 
 	// background-init handles the work done by the initial connector.Connect RPC call.  This
-	// happens in a separage goroutine from the gRPC server's connection handler so that the
+	// happens in a separate goroutine from the gRPC server's connection handler so that the
 	// request getting cancelled doesn't cancel the work.
 	g.Go("background-init", func(c context.Context) error {
 		defer func() {
@@ -405,7 +412,11 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config)
+		svc, ok := <-svcCh
+		if !ok {
+			return nil
+		}
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config, svc)
 
 		return nil
 	})
@@ -425,8 +436,10 @@ func run(c context.Context) error {
 	//  - watch the intercepts (manager.WatchIntercepts) and then
 	//    + (3) listen on the appropriate local ports and forward them to the intercepted
 	//      Services, and
-	//    + (4) mount the appropriate remote valumes.
+	//    + (4) mount the appropriate remote volumes.
 	g.Go("background-manager", func(c context.Context) error {
+		grpcQuit := <-grpcQuitCh
+		defer grpcQuit()
 		mgr, _ := s.sharedState.GetTrafficManagerBlocking(c)
 		if mgr == nil {
 			return nil
@@ -446,17 +459,14 @@ func run(c context.Context) error {
 				s.scoutClient.SetMetadatum(k, v)
 			}
 
-			var metadata []client.ScoutMeta
+			var metadata []scout.ScoutMeta
 			for k, v := range report.Metadata {
-				metadata = append(metadata, client.ScoutMeta{
+				metadata = append(metadata, scout.ScoutMeta{
 					Key:   k,
 					Value: v,
 				})
 			}
-			if err := s.scoutClient.Report(c, report.Action, metadata...); err != nil {
-				// error is logged and is not fatal
-				dlog.Errorf(c, "report failed: %+v", err)
-			}
+			s.scoutClient.Report(c, report.Action, metadata...)
 		}
 		return nil
 	})

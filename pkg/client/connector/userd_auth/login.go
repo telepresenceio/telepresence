@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -25,8 +24,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
 const (
@@ -45,7 +44,6 @@ type oauth2Callback struct {
 type loginExecutor struct {
 	// static
 
-	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
 	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
@@ -60,6 +58,7 @@ type loginExecutor struct {
 	loginMu               sync.Mutex
 	callbacks             chan oauth2Callback
 	tokenSource           oauth2.TokenSource
+	loginToken            chan oauth2.Token // used to pass token from login command to refresh goroutine
 	userInfo              *authdata.UserInfo
 	apikeys               map[string]map[string]string // map[env.LoginDomain]map[apikeyDescription]apikey
 	refreshTimer          *time.Timer
@@ -80,7 +79,6 @@ type LoginExecutor interface {
 
 // NewLoginExecutor returns an instance of LoginExecutor
 func NewLoginExecutor(
-	env client.Env,
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
@@ -88,7 +86,6 @@ func NewLoginExecutor(
 	scout chan<- scout.ScoutReport,
 ) LoginExecutor {
 	ret := &loginExecutor{
-		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
 		OpenURLFunc:      openURLFunc,
@@ -99,8 +96,14 @@ func NewLoginExecutor(
 		// AFAICT, it's not possible to create a timer in a stopped state.  So we create it
 		// in a running state with 1 minute left, and then immediately stop it below with
 		// resetRefreshTimerUnlocked.
-		refreshTimer:      time.NewTimer(1 * time.Minute),
-		refreshTimerReset: make(chan time.Duration),
+		refreshTimer: time.NewTimer(1 * time.Minute),
+
+		// The refreshTimerReset channel must have a small buffer because it is potentially
+		// written and read by the same select. Deadlocks will happen if it is unbuffered.
+		// 3 slots should be plenty given that the writes are controlled by the above
+		// refreshTimer.
+		refreshTimerReset: make(chan time.Duration, 3),
+		loginToken:        make(chan oauth2.Token),
 	}
 	ret.oauth2ConfigMu.Lock()
 	ret.loginMu.Lock()
@@ -108,9 +111,8 @@ func NewLoginExecutor(
 	return ret
 }
 
-func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
+func NewStandardLoginExecutor(stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
 	return NewLoginExecutor(
-		env,
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,
 		browser.OpenURL,
@@ -174,12 +176,21 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Get the correct loginClientID depending on the location
+	// of the telepresence binary
+	loginClientID := "telepresence-cli"
+	if execMechanism, err := client.GetInstallMechanism(); err != nil {
+		dlog.Errorf(ctx, "login worker errored getting extension path, using default %s: %s", loginClientID, err)
+	} else if execMechanism == "docker" {
+		loginClientID = "docker-desktop"
+	}
+	env := client.GetEnv(ctx)
 	l.oauth2Config = oauth2.Config{
-		ClientID:    l.env.LoginClientID,
+		ClientID:    loginClientID,
 		RedirectURL: fmt.Sprintf("http://localhost:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  l.env.LoginAuthURL,
-			TokenURL: l.env.LoginTokenURL,
+			AuthURL:  env.LoginAuthURL,
+			TokenURL: env.LoginTokenURL,
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
@@ -209,8 +220,8 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	if l.apikeys == nil {
 		l.apikeys = make(map[string]map[string]string)
 	}
-	if l.apikeys[l.env.LoginDomain] == nil {
-		l.apikeys[l.env.LoginDomain] = make(map[string]string)
+	if l.apikeys[env.LoginDomain] == nil {
+		l.apikeys[env.LoginDomain] = make(map[string]string)
 	}
 
 	l.oauth2ConfigMu.Unlock()
@@ -225,7 +236,9 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 
 	grp.Go("server-http", func(ctx context.Context) error {
 		sc := dhttp.ServerConfig{
-			Handler: http.HandlerFunc(l.httpHandler),
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				l.httpHandler(ctx, w, r)
+			}),
 		}
 		return sc.Serve(ctx, listener)
 	})
@@ -235,18 +248,53 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			case <-l.refreshTimer.C:
 				dlog.Infoln(ctx, "refreshing access token...")
 				if token, err := l.getToken(ctx); err != nil {
-					dlog.Infof(ctx, "could not refresh assess token: %v", err)
+					dlog.Infof(ctx, "could not refresh access token: %v", err)
 				} else if token != "" {
 					dlog.Infof(ctx, "got new access token")
 				}
 			case delta := <-l.refreshTimerReset:
 				l.resetRefreshTimerUnlocked(delta)
+			case token := <-l.loginToken:
+				// If we get a token from the login process, we update the tokenSource
+				// with its value so we refresh it properly.
+				l.resetRefreshTimerUnlocked(time.Until(token.Expiry))
+				l.tokenSource = newTokenSource(ctx, l.oauth2Config, l.tokenCB, l.tokenErrCB, &token)
 			case <-ctx.Done():
 				return nil
 			}
 		}
 	})
 	return grp.Wait()
+}
+
+func (l *loginExecutor) reportLoginResult(ctx context.Context, err error, method string) {
+	switch {
+	case err != nil && err != ctx.Err():
+		fmt.Fprintln(l.stdout, "Login failure.")
+		l.scout <- scout.ScoutReport{
+			Action: "login_failure",
+			Metadata: map[string]interface{}{
+				"error":  err.Error(),
+				"method": method,
+			},
+		}
+	case err != nil && err == ctx.Err():
+		fmt.Fprintln(l.stdout, "Login aborted.")
+		l.scout <- scout.ScoutReport{
+			Action: "login_interrupted",
+			Metadata: map[string]interface{}{
+				"method": method,
+			},
+		}
+	default:
+		fmt.Fprintln(l.stdout, "Login successful.")
+		l.scout <- scout.ScoutReport{
+			Action: "login_success",
+			Metadata: map[string]interface{}{
+				"method": method,
+			},
+		}
+	}
 }
 
 // Login tries logging the user by opening a browser window and authenticating against the
@@ -269,28 +317,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 
 	// Whatever the result is, report it to the terminal and report it to Metriton.
 	var token *oauth2.Token
-	defer func() {
-		switch {
-		case err != nil && err != ctx.Err():
-			fmt.Fprintln(l.stdout, "Login failure.")
-			l.scout <- scout.ScoutReport{
-				Action: "login_failure",
-				Metadata: map[string]interface{}{
-					"error": err.Error(),
-				},
-			}
-		case err != nil && err == ctx.Err():
-			fmt.Fprintln(l.stdout, "Login aborted.")
-			l.scout <- scout.ScoutReport{
-				Action: "login_interrupted",
-			}
-		default:
-			fmt.Fprintln(l.stdout, "Login successful.")
-			l.scout <- scout.ScoutReport{
-				Action: "login_success",
-			}
-		}
-	}()
+	defer l.reportLoginResult(ctx, err, "browser")
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
@@ -341,6 +368,10 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return err
 		}
 
+		// We pass the token to the goroutine that ensures the token
+		// remains updated since the context used in the tokenSource above will be
+		// canceled once the login command finishes.
+		l.loginToken <- *token
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -350,6 +381,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogin bool, err error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
+	defer l.reportLoginResult(ctx, err, "apikey")
 
 	// Fetch userinfo first, as to validate the apikey.
 	err = l.lockedRetrieveUserInfo(ctx, map[string]string{
@@ -359,7 +391,8 @@ func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogi
 		return false, err
 	}
 
-	if apikey == l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] {
+	env := client.GetEnv(ctx)
+	if apikey == l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] {
 		// Don't bother continuing if already logged in with this key.
 		return false, nil
 	}
@@ -367,10 +400,10 @@ func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogi
 	if l.apikeys == nil {
 		l.apikeys = make(map[string]map[string]string)
 	}
-	l.apikeys[l.env.LoginDomain] = map[string]string{
+	l.apikeys[env.LoginDomain] = map[string]string{
 		a8rcloud.KeyDescRoot: apikey,
 	}
-	l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] = apikey
+	l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] = apikey
 	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
 		return false, err
 	}
@@ -378,12 +411,13 @@ func (l *loginExecutor) LoginAPIKey(ctx context.Context, apikey string) (newLogi
 	return true, nil
 }
 
-func (l *loginExecutor) Logout(ctx context.Context) error {
+func (l *loginExecutor) Logout(ctx context.Context) (err error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if l.tokenSource == nil && l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot] == "" {
-		return fmt.Errorf("Logout: %w", ErrNotLoggedIn)
+	env := client.GetEnv(ctx)
+	if l.tokenSource == nil && l.apikeys[env.LoginDomain][a8rcloud.KeyDescRoot] == "" {
+		err = fmt.Errorf("Logout: %w", ErrNotLoggedIn)
 	}
 
 	l.resetRefreshTimer(0)
@@ -393,12 +427,15 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	l.userInfo = nil
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)
 
-	l.apikeys[l.env.LoginDomain] = make(map[string]string)
-	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
-		return err
+	l.apikeys[env.LoginDomain] = make(map[string]string)
+	if saveErr := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); saveErr != nil {
+		if err == nil {
+			err = saveErr
+		} else {
+			fmt.Fprintln(os.Stderr, saveErr.Error())
+		}
 	}
-
-	return nil
+	return err
 }
 
 func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
@@ -415,8 +452,8 @@ func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
 }
 
 // Must hold l.loginMu to call this.
-func (l *loginExecutor) lockedGetCreds() (map[string]string, error) {
-	rootKey, rootKeyOK := l.apikeys[l.env.LoginDomain][a8rcloud.KeyDescRoot]
+func (l *loginExecutor) lockedGetCreds(ctx context.Context) (map[string]string, error) {
+	rootKey, rootKeyOK := l.apikeys[client.GetEnv(ctx).LoginDomain][a8rcloud.KeyDescRoot]
 	switch {
 	case rootKeyOK:
 		return map[string]string{
@@ -440,7 +477,7 @@ func (l *loginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdat
 	defer l.loginMu.Unlock()
 
 	if refresh {
-		creds, err := l.lockedGetCreds()
+		creds, err := l.lockedGetCreds(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("GetUserInfo: %w", err)
 		}
@@ -458,20 +495,21 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if key, ok := l.apikeys[l.env.LoginDomain][description]; ok {
+	env := client.GetEnv(ctx)
+	if key, ok := l.apikeys[env.LoginDomain][description]; ok {
 		return key, nil
 	}
 
-	creds, err := l.lockedGetCreds()
+	creds, err := l.lockedGetCreds(ctx)
 	if err != nil {
 		return "", fmt.Errorf("GetAPIKey: %w", err)
 	}
-	key, err := getAPIKey(ctx, l.env, creds, description)
+	key, err := getAPIKey(ctx, creds, description)
 	if err != nil {
 		return "", err
 	}
 
-	l.apikeys[l.env.LoginDomain][description] = key
+	l.apikeys[env.LoginDomain][description] = key
 	if err := cache.SaveToUserCache(ctx, l.apikeys, apikeysFile); err != nil {
 		return "", err
 	}
@@ -481,7 +519,7 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 // Must hold l.loginMu to call this.
 func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[string]string) error {
 	var userInfo authdata.UserInfo
-	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
+	req, err := http.NewRequest("GET", client.GetEnv(ctx).UserInfoURL, nil)
 	if err != nil {
 		return err
 	}
@@ -499,7 +537,7 @@ func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[st
 		}
 		return fmt.Errorf("unexpected status %v from user info endpoint", resp.StatusCode)
 	}
-	content, err := ioutil.ReadAll(resp.Body)
+	content, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -511,7 +549,7 @@ func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[st
 	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 
-func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
+func (l *loginExecutor) httpHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != callbackPath {
 		http.NotFound(w, r)
 		return
@@ -524,7 +562,12 @@ func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
 	var sb strings.Builder
 	sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
 	if errorName == "" && code != "" {
-		w.Header().Set("Location", l.env.LoginCompletionURL)
+		completionURL := client.GetEnv(ctx).LoginCompletionURL
+		// Attribute login to the correct client
+		if mech, _ := client.GetInstallMechanism(); mech == "docker" {
+			completionURL += "?client=docker-desktop"
+		}
+		w.Header().Set("Location", completionURL)
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		sb.WriteString("<h1>Authentication Successful</h1>")
 		sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")

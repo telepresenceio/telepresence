@@ -2,17 +2,19 @@ package userd_trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"time"
-
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot
@@ -60,23 +62,24 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 			err = fmt.Errorf("manager.WatchAgents dial: %w", err)
 		}
 		for err == nil && ctx.Err() == nil {
-			if snapshot, err := stream.Recv(); err != nil {
-				if ctx.Err() == nil {
+			snapshot, err := stream.Recv()
+			if err != nil {
+				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
 					dlog.Errorf(ctx, "manager.WatchAgents recv: %v", err)
-					break
 				}
-			} else {
-				tm.setCurrentAgents(snapshot.Agents)
+				tm.setCurrentAgents(nil)
+				break
+			}
+			tm.setCurrentAgents(snapshot.Agents)
 
-				// Notify waiters for agents
-				for _, agent := range snapshot.Agents {
-					fullName := agent.Name + "." + agent.Namespace
-					if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
-						if ch, ok := chUt.(chan *manager.AgentInfo); ok {
-							dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
-							ch <- agent
-							close(ch)
-						}
+			// Notify waiters for agents
+			for _, agent := range snapshot.Agents {
+				fullName := agent.Name + "." + agent.Namespace
+				if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
+					if ch, ok := chUt.(chan *manager.AgentInfo); ok {
+						dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
+						ch <- agent
+						close(ch)
 					}
 				}
 			}
@@ -91,8 +94,10 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcName, svcPortIdentifier, agentImageName string) *rpc.InterceptResult {
-	svcUID, kind, err := tm.ensureAgent(c, namespace, agentName, svcName, svcPortIdentifier, agentImageName)
+func (tm *trafficManager) addAgent(c context.Context, workload kates.Object, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
+	svcUID, kind, err := tm.EnsureAgent(c, workload, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
+	agentName := workload.GetName()
+	namespace := workload.GetNamespace()
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{

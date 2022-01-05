@@ -25,18 +25,18 @@ func RemoveSocket(listener net.Listener) error {
 }
 
 // SocketExists returns true if a socket is found with the given name
-func SocketExists(name string) bool {
+func SocketExists(name string) (bool, error) {
 	return socketExists(name)
 }
 
 // WaitUntilSocketVanishes waits until the socket at the given path is removed
 // and returns when that happens. The wait will be max ttw (time to wait) long.
 // An error is returned if that time is exceeded before the socket is removed.
-func WaitUntilSocketVanishes(name, path string, ttw time.Duration) (err error) {
+func WaitUntilSocketVanishes(name, path string, ttw time.Duration) error {
 	giveUp := time.Now().Add(ttw)
 	for giveUp.After(time.Now()) {
-		if !SocketExists(path) {
-			return nil
+		if exists, err := SocketExists(path); err != nil || !exists {
+			return err
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
@@ -46,11 +46,11 @@ func WaitUntilSocketVanishes(name, path string, ttw time.Duration) (err error) {
 // WaitUntilSocketAppears waits until the socket at the given path comes into
 // existence and returns when that happens. The wait will be max ttw (time to wait) long.
 // An error is returned if that time is exceeded before the socket is removed.
-func WaitUntilSocketAppears(name, path string, ttw time.Duration) (err error) {
+func WaitUntilSocketAppears(name, path string, ttw time.Duration) error {
 	giveUp := time.Now().Add(ttw)
 	for giveUp.After(time.Now()) {
-		if SocketExists(path) {
-			return nil
+		if exists, err := SocketExists(path); err != nil || exists {
+			return err
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

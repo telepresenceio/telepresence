@@ -18,8 +18,11 @@ TOOLSDIR=tools
 TOOLSBINDIR=$(TOOLSDIR)/bin
 TOOLSSRCDIR=$(TOOLSDIR)/src
 
-GOHOSTOS=$(shell go env GOHOSTOS)
-GOHOSTARCH=$(shell go env GOHOSTARCH)
+GOHOSTOS ?= $(shell go env GOHOSTOS)
+GOHOSTARCH ?= $(shell go env GOHOSTARCH)
+
+# GOARCH defaults to GOHOSTARCH but can also be set by the caller of make.
+GOARCH?=$(GOHOSTARCH)
 
 export PATH := $(abspath $(TOOLSBINDIR)):$(PATH)
 
@@ -37,7 +40,7 @@ clobber-tools:
 # cannot be trusted since this must be the exact same version as used when
 # running CI. If it isn't, the generate-check will fail.
 tools/protoc = $(TOOLSBINDIR)/protoc
-PROTOC_VERSION=3.13.0
+PROTOC_VERSION=3.17.3
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
 $(TOOLSDIR)/$(PROTOC_ZIP):
 	mkdir -p $(@D)
@@ -49,7 +52,7 @@ $(TOOLSDIR)/$(PROTOC_ZIP):
 # ===============
 #
 tools/protolint = $(TOOLSBINDIR)/protolint
-PROTOLINT_VERSION=0.26.0
+PROTOLINT_VERSION=0.32.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
 $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
@@ -63,7 +66,12 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 #
 tools/shellcheck = $(TOOLSBINDIR)/shellcheck
 SHELLCHECK_VERSION=0.7.2
-SHELLCHECK_TXZ = https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(GOHOSTOS).$(shell uname -m).tar.xz
+SHELLCHECK_ARCH=$(shell uname -m)
+# shellcheck uses the same binary on Intel and Apple Silicon macs
+ifeq ($(GOHOSTOS),darwin)
+SHELLCHECK_ARCH=x86_64
+endif
+SHELLCHECK_TXZ = https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(GOHOSTOS).$(SHELLCHECK_ARCH).tar.xz
 $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 	mkdir -p $(@D)
 	curl -sfL $(SHELLCHECK_TXZ) -o $@
@@ -80,8 +88,8 @@ else
 SUFFIX=
 endif
 tools/helm = $(TOOLSBINDIR)/helm
-HELM_VERSION=3.5.4
-HELM_TGZ = https://get.helm.sh/helm-v$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
+HELM_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select (.Path == "helm.sh/helm/v3") | .Version')
+HELM_TGZ = https://get.helm.sh/helm-$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
 $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 	mkdir -p $(@D)
 	curl -sfL $(HELM_TGZ) -o $@
@@ -104,5 +112,6 @@ tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go
 tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc
 tools/ko                 = $(TOOLSBINDIR)/ko
 tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint
+tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource
 $(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
 	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)

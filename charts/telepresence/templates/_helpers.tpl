@@ -5,24 +5,6 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/*
-Create a default fully qualified app name.
-We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
-If release name contains chart name it will be used as a full name.
-{{- define "telepresence.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
-{{- end }}
-*/}}
-
 {{- define "telepresence.fullname" -}}
 {{- $name := default "traffic-manager" }}
 {{- if .Values.isCI }}
@@ -63,6 +45,12 @@ helm.sh/chart: {{ include "telepresence.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{/* This value is intentionally undocumented -- it's used by the telepresence binary to determine ownership of the release */}}
+{{- if .Values.createdBy }}
+app.kubernetes.io/created-by: {{ .Values.createdBy }}
+{{- else }}
+app.kubernetes.io/created-by: {{ .Release.Service }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -99,7 +87,7 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update"]
+  verbs: ["get", "list", "update", "patch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]

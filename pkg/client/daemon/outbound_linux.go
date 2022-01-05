@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	dns2 "github.com/miekg/dns"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
 )
 
@@ -30,8 +30,11 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 
 	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), o.router.dev)
 	if err == errResolveDNotConfigured {
-		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
+		err = nil
+		if c.Err() == nil {
+			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
+			err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"))
+		}
 	}
 	return err
 }
@@ -42,8 +45,12 @@ func (o *outbound) shouldApplySearch(query string) bool {
 		return false
 	}
 
+	if query == "localhost." {
+		return false
+	}
+
 	// Don't apply search paths to the kubernetes zone
-	if strings.HasSuffix(query, dotKubernetesZone) {
+	if strings.HasSuffix(query, "."+o.router.clusterDomain) {
 		return false
 	}
 
@@ -71,7 +78,7 @@ func (o *outbound) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string) []net.IP {
+func (o *outbound) resolveInSearch(c context.Context, query string) []net.IP {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -81,17 +88,17 @@ func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string
 
 	if o.shouldApplySearch(query) {
 		for _, s := range o.search {
-			if ips := o.resolveInCluster(c, qType, query+s); len(ips) > 0 {
+			if ips := o.resolveInCluster(c, query+s); len(ips) > 0 {
 				return ips
 			}
 		}
 	}
-	return o.resolveInCluster(c, qType, query)
+	return o.resolveInCluster(c, query)
 }
 
 func (o *outbound) runOverridingServer(c context.Context) error {
 	if o.dnsConfig.LocalIp == nil {
-		dat, err := ioutil.ReadFile("/etc/resolv.conf")
+		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
 		}
@@ -108,22 +115,6 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
-	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		namespaces := make(map[string]struct{})
-		search := make([]string, 0)
-		for _, path := range paths {
-			if strings.ContainsRune(path, '.') {
-				search = append(search, path)
-			} else if path != "" {
-				namespaces[path] = struct{}{}
-			}
-		}
-		o.domainsLock.Lock()
-		o.namespaces = namespaces
-		o.search = search
-		o.domainsLock.Unlock()
-	}
-
 	listeners, err := o.dnsListeners(c)
 	if err != nil {
 		return err
@@ -132,7 +123,6 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	ncc := dcontext.WithoutCancel(c)
 	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port)
 
 	// Create the connection later used for fallback. We need to create this before the firewall
@@ -142,20 +132,63 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err = routeDNS(ncc, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr)); err != nil {
-		return err
-	}
 	defer func() {
 		_ = conn.Close()
-		unrouteDNS(ncc)
 	}()
-	dns.Flush(c)
-	srv := dns.NewServer(c, listeners, conn, o.resolveInSearch)
-	close(o.dnsConfigured)
-	dlog.Debug(c, "Starting server")
-	err = srv.Run(c)
-	dlog.Debug(c, "Server done")
-	return err
+
+	serverStarted := make(chan struct{})
+	serverDone := make(chan struct{})
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go("Server", func(c context.Context) error {
+		defer close(serverDone)
+		select {
+		case <-c.Done():
+			return nil
+		case <-o.router.configured():
+			// Server will close the listener, so no need to close it here.
+			o.processSearchPaths(g, func(c context.Context, paths []string) error {
+				namespaces := make(map[string]struct{})
+				search := make([]string, 0)
+				for _, path := range paths {
+					if strings.ContainsRune(path, '.') {
+						search = append(search, path)
+					} else if path != "" {
+						namespaces[path] = struct{}{}
+					}
+				}
+				o.domainsLock.Lock()
+				o.namespaces = namespaces
+				o.search = search
+				o.domainsLock.Unlock()
+				o.flushDNS()
+				return nil
+			})
+			return dns.NewServer(listeners, conn, o.resolveInSearch, &o.dnsCache).Run(c, serverStarted)
+		}
+	})
+
+	g.Go("NAT-redirect", func(c context.Context) error {
+		select {
+		case <-c.Done():
+		case <-serverStarted:
+			// Give DNS server time to start before rerouting NAT
+			dtime.SleepWithContext(c, time.Millisecond)
+
+			err := routeDNS(c, o.dnsConfig.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
+			if err != nil {
+				return err
+			}
+			defer func() {
+				c := context.Background()
+				unrouteDNS(c)
+				o.flushDNS()
+			}()
+			o.flushDNS()
+			<-serverDone // Stay alive until DNS server is done
+		}
+		return nil
+	})
+	return g.Wait()
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
@@ -254,7 +287,7 @@ func runNatTableCmd(c context.Context, args ...string) error {
 const tpDNSChain = "telepresence-dns"
 
 // routeDNS creates a new chain in the "nat" table with two rules in it. One rule ensures
-// that all packages sent to the currently configured DNS service are rerouted to our local
+// that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
 func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr) (err error) {
@@ -263,7 +296,7 @@ func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr
 	if err = runNatTableCmd(c, "-N", tpDNSChain); err != nil {
 		return err
 	}
-	// Alter locally generated packages before routing
+	// Alter locally generated packets before routing
 	if err = runNatTableCmd(c, "-I", "OUTPUT", "1", "-j", tpDNSChain); err != nil {
 		return err
 	}
@@ -279,7 +312,7 @@ func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr
 		return err
 	}
 
-	// This rule redirects all packages intended for the DNS service to our local DNS service
+	// This rule redirects all packets intended for the DNS service to our local DNS service
 	return runNatTableCmd(c, "-A", tpDNSChain,
 		"-p", "udp",
 		"--dest", dnsIP.String()+"/32",

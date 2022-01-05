@@ -1,11 +1,9 @@
-//+build ignore
-
 package main
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -31,7 +29,7 @@ func kubeceptionRequest(ctx context.Context, client *http.Client, httpVerb, toke
 		return "", fmt.Errorf("Error in request: %w", err)
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("Unable to read response body: %w", err)
 	}
@@ -59,9 +57,13 @@ func run() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		err := client.Retry(ctx, "kubeception", func(ctx context.Context) error {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			kubeconfig, err := kubeceptionRequest(ctx, cli, "PUT", token, clusterName, map[string]string{"wait": "true", "timeoutSecs": "7200", "version": "1.19"})
+			kubeconfig, err := kubeceptionRequest(ctx, cli, "PUT", token, clusterName, map[string]string{
+				"wait":        "true",
+				"timeoutSecs": "7200",
+				"version":     "1.19",
+				"provider":    "production"})
 			if err != nil {
 				return err
 			}
