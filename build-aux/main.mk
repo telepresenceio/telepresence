@@ -229,13 +229,27 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
 	$(tools/protolint) lint --fix rpc || true
 
-.PHONY: check
-check: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
+.PHONY: check-all
+check-all: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -timeout=29m ./integration_test/...
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test ./cmd/... ./pkg/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
+
+.PHONY: check-unit
+check-unit: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
+	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
+	# is only used for extensions. Therefore, we want to validate that our tests, and
+	# telepresence, run without requiring any outside dependencies.
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
+
+.PHONY: check-integration
+check-integration: $(tools/ko) $(tools/helm) pkg/install/helm/telepresence-chart.tgz ## (QA) Run the test suite
+	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
+	# is only used for extensions. Therefore, we want to validate that our tests, and
+	# telepresence, run without requiring any outside dependencies.
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
 
 .PHONY: _login
 _login:
@@ -253,7 +267,7 @@ install: build ## (Install) Installs the telepresence binary to $(bindir)
 # =======
 
 .PHONY: all test images push-images
-all:         build image ## (ZAlias) Alias for 'build image'
-test:        check       ## (ZAlias) Alias for 'check'
-images:      image       ## (ZAlias) Alias for 'image'
-push-images: push-image  ## (ZAlias) Alias for 'push-image'
+all:         build image     ## (ZAlias) Alias for 'build image'
+test:        check-all       ## (ZAlias) Alias for 'check-all'
+images:      image           ## (ZAlias) Alias for 'image'
+push-images: push-image      ## (ZAlias) Alias for 'push-image'

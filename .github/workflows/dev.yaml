@@ -1,0 +1,239 @@
+name: "Integration Tests"
+on:
+  pull_request_target:
+    types:
+      - labeled
+jobs:
+  "build_image":
+    runs-on: ubuntu-latest
+    if: ${{ github.event.label.name == 'ok to test' }}
+    steps:
+      - name: Remove label
+        uses: andymckay/labeler@master
+        with:
+          remove-labels: "ok to test"
+        if: always()
+      - uses: actions/checkout@v2
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - name: Build dev image
+        run: |
+          TAG="2.4.5-gotest.${GITHUB_SHA:0:7}"
+          TELEPRESENCE_VERSION="v${TAG}" make image
+          mkdir -p /tmp/workspace
+          docker save "datawire/tel2:${TAG}" > tel2-image.tar
+      - name: Upload image
+        uses: actions/upload-artifact@v2
+        with:
+          name: image
+          path: tel2-image.tar
+  "macos_test":
+    runs-on: macos-latest
+    needs: "build_image"
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - uses: azure/setup-kubectl@v1
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          version: 'v1.19.3'
+        id: kubectl
+      - run: make build
+        if: steps.get_last_run.outputs.passed != 'success'
+      - run: |
+          brew update
+          brew install --cask macfuse
+          brew install gromgit/fuse/sshfs-mac
+          brew link --overwrite sshfs-mac
+        name: install dependencies
+        if: steps.get_last_run.outputs.passed != 'success'
+      - uses: actions/download-artifact@v2
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          name: image
+      - uses: ./.github/actions/prepare-kluster
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          platform: macos
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          tel-image: tel2-image.tar
+        id: kluster
+      - name: Run tests
+        if: steps.get_last_run.outputs.passed != 'success'
+        uses: nick-invision/retry@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: |
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            export DTEST_KUBECONFIG=${{ steps.kluster.outputs.kubeconfig }}
+            export DTEST_REGISTRY=docker.io/datawire
+            make check-integration
+      - name: Mark test as successful
+        run: echo "::set-output name=run_result::success" > run_result
+      - uses: ./.github/actions/upload-logs
+        if: always()
+      - uses: ./.github/actions/cleanup-kluster
+        with:
+          platform: macos
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+        if: always()
+
+  "windows_test":
+    runs-on: windows-2019
+    needs: "build_image"
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - uses: azure/setup-kubectl@v1
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          version: 'v1.19.3'
+        id: kubectl
+      - run: |
+          choco install make
+          mkdir -p build-output/bin
+          curl.exe -LO https://www.wintun.net/builds/wintun-0.12.zip
+          Expand-Archive -Path wintun-0.12.zip -DestinationPath .
+          #cp wintun/bin/amd64/wintun.dll "$ENV:SystemRoot\\system32\\wintun.dll"
+          #cp wintun/bin/amd64/wintun.dll .
+          cp wintun/bin/amd64/wintun.dll "build-output\\bin"
+        if: steps.get_last_run.outputs.passed != 'success'
+        name: install dependencies
+      - name: "Download sshfs"
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: |
+          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
+          curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
+        shell: bash
+      - name: "Install sshfs"
+        if: steps.get_last_run.outputs.passed != 'success'
+        shell: powershell
+        run: |
+          dir
+          Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
+          Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
+          [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
+      - uses: actions/download-artifact@v2
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          name: image
+      - run: make build
+        if: steps.get_last_run.outputs.passed != 'success'
+      - uses: ./.github/actions/prepare-kluster
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          platform: windows
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          tel-image: tel2-image.tar
+        id: kluster
+      - run: |
+          # We want to validate that tests still pass, even if the metrics host
+          # points to a broken IP
+          echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
+        if: steps.get_last_run.outputs.passed != 'success'
+        name: Update etc\hosts
+      - name: Run tests
+        if: steps.get_last_run.outputs.passed != 'success'
+        uses: nick-invision/retry@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: |
+            $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
+            $ENV:DTEST_REGISTRY = "docker.io/datawire"
+            $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
+            make check-integration
+      - name: Mark test as successful
+        run: echo "::set-output name=run_result::success" > run_result
+      - uses: ./.github/actions/upload-logs
+        if: always()
+      - uses: ./.github/actions/cleanup-kluster
+        with:
+          platform: windows
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+        if: always()
+  "linux_test":
+    runs-on: ubuntu-latest
+    needs: "build_image"
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - uses: azure/setup-kubectl@v1
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          version: 'v1.19.3'
+        id: kubectl
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y sshfs socat
+          sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
+        if: steps.get_last_run.outputs.passed != 'success'
+        name: install dependencies
+      - uses: actions/download-artifact@v2
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          name: image
+      - run: make build
+        if: steps.get_last_run.outputs.passed != 'success'
+      - uses: ./.github/actions/prepare-kluster
+        if: steps.get_last_run.outputs.passed != 'success'
+        with:
+          platform: linux
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          tel-image: tel2-image.tar
+        id: kluster
+      - name: Run tests
+        if: steps.get_last_run.outputs.passed != 'success'
+        uses: nick-invision/retry@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: |
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            export DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}"
+            export DTEST_REGISTRY="docker.io/datawire"
+            make check-integration
+      - name: Mark test as successful
+        run: echo "::set-output name=run_result::success" > run_result
+      - uses: ./.github/actions/upload-logs
+        if: always()
+      - uses: ./.github/actions/cleanup-kluster
+        with:
+          platform: linux
+          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+        if: always()

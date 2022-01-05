@@ -1,0 +1,43 @@
+name: "Prepare Kluster"
+description: "Provision a kluster"
+inputs:
+  platform:
+    description: "The platform the kluster will be running tests for"
+    required: true
+  token:
+    description: "The kubeception token to use"
+    required: true
+  tel-image:
+    description: "Path to the image to load onto the cluster"
+    required: true
+outputs:
+  kubeconfig:
+    description: "The resulting kubeconfig file"
+    value: ${{ steps.provision.outputs.kubeconfig-path }}
+runs:
+  using: composite
+  steps:
+    - name: Create kluster
+      shell: bash
+      id: provision
+      env:
+        DEV_TELEPRESENCE_KUBECEPTION_TOKEN: ${{ inputs.token }}
+      run: |
+        go run ./build-aux/kubeception create "tp-ci-${{ inputs.platform }}-${GITHUB_SHA}" > "$HOME/kubeconfig"
+        export KUBECONFIG="$HOME/kubeconfig"
+        go run ./build-aux/wait_for_cluster "$KUBECONFIG"
+        if [[ "${{ inputs.platform }}" == "windows" ]]; then
+          # With thanks to stack overflow (https://stackoverflow.com/a/13701495) for showing how to convert a unix path to a windows path
+          echo "::set-output name=kubeconfig-path::$(echo $KUBECONFIG | sed -e 's/^\///' -e 's/\//\\/g' -e 's/^./\0:/')"
+        else
+          echo "::set-output name=kubeconfig-path::$(echo $KUBECONFIG)"
+        fi
+    - name: Load image
+      shell: bash
+      run: |
+        export KUBECONFIG="$HOME/kubeconfig"
+        kubectl apply -f build-aux/image-importer.yaml
+        POD_NAME=$(kubectl get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
+        kubectl wait --for=condition=ready pod $POD_NAME
+        kubectl cp "${{ inputs.tel-image }}" "$POD_NAME:/tmp/image.tar"
+        kubectl exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar

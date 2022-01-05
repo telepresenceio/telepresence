@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	goRuntime "runtime"
 	"strconv"
 	"strings"
@@ -62,6 +63,9 @@ func (s *interceptMountSuite) TearDownSuite() {
 }
 
 func (s *interceptMountSuite) Test_InterceptMount() {
+	if runtime.GOOS == "darwin" {
+		s.T().SkipNow()
+	}
 	require := s.Require()
 	ctx := s.Context()
 

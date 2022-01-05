@@ -14,3 +14,4 @@ A few sentences describing the overall goals of the pull request's commits.
  - [ ] My change is adequately tested.
  - [ ] I updated `DEVELOPING.md` with any any special dev tricks I had to use to work on this code efficiently.
  - [ ] I updated `TELEMETRY.md` if I added, changed, or removed a metric name.
+ - [ ] Once my PR is ready to have integration tests ran, I posted the PR in #telepresence-dev in the datawire-oss slack so that the "ok to test" label can be applied.

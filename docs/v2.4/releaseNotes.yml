@@ -65,6 +65,14 @@ items:
           The port used by default in the <code>telepresence intercept</code> command (8080), can now be changed by setting
           the <code>intercept.defaultPort</code> in the <code>config.yml</code> file.
         docs: reference/config/#intercept
+      - type: change
+        title: Telepresence CI now uses Github Actions
+        body: >-
+          Telepresence now uses Github Actions for doing unit and integration testing. It is
+          now easier for contributors to run tests on PRs since maintainers can add an
+          "ok to test" label to PRs (including from forks) to run integration tests.
+        docs: https://github.com/telepresenceio/telepresence/actions
+        image: telepresence-2.4.10-actions.png
       - type: bugfix
         title: Check conditions before asking questions
         body: >-
