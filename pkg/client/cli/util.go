@@ -55,7 +55,7 @@ func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, conn
 
 func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectInfo, error) {
 	var resp *connector.ConnectInfo
-	err := cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		resp, err = connectorClient.Connect(ctx, &connector.ConnectRequest{
 			KubeFlags:        kubeFlagMap(),

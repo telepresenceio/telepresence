@@ -88,7 +88,7 @@ func daemonStatus(cmd *cobra.Command) error {
 func connectorStatus(cmd *cobra.Command) error {
 	out := cmd.OutOrStdout()
 
-	err := cliutil.WithStartedConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := cliutil.WithStartedConnector(cmd.Context(), false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		fmt.Fprintln(out, "User Daemon: Running")
 
 		type kv struct {

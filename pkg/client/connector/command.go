@@ -320,8 +320,19 @@ func run(c context.Context) error {
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 	})
-	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
-	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(&s.sharedState.UserNotifications, s.scout)
+
+	cliio := &s.sharedState.UserNotifications
+	quitOnce := sync.Once{}
+	s.cancel = func() {
+		quitOnce.Do(func() {
+			g.Go("quit", func(_ context.Context) error {
+				cliio.Close()
+				return nil
+			})
+		})
+	}
+
+	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(cliio, s.scout)
 	var scoutUsers sync.WaitGroup
 	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
 	go func() {
@@ -393,7 +404,12 @@ func run(c context.Context) error {
 			Handler: svc,
 		}
 		dlog.Info(c, "gRPC server started")
-		return sc.Serve(grpcSoft, grpcListener)
+		if err = sc.Serve(grpcSoft, grpcListener); err != nil {
+			if c.Err() != nil {
+				err = nil // Normal shutdown
+			}
+		}
+		return err
 	})
 
 	// background-init handles the work done by the initial connector.Connect RPC call.  This

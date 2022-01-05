@@ -77,7 +77,7 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 
 func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
 	var version *common.VersionInfo
-	err := cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
 		version, err = connectorClient.Version(ctx, &empty.Empty{})
 		if err != nil {
