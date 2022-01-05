@@ -31,6 +31,9 @@ grpc:
   maxReceiveSize: 10Mi
 telepresenceAPI:
   port: 9980
+intercept:
+  appProtocolStrategy: portName
+  defaultPort: "8088"
 ```
 
 #### Timeouts
@@ -62,8 +65,6 @@ case insensitive:
  - `info`
  - `warning` or `warn`
  - `error`
- - `fatal`
- - `panic`
 
 For whichever log-level you select, you will get logs labeled with that level and of higher severity.
 (e.g. if you use `info`, you will also get logs labeled `error`. You will NOT get logs labeled `debug`.
@@ -133,6 +134,29 @@ The size is measured in bytes. You can express it as a plain integer or as a fix
 The `telepresenceAPI` controls the behavior of Telepresence's RESTful API server that can be queried for additional information about ongoing intercepts. When present, and the `port` is set to a valid port number, it's propagated to the auto-installer so that application containers that can be intercepted gets the `TELEPRESENCE_API_PORT` environment set. The server can then be queried at `localhost:<TELEPRESENCE_API_PORT>`. In addition, the `traffic-agent` and the `user-daemon` on the workstation that performs an intercept will start the server on that port.
 If the `traffic-manager` is auto-installed, its webhook agent injector will be configured to add the `TELEPRESENCE_API_PORT` environment to the app container when the `traffic-agent` is injected.
 See [RESTful API server](../restapi) for more info.
+
+#### Intercept
+The `intercept` controls applies to how telepresence will intercept the communications to the intercepted service.
+
+The `defaultPort` controls what port that will be selected when no `--port` flag is given to the `telepresence intercept` command. The default value is "8080".
+
+The `appProtocolStrategy` is only relevant when using personal intercepts and controls how telepresence selects the application protocol to use when intercepting a service that has no `service.ports.appProtocol` defined. Valid values are:
+
+| Value        | Resulting action                                                                                       |
+|--------------|--------------------------------------------------------------------------------------------------------|
+| `http2Probe` | The telepresence traffic-agent will probe the intercepted container to check whether it supports http2 |
+| `portName`   | Telepresence will make an educated guess about the protocol based on the name of the service port      |
+| `http`       | Telepresence will use http                                                                             |
+| `http2`      | Telepresence will use http2                                                                            |
+
+When `portName` is used, Telepresence will determine the protocol by the name of the port: `<protocol>[-suffix]`. The following protocols are recognized:
+
+| Protocol | Meaning                               |
+|----------|---------------------------------------|
+| `http`   | Plaintext HTTP/1.1 traffic            |
+| `http2`  | Plaintext HTTP/2 traffic              |
+| `https`  | TLS Encrypted HTTP (1.1 or 2) traffic |
+| `grpc`   | Same as http2                         |
 
 ## Per-Cluster Configuration
 Some configuration is not global to Telepresence and is actually specific to a cluster.  Thus, we store that config information in your kubeconfig file, so that it is easier to maintain per-cluster configuration.

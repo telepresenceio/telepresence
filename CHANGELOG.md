@@ -2,6 +2,9 @@
 
 ### 2.4.10 (TBD)
 
+- Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 
+  communicating with the workstation process.
+
 - Feature: The port used by default in the `telepresence intercept` command (8080), can now be changed by setting
   the `intercept.defaultPort` in the `config.yml` file.
 
