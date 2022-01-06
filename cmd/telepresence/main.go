@@ -47,7 +47,7 @@ func main() {
 			SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 			SilenceUsage:  true, // our FlagErrorFunc will handle it
 		}
-		cmd.AddCommand(connector.Command(connector.NewConnector()))
+		cmd.AddCommand(connector.Command())
 		cmd.AddCommand(daemon.Command())
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)

@@ -69,13 +69,8 @@ type service struct {
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 }
 
-type Connector interface {
-	Run(ctx context.Context) error
-	Ready() chan struct{}
-}
-
 // Command returns the CLI sub-command for "connector-foreground"
-func Command(conn Connector) *cobra.Command {
+func Command() *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
@@ -83,7 +78,7 @@ func Command(conn Connector) *cobra.Command {
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return conn.Run(cmd.Context())
+			return run(cmd.Context())
 		},
 	}
 	return c
@@ -284,16 +279,8 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	return ret
 }
 
-type ConnectorImpl struct {
-	ready chan struct{}
-}
-
-func NewConnector() *ConnectorImpl {
-	return &ConnectorImpl{ready: make(chan struct{})}
-}
-
 // run is the main function when executing as the connector
-func (ci *ConnectorImpl) Run(c context.Context) error {
+func run(c context.Context) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -484,14 +471,9 @@ func (ci *ConnectorImpl) Run(c context.Context) error {
 		return nil
 	})
 
-	close(ci.ready)
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)
 	}
 	return err
-}
-
-func (ci *ConnectorImpl) Ready() chan struct{} {
-	return ci.ready
 }
