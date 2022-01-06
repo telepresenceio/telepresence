@@ -61,6 +61,16 @@ type State struct {
 	timedLogLevel       log.TimedLevel
 }
 
+type ROState interface {
+	GetClusterBlocking(ctx context.Context) (*userd_k8s.Cluster, error)
+	GetClusterNonBlocking() *userd_k8s.Cluster
+	GetTrafficManagerNonBlocking() TrafficManager
+	GetTrafficManagerBlocking(ctx context.Context) (TrafficManager, error)
+	GetTrafficManagerReadyToIntercept() (*connector.InterceptResult, TrafficManager)
+	GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error)
+	GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error)
+}
+
 func NewState(ctx context.Context, procName string) (*State, error) {
 	s := &State{
 		//LoginExecutor:     "Caller will initialize this later",

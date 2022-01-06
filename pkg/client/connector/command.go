@@ -69,8 +69,12 @@ type service struct {
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 }
 
+type Extension interface {
+	Start(ctx context.Context, g *dgroup.Group, scoutCh chan ScoutReport, state sharedstate.ROState) error
+}
+
 // Command returns the CLI sub-command for "connector-foreground"
-func Command() *cobra.Command {
+func Command(extensions ...Extension) *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
@@ -78,7 +82,7 @@ func Command() *cobra.Command {
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context())
+			return run(cmd.Context(), extensions...)
 		},
 	}
 	return c
@@ -280,7 +284,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 }
 
 // run is the main function when executing as the connector
-func run(c context.Context) error {
+func run(c context.Context, extensions ...Extension) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -470,6 +474,10 @@ func run(c context.Context) error {
 		}
 		return nil
 	})
+
+	for _, ext := range extensions {
+		ext.Start(c, g, s.scout, s.sharedState)
+	}
 
 	err = g.Wait()
 	if err != nil {
