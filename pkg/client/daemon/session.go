@@ -163,80 +163,60 @@ func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClien
 	return conn, mc, nil
 }
 
+func convertAlsoProxySubnets(c context.Context, ms []*manager.IPNet) []*net.IPNet {
+	ns := make([]*net.IPNet, len(ms))
+	for i, m := range ms {
+		n := iputil.IPNetFromRPC(m)
+		dlog.Infof(c, "Adding also-proxy subnet %s", n)
+		ns[i] = n
+	}
+	return ns
+}
+
+func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []routing.Route {
+	rs := make([]routing.Route, 0, len(ms))
+	for _, m := range ms {
+		n := iputil.IPNetFromRPC(m)
+		r, err := routing.GetRoute(c, n)
+		if err != nil {
+			dlog.Errorf(c, "unable to get route for never-proxied subnet %s. "+
+				"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
+				"not work if it falls within the CIDR for pods/services. Error: %v",
+				n, err)
+			continue
+		}
+		dlog.Infof(c, "Adding never-proxy subnet %s", n)
+		rs = append(rs, r)
+	}
+	return rs
+}
+
 // newSession returns a new properly initialized session object.
-//
-// If dnsIP is empty, it will be detected from /etc/resolv.conf
 func newSession(c context.Context, scout chan<- scout.ScoutReport, mi *daemon.OutboundInfo) (*session, error) {
-	c, cancel := context.WithCancel(c)
 	conn, mc, err := connectToManager(c)
 	if mc == nil || err != nil {
-		cancel()
 		return nil, err
 	}
 
 	dev, err := vif.OpenTun(c)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
-	// seed random generator (used when shuffling IPs)
-	rand.Seed(time.Now().UnixNano())
-
 	s := &session{
-		cancel:        cancel,
-		scout:         scout,
-		dev:           dev,
-		handlers:      tunnel.NewPool(),
-		fragmentMap:   make(map[uint16][]*buffer.Data),
-		rndSource:     rand.NewSource(time.Now().UnixNano()),
-		session:       mi.Session,
-		managerClient: mc,
-		clientConn:    conn,
-	}
-
-	if len(mi.AlsoProxySubnets) > 0 {
-		s.alsoProxySubnets = make([]*net.IPNet, len(mi.AlsoProxySubnets))
-		for i, ap := range mi.AlsoProxySubnets {
-			apSn := iputil.IPNetFromRPC(ap)
-			dlog.Infof(c, "Adding also-proxy subnet %s", apSn)
-			s.alsoProxySubnets[i] = apSn
-		}
-	}
-	if len(mi.NeverProxySubnets) > 0 {
-		s.neverProxySubnets = []routing.Route{}
-		for _, np := range mi.NeverProxySubnets {
-			npSn := iputil.IPNetFromRPC(np)
-			dlog.Infof(c, "Adding never-proxy subnet %s", npSn)
-			route, err := routing.GetRoute(c, npSn)
-			if err != nil {
-				dlog.Errorf(c, "unable to get route for never-proxied subnet %s. "+
-					"If this is your kubernetes API server you may want to open an issue, since telepresence may not work if it falls within the CIDR for pods/services. "+
-					"Error: %v",
-					iputil.IPNetFromRPC(np), err)
-				continue
-			}
-			s.neverProxySubnets = append(s.neverProxySubnets, route)
-		}
+		cancel:            func() {},
+		scout:             scout,
+		dev:               dev,
+		handlers:          tunnel.NewPool(),
+		fragmentMap:       make(map[uint16][]*buffer.Data),
+		rndSource:         rand.NewSource(time.Now().UnixNano()),
+		session:           mi.Session,
+		managerClient:     mc,
+		clientConn:        conn,
+		alsoProxySubnets:  convertAlsoProxySubnets(c, mi.AlsoProxySubnets),
+		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
 	}
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
-
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	cfgComplete := make(chan struct{})
-	g.Go("watch-cluster-info", func(ctx context.Context) error {
-		s.watchClusterInfo(ctx, cfgComplete)
-		return nil
-	})
-
-	select {
-	case <-c.Done():
-		return nil, nil
-	case <-cfgComplete:
-		g.Go("dns", func(ctx context.Context) error {
-			return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
-		})
-		g.Go("router", s.routerWorker)
-	}
 	return s, nil
 }
 
@@ -442,7 +422,30 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	}
 }
 
-func (s *session) stop(c context.Context) {
+func (s *session) run(c context.Context) error {
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{ShutdownOnNonError: true})
+
+	cfgComplete := make(chan struct{})
+	g.Go("watch-cluster-info", func(ctx context.Context) error {
+		s.watchClusterInfo(ctx, cfgComplete)
+		return nil
+	})
+
+	select {
+	case <-c.Done():
+		return nil
+	case <-cfgComplete:
+		g.Go("dns", func(ctx context.Context) error {
+			return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
+		})
+		g.Go("router", s.routerWorker)
+		g.Go("stop", s.stop)
+	}
+	return g.Wait()
+}
+
+func (s *session) stop(c context.Context) error {
+	<-c.Done()
 	if atomic.CompareAndSwapInt32(&s.closing, 0, 1) {
 		cc, cancel := context.WithTimeout(c, time.Second)
 		defer cancel()
@@ -462,12 +465,11 @@ func (s *session) stop(c context.Context) {
 		}
 		s.dev.Close()
 	}
-	s.cancel() // Cancel this session's go-routines
-
 	dlog.Debug(c, "Sending quit message to connector")
 	_, _ = connector.NewConnectorClient(s.clientConn).Quit(c, &empty.Empty{})
 	s.clientConn.Close()
 	dlog.Debug(c, "Connector shutdown complete")
+	return nil
 }
 
 func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {

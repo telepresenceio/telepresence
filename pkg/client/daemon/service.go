@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
@@ -50,8 +51,9 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	cancel        context.CancelFunc
-	sessionsCtx   context.Context
+	quit          context.CancelFunc
+	connectCh     chan *rpc.OutboundInfo
+	connectErrCh  chan error
 	sessionLock   sync.Mutex
 	session       *session
 	timedLogLevel log.TimedLevel
@@ -93,8 +95,7 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 
 func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
-	d.disconnect(ctx)
-	d.cancel()
+	d.quit()
 	return &empty.Empty{}, nil
 }
 
@@ -108,32 +109,35 @@ func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empt
 }
 
 func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
+	dlog.Debug(ctx, "Received gRPC Connect")
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	if d.session != nil {
 		return nil, status.Error(codes.AlreadyExists, "an active session exists")
 	}
-	s, err := newSession(d.sessionsCtx, d.scout, info)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	select {
+	case <-ctx.Done():
+		return &empty.Empty{}, nil
+	case d.connectCh <- info:
 	}
-	d.session = s
+	select {
+	case <-ctx.Done():
+	case err := <-d.connectErrCh:
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 	return &empty.Empty{}, nil
 }
 
 func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Disconnect")
-	d.disconnect(ctx)
-	return &empty.Empty{}, nil
-}
-
-func (d *service) disconnect(ctx context.Context) {
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	if d.session != nil {
-		d.session.stop(ctx)
-		d.session = nil
+		d.session.cancel()
 	}
+	return &empty.Empty{}, nil
 }
 
 func (d *service) currentSession() (*session, error) {
@@ -202,6 +206,9 @@ func run(c context.Context, loggingDir, configDir string) error {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
 
+	// seed random generator (used when shuffling IPs)
+	rand.Seed(time.Now().UnixNano())
+
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
 	// directories rather than directories for the root user.
 	c = filelocation.WithAppUserLogDir(c, loggingDir)
@@ -240,6 +247,8 @@ func run(c context.Context, loggingDir, configDir string) error {
 		scoutClient:   scout.NewScout(c, "daemon"),
 		scout:         make(chan scout.ScoutReport, 25),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
+		connectCh:     make(chan *rpc.OutboundInfo),
+		connectErrCh:  make(chan error),
 	}
 	defer close(d.scout)
 
@@ -297,10 +306,46 @@ func run(c context.Context, loggingDir, configDir string) error {
 	})
 
 	g.Go("session", func(c context.Context) (err error) {
-		c, d.cancel = context.WithCancel(c)
-		d.sessionsCtx = c
-		<-c.Done()
-		return nil
+		// The d.quit is called when we receive a Quit. It terminates
+		// the whole process.
+		c, d.quit = context.WithCancel(c)
+		for {
+			// Wait for a connection request
+			var oi *rpc.OutboundInfo
+			select {
+			case <-c.Done():
+				return nil
+			case oi = <-d.connectCh:
+			}
+
+			// Respond by setting the session and returning the error (or nil
+			// if everything is ok)
+			d.session, err = newSession(c, d.scout, oi)
+			select {
+			case <-c.Done():
+				return nil
+			case d.connectErrCh <- err:
+			}
+			if err != nil {
+				continue
+			}
+
+			// Run the session synchronously and ensure that it is cleaned
+			// up properly when the context is cancelled
+			func(c context.Context) {
+				defer func() {
+					d.sessionLock.Lock()
+					d.session = nil
+					d.sessionLock.Unlock()
+				}()
+
+				// The d.session.cancel is called from Disconnect
+				c, d.session.cancel = context.WithCancel(c)
+				if err := d.session.run(c); err != nil {
+					dlog.Error(c, err)
+				}
+			}(c)
+		}
 	})
 
 	g.Go("server-grpc", func(c context.Context) (err error) {
