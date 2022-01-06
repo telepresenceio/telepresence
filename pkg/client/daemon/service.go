@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -200,6 +201,149 @@ func reloadConfig(c context.Context) error {
 	return nil
 }
 
+func (d *service) configReload(c context.Context) error {
+	configFile := client.GetConfigFile(c)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+
+	// The directory containing the config file must be watched because editing
+	// the file will typically end with renaming the original and then creating
+	// a new file. A watcher that follows the inode will not see when the new
+	// file is created.
+	if err = watcher.Add(filepath.Dir(configFile)); err != nil {
+		return err
+	}
+
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		if err := reloadConfig(c); err != nil {
+			dlog.Error(c, err)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case err = <-watcher.Errors:
+			dlog.Error(c, err)
+		case event := <-watcher.Events:
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
+				// The config file was created or modified. Let's defer the load just a little bit
+				// in case there are more modifications (a write out with vi will typically cause
+				// one CREATE event and at least one WRITE event).
+				delay.Reset(5 * time.Millisecond)
+			}
+		}
+	}
+}
+
+// manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
+// a session and writes a reply to the connectErrCh. The session is then started if it was
+// successfully created.
+func (d *service) manageSessions(c context.Context) error {
+	// The d.quit is called when we receive a Quit. Since it
+	// terminates this function, it terminates the whole process.
+	c, d.quit = context.WithCancel(c)
+	for {
+		// Wait for a connection request
+		var oi *rpc.OutboundInfo
+		select {
+		case <-c.Done():
+			return nil
+		case oi = <-d.connectCh:
+		}
+
+		// Respond by setting the session and returning the error (or nil
+		// if everything is ok)
+		var err error
+		d.session, err = newSession(c, d.scout, oi)
+		select {
+		case <-c.Done():
+			return nil
+		case d.connectErrCh <- err:
+		}
+		if err != nil {
+			continue
+		}
+
+		// Run the session synchronously and ensure that it is cleaned
+		// up properly when the context is cancelled
+		func(c context.Context) {
+			defer func() {
+				d.sessionLock.Lock()
+				d.session = nil
+				d.sessionLock.Unlock()
+			}()
+
+			// The d.session.cancel is called from Disconnect
+			c, d.session.cancel = context.WithCancel(c)
+			if err := d.session.run(c); err != nil {
+				dlog.Error(c, err)
+			}
+		}(c)
+	}
+}
+
+func (d *service) serveGrpc(c context.Context, l net.Listener) error {
+	defer func() {
+		// Error recovery.
+		if perr := derror.PanicToError(recover()); perr != nil {
+			dlog.Error(c, perr)
+		}
+	}()
+
+	var opts []grpc.ServerOption
+	cfg := client.GetConfig(c)
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+		}
+	}
+	svc := grpc.NewServer(opts...)
+	rpc.RegisterDaemonServer(svc, d)
+
+	sc := &dhttp.ServerConfig{
+		Handler: svc,
+	}
+	dlog.Info(c, "gRPC server started")
+	err := sc.Serve(c, l)
+	if err != nil {
+		dlog.Errorf(c, "gRPC server ended with: %v", err)
+	} else {
+		dlog.Debug(c, "gRPC server ended")
+	}
+	return err
+}
+
+// metriton is the goroutine that handles all telemetry reports, so that calls to
+// metriton don't block the functional goroutines.
+func (d *service) metriton(c context.Context) error {
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case report := <-d.scout:
+			for k, v := range report.PersistentMetadata {
+				d.scoutClient.SetMetadatum(k, v)
+			}
+			var metadata []scout.ScoutMeta
+			for k, v := range report.Metadata {
+				metadata = append(metadata, scout.ScoutMeta{
+					Key:   k,
+					Value: v,
+				})
+			}
+			d.scoutClient.Report(c, report.Action, metadata...)
+		}
+	}
+}
+
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, configDir string) error {
 	if !proc.IsAdmin() {
@@ -263,146 +407,10 @@ func run(c context.Context, loggingDir, configDir string) error {
 	})
 
 	// Add a reload function that triggers on create and write of the config.yml file.
-	g.Go("config-reload", func(c context.Context) error {
-		configFile := client.GetConfigFile(c)
-		watcher, err := fsnotify.NewWatcher()
-		if err != nil {
-			return err
-		}
-		defer watcher.Close()
-
-		// The directory containing the config file must be watched because editing
-		// the file will typically end with renaming the original and then creating
-		// a new file. A watcher that follows the inode will not see when the new
-		// file is created.
-		if err = watcher.Add(filepath.Dir(configFile)); err != nil {
-			return err
-		}
-
-		// The delay timer will initially sleep forever. It's reset to a very short
-		// delay when the file is modified.
-		delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
-			if err := reloadConfig(c); err != nil {
-				dlog.Error(c, err)
-			}
-		})
-		defer delay.Stop()
-
-		for {
-			select {
-			case <-c.Done():
-				return nil
-			case err = <-watcher.Errors:
-				dlog.Error(c, err)
-			case event := <-watcher.Events:
-				if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
-					// The config file was created or modified. Let's defer the load just a little bit
-					// in case there are more modifications (a write out with vi will typically cause
-					// one CREATE event and at least one WRITE event).
-					delay.Reset(5 * time.Millisecond)
-				}
-			}
-		}
-	})
-
-	g.Go("session", func(c context.Context) (err error) {
-		// The d.quit is called when we receive a Quit. It terminates
-		// the whole process.
-		c, d.quit = context.WithCancel(c)
-		for {
-			// Wait for a connection request
-			var oi *rpc.OutboundInfo
-			select {
-			case <-c.Done():
-				return nil
-			case oi = <-d.connectCh:
-			}
-
-			// Respond by setting the session and returning the error (or nil
-			// if everything is ok)
-			d.session, err = newSession(c, d.scout, oi)
-			select {
-			case <-c.Done():
-				return nil
-			case d.connectErrCh <- err:
-			}
-			if err != nil {
-				continue
-			}
-
-			// Run the session synchronously and ensure that it is cleaned
-			// up properly when the context is cancelled
-			func(c context.Context) {
-				defer func() {
-					d.sessionLock.Lock()
-					d.session = nil
-					d.sessionLock.Unlock()
-				}()
-
-				// The d.session.cancel is called from Disconnect
-				c, d.session.cancel = context.WithCancel(c)
-				if err := d.session.run(c); err != nil {
-					dlog.Error(c, err)
-				}
-			}(c)
-		}
-	})
-
-	g.Go("server-grpc", func(c context.Context) (err error) {
-		defer func() {
-			// Error recovery.
-			if perr := derror.PanicToError(recover()); perr != nil {
-				dlog.Error(c, perr)
-			}
-		}()
-
-		defer func() {
-			if err != nil {
-				dlog.Errorf(c, "gRPC server ended with: %v", err)
-			} else {
-				dlog.Debug(c, "gRPC server ended")
-			}
-		}()
-
-		var opts []grpc.ServerOption
-		cfg := client.GetConfig(c)
-		if !cfg.Grpc.MaxReceiveSize.IsZero() {
-			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-			}
-		}
-		svc := grpc.NewServer(opts...)
-		rpc.RegisterDaemonServer(svc, d)
-
-		sc := &dhttp.ServerConfig{
-			Handler: svc,
-		}
-		dlog.Info(c, "gRPC server started")
-		return sc.Serve(c, grpcListener)
-	})
-
-	// metriton is the goroutine that handles all telemetry reports, so that calls to
-	// metriton don't block the functional goroutines.
-	g.Go("metriton", func(c context.Context) error {
-		for {
-			select {
-			case <-c.Done():
-				return nil
-			case report := <-d.scout:
-				for k, v := range report.PersistentMetadata {
-					d.scoutClient.SetMetadatum(k, v)
-				}
-				var metadata []scout.ScoutMeta
-				for k, v := range report.Metadata {
-					metadata = append(metadata, scout.ScoutMeta{
-						Key:   k,
-						Value: v,
-					})
-				}
-				d.scoutClient.Report(c, report.Action, metadata...)
-			}
-		}
-	})
+	g.Go("config-reload", d.configReload)
+	g.Go("session", d.manageSessions)
+	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
+	g.Go("metriton", d.metriton)
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)
