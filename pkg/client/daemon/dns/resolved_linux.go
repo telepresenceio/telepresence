@@ -121,7 +121,7 @@ func (s *Server) updateLinkDomains(c context.Context, paths []string, dev *vif.D
 	s.namespaces = namespaces
 	s.search = search
 	s.domainsLock.Unlock()
-	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
+	if err := dbus.SetLinkDomains(dcontext.HardContext(c), int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}
 	dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))

@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/datawire/dlib/dcontext"
+
 	"github.com/blang/semver"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -457,8 +459,9 @@ func (s *session) stop(c context.Context) error {
 		<-cc.Done()
 	}
 	if atomic.CompareAndSwapInt32(&s.closing, 1, 2) {
+		cc := dcontext.WithoutCancel(c)
 		for _, np := range s.curStaticRoutes {
-			err := s.dev.RemoveStaticRoute(c, np)
+			err := s.dev.RemoveStaticRoute(cc, np)
 			if err != nil {
 				dlog.Warnf(c, "error removing route %s: %v", np, err)
 			}
