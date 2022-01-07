@@ -694,7 +694,7 @@ func (is *interceptState) DeactivateState(ctx context.Context) error {
 }
 
 func removeIntercept(ctx context.Context, name string) error {
-	return cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	return cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var r *connector.InterceptResult
 		var err error
 		r, err = connectorClient.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})

@@ -91,7 +91,7 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		return nil
 	})
 	if err == nil && doQuit {
-		err = cliutil.QuitDaemon(cmd.Context())
+		err = cliutil.Disconnect(cmd.Context(), false)
 	}
 	return err
 }

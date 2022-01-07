@@ -135,7 +135,7 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that no telepresence is running when the tests start
-	_, _, _ = Telepresence(ctx, "quit") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-r") //nolint:dogsled // don't care about any of the returns
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
@@ -519,8 +519,8 @@ func TelepresenceQuitOk(ctx context.Context) {
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Root Daemon quitting... done") ||
-		strings.Contains(stdout, "Telepresence Root Daemon is already stopped"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting... done") ||
+		strings.Contains(stdout, "Telepresence Network is already disconnected"))
 	assert.True(t, strings.Contains(stdout, "Telepresence User Daemon quitting... done") ||
 		strings.Contains(stdout, "Telepresence User Daemon is already stopped"))
 }

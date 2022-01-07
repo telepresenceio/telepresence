@@ -1,4 +1,4 @@
-package daemon
+package dns
 
 import (
 	"bufio"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type resolveFile struct {
@@ -119,7 +119,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 	r.search = ps
 }
 
-// dnsServerWorker places a file under the /etc/resolver directory so that it is picked up by the
+// Worker places a file under the /etc/resolver directory so that it is picked up by the
 // macOS resolver. The file is configured with a single nameserver that points to the local IP
 // that the Telepresence DNS server listens to. The file is removed, and the DNS is flushed when
 // the worker terminates
@@ -129,7 +129,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //   man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (o *outbound) dnsServerWorker(c context.Context) error {
+func (s *Server) Worker(c context.Context, dev *vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -141,14 +141,14 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	o.router.configureDNS(c, dnsAddr)
+	configureDNS(nil, dnsAddr)
 
 	err = os.MkdirAll(resolverDirName, 0755)
 	if err != nil {
 		return err
 	}
 
-	kubernetesZone := o.router.clusterDomain
+	kubernetesZone := s.clusterDomain
 	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
 		port:        dnsAddr.Port,
@@ -166,35 +166,32 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		_ = os.Remove(resolverFileName)
 
 		// Remove each namespace resolver file
-		for namespace := range o.domains {
-			_ = os.Remove(namespaceResolverFile(resolverDirName, namespace))
+		for domain := range s.domains {
+			_ = os.Remove(domainResolverFile(resolverDirName, domain))
 		}
-		o.flushDNS()
+		s.flushDNS()
 	}()
 
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		select {
-		case <-c.Done():
-			return nil
-		case <-o.router.configured():
-			// Server will close the listener, so no need to close it here.
-			o.processSearchPaths(g, func(c context.Context, paths []string) error {
-				return o.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
-			})
-			return dns.NewServer([]net.PacketConn{listener}, nil, o.resolveInCluster, &o.dnsCache).Run(c, make(chan struct{}))
-		}
+		// Server will close the listener, so no need to close it here.
+		s.processSearchPaths(g, func(c context.Context, paths []string, device *vif.Device) error {
+			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
+		}, dev)
+		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
 	return g.Wait()
 }
 
-func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
+func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
 	dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
 	rf, err := readResolveFile(resolverFileName)
 	if err != nil {
 		return err
 	}
+
+	// paths that contain a dot are search paths, the ones that don't are namespaces.
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for _, path := range paths {
@@ -206,51 +203,52 @@ func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resol
 	}
 	namespaces[tel2SubDomain] = struct{}{}
 
-	domains := make(map[string]struct{}, len(namespaces)+len(o.dnsConfig.IncludeSuffixes))
+	// All namespaces and include suffixes become domains
+	domains := make(map[string]struct{}, len(namespaces)+len(s.config.IncludeSuffixes))
 	for ns, v := range namespaces {
 		domains[ns] = v
 	}
-	for _, sfx := range o.dnsConfig.IncludeSuffixes {
+	for _, sfx := range s.config.IncludeSuffixes {
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}
 
-	o.domainsLock.Lock()
-	defer o.domainsLock.Unlock()
+	s.domainsLock.Lock()
+	defer s.domainsLock.Unlock()
 
 	// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
 	// for each namespace in its own domain file under /etc/resolver. Each file
 	// is named "telepresence.<domain>.local"
 	var removals []string
 	var additions []string
-	for ns := range o.domains {
-		if _, ok := domains[ns]; !ok {
-			removals = append(removals, ns)
+	for domain := range s.domains {
+		if _, ok := domains[domain]; !ok {
+			removals = append(removals, domain)
 		}
 	}
-	for ns := range domains {
-		if _, ok := o.domains[ns]; !ok {
-			additions = append(additions, ns)
+	for domain := range domains {
+		if _, ok := s.domains[domain]; !ok {
+			additions = append(additions, domain)
 		}
 	}
 
-	o.search = search
-	o.namespaces = namespaces
-	o.domains = domains
+	s.search = search
+	s.namespaces = namespaces
+	s.domains = domains
 
-	for _, namespace := range removals {
-		nsFile := namespaceResolverFile(resolverDirName, namespace)
+	for _, domain := range removals {
+		nsFile := domainResolverFile(resolverDirName, domain)
 		dlog.Infof(c, "Removing %s", nsFile)
 		if err = os.Remove(nsFile); err != nil {
 			dlog.Error(c, err)
 		}
 	}
-	for _, namespace := range additions {
+	for _, domain := range additions {
 		df := resolveFile{
 			port:        dnsAddr.Port,
-			domain:      namespace,
+			domain:      domain,
 			nameservers: []net.IP{dnsAddr.IP},
 		}
-		nsFile := namespaceResolverFile(resolverDirName, namespace)
+		nsFile := domainResolverFile(resolverDirName, domain)
 		dlog.Infof(c, "Generated new %s", nsFile)
 		if err = df.write(nsFile); err != nil {
 			dlog.Error(c, err)
@@ -265,10 +263,10 @@ func (o *outbound) updateResolverFiles(c context.Context, resolverDirName, resol
 	if err = rf.write(resolverFileName); err != nil {
 		return err
 	}
-	o.flushDNS()
+	s.flushDNS()
 	return nil
 }
 
-func namespaceResolverFile(resolverDirName, namespace string) string {
-	return filepath.Join(resolverDirName, "telepresence."+namespace+".local")
+func domainResolverFile(resolverDirName, domain string) string {
+	return filepath.Join(resolverDirName, "telepresence."+domain+".local")
 }
