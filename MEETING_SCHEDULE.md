@@ -7,7 +7,7 @@ Every four to six weeks we dedicate one session to meeting the maintainers of Te
 For the latest information, [visit the website](https://www.getambassador.io/about-us/events/meet-the-maintainers/).
 
 
-**Zoom Meeting Link**: https://us02web.zoom.us/j/81261393224
+**Zoom Meeting Link**: https://us02web.zoom.us/j/notarealmeeting
 
 **Recordings**: http://bit.ly/AmbassadorOfficeHoursRecordings
 
