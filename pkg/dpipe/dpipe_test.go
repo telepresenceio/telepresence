@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -21,6 +22,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	echoBinary = ebf.Name()
+	if runtime.GOOS == "windows" {
+		echoBinary += ".exe"
+	}
 	ebf.Close()
 	if err = exec.Command("go", "build", "-o", echoBinary, "./testdata/echo").Run(); err != nil {
 		panic(err)
