@@ -21,7 +21,7 @@ import (
 var loggerForTest *logrus.Logger
 
 // InitContext sets up standard Telepresence logging for a background process
-func InitContext(ctx context.Context, name string) (context.Context, error) {
+func InitContext(ctx context.Context, name string, strategy RotationStrategy) (context.Context, error) {
 	logger := logrus.New()
 	loggerForTest = logger
 
@@ -45,7 +45,7 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, true, 0600, NewRotateOnce(), maxFiles)
+		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, true, 0600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}

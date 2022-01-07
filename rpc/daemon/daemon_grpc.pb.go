@@ -27,8 +27,10 @@ type DaemonClient interface {
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Quit quits (terminates) the service.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// SetOutboundInfo provides the information needed to set up outbound connectivity
-	SetOutboundInfo(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Connect creates a new session that provides outbound connectivity to the cluster
+	Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Disconnect disconnects the current session.
+	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
 	GetClusterSubnets(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClusterSubnets, error)
 	// SetDnsSearchPath sets a new search path.
@@ -72,9 +74,18 @@ func (c *daemonClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc
 	return out, nil
 }
 
-func (c *daemonClient) SetOutboundInfo(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *daemonClient) Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetOutboundInfo", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Connect", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Disconnect", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +129,10 @@ type DaemonServer interface {
 	Status(context.Context, *emptypb.Empty) (*DaemonStatus, error)
 	// Quit quits (terminates) the service.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
-	// SetOutboundInfo provides the information needed to set up outbound connectivity
-	SetOutboundInfo(context.Context, *OutboundInfo) (*emptypb.Empty, error)
+	// Connect creates a new session that provides outbound connectivity to the cluster
+	Connect(context.Context, *OutboundInfo) (*emptypb.Empty, error)
+	// Disconnect disconnects the current session.
+	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
 	GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error)
 	// SetDnsSearchPath sets a new search path.
@@ -142,8 +155,11 @@ func (UnimplementedDaemonServer) Status(context.Context, *emptypb.Empty) (*Daemo
 func (UnimplementedDaemonServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) SetOutboundInfo(context.Context, *OutboundInfo) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetOutboundInfo not implemented")
+func (UnimplementedDaemonServer) Connect(context.Context, *OutboundInfo) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
+}
+func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
 }
 func (UnimplementedDaemonServer) GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClusterSubnets not implemented")
@@ -221,20 +237,38 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_SetOutboundInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Daemon_Connect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(OutboundInfo)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaemonServer).SetOutboundInfo(ctx, in)
+		return srv.(DaemonServer).Connect(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.daemon.Daemon/SetOutboundInfo",
+		FullMethod: "/telepresence.daemon.Daemon/Connect",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).SetOutboundInfo(ctx, req.(*OutboundInfo))
+		return srv.(DaemonServer).Connect(ctx, req.(*OutboundInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).Disconnect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.daemon.Daemon/Disconnect",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).Disconnect(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -313,8 +347,12 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Daemon_Quit_Handler,
 		},
 		{
-			MethodName: "SetOutboundInfo",
-			Handler:    _Daemon_SetOutboundInfo_Handler,
+			MethodName: "Connect",
+			Handler:    _Daemon_Connect_Handler,
+		},
+		{
+			MethodName: "Disconnect",
+			Handler:    _Daemon_Disconnect_Handler,
 		},
 		{
 			MethodName: "GetClusterSubnets",

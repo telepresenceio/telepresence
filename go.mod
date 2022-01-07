@@ -9,6 +9,7 @@ require (
 	github.com/datawire/ambassador/v2 v2.0.2-rc.1.0.20210915144712-7bc28ed11dfc
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/godbus/dbus/v5 v5.0.4
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.2

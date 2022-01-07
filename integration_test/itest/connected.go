@@ -26,14 +26,12 @@ func (ch *connected) setup(ctx context.Context) bool {
 	t := getT(ctx)
 	// Start once with default user to ensure that the auto-installer can run OK.
 	stdout := TelepresenceOk(WithUser(ctx, "default"), "connect")
-	require.Contains(t, stdout, "Launching Telepresence Root Daemon")
 	require.Contains(t, stdout, "Launching Telepresence User Daemon")
 	require.Contains(t, stdout, "Connected to context default")
 	TelepresenceQuitOk(ctx)
 
 	// Connect using telepresence-test-developer user
 	stdout = TelepresenceOk(ctx, "connect")
-	require.Contains(t, stdout, "Launching Telepresence Root Daemon")
 	require.Contains(t, stdout, "Launching Telepresence User Daemon")
 	require.Contains(t, stdout, "Connected to context default")
 	TelepresenceOk(ctx, "loglevel", "-d30m", "debug")

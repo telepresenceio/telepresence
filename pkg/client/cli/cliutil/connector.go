@@ -31,19 +31,19 @@ var ErrNoConnector = errors.New("telepresence user daemon is not running")
 //
 // Nested calls to WithConnector will reuse the outer connection.
 func WithConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, true, fn)
+	return withConnector(ctx, true, true, fn)
 }
 
 // WithStartedConnector is like WithConnector, but returns ErrNoConnector if the connector is not
 // already running, rather than starting it.
-func WithStartedConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, false, fn)
+func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
+	return withConnector(ctx, false, withNotify, fn)
 }
 
 type connectorConnCtxKey struct{}
 type connectorStartedCtxKey struct{}
 
-func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context, connector.ConnectorClient) error) error {
+func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		connectorClient := connector.NewConnectorClient(conn)
@@ -87,6 +87,9 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 			return err
 		}
 	}
+	if !withNotify {
+		return fn(ctx, connectorClient)
+	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		ShutdownOnNonError: true,
@@ -128,7 +131,7 @@ func DidLaunchConnector(ctx context.Context) bool {
 }
 
 func QuitConnector(ctx context.Context) error {
-	err := WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	err := WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		fmt.Print("Telepresence User Daemon quitting...")
 		_, err := connectorClient.Quit(ctx, &empty.Empty{})
 		return err
@@ -137,7 +140,7 @@ func QuitConnector(ctx context.Context) error {
 		err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
 	}
 	if err != nil {
-		if errors.Is(err, ErrNoConnector) {
+		if errors.Is(err, ErrNoConnector) || grpcStatus.Code(err) == grpcCodes.Unavailable {
 			fmt.Println("Telepresence User Daemon is already stopped")
 			return nil
 		}

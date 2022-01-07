@@ -3,15 +3,21 @@ package dns
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type Resolver func(ctx context.Context, domain string) []net.IP
@@ -21,19 +27,40 @@ type Resolver func(ctx context.Context, domain string) []net.IP
 // recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
 const recursionCheck = "tel2-recursion-check.kube-system"
 
+// defaultClusterDomain used unless traffic-manager reports otherwise
+const defaultClusterDomain = "cluster.local."
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
-	listeners    []net.PacketConn
 	fallback     *dns.Conn
 	resolve      Resolver
 	requestCount int64
-	cache        *sync.Map
+	cache        sync.Map
 	recursive    int32 // 0 = never tested, 1 = not recursive, 2 = recursive
 	cacheResolve func(*dns.Question) []dns.RR
+
+	// Namespaces, accessible using <service-name>.<namespace-name>
+	namespaces map[string]struct{}
+	domains    map[string]struct{}
+	search     []string
+
+	// The domainsLock locks usage of namespaces, domains, and search
+	domainsLock sync.RWMutex
+
+	// searchPathCh receives requests to change the search path.
+	searchPathCh chan []string
+
+	config *rpc.DNSConfig
+
+	// clusterDomain reported by the traffic-manager
+	clusterDomain string
+
+	// Function that sends a lookup requrest to the traffic-manager
+	clusterLookup func(context.Context, string) ([][]byte, error)
 }
 
-type dnsValue struct {
+type cacheEntry struct {
 	created   time.Time
 	recursion int32 // will be set to the current qType during call to cluster
 	answer    []dns.RR
@@ -43,20 +70,206 @@ type dnsValue struct {
 // cacheTTL is the time to live for an entry in the local DNS cache.
 const cacheTTL = 60 * time.Second
 
-func (dv *dnsValue) expired() bool {
+func (dv *cacheEntry) expired() bool {
 	return time.Since(dv.created) > cacheTTL
 }
 
 // NewServer returns a new dns.Server
-func NewServer(listeners []net.PacketConn, fallback *dns.Conn, resolve Resolver, cache *sync.Map) *Server {
+func NewServer(config *rpc.DNSConfig, clusterLookup func(context.Context, string) ([][]byte, error)) *Server {
+	if config == nil {
+		config = &rpc.DNSConfig{}
+	}
+	if len(config.ExcludeSuffixes) == 0 {
+		config.ExcludeSuffixes = []string{
+			".arpa",
+			".com",
+			".io",
+			".net",
+			".org",
+			".ru",
+		}
+	}
+	if config.LookupTimeout.AsDuration() <= 0 {
+		config.LookupTimeout = durationpb.New(4 * time.Second)
+	}
 	s := &Server{
-		listeners: listeners,
-		fallback:  fallback,
-		resolve:   resolve,
-		cache:     cache,
+		config:        config,
+		namespaces:    make(map[string]struct{}),
+		domains:       make(map[string]struct{}),
+		search:        []string{""},
+		searchPathCh:  make(chan []string, 5),
+		clusterDomain: defaultClusterDomain,
+		clusterLookup: clusterLookup,
 	}
 	s.cacheResolve = s.resolveWithRecursionCheck
 	return s
+}
+
+// tel2SubDomain aims to fix a search-path problem when using Docker on non-linux systems where
+// Docker uses its own search-path for single label names. This means that the search path that
+// is declared in the macOS resolver is ignored although the rest of the DNS-resolution works OK.
+// Since the search-path is likely to change during a session, a stable fake domain is needed to
+// emulate the search-path. That fake-domain can then be used in the search path declared in the
+// Docker config.
+//
+// The "tel2-search" domain fills this purpose and a request for "<single label name>.tel2-search."
+// will be resolved as "<single label name>." using the search path of this resolver.
+const tel2SubDomain = "tel2-search"
+const tel2SubDomainDot = tel2SubDomain + "."
+
+var localhostIPs = []net.IP{{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+
+func (s *Server) shouldDoClusterLookup(query string) bool {
+	if strings.HasSuffix(query, "."+s.clusterDomain) && strings.Count(query, ".") < 4 {
+		return false
+	}
+
+	query = query[:len(query)-1] // skip last dot
+
+	// Always include configured includeSuffixes
+	for _, sfx := range s.config.IncludeSuffixes {
+		if strings.HasSuffix(query, sfx) {
+			return true
+		}
+	}
+
+	// Skip configured excludeSuffixes
+	for _, sfx := range s.config.ExcludeSuffixes {
+		if strings.HasSuffix(query, sfx) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) resolveInCluster(c context.Context, query string) (results []net.IP) {
+	query = strings.ToLower(query)
+	query = strings.TrimSuffix(query, tel2SubDomainDot)
+
+	if query == "localhost." {
+		// BUG(lukeshu): I have no idea why a lookup
+		// for localhost even makes it to here on my
+		// home WiFi when connecting to a k3sctl
+		// cluster (but not a kubernaut.io cluster).
+		// But it does, so I need this in order to be
+		// productive at home.  We should really
+		// root-cause this, because it's weird.
+		return localhostIPs
+	}
+
+	if !s.shouldDoClusterLookup(query) {
+		return nil
+	}
+
+	// Give the cluster lookup a reasonable timeout.
+	c, cancel := context.WithTimeout(c, s.config.LookupTimeout.AsDuration())
+	defer cancel()
+
+	result, err := s.clusterLookup(c, query[:len(query)-1])
+	if err != nil {
+		dlog.Error(c, client.CheckTimeout(c, err))
+		return nil
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	ips := make(iputil.IPs, len(result))
+	for i, ip := range result {
+		ips[i] = ip
+	}
+	return ips
+}
+
+func (s *Server) GetConfig() *rpc.DNSConfig {
+	dnsConfig := &rpc.DNSConfig{}
+	if s.config != nil {
+		dnsConfig.LocalIp = s.config.LocalIp
+		dnsConfig.ExcludeSuffixes = s.config.ExcludeSuffixes
+		dnsConfig.IncludeSuffixes = s.config.IncludeSuffixes
+		dnsConfig.LookupTimeout = s.config.LookupTimeout
+	}
+	return dnsConfig
+}
+
+func (s *Server) SetClusterDomainAndDNS(domain string, dnsIP net.IP) {
+	s.clusterDomain = domain
+	if s.config == nil {
+		s.config = &rpc.DNSConfig{}
+	}
+	if s.config.RemoteIp == nil {
+		s.config.RemoteIp = dnsIP
+	}
+}
+
+// SetSearchPath updates the DNS search path used by the resolver
+func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) {
+	// Provide direct access to intercepted namespaces
+	for _, ns := range namespaces {
+		paths = append(paths, ns+".svc."+s.clusterDomain)
+	}
+	select {
+	case <-ctx.Done():
+	case s.searchPathCh <- paths:
+	}
+}
+
+func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
+	lc := &net.ListenConfig{}
+	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
+}
+
+func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, *vif.Device) error, dev *vif.Device) {
+	g.Go("SearchPaths", func(c context.Context) error {
+		var prevPaths []string
+		unchanged := func(paths []string) bool {
+			if len(paths) != len(prevPaths) {
+				return false
+			}
+			for i, path := range paths {
+				if path != prevPaths[i] {
+					return false
+				}
+			}
+			return true
+		}
+
+		for {
+			select {
+			case <-c.Done():
+				return nil
+			case paths := <-s.searchPathCh:
+				if len(s.searchPathCh) > 0 {
+					// Only interested in the last one
+					continue
+				}
+				if !unchanged(paths) {
+					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
+					prevPaths = make([]string, len(paths))
+					copy(prevPaths, paths)
+					if err := processor(c, paths, dev); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	})
+}
+
+func (s *Server) flushDNS() {
+	s.cache.Range(func(key, _ interface{}) bool {
+		s.cache.Delete(key)
+		return true
+	})
+}
+
+// splitToUDPAddr splits the given address into an UDPAddr. It's
+// an  error if the address is based on a hostname rather than an IP.
+func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
+	ip, port, err := iputil.SplitToIPPort(netAddr)
+	if err != nil {
+		return nil, err
+	}
+	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
 }
 
 // RequestCount returns the number of requests that this server has received.
@@ -81,9 +294,9 @@ func copyRRs(rrs []dns.RR, qType uint16) []dns.RR {
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
 func (s *Server) resolveThruCache(q *dns.Question) []dns.RR {
-	newDv := &dnsValue{wait: make(chan struct{}), created: time.Now()}
+	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
-		oldDv := v.(*dnsValue)
+		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&s.recursive) == 2 && atomic.LoadInt32(&oldDv.recursion) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
 			return nil
@@ -101,9 +314,9 @@ func (s *Server) resolveThruCache(q *dns.Question) []dns.RR {
 // recursionCheck query has completed, and it has been determined whether a query that is propagated
 // to the cluster will recurse back to this resolver or not.
 func (s *Server) resolveWithRecursionCheck(q *dns.Question) []dns.RR {
-	newDv := &dnsValue{wait: make(chan struct{}), created: time.Now()}
+	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
-		oldDv := v.(*dnsValue)
+		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&oldDv.recursion) == int32(q.Qtype) {
 			if q.Name == recursionCheck+"." {
 				atomic.StoreInt32(&s.recursive, 2)
@@ -196,7 +409,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 // keep this low to avoid such caching.
 const dnsTTL = 4
 
-func (s *Server) resolveQuery(q *dns.Question, dv *dnsValue) []dns.RR {
+func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) []dns.RR {
 	atomic.StoreInt32(&dv.recursion, int32(q.Qtype))
 	defer func() {
 		atomic.StoreInt32(&dv.recursion, 0)
@@ -244,10 +457,13 @@ func (s *Server) resolveQuery(q *dns.Question, dv *dnsValue) []dns.RR {
 }
 
 // Run starts the DNS server(s) and waits for them to end
-func (s *Server) Run(c context.Context, initDone chan<- struct{}) error {
+func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallback *dns.Conn, resolve Resolver) error {
 	s.ctx = c
+	s.fallback = fallback
+	s.resolve = resolve
+
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	for _, listener := range s.listeners {
+	for _, listener := range listeners {
 		srv := &dns.Server{PacketConn: listener, Handler: s, ReadTimeout: time.Second}
 		g.Go(listener.LocalAddr().String(), func(c context.Context) error {
 			go func() {
