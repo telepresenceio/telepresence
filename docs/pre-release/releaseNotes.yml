@@ -83,6 +83,11 @@ items:
         title: Fix invalid log statement
         body: >-
           Telepresence will no longer log invalid: <code>"unhandled connection control message: code DIAL_OK"</code> errors.
+      - type: bugfix
+        title: Log errors from sshfs/sftp
+        body: >-
+          Output to <code>stderr</code> from the traffic-agent's <code>sftp</code> and the client's <code>sshfs</code> processes
+          are properly logged as errors.
   - version: 2.4.9
     date: "2021-12-09"
     notes:

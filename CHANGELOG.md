@@ -21,6 +21,8 @@
 - Bugfix: User will not be asked to log in or add ingress information when creating an intercept until a check has been 
   made that the intercept is possible.
 
+- Bugfix: Output to `stderr` from the traffic-agent's `sftp` and the client's `sshfs` processes are properly logged as errors.
+
 ### 2.4.9 (December 9, 2021)
 
 - Bugfix: Fixed an error where access tokens were not refreshed if you login
