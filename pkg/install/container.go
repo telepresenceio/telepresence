@@ -1,7 +1,6 @@
 package install
 
 import (
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -164,7 +163,8 @@ func agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
 	for i, mount := range mounts {
 		// Keep the ServiceAccount mount unaltered or a new one will be generated
 		if !strings.HasPrefix(mount.MountPath, "/var/run/secrets") {
-			mount.MountPath = filepath.Join(TelAppMountPoint, mount.MountPath)
+			// Don't use filepath.Join here. The target is never windows
+			mount.MountPath = TelAppMountPoint + "/" + strings.TrimPrefix(mount.MountPath, "/")
 		}
 		agentMounts[i] = mount
 	}

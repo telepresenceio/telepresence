@@ -23,6 +23,9 @@
 
 - Bugfix: Output to `stderr` from the traffic-agent's `sftp` and the client's `sshfs` processes are properly logged as errors.
 
+- Bugfix: Auto installer will no longer not emit backslash separators for the `/tel-app-mounts` paths in the
+  traffic-agent container spec when running on Windows
+
 ### 2.4.9 (December 9, 2021)
 
 - Bugfix: Fixed an error where access tokens were not refreshed if you login
