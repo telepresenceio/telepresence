@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
@@ -39,25 +38,23 @@ func (h *timedHandler) Close(_ context.Context) {
 
 type handler struct {
 	timedHandler
-	stream    tunnel.Stream
-	muxTunnel connpool.MuxTunnel // Deprecated
-	toTun     ip.Writer
-	fromTun   chan Datagram
+	stream  tunnel.Stream
+	toTun   ip.Writer
+	fromTun chan Datagram
 }
 
 const ioChannelSize = 0x40
 const idleDuration = 5 * time.Second
 
-func NewHandler(stream tunnel.Stream, muxTunnel connpool.MuxTunnel, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
+func NewHandler(stream tunnel.Stream, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
 	return &handler{
 		timedHandler: timedHandler{
 			id:     id,
 			remove: remove,
 		},
-		stream:    stream,
-		muxTunnel: muxTunnel,
-		toTun:     toTun,
-		fromTun:   make(chan Datagram, ioChannelSize),
+		stream:  stream,
+		toTun:   toTun,
+		fromTun: make(chan Datagram, ioChannelSize),
 	}
 }
 
@@ -67,15 +64,6 @@ func (h *handler) HandleDatagram(ctx context.Context, dg Datagram) {
 	case h.fromTun <- dg:
 	}
 }
-
-func (h *handler) HandleMessage(ctx context.Context, mdg connpool.Message) {
-	h.handlePayload(ctx, mdg.Payload())
-}
-
-func (h *handler) handlePayload(ctx context.Context, payload []byte) {
-	sendUDPToTun(ctx, h.id, payload, h.toTun)
-}
-
 func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
 	pkt := NewDatagram(HeaderLen+len(payload), id.Destination(), id.Source())
 	ipHdr := pkt.IPHeader()
@@ -115,12 +103,7 @@ func (h *handler) writeLoop(ctx context.Context) {
 			dlog.Debugf(ctx, "<- TUN %s", dg)
 			dlog.Debugf(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
-			var err error
-			if h.muxTunnel != nil {
-				err = h.muxTunnel.Send(ctx, connpool.NewMessage(h.id, udpHdr.Payload()))
-			} else {
-				err = h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
-			}
+			err := h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
 			dg.Release()
 			if err != nil {
 				if ctx.Err() == nil {

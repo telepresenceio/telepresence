@@ -23,7 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -50,9 +50,9 @@ import (
 //
 // For UDP and TCP packets, a ConnID is created which uniquely identifies a combination of protocol,
 // source IP, source port, destination IP, and destination port. A handler is then obtained that matches
-// that ID (active handlers are cached in a connpool.Pool) and the packet is then sent to that handler.
+// that ID (active handlers are cached in a tunnel.Pool) and the packet is then sent to that handler.
 // The handler typically sends the ConnID and the payload of the packet over to the traffic-manager
-// using the gRPC ClientTunnel. At the receiving en din the traffic-manager, a similar connpool.Pool obtains
+// using the gRPC ClientTunnel. At the receiving en din the traffic-manager, a similar tunnel.Pool obtains
 // a corresponding handler which manages a net.Conn matching the ConnID in the cluster.
 //
 // Negotiation:
@@ -69,9 +69,6 @@ type tunRouter struct {
 
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
-
-	// tunnel is the bidirectional gRPC tunnel to the traffic-manager
-	muxTunnel connpool.MuxTunnel
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
@@ -408,43 +405,10 @@ func (t *tunRouter) run(c context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
 			}
-
-			clientTunnel, err := t.managerClient.ClientTunnel(c)
-			if err != nil {
-				return err
+			if mgrVer.LE(semver.MustParse("2.4.4")) {
+				return errcat.User.Newf("unsupported traffic-manager version %s. Minimum supported version is 2.4.5", mgrVer)
 			}
-			muxTunnel := connpool.NewMuxTunnel(clientTunnel)
-			if err = muxTunnel.Send(c, connpool.SessionInfoControl(t.session)); err != nil {
-				return err
-			}
-
-			var peerVersion uint16
-			if mgrVer.LE(semver.MustParse("2.4.2")) {
-				peerVersion = 0
-			} else {
-				if err = muxTunnel.Send(c, connpool.VersionControl()); err != nil {
-					return err
-				}
-				peerVersion, err = muxTunnel.ReadPeerVersion(c)
-				if err != nil {
-					return err
-				}
-			}
-			// Versions >= 2 don't use connpool.Tunnel. They use tunnel.Stream.
-			if peerVersion < 2 {
-				t.muxTunnel = muxTunnel
-				close(t.tmVerOk)
-				dlog.Debug(c, "MGR read loop starting")
-				err = t.muxTunnel.DialLoop(c, t.handlers)
-				var recvErr *client.RecvEOF
-				if errors.As(err, &recvErr) {
-					<-c.Done()
-				}
-			} else {
-				close(t.tmVerOk)
-				dlog.Debug(c, "closing since a more recent system detected")
-				err = muxTunnel.CloseSend()
-			}
+			close(t.tmVerOk)
 			return err
 		})
 	})
@@ -612,7 +576,7 @@ func (t *tunRouter) tcp(c context.Context, pkt tcp.Packet) {
 	}
 
 	wf, _, err := t.handlers.GetOrCreateTCP(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
-		return tcp.NewHandler(t.streamCreator(connID), t.muxTunnel, &t.closing, vifWriter{t.dev}, connID, remove, t.rndSource), nil
+		return tcp.NewHandler(t.streamCreator(connID), &t.closing, vifWriter{t.dev}, connID, remove, t.rndSource), nil
 	}, pkt)
 	if err != nil {
 		dlog.Error(c, err)
@@ -631,25 +595,17 @@ func (t *tunRouter) udp(c context.Context, dg udp.Datagram) {
 		if t.dnsLocalAddr != nil && udpHdr.DestinationPort() == t.dnsPort && ipHdr.Destination().Equal(t.dnsIP) {
 			return udp.NewDnsInterceptor(w, connID, remove, t.dnsLocalAddr)
 		}
-		stream, err := t.maybeOpenStream(c, connID)
+		stream, err := t.streamCreator(connID)(c)
 		if err != nil {
 			return nil, err
 		}
-		return udp.NewHandler(stream, t.muxTunnel, w, connID, remove), nil
+		return udp.NewHandler(stream, w, connID, remove), nil
 	})
 	if err != nil {
 		dlog.Error(c, err)
 		return
 	}
 	uh.(udp.DatagramHandler).HandleDatagram(c, dg)
-}
-
-func (t *tunRouter) maybeOpenStream(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
-	if t.muxTunnel != nil {
-		// tunnelVersion <= 2, so use the multiplexing tunnel
-		return nil, nil
-	}
-	return t.streamCreator(id)(c)
 }
 
 func (t *tunRouter) streamCreator(id tunnel.ConnID) tcp.StreamCreator {

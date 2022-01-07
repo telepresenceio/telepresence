@@ -96,7 +96,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}()
 
 	// Wait for second pod to arrive
-	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, 5*time.Second, time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, 20*time.Second, 2*time.Second)
 	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Delete the currently intercepted pod

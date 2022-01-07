@@ -8,9 +8,10 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -119,45 +120,11 @@ func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewIn
 }
 
 func (p *mgrProxy) ClientTunnel(fhDaemon managerrpc.Manager_ClientTunnelServer) error {
-	ctx := fhDaemon.Context()
-	fhManager, err := p.client.ClientTunnel(ctx, p.callOptions...)
-	if err != nil {
-		return err
-	}
-	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
-	grp.Go("manager->daemon", func(ctx context.Context) error {
-		for {
-			payload, err := fhManager.Recv()
-			if err != nil {
-				if err == io.EOF || ctx.Err() != nil {
-					return nil
-				}
-				return err
-			}
-			if err = fhDaemon.Send(payload); err != nil {
-				return err
-			}
-		}
-	})
-	grp.Go("daemon->manager", func(ctx context.Context) error {
-		for {
-			payload, err := fhDaemon.Recv()
-			if err != nil {
-				if err == io.EOF || ctx.Err() != nil {
-					return nil
-				}
-				return err
-			}
-			if err = fhManager.Send(payload); err != nil {
-				return err
-			}
-		}
-	})
-	return grp.Wait()
+	return status.Error(codes.Unimplemented, "ClientTunnel was deprecated in 2.4.5 and has since been removed")
 }
 
 func (p *mgrProxy) AgentTunnel(server managerrpc.Manager_AgentTunnelServer) error {
-	return errors.New("must call manager.AgentTunnel from an agent (intercepted Pod), not from a client (workstation)")
+	return status.Error(codes.Unimplemented, "AgentTunnel was deprecated in 2.4.5 and has since been removed")
 }
 
 type tmReceiver interface {
