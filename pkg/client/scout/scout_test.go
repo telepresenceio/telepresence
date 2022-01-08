@@ -442,8 +442,7 @@ func TestReport(t *testing.T) {
 				os.Setenv(k, v)
 			}
 			scout := &Scout{
-				buffer:  make(chan bufEntry, 40),
-				envMeta: getDefaultEnvironmentMetadata(),
+				buffer: make(chan bufEntry, bufferSize),
 				Reporter: &metriton.Reporter{
 					Application: mockApplication,
 					Version:     mockVersion,

@@ -149,6 +149,9 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 		dlog.Errorf(ctx, "scout error getting executable: %s", err)
 	}
 	baseMeta["install_method"] = installMethod
+	for k, v := range getDefaultEnvironmentMetadata() {
+		baseMeta[k] = v
+	}
 
 	return &Scout{
 		buffer: make(chan bufEntry, bufferSize),
@@ -227,7 +230,7 @@ func (s *Scout) Report(ctx context.Context, action string, pairs ...ScoutMeta) {
 
 func (s *Scout) doReport(ctx context.Context, action string, meta ...ScoutMeta) {
 	s.index++
-	metadata := getDefaultEnvironmentMetadata()
+	metadata := make(map[string]interface{}, 4+len(meta))
 	metadata["action"] = action
 	metadata["index"] = s.index
 	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
@@ -246,8 +249,8 @@ func (s *Scout) doReport(ctx context.Context, action string, meta ...ScoutMeta) 
 }
 
 // Returns a metadata map containing all the additional environment variables to be reported
-func getDefaultEnvironmentMetadata() map[string]interface{} {
-	metadata := map[string]interface{}{}
+func getDefaultEnvironmentMetadata() map[string]string {
+	metadata := map[string]string{}
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
 		if strings.HasPrefix(pair[0], environmentMetadataPrefix) {
