@@ -138,23 +138,7 @@ const bufferSize = 40
 // NewReporter creates a new initialized Reporter instance that can be used to
 // send telepresence reports to Metriton
 func NewReporter(ctx context.Context, mode string) *Reporter {
-	baseMeta := getOsMetadata(ctx)
-	baseMeta["mode"] = mode
-	baseMeta["trace_id"] = uuid.New()
-	baseMeta["goos"] = runtime.GOOS
-
-	// Discover how Telepresence was installed based on the binary's location
-	installMethod, err := client.GetInstallMechanism()
-	if err != nil {
-		dlog.Errorf(ctx, "scout error getting executable: %s", err)
-	}
-	baseMeta["install_method"] = installMethod
-	for k, v := range getDefaultEnvironmentMetadata() {
-		baseMeta[k] = v
-	}
-
-	return &Reporter{
-		buffer: make(chan bufEntry, bufferSize),
+	r := &Reporter{
 		reporter: &metriton.Reporter{
 			Application: "telepresence2",
 			Version:     client.Version(),
@@ -167,10 +151,32 @@ func NewReporter(ctx context.Context, mode string) *Reporter {
 				}
 				return id, nil
 			},
-			// Fixed (growing) metadata passed with every report
-			BaseMetadata: baseMeta,
 		},
 	}
+	r.initialize(ctx, mode, runtime.GOOS)
+	return r
+}
+
+// initialization broken out or constructor for the benefit of testing
+func (r *Reporter) initialize(ctx context.Context, mode, goos string) {
+	r.buffer = make(chan bufEntry, bufferSize)
+
+	// Fixed (growing) metadata passed with every report
+	baseMeta := getOsMetadata(ctx)
+	baseMeta["mode"] = mode
+	baseMeta["trace_id"] = uuid.New()
+	baseMeta["goos"] = goos
+
+	// Discover how Telepresence was installed based on the binary's location
+	installMethod, err := client.GetInstallMechanism()
+	if err != nil {
+		dlog.Errorf(ctx, "scout error getting executable: %s", err)
+	}
+	baseMeta["install_method"] = installMethod
+	for k, v := range getDefaultEnvironmentMetadata() {
+		baseMeta[k] = v
+	}
+	r.reporter.BaseMetadata = baseMeta
 }
 
 func (r *Reporter) InstallID() string {
@@ -202,18 +208,17 @@ func (r *Reporter) Run(ctx context.Context) error {
 		close(r.buffer)
 	}()
 
-	ctx = dcontext.HardContext(ctx)
-	baseMeta := r.reporter.BaseMetadata
+	hc := dcontext.HardContext(ctx)
 	for be := range r.buffer {
 		if be.action == setMetadatumAction {
 			entry := be.entries[0]
 			if entry.Value == "" {
-				delete(baseMeta, entry.Key)
+				delete(r.reporter.BaseMetadata, entry.Key)
 			} else {
-				baseMeta[entry.Key] = entry.Value
+				r.reporter.BaseMetadata[entry.Key] = entry.Value
 			}
 		} else {
-			r.doReport(ctx, &be)
+			r.doReport(hc, &be)
 		}
 	}
 	return nil

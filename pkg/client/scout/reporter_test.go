@@ -449,14 +449,10 @@ func TestReport(t *testing.T) {
 					GetInstallID: func(r *metriton.Reporter) (string, error) {
 						return mockInstallID, nil
 					},
-					// Fixed (growing) metadata passed with every report
-					BaseMetadata: map[string]interface{}{
-						"mode": mockMode,
-						"goos": mockOS,
-					},
 					Endpoint: testServer.URL,
 				},
 			}
+			scout.initialize(ctx, mockMode, mockOS)
 
 			// Start scout report processing...
 			sc, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
