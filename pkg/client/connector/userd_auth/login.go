@@ -48,7 +48,7 @@ type loginExecutor struct {
 	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
 	stdout           io.Writer
-	scout            *scout.Scout
+	scout            *scout.Reporter
 
 	// stateful
 
@@ -83,7 +83,7 @@ func NewLoginExecutor(
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
 	stdout io.Writer,
-	scout *scout.Scout,
+	scout *scout.Reporter,
 ) LoginExecutor {
 	ret := &loginExecutor{
 		SaveTokenFunc:    saveTokenFunc,
@@ -111,7 +111,7 @@ func NewLoginExecutor(
 	return ret
 }
 
-func NewStandardLoginExecutor(stdout io.Writer, scout *scout.Scout) LoginExecutor {
+func NewStandardLoginExecutor(stdout io.Writer, scout *scout.Reporter) LoginExecutor {
 	return NewLoginExecutor(
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,

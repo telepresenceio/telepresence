@@ -40,7 +40,7 @@ type outbound struct {
 
 	dnsConfig *rpc.DNSConfig
 
-	scout *scout.Scout
+	scout *scout.Reporter
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -51,7 +51,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout *scout.Scout) (*outbound, error) {
+func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout *scout.Reporter) (*outbound, error) {
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 

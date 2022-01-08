@@ -87,7 +87,7 @@ type anonymizer struct {
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
 func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error {
-	scout := scout.NewScout(ctx, "cli")
+	scout := scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 
 	// Get the log directory and return the error if we can't get it

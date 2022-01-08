@@ -234,7 +234,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 	ctx = dlog.WithLogger(ctx, nil)
-	scout := scout.NewScout(ctx, "cli")
+	scout := scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 
 	// Add metadata for the main legacy Telepresence commands so we can

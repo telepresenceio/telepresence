@@ -25,11 +25,11 @@ type bufEntry struct {
 	pairs  []ScoutMeta
 }
 
-// Scout is a Metriton reported
-type Scout struct {
+// Reporter is a Metriton reported
+type Reporter struct {
 	index    int
 	buffer   chan bufEntry
-	Reporter *metriton.Reporter
+	reporter *metriton.Reporter
 }
 
 // ScoutMeta is a key/value association used when reporting
@@ -135,9 +135,9 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 // before entries are discarded.
 const bufferSize = 40
 
-// NewScout creates a new initialized Scout instance that can be used to
+// NewReporter creates a new initialized Reporter instance that can be used to
 // send telepresence reports to Metriton
-func NewScout(ctx context.Context, mode string) (s *Scout) {
+func NewReporter(ctx context.Context, mode string) *Reporter {
 	baseMeta := getOsMetadata(ctx)
 	baseMeta["mode"] = mode
 	baseMeta["trace_id"] = uuid.New()
@@ -153,9 +153,9 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 		baseMeta[k] = v
 	}
 
-	return &Scout{
+	return &Reporter{
 		buffer: make(chan bufEntry, bufferSize),
-		Reporter: &metriton.Reporter{
+		reporter: &metriton.Reporter{
 			Application: "telepresence2",
 			Version:     client.Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
@@ -173,34 +173,38 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 	}
 }
 
+func (r *Reporter) InstallID() string {
+	return r.reporter.InstallID()
+}
+
 const setMetadatumAction = "__set_metadatum__"
 
 // SetMetadatum associates the given key with the given value in the metadata
 // of this instance.
-func (r *Scout) SetMetadatum(ctx context.Context, key string, value interface{}) {
+func (r *Reporter) SetMetadatum(ctx context.Context, key string, value interface{}) {
 	r.Report(ctx, setMetadatumAction, ScoutMeta{Key: key, Value: value})
 }
 
 // Start starts the instance in a goroutine
-func (s *Scout) Start(ctx context.Context) {
+func (r *Reporter) Start(ctx context.Context) {
 	go func() {
-		if err := s.Run(ctx); err != nil {
+		if err := r.Run(ctx); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()
 }
 
 // Run ensures that all reports on the send queue are sent to the endpoint
-func (s *Scout) Run(ctx context.Context) error {
+func (r *Reporter) Run(ctx context.Context) error {
 	go func() {
 		// Close buffer and let it drain when ctx is done.
 		<-ctx.Done()
-		close(s.buffer)
+		close(r.buffer)
 	}()
 
 	ctx = dcontext.HardContext(ctx)
-	baseMeta := s.Reporter.BaseMetadata
-	for be := range s.buffer {
+	baseMeta := r.reporter.BaseMetadata
+	for be := range r.buffer {
 		if be.action == setMetadatumAction {
 			entry := be.pairs[0]
 			if entry.Value == "" {
@@ -209,30 +213,30 @@ func (s *Scout) Run(ctx context.Context) error {
 				baseMeta[entry.Key] = entry.Value
 			}
 		} else {
-			s.doReport(ctx, be.action, be.pairs...)
+			r.doReport(ctx, be.action, be.pairs...)
 		}
 	}
 	return nil
 }
 
 // Report constructs and buffers a report on the send queue. It includes the fixed (growing)
-// set of metadata in the Scout structure and the pairs passed as arguments to this
+// set of metadata in the Reporter structure and the pairs passed as arguments to this
 // call. It also includes and increments the index, which can be used to
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
-func (s *Scout) Report(ctx context.Context, action string, pairs ...ScoutMeta) {
+func (r *Reporter) Report(ctx context.Context, action string, pairs ...ScoutMeta) {
 	select {
-	case s.buffer <- bufEntry{action, pairs}:
+	case r.buffer <- bufEntry{action, pairs}:
 	default:
 		dlog.Infof(ctx, "scout report %q discarded. Output buffer is full (or closed)", action)
 	}
 }
 
-func (s *Scout) doReport(ctx context.Context, action string, meta ...ScoutMeta) {
-	s.index++
+func (r *Reporter) doReport(ctx context.Context, action string, meta ...ScoutMeta) {
+	r.index++
 	metadata := make(map[string]interface{}, 4+len(meta))
 	metadata["action"] = action
-	metadata["index"] = s.index
+	metadata["index"] = r.index
 	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
@@ -242,7 +246,7 @@ func (s *Scout) doReport(ctx context.Context, action string, meta ...ScoutMeta) 
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err = s.Reporter.Report(ctx, metadata)
+	_, err = r.reporter.Report(ctx, metadata)
 	if err != nil && ctx.Err() == nil {
 		dlog.Infof(ctx, "scout report %q failed: %v", action, err)
 	}

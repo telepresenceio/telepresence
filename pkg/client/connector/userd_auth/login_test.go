@@ -204,7 +204,7 @@ func TestLoginFlow(t *testing.T) {
 		cfg, err := client.LoadConfig(ctx)
 		require.NoError(t, err)
 		ctx = client.WithConfig(ctx, cfg)
-		sc := scout.NewScout(ctx, "login-test")
+		sc := scout.NewReporter(ctx, "login-test")
 		return &fixture{
 			Context:                 ctx,
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,

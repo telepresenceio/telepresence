@@ -84,7 +84,7 @@ ifaces:
 func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	var (
 		ctx          = cmd.Context()
-		sc           = scout.NewScout(ctx, "cli")
+		sc           = scout.NewReporter(ctx, "cli")
 		configIssues = false
 		vpnMasks     = false
 		clusterMasks = false

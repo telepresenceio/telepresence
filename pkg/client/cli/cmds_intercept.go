@@ -89,7 +89,7 @@ type interceptState struct {
 	cmd  safeCobraCommand
 	args interceptArgs
 
-	scout *scout.Scout
+	scout *scout.Reporter
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
@@ -271,7 +271,7 @@ func newInterceptState(
 		cmd:  cmd,
 		args: args,
 
-		scout: scout.NewScout(ctx, "cli"),
+		scout: scout.NewReporter(ctx, "cli"),
 
 		connectorClient: connectorClient,
 		managerClient:   managerClient,

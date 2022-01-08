@@ -53,7 +53,7 @@ type parsedConnectRequest struct {
 
 // service represents the state of the Telepresence Connector
 type service struct {
-	scout *scout.Scout
+	scout *scout.Reporter
 
 	cancel func()
 
@@ -210,7 +210,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := userd_trafficmgr.New(c,
 		cluster,
-		s.scout.Reporter.InstallID(),
+		s.scout.InstallID(),
 		userd_trafficmgr.Callbacks{
 			GetCloudAPIKey: s.sharedState.GetCloudAPIKey,
 			RegisterManagerServer: func(mgrSrv manager.ManagerServer) {
@@ -291,7 +291,7 @@ func run(c context.Context) error {
 	dlog.Debug(c, "Listener opened")
 
 	s := &service{
-		scout:           scout.NewScout(c, "connector"),
+		scout:           scout.NewReporter(c, "connector"),
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 	}

@@ -55,7 +55,7 @@ type service struct {
 	cancel        context.CancelFunc
 	timedLogLevel log.TimedLevel
 
-	scout *scout.Scout
+	scout *scout.Reporter
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -194,7 +194,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 				DisableKeepAlives: true,
 			},
 		},
-		scout:         scout.NewScout(c, "daemon"),
+		scout:         scout.NewReporter(c, "daemon"),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 	}
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {

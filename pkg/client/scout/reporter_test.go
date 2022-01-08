@@ -295,10 +295,10 @@ func TestInstallID(t *testing.T) {
 			}
 
 			// Then do...
-			scout := NewScout(ctx, "go-test")
-			scout.Reporter.Endpoint = metriton.BetaEndpoint
-			actualID := scout.Reporter.InstallID()
-			actualErr, _ := scout.Reporter.BaseMetadata["install_id_error"].(string)
+			scout := NewReporter(ctx, "go-test")
+			scout.reporter.Endpoint = metriton.BetaEndpoint
+			actualID := scout.reporter.InstallID()
+			actualErr, _ := scout.reporter.BaseMetadata["install_id_error"].(string)
 
 			// And expect...
 			if tcData.ExpectedID == "" {
@@ -308,7 +308,7 @@ func TestInstallID(t *testing.T) {
 			}
 			assert.Equal(t, os.ExpandEnv(tcData.ExpectedErr), actualErr)
 			for k, v := range tcData.ExpectedExtra {
-				assert.Equal(t, v, scout.Reporter.BaseMetadata[k], k)
+				assert.Equal(t, v, scout.reporter.BaseMetadata[k], k)
 			}
 			os.Setenv("id", actualID)
 			for filename, expectedFilebody := range tcData.ExpectedHomeDir {
@@ -441,9 +441,9 @@ func TestReport(t *testing.T) {
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, v)
 			}
-			scout := &Scout{
-				buffer: make(chan bufEntry, bufferSize),
-				Reporter: &metriton.Reporter{
+			scout := &Reporter{
+				buffer: make(chan bufEntry, 40),
+				reporter: &metriton.Reporter{
 					Application: mockApplication,
 					Version:     mockVersion,
 					GetInstallID: func(r *metriton.Reporter) (string, error) {
