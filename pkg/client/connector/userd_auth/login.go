@@ -272,14 +272,14 @@ func (l *loginExecutor) reportLoginResult(ctx context.Context, err error, method
 	case err != nil && err != ctx.Err():
 		fmt.Fprintln(l.stdout, "Login failure.")
 		l.scout.Report(ctx, "login_failure",
-			scout.ScoutMeta{Key: "error", Value: err.Error()},
-			scout.ScoutMeta{Key: "method", Value: method})
+			scout.Entry{Key: "error", Value: err.Error()},
+			scout.Entry{Key: "method", Value: method})
 	case err != nil && err == ctx.Err():
 		fmt.Fprintln(l.stdout, "Login aborted.")
-		l.scout.Report(ctx, "login_interrupted", scout.ScoutMeta{Key: "method", Value: method})
+		l.scout.Report(ctx, "login_interrupted", scout.Entry{Key: "method", Value: method})
 	default:
 		fmt.Fprintln(l.stdout, "Login successful.")
-		l.scout.Report(ctx, "login_success", scout.ScoutMeta{Key: "method", Value: method})
+		l.scout.Report(ctx, "login_success", scout.Entry{Key: "method", Value: method})
 	}
 }
 

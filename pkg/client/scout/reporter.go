@@ -21,8 +21,8 @@ import (
 const environmentMetadataPrefix = "TELEPRESENCE_REPORT_"
 
 type bufEntry struct {
-	action string
-	pairs  []ScoutMeta
+	action  string
+	entries []Entry
 }
 
 // Reporter is a Metriton reported
@@ -32,8 +32,8 @@ type Reporter struct {
 	reporter *metriton.Reporter
 }
 
-// ScoutMeta is a key/value association used when reporting
-type ScoutMeta struct {
+// Entry is a key/value association used when reporting
+type Entry struct {
 	Key   string
 	Value interface{}
 }
@@ -182,7 +182,7 @@ const setMetadatumAction = "__set_metadatum__"
 // SetMetadatum associates the given key with the given value in the metadata
 // of this instance.
 func (r *Reporter) SetMetadatum(ctx context.Context, key string, value interface{}) {
-	r.Report(ctx, setMetadatumAction, ScoutMeta{Key: key, Value: value})
+	r.Report(ctx, setMetadatumAction, Entry{Key: key, Value: value})
 }
 
 // Start starts the instance in a goroutine
@@ -206,49 +206,49 @@ func (r *Reporter) Run(ctx context.Context) error {
 	baseMeta := r.reporter.BaseMetadata
 	for be := range r.buffer {
 		if be.action == setMetadatumAction {
-			entry := be.pairs[0]
+			entry := be.entries[0]
 			if entry.Value == "" {
 				delete(baseMeta, entry.Key)
 			} else {
 				baseMeta[entry.Key] = entry.Value
 			}
 		} else {
-			r.doReport(ctx, be.action, be.pairs...)
+			r.doReport(ctx, &be)
 		}
 	}
 	return nil
 }
 
 // Report constructs and buffers a report on the send queue. It includes the fixed (growing)
-// set of metadata in the Reporter structure and the pairs passed as arguments to this
+// set of metadata in the Reporter structure and the entries passed as arguments to this
 // call. It also includes and increments the index, which can be used to
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
-func (r *Reporter) Report(ctx context.Context, action string, pairs ...ScoutMeta) {
+func (r *Reporter) Report(ctx context.Context, action string, entries ...Entry) {
 	select {
-	case r.buffer <- bufEntry{action, pairs}:
+	case r.buffer <- bufEntry{action, entries}:
 	default:
 		dlog.Infof(ctx, "scout report %q discarded. Output buffer is full (or closed)", action)
 	}
 }
 
-func (r *Reporter) doReport(ctx context.Context, action string, meta ...ScoutMeta) {
+func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
 	r.index++
-	metadata := make(map[string]interface{}, 4+len(meta))
-	metadata["action"] = action
+	metadata := make(map[string]interface{}, 4+len(be.entries))
+	metadata["action"] = be.action
 	metadata["index"] = r.index
 	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
 		metadata["account_id"] = userInfo.AccountId
 	}
-	for _, metaItem := range meta {
+	for _, metaItem := range be.entries {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
 	_, err = r.reporter.Report(ctx, metadata)
 	if err != nil && ctx.Err() == nil {
-		dlog.Infof(ctx, "scout report %q failed: %v", action, err)
+		dlog.Infof(ctx, "scout report %q failed: %v", be.action, err)
 	}
 }
 

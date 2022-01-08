@@ -200,7 +200,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	// Phone home with the information about the size of the cluster
 	s.scout.SetMetadatum(c, "cluster_id", cluster.GetClusterId(c))
-	s.scout.Report(c, "connecting_traffic_manager", scout.ScoutMeta{
+	s.scout.Report(c, "connecting_traffic_manager", scout.Entry{
 		Key:   "mapped_namespaces",
 		Value: len(cr.MappedNamespaces),
 	})
@@ -245,7 +245,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	// Collect data on how long connection time took
-	s.scout.Report(c, "finished_connecting_traffic_manager", scout.ScoutMeta{
+	s.scout.Report(c, "finished_connecting_traffic_manager", scout.Entry{
 		Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
 
 	ingressInfo, err := cluster.DetectIngressBehavior(c)

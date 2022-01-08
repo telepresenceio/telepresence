@@ -131,7 +131,7 @@ func (o *outbound) resolveInCluster(c context.Context, query string) (results []
 	}
 	// Don't report queries that won't be resolved in-cluster, since that'll report every single DNS query on the user's machine
 	defer func() {
-		o.scout.Report(c, "incluster_dns_query", scout.ScoutMeta{Key: "had_results", Value: results != nil})
+		o.scout.Report(c, "incluster_dns_query", scout.Entry{Key: "had_results", Value: results != nil})
 	}()
 
 	// Give the cluster lookup a reasonable timeout.

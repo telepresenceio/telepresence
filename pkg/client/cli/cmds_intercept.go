@@ -614,7 +614,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	defer func() {
 		if err != nil {
-			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
 		} else {
 			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
 		}
@@ -659,7 +659,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			},
 		})
 		if err != nil {
-			is.scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			is.scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
 			err = fmt.Errorf("creating preview domain: %w", err)
 			return true, err
 		}

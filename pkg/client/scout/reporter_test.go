@@ -331,7 +331,7 @@ func TestReport(t *testing.T) {
 	)
 	type testcase struct {
 		InputEnv         map[string]string
-		InputMeta        []ScoutMeta
+		Input            []Entry
 		ExpectedMetadata map[string]string
 	}
 	testcases := map[string]testcase{
@@ -343,7 +343,7 @@ func TestReport(t *testing.T) {
 			},
 		},
 		"with-additional-scout-meta": {
-			InputMeta: []ScoutMeta{
+			Input: []Entry{
 				{
 					Key:   "extra_field_1",
 					Value: "extra value 1",
@@ -379,7 +379,7 @@ func TestReport(t *testing.T) {
 				"TELEPRESENCE_REPORT_ACTION":        "should be overridden",
 				"TELEPRESENCE_REPORT_EXTRA_FIELD_1": "should also be overridden",
 			},
-			InputMeta: []ScoutMeta{
+			Input: []Entry{
 				{
 					Key:   "extra_field_1",
 					Value: "extra value 1",
@@ -393,7 +393,7 @@ func TestReport(t *testing.T) {
 			},
 		},
 		"with-scout-meta-overriding-default-meta": {
-			InputMeta: []ScoutMeta{
+			Input: []Entry{
 				{
 					Key:   "mode",
 					Value: "overridden mode",
@@ -468,7 +468,7 @@ func TestReport(t *testing.T) {
 			}()
 
 			// Then do...
-			scout.Report(ctx, mockAction, tcData.InputMeta...)
+			scout.Report(ctx, mockAction, tcData.Input...)
 			cancel()
 			wg.Wait()
 
