@@ -90,6 +90,8 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		clusterMasks = false
 		reader       = bufio.NewReader(cmd.InOrStdin())
 	)
+	sc.Start(ctx)
+
 	err = cliutil.QuitDaemon(ctx)
 	if err != nil {
 		return err

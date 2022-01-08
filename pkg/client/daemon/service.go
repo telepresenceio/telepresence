@@ -55,8 +55,7 @@ type service struct {
 	cancel        context.CancelFunc
 	timedLogLevel log.TimedLevel
 
-	scoutClient *scout.Scout           // don't use this directly; use the 'scout' chan instead
-	scout       chan scout.ScoutReport // any-of-scoutUsers -> background-metriton
+	scout *scout.Scout
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -195,8 +194,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 				DisableKeepAlives: true,
 			},
 		},
-		scoutClient:   scout.NewScout(c, "daemon"),
-		scout:         make(chan scout.ScoutReport, 25),
+		scout:         scout.NewScout(c, "daemon"),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 	}
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
@@ -279,27 +277,7 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.
-	g.Go("background-metriton", func(c context.Context) error {
-		for report := range d.scout {
-			for k, v := range report.PersistentMetadata {
-				d.scoutClient.SetMetadatum(k, v)
-			}
-
-			var metadata []scout.ScoutMeta
-			for k, v := range report.Metadata {
-				metadata = append(metadata, scout.ScoutMeta{
-					Key:   k,
-					Value: v,
-				})
-			}
-			d.scoutClient.Report(c, report.Action, metadata...)
-		}
-		return nil
-	})
-	go func() {
-		scoutUsers.Wait()
-		close(d.scout)
-	}()
+	g.Go("background-metriton", d.scout.Run)
 
 	err = g.Wait()
 	if err != nil {

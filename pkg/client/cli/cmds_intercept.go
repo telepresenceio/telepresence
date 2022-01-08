@@ -89,7 +89,7 @@ type interceptState struct {
 	cmd  safeCobraCommand
 	args interceptArgs
 
-	Scout *scout.Scout
+	scout *scout.Scout
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
@@ -267,16 +267,18 @@ func newInterceptState(
 	managerClient manager.ManagerClient,
 	connInfo *connector.ConnectInfo,
 ) *interceptState {
-	return &interceptState{
+	is := &interceptState{
 		cmd:  cmd,
 		args: args,
 
-		Scout: scout.NewScout(ctx, "cli"),
+		scout: scout.NewScout(ctx, "cli"),
 
 		connectorClient: connectorClient,
 		managerClient:   managerClient,
 		connInfo:        connInfo,
 	}
+	is.scout.Start(ctx)
+	return is
 }
 
 func interceptMessage(r *connector.InterceptResult) error {
@@ -603,18 +605,18 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	}
 
 	// Add whatever metadata we already have to scout
-	is.Scout.SetMetadatum("service_name", args.agentName)
-	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
+	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
+	is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
 	mechanism, _ := args.extState.Mechanism()
 	mechanismArgs, _ := args.extState.MechanismArgs()
-	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
-	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
+	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
+	is.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(mechanismArgs))
 
 	defer func() {
 		if err != nil {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 		} else {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
+			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
 		}
 	}()
 
@@ -640,13 +642,13 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	var intercept *manager.InterceptInfo
 
 	// Add metadata to scout from InterceptResult
-	is.Scout.SetMetadatum("service_uid", r.GetServiceUid())
-	is.Scout.SetMetadatum("workload_kind", r.GetWorkloadKind())
+	is.scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
+	is.scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
 	// Since a user can create an intercept without specifying a namespace
 	// (thus using the default in their kubeconfig), we should be getting
 	// the namespace from the InterceptResult because that adds the namespace
 	// if it wasn't given on the cli by the user
-	is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
+	is.scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 
 	if args.previewEnabled {
 		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
@@ -657,15 +659,15 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			},
 		})
 		if err != nil {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			is.scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
 			err = fmt.Errorf("creating preview domain: %w", err)
 			return true, err
 		}
-		is.Scout.SetMetadatum("preview_url", intercept.PreviewDomain)
+		is.scout.SetMetadatum(ctx, "preview_url", intercept.PreviewDomain)
 	} else {
 		intercept = r.InterceptInfo
 	}
-	is.Scout.SetMetadatum("intercept_id", intercept.Id)
+	is.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
 
 	is.env = r.Environment
 	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id

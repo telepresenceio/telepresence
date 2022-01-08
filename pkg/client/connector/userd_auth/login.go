@@ -48,7 +48,7 @@ type loginExecutor struct {
 	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
 	stdout           io.Writer
-	scout            chan<- scout.ScoutReport
+	scout            *scout.Scout
 
 	// stateful
 
@@ -83,7 +83,7 @@ func NewLoginExecutor(
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
 	stdout io.Writer,
-	scout chan<- scout.ScoutReport,
+	scout *scout.Scout,
 ) LoginExecutor {
 	ret := &loginExecutor{
 		SaveTokenFunc:    saveTokenFunc,
@@ -111,7 +111,7 @@ func NewLoginExecutor(
 	return ret
 }
 
-func NewStandardLoginExecutor(stdout io.Writer, scout chan<- scout.ScoutReport) LoginExecutor {
+func NewStandardLoginExecutor(stdout io.Writer, scout *scout.Scout) LoginExecutor {
 	return NewLoginExecutor(
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,
@@ -271,29 +271,15 @@ func (l *loginExecutor) reportLoginResult(ctx context.Context, err error, method
 	switch {
 	case err != nil && err != ctx.Err():
 		fmt.Fprintln(l.stdout, "Login failure.")
-		l.scout <- scout.ScoutReport{
-			Action: "login_failure",
-			Metadata: map[string]interface{}{
-				"error":  err.Error(),
-				"method": method,
-			},
-		}
+		l.scout.Report(ctx, "login_failure",
+			scout.ScoutMeta{Key: "error", Value: err.Error()},
+			scout.ScoutMeta{Key: "method", Value: method})
 	case err != nil && err == ctx.Err():
 		fmt.Fprintln(l.stdout, "Login aborted.")
-		l.scout <- scout.ScoutReport{
-			Action: "login_interrupted",
-			Metadata: map[string]interface{}{
-				"method": method,
-			},
-		}
+		l.scout.Report(ctx, "login_interrupted", scout.ScoutMeta{Key: "method", Value: method})
 	default:
 		fmt.Fprintln(l.stdout, "Login successful.")
-		l.scout <- scout.ScoutReport{
-			Action: "login_success",
-			Metadata: map[string]interface{}{
-				"method": method,
-			},
-		}
+		l.scout.Report(ctx, "login_success", scout.ScoutMeta{Key: "method", Value: method})
 	}
 }
 

@@ -1,6 +1,7 @@
-package scout_test
+package scout
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,13 +11,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/ambassador/v2/pkg/metriton"
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -292,7 +295,7 @@ func TestInstallID(t *testing.T) {
 			}
 
 			// Then do...
-			scout := scout.NewScout(ctx, "go-test")
+			scout := NewScout(ctx, "go-test")
 			scout.Reporter.Endpoint = metriton.BetaEndpoint
 			actualID := scout.Reporter.InstallID()
 			actualErr, _ := scout.Reporter.BaseMetadata["install_id_error"].(string)
@@ -328,7 +331,7 @@ func TestReport(t *testing.T) {
 	)
 	type testcase struct {
 		InputEnv         map[string]string
-		InputMeta        []scout.ScoutMeta
+		InputMeta        []ScoutMeta
 		ExpectedMetadata map[string]string
 	}
 	testcases := map[string]testcase{
@@ -340,7 +343,7 @@ func TestReport(t *testing.T) {
 			},
 		},
 		"with-additional-scout-meta": {
-			InputMeta: []scout.ScoutMeta{
+			InputMeta: []ScoutMeta{
 				{
 					Key:   "extra_field_1",
 					Value: "extra value 1",
@@ -376,7 +379,7 @@ func TestReport(t *testing.T) {
 				"TELEPRESENCE_REPORT_ACTION":        "should be overridden",
 				"TELEPRESENCE_REPORT_EXTRA_FIELD_1": "should also be overridden",
 			},
-			InputMeta: []scout.ScoutMeta{
+			InputMeta: []ScoutMeta{
 				{
 					Key:   "extra_field_1",
 					Value: "extra value 1",
@@ -390,7 +393,7 @@ func TestReport(t *testing.T) {
 			},
 		},
 		"with-scout-meta-overriding-default-meta": {
-			InputMeta: []scout.ScoutMeta{
+			InputMeta: []ScoutMeta{
 				{
 					Key:   "mode",
 					Value: "overridden mode",
@@ -438,7 +441,9 @@ func TestReport(t *testing.T) {
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, v)
 			}
-			scout := &scout.Scout{
+			scout := &Scout{
+				buffer:  make(chan bufEntry, 40),
+				envMeta: getDefaultEnvironmentMetadata(),
 				Reporter: &metriton.Reporter{
 					Application: mockApplication,
 					Version:     mockVersion,
@@ -454,11 +459,22 @@ func TestReport(t *testing.T) {
 				},
 			}
 
+			// Start scout report processing...
+			sc, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				assert.NoError(t, scout.Run(sc))
+			}()
+
 			// Then do...
 			scout.Report(ctx, mockAction, tcData.InputMeta...)
+			cancel()
+			wg.Wait()
 
 			// And expect...
-			assert.Len(t, capturedRequestBodies, 1)
+			require.Len(t, capturedRequestBodies, 1)
 			metadata := capturedRequestBodies[0]["metadata"].(map[string]interface{})
 			for expectedKey, expectedValue := range tcData.ExpectedMetadata {
 				assert.Equal(t, expectedValue, metadata[expectedKey])
