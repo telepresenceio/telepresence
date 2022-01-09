@@ -121,6 +121,10 @@ type session struct {
 
 	// rndSource is the source for the random number generator in the TCP handlers
 	rndSource rand.Source
+
+	// Telemetry counters for DNS lookups
+	dnsLookups  int
+	dnsFailures int
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible
@@ -224,14 +228,14 @@ func newSession(c context.Context, scout *scout.Reporter, mi *daemon.OutboundInf
 // clusterLookup sends a LookupHost request to the traffic-manager and returns the result
 func (s *session) clusterLookup(ctx context.Context, key string) ([][]byte, error) {
 	dlog.Debugf(ctx, "LookupHost %q", key)
+	s.dnsLookups++
 	r, err := s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{
 		Session: s.session,
 		Host:    key,
 	})
-
-	// TODO: This will send a lot of scout reports per user and will not scale very well. Consider
-	//  using counters instead and send reports when the connection ends. /thomas
-	s.scout.Report(ctx, "incluster_dns_query", scout.Entry{Key: "had_results", Value: err == nil && len(r.Ips) > 0})
+	if err != nil || len(r.Ips) == 0 {
+		s.dnsFailures++
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -442,6 +446,10 @@ func (s *session) run(c context.Context) error {
 }
 
 func (s *session) stop(c context.Context) {
+	s.scout.Report(c, "incluster_dns_queries",
+		scout.Entry{Key: "total", Value: s.dnsLookups},
+		scout.Entry{Key: "failures", Value: s.dnsFailures})
+
 	atomic.StoreInt32(&s.closing, 1)
 	cc, cancel := context.WithTimeout(c, time.Second)
 	defer cancel()
