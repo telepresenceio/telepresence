@@ -136,6 +136,9 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 
 	// Ensure that no telepresence is running when the tests start
 	_, _, _ = Telepresence(ctx, "quit") //nolint:dogsled // don't care about any of the returns
+
+	// Ensure that the daemon-socket is non-existent.
+	_ = rmAsRoot(client.DaemonSocketName)
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
