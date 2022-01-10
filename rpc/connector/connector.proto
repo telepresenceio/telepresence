@@ -64,6 +64,38 @@ service Connector {
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  rpc ListCommands(google.protobuf.Empty) returns (CommandGroups);
+
+  rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+}
+
+message CommandGroups {
+  message Flag {
+    string type = 1;
+    string flag = 2;
+    string help = 3;
+  }
+  message Command {
+    string name = 1;
+    string short_help = 2;
+    string long_help = 3;
+    repeated Flag flags = 4;
+  }
+  message Commands {
+    repeated Command commands = 1;
+  }
+
+  map<string, Commands> command_groups = 1;
+}
+
+message RunCommandRequest {
+  repeated string os_args = 1;
+}
+
+message RunCommandResponse {
+  string stdout = 1;
+  string stderr = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.

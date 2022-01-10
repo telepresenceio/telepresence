@@ -60,6 +60,8 @@ type ConnectorClient interface {
 	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
+	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
 }
 
 type connectorClient struct {
@@ -237,6 +239,24 @@ func (c *connectorClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...g
 	return out, nil
 }
 
+func (c *connectorClient) ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error) {
+	out := new(CommandGroups)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ListCommands", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error) {
+	out := new(RunCommandResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RunCommand", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -280,6 +300,8 @@ type ConnectorServer interface {
 	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
+	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -334,6 +356,12 @@ func (UnimplementedConnectorServer) SetLogLevel(context.Context, *manager.LogLev
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
+}
+func (UnimplementedConnectorServer) ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListCommands not implemented")
+}
+func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -639,6 +667,42 @@ func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ListCommands(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/ListCommands",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ListCommands(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RunCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunCommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RunCommand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/RunCommand",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RunCommand(ctx, req.(*RunCommandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -705,6 +769,14 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Quit",
 			Handler:    _Connector_Quit_Handler,
+		},
+		{
+			MethodName: "ListCommands",
+			Handler:    _Connector_ListCommands_Handler,
+		},
+		{
+			MethodName: "RunCommand",
+			Handler:    _Connector_RunCommand_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
