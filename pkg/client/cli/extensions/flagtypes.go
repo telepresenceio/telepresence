@@ -210,6 +210,13 @@ var flagTypes = map[TypeEnum]interface{}{
 	},
 }
 
+func TypeFromString(s string) (TypeEnum, error) {
+	if _, ok := flagTypes[TypeEnum(s)]; !ok {
+		return TypeEnum(""), fmt.Errorf("invalid flag type: %s", s)
+	}
+	return TypeEnum(s), nil
+}
+
 type simpleValue struct {
 	pflag.Value
 	ptr reflect.Value

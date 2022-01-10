@@ -15,17 +15,19 @@ type CommandGroup struct {
 	Commands []*cobra.Command
 }
 
+type CommandGroups map[string][]*cobra.Command
+
 // FlagGroup represents a group of flags and the name of that group
 type FlagGroup struct {
 	Name  string
 	Flags *pflag.FlagSet
 }
 
-var commandGroupMap = make(map[string][]CommandGroup)
+var commandGroupMap = make(map[string]CommandGroups)
 var globalFlagGroups []FlagGroup
 
 func init() {
-	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) []CommandGroup {
+	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) CommandGroups {
 		return commandGroupMap[cmd.Name()]
 	})
 	cobra.AddTemplateFunc("globalFlagGroups", func() []FlagGroup {
@@ -64,15 +66,15 @@ func init() {
 	})
 }
 
-func setCommandGroups(cmd *cobra.Command, groups []CommandGroup) {
+func setCommandGroups(cmd *cobra.Command, groups CommandGroups) {
 	commandGroupMap[cmd.Name()] = groups
 }
 
 // AddCommandGroups adds all the groups in the given CommandGroup to the command,  replaces
 // the its standard usage template with a template that groups the commands according to that group.
-func AddCommandGroups(cmd *cobra.Command, groups []CommandGroup) {
+func AddCommandGroups(cmd *cobra.Command, groups CommandGroups) {
 	for _, group := range groups {
-		cmd.AddCommand(group.Commands...)
+		cmd.AddCommand(group...)
 	}
 	setCommandGroups(cmd, groups)
 
@@ -90,8 +92,8 @@ Examples:
 
 Available Commands:
 {{- if commandGroups .}}
-{{- range $group := commandGroups .}}
-  {{$group.Name}}:{{range $group.Commands}}
+{{- range $name, $group := commandGroups .}}
+  {{$name}}:{{range $group}}
     {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}
 {{- else}}
 {{- range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}

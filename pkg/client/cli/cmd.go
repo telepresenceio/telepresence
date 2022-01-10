@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"runtime"
 	"strings"
 
@@ -132,25 +134,24 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
+	groups, err := getRemoteCommands(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting remote commands from connector: %v; continuing without.\n", err)
+	}
 	rootCmd.InitDefaultHelpCmd()
-	AddCommandGroups(rootCmd, []CommandGroup{
-		{
-			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		},
-		{
-			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
-		},
-		{
-			Name:     "Debug Commands",
-			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		},
-		{
-			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
-		},
-	})
+	static := CommandGroups{
+		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
+		"Traffic Commands": []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
+		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
+		"Other Commands":   []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+	}
+	for name, cmds := range static {
+		if _, ok := groups[name]; !ok {
+			groups[name] = []*cobra.Command{}
+		}
+		groups[name] = append(groups[name], cmds...)
+	}
+	AddCommandGroups(rootCmd, groups)
 	initGlobalFlagGroups()
 	for _, group := range globalFlagGroups {
 		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
