@@ -68,14 +68,25 @@ your cluster; if it detects it correctly, may simply press "enter" and
 accept the default, otherwise you must tell Telepresence the correct
 value.
 
-When creating an intercept with the `http` mechanism, the
-traffic-agent sends a `GET /telepresence-http2-check` request to your
-service and to the process running on your local machine at the port
-specified in your intercept, in order to determine if they support
-HTTP/2.  This is required for the intercepts to behave correctly.  If
-you do not have a service running locally when the intercept is
-created, the traffic-agent will use the result it got from checking
-the in-cluster service.
+When creating an intercept with the `http` mechanism, Telepresence must
+determine the application protocol to use (HTTP/1.1 or HTTP/2). If the
+service's `ports.appProtocol` field is set, it will be used. If not, then
+Telepresence will use the configured [application protocol strategy](../config/#intercept)
+to determine the protocol. The default behavior (`http2Probe` strategy) is
+to send a `GET /telepresence-http2-check` request to your service in order
+to determine if it supports HTTP/2.  This is required for the intercepts to
+behave correctly.
+
+### TLS
+
+If the intercepted service expects TLS, then Telepresence must terminate the
+TLS in order to use the `http` mechanism. It is then common to also restore
+the TLS by originating it again. This is controlled using [TLS annotations](../cluster-config/#tls)
+in the workload.
+
+Use the `--http-plaintext` flag when doing an intercept when the service in the
+cluster is using TLS in case you want to use plaintext for the communication with the
+process on your local workstation. 
 
 ## Supported workloads
 
