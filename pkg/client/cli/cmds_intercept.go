@@ -277,7 +277,7 @@ func newInterceptState(
 		managerClient:   managerClient,
 		connInfo:        connInfo,
 	}
-	is.scout.Start(ctx)
+	is.scout.Start(log.WithDiscardingLogger(ctx))
 	return is
 }
 
