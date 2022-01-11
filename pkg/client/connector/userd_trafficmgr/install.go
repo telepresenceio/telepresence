@@ -259,6 +259,17 @@ func (ki *installer) getSvcForInjectedPod(
 	return svc, nil
 }
 
+func useAutoInstall(podTpl *kates.PodTemplateSpec) (bool, error) {
+	a := podTpl.ObjectMeta.Annotations
+	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
+	manuallyManaged := a != nil && a[install.ManualInjectAnnotation] == "true"
+	if webhookInjected && manuallyManaged {
+		return false, fmt.Errorf("workload is misconfigured; only one of %s and %s may be set at a time, but both are",
+			install.InjectAnnotation, install.ManualInjectAnnotation)
+	}
+	return !(webhookInjected || manuallyManaged), nil
+}
+
 // EnsureAgent does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
@@ -275,18 +286,16 @@ func (ki *installer) EnsureAgent(c context.Context, obj kates.Object,
 	namespace := obj.GetNamespace()
 
 	var svc *kates.Service
-	a := podTemplate.ObjectMeta.Annotations
-	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
-	manuallyManaged := a != nil && a[install.ManualInjectAnnotation] == "true"
-	if webhookInjected != manuallyManaged {
+	autoInstall, err := useAutoInstall(podTemplate)
+	if err != nil {
+		return "", "", err
+	}
+	if !autoInstall {
 		svc, err := ki.getSvcForInjectedPod(c, namespace, name, svcName, portNameOrNumber, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
 		return string(svc.GetUID()), kind, nil
-	} else if webhookInjected {
-		// If both are true that's likely to cause issues, since there may be two traffic agents on the pod.
-		return "", "", fmt.Errorf("workload is misconfigured; only one of %s and %s may be set at a time, but both are", install.InjectAnnotation, install.ManualInjectAnnotation)
 	}
 
 	var agentContainer *kates.Container
