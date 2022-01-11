@@ -15,8 +15,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -161,9 +161,9 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 	require := is.Require()
 	ctx := is.Context()
 
-	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{"kubeconfig": itest.KubeConfig(ctx), "namespace": is.ManagerNamespace()})
+	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{"kubeconfig": itest.KubeConfig(ctx), "namespace": is.ManagerNamespace()})
 	require.NoError(err)
-	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, k8s.Callbacks{})
 	require.NoError(err)
 
 	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up.
@@ -226,7 +226,7 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace
 
 	require := is.Require()
 	require.NoError(kc.WaitUntilReady(waitCtx))
-	ti, err := userd_trafficmgr.NewTrafficManagerInstaller(kc)
+	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 	require.NoError(ti.EnsureManager(ctx))
 	require.Eventually(func() bool {
@@ -242,20 +242,20 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
 }
 
-func (is *installSuite) cluster(ctx context.Context, managerNamespace string) *userd_k8s.Cluster {
+func (is *installSuite) cluster(ctx context.Context, managerNamespace string) *k8s.Cluster {
 	require := is.Require()
-	cfgAndFlags, err := userd_k8s.NewConfig(ctx, map[string]string{
+	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{
 		"kubeconfig": itest.KubeConfig(ctx),
 		"context":    "default",
 		"namespace":  managerNamespace})
 	require.NoError(err)
-	kc, err := userd_k8s.NewCluster(ctx, cfgAndFlags, nil, userd_k8s.Callbacks{})
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, k8s.Callbacks{})
 	require.NoError(err)
 	return kc
 }
 
-func (is *installSuite) installer(ctx context.Context) userd_trafficmgr.Installer {
-	ti, err := userd_trafficmgr.NewTrafficManagerInstaller(is.cluster(ctx, is.ManagerNamespace()))
+func (is *installSuite) installer(ctx context.Context) trafficmgr.Installer {
+	ti, err := trafficmgr.NewTrafficManagerInstaller(is.cluster(ctx, is.ManagerNamespace()))
 	is.Require().NoError(err)
 	return ti
 }

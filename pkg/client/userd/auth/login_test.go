@@ -21,9 +21,9 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -167,7 +167,7 @@ func TestLoginFlow(t *testing.T) {
 		MockSaveUserInfoWrapper *MockSaveUserInfoWrapper
 		MockOpenURLWrapper      *MockOpenURLWrapper
 		MockOauth2Server        *MockOauth2Server
-		Runner                  userd_auth.LoginExecutor
+		Runner                  auth.LoginExecutor
 		OpenedUrls              chan string
 	}
 	const mockCompletionUrl = "http://example.com/mock-completion"
@@ -212,7 +212,7 @@ func TestLoginFlow(t *testing.T) {
 			MockOpenURLWrapper:      mockOpenURLWrapper,
 			MockOauth2Server:        mockOauth2Server,
 			OpenedUrls:              openUrlChan,
-			Runner: userd_auth.NewLoginExecutor(
+			Runner: auth.NewLoginExecutor(
 				saveToken,
 				saveUserInfo,
 				func(url string) error {
