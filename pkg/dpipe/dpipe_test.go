@@ -3,7 +3,10 @@ package dpipe
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
+
+	//nolint:depguard // This short script has no logging and no Contexts.
 	"os/exec"
 	"runtime"
 	"testing"
@@ -19,7 +22,8 @@ var echoBinary string
 func TestMain(m *testing.M) {
 	ebf, err := os.CreateTemp("", "echo")
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	echoBinary = ebf.Name()
 	if runtime.GOOS == "windows" {
@@ -27,7 +31,8 @@ func TestMain(m *testing.M) {
 	}
 	ebf.Close()
 	if err = exec.Command("go", "build", "-o", echoBinary, "./testdata/echo").Run(); err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	defer os.Remove(echoBinary)
 	m.Run()
