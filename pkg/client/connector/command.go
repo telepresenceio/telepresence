@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
@@ -149,7 +150,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	}
 }
 
-func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config, svc *grpc.Server) *rpc.ConnectInfo {
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config, svc *grpc.Server, le userd_auth.LoginExecutor) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -212,7 +213,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		cluster,
 		s.scout.InstallID(),
 		userd_trafficmgr.Callbacks{
-			GetCloudAPIKey: s.sharedState.GetCloudAPIKey,
+			GetCloudAPIKey: le.GetCloudAPIKey,
 			RegisterManagerServer: func(mgrSrv manager.ManagerServer) {
 				manager.RegisterManagerServer(svc, mgrSrv)
 			},
@@ -303,7 +304,7 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 
-	cliio := &s.sharedState.UserNotifications
+	cliio := &broadcastqueue.BroadcastQueue{}
 	quitOnce := sync.Once{}
 	s.cancel = func() {
 		quitOnce.Do(func() {
@@ -313,8 +314,7 @@ func run(c context.Context) error {
 			})
 		})
 	}
-
-	s.sharedState.LoginExecutor = userd_auth.NewStandardLoginExecutor(cliio, s.scout)
+	loginExecutor := userd_auth.NewStandardLoginExecutor(cliio, s.scout)
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -361,10 +361,13 @@ func run(c context.Context) error {
 		svc := grpc.NewServer(opts...)
 		var grpcSvc rpc.ConnectorServer
 		grpcSvc, err = userd_grpc.NewGRPCService(
-			c, ProcessName,
+			c,
+			ProcessName,
 			userd_grpc.Callbacks{
-				Cancel:  s.cancel,
-				Connect: s.connect,
+				LoginExecutor:     loginExecutor,
+				Cancel:            s.cancel,
+				Connect:           s.connect,
+				UserNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
 			},
 			s.sharedState,
 		)
@@ -408,7 +411,7 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config, svc)
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config, svc, loginExecutor)
 
 		return nil
 	})
@@ -441,7 +444,7 @@ func run(c context.Context) error {
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
 	// Ambassador Cloud login flow.
-	g.Go("background-systema", s.sharedState.LoginExecutor.Worker)
+	g.Go("background-systema", loginExecutor.Worker)
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.

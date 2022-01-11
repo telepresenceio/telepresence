@@ -28,8 +28,10 @@ import (
 )
 
 type Callbacks struct {
-	Cancel  func()
-	Connect func(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo
+	userd_auth.LoginExecutor
+	Cancel            func()
+	Connect           func(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo
+	UserNotifications func(context.Context) <-chan string
 }
 
 type service struct {
@@ -204,7 +206,7 @@ func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
 	ctx := s.callCtx(stream.Context(), "UserNotifications")
 	dlog.Debug(ctx, "called")
-	for msg := range s.sharedState.UserNotifications.Subscribe(ctx) {
+	for msg := range s.callbacks.UserNotifications(ctx) {
 		if err := stream.Send(&rpc.Notification{Message: msg}); err != nil {
 			return err
 		}
@@ -217,7 +219,7 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginR
 	ctx = s.callCtx(ctx, "Login")
 	dlog.Debug(ctx, "called")
 	if apikey := req.GetApiKey(); apikey != "" {
-		newLogin, err := s.sharedState.LoginExecutor.LoginAPIKey(ctx, apikey)
+		newLogin, err := s.callbacks.LoginAPIKey(ctx, apikey)
 		dlog.Infof(ctx, "LoginAPIKey => (%v, %v)", newLogin, err)
 		if err != nil {
 			if errors.Is(err, os.ErrPermission) {
@@ -234,11 +236,11 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginR
 		// We should refresh here because the user is explicitly logging in so
 		// even if we have cache'd user info, if they are unable to get new
 		// user info, then it should trigger the login function
-		if _, err := s.sharedState.LoginExecutor.GetUserInfo(ctx, true); err == nil {
+		if _, err := s.callbacks.GetUserInfo(ctx, true); err == nil {
 			dlog.Debug(ctx, "returned")
 			return &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}, nil
 		}
-		if err := s.sharedState.LoginExecutor.Login(ctx); err != nil {
+		if err := s.callbacks.Login(ctx); err != nil {
 			dlog.Debug(ctx, "returned")
 			return nil, err
 		}
@@ -250,7 +252,7 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginR
 func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Logout")
 	dlog.Debug(ctx, "called")
-	if err := s.sharedState.LoginExecutor.Logout(ctx); err != nil {
+	if err := s.callbacks.Logout(ctx); err != nil {
 		if errors.Is(err, userd_auth.ErrNotLoggedIn) {
 			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
 		}
@@ -264,7 +266,7 @@ func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, err
 func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (*rpc.UserInfo, error) {
 	ctx = s.callCtx(ctx, "GetCloudUserInfo")
 	dlog.Debug(ctx, "called")
-	info, err := s.sharedState.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
+	info, err := s.callbacks.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
 	if err != nil {
 		dlog.Debug(ctx, "returned")
 		return nil, err
@@ -276,7 +278,7 @@ func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest
 func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
 	ctx = s.callCtx(ctx, "GetCloudAPIKey")
 	dlog.Debug(ctx, "called")
-	key, err := s.sharedState.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
+	key, err := s.callbacks.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
 	if err != nil {
 		dlog.Debug(ctx, "returned")
 		return nil, err
@@ -288,12 +290,12 @@ func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc
 func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
 	ctx = s.callCtx(ctx, "GetCloudLicense")
 	dlog.Debug(ctx, "called")
-	license, hostDomain, err := s.sharedState.LoginExecutor.GetLicense(ctx, req.GetId())
+	license, hostDomain, err := s.callbacks.GetLicense(ctx, req.GetId())
 	// login is required to get the license from system a so
 	// we try to login before retrying the request
 	if err != nil {
-		if _err := s.sharedState.LoginExecutor.Login(ctx); _err == nil {
-			license, hostDomain, err = s.sharedState.LoginExecutor.GetLicense(ctx, req.GetId())
+		if _err := s.callbacks.Login(ctx); _err == nil {
+			license, hostDomain, err = s.callbacks.GetLicense(ctx, req.GetId())
 		}
 	}
 	if err != nil {

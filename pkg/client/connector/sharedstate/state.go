@@ -6,9 +6,6 @@ import (
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -45,9 +42,6 @@ type TrafficManager interface {
 }
 
 type State struct {
-	LoginExecutor     userd_auth.LoginExecutor
-	UserNotifications broadcastqueue.BroadcastQueue
-
 	clusterFinalized chan struct{}
 	cluster          *userd_k8s.Cluster
 
@@ -146,32 +140,4 @@ func (s *State) GetTrafficManagerReadyToIntercept() (*connector.InterceptResult,
 		}
 	}
 	return &connector.InterceptResult{Error: ie}, nil
-}
-
-func (s *State) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {
-	info, err := s.LoginExecutor.GetUserInfo(ctx, refresh)
-	if autoLogin && err != nil {
-		// Opportunistically log in; if it fails, don't sweat it and discard the error.
-		if _err := s.LoginExecutor.Login(ctx); _err == nil {
-			info, err = s.LoginExecutor.GetUserInfo(ctx, refresh)
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	return info, nil
-}
-
-func (s *State) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
-	key, err := s.LoginExecutor.GetAPIKey(ctx, desc)
-	if autoLogin && err != nil {
-		// Opportunistically log in; if it fails, don't sweat it and discard the error.
-		if _err := s.LoginExecutor.Login(ctx); _err == nil {
-			key, err = s.LoginExecutor.GetAPIKey(ctx, desc)
-		}
-	}
-	if err != nil {
-		return "", err
-	}
-	return key, nil
 }
