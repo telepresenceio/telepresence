@@ -23,6 +23,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type Callbacks struct {
@@ -33,20 +35,30 @@ type Callbacks struct {
 type service struct {
 	rpc.UnsafeConnectorServer
 
-	callbacks   Callbacks
-	sharedState *sharedstate.State
+	callbacks     Callbacks
+	procName      string
+	timedLogLevel log.TimedLevel
+	sharedState   *sharedstate.State
 
 	ucn int64
 }
 
 func NewGRPCService(
+	ctx context.Context,
+	procName string,
 	callbacks Callbacks,
 	sharedState *sharedstate.State,
-) rpc.ConnectorServer {
-	return &service{
-		callbacks:   callbacks,
-		sharedState: sharedState,
+) (rpc.ConnectorServer, error) {
+	s := &service{
+		callbacks:     callbacks,
+		sharedState:   sharedState,
+		procName:      procName,
+		timedLogLevel: log.NewTimedLevel(client.GetConfig(ctx).LogLevels.UserDaemon.String(), log.SetLevel),
 	}
+	if err := logging.LoadTimedLevelFromCache(ctx, s.timedLogLevel, s.procName); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func callRecovery(c context.Context, r interface{}, err error) error {
@@ -299,8 +311,13 @@ func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	if request.Duration != nil {
 		duration = request.Duration.AsDuration()
 	}
+	err := logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName)
+	if err != nil {
+		dlog.Debug(ctx, "returned")
+		return nil, grpcStatus.Error(grpcCodes.Internal, err.Error())
+	}
 	dlog.Debug(ctx, "returned")
-	return &empty.Empty{}, s.sharedState.SetLogLevel(ctx, request.LogLevel, duration)
+	return &empty.Empty{}, nil
 }
 
 func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {

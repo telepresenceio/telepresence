@@ -295,9 +295,7 @@ func run(c context.Context) error {
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 	}
-	if s.sharedState, err = sharedstate.NewState(c, ProcessName); err != nil {
-		return err
-	}
+	s.sharedState = sharedstate.NewState()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -353,14 +351,6 @@ func run(c context.Context) error {
 			}
 		}()
 
-		defer func() {
-			if err != nil {
-				dlog.Errorf(c, "gRPC server ended with: %v", err)
-			} else {
-				dlog.Debug(c, "gRPC server ended")
-			}
-		}()
-
 		opts := []grpc.ServerOption{}
 		cfg := client.GetConfig(c)
 		if !cfg.Grpc.MaxReceiveSize.IsZero() {
@@ -369,23 +359,32 @@ func run(c context.Context) error {
 			}
 		}
 		svc := grpc.NewServer(opts...)
-		rpc.RegisterConnectorServer(svc, userd_grpc.NewGRPCService(
+		var grpcSvc rpc.ConnectorServer
+		grpcSvc, err = userd_grpc.NewGRPCService(
+			c, ProcessName,
 			userd_grpc.Callbacks{
 				Cancel:  s.cancel,
 				Connect: s.connect,
 			},
 			s.sharedState,
-		))
+		)
+		if err != nil {
+			return err
+		}
+		rpc.RegisterConnectorServer(svc, grpcSvc)
 		svcCh <- svc
 
 		sc := &dhttp.ServerConfig{
 			Handler: svc,
 		}
 		dlog.Info(c, "gRPC server started")
-		if err = sc.Serve(grpcSoft, grpcListener); err != nil {
-			if c.Err() != nil {
-				err = nil // Normal shutdown
-			}
+		if err = sc.Serve(grpcSoft, grpcListener); err != nil && c.Err() != nil {
+			err = nil // Normal shutdown
+		}
+		if err != nil {
+			dlog.Errorf(c, "gRPC server ended with: %v", err)
+		} else {
+			dlog.Debug(c, "gRPC server ended")
 		}
 		return err
 	})
