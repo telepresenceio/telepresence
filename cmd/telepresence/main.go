@@ -10,9 +10,9 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -48,7 +48,7 @@ func main() {
 			SilenceUsage:  true, // our FlagErrorFunc will handle it
 		}
 		cmd.AddCommand(userd.Command())
-		cmd.AddCommand(daemon.Command())
+		cmd.AddCommand(rootd.Command())
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			os.Exit(1)
@@ -87,7 +87,7 @@ func isDaemon() bool {
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
 	w := cmd.ErrOrStderr()
 	first := true
-	for _, proc := range []string{daemon.ProcessName, userd.ProcessName} {
+	for _, proc := range []string{rootd.ProcessName, userd.ProcessName} {
 		if summary, err := logging.SummarizeLog(ctx, proc); err != nil {
 			fmt.Fprintf(w, "failed to scan %s logs: %v\n", proc, err)
 		} else if summary != "" {

@@ -11,7 +11,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
