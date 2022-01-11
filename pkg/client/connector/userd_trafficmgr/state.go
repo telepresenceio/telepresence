@@ -14,7 +14,7 @@ type State struct {
 	cluster          *userd_k8s.Cluster
 
 	trafficMgrFinalized chan struct{}
-	trafficMgr          TrafficManager
+	trafficMgr          *TrafficManager
 }
 
 func NewState() *State {
@@ -55,7 +55,7 @@ func (s *State) GetClusterNonBlocking() *userd_k8s.Cluster {
 	}
 }
 
-func (s *State) MaybeSetTrafficManager(mgr TrafficManager) bool {
+func (s *State) MaybeSetTrafficManager(mgr *TrafficManager) bool {
 	select {
 	case <-s.trafficMgrFinalized:
 		return false
@@ -66,7 +66,7 @@ func (s *State) MaybeSetTrafficManager(mgr TrafficManager) bool {
 	}
 }
 
-func (s *State) GetTrafficManagerBlocking(ctx context.Context) (TrafficManager, error) {
+func (s *State) GetTrafficManagerBlocking(ctx context.Context) (*TrafficManager, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -75,7 +75,7 @@ func (s *State) GetTrafficManagerBlocking(ctx context.Context) (TrafficManager, 
 	}
 }
 
-func (s *State) GetTrafficManagerNonBlocking() TrafficManager {
+func (s *State) GetTrafficManagerNonBlocking() *TrafficManager {
 	select {
 	case <-s.trafficMgrFinalized:
 		return s.trafficMgr
@@ -84,7 +84,7 @@ func (s *State) GetTrafficManagerNonBlocking() TrafficManager {
 	}
 }
 
-func (s *State) GetTrafficManagerReadyToIntercept() (*connector.InterceptResult, TrafficManager) {
+func (s *State) GetTrafficManagerReadyToIntercept() (*connector.InterceptResult, *TrafficManager) {
 	var ie connector.InterceptError
 	switch {
 	case s.cluster == nil:

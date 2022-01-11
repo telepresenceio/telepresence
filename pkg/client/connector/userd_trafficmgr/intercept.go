@@ -75,7 +75,7 @@ func newPortForwards() *livePortForwards {
 }
 
 // start starts a port forward for the given intercept and remembers that it's alive
-func (lpf livePortForwards) start(ctx context.Context, tm *trafficManager, ii *manager.InterceptInfo) {
+func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *manager.InterceptInfo) {
 	fk := forwardKey{
 		Name:  ii.Spec.Name,
 		PodIP: ii.PodIp,
@@ -110,7 +110,7 @@ func (lpf livePortForwards) cancelUnwanted(ctx context.Context) {
 }
 
 // reconcileMountPoints deletes mount points for which there no longer is an intercept
-func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
+func (tm *TrafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
 	var mountsToDelete []interface{}
 	tm.mountPoints.Range(func(key, value interface{}) bool {
 		if _, ok := existingIntercepts[value.(string)]; !ok {
@@ -143,7 +143,7 @@ func (tm *trafficManager) reconcileMountPoints(ctx context.Context, existingInte
 	}
 }
 
-func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
+func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error {
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
 	//     dgroup's other functionality
@@ -232,7 +232,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot amended with
 // the local filesystem mount point.
-func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
+func (tm *TrafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 	// Copy the current snapshot
 	tm.currentInterceptsLock.Lock()
 	intercepts := make([]*manager.InterceptInfo, len(tm.currentIntercepts))
@@ -255,7 +255,7 @@ func (tm *trafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 	return intercepts
 }
 
-func (tm *trafficManager) setCurrentIntercepts(ctx context.Context, intercepts []*manager.InterceptInfo) {
+func (tm *TrafficManager) setCurrentIntercepts(ctx context.Context, intercepts []*manager.InterceptInfo) {
 	tm.currentInterceptsLock.Lock()
 	tm.currentIntercepts = intercepts
 	tm.reconcileAPIServers(ctx)
@@ -273,7 +273,7 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (tm *trafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object) {
+func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object) {
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
@@ -320,7 +320,7 @@ func (tm *trafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 }
 
 // AddIntercept adds one intercept
-func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	result, wl := tm.CanIntercept(c, ir)
 	if result != nil {
 		return result, nil
@@ -427,13 +427,13 @@ func (tm *trafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 }
 
 // shouldForward returns true if the intercept info given should result in mounts or ports being forwarded
-func (tm *trafficManager) shouldForward(ii *manager.InterceptInfo) bool {
+func (tm *TrafficManager) shouldForward(ii *manager.InterceptInfo) bool {
 	return ii.SftpPort > 0 || len(ii.Spec.ExtraPorts) > 0
 }
 
 // startForwards starts port forwards and mounts for the given forwardKey.
 // It assumes that the user has called shouldForward and is sure that something will be started.
-func (tm *trafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, extraPorts []int32) {
+func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, extraPorts []int32) {
 	if sftpPort > 0 {
 		// There's nothing to mount if the SftpPort is zero
 		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
@@ -447,7 +447,7 @@ func (tm *trafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup,
 	}
 }
 
-func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
+func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// Using kubectl port-forward here would require the pod name to be either fetched from the API server, or threaded
 	// all the way through from the intercept request to the agent and into the WatchIntercepts; it would also create
@@ -465,7 +465,7 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	}
 }
 
-func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
+func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	var mountPoint string
@@ -543,7 +543,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 }
 
 // RemoveIntercept removes one intercept by name
-func (tm *trafficManager) RemoveIntercept(c context.Context, name string) error {
+func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error {
 	if ns, ok := tm.LocalIntercepts[name]; ok {
 		return tm.RemoveLocalOnlyIntercept(c, name, ns)
 	}
@@ -557,7 +557,7 @@ func (tm *trafficManager) RemoveIntercept(c context.Context, name string) error 
 }
 
 // clearIntercepts removes all intercepts
-func (tm *trafficManager) clearIntercepts(c context.Context) error {
+func (tm *TrafficManager) clearIntercepts(c context.Context) error {
 	<-tm.startup
 	for _, cept := range tm.getCurrentIntercepts() {
 		err := tm.RemoveIntercept(c, cept.Spec.Name)
@@ -570,7 +570,7 @@ func (tm *trafficManager) clearIntercepts(c context.Context) error {
 
 // reconcileAPIServers start/stop API servers as needed based on the TELEPRESENCE_API_PORT environment variable
 // of the currently intercepted agent's env.
-func (tm *trafficManager) reconcileAPIServers(ctx context.Context) {
+func (tm *TrafficManager) reconcileAPIServers(ctx context.Context) {
 	wantedPorts := make(map[int]struct{})
 	wantedMatchers := make(map[string]*manager.InterceptInfo)
 	agents := tm.getCurrentAgents()
@@ -623,7 +623,7 @@ func (tm *trafficManager) reconcileAPIServers(ctx context.Context) {
 	}
 }
 
-func (tm *trafficManager) newAPIServerForPort(ctx context.Context, port int) {
+func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
 	s := restapi.NewServer(tm, true)
 	as := apiServer{Server: s}
 	ctx, as.cancel = context.WithCancel(ctx)
@@ -639,7 +639,7 @@ func (tm *trafficManager) newAPIServerForPort(ctx context.Context, port int) {
 	}()
 }
 
-func (tm *trafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
+func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
 	m, err := header.NewMatcher(ic.Headers)
 	if err != nil {
 		dlog.Error(ctx, err)
@@ -652,7 +652,7 @@ func (tm *trafficManager) newMatcher(ctx context.Context, ic *manager.InterceptI
 	}
 }
 
-func (tm *trafficManager) Intercepts(ctx context.Context, callerID string, h http.Header) (bool, error) {
+func (tm *TrafficManager) Intercepts(ctx context.Context, callerID string, h http.Header) (bool, error) {
 	tm.currentInterceptsLock.Lock()
 	defer tm.currentInterceptsLock.Unlock()
 	m := tm.currentMatchers[callerID]

@@ -26,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -35,37 +34,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
-
-// A TrafficManager implementation is essentially the goroutine that handles communication with the
-// in-cluster Traffic Manager.  It includes a "Run" method which is what runs in the goroutine, and
-// several other methods to communicate with that goroutine.
-type TrafficManager interface {
-	// Run is the "main" method that runs in a dedicated persistent goroutine.
-	Run(context.Context) error
-
-	// GetClientBlocking returns a client object for talking to the manager.  If communication
-	// is not yet established, GetClientBlocking blocks until it is (or until the Context is
-	// canceled).  Error is non-nil if either there is an error establishing communication or if
-	// the context is canceled.
-	GetClientBlocking(ctx context.Context) (manager.ManagerClient, error)
-
-	// GetClientNonBlocking is similar to GetClientBlocking, but if communication is not yet
-	// established then it immediately returns (nil, nil) rather than blocking; this is the only
-	// scenario in which both are nil.
-	GetClientNonBlocking() (manager.ManagerClient, error)
-
-	// CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
-	// only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
-	// intercept, or the workload for the intercept.
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object)
-
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-
-	RemoveIntercept(context.Context, string) error
-	WorkloadInfoSnapshot(context.Context, *rpc.ListRequest) *rpc.WorkloadInfoSnapshot
-	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
-	SetStatus(context.Context, *rpc.ConnectInfo)
-}
 
 type Callbacks struct {
 	GetCloudAPIKey        func(context.Context, string, bool) (string, error)
@@ -78,9 +46,10 @@ type apiServer struct {
 	cancel context.CancelFunc
 }
 
-// trafficManager is a handle to access the Traffic Manager in a
-// cluster.
-type trafficManager struct {
+// A TrafficManager is essentially the goroutine that handles communication with the
+// in-cluster Traffic Manager.  It includes a "Run" method which is what runs in the goroutine, and
+// several other methods to communicate with that goroutine.
+type TrafficManager struct {
 	*installer // installer is also a k8sCluster
 	callbacks  Callbacks
 
@@ -134,7 +103,7 @@ func New(
 	cluster *userd_k8s.Cluster,
 	installID string,
 	callbacks Callbacks,
-) (*trafficManager, error) {
+) (*TrafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -149,7 +118,7 @@ func New(
 	if err != nil {
 		return nil, errors.Wrap(err, "new installer")
 	}
-	tm := &trafficManager{
+	tm := &TrafficManager{
 		installer:   ti.(*installer),
 		installID:   installID,
 		startup:     make(chan struct{}),
@@ -160,7 +129,8 @@ func New(
 	return tm, nil
 }
 
-func (tm *trafficManager) Run(c context.Context) error {
+// Run is the "main" method that runs in a dedicated persistent goroutine.
+func (tm *TrafficManager) Run(c context.Context) error {
 	err := tm.EnsureManager(c)
 	if err != nil {
 		tm.managerErr = fmt.Errorf("failed to start traffic manager: %w", err)
@@ -230,7 +200,7 @@ func (tm *trafficManager) Run(c context.Context) error {
 
 	// Gotta call RegisterManagerServer before we call daemon.Connect which tells the
 	// daemon to use the proxy.
-	tm.callbacks.RegisterManagerServer(userd_grpc.NewManagerProxy(tm.managerClient))
+	tm.callbacks.RegisterManagerServer(NewManagerProxy(tm.managerClient))
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	if _, err := tm.callbacks.Connect(c, tm.getOutboundInfo(c)); err != nil {
@@ -248,14 +218,14 @@ func (tm *trafficManager) Run(c context.Context) error {
 	return g.Wait()
 }
 
-func (tm *trafficManager) session() *manager.SessionInfo {
+func (tm *TrafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
 // hasOwner parses an object and determines whether the object has an
 // owner that is of a kind we prefer. Currently the only owner that we
 // prefer is a Deployment, but this may grow in the future
-func (tm *trafficManager) hasOwner(obj kates.Object) bool {
+func (tm *TrafficManager) hasOwner(obj kates.Object) bool {
 	for _, owner := range obj.GetOwnerReferences() {
 		if owner.Kind == "Deployment" {
 			return true
@@ -266,7 +236,7 @@ func (tm *trafficManager) hasOwner(obj kates.Object) bool {
 
 // getReasonAndLabels gets the workload's associated labels, as well as a reason
 // it cannot be intercepted if that is the case.
-func (tm *trafficManager) getReasonAndLabels(workload kates.Object, namespace, name string) (map[string]string, string, error) {
+func (tm *TrafficManager) getReasonAndLabels(workload kates.Object, namespace, name string) (map[string]string, string, error) {
 	var labels map[string]string
 	var reason string
 	switch workload := workload.(type) {
@@ -297,7 +267,7 @@ func (tm *trafficManager) getReasonAndLabels(workload kates.Object, namespace, n
 // of the given objectKind.  Additionally, it uses information about the
 // filter param, which is configurable, to decide which workloads to add
 // or ignore based on the filter criteria.
-func (tm *trafficManager) getInfosForWorkloads(
+func (tm *TrafficManager) getInfosForWorkloads(
 	ctx context.Context,
 	workloads []kates.Object,
 	namespace string,
@@ -359,7 +329,7 @@ func (tm *trafficManager) getInfosForWorkloads(
 	return workloadInfos
 }
 
-func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
+func (tm *TrafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
 	namespace := tm.ActualNamespace(rq.Namespace)
@@ -412,7 +382,7 @@ func (tm *trafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}
 }
 
-func (tm *trafficManager) remain(c context.Context) error {
+func (tm *TrafficManager) remain(c context.Context) error {
 	<-tm.startup
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -439,7 +409,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 	}
 }
 
-func (tm *trafficManager) SetStatus(ctx context.Context, r *rpc.ConnectInfo) {
+func (tm *TrafficManager) SetStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
@@ -477,7 +447,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 	return representativeAgents
 }
 
-func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+func (tm *TrafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
 	<-tm.startup
 	agents := tm.getCurrentAgents()
@@ -531,7 +501,7 @@ func (tm *trafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
-func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+func (tm *TrafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
@@ -595,7 +565,11 @@ func (tm *trafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundI
 	return info
 }
 
-func (tm *trafficManager) GetClientBlocking(ctx context.Context) (manager.ManagerClient, error) {
+// GetClientBlocking returns a client object for talking to the manager.  If communication
+// is not yet established, GetClientBlocking blocks until it is (or until the Context is
+// canceled).  Error is non-nil if either there is an error establishing communication or if
+// the context is canceled.
+func (tm *TrafficManager) GetClientBlocking(ctx context.Context) (manager.ManagerClient, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -604,7 +578,10 @@ func (tm *trafficManager) GetClientBlocking(ctx context.Context) (manager.Manage
 	}
 }
 
-func (tm *trafficManager) GetClientNonBlocking() (manager.ManagerClient, error) {
+// GetClientNonBlocking is similar to GetClientBlocking, but if communication is not yet
+// established then it immediately returns (nil, nil) rather than blocking; this is the only
+// scenario in which both are nil.
+func (tm *TrafficManager) GetClientNonBlocking() (manager.ManagerClient, error) {
 	select {
 	case <-tm.startup:
 		return tm.managerClient, tm.managerErr

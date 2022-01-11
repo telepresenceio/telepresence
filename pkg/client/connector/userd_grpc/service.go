@@ -174,9 +174,9 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	c = s.callCtx(c, "List")
 	dlog.Debug(c, "called")
 	haveManager := false
-	manager, _ := s.sharedState.GetTrafficManagerBlocking(c)
-	if manager != nil {
-		managerClient, _ := manager.GetClientNonBlocking()
+	mgr, _ := s.sharedState.GetTrafficManagerBlocking(c)
+	if mgr != nil {
+		managerClient, _ := mgr.GetClientNonBlocking()
 		haveManager = (managerClient != nil)
 	}
 	if !haveManager {
@@ -184,7 +184,7 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 
-	result, err = manager.WorkloadInfoSnapshot(c, lr), nil
+	result, err = mgr.WorkloadInfoSnapshot(c, lr), nil
 	dlog.Debug(c, "returned")
 	return
 }

@@ -18,7 +18,7 @@ import (
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot
-func (tm *trafficManager) getCurrentAgents() []*manager.AgentInfo {
+func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
 	agents := make([]*manager.AgentInfo, len(tm.currentAgents))
@@ -31,7 +31,7 @@ func (tm *trafficManager) getCurrentAgents() []*manager.AgentInfo {
 
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
-func (tm *trafficManager) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
+func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
 	agents := make(map[string]*manager.AgentInfo)
@@ -47,13 +47,13 @@ func (tm *trafficManager) getCurrentAgentsInNamespace(ns string) map[string]*man
 	return agents
 }
 
-func (tm *trafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
+func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
 	tm.currentAgentsLock.Lock()
 	tm.currentAgents = agents
 	tm.currentAgentsLock.Unlock()
 }
 
-func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
+func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
 		<-tm.startup
@@ -94,7 +94,7 @@ func (tm *trafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, workload kates.Object, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
+func (tm *TrafficManager) addAgent(c context.Context, workload kates.Object, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
 	svcUID, kind, err := tm.EnsureAgent(c, workload, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
 	agentName := workload.GetName()
 	namespace := workload.GetNamespace()
@@ -130,7 +130,7 @@ func (tm *trafficManager) addAgent(c context.Context, workload kates.Object, svc
 	}
 }
 
-func (tm *trafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
+func (tm *TrafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)
 	tm.agentWaiters.Store(fullName, waitCh)

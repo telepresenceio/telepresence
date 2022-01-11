@@ -1,4 +1,4 @@
-package userd_grpc
+package userd_trafficmgr
 
 import (
 	"context"
