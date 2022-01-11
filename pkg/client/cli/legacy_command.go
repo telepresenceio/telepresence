@@ -232,25 +232,27 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dlog.WithLogger(cmd.Context(), nil)
-	scout := scout.NewScout(cmd.Context(), "cli")
+	ctx := cmd.Context()
+	ctx = dlog.WithLogger(ctx, nil)
+	scout := scout.NewReporter(ctx, "cli")
+	scout.Start(log.WithDiscardingLogger(ctx))
 
 	// Add metadata for the main legacy Telepresence commands so we can
 	// track usage and see what legacy commands people are still using.
 	if lc.swapDeployment != "" {
-		scout.SetMetadatum("swap_deployment", true)
+		scout.SetMetadatum(ctx, "swap_deployment", true)
 	}
 	if lc.run {
-		scout.SetMetadatum("run", true)
+		scout.SetMetadatum(ctx, "run", true)
 	}
 	if lc.dockerRun {
-		scout.SetMetadatum("docker_run", true)
+		scout.SetMetadatum(ctx, "docker_run", true)
 	}
 	if lc.runShell {
-		scout.SetMetadatum("run_shell", true)
+		scout.SetMetadatum(ctx, "run_shell", true)
 	}
 	if lc.unsupportedFlags != nil {
-		scout.SetMetadatum("unsupported_flags", lc.unsupportedFlags)
+		scout.SetMetadatum(ctx, "unsupported_flags", lc.unsupportedFlags)
 	}
 	scout.Report(log.WithDiscardingLogger(cmd.Context()), "Used legacy syntax")
 

@@ -40,7 +40,7 @@ type outbound struct {
 
 	dnsConfig *rpc.DNSConfig
 
-	scout chan<- scout.ScoutReport
+	scout *scout.Reporter
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -51,7 +51,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
-func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout chan<- scout.ScoutReport) (*outbound, error) {
+func newOutbound(c context.Context, dnsIPStr string, noSearch bool, scout *scout.Reporter) (*outbound, error) {
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
 
@@ -131,17 +131,7 @@ func (o *outbound) resolveInCluster(c context.Context, query string) (results []
 	}
 	// Don't report queries that won't be resolved in-cluster, since that'll report every single DNS query on the user's machine
 	defer func() {
-		r := scout.ScoutReport{
-			Action: "incluster_dns_query",
-			Metadata: map[string]interface{}{
-				"had_results": results != nil,
-			},
-		}
-		// Post to scout channel but never block if it's full
-		select {
-		case o.scout <- r:
-		default:
-		}
+		o.scout.Report(c, "incluster_dns_query", scout.Entry{Key: "had_results", Value: results != nil})
 	}()
 
 	// Give the cluster lookup a reasonable timeout.

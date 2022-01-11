@@ -193,12 +193,6 @@ func TestLoginFlow(t *testing.T) {
 		ctx := dlog.NewTestContext(t, false)
 
 		stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-		scout := make(chan scout.ScoutReport)
-		t.Cleanup(func() { close(scout) })
-		go func() {
-			for range scout {
-			}
-		}()
 		ctx = client.WithEnv(ctx,
 			&client.Env{
 				LoginAuthURL:       mockOauth2Server.AuthUrl(),
@@ -210,7 +204,7 @@ func TestLoginFlow(t *testing.T) {
 		cfg, err := client.LoadConfig(ctx)
 		require.NoError(t, err)
 		ctx = client.WithConfig(ctx, cfg)
-
+		sc := scout.NewReporter(ctx, "login-test")
 		return &fixture{
 			Context:                 ctx,
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,
@@ -226,7 +220,7 @@ func TestLoginFlow(t *testing.T) {
 					return mockOpenURLWrapper.OpenURL(url)
 				},
 				stdout,
-				scout,
+				sc,
 			),
 		}
 	}

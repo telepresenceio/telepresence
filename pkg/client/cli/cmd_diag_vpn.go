@@ -84,12 +84,14 @@ ifaces:
 func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	var (
 		ctx          = cmd.Context()
-		sc           = scout.NewScout(ctx, "cli")
+		sc           = scout.NewReporter(ctx, "cli")
 		configIssues = false
 		vpnMasks     = false
 		clusterMasks = false
 		reader       = bufio.NewReader(cmd.InOrStdin())
 	)
+	sc.Start(log.WithDiscardingLogger(ctx))
+
 	err = cliutil.QuitDaemon(ctx)
 	if err != nil {
 		return err
@@ -97,12 +99,12 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 
 	defer func() {
 		if err != nil {
-			sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_error", scout.ScoutMeta{Key: "error", Value: err.Error()})
+			sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_error", scout.Entry{Key: "error", Value: err.Error()})
 		} else {
 			if configIssues {
 				sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_fail",
-					scout.ScoutMeta{Key: "vpn_masks", Value: vpnMasks},
-					scout.ScoutMeta{Key: "cluster_masks", Value: clusterMasks},
+					scout.Entry{Key: "vpn_masks", Value: vpnMasks},
+					scout.Entry{Key: "cluster_masks", Value: clusterMasks},
 				)
 			} else {
 				sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_pass")
