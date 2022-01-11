@@ -20,8 +20,8 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -40,7 +40,7 @@ type service struct {
 	callbacks     Callbacks
 	procName      string
 	timedLogLevel log.TimedLevel
-	sharedState   *sharedstate.State
+	sharedState   *userd_trafficmgr.State
 
 	ucn int64
 }
@@ -49,7 +49,7 @@ func NewGRPCService(
 	ctx context.Context,
 	procName string,
 	callbacks Callbacks,
-	sharedState *sharedstate.State,
+	sharedState *userd_trafficmgr.State,
 ) (rpc.ConnectorServer, error) {
 	s := &service{
 		callbacks:     callbacks,

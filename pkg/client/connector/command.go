@@ -22,7 +22,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
@@ -60,7 +59,7 @@ type service struct {
 
 	// Must hold connectMu to use the sharedState.MaybeSetXXX methods.
 	connectMu   sync.Mutex
-	sharedState *sharedstate.State
+	sharedState *userd_trafficmgr.State
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
@@ -296,7 +295,7 @@ func run(c context.Context) error {
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 	}
-	s.sharedState = sharedstate.NewState()
+	s.sharedState = userd_trafficmgr.NewState()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -416,7 +415,7 @@ func run(c context.Context) error {
 		return nil
 	})
 
-	// background-k8swatch watches all of the nescessary Kubernetes resources.
+	// background-k8swatch watches all the necessary Kubernetes resources.
 	g.Go("background-k8swatch", func(c context.Context) error {
 		cluster, _ := s.sharedState.GetClusterBlocking(c)
 		if cluster == nil {

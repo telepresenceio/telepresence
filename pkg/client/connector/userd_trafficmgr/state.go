@@ -1,45 +1,13 @@
-package sharedstate
+package userd_trafficmgr
 
 import (
 	"context"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
-
-// A TrafficManager implementation is essentially the goroutine that handles communication with the
-// in-cluster Traffic Manager.  It includes a "Run" method which is what runs in the goroutine, and
-// several other methods to communicate with that goroutine.
-type TrafficManager interface {
-	// Run is the "main" method that runs in a dedicated persistent goroutine.
-	Run(context.Context) error
-
-	// GetClientBlocking returns a client object for talking to the manager.  If communication
-	// is not yet established, GetClientBlocking blocks until it is (or until the Context is
-	// canceled).  Error is non-nil if either there is an error establishing communication or if
-	// the context is canceled.
-	GetClientBlocking(ctx context.Context) (manager.ManagerClient, error)
-
-	// GetClientNonBlocking is similar to GetClientBlocking, but if communication is not yet
-	// established then it immediately returns (nil, nil) rather than blocking; this is the only
-	// scenario in which both are nil.
-	GetClientNonBlocking() (manager.ManagerClient, error)
-
-	// CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
-	// only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
-	// intercept, or the workload for the intercept.
-	CanIntercept(context.Context, *connector.CreateInterceptRequest) (*connector.InterceptResult, kates.Object)
-
-	AddIntercept(context.Context, *connector.CreateInterceptRequest) (*connector.InterceptResult, error)
-
-	RemoveIntercept(context.Context, string) error
-	WorkloadInfoSnapshot(context.Context, *connector.ListRequest) *connector.WorkloadInfoSnapshot
-	Uninstall(context.Context, *connector.UninstallRequest) (*connector.UninstallResult, error)
-	SetStatus(context.Context, *connector.ConnectInfo)
-}
 
 type State struct {
 	clusterFinalized chan struct{}
