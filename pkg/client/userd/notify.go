@@ -1,4 +1,4 @@
-package connector
+package userd
 
 import (
 	"context"

@@ -20,10 +20,10 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 

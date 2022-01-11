@@ -13,7 +13,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 

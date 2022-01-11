@@ -3,7 +3,7 @@ package userd_trafficmgr
 import (
 	"context"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"

@@ -1,4 +1,4 @@
-package connector
+package userd
 
 import (
 	"context"
@@ -21,14 +21,14 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_grpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
