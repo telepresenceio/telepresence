@@ -1,4 +1,4 @@
-package userd_trafficmgr
+package trafficmgr
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -100,7 +100,7 @@ type interceptResult struct {
 // New returns a TrafficManager resource for the given cluster if it has a Traffic Manager service.
 func New(
 	_ context.Context,
-	cluster *userd_k8s.Cluster,
+	cluster *k8s.Cluster,
 	installID string,
 	callbacks Callbacks,
 ) (*TrafficManager, error) {

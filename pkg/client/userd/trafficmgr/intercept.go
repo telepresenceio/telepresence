@@ -1,4 +1,4 @@
-package userd_trafficmgr
+package trafficmgr
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/header"
@@ -378,7 +378,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
 	if err != nil {
-		if !errors.Is(err, userd_auth.ErrNotLoggedIn) {
+		if !errors.Is(err, auth.ErrNotLoggedIn) {
 			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
 		}
 	}

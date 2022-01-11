@@ -1,4 +1,4 @@
-package userd_grpc
+package userd
 
 import (
 	"context"
@@ -22,25 +22,25 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type Callbacks struct {
-	userd_auth.LoginExecutor
+	auth.LoginExecutor
 	Cancel            func()
 	Connect           func(c context.Context, cr *rpc.ConnectRequest, dryRun bool) *rpc.ConnectInfo
 	UserNotifications func(context.Context) <-chan string
 }
 
-type service struct {
+type grpcService struct {
 	rpc.UnsafeConnectorServer
 
 	callbacks     Callbacks
 	procName      string
 	timedLogLevel log.TimedLevel
-	sharedState   *userd_trafficmgr.State
+	sharedState   *trafficmgr.State
 
 	ucn int64
 }
@@ -49,9 +49,9 @@ func NewGRPCService(
 	ctx context.Context,
 	procName string,
 	callbacks Callbacks,
-	sharedState *userd_trafficmgr.State,
+	sharedState *trafficmgr.State,
 ) (rpc.ConnectorServer, error) {
-	s := &service{
+	s := &grpcService{
 		callbacks:     callbacks,
 		sharedState:   sharedState,
 		procName:      procName,
@@ -78,18 +78,18 @@ func callRecovery(c context.Context, r interface{}, err error) error {
 	return err
 }
 
-func (s *service) callCtx(ctx context.Context, name string) context.Context {
+func (s *grpcService) callCtx(ctx context.Context, name string) context.Context {
 	return dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s-%d", name, atomic.AddInt64(&s.ucn, 1)))
 }
 
-func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+func (s *grpcService) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil
 }
 
-func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+func (s *grpcService) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Connect")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -98,7 +98,7 @@ func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Co
 	return
 }
 
-func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+func (s *grpcService) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Status")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -107,7 +107,7 @@ func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Con
 	return
 }
 
-func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (s *grpcService) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	c = s.callCtx(c, "CanIntercept")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -131,7 +131,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	return
 }
 
-func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (s *grpcService) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	c = s.callCtx(c, "CreateIntercept")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -145,7 +145,7 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 	return
 }
 
-func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
+func (s *grpcService) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	c = s.callCtx(c, "RemoveIntercept")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -170,7 +170,7 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, nil
 }
 
-func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
+func (s *grpcService) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	c = s.callCtx(c, "List")
 	dlog.Debug(c, "called")
 	haveManager := false
@@ -189,7 +189,7 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	return
 }
 
-func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
+func (s *grpcService) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	c = s.callCtx(c, "Uninstall")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -203,7 +203,7 @@ func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 	return
 }
 
-func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
+func (s *grpcService) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
 	ctx := s.callCtx(stream.Context(), "UserNotifications")
 	dlog.Debug(ctx, "called")
 	for msg := range s.callbacks.UserNotifications(ctx) {
@@ -215,7 +215,7 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 	return nil
 }
 
-func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginResult, error) {
+func (s *grpcService) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginResult, error) {
 	ctx = s.callCtx(ctx, "Login")
 	dlog.Debug(ctx, "called")
 	if apikey := req.GetApiKey(); apikey != "" {
@@ -249,11 +249,11 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (*rpc.LoginR
 	return &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}, nil
 }
 
-func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *grpcService) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Logout")
 	dlog.Debug(ctx, "called")
 	if err := s.callbacks.Logout(ctx); err != nil {
-		if errors.Is(err, userd_auth.ErrNotLoggedIn) {
+		if errors.Is(err, auth.ErrNotLoggedIn) {
 			err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
 		}
 		dlog.Debug(ctx, "returned")
@@ -263,7 +263,7 @@ func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, err
 	return &empty.Empty{}, nil
 }
 
-func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (*rpc.UserInfo, error) {
+func (s *grpcService) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (*rpc.UserInfo, error) {
 	ctx = s.callCtx(ctx, "GetCloudUserInfo")
 	dlog.Debug(ctx, "called")
 	info, err := s.callbacks.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
@@ -275,7 +275,7 @@ func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest
 	return info, nil
 }
 
-func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
+func (s *grpcService) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc.KeyData, error) {
 	ctx = s.callCtx(ctx, "GetCloudAPIKey")
 	dlog.Debug(ctx, "called")
 	key, err := s.callbacks.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin())
@@ -287,7 +287,7 @@ func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (*rpc
 	return &rpc.KeyData{ApiKey: key}, nil
 }
 
-func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
+func (s *grpcService) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (*rpc.LicenseData, error) {
 	ctx = s.callCtx(ctx, "GetCloudLicense")
 	dlog.Debug(ctx, "called")
 	license, hostDomain, err := s.callbacks.GetLicense(ctx, req.GetId())
@@ -306,7 +306,7 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 	return &rpc.LicenseData{License: license, HostDomain: hostDomain}, nil
 }
 
-func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+func (s *grpcService) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "SetLogLevel")
 	dlog.Debug(ctx, "called")
 	duration := time.Duration(0)
@@ -322,7 +322,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	return &empty.Empty{}, nil
 }
 
-func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *grpcService) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	ctx = s.callCtx(ctx, "Quit")
 	dlog.Debug(ctx, "called")
 	s.callbacks.Cancel()

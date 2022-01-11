@@ -9,7 +9,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 )
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if

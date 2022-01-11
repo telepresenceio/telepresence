@@ -1,4 +1,4 @@
-package userd_auth_test
+package auth_test
 
 import (
 	"context"

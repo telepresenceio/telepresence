@@ -1,4 +1,4 @@
-package userd_trafficmgr
+package trafficmgr
 
 import (
 	"context"

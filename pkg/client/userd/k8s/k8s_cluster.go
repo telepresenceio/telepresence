@@ -1,4 +1,4 @@
-package userd_k8s
+package k8s
 
 import (
 	"context"

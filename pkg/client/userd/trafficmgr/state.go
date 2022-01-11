@@ -1,9 +1,9 @@
-package userd_trafficmgr
+package trafficmgr
 
 import (
 	"context"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -11,7 +11,7 @@ import (
 
 type State struct {
 	clusterFinalized chan struct{}
-	cluster          *userd_k8s.Cluster
+	cluster          *k8s.Cluster
 
 	trafficMgrFinalized chan struct{}
 	trafficMgr          *TrafficManager
@@ -26,7 +26,7 @@ func NewState() *State {
 	}
 }
 
-func (s *State) MaybeSetCluster(cluster *userd_k8s.Cluster) bool {
+func (s *State) MaybeSetCluster(cluster *k8s.Cluster) bool {
 	select {
 	case <-s.clusterFinalized:
 		return false
@@ -37,7 +37,7 @@ func (s *State) MaybeSetCluster(cluster *userd_k8s.Cluster) bool {
 	}
 }
 
-func (s *State) GetClusterBlocking(ctx context.Context) (*userd_k8s.Cluster, error) {
+func (s *State) GetClusterBlocking(ctx context.Context) (*k8s.Cluster, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -46,7 +46,7 @@ func (s *State) GetClusterBlocking(ctx context.Context) (*userd_k8s.Cluster, err
 	}
 }
 
-func (s *State) GetClusterNonBlocking() *userd_k8s.Cluster {
+func (s *State) GetClusterNonBlocking() *k8s.Cluster {
 	select {
 	case <-s.clusterFinalized:
 		return s.cluster

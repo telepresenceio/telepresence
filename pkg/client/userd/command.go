@@ -24,11 +24,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_grpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -48,10 +47,10 @@ to troubleshoot problems.
 
 type parsedConnectRequest struct {
 	*rpc.ConnectRequest
-	*userd_k8s.Config
+	*k8s.Config
 }
 
-// service represents the state of the Telepresence Connector
+// grpcService represents the state of the Telepresence Connector
 type service struct {
 	scout *scout.Reporter
 
@@ -59,7 +58,7 @@ type service struct {
 
 	// Must hold connectMu to use the sharedState.MaybeSetXXX methods.
 	connectMu   sync.Mutex
-	sharedState *userd_trafficmgr.State
+	sharedState *trafficmgr.State
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
@@ -94,7 +93,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	config, err := userd_k8s.NewConfig(c, cr.KubeFlags)
+	config, err := k8s.NewConfig(c, cr.KubeFlags)
 	if err != nil && !dryRun {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
@@ -149,7 +148,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	}
 }
 
-func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *userd_k8s.Config, svc *grpc.Server, le userd_auth.LoginExecutor) *rpc.ConnectInfo {
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *k8s.Config, svc *grpc.Server, le auth.LoginExecutor) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -158,7 +157,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	s.scout.Report(c, "connect")
 
-	// establish a connection to the daemon gRPC service
+	// establish a connection to the daemon gRPC grpcService
 	dlog.Info(c, "Connecting to daemon...")
 	conn, err := client.DialSocket(c, client.DaemonSocketName)
 	if err != nil {
@@ -173,13 +172,13 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	daemonClient := daemon.NewDaemonClient(conn)
 
 	dlog.Info(c, "Connecting to k8s cluster...")
-	cluster, err := func() (*userd_k8s.Cluster, error) {
+	cluster, err := func() (*k8s.Cluster, error) {
 		c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
 		defer cancel()
-		cluster, err := userd_k8s.NewCluster(c,
+		cluster, err := k8s.NewCluster(c,
 			k8sConfig,
 			mappedNamespaces,
-			userd_k8s.Callbacks{
+			k8s.Callbacks{
 				SetDNSSearchPath: daemonClient.SetDnsSearchPath,
 			},
 		)
@@ -208,10 +207,10 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := userd_trafficmgr.New(c,
+	tmgr, err := trafficmgr.New(c,
 		cluster,
 		s.scout.InstallID(),
-		userd_trafficmgr.Callbacks{
+		trafficmgr.Callbacks{
 			GetCloudAPIKey: le.GetCloudAPIKey,
 			RegisterManagerServer: func(mgrSrv manager.ManagerServer) {
 				manager.RegisterManagerServer(svc, mgrSrv)
@@ -295,7 +294,7 @@ func run(c context.Context) error {
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 	}
-	s.sharedState = userd_trafficmgr.NewState()
+	s.sharedState = trafficmgr.NewState()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -313,7 +312,7 @@ func run(c context.Context) error {
 			})
 		})
 	}
-	loginExecutor := userd_auth.NewStandardLoginExecutor(cliio, s.scout)
+	loginExecutor := auth.NewStandardLoginExecutor(cliio, s.scout)
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -359,10 +358,10 @@ func run(c context.Context) error {
 		}
 		svc := grpc.NewServer(opts...)
 		var grpcSvc rpc.ConnectorServer
-		grpcSvc, err = userd_grpc.NewGRPCService(
+		grpcSvc, err = NewGRPCService(
 			c,
 			ProcessName,
-			userd_grpc.Callbacks{
+			Callbacks{
 				LoginExecutor:     loginExecutor,
 				Cancel:            s.cancel,
 				Connect:           s.connect,

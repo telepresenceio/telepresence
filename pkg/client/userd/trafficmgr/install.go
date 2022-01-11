@@ -1,4 +1,4 @@
-package userd_trafficmgr
+package trafficmgr
 
 import (
 	"bytes"
@@ -19,23 +19,23 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 )
 
 type installer struct {
-	*userd_k8s.Cluster
+	*k8s.Cluster
 }
 
 type Installer interface {
-	userd_k8s.ResourceFinder
+	k8s.ResourceFinder
 	EnsureAgent(c context.Context, obj kates.Object, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
 	EnsureManager(c context.Context) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
 
-func NewTrafficManagerInstaller(kc *userd_k8s.Cluster) (Installer, error) {
+func NewTrafficManagerInstaller(kc *k8s.Cluster) (Installer, error) {
 	return &installer{Cluster: kc}, nil
 }
 

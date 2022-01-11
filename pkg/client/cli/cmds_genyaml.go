@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -201,7 +201,7 @@ func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	cfg := client.GetConfig(ctx)
-	k8sConfig, err := userd_k8s.NewConfig(ctx, kubeFlagMap())
+	k8sConfig, err := k8s.NewConfig(ctx, kubeFlagMap())
 	if err != nil {
 		return fmt.Errorf("unable to get k8s config: %w", err)
 	}
