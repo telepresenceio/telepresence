@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 const ProcessName = "connector"
@@ -50,8 +51,16 @@ type parsedConnectRequest struct {
 	*k8s.Config
 }
 
-// grpcService represents the state of the Telepresence Connector
+// service represents the long running state of the Telepresence User Daemon
 type service struct {
+	rpc.UnsafeConnectorServer
+
+	procName          string
+	timedLogLevel     log.TimedLevel
+	loginExecutor     auth.LoginExecutor
+	userNotifications func(context.Context) <-chan string
+	ucn               int64
+
 	scout *scout.Reporter
 
 	cancel func()
@@ -289,12 +298,21 @@ func run(c context.Context) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
+	sr := scout.NewReporter(c, "connector")
+	cliio := &broadcastqueue.BroadcastQueue{}
+
 	s := &service{
-		scout:           scout.NewReporter(c, "connector"),
-		connectRequest:  make(chan parsedConnectRequest),
-		connectResponse: make(chan *rpc.ConnectInfo),
+		scout:             sr,
+		connectRequest:    make(chan parsedConnectRequest),
+		connectResponse:   make(chan *rpc.ConnectInfo),
+		loginExecutor:     auth.NewStandardLoginExecutor(cliio, sr),
+		userNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
+		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+		sharedState:       trafficmgr.NewState(),
 	}
-	s.sharedState = trafficmgr.NewState()
+	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
+		return err
+	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -302,7 +320,6 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 
-	cliio := &broadcastqueue.BroadcastQueue{}
 	quitOnce := sync.Once{}
 	s.cancel = func() {
 		quitOnce.Do(func() {
@@ -312,7 +329,6 @@ func run(c context.Context) error {
 			})
 		})
 	}
-	loginExecutor := auth.NewStandardLoginExecutor(cliio, s.scout)
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -357,22 +373,7 @@ func run(c context.Context) error {
 			}
 		}
 		svc := grpc.NewServer(opts...)
-		var grpcSvc rpc.ConnectorServer
-		grpcSvc, err = NewGRPCService(
-			c,
-			ProcessName,
-			Callbacks{
-				LoginExecutor:     loginExecutor,
-				Cancel:            s.cancel,
-				Connect:           s.connect,
-				UserNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
-			},
-			s.sharedState,
-		)
-		if err != nil {
-			return err
-		}
-		rpc.RegisterConnectorServer(svc, grpcSvc)
+		rpc.RegisterConnectorServer(svc, s)
 		svcCh <- svc
 
 		sc := &dhttp.ServerConfig{
@@ -409,7 +410,7 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config, svc, loginExecutor)
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.Config, svc, s.loginExecutor)
 
 		return nil
 	})
@@ -442,7 +443,7 @@ func run(c context.Context) error {
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
 	// Ambassador Cloud login flow.
-	g.Go("background-systema", loginExecutor.Worker)
+	g.Go("background-systema", s.loginExecutor.Worker)
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.
