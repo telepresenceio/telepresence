@@ -2,7 +2,6 @@ package scout
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/datawire/ambassador/v2/pkg/metriton"
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata"
@@ -20,14 +20,20 @@ import (
 // Environment variable prefix for additional metadata to be reported
 const environmentMetadataPrefix = "TELEPRESENCE_REPORT_"
 
-// Scout is a Metriton reported
-type Scout struct {
-	index    int
-	Reporter *metriton.Reporter
+type bufEntry struct {
+	action  string
+	entries []Entry
 }
 
-// ScoutMeta is a key/value association used when reporting
-type ScoutMeta struct {
+// Reporter is a Metriton reported
+type Reporter struct {
+	index    int
+	buffer   chan bufEntry
+	reporter *metriton.Reporter
+}
+
+// Entry is a key/value association used when reporting
+type Entry struct {
 	Key   string
 	Value interface{}
 }
@@ -125,23 +131,15 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	return retID, nil
 }
 
-// NewScout creates a new initialized Scout instance that can be used to
+// bufferSize is the max number of entries that can be stored in the buffer
+// before entries are discarded.
+const bufferSize = 40
+
+// NewReporter creates a new initialized Reporter instance that can be used to
 // send telepresence reports to Metriton
-func NewScout(ctx context.Context, mode string) (s *Scout) {
-	baseMeta := getOsMetadata(ctx)
-	baseMeta["mode"] = mode
-	baseMeta["trace_id"] = uuid.New()
-	baseMeta["goos"] = runtime.GOOS
-
-	// Discover how Telepresence was installed based on the binary's location
-	installMethod, err := client.GetInstallMechanism()
-	if err != nil {
-		dlog.Errorf(ctx, "scout error getting executable: %s", err)
-	}
-	baseMeta["install_method"] = installMethod
-
-	return &Scout{
-		Reporter: &metriton.Reporter{
+func NewReporter(ctx context.Context, mode string) *Reporter {
+	r := &Reporter{
+		reporter: &metriton.Reporter{
 			Application: "telepresence2",
 			Version:     client.Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
@@ -153,50 +151,115 @@ func NewScout(ctx context.Context, mode string) (s *Scout) {
 				}
 				return id, nil
 			},
-			// Fixed (growing) metadata passed with every report
-			BaseMetadata: baseMeta,
 		},
 	}
+	r.initialize(ctx, mode, runtime.GOOS)
+	return r
 }
+
+// initialization broken out or constructor for the benefit of testing
+func (r *Reporter) initialize(ctx context.Context, mode, goos string) {
+	r.buffer = make(chan bufEntry, bufferSize)
+
+	// Fixed (growing) metadata passed with every report
+	baseMeta := getOsMetadata(ctx)
+	baseMeta["mode"] = mode
+	baseMeta["trace_id"] = uuid.New()
+	baseMeta["goos"] = goos
+
+	// Discover how Telepresence was installed based on the binary's location
+	installMethod, err := client.GetInstallMechanism()
+	if err != nil {
+		dlog.Errorf(ctx, "scout error getting executable: %s", err)
+	}
+	baseMeta["install_method"] = installMethod
+	for k, v := range getDefaultEnvironmentMetadata() {
+		baseMeta[k] = v
+	}
+	r.reporter.BaseMetadata = baseMeta
+}
+
+func (r *Reporter) InstallID() string {
+	return r.reporter.InstallID()
+}
+
+const setMetadatumAction = "__set_metadatum__"
 
 // SetMetadatum associates the given key with the given value in the metadata
-// of this instance. It's an error if the key already exists.
-func (s *Scout) SetMetadatum(key string, value interface{}) {
-	oldValue, ok := s.Reporter.BaseMetadata[key]
-	if ok {
-		panic(fmt.Sprintf("trying to replace metadata[%q] = %q with %q", key, oldValue, value))
-	}
-	s.Reporter.BaseMetadata[key] = value
+// of this instance.
+func (r *Reporter) SetMetadatum(ctx context.Context, key string, value interface{}) {
+	r.Report(ctx, setMetadatumAction, Entry{Key: key, Value: value})
 }
 
-// Report constructs and sends a report. It includes the fixed (growing) set of
-// metadata in the Scout structure and the pairs passed as arguments to this
+// Start starts the instance in a goroutine
+func (r *Reporter) Start(ctx context.Context) {
+	go func() {
+		if err := r.Run(ctx); err != nil {
+			dlog.Error(ctx, err)
+		}
+	}()
+}
+
+// Run ensures that all reports on the send queue are sent to the endpoint
+func (r *Reporter) Run(ctx context.Context) error {
+	go func() {
+		// Close buffer and let it drain when ctx is done.
+		<-ctx.Done()
+		close(r.buffer)
+	}()
+
+	hc := dcontext.HardContext(ctx)
+	for be := range r.buffer {
+		if be.action == setMetadatumAction {
+			entry := be.entries[0]
+			if entry.Value == "" {
+				delete(r.reporter.BaseMetadata, entry.Key)
+			} else {
+				r.reporter.BaseMetadata[entry.Key] = entry.Value
+			}
+		} else {
+			r.doReport(hc, &be)
+		}
+	}
+	return nil
+}
+
+// Report constructs and buffers a report on the send queue. It includes the fixed (growing)
+// set of metadata in the Reporter structure and the entries passed as arguments to this
 // call. It also includes and increments the index, which can be used to
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
-func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) {
-	s.index++
-	metadata := getDefaultEnvironmentMetadata()
-	metadata["action"] = action
-	metadata["index"] = s.index
+func (r *Reporter) Report(ctx context.Context, action string, entries ...Entry) {
+	select {
+	case r.buffer <- bufEntry{action, entries}:
+	default:
+		dlog.Infof(ctx, "scout report %q discarded. Output buffer is full (or closed)", action)
+	}
+}
+
+func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
+	r.index++
+	metadata := make(map[string]interface{}, 4+len(be.entries))
+	metadata["action"] = be.action
+	metadata["index"] = r.index
 	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
 		metadata["account_id"] = userInfo.AccountId
 	}
-	for _, metaItem := range meta {
+	for _, metaItem := range be.entries {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err = s.Reporter.Report(ctx, metadata)
+	_, err = r.reporter.Report(ctx, metadata)
 	if err != nil && ctx.Err() == nil {
-		dlog.Infof(ctx, "scout report %q failed: %v", action, err)
+		dlog.Infof(ctx, "scout report %q failed: %v", be.action, err)
 	}
 }
 
 // Returns a metadata map containing all the additional environment variables to be reported
-func getDefaultEnvironmentMetadata() map[string]interface{} {
-	metadata := map[string]interface{}{}
+func getDefaultEnvironmentMetadata() map[string]string {
+	metadata := map[string]string{}
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
 		if strings.HasPrefix(pair[0], environmentMetadataPrefix) {
