@@ -10,49 +10,21 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 )
 
-func getRemoteCommands(ctx context.Context) (CommandGroups, error) {
+func getRemoteCommands(ctx context.Context) (cliutil.CommandGroups, error) {
 	tCtx, tCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer tCancel()
-	groups := CommandGroups{}
+	groups := cliutil.CommandGroups{}
 	err := cliutil.WithNetwork(tCtx, func(ctx context.Context, _ daemon.DaemonClient) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 			remote, err := connectorClient.ListCommands(ctx, &empty.Empty{})
 			if err != nil {
 				return fmt.Errorf("unable to call ListCommands: %w", err)
 			}
-			for name, cmds := range remote.GetCommandGroups() {
-				commands := []*cobra.Command{}
-				for _, cmd := range cmds.GetCommands() {
-					cobraCmd := &cobra.Command{
-						Use:   cmd.GetName(),
-						Long:  cmd.GetLongHelp(),
-						Short: cmd.GetShortHelp(),
-						RunE:  runRemote,
-					}
-					for _, flag := range cmd.GetFlags() {
-						tp, err := extensions.TypeFromString(flag.GetType())
-						if err != nil {
-							return err
-						}
-						val, err := tp.NewFlagValueFromPFlagString(flag.GetDefaultValue())
-						if err != nil {
-							return err
-						}
-						if flag.GetShorthand() == "" {
-							cobraCmd.Flags().Var(val, flag.GetFlag(), flag.GetHelp())
-						} else {
-							cobraCmd.Flags().VarP(val, flag.GetFlag(), flag.GetShorthand(), flag.GetHelp())
-						}
-					}
-					commands = append(commands, cobraCmd)
-				}
-				groups[name] = commands
-			}
-			return nil
+			groups, err = cliutil.RPCToCommands(remote, runRemote)
+			return err
 		})
 	})
 	if err != nil {

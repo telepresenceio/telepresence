@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -137,10 +138,10 @@ func Command(ctx context.Context) *cobra.Command {
 	groups, err := getRemoteCommands(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting remote commands from connector: %v; continuing without.\n", err)
-		groups = CommandGroups{}
+		groups = cliutil.CommandGroups{}
 	}
 	rootCmd.InitDefaultHelpCmd()
-	static := CommandGroups{
+	static := cliutil.CommandGroups{
 		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
 		"Traffic Commands": []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
 		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
@@ -161,7 +162,7 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 func initGlobalFlagGroups() {
-	globalFlagGroups = []FlagGroup{
+	globalFlagGroups = []cliutil.FlagGroup{
 		{
 			Name: "Kubernetes flags",
 			Flags: func() *pflag.FlagSet {
@@ -173,7 +174,7 @@ func initGlobalFlagGroups() {
 			}(),
 		}}
 
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+	globalFlagGroups = append(globalFlagGroups, cliutil.FlagGroup{
 		Name: "Telepresence networking flags",
 		Flags: func() *pflag.FlagSet {
 			netflags := pflag.NewFlagSet("", 0)
@@ -194,7 +195,7 @@ func initGlobalFlagGroups() {
 		}(),
 	})
 
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+	globalFlagGroups = append(globalFlagGroups, cliutil.FlagGroup{
 		Name: "other Telepresence flags",
 		Flags: func() *pflag.FlagSet {
 			flags := pflag.NewFlagSet("", 0)

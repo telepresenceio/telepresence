@@ -4,8 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 type exampleCommandInfo struct {
@@ -31,35 +30,8 @@ func exampleCommand() *cobra.Command {
 	return cmd
 }
 
-func GetCommands() map[string][]*cobra.Command {
+func GetCommands() cliutil.CommandGroups {
 	return map[string][]*cobra.Command{
 		"Remote Commands": {exampleCommand()},
 	}
-}
-
-func CommandsToRPC(cmds map[string][]*cobra.Command) *connector.CommandGroups {
-	groups := make(map[string]*connector.CommandGroups_Commands)
-	for name, g := range cmds {
-		cmds := []*connector.CommandGroups_Command{}
-		for _, cmd := range g {
-			flags := []*connector.CommandGroups_Flag{}
-			cmd.Flags().VisitAll(func(f *pflag.Flag) {
-				flags = append(flags, &connector.CommandGroups_Flag{
-					Type:         f.Value.Type(),
-					Flag:         f.Name,
-					Help:         f.Usage,
-					Shorthand:    f.Shorthand,
-					DefaultValue: f.Value.String(),
-				})
-			})
-			cmds = append(cmds, &connector.CommandGroups_Command{
-				Name:      cmd.Use,
-				LongHelp:  cmd.Long,
-				ShortHelp: cmd.Short,
-				Flags:     flags,
-			})
-		}
-		groups[name] = &connector.CommandGroups_Commands{Commands: cmds}
-	}
-	return &connector.CommandGroups{CommandGroups: groups}
 }

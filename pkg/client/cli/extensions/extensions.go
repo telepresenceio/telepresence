@@ -372,7 +372,7 @@ func (es *ExtensionsState) MechanismArgs() ([]string, error) {
 	var args []string
 	for flagname := range mechdata.Flags {
 		flag := es.flags.Lookup(mechname + "-" + flagname)
-		args = append(args, flag.Value.(Value).AsArgs(flagname)...)
+		args = append(args, flag.Value.(cliutil.Value).AsArgs(flagname)...)
 	}
 
 	return args, nil
@@ -423,7 +423,7 @@ type FlagInfo struct {
 	// value of a flag (below), and for (2) validating and normalizing the flag value that the
 	// user passes on the CLI.  See the `flagTypes` variable in `flagtypes.go` for a list of
 	// possible values.  This field is required.
-	Type TypeEnum `json:"type"`
+	Type cliutil.TypeEnum `json:"type"`
 	// Default is the default value for this flag.  This field is optional; if it isn't
 	// specitified then the zero value is used.
 	Default json.RawMessage `json:"default,omitempty"`
