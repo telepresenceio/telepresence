@@ -205,19 +205,29 @@ func (r *Reporter) Run(ctx context.Context) error {
 	go func() {
 		// Close buffer and let it drain when ctx is done.
 		<-ctx.Done()
-		close(r.buffer)
+
+		// Send a zeroed bufEntry here instead of closing the buffer so that
+		// any stray Reports that arrive after the context is cancelled aren't
+		// sent on a closed channel
+		select {
+		case r.buffer <- bufEntry{}:
+		default:
+		}
 	}()
 
 	hc := dcontext.HardContext(ctx)
 	for be := range r.buffer {
-		if be.action == setMetadatumAction {
+		switch be.action {
+		case "":
+			break
+		case setMetadatumAction:
 			entry := be.entries[0]
 			if entry.Value == "" {
 				delete(r.reporter.BaseMetadata, entry.Key)
 			} else {
 				r.reporter.BaseMetadata[entry.Key] = entry.Value
 			}
-		} else {
+		default:
 			r.doReport(hc, &be)
 		}
 	}
