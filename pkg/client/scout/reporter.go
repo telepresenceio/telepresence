@@ -219,7 +219,7 @@ func (r *Reporter) Run(ctx context.Context) error {
 	for be := range r.buffer {
 		switch be.action {
 		case "":
-			break
+			return nil
 		case setMetadatumAction:
 			entry := be.entries[0]
 			if entry.Value == "" {
