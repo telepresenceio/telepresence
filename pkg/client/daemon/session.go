@@ -12,12 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
-
 	"github.com/blang/semver"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -68,7 +67,7 @@ import (
 type session struct {
 	cancel context.CancelFunc
 
-	scout chan<- scout.ScoutReport
+	scout *scout.Reporter
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
 	dev *vif.Device
@@ -194,7 +193,7 @@ func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []routing.
 }
 
 // newSession returns a new properly initialized session object.
-func newSession(c context.Context, scout chan<- scout.ScoutReport, mi *daemon.OutboundInfo) (*session, error) {
+func newSession(c context.Context, scout *scout.Reporter, mi *daemon.OutboundInfo) (*session, error) {
 	conn, mc, err := connectToManager(c)
 	if mc == nil || err != nil {
 		return nil, err
@@ -232,17 +231,7 @@ func (s *session) clusterLookup(ctx context.Context, key string) ([][]byte, erro
 
 	// TODO: This will send a lot of scout reports per user and will not scale very well. Consider
 	//  using counters instead and send reports when the connection ends. /thomas
-	sr := scout.ScoutReport{
-		Action: "incluster_dns_query",
-		Metadata: map[string]interface{}{
-			"had_results": err == nil && len(r.Ips) > 0,
-		},
-	}
-	// Post to scout channel but never block if it's full
-	select {
-	case s.scout <- sr:
-	default:
-	}
+	s.scout.Report(ctx, "incluster_dns_query", scout.Entry{Key: "had_results", Value: err == nil && len(r.Ips) > 0})
 	if err != nil {
 		return nil, err
 	}

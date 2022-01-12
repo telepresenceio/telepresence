@@ -59,8 +59,7 @@ type service struct {
 	session       *session
 	timedLogLevel log.TimedLevel
 
-	scoutClient *scout.Scout           // don't use this directly; use the 'scout' chan instead
-	scout       chan scout.ScoutReport // any-of-scoutUsers -> background-metriton
+	scout *scout.Reporter
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -321,29 +320,6 @@ func (d *service) serveGrpc(c context.Context, l net.Listener) error {
 	return err
 }
 
-// metriton is the goroutine that handles all telemetry reports, so that calls to
-// metriton don't block the functional goroutines.
-func (d *service) metriton(c context.Context) error {
-	for {
-		select {
-		case <-c.Done():
-			return nil
-		case report := <-d.scout:
-			for k, v := range report.PersistentMetadata {
-				d.scoutClient.SetMetadatum(k, v)
-			}
-			var metadata []scout.ScoutMeta
-			for k, v := range report.Metadata {
-				metadata = append(metadata, scout.ScoutMeta{
-					Key:   k,
-					Value: v,
-				})
-			}
-			d.scoutClient.Report(c, report.Action, metadata...)
-		}
-	}
-}
-
 // run is the main function when executing as the daemon
 func run(c context.Context, loggingDir, configDir string) error {
 	if !proc.IsAdmin() {
@@ -388,14 +364,11 @@ func run(c context.Context, loggingDir, configDir string) error {
 	dlog.Debug(c, "Listener opened")
 
 	d := &service{
-		scoutClient:   scout.NewScout(c, "daemon"),
-		scout:         make(chan scout.ScoutReport, 25),
+		scout:         scout.NewReporter(c, "daemon"),
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 		connectCh:     make(chan *rpc.OutboundInfo),
 		connectErrCh:  make(chan error),
 	}
-	defer close(d.scout)
-
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err
 	}
@@ -410,7 +383,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 	g.Go("config-reload", d.configReload)
 	g.Go("session", d.manageSessions)
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
-	g.Go("metriton", d.metriton)
+	g.Go("metriton", d.scout.Run)
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)
