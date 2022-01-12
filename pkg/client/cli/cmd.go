@@ -2,8 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
@@ -12,6 +10,7 @@ import (
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -137,8 +136,7 @@ func Command(ctx context.Context) *cobra.Command {
 
 	groups, err := getRemoteCommands(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting remote commands from connector: %v; continuing without.\n", err)
-		groups = cliutil.CommandGroups{}
+		groups = commands.GetCommandsForLocal(err)
 	}
 	rootCmd.InitDefaultHelpCmd()
 	static := cliutil.CommandGroups{

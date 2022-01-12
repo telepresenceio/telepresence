@@ -18,7 +18,7 @@ func getRemoteCommands(ctx context.Context) (cliutil.CommandGroups, error) {
 	defer tCancel()
 	groups := cliutil.CommandGroups{}
 	err := cliutil.WithNetwork(tCtx, func(ctx context.Context, _ daemon.DaemonClient) error {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		return cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 			remote, err := connectorClient.ListCommands(ctx, &empty.Empty{})
 			if err != nil {
 				return fmt.Errorf("unable to call ListCommands: %w", err)
