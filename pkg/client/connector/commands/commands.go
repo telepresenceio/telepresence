@@ -10,6 +10,7 @@ import (
 
 type exampleCommandInfo struct {
 	sampleFlag string
+	array      []string
 }
 
 func (e *exampleCommandInfo) run(cmd *cobra.Command, _ []string) error {
@@ -25,7 +26,8 @@ func exampleCommand() *cobra.Command {
 		Long:  `Try this to see what happens when a command is run by the user daemon!`,
 		RunE:  info.run,
 	}
-	cmd.Flags().StringVar(&info.sampleFlag, "flag", "nothing", "Flag for flagging")
+	cmd.Flags().StringVarP(&info.sampleFlag, "flag", "f", "nothing", "Flag for flagging")
+	cmd.Flags().StringArrayVar(&info.array, "array", []string{"a", "b", "c"}, "array")
 	return cmd
 }
 
@@ -43,9 +45,11 @@ func CommandsToRPC(cmds map[string][]*cobra.Command) *connector.CommandGroups {
 			flags := []*connector.CommandGroups_Flag{}
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {
 				flags = append(flags, &connector.CommandGroups_Flag{
-					Type: f.Value.Type(),
-					Flag: f.Name,
-					Help: f.Usage,
+					Type:         f.Value.Type(),
+					Flag:         f.Name,
+					Help:         f.Usage,
+					Shorthand:    f.Shorthand,
+					DefaultValue: f.Value.String(),
 				})
 			})
 			cmds = append(cmds, &connector.CommandGroups_Command{

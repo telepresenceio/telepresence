@@ -137,6 +137,7 @@ func Command(ctx context.Context) *cobra.Command {
 	groups, err := getRemoteCommands(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting remote commands from connector: %v; continuing without.\n", err)
+		groups = CommandGroups{}
 	}
 	rootCmd.InitDefaultHelpCmd()
 	static := CommandGroups{

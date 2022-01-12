@@ -195,7 +195,7 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *Exte
 	for _, mechname := range mechnames {
 		mechdata := es.exts[es.mech2ext[mechname]].Mechanisms[mechname]
 		for flagname, flagdata := range mechdata.Flags {
-			val, err := flagdata.Type.NewFlagValue(flagdata.Default)
+			val, err := flagdata.Type.NewFlagValueFromJson(flagdata.Default)
 			if err != nil {
 				return nil, fmt.Errorf("extension mechanism %q (%q): flag %q: invalid default for type: %w",
 					mechname, es.ext2file[es.mech2ext[mechname]],

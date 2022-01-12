@@ -65,8 +65,10 @@ service Connector {
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
+  // ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
   rpc ListCommands(google.protobuf.Empty) returns (CommandGroups);
 
+  // RunCommand executes a CLI command.
   rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
 }
 
@@ -75,6 +77,8 @@ message CommandGroups {
     string type = 1;
     string flag = 2;
     string help = 3;
+    string shorthand = 4;
+    string default_value = 5;
   }
   message Command {
     string name = 1;
@@ -94,8 +98,8 @@ message RunCommandRequest {
 }
 
 message RunCommandResponse {
-  string stdout = 1;
-  string stderr = 2;
+  bytes stdout = 1;
+  bytes stderr = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.

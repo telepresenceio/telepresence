@@ -79,14 +79,14 @@ func convertNew(val interface{}, to reflect.Type) (ptr reflect.Value, err error)
 	return ptr, nil
 }
 
-func (t TypeEnum) NewFlagValue(untypedDefault interface{}) (Value, error) {
+func (t TypeEnum) NewFlagValueFromJson(untypedDefault interface{}) (Value, error) {
 	// validate the constructor function
 	fnVal, defaultTyp := t.sanityCheck()
 
 	// convert the default value to the correct type
 	typedDefaultPtrVal, err := convertNew(untypedDefault, defaultTyp)
 	if err != nil {
-		return nil, fmt.Errorf("invalid default value for type: %w", err)
+		return nil, fmt.Errorf("invalid default value %v for type: %w", untypedDefault, err)
 	}
 
 	// call the constructor function
@@ -96,6 +96,19 @@ func (t TypeEnum) NewFlagValue(untypedDefault interface{}) (Value, error) {
 	})[0].Interface().(Value)
 
 	return retVal, nil
+}
+
+func (t TypeEnum) NewFlagValueFromPFlagString(stringDefault string) (Value, error) {
+	// Doing Value.String on a pflag value doesn't return a json encoded string at all (which is kinda crazy because it obfuscates the type of the value)
+	// So what we do here is just construct an empty Value from an empty JSON representation -- NewFlagValueFromJson will ultimately return a concrete
+	// Value type from pflag, and those concrete value types (e.g. stringValue, boolValue) implement a Set method that is capable of
+	// reconstructing a value from the output of their String methods.
+	val, err := t.NewFlagValueFromJson(nil)
+	if err != nil {
+		return nil, err
+	}
+	val.Set(stringDefault)
+	return val, nil
 }
 
 type pfs = pflag.FlagSet // to make the following table a little less over-verbose
@@ -198,7 +211,7 @@ var flagTypes = map[TypeEnum]interface{}{
 			asArgs: stringSliceAsArgs,
 		}
 	},
-	"string-array": func(fs *pfs, x *[]string) Value { fs.StringArrayVar(x, "x", *x, ""); return slice(fs, x) },
+	"stringArray": func(fs *pfs, x *[]string) Value { fs.StringArrayVar(x, "x", *x, ""); return slice(fs, x) },
 
 	// maps ////////////////////////////////////////////////////////////////
 

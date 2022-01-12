@@ -1,11 +1,11 @@
 package userd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -289,7 +289,7 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 	}
 	cli.AddCommandGroups(cmd, commands.GetCommands())
 	cmd.SetArgs(req.GetOsArgs())
-	outW, errW := &strings.Builder{}, &strings.Builder{}
+	outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
 	cmd.SetOut(outW)
 	cmd.SetErr(errW)
 	err := cmd.ExecuteContext(ctx)
@@ -297,7 +297,7 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 		return nil, err
 	}
 	return &rpc.RunCommandResponse{
-		Stdout: outW.String(),
-		Stderr: errW.String(),
+		Stdout: outW.Bytes(),
+		Stderr: errW.Bytes(),
 	}, nil
 }

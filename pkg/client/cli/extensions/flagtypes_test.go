@@ -33,10 +33,10 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 		_, argTyp := flagType.sanityCheck()
 		bPtrVal := reflect.New(argTyp)
 
-		// Check that TypeEnum.NewFlagValue works.
-		aVal, err := flagType.NewFlagValue(a)
+		// Check that TypeEnum.NewFlagValueFromJson works.
+		aVal, err := flagType.NewFlagValueFromJson(a)
 		if err != nil {
-			t.Logf("flagType.NewFlagValue(a) returned err: %v", err)
+			t.Logf("flagType.NewFlagValueFromJson(a) returned err: %v", err)
 			return false
 		}
 

@@ -60,7 +60,9 @@ type ConnectorClient interface {
 	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
 	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
+	// RunCommand executes a CLI command.
 	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
 }
 
@@ -300,7 +302,9 @@ type ConnectorServer interface {
 	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	// ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
 	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
+	// RunCommand executes a CLI command.
 	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }

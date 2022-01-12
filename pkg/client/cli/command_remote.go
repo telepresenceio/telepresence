@@ -21,6 +21,9 @@ func getRemoteCommands(ctx context.Context) (CommandGroups, error) {
 	err := cliutil.WithNetwork(tCtx, func(ctx context.Context, _ daemon.DaemonClient) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 			remote, err := connectorClient.ListCommands(ctx, &empty.Empty{})
+			if err != nil {
+				return fmt.Errorf("unable to call ListCommands: %w", err)
+			}
 			for name, cmds := range remote.GetCommandGroups() {
 				commands := []*cobra.Command{}
 				for _, cmd := range cmds.GetCommands() {
@@ -35,18 +38,19 @@ func getRemoteCommands(ctx context.Context) (CommandGroups, error) {
 						if err != nil {
 							return err
 						}
-						val, err := tp.NewFlagValue([]byte{})
+						val, err := tp.NewFlagValueFromPFlagString(flag.GetDefaultValue())
 						if err != nil {
 							return err
 						}
-						cobraCmd.Flags().Var(val, flag.GetFlag(), flag.GetHelp())
+						if flag.GetShorthand() == "" {
+							cobraCmd.Flags().Var(val, flag.GetFlag(), flag.GetHelp())
+						} else {
+							cobraCmd.Flags().VarP(val, flag.GetFlag(), flag.GetShorthand(), flag.GetHelp())
+						}
 					}
 					commands = append(commands, cobraCmd)
 				}
 				groups[name] = commands
-			}
-			if err != nil {
-				return fmt.Errorf("unable to call ListCommands: %w", err)
 			}
 			return nil
 		})
@@ -64,8 +68,8 @@ func runRemote(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			cmd.OutOrStdout().Write([]byte(result.GetStdout()))
-			cmd.ErrOrStderr().Write([]byte(result.GetStderr()))
+			cmd.OutOrStdout().Write(result.GetStdout())
+			cmd.ErrOrStderr().Write(result.GetStderr())
 			return nil
 		})
 	})
