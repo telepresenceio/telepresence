@@ -426,42 +426,47 @@ func (s *session) run(c context.Context) error {
 	case <-c.Done():
 		return nil
 	case <-cfgComplete:
-		g.Go("dns", func(ctx context.Context) error {
-			return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
-		})
-		g.Go("router", s.routerWorker)
-		g.Go("stop", s.stop)
 	}
+
+	// Start the router and the DNS service and wait for the context
+	// to be done. Then shut things down in order. The following happens:
+	// 1. The DNS worker terminates (it needs the TUN device to be alive while doing that)
+	// 2. The TUN device is closed (by the stop method). This unblocks the routerWorker's pending read on the device.
+	// 3. The routerWorker terminates.
+	g.Go("dns", func(ctx context.Context) error {
+		defer s.stop(c)
+		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
+	})
+	g.Go("router", s.routerWorker)
 	return g.Wait()
 }
 
-func (s *session) stop(c context.Context) error {
-	<-c.Done()
-	if atomic.CompareAndSwapInt32(&s.closing, 0, 1) {
-		cc, cancel := context.WithTimeout(c, time.Second)
-		defer cancel()
-		go func() {
-			atomic.StoreInt32(&s.closing, 1)
-			s.handlers.CloseAll(cc)
-			cancel()
-		}()
-		<-cc.Done()
-	}
-	if atomic.CompareAndSwapInt32(&s.closing, 1, 2) {
-		cc := dcontext.WithoutCancel(c)
-		for _, np := range s.curStaticRoutes {
-			err := s.dev.RemoveStaticRoute(cc, np)
-			if err != nil {
-				dlog.Warnf(c, "error removing route %s: %v", np, err)
-			}
+func (s *session) stop(c context.Context) {
+	atomic.StoreInt32(&s.closing, 1)
+	cc, cancel := context.WithTimeout(c, time.Second)
+	defer cancel()
+	go func() {
+		s.handlers.CloseAll(cc)
+		cancel()
+	}()
+	<-cc.Done()
+	atomic.StoreInt32(&s.closing, 2)
+
+	cc = dcontext.WithoutCancel(c)
+	for _, np := range s.curStaticRoutes {
+		err := s.dev.RemoveStaticRoute(cc, np)
+		if err != nil {
+			dlog.Warnf(c, "error removing route %s: %v", np, err)
 		}
-		s.dev.Close()
 	}
+	if err := s.dev.Close(); err != nil {
+		dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
+	}
+
 	dlog.Debug(c, "Sending quit message to connector")
 	_, _ = connector.NewConnectorClient(s.clientConn).Quit(c, &empty.Empty{})
 	s.clientConn.Close()
 	dlog.Debug(c, "Connector shutdown complete")
-	return nil
 }
 
 func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
