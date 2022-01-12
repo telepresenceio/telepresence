@@ -107,7 +107,12 @@ func (t TypeEnum) NewFlagValueFromPFlagString(stringDefault string) (Value, erro
 	if err != nil {
 		return nil, err
 	}
-	val.Set(stringDefault)
+	// Specifically for strings, a default value of [] (empty) will be interpreted as the string "[]"
+	// this results in "[]" being prepended to every string array; therefore if we have a string slice/array
+	// and a default of [], just don't set it.
+	if !(stringDefault == "[]" && (t == "stringSlice" || t == "stringArray")) {
+		val.Set(stringDefault)
+	}
 	return val, nil
 }
 
@@ -134,9 +139,9 @@ var flagTypes = map[TypeEnum]interface{}{
 	"int32": func(fs *pfs, x *int32) Value { fs.Int32Var(x, "x", *x, ""); return simple(fs) },
 	"int64": func(fs *pfs, x *int64) Value { fs.Int64Var(x, "x", *x, ""); return simple(fs) },
 
-	"int-slice":   func(fs *pfs, x *[]int) Value { fs.IntSliceVar(x, "x", *x, ""); return slice(fs, x) },
-	"int32-slice": func(fs *pfs, x *[]int32) Value { fs.Int32SliceVar(x, "x", *x, ""); return slice(fs, x) },
-	"int64-slice": func(fs *pfs, x *[]int64) Value { fs.Int64SliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"intSlice":   func(fs *pfs, x *[]int) Value { fs.IntSliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"int32Slice": func(fs *pfs, x *[]int32) Value { fs.Int32SliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"int64Slice": func(fs *pfs, x *[]int64) Value { fs.Int64SliceVar(x, "x", *x, ""); return slice(fs, x) },
 	// no int8-slice or int16-slice :(
 
 	"uint":   func(fs *pfs, x *uint) Value { fs.UintVar(x, "x", *x, ""); return simple(fs) },
@@ -145,14 +150,14 @@ var flagTypes = map[TypeEnum]interface{}{
 	"uint32": func(fs *pfs, x *uint32) Value { fs.Uint32Var(x, "x", *x, ""); return simple(fs) },
 	"uint64": func(fs *pfs, x *uint64) Value { fs.Uint64Var(x, "x", *x, ""); return simple(fs) },
 
-	"uint-slice": func(fs *pfs, x *[]uint) Value { fs.UintSliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"uintSlice": func(fs *pfs, x *[]uint) Value { fs.UintSliceVar(x, "x", *x, ""); return slice(fs, x) },
 	// no uint{x}-slice :(
 
-	"float32":       func(fs *pfs, x *float32) Value { fs.Float32Var(x, "x", *x, ""); return simple(fs) },
-	"float32-slice": func(fs *pfs, x *[]float32) Value { fs.Float32SliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"float32":      func(fs *pfs, x *float32) Value { fs.Float32Var(x, "x", *x, ""); return simple(fs) },
+	"float32Slice": func(fs *pfs, x *[]float32) Value { fs.Float32SliceVar(x, "x", *x, ""); return slice(fs, x) },
 
-	"float64":       func(fs *pfs, x *float64) Value { fs.Float64Var(x, "x", *x, ""); return simple(fs) },
-	"float64-slice": func(fs *pfs, x *[]float64) Value { fs.Float64SliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"float64":      func(fs *pfs, x *float64) Value { fs.Float64Var(x, "x", *x, ""); return simple(fs) },
+	"float64Slice": func(fs *pfs, x *[]float64) Value { fs.Float64SliceVar(x, "x", *x, ""); return slice(fs, x) },
 
 	"count": func(fs *pfs, x *int) Value {
 		val := *x
@@ -166,23 +171,23 @@ var flagTypes = map[TypeEnum]interface{}{
 
 	// Booleans ////////////////////////////////////////////////////////////
 
-	"bool":       func(fs *pfs, x *bool) Value { fs.BoolVar(x, "x", *x, ""); return simple(fs) },
-	"bool-slice": func(fs *pfs, x *[]bool) Value { fs.BoolSliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"bool":      func(fs *pfs, x *bool) Value { fs.BoolVar(x, "x", *x, ""); return simple(fs) },
+	"boolSlice": func(fs *pfs, x *[]bool) Value { fs.BoolSliceVar(x, "x", *x, ""); return slice(fs, x) },
 
 	// durations ///////////////////////////////////////////////////////////
 
-	"duration":       func(fs *pfs, x *time.Duration) Value { fs.DurationVar(x, "x", *x, ""); return simple(fs) },
-	"duration-slice": func(fs *pfs, x *[]time.Duration) Value { fs.DurationSliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"duration":      func(fs *pfs, x *time.Duration) Value { fs.DurationVar(x, "x", *x, ""); return simple(fs) },
+	"durationSlice": func(fs *pfs, x *[]time.Duration) Value { fs.DurationSliceVar(x, "x", *x, ""); return slice(fs, x) },
 
 	// networking //////////////////////////////////////////////////////////
 
-	"ip":       func(fs *pfs, x *net.IP) Value { fs.IPVar(x, "x", *x, ""); return nilable(fs, x) },
-	"ip-slice": func(fs *pfs, x *[]net.IP) Value { fs.IPSliceVar(x, "x", *x, ""); return slice(fs, x) },
+	"ip":      func(fs *pfs, x *net.IP) Value { fs.IPVar(x, "x", *x, ""); return nilable(fs, x) },
+	"ipSlice": func(fs *pfs, x *[]net.IP) Value { fs.IPSliceVar(x, "x", *x, ""); return slice(fs, x) },
 
-	"ipmask": func(fs *pfs, x *net.IPMask) Value { fs.IPMaskVar(x, "x", *x, ""); return nilable(fs, x) },
+	"ipMask": func(fs *pfs, x *net.IPMask) Value { fs.IPMaskVar(x, "x", *x, ""); return nilable(fs, x) },
 	// no ipmask-slice :(
 
-	"ipnet": func(fs *pfs, x *net.IPNet) Value {
+	"ipNet": func(fs *pfs, x *net.IPNet) Value {
 		fs.IPNetVar(x, "x", *x, "")
 		return complexValue{
 			Value: fs.Lookup("x").Value,
@@ -199,11 +204,11 @@ var flagTypes = map[TypeEnum]interface{}{
 
 	// strings /////////////////////////////////////////////////////////////
 
-	"bytes-base64": func(fs *pfs, x *[]byte) Value { fs.BytesBase64Var(x, "x", *x, ""); return simple(fs) },
-	"bytes-hex":    func(fs *pfs, x *[]byte) Value { fs.BytesHexVar(x, "x", *x, ""); return simple(fs) },
+	"bytesBase64": func(fs *pfs, x *[]byte) Value { fs.BytesBase64Var(x, "x", *x, ""); return simple(fs) },
+	"bytesHex":    func(fs *pfs, x *[]byte) Value { fs.BytesHexVar(x, "x", *x, ""); return simple(fs) },
 
 	"string": func(fs *pfs, x *string) Value { fs.StringVar(x, "x", *x, ""); return simple(fs) },
-	"string-slice": func(fs *pfs, x *[]string) Value {
+	"stringSlice": func(fs *pfs, x *[]string) Value {
 		fs.StringSliceVar(x, "x", *x, "")
 		return complexValue{
 			Value:  fs.Lookup("x").Value,
@@ -215,9 +220,9 @@ var flagTypes = map[TypeEnum]interface{}{
 
 	// maps ////////////////////////////////////////////////////////////////
 
-	"string-to-int":   func(fs *pfs, x *map[string]int) Value { fs.StringToIntVar(x, "x", *x, ""); return mapping(fs, x) },
-	"string-to-int64": func(fs *pfs, x *map[string]int64) Value { fs.StringToInt64Var(x, "x", *x, ""); return mapping(fs, x) },
-	"string-to-string": func(fs *pfs, x *map[string]string) Value {
+	"stringToInt":   func(fs *pfs, x *map[string]int) Value { fs.StringToIntVar(x, "x", *x, ""); return mapping(fs, x) },
+	"stringToInt64": func(fs *pfs, x *map[string]int64) Value { fs.StringToInt64Var(x, "x", *x, ""); return mapping(fs, x) },
+	"stringToString": func(fs *pfs, x *map[string]string) Value {
 		fs.StringToStringVar(x, "x", *x, "")
 		return stringMapping(fs, x)
 	},
