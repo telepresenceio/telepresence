@@ -66,9 +66,14 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 }
 
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+	executable, err := client.Executable()
+	if err != nil {
+		return &common.VersionInfo{}, err
+	}
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
+		Executable: executable,
 	}, nil
 }
 

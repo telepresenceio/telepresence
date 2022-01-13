@@ -71,3 +71,11 @@ func Structured() semver.Version {
 	structuredOutput = structured
 	return structuredOutput
 }
+
+func GetExecutable() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return executable, nil
+}

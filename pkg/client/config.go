@@ -33,6 +33,7 @@ type Config struct {
 	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
 	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	Daemons         Daemons         `json:"daemons,omitempty" yaml:"daemons,omitempty"`
 	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
 }
 
@@ -44,6 +45,7 @@ func (c *Config) Merge(o *Config) {
 	c.Cloud.merge(&o.Cloud)
 	c.Grpc.merge(&o.Grpc)
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
+	c.Daemons.merge(&o.Daemons)
 	c.Intercept.merge(&o.Intercept)
 }
 
@@ -123,6 +125,8 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 			err = ms[i+1].Decode(&c.Grpc)
 		case kv == "telepresenceAPI":
 			err = ms[i+1].Decode(&c.TelepresenceAPI)
+		case kv == "daemons":
+			err = ms[i+1].Decode(&c.Daemons)
 		case kv == "intercept":
 			err = ms[i+1].Decode(&c.Intercept)
 		case parseContext != nil:
@@ -686,6 +690,16 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
+type Daemons struct {
+	UserDaemonBinary string `json:"userDaemonBinary,omitempty" yaml:"userDaemonBinary,omitempty"`
+}
+
+func (d *Daemons) merge(o *Daemons) {
+	if o.UserDaemonBinary != "" {
+		d.UserDaemonBinary = o.UserDaemonBinary
+	}
+}
+
 const defaultInterceptDefaultPort = 8080
 
 type Intercept struct {
@@ -756,6 +770,10 @@ func GetConfigFile(c context.Context) string {
 
 // GetDefaultConfig returns the default configuration settings
 func GetDefaultConfig(c context.Context) Config {
+	executable, err := os.Executable()
+	if err != nil {
+		dlog.Errorf(c, "unable to get telepresence executable: %s", err)
+	}
 	cfg := Config{
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
@@ -781,6 +799,9 @@ func GetDefaultConfig(c context.Context) Config {
 		},
 		Grpc:            Grpc{},
 		TelepresenceAPI: TelepresenceAPI{},
+		Daemons: Daemons{
+			UserDaemonBinary: executable,
+		},
 		Intercept: Intercept{
 			DefaultPort: defaultInterceptDefaultPort,
 		},
