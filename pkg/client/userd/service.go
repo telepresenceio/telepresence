@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -51,6 +52,15 @@ type parsedConnectRequest struct {
 	*k8s.Config
 }
 
+// A DaemonService represents a service that should be started together with the connector daemon.
+// Can be used when passing in custom commands to start up any resources needed for the commands.
+type DaemonService interface {
+	Name() string
+	Start(ctx context.Context, scout *scout.Reporter, state trafficmgr.ROState) error
+}
+
+type CommandFactory func() cliutil.CommandGroups
+
 // service represents the long running state of the Telepresence User Daemon
 type service struct {
 	rpc.UnsafeConnectorServer
@@ -72,10 +82,13 @@ type service struct {
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
+
+	// This is used for the service to know which CLI commands it supports
+	getCommands CommandFactory
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
-func Command() *cobra.Command {
+func Command(getCommands CommandFactory, services ...DaemonService) *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
@@ -83,7 +96,7 @@ func Command() *cobra.Command {
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context())
+			return run(cmd.Context(), getCommands, services...)
 		},
 	}
 	return c
@@ -274,7 +287,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 }
 
 // run is the main function when executing as the connector
-func run(c context.Context) error {
+func run(c context.Context, getCommands CommandFactory, services ...DaemonService) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -309,6 +322,7 @@ func run(c context.Context) error {
 		userNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
 		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 		sharedState:       trafficmgr.NewState(),
+		getCommands:       getCommands,
 	}
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
@@ -448,6 +462,12 @@ func run(c context.Context) error {
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.
 	g.Go("background-metriton", s.scout.Run)
+
+	for _, svc := range services {
+		g.Go(svc.Name(), func(c context.Context) error {
+			return svc.Start(c, s.scout, s.sharedState)
+		})
+	}
 
 	err = g.Wait()
 	if err != nil {

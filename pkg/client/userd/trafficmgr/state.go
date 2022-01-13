@@ -16,6 +16,14 @@ type State struct {
 	trafficMgr          *TrafficManager
 }
 
+type ROState interface {
+	GetClusterBlocking(ctx context.Context) (*k8s.Cluster, error)
+	GetClusterNonBlocking() *k8s.Cluster
+	GetTrafficManagerNonBlocking() *TrafficManager
+	GetTrafficManagerBlocking(ctx context.Context) (*TrafficManager, error)
+	GetTrafficManagerReadyToIntercept() (*connector.InterceptResult, *TrafficManager)
+}
+
 func NewState() *State {
 	return &State{
 		//LoginExecutor:     "Caller will initialize this later",

@@ -281,7 +281,7 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (*rpc.CommandGroups, error) {
-	return cliutil.CommandsToRPC(commands.GetCommands()), nil
+	return cliutil.CommandsToRPC(s.getCommands()), nil
 }
 
 func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
