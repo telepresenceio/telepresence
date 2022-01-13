@@ -113,7 +113,7 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	s.logCall(c, "CanIntercept", func(c context.Context) {
-		var session *trafficmgr.TrafficManager
+		var session trafficmgr.Session
 		if session, err = s.currentSession(); err != nil {
 			return
 		}
@@ -134,7 +134,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	s.logCall(c, "CreateIntercept", func(c context.Context) {
-		var session *trafficmgr.TrafficManager
+		var session trafficmgr.Session
 		if session, err = s.currentSession(); err != nil {
 			return
 		}
@@ -146,7 +146,7 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	s.logCall(c, "RemoveIntercept", func(c context.Context) {
-		var session *trafficmgr.TrafficManager
+		var session trafficmgr.Session
 		if session, err = s.currentSession(); err != nil {
 			return
 		}
@@ -169,7 +169,7 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	s.logCall(c, "List", func(c context.Context) {
-		var session *trafficmgr.TrafficManager
+		var session trafficmgr.Session
 		if session, err = s.currentSession(); err != nil {
 			return
 		}
@@ -181,7 +181,7 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	s.logCall(c, "Uninstall", func(c context.Context) {
-		var session *trafficmgr.TrafficManager
+		var session trafficmgr.Session
 		if session, err = s.currentSession(); err != nil {
 			return
 		}

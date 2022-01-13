@@ -38,6 +38,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
+type Session interface {
+	restapi.AgentState
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object)
+	GetStatus(context.Context) *rpc.ConnectInfo
+	RemoveIntercept(context.Context, string) error
+	Run(context.Context) error
+	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
+	WorkloadInfoSnapshot(context.Context, *rpc.ListRequest) *rpc.WorkloadInfoSnapshot
+}
+
 type Service interface {
 	RootDaemonClient() daemon.DaemonClient
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
@@ -99,7 +110,7 @@ type interceptResult struct {
 	err       error
 }
 
-func New(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service) (*TrafficManager, *connector.ConnectInfo) {
+func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service) (Session, *connector.ConnectInfo) {
 	sr.Report(c, "connect")
 
 	dlog.Info(c, "Connecting to k8s cluster...")

@@ -58,7 +58,7 @@ type service struct {
 
 	quit func()
 
-	session       *trafficmgr.TrafficManager
+	session       trafficmgr.Session
 	sessionCancel context.CancelFunc
 	sessionLock   sync.Mutex
 
@@ -119,7 +119,7 @@ func (s *service) manageSessions(c context.Context) error {
 		// Respond by setting the session and returning the error (or nil
 		// if everything is ok)
 		var rsp *rpc.ConnectInfo
-		s.session, rsp = trafficmgr.New(c, s.scout, oi, s)
+		s.session, rsp = trafficmgr.NewSession(c, s.scout, oi, s)
 		select {
 		case <-c.Done():
 			return nil
