@@ -7,7 +7,6 @@ import (
 )
 
 func (tm *TrafficManager) dialRequestWatcher(ctx context.Context) error {
-	<-tm.startup
 	// Deal with dial requests from the manager
 	dialerStream, err := tm.managerClient.WatchDial(ctx, tm.sessionInfo)
 	if err != nil {
