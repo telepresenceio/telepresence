@@ -115,11 +115,12 @@ func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*empty.E
 	}
 	select {
 	case <-ctx.Done():
-		return &empty.Empty{}, nil
+		return nil, status.Error(codes.Canceled, ctx.Err().Error())
 	case d.connectCh <- info:
 	}
 	select {
 	case <-ctx.Done():
+		return nil, status.Error(codes.Canceled, ctx.Err().Error())
 	case err := <-d.connectErrCh:
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
