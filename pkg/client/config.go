@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -42,6 +44,50 @@ func (c *Config) Merge(o *Config) {
 	c.Grpc.merge(&o.Grpc)
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
 	c.Intercept.merge(&o.Intercept)
+}
+
+// Watch uses a file system watcher that receives events when the configuration changes
+// and calls the given function when that happens.
+func Watch(c context.Context, onReload func(context.Context) error) error {
+	configFile := GetConfigFile(c)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+
+	// The directory containing the config file must be watched because editing
+	// the file will typically end with renaming the original and then creating
+	// a new file. A watcher that follows the inode will not see when the new
+	// file is created.
+	if err = watcher.Add(filepath.Dir(configFile)); err != nil {
+		return err
+	}
+
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		if err := onReload(c); err != nil {
+			dlog.Error(c, err)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case err = <-watcher.Errors:
+			dlog.Error(c, err)
+		case event := <-watcher.Events:
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
+				// The config file was created or modified. Let's defer the load just a little bit
+				// in case there are more modifications (a write out with vi will typically cause
+				// one CREATE event and at least one WRITE event).
+				delay.Reset(5 * time.Millisecond)
+			}
+		}
+	}
 }
 
 func stringKey(n *yaml.Node) (string, error) {
