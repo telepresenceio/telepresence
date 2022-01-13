@@ -10,8 +10,8 @@ import (
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your

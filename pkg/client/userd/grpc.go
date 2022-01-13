@@ -23,10 +23,11 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/commands"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
@@ -280,7 +281,7 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (*rpc.CommandGroups, error) {
-	return commands.CommandsToRPC(commands.GetCommands()), nil
+	return cliutil.CommandsToRPC(commands.GetCommands()), nil
 }
 
 func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {

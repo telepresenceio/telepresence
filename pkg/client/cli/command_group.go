@@ -60,8 +60,8 @@ func setCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
 // AddCommandGroups adds all the groups in the given CommandGroups to the command,  replaces
 // the its standard usage template with a template that groups the commands according to that group.
 func AddCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
-	for _, group := range groups {
-		cmd.AddCommand(group...)
+	for _, commands := range groups {
+		cmd.AddCommand(commands...)
 	}
 	setCommandGroups(cmd, groups)
 
@@ -79,8 +79,8 @@ Examples:
 
 Available Commands:
 {{- if commandGroups .}}
-{{- range $name, $group := commandGroups .}}
-  {{$name}}:{{range $group}}
+{{- range $name, $commands := commandGroups .}}
+  {{$name}}:{{range $commands}}
     {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}
 {{- else}}
 {{- range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
