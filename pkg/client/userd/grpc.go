@@ -72,10 +72,10 @@ func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Co
 	return
 }
 
-func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+func (s *service) Status(c context.Context, _ *empty.Empty) (ci *rpc.ConnectInfo, err error) {
 	s.logCall(c, "Status", func(c context.Context) {
 		defer func() { err = callRecovery(c, recover(), err) }()
-		ci, err = s.connect(c, cr, true), nil
+		ci, err = s.connect(c, nil, true), nil
 	})
 	return
 }
@@ -232,7 +232,7 @@ func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest
 }
 
 func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (result *rpc.KeyData, err error) {
-	s.logCall(ctx, "GetCloudUserInfo", func(c context.Context) {
+	s.logCall(ctx, "GetCloudAPIKey", func(c context.Context) {
 		var key string
 		if key, err = s.loginExecutor.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin()); err == nil {
 			result = &rpc.KeyData{ApiKey: key}

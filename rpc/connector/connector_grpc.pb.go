@@ -32,7 +32,7 @@ type ConnectorClient interface {
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Status is much like Connect, except that it doesn't actually do
 	// anything.  It's a dry-run.
-	Status(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
+	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Queries the connector whether it is possible to create the given intercept.
 	CanIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Adds an intercept to a workload.  Requires having already called
@@ -92,7 +92,7 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 	return out, nil
 }
 
-func (c *connectorClient) Status(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error) {
+func (c *connectorClient) Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ConnectInfo, error) {
 	out := new(ConnectInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Status", in, out, opts...)
 	if err != nil {
@@ -274,7 +274,7 @@ type ConnectorServer interface {
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
 	// Status is much like Connect, except that it doesn't actually do
 	// anything.  It's a dry-run.
-	Status(context.Context, *ConnectRequest) (*ConnectInfo, error)
+	Status(context.Context, *emptypb.Empty) (*ConnectInfo, error)
 	// Queries the connector whether it is possible to create the given intercept.
 	CanIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
 	// Adds an intercept to a workload.  Requires having already called
@@ -319,7 +319,7 @@ func (UnimplementedConnectorServer) Version(context.Context, *emptypb.Empty) (*c
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
-func (UnimplementedConnectorServer) Status(context.Context, *ConnectRequest) (*ConnectInfo, error) {
+func (UnimplementedConnectorServer) Status(context.Context, *emptypb.Empty) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
 func (UnimplementedConnectorServer) CanIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
@@ -417,7 +417,7 @@ func _Connector_Connect_Handler(srv interface{}, ctx context.Context, dec func(i
 }
 
 func _Connector_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectRequest)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -429,7 +429,7 @@ func _Connector_Status_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/telepresence.connector.Connector/Status",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Status(ctx, req.(*ConnectRequest))
+		return srv.(ConnectorServer).Status(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }

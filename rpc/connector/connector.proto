@@ -23,7 +23,7 @@ service Connector {
 
   // Status is much like Connect, except that it doesn't actually do
   // anything.  It's a dry-run.
-  rpc Status(ConnectRequest) returns (ConnectInfo);
+  rpc Status(google.protobuf.Empty) returns (ConnectInfo);
 
   // Queries the connector whether it is possible to create the given intercept.
   rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);

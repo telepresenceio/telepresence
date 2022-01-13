@@ -102,12 +102,16 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest, dryRun bool
 	s.connectMu.Lock()
 	defer s.connectMu.Unlock()
 
-	config, err := k8s.NewConfig(c, cr.KubeFlags)
-	if err != nil && !dryRun {
-		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+	var config *k8s.Config
+	if !dryRun {
+		var err error
+		config, err = k8s.NewConfig(c, cr.KubeFlags)
+		if err != nil {
+			return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+		}
 	}
 	if cluster := s.sharedState.GetClusterNonBlocking(); cluster != nil {
-		if cluster.Config.ContextServiceAndFlagsEqual(config) {
+		if !dryRun && cluster.Config.ContextServiceAndFlagsEqual(config) {
 			cluster.Config = config // namespace might have changed
 			if mns := cr.MappedNamespaces; len(mns) > 0 {
 				if len(mns) == 1 && mns[0] == "all" {

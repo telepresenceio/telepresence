@@ -126,9 +126,7 @@ func connectorStatus(cmd *cobra.Command) error {
 			fields = append(fields, kv{"Ambassador Cloud", "Logged in"})
 		}
 
-		status, err := connectorClient.Status(ctx, &connector.ConnectRequest{
-			KubeFlags: kubeFlagMap(),
-		})
+		status, err := connectorClient.Status(ctx, &empty.Empty{})
 		if err != nil {
 			return err
 		}
