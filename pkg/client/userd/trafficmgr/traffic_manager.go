@@ -200,7 +200,9 @@ func (tm *TrafficManager) Run(c context.Context) error {
 
 	// Gotta call RegisterManagerServer before we call daemon.Connect which tells the
 	// daemon to use the proxy.
-	tm.callbacks.RegisterManagerServer(NewManagerProxy(tm.managerClient))
+	mgrProxy := NewManagerProxy()
+	mgrProxy.SetClient(tm.managerClient)
+	tm.callbacks.RegisterManagerServer(mgrProxy)
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	if _, err := tm.callbacks.Connect(c, tm.getOutboundInfo(c)); err != nil {
