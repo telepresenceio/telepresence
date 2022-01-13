@@ -1,6 +1,7 @@
 package userd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,13 +17,17 @@ import (
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/spf13/cobra"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
@@ -273,4 +278,27 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 		s.cancel()
 	})
 	return &empty.Empty{}, nil
+}
+
+func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (*rpc.CommandGroups, error) {
+	return cliutil.CommandsToRPC(commands.GetCommands()), nil
+}
+
+func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
+	cmd := &cobra.Command{
+		Use: "fauxmand",
+	}
+	cli.AddCommandGroups(cmd, commands.GetCommands())
+	cmd.SetArgs(req.GetOsArgs())
+	outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+	cmd.SetOut(outW)
+	cmd.SetErr(errW)
+	err := cmd.ExecuteContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.RunCommandResponse{
+		Stdout: outW.Bytes(),
+		Stderr: errW.Bytes(),
+	}, nil
 }

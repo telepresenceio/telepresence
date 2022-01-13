@@ -1,4 +1,4 @@
-package extensions
+package cliutil
 
 import (
 	"encoding/json"
@@ -33,10 +33,10 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 		_, argTyp := flagType.sanityCheck()
 		bPtrVal := reflect.New(argTyp)
 
-		// Check that TypeEnum.NewFlagValue works.
-		aVal, err := flagType.NewFlagValue(a)
+		// Check that TypeEnum.NewFlagValueFromJson works.
+		aVal, err := flagType.NewFlagValueFromJson(a)
 		if err != nil {
-			t.Logf("flagType.NewFlagValue(a) returned err: %v", err)
+			t.Logf("flagType.NewFlagValueFromJson(a) returned err: %v", err)
 			return false
 		}
 
@@ -85,13 +85,13 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 		Table  []interface{}
 		Fuzzer func([]reflect.Value, *rand.Rand)
 	}{
-		"string-slice": {
+		"stringSlice": {
 			Table: []interface{}{
 				[]string{""},
 				[]string{"foo,bar", "baz"},
 			},
 		},
-		"string-to-int": {
+		"stringToInt": {
 			// XXX: pflag doesn't support keys with `,` or `=` in them.
 			Table: []interface{}{
 				map[string]int{
@@ -118,7 +118,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 				}
 			},
 		},
-		"string-to-int64": {
+		"stringToInt64": {
 			// XXX: pflag doesn't support keys with `,` or `=` in them.
 			Table: []interface{}{
 				map[string]int64{
@@ -145,7 +145,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 				}
 			},
 		},
-		"string-to-string": {
+		"stringToString": {
 			// XXX: pflag doesn't support keys with `=` in them.
 			Table: []interface{}{
 				map[string]string{
@@ -187,7 +187,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 				out[0] = reflect.ValueOf(randomIP(rand))
 			},
 		},
-		"ip-slice": {
+		"ipSlice": {
 			Fuzzer: func(out []reflect.Value, rand *rand.Rand) {
 				ret := make([]net.IP, rand.Intn(50))
 				for i := range ret {
@@ -196,14 +196,14 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 				out[0] = reflect.ValueOf(ret)
 			},
 		},
-		"ipmask": {
+		"ipMask": {
 			Fuzzer: func(out []reflect.Value, rand *rand.Rand) {
 				bs := make([]byte, 4) // XXX pflag only supports IPv4 masks
 				rand.Read(bs)
 				out[0] = reflect.ValueOf(net.IPMask(bs))
 			},
 		},
-		"ipnet": {
+		"ipNet": {
 			Fuzzer: func(out []reflect.Value, rand *rand.Rand) {
 				ip := randomIP(rand)
 				mask := net.CIDRMask(rand.Intn(len(ip)*8), len(ip)*8)
