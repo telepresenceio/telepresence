@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -52,11 +53,19 @@ type parsedConnectRequest struct {
 	*k8s.Config
 }
 
+type ROState interface {
+	GetClusterBlocking(ctx context.Context) (*k8s.Cluster, error)
+	GetClusterNonBlocking() *k8s.Cluster
+	GetTrafficManagerNonBlocking() *trafficmgr.TrafficManager
+	GetTrafficManagerBlocking(ctx context.Context) (*trafficmgr.TrafficManager, error)
+	GetTrafficManagerReadyToIntercept() (*connector.InterceptResult, *trafficmgr.TrafficManager)
+}
+
 // A DaemonService represents a service that should be started together with the connector daemon.
 // Can be used when passing in custom commands to start up any resources needed for the commands.
 type DaemonService interface {
 	Name() string
-	Start(ctx context.Context, scout *scout.Reporter, state trafficmgr.ROState) error
+	Start(ctx context.Context, scout *scout.Reporter, state ROState) error
 }
 
 type CommandFactory func() cliutil.CommandGroups
