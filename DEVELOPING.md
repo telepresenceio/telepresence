@@ -158,7 +158,7 @@ run, though).  Be sure to look at the diff and make sure that new
 behavior is actually correct!
 
 ```console
-$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/connector/userd_trafficmgr
+$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/userd/trafficmgr
 ```
 
 ## Building for Release

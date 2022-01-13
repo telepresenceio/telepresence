@@ -140,8 +140,8 @@ prepare-release: generate ## (Release) Update nescessary files and tag the relea
 	rm -f charts/telepresence/Chart.yaml.bak
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/connector/userd_trafficmgr/testdata/addAgentToWorkload/cur pkg/client/connector/userd_trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/connector/userd_trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/cur pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
