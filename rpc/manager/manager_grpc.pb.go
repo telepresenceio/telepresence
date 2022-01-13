@@ -47,6 +47,7 @@ type ManagerClient interface {
 	// GetLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
 	GetLogs(ctx context.Context, in *GetLogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
+	WatchWorkloads(ctx context.Context, in *WorkloadWatchRequest, opts ...grpc.CallOption) (Manager_WatchWorkloadsClient, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -219,8 +220,40 @@ func (c *managerClient) GetLogs(ctx context.Context, in *GetLogsRequest, opts ..
 	return out, nil
 }
 
+func (c *managerClient) WatchWorkloads(ctx context.Context, in *WorkloadWatchRequest, opts ...grpc.CallOption) (Manager_WatchWorkloadsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[0], "/telepresence.manager.Manager/WatchWorkloads", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchWorkloadsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchWorkloadsClient interface {
+	Recv() (*WorkloadSnapshot, error)
+	grpc.ClientStream
+}
+
+type managerWatchWorkloadsClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchWorkloadsClient) Recv() (*WorkloadSnapshot, error) {
+	m := new(WorkloadSnapshot)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[0], "/telepresence.manager.Manager/WatchAgents", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], "/telepresence.manager.Manager/WatchAgents", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +285,7 @@ func (x *managerWatchAgentsClient) Recv() (*AgentInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], "/telepresence.manager.Manager/WatchIntercepts", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], "/telepresence.manager.Manager/WatchIntercepts", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +317,7 @@ func (x *managerWatchInterceptsClient) Recv() (*InterceptInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], "/telepresence.manager.Manager/WatchClusterInfo", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], "/telepresence.manager.Manager/WatchClusterInfo", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +394,7 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 }
 
 func (c *managerClient) ClientTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ClientTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], "/telepresence.manager.Manager/ClientTunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], "/telepresence.manager.Manager/ClientTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +425,7 @@ func (x *managerClientTunnelClient) Recv() (*ConnMessage, error) {
 }
 
 func (c *managerClient) AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], "/telepresence.manager.Manager/AgentTunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], "/telepresence.manager.Manager/AgentTunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +474,7 @@ func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupH
 }
 
 func (c *managerClient) WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], "/telepresence.manager.Manager/WatchLookupHost", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], "/telepresence.manager.Manager/WatchLookupHost", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +506,7 @@ func (x *managerWatchLookupHostClient) Recv() (*LookupHostRequest, error) {
 }
 
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], "/telepresence.manager.Manager/WatchLogLevel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], "/telepresence.manager.Manager/WatchLogLevel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +538,7 @@ func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
 }
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], "/telepresence.manager.Manager/Tunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], "/telepresence.manager.Manager/Tunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +569,7 @@ func (x *managerTunnelClient) Recv() (*TunnelMessage, error) {
 }
 
 func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchDialClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], "/telepresence.manager.Manager/WatchDial", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], "/telepresence.manager.Manager/WatchDial", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -599,6 +632,7 @@ type ManagerServer interface {
 	// GetLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
 	GetLogs(context.Context, *GetLogsRequest) (*LogsResponse, error)
+	WatchWorkloads(*WorkloadWatchRequest, Manager_WatchWorkloadsServer) error
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -701,6 +735,9 @@ func (UnimplementedManagerServer) SetLogLevel(context.Context, *LogLevelRequest)
 }
 func (UnimplementedManagerServer) GetLogs(context.Context, *GetLogsRequest) (*LogsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLogs not implemented")
+}
+func (UnimplementedManagerServer) WatchWorkloads(*WorkloadWatchRequest, Manager_WatchWorkloadsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
 }
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgents not implemented")
@@ -959,6 +996,27 @@ func _Manager_GetLogs_Handler(srv interface{}, ctx context.Context, dec func(int
 		return srv.(ManagerServer).GetLogs(ctx, req.(*GetLogsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_WatchWorkloads_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WorkloadWatchRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchWorkloads(m, &managerWatchWorkloadsServer{stream})
+}
+
+type Manager_WatchWorkloadsServer interface {
+	Send(*WorkloadSnapshot) error
+	grpc.ServerStream
+}
+
+type managerWatchWorkloadsServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchWorkloadsServer) Send(m *WorkloadSnapshot) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Manager_WatchAgents_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -1372,6 +1430,11 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchWorkloads",
+			Handler:       _Manager_WatchWorkloads_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "WatchAgents",
 			Handler:       _Manager_WatchAgents_Handler,

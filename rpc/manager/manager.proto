@@ -403,6 +403,26 @@ message ClusterInfo {
   string cluster_domain = 4;
 }
 
+message WorkloadWatchRequest {
+    SessionInfo session = 1;
+    repeated string mapped_namespaces = 2;
+}
+
+message WorkloadSnapshot {
+    message WorkloadInfo {
+        message ServicePort {
+            string name = 1;
+            int32 port = 2;
+        }
+        // uid corresponds to the Kubernetes service's metadata.uid
+        string uid = 1;
+        string name = 2;
+        string namespace = 3;
+        repeated ServicePort ports = 4;
+    }
+    repeated WorkloadInfo workloads = 1;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -446,6 +466,8 @@ service Manager {
   rpc GetLogs(GetLogsRequest) returns (LogsResponse);
 
   // Watches
+
+  rpc WatchWorkloads(WorkloadWatchRequest) returns (stream WorkloadSnapshot);
 
   // WatchAgents notifies a client of the set of known Agents.
   //

@@ -259,6 +259,25 @@ func (p *mgrProxy) WatchClusterInfo(arg *managerrpc.SessionInfo, srv managerrpc.
 	}
 }
 
+func (p *mgrProxy) WatchWorkloads(arg *managerrpc.WorkloadWatchRequest, srv managerrpc.Manager_WatchWorkloadsServer) error {
+	cli, err := p.client.WatchWorkloads(srv.Context(), arg, p.callOptions...)
+	if err != nil {
+		return err
+	}
+	for {
+		info, err := cli.Recv()
+		if err != nil {
+			if err == io.EOF || srv.Context().Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if err = srv.Send(info); err != nil {
+			return err
+		}
+	}
+}
+
 func (p *mgrProxy) SetLogLevel(ctx context.Context, request *managerrpc.LogLevelRequest) (*empty.Empty, error) {
 	return p.client.SetLogLevel(ctx, request, p.callOptions...)
 }

@@ -28,6 +28,7 @@ rules:
   verbs:
   - get
   - list
+  - watch
 {{- if (not .Values.managerRbac.namespaced) }}
 - apiGroups:
   - ""

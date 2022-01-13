@@ -18,6 +18,8 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -735,4 +737,77 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 // expire removes stale sessions.
 func (m *Manager) expire(ctx context.Context) {
 	m.state.ExpireSessions(ctx, m.clock.Now().Add(-15*time.Second))
+}
+
+func (m *Manager) WatchWorkloads(request *rpc.WorkloadWatchRequest, stream rpc.Manager_WatchWorkloadsServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), request.GetSession())
+	dlog.Debugf(ctx, "WatchWorkloads called")
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	informerFactory := informers.NewSharedInformerFactory(managerutil.GetK8sClientset(ctx), 0)
+	svcController := informerFactory.Core().V1().Services()
+	svcInformer := svcController.Informer()
+
+	informerFactory.Start(ctx.Done())
+	informerFactory.WaitForCacheSync(ctx.Done())
+	workloads := map[string]*rpc.WorkloadSnapshot_WorkloadInfo{}
+	workloadLock := sync.RWMutex{}
+	setObj := func(obj interface{}) {
+		svc := obj.(*corev1.Service)
+		ports := []*rpc.WorkloadSnapshot_WorkloadInfo_ServicePort{}
+		for _, port := range svc.Spec.Ports {
+			ports = append(ports, &rpc.WorkloadSnapshot_WorkloadInfo_ServicePort{
+				Name: port.Name,
+				Port: port.Port,
+			})
+		}
+		msg := &rpc.WorkloadSnapshot_WorkloadInfo{
+			Ports:     ports,
+			Uid:       string(svc.UID),
+			Name:      svc.Name,
+			Namespace: svc.Namespace,
+		}
+		workloadLock.Lock()
+		defer workloadLock.Unlock()
+		workloads[msg.Uid] = msg
+	}
+	svcInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			dlog.Infof(ctx, "AddFunc")
+			setObj(obj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			dlog.Infof(ctx, "DeleteFunc")
+			svc := obj.(*corev1.Service)
+			workloadLock.Lock()
+			defer workloadLock.Unlock()
+			delete(workloads, string(svc.UID))
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			dlog.Infof(ctx, "UpdateFunc")
+			setObj(newObj)
+		},
+	})
+	ticker := time.NewTicker(20 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			workloadLock.RLock()
+			snapshot := &rpc.WorkloadSnapshot{Workloads: []*rpc.WorkloadSnapshot_WorkloadInfo{}}
+			for _, svc := range workloads {
+				snapshot.Workloads = append(snapshot.Workloads, svc)
+			}
+			workloadLock.RUnlock()
+			dlog.Infof(ctx, "Sending!")
+			err := stream.Send(snapshot)
+			if err != nil {
+				return fmt.Errorf("unable to send snapshot: %w", err)
+			}
+			if err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
