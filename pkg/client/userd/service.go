@@ -89,6 +89,12 @@ func Command() *cobra.Command {
 	return c
 }
 
+func (s *service) configReload(c context.Context) error {
+	return client.Watch(c, func(c context.Context) error {
+		return logging.ReloadDaemonConfig(c, false)
+	})
+}
+
 func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	return &rpc.ConnectInfo{
 		Error:         t,
@@ -394,6 +400,8 @@ func run(c context.Context) error {
 		}
 		return err
 	})
+
+	g.Go("config-reload", s.configReload)
 
 	// background-init handles the work done by the initial connector.Connect RPC call.  This
 	// happens in a separate goroutine from the gRPC server's connection handler so that the
