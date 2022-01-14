@@ -72,7 +72,6 @@ func daemonStatus(cmd *cobra.Command) error {
 				fmt.Fprintf(out, "    - %s\n", iputil.IPNetFromRPC(subnet))
 			}
 		}
-
 		return nil
 	})
 	if err != nil {

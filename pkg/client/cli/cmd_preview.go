@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -35,26 +33,26 @@ func previewCommand() *cobra.Command {
 
 		Short: "Create a preview domain for an existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
-				if _, err := cliutil.ClientEnsureLoggedIn(cmd.Context(), "", connectorClient); err != nil {
+			return withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
+				if _, err := cliutil.ClientEnsureLoggedIn(cmd.Context(), "", cs.userD); err != nil {
 					return err
 				}
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					if createSpec.Ingress == nil {
-						request := manager.GetInterceptRequest{Session: connInfo.SessionInfo, Name: args[0]}
+						request := manager.GetInterceptRequest{Session: cs.SessionInfo, Name: args[0]}
 						// Throws rpc "not found" error if intercept has not yet been created
 						interceptInfo, err := managerClient.GetIntercept(ctx, &request)
 						if err != nil {
 							return err
 						}
-						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), connInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace)
+						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), cs.ConnectInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace)
 						if err != nil {
 							return err
 						}
 						createSpec.Ingress = ingress
 					}
 					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-						Session: connInfo.SessionInfo,
+						Session: cs.SessionInfo,
 						Name:    args[0],
 						PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 							AddPreviewDomain: &createSpec,
@@ -77,10 +75,10 @@ func previewCommand() *cobra.Command {
 
 		Short: "Remove a preview domain from an intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, func(ctx context.Context, _ connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+			return withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-						Session: connInfo.SessionInfo,
+						Session: cs.SessionInfo,
 						Name:    args[0],
 						PreviewDomainAction: &manager.UpdateInterceptRequest_RemovePreviewDomain{
 							RemovePreviewDomain: true,

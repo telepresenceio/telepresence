@@ -22,7 +22,6 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -237,18 +236,18 @@ func leaveCommand() *cobra.Command {
 func intercept(cmd *cobra.Command, args interceptArgs) error {
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+		return withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 			})
 		})
 	}
 
 	// start intercept, run command, then stop the intercept
-	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+	return withConnector(cmd, false, func(ctx context.Context, cs *connectorState) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 			return client.WithEnsuredState(ctx, is, false, func() error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
@@ -263,9 +262,8 @@ func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
 	args interceptArgs,
-	connectorClient connector.ConnectorClient,
+	cs *connectorState,
 	managerClient manager.ManagerClient,
-	connInfo *connector.ConnectInfo,
 ) *interceptState {
 	is := &interceptState{
 		cmd:  cmd,
@@ -273,9 +271,9 @@ func newInterceptState(
 
 		scout: scout.NewReporter(ctx, "cli"),
 
-		connectorClient: connectorClient,
+		connectorClient: cs.userD,
 		managerClient:   managerClient,
-		connInfo:        connInfo,
+		connInfo:        cs.ConnectInfo,
 	}
 	is.scout.Start(log.WithDiscardingLogger(ctx))
 	return is

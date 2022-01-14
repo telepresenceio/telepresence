@@ -25,6 +25,12 @@ func kubeFlagMap() map[string]string {
 	return kubeFlagMap
 }
 
+type connectorState struct {
+	*connector.ConnectInfo
+	userD connector.ConnectorClient
+	rootD daemon.DaemonClient
+}
+
 // withConnector is like cliutil.WithConnector, but also
 //
 //  - Ensures that the damon is running too
@@ -33,7 +39,7 @@ func kubeFlagMap() map[string]string {
 //    them down when it's done.  If they were already running, it will leave them running.)
 //
 //  - Makes the connector.Connect gRPC call to set up networking
-func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, connector.ConnectorClient, *connector.ConnectInfo, daemon.DaemonClient) error) error {
+func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, *connectorState) error) error {
 	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
 			if cliutil.DidLaunchConnector(ctx) {
@@ -48,7 +54,7 @@ func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, conn
 			if err != nil {
 				return err
 			}
-			return f(ctx, connectorClient, connInfo, daemonClient)
+			return f(ctx, &connectorState{ConnectInfo: connInfo, userD: connectorClient, rootD: daemonClient})
 		})
 	})
 }

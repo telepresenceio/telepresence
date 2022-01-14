@@ -9,14 +9,13 @@ import (
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-// getClusterID is a simple command that makes it easier for users to
+// ClusterIdCommand is a simple command that makes it easier for users to
 // figure out what their cluster ID is. For now this is just used when
 // people are making licenses for air-gapped environments
 func ClusterIdCommand() *cobra.Command {
@@ -49,11 +48,11 @@ func connectCommand() *cobra.Command {
 		Short: "Connect to a cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return withConnector(cmd, true, func(_ context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
+				return withConnector(cmd, true, func(_ context.Context, _ *connectorState) error {
 					return nil
 				})
 			}
-			return withConnector(cmd, false, func(ctx context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
+			return withConnector(cmd, false, func(ctx context.Context, _ *connectorState) error {
 				return proc.Run(ctx, nil, args[0], args[1:]...)
 			})
 		},
