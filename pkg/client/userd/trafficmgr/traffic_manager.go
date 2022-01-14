@@ -166,7 +166,6 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		SessionInfo:    tmgr.session(),
 		Agents:         &manager.AgentInfoSnapshot{Agents: tmgr.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
-		BridgeOk:       true,
 	}
 	return tmgr, ret
 }
@@ -524,7 +523,6 @@ func (tm *TrafficManager) GetStatus(c context.Context) *rpc.ConnectInfo {
 		SessionInfo:    tm.session(),
 		Agents:         &manager.AgentInfoSnapshot{Agents: tm.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()},
-		BridgeOk:       true,
 	}
 	return ret
 }

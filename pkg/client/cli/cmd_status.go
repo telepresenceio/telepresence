@@ -148,11 +148,6 @@ func connectorStatus(cmd *cobra.Command) error {
 		}
 		fields = append(fields, kv{"Kubernetes server", status.ClusterServer})
 		fields = append(fields, kv{"Kubernetes context", status.ClusterContext})
-		if status.BridgeOk {
-			fields = append(fields, kv{"Telepresence proxy", "ON (networking to the cluster is enabled)"})
-		} else {
-			fields = append(fields, kv{"Telepresence proxy", "OFF (attempting to connect...)"})
-		}
 		intercepts := fmt.Sprintf("%d total\n", len(status.GetIntercepts().GetIntercepts()))
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
 			intercepts += fmt.Sprintf("%s: %s\n", icept.Spec.Name, icept.Spec.Client)

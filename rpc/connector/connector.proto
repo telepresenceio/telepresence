@@ -141,7 +141,7 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
-  bool bridge_ok = 5;
+  reserved 5;
   reserved 6;
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
