@@ -43,7 +43,7 @@ type dialer struct {
 // and the given connection.
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
-// and call the release function it got from the connpool.Pool to ensure that it gets properly released.
+// and call the release function it got from the tunnel.Pool to ensure that it gets properly released.
 func NewDialer(stream Stream) Endpoint {
 	return NewConnEndpoint(stream, nil)
 }

@@ -93,7 +93,6 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 }
 
 func (s *notConnectedSuite) Test_ConflictingProxies() {
-	require := s.Require()
 	ctx := s.Context()
 
 	testIP := &net.IPNet{
@@ -119,6 +118,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 		},
 	} {
 		s.Run(name, func() {
+			require := s.Require()
 			ctx := itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
 				return map[string]interface{}{
 					"never-proxy": t.neverProxy,

@@ -21,7 +21,6 @@ func (s *notConnectedSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := itest.WithUser(s.Context(), "default")
 	stdout := itest.TelepresenceOk(ctx, "connect")
-	s.Contains(stdout, "Launching Telepresence Root Daemon")
 	s.Contains(stdout, "Launching Telepresence User Daemon")
 	s.Contains(stdout, "Connected to context")
 	itest.TelepresenceQuitOk(ctx)
@@ -30,7 +29,6 @@ func (s *notConnectedSuite) SetupSuite() {
 func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	ctx := s.Context()
 	stdout := itest.TelepresenceOk(ctx, "connect", "--", s.Executable(), "status")
-	s.Contains(stdout, "Launching Telepresence Root Daemon")
 	s.Contains(stdout, "Launching Telepresence User Daemon")
 	s.Contains(stdout, "Connected to context")
 	s.Contains(stdout, "Kubernetes context:")
@@ -45,7 +43,6 @@ func (s *notConnectedSuite) Test_InvalidKubeconfig() {
 	ctx := itest.WithEnv(s.Context(), map[string]string{"KUBECONFIG": "/dev/null"})
 	stdout, stderr, err := itest.Telepresence(ctx, "connect")
 	s.Contains(stderr, "kubeconfig has no context definition")
-	s.Contains(stdout, "Launching Telepresence Root Daemon")
 	s.Contains(stdout, "Launching Telepresence User Daemon")
 	itest.AssertQuitOutput(ctx, stdout)
 	s.Error(err)
@@ -56,7 +53,6 @@ func (s *notConnectedSuite) Test_NonExistentContext() {
 	stdout, stderr, err := itest.Telepresence(ctx, "connect", "--context", "not-likely-to-exist")
 	s.Error(err)
 	s.Contains(stderr, `"not-likely-to-exist" does not exist`)
-	s.Contains(stdout, "Launching Telepresence Root Daemon")
 	s.Contains(stdout, "Launching Telepresence User Daemon")
 	itest.AssertQuitOutput(ctx, stdout)
 }

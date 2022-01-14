@@ -47,6 +47,7 @@ following Free and Open Source software:
     github.com/fatih/camelcase                                          v1.0.0                                     MIT license
     github.com/fatih/color                                              v1.10.0                                    MIT license
     github.com/form3tech-oss/jwt-go                                     v3.2.2+incompatible                        MIT license
+    github.com/fsnotify/fsnotify                                        v1.4.9                                     3-clause BSD license
     github.com/go-errors/errors                                         v1.0.1                                     MIT license
     github.com/go-logr/logr                                             v0.4.0                                     Apache License 2.0
     github.com/go-openapi/jsonpointer                                   v0.19.5                                    Apache License 2.0

@@ -9,7 +9,9 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your
@@ -132,25 +134,24 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
+	groups, err := getRemoteCommands(ctx)
+	if err != nil {
+		groups = commands.GetCommandsForLocal(err)
+	}
 	rootCmd.InitDefaultHelpCmd()
-	AddCommandGroups(rootCmd, []CommandGroup{
-		{
-			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		},
-		{
-			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
-		},
-		{
-			Name:     "Debug Commands",
-			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		},
-		{
-			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
-		},
-	})
+	static := cliutil.CommandGroups{
+		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
+		"Traffic Commands": []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
+		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
+		"Other Commands":   []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+	}
+	for name, cmds := range static {
+		if _, ok := groups[name]; !ok {
+			groups[name] = []*cobra.Command{}
+		}
+		groups[name] = append(groups[name], cmds...)
+	}
+	AddCommandGroups(rootCmd, groups)
 	initGlobalFlagGroups()
 	for _, group := range globalFlagGroups {
 		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
@@ -159,7 +160,7 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 func initGlobalFlagGroups() {
-	globalFlagGroups = []FlagGroup{
+	globalFlagGroups = []cliutil.FlagGroup{
 		{
 			Name: "Kubernetes flags",
 			Flags: func() *pflag.FlagSet {
@@ -171,7 +172,7 @@ func initGlobalFlagGroups() {
 			}(),
 		}}
 
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+	globalFlagGroups = append(globalFlagGroups, cliutil.FlagGroup{
 		Name: "Telepresence networking flags",
 		Flags: func() *pflag.FlagSet {
 			netflags := pflag.NewFlagSet("", 0)
@@ -192,7 +193,7 @@ func initGlobalFlagGroups() {
 		}(),
 	})
 
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+	globalFlagGroups = append(globalFlagGroups, cliutil.FlagGroup{
 		Name: "other Telepresence flags",
 		Flags: func() *pflag.FlagSet {
 			flags := pflag.NewFlagSet("", 0)

@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.5.0 (TBD)
+
+- Drop backward compatibility with versions 2.4.4 or older by removing the deprecated multiplexing tunnel functionality.
+
 ### 2.4.10 (January 13, 2022)
 
 - Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 

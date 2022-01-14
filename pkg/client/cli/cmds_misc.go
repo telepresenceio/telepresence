@@ -89,13 +89,17 @@ func dashboardCommand() *cobra.Command {
 }
 
 func quitCommand() *cobra.Command {
-	return &cobra.Command{
+	quitRootDaemon := false
+	cmd := &cobra.Command{
 		Use:  "quit",
 		Args: cobra.NoArgs,
 
 		Short: "Tell telepresence daemon to quit",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cliutil.QuitDaemon(cmd.Context())
+			return cliutil.Disconnect(cmd.Context(), quitRootDaemon)
 		},
 	}
+	flags := cmd.Flags()
+	flags.BoolVarP(&quitRootDaemon, "stop-daemon", "r", false, "stop root daemon")
+	return cmd
 }
