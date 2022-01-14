@@ -43,11 +43,12 @@ type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object)
-	GetStatus(context.Context) *rpc.ConnectInfo
+	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	RemoveIntercept(context.Context, string) error
 	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
+	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
 	WorkloadInfoSnapshot(context.Context, *rpc.ListRequest) *rpc.WorkloadInfoSnapshot
 }
 
@@ -514,7 +515,27 @@ func (tm *TrafficManager) remain(c context.Context) error {
 	}
 }
 
-func (tm *TrafficManager) GetStatus(c context.Context) *rpc.ConnectInfo {
+func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+	config, err := k8s.NewConfig(c, cr.KubeFlags)
+	if err != nil {
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+	}
+	if !tm.Config.ContextServiceAndFlagsEqual(config) {
+		return &rpc.ConnectInfo{
+			Error:          rpc.ConnectInfo_MUST_RESTART,
+			ClusterContext: tm.Config.Context,
+			ClusterServer:  tm.Config.Server,
+			ClusterId:      tm.GetClusterId(c),
+		}
+	}
+
+	if err = tm.SetMappedNamespaces(c, cr.MappedNamespaces); err != nil {
+		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+	}
+	return tm.Status(c)
+}
+
+func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 	cfg := tm.Config
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_ALREADY_CONNECTED,

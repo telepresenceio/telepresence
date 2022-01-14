@@ -71,7 +71,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		s.sessionLock.Lock()
 		defer s.sessionLock.Unlock()
 		if s.session != nil {
-			result = s.session.GetStatus(ctx)
+			result = s.session.UpdateStatus(ctx, cr)
 			return
 		}
 		select {
@@ -105,7 +105,7 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 		if s.session == nil {
 			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
 		} else {
-			result = s.session.GetStatus(c)
+			result = s.session.Status(c)
 		}
 	})
 	return
