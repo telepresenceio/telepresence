@@ -59,6 +59,8 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
+  rpc GetIngressInfos(google.protobuf.Empty) returns (IngressInfos);
+
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
 
@@ -146,10 +148,14 @@ message ConnectInfo {
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
-  repeated manager.IngressInfo ingress_infos = 9;
+  reserved 9;
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+}
+
+message IngressInfos {
+  repeated manager.IngressInfo ingress_infos = 1;
 }
 
 message UninstallRequest {

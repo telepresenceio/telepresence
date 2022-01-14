@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -45,7 +46,11 @@ func previewCommand() *cobra.Command {
 						if err != nil {
 							return err
 						}
-						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), cs.ConnectInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace)
+						iis, err := cs.userD.GetIngressInfos(ctx, &empty.Empty{})
+						if err != nil {
+							return err
+						}
+						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), cs.ConnectInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace, iis.IngressInfos)
 						if err != nil {
 							return err
 						}

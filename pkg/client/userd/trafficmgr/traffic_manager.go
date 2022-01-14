@@ -43,6 +43,7 @@ type Session interface {
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object)
 	GetStatus(context.Context) *rpc.ConnectInfo
+	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	RemoveIntercept(context.Context, string) error
 	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
@@ -128,11 +129,6 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		Value: len(cr.MappedNamespaces),
 	})
 
-	ingressInfo, err := cluster.DetectIngressBehavior(c)
-	if err != nil {
-		return nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
-	}
-
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
@@ -162,7 +158,6 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		ClusterContext: cluster.Config.Context,
 		ClusterServer:  cluster.Config.Server,
 		ClusterId:      cluster.GetClusterId(c),
-		IngressInfos:   ingressInfo,
 		SessionInfo:    tmgr.session(),
 		Agents:         &manager.AgentInfoSnapshot{Agents: tmgr.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
@@ -510,16 +505,11 @@ func (tm *TrafficManager) remain(c context.Context) error {
 
 func (tm *TrafficManager) GetStatus(c context.Context) *rpc.ConnectInfo {
 	cfg := tm.Config
-	ingressInfo, err := tm.DetectIngressBehavior(c)
-	if err != nil {
-		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
-	}
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
 		ClusterContext: cfg.Context,
 		ClusterServer:  cfg.Server,
 		ClusterId:      tm.GetClusterId(c),
-		IngressInfos:   ingressInfo,
 		SessionInfo:    tm.session(),
 		Agents:         &manager.AgentInfoSnapshot{Agents: tm.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()},

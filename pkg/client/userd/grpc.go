@@ -280,6 +280,20 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 	return
 }
 
+func (s *service) GetIngressInfos(ctx context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
+	s.logCall(ctx, "GetIngressInfos", func(c context.Context) {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
+			return
+		}
+		var iis []*manager.IngressInfo
+		if iis, err = session.IngressInfos(ctx); err == nil {
+			result = &rpc.IngressInfos{IngressInfos: iis}
+		}
+	})
+	return
+}
+
 func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
 		duration := time.Duration(0)

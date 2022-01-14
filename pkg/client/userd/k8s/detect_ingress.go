@@ -9,8 +9,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-// TOOO: Move this to traffic-manager
-func (kc *Cluster) DetectIngressBehavior(c context.Context) ([]*manager.IngressInfo, error) {
+// TODO: Move this to cluster side traffic-manager
+func (kc *Cluster) detectIngressBehavior(c context.Context) ([]*manager.IngressInfo, error) {
 	loadBalancers, err := kc.findAllSvcByType(c, v1.ServiceTypeLoadBalancer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain all services of type LoadBalancer: %v", err)

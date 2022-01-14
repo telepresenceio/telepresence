@@ -9,6 +9,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 // RunWatchers runs a set of Kubernetes watchers that provide information from the cluster which is
@@ -50,7 +51,7 @@ func (kc *Cluster) RunWatchers(c context.Context) (err error) {
 			case <-c.Done():
 				return nil
 			case <-acc.Changed():
-				if kc.onNamespacesChange(c, acc, accWait) {
+				if kc.onNamespacesChange(c, acc) {
 					if accWait != nil {
 						close(accWait)
 						accWait = nil // accWait is one-shot
@@ -62,27 +63,72 @@ func (kc *Cluster) RunWatchers(c context.Context) (err error) {
 	return g.Wait()
 }
 
-func (kc *Cluster) onNamespacesChange(c context.Context, acc *kates.Accumulator, accWait chan<- struct{}) bool {
+func (kc *Cluster) onNamespacesChange(c context.Context, acc *kates.Accumulator) bool {
 	changed := func() bool {
 		kc.accLock.Lock()
 		defer kc.accLock.Unlock()
 		return acc.Update(&kc.curSnapshot)
 	}()
 	if changed {
-		changed = kc.refreshNamespaces(c, accWait)
+		changed = kc.refreshNamespaces(c)
 	}
 	return changed
 }
 
-func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) {
-	sort.Strings(namespaces)
-	kc.accLock.Lock()
-	kc.mappedNamespaces = namespaces
-	kc.accLock.Unlock()
-	kc.refreshNamespaces(c, nil)
+func sortedStringSlicesEqual(as, bs []string) bool {
+	if len(as) != len(bs) {
+		return false
+	}
+	for i, a := range as {
+		if a != bs[i] {
+			return false
+		}
+	}
+	return true
 }
 
-func (kc *Cluster) refreshNamespaces(c context.Context, accWait chan<- struct{}) bool {
+func (kc *Cluster) IngressInfos(c context.Context) ([]*manager.IngressInfo, error) {
+	kc.accLock.Lock()
+	if kc.ingressInfo == nil {
+		kc.accLock.Unlock()
+		ingressInfo, err := kc.detectIngressBehavior(c)
+		if err != nil {
+			// Don't fetch again unless namespaces change
+			kc.ingressInfo = []*manager.IngressInfo{}
+			return nil, err
+		}
+		kc.accLock.Lock()
+		kc.ingressInfo = ingressInfo
+	}
+	is := make([]*manager.IngressInfo, len(kc.ingressInfo))
+	copy(is, kc.ingressInfo)
+	kc.accLock.Unlock()
+	return is, nil
+}
+
+func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) error {
+	if len(namespaces) == 1 && namespaces[0] == "all" {
+		namespaces = nil
+	} else {
+		sort.Strings(namespaces)
+	}
+
+	kc.accLock.Lock()
+	changed := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
+	if changed {
+		kc.mappedNamespaces = namespaces
+	}
+	kc.accLock.Unlock()
+
+	if !changed {
+		return nil
+	}
+	kc.refreshNamespaces(c)
+	kc.ingressInfo = nil
+	return nil
+}
+
+func (kc *Cluster) refreshNamespaces(c context.Context) bool {
 	kc.accLock.Lock()
 	namespaces := make([]string, 0, len(kc.curSnapshot.Namespaces))
 	for _, ns := range kc.curSnapshot.Namespaces {
@@ -91,25 +137,17 @@ func (kc *Cluster) refreshNamespaces(c context.Context, accWait chan<- struct{})
 		}
 	}
 	sort.Strings(namespaces)
-
-	nsChange := len(namespaces) != len(kc.lastNamespaces)
-	if !nsChange {
-		for i, ns := range namespaces {
-			if ns != kc.lastNamespaces[i] {
-				nsChange = true
-				break
-			}
-		}
-	}
-	if nsChange {
+	equal := sortedStringSlicesEqual(namespaces, kc.lastNamespaces)
+	if !equal {
 		kc.lastNamespaces = namespaces
 	}
 	kc.accLock.Unlock()
 
-	if nsChange {
-		kc.updateDaemonNamespaces(c)
+	if equal {
+		return false
 	}
-	return nsChange
+	kc.updateDaemonNamespaces(c)
+	return true
 }
 
 func (kc *Cluster) shouldBeWatched(namespace string) bool {

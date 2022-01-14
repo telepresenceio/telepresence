@@ -579,7 +579,11 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 		if args.previewSpec.Ingress == nil {
 			// Fill defaults
-			ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace)
+			iis, err := is.connectorClient.GetIngressInfos(ctx, &empty.Empty{})
+			if err != nil {
+				return false, err
+			}
+			ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace, iis.IngressInfos)
 			if err != nil {
 				return false, err
 			}
@@ -912,6 +916,7 @@ func selectIngress(
 	connInfo *connector.ConnectInfo,
 	interceptName string,
 	interceptNamespace string,
+	ingressInfos []*manager.IngressInfo,
 ) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
@@ -921,7 +926,7 @@ func selectIngress(
 	selectOrConfirm := "Confirm"
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
-		iis := connInfo.IngressInfos
+		iis := ingressInfos
 		if len(iis) > 0 {
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {

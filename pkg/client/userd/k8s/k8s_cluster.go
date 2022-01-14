@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 )
@@ -42,10 +44,14 @@ type ResourceFinder interface {
 	FindSvc(c context.Context, namespace, name string) (*kates.Service, error)
 }
 
-// k8sCluster is a Kubernetes cluster reference
+// Cluster is a Kubernetes cluster reference
 type Cluster struct {
 	*Config
 	mappedNamespaces []string
+
+	// If ingressInfo is nil, it's not computed
+	// If it is an empty slice, then it is computed, but no ingress was found
+	ingressInfo []*manager.IngressInfo
 
 	// Main
 	client    *kates.Client
@@ -281,21 +287,41 @@ func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*kates.Se
 	return rs, nil
 }
 
-// findAllSvc finds services with the given service type in all namespaces of the cluster returns
+// findAllSvcByType finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
 func (kc *Cluster) findAllSvcByType(c context.Context, svcType corev1.ServiceType) ([]*kates.Service, error) {
 	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
-	var svcs []*kates.Service
-	if err := kc.client.List(c, kates.Query{Kind: "Service"}, &svcs); err != nil {
-		return nil, err
-	}
 	var typedSvcs []*kates.Service
-	for _, svc := range svcs {
-		if svc.Spec.Type == svcType {
-			typedSvcs = append(typedSvcs, svc)
-			break
+	findTyped := func(ns string) error {
+		var svcs []*kates.Service
+		if err := kc.client.List(c, kates.Query{Kind: "Service", Namespace: ns}, &svcs); err != nil {
+			return err
 		}
+		for _, svc := range svcs {
+			if svc.Spec.Type == svcType {
+				typedSvcs = append(typedSvcs, svc)
+			}
+		}
+		return nil
+	}
+
+	kc.accLock.Lock()
+	var mns []string
+	if len(kc.mappedNamespaces) > 0 {
+		mns = make([]string, len(kc.mappedNamespaces))
+		copy(mns, kc.mappedNamespaces)
+	}
+	kc.accLock.Unlock()
+
+	if len(mns) > 0 {
+		for _, ns := range mns {
+			if err := findTyped(ns); err != nil {
+				return nil, err
+			}
+		}
+	} else if err := findTyped(""); err != nil {
+		return nil, err
 	}
 	return typedSvcs, nil
 }
@@ -312,16 +338,21 @@ func (kc *Cluster) namespaceExists(namespace string) (exists bool) {
 	return exists
 }
 
-func NewCluster(c context.Context, kubeFlags *Config, mappedNamespaces []string, callbacks Callbacks) (*Cluster, error) {
+func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, callbacks Callbacks) (*Cluster, error) {
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.ConfigFlags)
 	if err != nil {
 		return nil, client.CheckTimeout(c, fmt.Errorf("k8s client create failed: %w", err))
 	}
+	if len(namespaces) == 1 && namespaces[0] == "all" {
+		namespaces = nil
+	} else {
+		sort.Strings(namespaces)
+	}
 
 	ret := &Cluster{
 		Config:           kubeFlags,
-		mappedNamespaces: mappedNamespaces,
+		mappedNamespaces: namespaces,
 		client:           kc,
 		callbacks:        callbacks,
 		LocalIntercepts:  map[string]string{},
@@ -334,7 +365,6 @@ func NewCluster(c context.Context, kubeFlags *Config, mappedNamespaces []string,
 
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
-
 	return ret, nil
 }
 
