@@ -325,6 +325,10 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
 	case connector.InterceptError_MOUNT_POINT_BUSY:
 		msg = fmt.Sprintf("Mount point already in use by intercept %q", r.ErrorText)
+	case connector.InterceptError_MISCONFIGURED_WORKLOAD:
+		msg = r.ErrorText
+	case connector.InterceptError_UNKNOWN_FLAG:
+		msg = fmt.Sprintf("Unknown flag: %s", r.ErrorText)
 	default:
 		msg = fmt.Sprintf("Unknown error code %d", r.Error)
 	}

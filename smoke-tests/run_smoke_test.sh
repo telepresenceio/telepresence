@@ -495,7 +495,7 @@ finish_step
 # here. The integration tests *do* test mounts on Windows and Linux so this
 # testing is really being extra cautious. We can remove this whole step if/when
 # the macfuse issue is cleared up in the macos executors.
-mount_path=$(telepresence list --json | jq '.[] | select(.name=="dataprocessingservice") | .intercept_info.spec.mount_point' | sed 's/"//g')
+mount_path=$($TELEPRESENCE list --json | jq '.[] | select(.name=="dataprocessingservice") | .intercept_info.spec.mount_point' | sed 's/"//g')
 if [[ -z $mount_path ]]; then
     echo "Mount path was empty and it shouldn't have been"
     exit 1

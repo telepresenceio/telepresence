@@ -10,9 +10,11 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/blang/semver"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -313,8 +315,52 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 			ErrorText: err.Error(),
 		}, nil
 	}
-	if _, err = install.GetPodTemplateFromObject(obj); err != nil {
+	var podTpl *kates.PodTemplateSpec
+	if podTpl, err = install.GetPodTemplateFromObject(obj); err != nil {
 		return interceptError(rpc.InterceptError_UNSUPPORTED_WORKLOAD, errcat.User.New(spec.WorkloadKind)), nil
+	}
+
+	// Check if the workload is auto installed. This also verifies annotation consistency
+	autoInstall, err := useAutoInstall(podTpl)
+	if err != nil {
+		return interceptError(rpc.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err)), nil
+	}
+
+	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
+	if spec.Mechanism == "http" {
+		var agentVer *semver.Version
+		for i := range podTpl.Spec.Containers {
+			if ct := &podTpl.Spec.Containers[i]; ct.Name == install.AgentContainerName {
+				image := ct.Image
+				if autoInstall {
+					// Image will be updated to the specified image unless they are equal
+					image = ir.AgentImage
+				}
+				if cp := strings.LastIndexByte(image, ':'); cp > 0 {
+					if v, err := semver.Parse(image[cp+1:]); err == nil {
+						agentVer = &v
+					}
+				}
+				break
+			}
+		}
+		if agentVer != nil {
+			if semver.MustParse("1.11.7").GE(*agentVer) {
+				mas := ir.Spec.MechanismArgs
+				l := len(mas) - 1
+				for i, ma := range mas {
+					switch ma {
+					case "--plaintext=true":
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-plaintext")), nil
+					case "--plaintext=false":
+						// Not supported by <= 1.11.7. Just remove it
+						mas[i] = mas[l]
+						l--
+					}
+				}
+				ir.Spec.MechanismArgs = mas[:l+1]
+			}
+		}
 	}
 	return nil, obj
 }
