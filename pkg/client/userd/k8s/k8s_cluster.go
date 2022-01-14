@@ -9,14 +9,13 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
-	"google.golang.org/grpc"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
 	k8err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -32,10 +31,6 @@ type nameMeta struct {
 
 type objName struct {
 	nameMeta `json:"metadata"`
-}
-
-type Callbacks struct {
-	SetDNSSearchPath func(ctx context.Context, in *daemon.Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type ResourceFinder interface {
@@ -54,8 +49,10 @@ type Cluster struct {
 	ingressInfo []*manager.IngressInfo
 
 	// Main
-	client    *kates.Client
-	callbacks Callbacks
+	client *kates.Client
+
+	// search paths are propagated to the rootDaemon
+	rootDaemon daemon.DaemonClient
 
 	lastNamespaces []string
 
@@ -66,7 +63,6 @@ type Cluster struct {
 	localInterceptedNamespaces map[string]struct{}
 
 	accLock         sync.Mutex
-	accWait         chan struct{}
 	LocalIntercepts map[string]string
 
 	// Current Namespace snapshot, get set by acc.Update().
@@ -338,7 +334,7 @@ func (kc *Cluster) namespaceExists(namespace string) (exists bool) {
 	return exists
 }
 
-func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, callbacks Callbacks) (*Cluster, error) {
+func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootDaemon daemon.DaemonClient) (*Cluster, error) {
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.ConfigFlags)
 	if err != nil {
@@ -354,9 +350,8 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, callb
 		Config:           kubeFlags,
 		mappedNamespaces: namespaces,
 		client:           kc,
-		callbacks:        callbacks,
+		rootDaemon:       rootDaemon,
 		LocalIntercepts:  map[string]string{},
-		accWait:          make(chan struct{}),
 	}
 
 	if err := ret.check(c); err != nil {
@@ -365,16 +360,18 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, callb
 
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
-	return ret, nil
-}
 
-func (kc *Cluster) WaitUntilReady(ctx context.Context) error {
+	firstSnapshotArrived := make(chan struct{})
+	go func() {
+		if err := ret.nsWatcher(dgroup.WithGoroutineName(c, "ns-watcher"), firstSnapshotArrived); err != nil {
+			dlog.Error(c, err)
+		}
+	}()
 	select {
-	case <-kc.accWait:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-c.Done():
+	case <-firstSnapshotArrived:
 	}
+	return ret, nil
 }
 
 func (kc *Cluster) GetClusterId(ctx context.Context) string {

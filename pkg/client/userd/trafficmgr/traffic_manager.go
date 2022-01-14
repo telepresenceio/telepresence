@@ -118,7 +118,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	rootDaemon := svc.RootDaemonClient()
 
 	dlog.Info(c, "Connecting to k8s cluster...")
-	cluster, err := connectCluster(c, cr, svc)
+	cluster, err := connectCluster(c, cr, rootDaemon)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		return nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -191,7 +191,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 }
 
 // connectCluster returns a configured cluster instance
-func connectCluster(c context.Context, cr *rpc.ConnectRequest, svc Service) (*k8s.Cluster, error) {
+func connectCluster(c context.Context, cr *rpc.ConnectRequest, rootDaemon daemon.DaemonClient) (*k8s.Cluster, error) {
 	config, err := k8s.NewConfig(c, cr.KubeFlags)
 	if err != nil {
 		return nil, err
@@ -208,9 +208,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest, svc Service) (*k8
 	cluster, err := k8s.NewCluster(c,
 		config,
 		mappedNamespaces,
-		k8s.Callbacks{
-			SetDNSSearchPath: svc.RootDaemonClient().SetDnsSearchPath,
-		},
+		rootDaemon,
 	)
 	if err != nil {
 		return nil, err
@@ -328,14 +326,6 @@ func (tm *TrafficManager) Run(c context.Context) error {
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
-
-	// background-k8swatch watches all the necessary Kubernetes resources.
-	g.Go("background-k8swatch", tm.RunWatchers)
-
-	// Wait until all k8s watches (in the "background-k8swatch" goroutine) are running.
-	if err := tm.WaitUntilReady(c); err != nil {
-		return err
-	}
 	return g.Wait()
 }
 

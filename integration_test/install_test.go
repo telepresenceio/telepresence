@@ -163,7 +163,7 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 
 	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{"kubeconfig": itest.KubeConfig(ctx), "namespace": is.ManagerNamespace()})
 	require.NoError(err)
-	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, k8s.Callbacks{})
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, nil)
 	require.NoError(err)
 
 	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up.
@@ -249,7 +249,7 @@ func (is *installSuite) cluster(ctx context.Context, managerNamespace string) *k
 		"context":    "default",
 		"namespace":  managerNamespace})
 	require.NoError(err)
-	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, k8s.Callbacks{})
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, nil)
 	require.NoError(err)
 	return kc
 }

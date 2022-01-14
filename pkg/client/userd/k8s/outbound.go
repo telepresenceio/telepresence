@@ -6,31 +6,22 @@ import (
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/derror"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-// RunWatchers runs a set of Kubernetes watchers that provide information from the cluster which is
-// then used for controlling the outbound connectivity of the cluster.
+// nsWatcher runs a Kubernetes watcher that provide information about the cluster's namespaces'.
 //
-// Initially, a watcher that watches the namespaces is created. Once it produces its first
-// snapshot, some filtering is done on the list in that snapshot and then one watcher for each
-// resulting namespace is created that watches pods and services. When their snapshot arrives,
-// these pods and services are used when creating IP-tables that are sent to the NAT-logic in the
-// daemon.
+// A filtered list of namespaces is used for creating a DNS search path which is propagated to
+// the DNS-resolver in the root daemon each time an update arrives.
 //
-// The filtered list of namespaces is also used for creating a DNS search path which is propagated to
-// the DNS-resolver in the daemon.
-//
-// When an update arrives in the namespace watcher, it will refresh the DNS-search path and the current
-// set of watchers so that new watchers are added for added namespaces and watchers for namespaces that
-// have been will be cancelled.
-//
-// If a pods and services watcher receives an update, it will send an updated IP-table to the daemon.
-func (kc *Cluster) RunWatchers(c context.Context) (err error) {
+// The first update will close the firstSnapshotArrived channel.
+func (kc *Cluster) nsWatcher(c context.Context, firstSnapshotArrived chan<- struct{}) (err error) {
 	defer func() {
+		if firstSnapshotArrived != nil {
+			close(firstSnapshotArrived)
+		}
 		if r := derror.PanicToError(recover()); r != nil {
 			err = r
 		}
@@ -42,25 +33,19 @@ func (kc *Cluster) RunWatchers(c context.Context) (err error) {
 			Kind: "namespace",
 		})
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-
-	g.Go("namespaces", func(c context.Context) error {
-		accWait := kc.accWait
-		for {
-			select {
-			case <-c.Done():
-				return nil
-			case <-acc.Changed():
-				if kc.onNamespacesChange(c, acc) {
-					if accWait != nil {
-						close(accWait)
-						accWait = nil // accWait is one-shot
-					}
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case <-acc.Changed():
+			if kc.onNamespacesChange(c, acc) {
+				if firstSnapshotArrived != nil {
+					close(firstSnapshotArrived)
+					firstSnapshotArrived = nil // accWait is one-shot
 				}
 			}
 		}
-	})
-	return g.Wait()
+	}
 }
 
 func (kc *Cluster) onNamespacesChange(c context.Context, acc *kates.Accumulator) bool {
@@ -174,8 +159,8 @@ func (kc *Cluster) SetInterceptedNamespaces(c context.Context, interceptedNamesp
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
-	if kc.callbacks.SetDNSSearchPath == nil {
-		// NOTE! Some tests dont't set the callback
+	if kc.rootDaemon == nil {
+		// NOTE! Some tests dont't set the rootDaemon
 		return
 	}
 
@@ -205,7 +190,7 @@ func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
 
 	sort.Strings(namespaces)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
-	if _, err := kc.callbacks.SetDNSSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+	if _, err := kc.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
 		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
 	}
 	dlog.Debug(c, "search paths posted successfully")
