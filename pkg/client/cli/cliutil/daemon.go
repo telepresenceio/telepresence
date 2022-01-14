@@ -123,7 +123,7 @@ func Disconnect(ctx context.Context, quitRootDaemon bool) (err error) {
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
 		// shut down the connector, then this is a no-op.
-		if cerr := QuitConnector(ctx); !(cerr == nil || errors.Is(err, ErrNoConnector)) {
+		if cerr := QuitConnector(ctx); !(cerr == nil || errors.Is(err, ErrNoUserDaemon)) {
 			if err == nil {
 				err = cerr
 			} else {

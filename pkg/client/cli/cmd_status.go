@@ -162,7 +162,7 @@ func connectorStatus(cmd *cobra.Command) error {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, cliutil.ErrNoConnector) {
+		if errors.Is(err, cliutil.ErrNoUserDaemon) {
 			fmt.Fprintln(out, "User Daemon: Not running")
 			return nil
 		}

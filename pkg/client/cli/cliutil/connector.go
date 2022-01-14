@@ -20,7 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-var ErrNoConnector = errors.New("telepresence user daemon is not running")
+var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
 
 // WithConnector (1) ensures that the connector is running, (2) establishes a connection to it, and
 // (3) runs the given function with that connection.
@@ -34,7 +34,7 @@ func WithConnector(ctx context.Context, fn func(context.Context, connector.Conne
 	return withConnector(ctx, true, true, fn)
 }
 
-// WithStartedConnector is like WithConnector, but returns ErrNoConnector if the connector is not
+// WithStartedConnector is like WithConnector, but returns ErrNoUserDaemon if the connector is not
 // already running, rather than starting it.
 func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
 	return withConnector(ctx, false, withNotify, fn)
@@ -59,7 +59,7 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 			break
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			err = ErrNoConnector
+			err = ErrNoUserDaemon
 			if maybeStart {
 				fmt.Println("Launching Telepresence User Daemon")
 				if err = proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
@@ -140,7 +140,7 @@ func QuitConnector(ctx context.Context) error {
 		err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
 	}
 	if err != nil {
-		if errors.Is(err, ErrNoConnector) || grpcStatus.Code(err) == grpcCodes.Unavailable {
+		if errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable {
 			fmt.Println("Telepresence User Daemon is already stopped")
 			return nil
 		}
