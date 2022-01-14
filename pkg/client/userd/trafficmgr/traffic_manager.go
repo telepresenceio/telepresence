@@ -52,7 +52,7 @@ type Session interface {
 }
 
 type Service interface {
-	RootDaemonClient() daemon.DaemonClient
+	RootDaemonClient(context.Context) (daemon.DaemonClient, error)
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 	LoginExecutor() auth.LoginExecutor
 }
@@ -62,9 +62,6 @@ type apiServer struct {
 	cancel context.CancelFunc
 }
 
-// A session is essentially the goroutine that handles communication with the
-// in-cluster Traffic Manager.  It includes a "Run" method which is what runs in the goroutine, and
-// several other methods to communicate with that goroutine.
 type TrafficManager struct {
 	*installer // installer is also a k8sCluster
 
@@ -76,9 +73,6 @@ type TrafficManager struct {
 
 	// manager client
 	managerClient manager.ManagerClient
-
-	// root daemon client
-	rootDaemonClient daemon.DaemonClient
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
@@ -115,7 +109,10 @@ type interceptResult struct {
 func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service) (Session, *connector.ConnectInfo) {
 	sr.Report(c, "connect")
 
-	rootDaemon := svc.RootDaemonClient()
+	rootDaemon, err := svc.RootDaemonClient(c)
+	if err != nil {
+		return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+	}
 
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := connectCluster(c, cr, rootDaemon)
@@ -295,13 +292,12 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:        ti.(*installer),
-		installID:        installID,
-		userAndHost:      userAndHost,
-		getCloudAPIKey:   svc.LoginExecutor().GetCloudAPIKey,
-		managerClient:    mClient,
-		rootDaemonClient: svc.RootDaemonClient(),
-		sessionInfo:      si,
+		installer:      ti.(*installer),
+		installID:      installID,
+		userAndHost:    userAndHost,
+		getCloudAPIKey: svc.LoginExecutor().GetCloudAPIKey,
+		managerClient:  mClient,
+		sessionInfo:    si,
 	}, nil
 }
 

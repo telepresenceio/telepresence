@@ -71,8 +71,19 @@ func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 	s.managerProxy.SetClient(managerClient, callOptions...)
 }
 
-func (s *service) RootDaemonClient() daemon.DaemonClient {
-	return s.daemonClient
+func (s *service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
+	if s.daemonClient != nil {
+		return s.daemonClient, nil
+	}
+	// establish a connection to the root daemon gRPC grpcService
+	dlog.Info(c, "Connecting to root daemon...")
+	conn, err := client.DialSocket(c, client.DaemonSocketName)
+	if err != nil {
+		dlog.Errorf(c, "unable to connect to root daemon: %+v", err)
+		return nil, err
+	}
+	s.daemonClient = daemon.NewDaemonClient(conn)
+	return s.daemonClient, nil
 }
 
 func (s *service) LoginExecutor() auth.LoginExecutor {
@@ -177,14 +188,6 @@ func run(c context.Context) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	// establish a connection to the root daemon gRPC grpcService
-	dlog.Info(c, "Connecting to root daemon...")
-	conn, err := client.DialSocket(c, client.DaemonSocketName)
-	if err != nil {
-		dlog.Errorf(c, "unable to connect to root daemon: %+v", err)
-		return err
-	}
-
 	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
 	// prefer to let the OS close it when we exit.
 
@@ -195,7 +198,6 @@ func run(c context.Context) error {
 		scout:             sr,
 		connectRequest:    make(chan *rpc.ConnectRequest),
 		connectResponse:   make(chan *rpc.ConnectInfo),
-		daemonClient:      daemon.NewDaemonClient(conn),
 		managerProxy:      trafficmgr.NewManagerProxy(),
 		loginExecutor:     auth.NewStandardLoginExecutor(cliio, sr),
 		userNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
