@@ -551,43 +551,51 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 	return nil
 }
 
+func (is *interceptState) ensureIngress(ctx context.Context, args *interceptArgs, ir *connector.CreateInterceptRequest, needLogin bool) error {
+	spec := args.previewSpec
+	if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
+		ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
+		if err != nil {
+			return err
+		}
+		spec.Ingress = ingress
+	}
+
+	if spec.Ingress == nil || needLogin {
+		// Ensure that the intercept can be made before logging in or asking the user questions about ingress
+		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
+			return err
+		}
+	}
+
+	if spec.Ingress == nil {
+		// Fill defaults
+		iis, err := is.connectorClient.GetIngressInfos(ctx, &empty.Empty{})
+		if err != nil {
+			return err
+		}
+		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace, iis.IngressInfos)
+		if err != nil {
+			return err
+		}
+		spec.Ingress = ingress
+	}
+	return nil
+}
+
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	ir, err := is.createRequest(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	args := is.args
+	args := &is.args
 	needLogin := !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin)
 
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if args.previewEnabled {
-		if args.previewSpec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
-			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
-			if err != nil {
-				return false, err
-			}
-			args.previewSpec.Ingress = ingress
-		}
-
-		if args.previewSpec.Ingress == nil || needLogin {
-			// Ensure that the intercept can be made before logging in or asking the user questions about ingress
-			if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
-				return false, err
-			}
-		}
-
-		if args.previewSpec.Ingress == nil {
-			// Fill defaults
-			iis, err := is.connectorClient.GetIngressInfos(ctx, &empty.Empty{})
-			if err != nil {
-				return false, err
-			}
-			ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace, iis.IngressInfos)
-			if err != nil {
-				return false, err
-			}
-			args.previewSpec.Ingress = ingress
+		if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
+			return false, err
 		}
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
