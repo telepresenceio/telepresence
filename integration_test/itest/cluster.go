@@ -117,6 +117,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		assert.NoError(t, err)
 	}
 	s.ensureQuitAndLoggedOut(ctx)
+	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	defer s.tearDown(ctx)
 	if !t.Failed() {
 		f(WithUser(s.withBasicConfig(ctx, t), TestUser))
