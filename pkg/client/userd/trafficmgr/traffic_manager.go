@@ -344,7 +344,7 @@ func (tm *TrafficManager) hasOwner(obj kates.Object) bool {
 
 // getReasonAndLabels gets the workload's associated labels, as well as a reason
 // it cannot be intercepted if that is the case.
-func (tm *TrafficManager) getReasonAndLabels(workload kates.Object, namespace, name string) (map[string]string, string, error) {
+func (tm *TrafficManager) getReasonAndLabels(workload kates.Object) (map[string]string, string, error) {
 	var labels map[string]string
 	var reason string
 	switch workload := workload.(type) {
@@ -398,7 +398,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 		if agent == nil && iCept == nil {
 			var labels map[string]string
 			var err error
-			if labels, reason, err = tm.getReasonAndLabels(workload, namespace, name); err != nil {
+			if labels, reason, err = tm.getReasonAndLabels(workload); err != nil {
 				continue
 			}
 			if reason == "" {
