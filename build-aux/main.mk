@@ -76,6 +76,7 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 	rm -rf ./vendor
 	find pkg cmd -name 'generated_*.go' -delete
 	rm -f OPENSOURCE.md
+	rm -f LICENSES.md
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
