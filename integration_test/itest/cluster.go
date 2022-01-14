@@ -525,8 +525,8 @@ func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
 	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting... done") ||
 		strings.Contains(stdout, "Telepresence Network is already disconnected"))
-	assert.True(t, strings.Contains(stdout, "Telepresence User Daemon quitting... done") ||
-		strings.Contains(stdout, "Telepresence User Daemon is already stopped"))
+	assert.True(t, strings.Contains(stdout, "Telepresence User Daemon disconnecting... done") ||
+		strings.Contains(stdout, "Telepresence Traffic Manager is already disconnected"))
 }
 
 // RunError checks if the given err is a *exit.ExitError, and if so, extracts

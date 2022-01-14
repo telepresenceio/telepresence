@@ -21,8 +21,11 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-  // Status is much like Connect, except that it doesn't actually do
-  // anything.  It's a dry-run.
+  // Disconnects the cluster
+  rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // Status returns the status of the current connection or DISCONNECTED
+  // if no connection has been established.
   rpc Status(google.protobuf.Empty) returns (ConnectInfo);
 
   // Queries the connector whether it is possible to create the given intercept.

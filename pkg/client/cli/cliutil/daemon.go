@@ -118,12 +118,12 @@ func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, 
 type quitting struct{}
 
 // Disconnect shuts down a session in the root daemon. When it shuts down, it will tell the connector to shut down.
-func Disconnect(ctx context.Context, quitRootDaemon bool) (err error) {
+func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err error) {
 	ctx = context.WithValue(ctx, quitting{}, true)
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
 		// shut down the connector, then this is a no-op.
-		if cerr := QuitConnector(ctx); !(cerr == nil || errors.Is(err, ErrNoUserDaemon)) {
+		if cerr := UserDaemonDisconnect(ctx, quitUserDaemon); !(cerr == nil || errors.Is(err, ErrNoUserDaemon)) {
 			if err == nil {
 				err = cerr
 			} else {
@@ -131,11 +131,26 @@ func Disconnect(ctx context.Context, quitRootDaemon bool) (err error) {
 			}
 		}
 	}()
-	err = WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-		fmt.Print("Telepresence Network disconnecting...")
-		var err error
-		if !quitRootDaemon {
+	fmt.Print("Telepresence Network ")
+	err = WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
+		defer func() {
+			if err == nil {
+				fmt.Println("done")
+			}
+		}()
+		if quitRootDaemon {
+			fmt.Print("quitting...")
+		} else {
+			var ds *daemon.DaemonStatus
+			if ds, err = daemonClient.Status(ctx, &empty.Empty{}); err != nil {
+				return err
+			}
+			if ds.OutboundConfig == nil {
+				return ErrNoNetwork
+			}
+			fmt.Print("disconnecting...")
 			if _, err = daemonClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
+				// nil or not unimplemented
 				return err
 			}
 			// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
@@ -143,13 +158,13 @@ func Disconnect(ctx context.Context, quitRootDaemon bool) (err error) {
 		_, err = daemonClient.Quit(ctx, &empty.Empty{})
 		return err
 	})
-	if err != nil {
-		if errors.Is(err, ErrNoNetwork) {
-			fmt.Println("Telepresence Network is already disconnected")
-			return nil
+	if errors.Is(err, ErrNoNetwork) {
+		if quitRootDaemon {
+			fmt.Println("had already quit")
+		} else {
+			fmt.Println("is already disconnected")
 		}
-		return err
+		err = nil
 	}
-	fmt.Println(" done")
-	return nil
+	return err
 }

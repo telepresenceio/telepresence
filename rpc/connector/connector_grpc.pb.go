@@ -30,8 +30,10 @@ type ConnectorClient interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
-	// Status is much like Connect, except that it doesn't actually do
-	// anything.  It's a dry-run.
+	// Disconnects the cluster
+	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Status returns the status of the current connection or DISCONNECTED
+	// if no connection has been established.
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Queries the connector whether it is possible to create the given intercept.
 	CanIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
@@ -87,6 +89,15 @@ func (c *connectorClient) Version(ctx context.Context, in *emptypb.Empty, opts .
 func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error) {
 	out := new(ConnectInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Connect", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Disconnect", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +293,10 @@ type ConnectorServer interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
-	// Status is much like Connect, except that it doesn't actually do
-	// anything.  It's a dry-run.
+	// Disconnects the cluster
+	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	// Status returns the status of the current connection or DISCONNECTED
+	// if no connection has been established.
 	Status(context.Context, *emptypb.Empty) (*ConnectInfo, error)
 	// Queries the connector whether it is possible to create the given intercept.
 	CanIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
@@ -329,6 +342,9 @@ func (UnimplementedConnectorServer) Version(context.Context, *emptypb.Empty) (*c
 }
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
+}
+func (UnimplementedConnectorServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
 }
 func (UnimplementedConnectorServer) Status(context.Context, *emptypb.Empty) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
@@ -426,6 +442,24 @@ func _Connector_Connect_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Connect(ctx, req.(*ConnectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).Disconnect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/Disconnect",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).Disconnect(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -753,6 +787,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Connect",
 			Handler:    _Connector_Connect_Handler,
+		},
+		{
+			MethodName: "Disconnect",
+			Handler:    _Connector_Disconnect_Handler,
 		},
 		{
 			MethodName: "Status",

@@ -99,13 +99,13 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) e
 	}
 
 	kc.accLock.Lock()
-	changed := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
-	if changed {
+	equal := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
+	if !equal {
 		kc.mappedNamespaces = namespaces
 	}
 	kc.accLock.Unlock()
 
-	if !changed {
+	if equal {
 		return nil
 	}
 	kc.refreshNamespaces(c)

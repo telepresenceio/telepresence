@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -19,7 +20,6 @@ import (
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/spf13/cobra"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -87,6 +87,17 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		}
 	})
 	return result, err
+}
+
+func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	s.logCall(c, "Disconnect", func(c context.Context) {
+		s.sessionLock.Lock()
+		defer s.sessionLock.Unlock()
+		if s.session != nil {
+			s.sessionCancel()
+		}
+	})
+	return &empty.Empty{}, nil
 }
 
 func (s *service) currentSession() (trafficmgr.Session, error) {
@@ -280,14 +291,15 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 	return
 }
 
-func (s *service) GetIngressInfos(ctx context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
-	s.logCall(ctx, "GetIngressInfos", func(c context.Context) {
+func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
+	s.logCall(c, "GetIngressInfos", func(c context.Context) {
 		var session trafficmgr.Session
 		if session, err = s.currentSession(); err != nil {
 			return
 		}
+		defer func() { err = callRecovery(c, recover(), err) }()
 		var iis []*manager.IngressInfo
-		if iis, err = session.IngressInfos(ctx); err == nil {
+		if iis, err = session.IngressInfos(c); err == nil {
 			result = &rpc.IngressInfos{IngressInfos: iis}
 		}
 	})

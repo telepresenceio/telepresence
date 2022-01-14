@@ -40,59 +40,51 @@ type connectorState struct {
 //
 //  - Makes the connector.Connect gRPC call to set up networking
 func withConnector(cmd *cobra.Command, retain bool, f func(context.Context, *connectorState) error) error {
-	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
-			if cliutil.DidLaunchConnector(ctx) {
+	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+			didConnect, connInfo, err := connect(ctx, connectorClient, cmd.OutOrStdout())
+			if err != nil {
+				return err
+			}
+			if didConnect {
 				// The daemon will shut down the connector for us.
 				defer func() {
 					if err != nil || !retain {
-						_ = cliutil.Disconnect(dcontext.WithoutCancel(ctx), false)
+						_ = cliutil.Disconnect(dcontext.WithoutCancel(ctx), false, false)
 					}
 				}()
-			}
-			connInfo, err := setConnectInfo(ctx, cmd.OutOrStdout())
-			if err != nil {
-				return err
 			}
 			return f(ctx, &connectorState{ConnectInfo: connInfo, userD: connectorClient, rootD: daemonClient})
 		})
 	})
 }
 
-func setConnectInfo(ctx context.Context, stdout io.Writer) (*connector.ConnectInfo, error) {
-	var resp *connector.ConnectInfo
-	err := cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var err error
-		resp, err = connectorClient.Connect(ctx, &connector.ConnectRequest{
-			KubeFlags:        kubeFlagMap(),
-			MappedNamespaces: mappedNamespaces,
-		})
-		if err != nil {
-			return err
-		}
-
-		var msg string
-		cat := errcat.Unknown
-		switch resp.Error {
-		case connector.ConnectInfo_UNSPECIFIED:
-			fmt.Fprintf(stdout, "Connected to context %s (%s)\n", resp.ClusterContext, resp.ClusterServer)
-			return nil
-		case connector.ConnectInfo_ALREADY_CONNECTED:
-			return nil
-		case connector.ConnectInfo_DISCONNECTED:
-			msg = "Not connected"
-		case connector.ConnectInfo_MUST_RESTART:
-			msg = "Cluster configuration changed, please quit telepresence and reconnect"
-		case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
-			msg = resp.ErrorText
-			if resp.ErrorCategory != 0 {
-				cat = errcat.Category(resp.ErrorCategory)
-			}
-		}
-		return cat.Newf("connector.Connect: %s", msg) // Return err != nil to ensure disconnect
+func connect(ctx context.Context, connectorClient connector.ConnectorClient, stdout io.Writer) (bool, *connector.ConnectInfo, error) {
+	resp, err := connectorClient.Connect(ctx, &connector.ConnectRequest{
+		KubeFlags:        kubeFlagMap(),
+		MappedNamespaces: mappedNamespaces,
 	})
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
-	return resp, nil
+
+	var msg string
+	cat := errcat.Unknown
+	switch resp.Error {
+	case connector.ConnectInfo_UNSPECIFIED:
+		fmt.Fprintf(stdout, "Connected to context %s (%s)\n", resp.ClusterContext, resp.ClusterServer)
+		return true, resp, nil
+	case connector.ConnectInfo_ALREADY_CONNECTED:
+		return false, resp, nil
+	case connector.ConnectInfo_DISCONNECTED:
+		return false, nil, cliutil.ErrNoTrafficManager
+	case connector.ConnectInfo_MUST_RESTART:
+		msg = "Cluster configuration changed, please quit telepresence and reconnect"
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
+		msg = resp.ErrorText
+		if resp.ErrorCategory != 0 {
+			cat = errcat.Category(resp.ErrorCategory)
+		}
+	}
+	return false, nil, cat.Newf("connector.Connect: %s", msg)
 }

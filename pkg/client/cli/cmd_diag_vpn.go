@@ -90,7 +90,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	)
 	sc.Start(log.WithDiscardingLogger(ctx))
 
-	err = cliutil.Disconnect(ctx, false)
+	err = cliutil.Disconnect(ctx, false, false)
 	if err != nil {
 		return err
 	}
