@@ -251,6 +251,7 @@ environment.
 
 ### Errors from `make generate`
 
+#### Outdated or missing bash
 When running `make generate` you may hit errors that look like:
 
 ```
@@ -264,4 +265,20 @@ In MacOS this can be done installing it from Homebrew:
 
 ```bash
 brew install bash
+```
+
+#### Missing go.sum entries
+If you get an error like this:
+
+```
+cd tools/src/go-mkopensource && GOOS= GOARCH= go build -o /home/andres/source/production/telepresence/tools/bin/go-mkopensource $(sed -En 's,^import "(.*)".*,\1,p' pin.go)
+missing go.sum entry for module providing package github.com/datawire/go-mkopensource; to add:
+	go mod download github.com/datawire/go-mkopensource
+```
+
+Add the missing entries by going to the folder that caused the faulire (in this case it's
+/home/andres/source/production/telepresence/tools/bin/go-mkopensource) and run the command provided by go:
+
+```
+go mod download github.com/datawire/go-mkopensource
 ```

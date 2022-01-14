@@ -65,7 +65,7 @@ generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.g
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod >OPENSOURCE.md
 	echo "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n" > LICENSES.md
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --output-type=json | jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' >> LICENSES.md
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --output-type=json | jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' >> LICENSES.md
 	rm -rf vendor
 
 .PHONY: generate-clean
