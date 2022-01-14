@@ -106,12 +106,12 @@ func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empt
 	return &empty.Empty{}, nil
 }
 
-func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
+func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.DaemonStatus, error) {
 	dlog.Debug(ctx, "Received gRPC Connect")
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	if d.session != nil {
-		return nil, status.Error(codes.AlreadyExists, "an active session exists")
+		return &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}, nil
 	}
 	select {
 	case <-ctx.Done():
@@ -126,7 +126,7 @@ func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*empty.E
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	return &empty.Empty{}, nil
+	return &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}, nil
 }
 
 func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {

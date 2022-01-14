@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dcontext"
@@ -114,6 +115,8 @@ type interceptResult struct {
 func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service) (Session, *connector.ConnectInfo) {
 	sr.Report(c, "connect")
 
+	rootDaemon := svc.RootDaemonClient()
+
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := connectCluster(c, cr, svc)
 	if err != nil {
@@ -144,9 +147,31 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	svc.SetManagerClient(tmgr.managerClient)
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if _, err := svc.RootDaemonClient().Connect(c, tmgr.getOutboundInfo(c)); err != nil {
-		dlog.Errorf(c, "failed to connect to root daemon: %v", err)
-		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+	oi := tmgr.getOutboundInfo(c)
+	var rootStatus *daemon.DaemonStatus
+	for attempt := 1; ; attempt++ {
+		if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
+			dlog.Errorf(c, "failed to connect to root daemon: %v", err)
+			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
+		oc := rootStatus.OutboundConfig
+		if oc == nil || oc.Session == nil {
+			// This is an internal error. Something is wrong with the root daemon.
+			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
+		}
+		if oc.Session.SessionId == oi.Session.SessionId {
+			break
+		}
+
+		// Root daemon was running an old session. This indicates that this daemon somehow
+		// crashed without disconnecting. So let's do that now, and then reconnect...
+		if attempt == 2 {
+			// ...or not, since we've already done it.
+			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
+		}
+		if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
+			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
+		}
 	}
 
 	// Collect data on how long connection time took
