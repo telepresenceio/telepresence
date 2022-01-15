@@ -137,6 +137,8 @@ func Command(ctx context.Context) *cobra.Command {
 	groups, err := getRemoteCommands(ctx)
 	if err != nil {
 		groups = commands.GetCommandsForLocal(err)
+	} else {
+		userDaemonRunning = true
 	}
 	rootCmd.InitDefaultHelpCmd()
 	static := cliutil.CommandGroups{
