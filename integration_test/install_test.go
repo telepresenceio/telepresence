@@ -210,22 +210,7 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 
 func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace string) {
 	kc := is.cluster(ctx, namespace)
-	watcherErr := make(chan error)
-	watchCtx, watchCancel := context.WithCancel(ctx)
-	defer func() {
-		watchCancel()
-		if err := <-watcherErr; err != nil {
-			is.Fail(err.Error())
-		}
-	}()
-	go func() {
-		watcherErr <- kc.RunWatchers(watchCtx)
-	}()
-	waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer waitCancel()
-
 	require := is.Require()
-	require.NoError(kc.WaitUntilReady(waitCtx))
 	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	require.NoError(err)
 	require.NoError(ti.EnsureManager(ctx))
