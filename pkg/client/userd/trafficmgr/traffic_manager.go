@@ -403,9 +403,8 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			}
 			if reason == "" {
 				// If an object is owned by a higher level workload, then users should
-				// intercept that workload so we will not include it in our slice.
+				// intercept that workload, so we will not include it in our slice.
 				if tm.hasOwner(workload) {
-					dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", name, workload.GetNamespace())
 					continue
 				}
 
