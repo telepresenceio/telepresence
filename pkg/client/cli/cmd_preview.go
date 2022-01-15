@@ -34,7 +34,7 @@ func previewCommand() *cobra.Command {
 
 		Short: "Create a preview domain for an existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
+			return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 				if _, err := cliutil.ClientEnsureLoggedIn(cmd.Context(), "", cs.userD); err != nil {
 					return err
 				}
@@ -80,7 +80,7 @@ func previewCommand() *cobra.Command {
 
 		Short: "Remove a preview domain from an intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
+			return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 						Session: cs.SessionInfo,

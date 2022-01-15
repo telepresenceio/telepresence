@@ -152,7 +152,7 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 		return err
 	})
 	if err == nil && quitUserDaemon {
-		err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
+		err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
 	}
 	if errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable {
 		if quitUserDaemon {
@@ -161,7 +161,6 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 			fmt.Println("is already disconnected")
 		}
 		err = nil
-		return nil
 	}
 	return err
 }

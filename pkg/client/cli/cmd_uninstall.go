@@ -56,7 +56,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 	doQuit := false
-	err := withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
+	err := withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
 			Namespace:     u.namespace,

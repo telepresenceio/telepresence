@@ -146,7 +146,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		return fmt.Errorf("failed to get routing table: %w", err)
 	}
 	subnets := map[string][]*net.IPNet{podType: {}, svcType: {}}
-	err = withConnector(cmd, false, func(ctx context.Context, cs *connectorState) error {
+	err = withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
 		// If this times out, it's likely to be because the traffic manager never gave us the subnets;
 		// this could happen for all kinds of reasons, but it makes no sense to go on if it does.
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

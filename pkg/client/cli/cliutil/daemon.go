@@ -130,6 +130,9 @@ func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err e
 				fmt.Fprintf(os.Stderr, "Error when quitting connector: %v\n", cerr)
 			}
 		}
+		if err == nil && quitRootDaemon {
+			err = client.WaitUntilSocketVanishes("root daemon", client.DaemonSocketName, 5*time.Second)
+		}
 	}()
 	fmt.Print("Telepresence Network ")
 	err = WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {

@@ -14,6 +14,7 @@ import (
 var userDaemonRunning = false
 var commandGroupMap = make(map[string]cliutil.CommandGroups)
 var globalFlagGroups []cliutil.FlagGroup
+var deprecatedGlobalFlags *pflag.FlagSet
 
 func init() {
 	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {

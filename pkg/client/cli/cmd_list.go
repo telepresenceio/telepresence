@@ -45,7 +45,7 @@ func listCommand() *cobra.Command {
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	var r *connector.WorkloadInfoSnapshot
 	var err error
-	err = withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
+	err = withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:

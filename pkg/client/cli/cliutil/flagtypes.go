@@ -111,7 +111,7 @@ func (t TypeEnum) NewFlagValueFromPFlagString(stringDefault string) (Value, erro
 	// this results in "[]" being prepended to every string array; therefore if we have a string slice/array
 	// and a default of [], just don't set it.
 	if !(stringDefault == "[]" && (t == "stringSlice" || t == "stringArray")) {
-		val.Set(stringDefault)
+		_ = val.Set(stringDefault)
 	}
 	return val, nil
 }

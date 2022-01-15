@@ -179,7 +179,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 			Agents:         gl.trafficAgents,
 			GetPodYaml:     gl.podYaml,
 		}
-		err = withConnector(cmd, false, func(_ context.Context, _ *connectorState) error {
+		err = withConnector(cmd, false, nil, func(_ context.Context, _ *connectorState) error {
 			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				lr, err := managerClient.GetLogs(ctx, rq)
 				if err != nil {

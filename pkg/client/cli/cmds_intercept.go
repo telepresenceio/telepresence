@@ -236,7 +236,7 @@ func leaveCommand() *cobra.Command {
 func intercept(cmd *cobra.Command, args interceptArgs) error {
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		return withConnector(cmd, true, func(ctx context.Context, cs *connectorState) error {
+		return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
@@ -245,7 +245,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 	}
 
 	// start intercept, run command, then stop the intercept
-	return withConnector(cmd, false, func(ctx context.Context, cs *connectorState) error {
+	return withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 			return client.WithEnsuredState(ctx, is, false, func() error {
