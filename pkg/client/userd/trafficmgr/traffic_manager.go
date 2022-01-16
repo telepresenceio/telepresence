@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -252,7 +254,11 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	dlog.Debug(c, "traffic-manager started, creating port-forward")
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, cluster.ConfigFlags, cluster.Client())
+	restConfig, err := cluster.ConfigFlags.ToRESTConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "ToRESTConfig")
+	}
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, restConfig, k8sapi.GetK8sInterface(c))
 	if err != nil {
 		return nil, err
 	}
