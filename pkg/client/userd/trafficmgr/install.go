@@ -217,7 +217,7 @@ func (ki *installer) getSvcForInjectedPod(
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
 	// agent is injected using a mutating webhook, or manually. Get its service and skip the rest
-	svc, err := install.FindMatchingService(c, ki.Clientset(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
+	svc, err := install.FindMatchingService(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ already exist for this service`, kind, obj.GetName())
 		if portNameOrNumber != "" {
 			dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
 		}
-		matchingSvc, err := install.FindMatchingService(c, ki.Clientset(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvc, err := install.FindMatchingService(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}

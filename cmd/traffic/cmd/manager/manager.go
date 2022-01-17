@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -37,11 +38,11 @@ func Main(ctx context.Context, args ...string) error {
 	if err != nil {
 		return fmt.Errorf("unable to get the Kubernetes InClusterConfig: %w", err)
 	}
-	clientset, err := kubernetes.NewForConfig(cfg)
+	ki, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("unable to create the Kubernetes clientset from InClusterConfig: %w", err)
+		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
 	}
-	ctx = managerutil.WithK8SClientset(ctx, clientset)
+	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,

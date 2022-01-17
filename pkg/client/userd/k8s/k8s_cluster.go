@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const supportedKubeAPIVersion = "1.17.0"
@@ -388,8 +389,8 @@ func (kc *Cluster) GetClusterId(ctx context.Context) string {
 	return clusterID
 }
 
-func (kc *Cluster) Clientset() kubernetes.Interface {
-	return kc.ki
+func (kc *Cluster) WithK8sInterface(c context.Context) context.Context {
+	return k8sapi.WithK8sInterface(c, kc.ki)
 }
 
 func (kc *Cluster) Client() *kates.Client {

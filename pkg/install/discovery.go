@@ -11,7 +11,8 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/client-go/kubernetes"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // svcPortByNameOrNumber iterates through a list of ports in a service and
@@ -48,9 +49,9 @@ func svcPortByNameOrNumber(svc *core.Service, nameOrNumber string) []*core.Servi
 	return svcPorts
 }
 
-func FindMatchingServices(c context.Context, ki kubernetes.Interface, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*core.Service, error) {
+func FindMatchingServices(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*core.Service, error) {
 	// TODO: Expensive on large clusters but the problem goes away once we move the installer to the traffic-manager
-	si := ki.CoreV1().Services(namespace)
+	si := k8sapi.GetK8sInterface(c).CoreV1().Services(namespace)
 	var ss []core.Service
 	if svcName != "" {
 		s, err := si.Get(c, svcName, meta.GetOptions{})
@@ -89,8 +90,8 @@ func FindMatchingServices(c context.Context, ki kubernetes.Interface, portNameOr
 	return matching, nil
 }
 
-func FindMatchingService(c context.Context, ki kubernetes.Interface, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
-	matchingSvcs, err := FindMatchingServices(c, ki, portNameOrNumber, svcName, namespace, labels)
+func FindMatchingService(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
+	matchingSvcs, err := FindMatchingServices(c, portNameOrNumber, svcName, namespace, labels)
 	if err != nil {
 		return nil, err
 	}

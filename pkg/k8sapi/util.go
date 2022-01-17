@@ -10,9 +10,24 @@ import (
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
 )
+
+func WithK8sInterface(ctx context.Context, ki kubernetes.Interface) context.Context {
+	return context.WithValue(ctx, kiKey{}, ki)
+}
+
+func GetK8sInterface(ctx context.Context) kubernetes.Interface {
+	ki, ok := ctx.Value(kiKey{}).(kubernetes.Interface)
+	if !ok {
+		return nil
+	}
+	return ki
+}
+
+type kiKey struct{}
 
 func GetPodTemplateFromObject(o runtime.Object) (*core.PodTemplateSpec, error) {
 	var tplSpec *core.PodTemplateSpec

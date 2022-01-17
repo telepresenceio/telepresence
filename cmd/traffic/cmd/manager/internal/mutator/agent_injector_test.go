@@ -14,7 +14,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -24,7 +23,7 @@ import (
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 
 func TestTrafficAgentInjector(t *testing.T) {
-	type svcFinder func(c context.Context, ki kubernetes.Interface, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error)
+	type svcFinder func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error)
 	env := &managerutil.Env{
 		User:        "",
 		ServerHost:  "tel-example",
@@ -63,10 +62,10 @@ func TestTrafficAgentInjector(t *testing.T) {
 			},
 		},
 	}
-	defaultSvcFinder := func(c context.Context, client kubernetes.Interface, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
+	defaultSvcFinder := func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
 		return defaultSvc, nil
 	}
-	numericPortSvcFinder := func(c context.Context, client kubernetes.Interface, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
+	numericPortSvcFinder := func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
 		return &core.Service{
 			TypeMeta: meta.TypeMeta{
 				Kind:       "Service",
@@ -90,7 +89,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			},
 		}, nil
 	}
-	multiSvcFinder := func(c context.Context, client kubernetes.Interface, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
+	multiSvcFinder := func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
 		// simulate not being given a service name and finding multiple services
 		if svcName == "" {
 			return nil, fmt.Errorf("multiple services found")

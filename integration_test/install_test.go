@@ -34,7 +34,7 @@ func init() {
 
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	ctx := is.Context()
-	ti := is.installer(ctx)
+	ctx, ti := is.installer(ctx)
 
 	sv := version.Version
 	version.Version = "v0.0.0-bogus"
@@ -82,7 +82,7 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 			PrivateHelm: 30 * time.Second,
 		},
 	})
-	ti := is.installer(ctx)
+	ctx, ti := is.installer(ctx)
 	require.Error(ti.EnsureManager(ctx))
 	restoreVersion()
 
@@ -97,7 +97,7 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	require := is.Require()
 	ctx := is.Context()
 
-	ti := is.installer(ctx)
+	ctx, ti := is.installer(ctx)
 	require.NoError(ti.EnsureManager(ctx))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
@@ -115,7 +115,7 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 func (is *installSuite) Test_RemoveManagerAndAgents_canUninstall() {
 	require := is.Require()
 	ctx := is.Context()
-	ti := is.installer(ctx)
+	ctx, ti := is.installer(ctx)
 
 	require.NoError(ti.EnsureManager(ctx))
 	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
@@ -134,7 +134,7 @@ func (is *installSuite) Test_EnsureManager_upgrades() {
 	is.T().Skip()
 	require := is.Require()
 	ctx := is.Context()
-	ti := is.installer(ctx)
+	ctx, ti := is.installer(ctx)
 
 	require.NoError(ti.EnsureManager(ctx))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
@@ -164,6 +164,7 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{"kubeconfig": itest.KubeConfig(ctx), "namespace": is.ManagerNamespace()})
 	require.NoError(err)
 	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, nil)
+	ctx = kc.WithK8sInterface(ctx)
 	require.NoError(err)
 
 	// The helm chart is declared as 1.9.9 to make sure it's "older" than ours, but we set the tag to 2.4.0 so that it actually starts up.
@@ -184,7 +185,7 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	ti := is.installer(ctx)
+	ctx, ti := is.installer(ctx)
 
 	require.NoError(ti.EnsureManager(ctx))
 
@@ -209,7 +210,7 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 }
 
 func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace string) {
-	kc := is.cluster(ctx, namespace)
+	ctx, kc := is.cluster(ctx, namespace)
 	require := is.Require()
 	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	require.NoError(err)
@@ -227,7 +228,7 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
 }
 
-func (is *installSuite) cluster(ctx context.Context, managerNamespace string) *k8s.Cluster {
+func (is *installSuite) cluster(ctx context.Context, managerNamespace string) (context.Context, *k8s.Cluster) {
 	require := is.Require()
 	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{
 		"kubeconfig": itest.KubeConfig(ctx),
@@ -236,11 +237,12 @@ func (is *installSuite) cluster(ctx context.Context, managerNamespace string) *k
 	require.NoError(err)
 	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, nil)
 	require.NoError(err)
-	return kc
+	return kc.WithK8sInterface(ctx), kc
 }
 
-func (is *installSuite) installer(ctx context.Context) trafficmgr.Installer {
-	ti, err := trafficmgr.NewTrafficManagerInstaller(is.cluster(ctx, is.ManagerNamespace()))
+func (is *installSuite) installer(ctx context.Context) (context.Context, trafficmgr.Installer) {
+	ctx, kc := is.cluster(ctx, is.ManagerNamespace())
+	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	is.Require().NoError(err)
-	return ti
+	return ctx, ti
 }

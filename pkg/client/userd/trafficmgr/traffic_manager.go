@@ -36,6 +36,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -49,6 +50,7 @@ type Session interface {
 	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
+	WithK8sInterface(context.Context) context.Context
 	WorkloadInfoSnapshot(context.Context, *rpc.ListRequest) *rpc.WorkloadInfoSnapshot
 }
 
@@ -124,6 +126,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	dlog.Infof(c, "Connected to context %s (%s)", cluster.Context, cluster.Server)
 
 	// Phone home with the information about the size of the cluster
+	c = cluster.WithK8sInterface(c)
 	sr.SetMetadatum(c, "cluster_id", cluster.GetClusterId(c))
 	sr.Report(c, "connecting_traffic_manager", scout.Entry{
 		Key:   "mapped_namespaces",
@@ -408,7 +411,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 					continue
 				}
 
-				matchingSvcs, err := install.FindMatchingServices(ctx, tm.Clientset(), "", "", namespace, labels)
+				matchingSvcs, err := install.FindMatchingServices(ctx, "", "", namespace, labels)
 				if err != nil {
 					continue
 				}

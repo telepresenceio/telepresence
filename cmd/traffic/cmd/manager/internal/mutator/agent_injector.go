@@ -69,7 +69,7 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	}
 
 	svcName := pod.Annotations[install.ServiceNameAnnotation]
-	svc, err := findMatchingService(ctx, managerutil.GetK8sClientset(ctx), "", svcName, podNamespace, pod.Labels)
+	svc, err := findMatchingService(ctx, "", svcName, podNamespace, pod.Labels)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil, err

@@ -33,17 +33,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
-func callRecovery(c context.Context, r interface{}, err error) error {
-	perr := derror.PanicToError(r)
-	if perr != nil {
-		if err == nil {
-			err = perr
-		} else {
-			dlog.Errorf(c, "%+v", perr)
-		}
-	}
-	if err != nil {
-		dlog.Errorf(c, "%+v", err)
+func callRecovery(r interface{}, err error) error {
+	if perr := derror.PanicToError(r); perr != nil {
+		err = perr
 	}
 	return err
 }
@@ -59,6 +51,20 @@ func (s *service) logCall(c context.Context, callName string, f func(context.Con
 	f(c)
 }
 
+func (s *service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session)) (err error) {
+	s.logCall(c, callName, func(ctx context.Context) {
+		s.sessionLock.RLock()
+		defer s.sessionLock.RUnlock()
+		if s.session == nil {
+			err = status.Error(codes.Unavailable, "no active session")
+			return
+		}
+		defer func() { err = callRecovery(recover(), err) }()
+		f(s.session.WithK8sInterface(c), s.session)
+	})
+	return
+}
+
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
@@ -68,12 +74,15 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 
 func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
 	s.logCall(ctx, "Connect", func(c context.Context) {
-		s.sessionLock.Lock()
-		defer s.sessionLock.Unlock()
+		s.sessionLock.RLock()
 		if s.session != nil {
+			ctx = s.session.WithK8sInterface(ctx)
 			result = s.session.UpdateStatus(ctx, cr)
+			s.sessionLock.RUnlock()
 			return
 		}
+		s.sessionLock.RUnlock()
+
 		select {
 		case <-ctx.Done():
 			err = status.Error(codes.Unavailable, ctx.Err().Error())
@@ -91,8 +100,8 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 
 func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(c, "Disconnect", func(c context.Context) {
-		s.sessionLock.Lock()
-		defer s.sessionLock.Unlock()
+		s.sessionLock.RLock()
+		defer s.sessionLock.RUnlock()
 		if s.session != nil {
 			s.sessionCancel()
 		}
@@ -100,34 +109,21 @@ func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, e
 	return &empty.Empty{}, nil
 }
 
-func (s *service) currentSession() (trafficmgr.Session, error) {
-	s.sessionLock.Lock()
-	defer s.sessionLock.Unlock()
-	if s.session == nil {
-		return nil, status.Error(codes.Unavailable, "no active session")
-	}
-	return s.session, nil
-}
-
 func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectInfo, err error) {
 	s.logCall(c, "Status", func(c context.Context) {
-		s.sessionLock.Lock()
-		defer s.sessionLock.Unlock()
+		s.sessionLock.RLock()
+		defer s.sessionLock.RUnlock()
 		if s.session == nil {
 			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
 		} else {
-			result = s.session.Status(c)
+			result = s.session.Status(s.session.WithK8sInterface(c))
 		}
 	})
 	return
 }
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	s.logCall(c, "CanIntercept", func(c context.Context) {
-		var session trafficmgr.Session
-		if session, err = s.currentSession(); err != nil {
-			return
-		}
+	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) {
 		var wl kates.Object
 		if result, wl = session.CanIntercept(c, ir); result == nil {
 			var kind string
@@ -144,24 +140,14 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	s.logCall(c, "CreateIntercept", func(c context.Context) {
-		var session trafficmgr.Session
-		if session, err = s.currentSession(); err != nil {
-			return
-		}
-		defer func() { err = callRecovery(c, recover(), err) }()
+	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) {
 		result, err = session.AddIntercept(c, ir)
 	})
 	return
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	s.logCall(c, "RemoveIntercept", func(c context.Context) {
-		var session trafficmgr.Session
-		if session, err = s.currentSession(); err != nil {
-			return
-		}
-		defer func() { err = callRecovery(c, recover(), err) }()
+	err = s.withSession(c, "RemoveIntercept", func(c context.Context, session trafficmgr.Session) {
 		result = &rpc.InterceptResult{}
 		if err = session.RemoveIntercept(c, rr.Name); err != nil {
 			if grpcStatus.Code(err) == grpcCodes.NotFound {
@@ -179,24 +165,14 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 }
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
-	s.logCall(c, "List", func(c context.Context) {
-		var session trafficmgr.Session
-		if session, err = s.currentSession(); err != nil {
-			return
-		}
-		defer func() { err = callRecovery(c, recover(), err) }()
-		result, err = session.WorkloadInfoSnapshot(c, lr), nil
+	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) {
+		result = session.WorkloadInfoSnapshot(c, lr)
 	})
 	return
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
-	s.logCall(c, "Uninstall", func(c context.Context) {
-		var session trafficmgr.Session
-		if session, err = s.currentSession(); err != nil {
-			return
-		}
-		defer func() { err = callRecovery(c, recover(), err) }()
+	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) {
 		result, err = session.Uninstall(c, ur)
 	})
 	return
@@ -292,12 +268,7 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 }
 
 func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
-	s.logCall(c, "GetIngressInfos", func(c context.Context) {
-		var session trafficmgr.Session
-		if session, err = s.currentSession(); err != nil {
-			return
-		}
-		defer func() { err = callRecovery(c, recover(), err) }()
+	err = s.withSession(c, "GetIngressInfos", func(c context.Context, session trafficmgr.Session) {
 		var iis []*manager.IngressInfo
 		if iis, err = session.IngressInfos(c); err == nil {
 			result = &rpc.IngressInfos{IngressInfos: iis}
