@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const helmDriver = "secrets"
@@ -51,7 +52,7 @@ func getValues(ctx context.Context) map[string]interface{} {
 		}
 	}
 	apc := clientConfig.Intercept.AppProtocolStrategy
-	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" || apc != client.Http2Probe {
+	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" || apc != k8sapi.Http2Probe {
 		agentImage := make(map[string]interface{})
 		if imgConfig.WebhookAgentImage != "" {
 			parts := strings.Split(imgConfig.WebhookAgentImage, ":")
@@ -69,7 +70,7 @@ func getValues(ctx context.Context) map[string]interface{} {
 		}
 		agentInjector := map[string]interface{}{"agentImage": agentImage}
 		values["agentInjector"] = agentInjector
-		if apc != client.Http2Probe {
+		if apc != k8sapi.Http2Probe {
 			agentInjector["appProtocolStrategy"] = apc.String()
 		}
 	}

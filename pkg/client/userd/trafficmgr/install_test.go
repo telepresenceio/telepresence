@@ -20,7 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -201,7 +201,7 @@ func sanitizeWorkload(obj kates.Object) {
 	obj.SetResourceVersion("")
 	obj.SetGeneration(int64(0))
 	obj.SetCreationTimestamp(metav1.Time{})
-	podTemplate, _ := install.GetPodTemplateFromObject(obj)
+	podTemplate, _ := k8sapi.GetPodTemplateFromObject(obj)
 	for i, c := range podTemplate.Spec.Containers {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""

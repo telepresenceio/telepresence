@@ -408,7 +408,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 					continue
 				}
 
-				matchingSvcs, err := install.FindMatchingServices(ctx, tm.Client(), "", "", namespace, labels)
+				matchingSvcs, err := install.FindMatchingServices(ctx, tm.Clientset(), "", "", namespace, labels)
 				if err != nil {
 					continue
 				}

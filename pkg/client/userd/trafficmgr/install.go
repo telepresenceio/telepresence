@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 type installer struct {
@@ -153,11 +154,11 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 	}
 	namespace := obj.GetNamespace()
 	if !annotationsFound {
-		return nil, install.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
+		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 	}
 	svcName := actions.ReferencedService
 	if svcName == "" {
-		return nil, install.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
+		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
 	svc, err := ki.FindSvc(c, namespace, svcName)
@@ -165,7 +166,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 		return nil, err
 	}
 	if svc == nil {
-		return nil, install.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
+		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
 	}
 	return svc, nil
 }
@@ -185,7 +186,7 @@ func checkSvcSame(_ context.Context, obj kates.Object, svcName, portNameOrNumber
 		// then the service to be used with the intercept has changed
 		curSvc := actions.ReferencedService
 		if svcName != "" && curSvc != svcName {
-			return install.ObjErrorf(obj, "associated Service changed from %q to %q", curSvc, svcName)
+			return k8sapi.ObjErrorf(obj, "associated Service changed from %q to %q", curSvc, svcName)
 		}
 
 		// If the portNameOrNumber passed in doesn't match the referenced service
@@ -195,7 +196,7 @@ func checkSvcSame(_ context.Context, obj kates.Object, svcName, portNameOrNumber
 			curSvcPortName := actions.ReferencedServicePortName
 			curSvcPort := actions.ReferencedServicePort
 			if curSvcPortName != portNameOrNumber && curSvcPort != portNameOrNumber {
-				return install.ObjErrorf(obj, "port changed from %q to %q", curSvcPort, portNameOrNumber)
+				return k8sapi.ObjErrorf(obj, "port changed from %q to %q", curSvcPort, portNameOrNumber)
 			}
 		}
 	}
@@ -216,7 +217,7 @@ func (ki *installer) getSvcForInjectedPod(
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
 	// agent is injected using a mutating webhook, or manually. Get its service and skip the rest
-	svc, err := install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
+	svc, err := install.FindMatchingService(c, ki.Clientset(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +277,7 @@ func useAutoInstall(podTpl *kates.PodTemplateSpec) (bool, error) {
 // associated with the workload since this is where that correlation is made.
 func (ki *installer) EnsureAgent(c context.Context, obj kates.Object,
 	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
-	podTemplate, err := install.GetPodTemplateFromObject(obj)
+	podTemplate, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return "", "", err
 	}
@@ -324,7 +325,7 @@ already exist for this service`, kind, obj.GetName())
 		if portNameOrNumber != "" {
 			dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
 		}
-		matchingSvc, err := install.FindMatchingService(c, ki.Client(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
+		matchingSvc, err := install.FindMatchingService(c, ki.Clientset(), portNameOrNumber, svcName, namespace, podTemplate.Labels)
 		if err != nil {
 			return "", "", err
 		}
@@ -339,7 +340,7 @@ already exist for this service`, kind, obj.GetName())
 			return "", "", err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return "", "", install.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
+			return "", "", k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 		}
 
 		dlog.Debugf(c, "Updating agent for %s %s.%s", kind, name, namespace)
@@ -500,20 +501,20 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 		return false, nil
 	}
 	if err := data.UnmarshalAnnotation(ajs); err != nil {
-		return false, install.ObjErrorf(obj, "annotations[%q]: unable to parse annotation: %q: %w",
+		return false, k8sapi.ObjErrorf(obj, "annotations[%q]: unable to parse annotation: %q: %w",
 			annTelepresenceActions, ajs, err)
 	}
 
 	annV, err := data.TelVersion()
 	if err != nil {
-		return false, install.ObjErrorf(obj, "annotations[%q]: unable to parse semantic version %q: %w",
+		return false, k8sapi.ObjErrorf(obj, "annotations[%q]: unable to parse semantic version %q: %w",
 			annTelepresenceActions, ajs, err)
 	}
 	ourV := client.Semver()
 
 	// Compare major and minor versions. 100% backward compatibility is assumed and greater patch versions are allowed
 	if ourV.Major < annV.Major || ourV.Major == annV.Major && ourV.Minor < annV.Minor {
-		return false, install.ObjErrorf(obj, "annotations[%q]: the version in the annotation (%v) is more recent than this binary's version (%v)",
+		return false, k8sapi.ObjErrorf(obj, "annotations[%q]: the version in the annotation (%v) is more recent than this binary's version (%v)",
 			annTelepresenceActions,
 			annV, ourV)
 	}
@@ -544,7 +545,7 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 		return "", err
 	}
 	if !ok {
-		return "", install.ObjErrorf(obj, "agent is not installed")
+		return "", k8sapi.ObjErrorf(obj, "agent is not installed")
 	}
 
 	if err = actions.Undo(obj); err != nil {
@@ -607,7 +608,7 @@ func addAgentToWorkload(
 	bool,
 	error,
 ) {
-	podTemplate, err := install.GetPodTemplateFromObject(object)
+	podTemplate, err := k8sapi.GetPodTemplateFromObject(object)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -615,7 +616,7 @@ func addAgentToWorkload(
 	cns := podTemplate.Spec.Containers
 	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, matchingService)
 	if err != nil {
-		return nil, nil, false, install.ObjErrorf(object, err.Error())
+		return nil, nil, false, k8sapi.ObjErrorf(object, err.Error())
 	}
 	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
 		matchingService.Name,
@@ -668,7 +669,7 @@ func addAgentToWorkload(
 		}
 	}
 	if containerPort.Number == 0 {
-		return nil, nil, false, install.ObjErrorf(object, "unable to add: the container port cannot be determined")
+		return nil, nil, false, k8sapi.ObjErrorf(object, "unable to add: the container port cannot be determined")
 	}
 	if containerPort.Name == "" {
 		containerPort.Name = fmt.Sprintf("tx-%d", containerPort.Number)
@@ -706,7 +707,7 @@ func addAgentToWorkload(
 			setGID:                  setGID,
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
-			ContainerPortAppProto:   install.GetAppProto(c, client.GetConfig(c).Intercept.AppProtocolStrategy, servicePort),
+			ContainerPortAppProto:   k8sapi.GetAppProto(c, client.GetConfig(c).Intercept.AppProtocolStrategy, servicePort),
 			ContainerPortNumber:     containerPort.Number,
 			APIPortNumber:           telepresenceAPIPort,
 			ImageName:               agentImageName,

@@ -36,6 +36,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -314,7 +315,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		}, nil
 	}
 	var podTpl *kates.PodTemplateSpec
-	if podTpl, err = install.GetPodTemplateFromObject(obj); err != nil {
+	if podTpl, err = k8sapi.GetPodTemplateFromObject(obj); err != nil {
 		return interceptError(rpc.InterceptError_UNSUPPORTED_WORKLOAD, errcat.User.New(spec.WorkloadKind)), nil
 	}
 

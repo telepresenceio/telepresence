@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // Public interface-y pieces ///////////////////////////////////////////////////
@@ -178,7 +179,7 @@ func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.Int
 			return p, nil
 		}
 	}
-	return nil, install.ObjErrorf(svc, "unable to find target port %q",
+	return nil, k8sapi.ObjErrorf(svc, "unable to find target port %q",
 		m.portName(targetPort.String()))
 }
 
@@ -235,7 +236,7 @@ func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*ka
 			return p, nil
 		}
 	}
-	return nil, install.ObjErrorf(svc, "unable to find port %d", targetPort)
+	return nil, k8sapi.ObjErrorf(svc, "unable to find port %d", targetPort)
 }
 
 func (m *addSymbolicPortAction) ExplainDo(_ kates.Object, out io.Writer) {
@@ -359,14 +360,14 @@ func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Con
 }
 
 func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
 	cns := tplSpec.Spec.Containers
 	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
-		return install.ObjErrorf(obj, "unable to find app container %q in", ata.containerName)
+		return k8sapi.ObjErrorf(obj, "unable to find app container %q in", ata.containerName)
 	}
 
 	// Under some odd circumstances, the agent volume can be left over after an uninstall.
@@ -403,7 +404,7 @@ func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
 }
 
 func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return false
 	}
@@ -427,7 +428,7 @@ func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tp
 	}
 
 	if volumeIdx < 0 {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName), "cannot delete volume")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName), "cannot delete volume")
 	}
 	if len(tplSpec.Spec.Volumes) == 1 {
 		tplSpec.Spec.Volumes = nil
@@ -438,7 +439,7 @@ func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tp
 }
 
 func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
@@ -451,7 +452,7 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 		}
 	}
 	if containerIdx < 0 {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName), "cannot undo agent container")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName), "cannot undo agent container")
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
@@ -481,7 +482,7 @@ type addInitContainerAction struct {
 var _ partialAction = (*addInitContainerAction)(nil)
 
 func (ica *addInitContainerAction) Do(obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
@@ -509,7 +510,7 @@ func (ica *addInitContainerAction) ExplainUndo(_ kates.Object, out io.Writer) {
 }
 
 func (ica *addInitContainerAction) IsDone(obj kates.Object) bool {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return false
 	}
@@ -527,7 +528,7 @@ func (ica *addInitContainerAction) IsDone(obj kates.Object) bool {
 }
 
 func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return err
 	}
@@ -535,7 +536,7 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) er
 	containerIdx := -1
 	cns := tplSpec.Spec.InitContainers
 	if cns == nil {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
 	}
 	for i := range cns {
 		if tplSpec.Spec.Containers[i].Name == install.InitContainerName {
@@ -544,7 +545,7 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) er
 		}
 	}
 	if containerIdx < 0 {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
 	}
 	tplSpec.Spec.InitContainers = append(tplSpec.Spec.InitContainers[:containerIdx], tplSpec.Spec.InitContainers[containerIdx+1:]...)
 	return nil
@@ -616,7 +617,7 @@ func (ae *addTPEnvironmentAction) IsDone(obj kates.Object) bool {
 }
 
 func (ae *addTPEnvironmentAction) getContainer(obj kates.Object) (*kates.Container, error) {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +627,7 @@ func (ae *addTPEnvironmentAction) getContainer(obj kates.Object) (*kates.Contain
 			return cn, nil
 		}
 	}
-	return nil, install.ObjErrorf(obj, "does not contain a %q container", ae.ContainerName)
+	return nil, k8sapi.ObjErrorf(obj, "does not contain a %q container", ae.ContainerName)
 }
 
 // hideContainerPortAction /////////////////////////////////////////////////////
@@ -649,7 +650,7 @@ type hideContainerPortAction struct {
 var _ partialAction = (*hideContainerPortAction)(nil)
 
 func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
+	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -659,13 +660,13 @@ func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kat
 		if cn.Name != hcp.ContainerName {
 			continue
 		}
-		p, err := install.GetPort(cn, name)
+		p, err := k8sapi.GetPort(cn, name)
 		if err != nil {
-			return nil, nil, install.ObjErrorf(obj, err.Error())
+			return nil, nil, k8sapi.ObjErrorf(obj, err.Error())
 		}
 		return cn, p, nil
 	}
-	return nil, nil, install.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
+	return nil, nil, k8sapi.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 func TestGetConfig(t *testing.T) {
@@ -83,7 +84,7 @@ intercept:
 	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.AgentImage)         // from user
 	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.WebhookAgentImage) // from user
 	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                              // from user
-	assert.Equal(t, PortName, cfg.Intercept.AppProtocolStrategy)                                 // from user
+	assert.Equal(t, k8sapi.PortName, cfg.Intercept.AppProtocolStrategy)                          // from user
 	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                             // from user
 }
 
@@ -99,7 +100,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg.LogLevels.UserDaemon = logrus.TraceLevel
 	cfg.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("20Mi")
 	cfg.TelepresenceAPI.Port = 4567
-	cfg.Intercept.AppProtocolStrategy = PortName
+	cfg.Intercept.AppProtocolStrategy = k8sapi.PortName
 	cfg.Intercept.DefaultPort = 9080
 	cfgBytes, err := yaml.Marshal(cfg)
 	require.NoError(t, err)

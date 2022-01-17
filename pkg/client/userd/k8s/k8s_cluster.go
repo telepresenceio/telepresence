@@ -13,6 +13,7 @@ import (
 	k8err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
@@ -48,6 +49,7 @@ type Cluster struct {
 
 	// Main
 	client *kates.Client
+	ki     kubernetes.Interface
 
 	// search paths are propagated to the rootDaemon
 	rootDaemon daemon.DaemonClient
@@ -338,6 +340,14 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 	if err != nil {
 		return nil, client.CheckTimeout(c, fmt.Errorf("k8s client create failed: %w", err))
 	}
+	rs, err := kubeFlags.ConfigFlags.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	ki, err := kubernetes.NewForConfig(rs)
+	if err != nil {
+		return nil, err
+	}
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
 	} else {
@@ -348,6 +358,7 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 		Config:           kubeFlags,
 		mappedNamespaces: namespaces,
 		client:           kc,
+		ki:               ki,
 		rootDaemon:       rootDaemon,
 		LocalIntercepts:  map[string]string{},
 	}
@@ -375,6 +386,10 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 func (kc *Cluster) GetClusterId(ctx context.Context) string {
 	clusterID, _ := actions.GetClusterID(ctx, kc.client)
 	return clusterID
+}
+
+func (kc *Cluster) Clientset() kubernetes.Interface {
+	return kc.ki
 }
 
 func (kc *Cluster) Client() *kates.Client {
