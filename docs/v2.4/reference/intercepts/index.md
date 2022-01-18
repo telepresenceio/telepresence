@@ -68,21 +68,22 @@ your cluster; if it detects it correctly, may simply press "enter" and
 accept the default, otherwise you must tell Telepresence the correct
 value.
 
-When creating an intercept with the `http` mechanism, Telepresence must
-determine the application protocol to use (HTTP/1.1 or HTTP/2). If the
-service's `ports.appProtocol` field is set, it will be used. If not, then
-Telepresence will use the configured [application protocol strategy](../config/#intercept)
-to determine the protocol. The default behavior (`http2Probe` strategy) is
-to send a `GET /telepresence-http2-check` request to your service in order
-to determine if it supports HTTP/2.  This is required for the intercepts to
-behave correctly.
+When you create an intercept with the `http` mechanism, Telepresence
+determines whether the application protocol uses HTTP/1.1 or HTTP/2. If the
+service's `ports.appProtocol` field is set, Telepresence uses that. If not,
+then Telepresence uses the configured application protocol strategy to determine
+the protocol. The default behavior (`http2Probe` strategy) sends a
+`GET /telepresence-http2-check` request to your service to determine if it supports
+HTTP/2. This is required for the intercepts to behave correctly.
 
 ### TLS
 
-If the intercepted service expects TLS, then Telepresence must terminate the
-TLS in order to use the `http` mechanism. It is then common to also restore
-the TLS by originating it again. This is controlled using [TLS annotations](../cluster-config/#tls)
-in the workload.
+If the intercepted service has been set up for `--mechanism=http`, Telepresence
+needs to terminate the TLS connection for the `http` mechanism to function in your
+intercepts. Additionally, you need to ensure the
+[TLS annotations](../cluster-config/#tls) are properly entered in your workload’s
+Pod template to designate that requests leaving your service still speak TLS
+outside of the service as expected.
 
 Use the `--http-plaintext` flag when doing an intercept when the service in the
 cluster is using TLS in case you want to use plaintext for the communication with the
