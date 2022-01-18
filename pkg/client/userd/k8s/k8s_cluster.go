@@ -384,7 +384,7 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 }
 
 func (kc *Cluster) GetClusterId(ctx context.Context) string {
-	clusterID, _ := k8sapi.GetClusterID(ctx, kc.client)
+	clusterID, _ := k8sapi.GetClusterID(ctx)
 	return clusterID
 }
 

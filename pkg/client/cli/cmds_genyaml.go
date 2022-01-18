@@ -15,8 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -150,7 +150,7 @@ Defaults to the name of the deployment.`)
 	_ = cmd.MarkFlagRequired("container-name")
 	_ = cmd.MarkFlagRequired("port")
 
-	kubeConfig := kates.NewConfigFlags(false)
+	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
 	kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)

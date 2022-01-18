@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -64,7 +64,7 @@ func parseLegacyCommand(args []string) *legacyCommand {
 		return ""
 	}
 	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
-	kubeConfig := kates.NewConfigFlags(false)
+	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
 	kubeConfig.AddFlags(kubeFlags)
 Parsing:

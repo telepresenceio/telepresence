@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -91,12 +92,12 @@ func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, lice
 // to access licensed features if the cluster is airgapped and
 // writes it to the given writer
 func createSecretFromLicense(ctx context.Context, writer io.Writer, license, hostDomain string) error {
-	secret := &kates.Secret{
-		TypeMeta: kates.TypeMeta{
+	secret := &core.Secret{
+		TypeMeta: meta.TypeMeta{
 			Kind:       "Secret",
 			APIVersion: "v1",
 		},
-		ObjectMeta: kates.ObjectMeta{
+		ObjectMeta: meta.ObjectMeta{
 			Namespace: "ambassador",
 			Name:      "systema-license",
 		},
