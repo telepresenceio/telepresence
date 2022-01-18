@@ -6,21 +6,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	goRuntime "runtime"
 	"strings"
 	"testing"
 	"text/template"
 
 	"github.com/stretchr/testify/assert"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -29,11 +29,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 	type testcase struct {
 		InputVersion  string
 		InputPortName string
-		InputWorkload kates.Object
-		InputService  *kates.Service
+		InputWorkload k8sapi.Workload
+		InputService  *core.Service
 
-		OutputWorkload kates.Object
-		OutputService  *kates.Service
+		OutputWorkload k8sapi.Workload
+		OutputService  *core.Service
 	}
 	testcases := map[string]testcase{}
 
@@ -184,7 +184,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 				sanitizeWorkload(actualWrk)
 
 				actualSvc := tc.OutputService.DeepCopy()
-				actualErr = undoServiceMods(ctx, actualSvc)
+				actualErr = undoServiceMods(ctx, k8sapi.Service(actualSvc))
 				if !assert.NoError(t, actualErr) {
 					return
 				}
@@ -197,11 +197,12 @@ func TestAddAgentToWorkload(t *testing.T) {
 	})
 }
 
-func sanitizeWorkload(obj kates.Object) {
-	obj.SetResourceVersion("")
-	obj.SetGeneration(int64(0))
-	obj.SetCreationTimestamp(metav1.Time{})
-	podTemplate, _ := install.GetPodTemplateFromObject(obj)
+func sanitizeWorkload(obj k8sapi.Workload) {
+	mObj := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	mObj.SetResourceVersion("")
+	mObj.SetGeneration(int64(0))
+	mObj.SetCreationTimestamp(metav1.Time{})
+	podTemplate := obj.GetPodTemplate()
 	for i, c := range podTemplate.Spec.Containers {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""
@@ -216,21 +217,23 @@ func sanitizeWorkload(obj kates.Object) {
 	}
 }
 
-func sanitizeService(svc *kates.Service) {
+func sanitizeService(svc *core.Service) {
 	svc.ObjectMeta.ResourceVersion = ""
 	svc.ObjectMeta.Generation = 0
 	svc.ObjectMeta.CreationTimestamp = metav1.Time{}
 }
 
-func deepCopyObject(obj kates.Object) kates.Object {
-	objValue := reflect.ValueOf(obj)
-	retValues := objValue.MethodByName("DeepCopy").Call([]reflect.Value{})
-	return retValues[0].Interface().(kates.Object)
+func deepCopyObject(obj k8sapi.Workload) k8sapi.Workload {
+	wl, err := k8sapi.WrapWorkload(obj.DeepCopyObject())
+	if err != nil {
+		panic(err)
+	}
+	return wl
 }
 
 // loadFile is a helper function that reads test data files and converts them
 // to a format that can be used in the tests.
-func loadFile(filename, inputVersion string) (workload kates.Object, service *kates.Service, portname string, err error) {
+func loadFile(filename, inputVersion string) (workload k8sapi.Workload, service *core.Service, portname string, err error) {
 	tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("read template: %s: %w", filename, err)
@@ -245,12 +248,12 @@ func loadFile(filename, inputVersion string) (workload kates.Object, service *ka
 	}
 
 	var dat struct {
-		Deployment  *kates.Deployment  `json:"deployment"`
-		ReplicaSet  *kates.ReplicaSet  `json:"replicaset"`
-		StatefulSet *kates.StatefulSet `json:"statefulset"`
+		Deployment  *apps.Deployment  `json:"deployment"`
+		ReplicaSet  *apps.ReplicaSet  `json:"replicaset"`
+		StatefulSet *apps.StatefulSet `json:"statefulset"`
 
-		Service       *kates.Service `json:"service"`
-		InterceptPort string         `json:"interceptPort"`
+		Service       *core.Service `json:"service"`
+		InterceptPort string        `json:"interceptPort"`
 	}
 	if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
 		return nil, nil, "", fmt.Errorf("parse yaml: %s: %w", filename, err)
@@ -259,15 +262,15 @@ func loadFile(filename, inputVersion string) (workload kates.Object, service *ka
 	cnt := 0
 	if dat.Deployment != nil {
 		cnt++
-		workload = dat.Deployment
+		workload = k8sapi.Deployment(dat.Deployment)
 	}
 	if dat.ReplicaSet != nil {
 		cnt++
-		workload = dat.ReplicaSet
+		workload = k8sapi.ReplicaSet(dat.ReplicaSet)
 	}
 	if dat.StatefulSet != nil {
 		cnt++
-		workload = dat.StatefulSet
+		workload = k8sapi.StatefulSet(dat.StatefulSet)
 	}
 	if cnt != 1 {
 		return nil, nil, "", fmt.Errorf("yaml must contain exactly one of 'deployment', 'replicaset', or 'statefulset'; got %d of them", cnt)

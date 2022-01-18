@@ -20,6 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const configFile = "config.yml"
@@ -687,70 +688,13 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 
 const defaultInterceptDefaultPort = 8080
 
-// AppProtocolStrategy specifies how the application protocol for a service port is determined
-// in case the service.spec.ports.appProtocol is not set.
-type AppProtocolStrategy int
-
-var apsNames = [...]string{"http2Probe", "portName", "http", "http2"}
-
-const (
-	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior)
-	Http2Probe AppProtocolStrategy = iota
-
-	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 probe
-	// if no such guess can be made.
-	PortName
-
-	// Http means just assume HTTP/1.1
-	Http
-
-	// Http2 means just assume HTTP/2
-	Http2
-)
-
-func (aps AppProtocolStrategy) String() string {
-	return apsNames[aps]
-}
-
-func NewAppProtocolStrategy(s string) (AppProtocolStrategy, error) {
-	for i, n := range apsNames {
-		if s == n {
-			return AppProtocolStrategy(i), nil
-		}
-	}
-	return 0, fmt.Errorf("invalid AppProtcolStrategy: %q", s)
-}
-
-func (aps AppProtocolStrategy) MarshalYAML() (interface{}, error) {
-	return aps.String(), nil
-}
-
-func (aps *AppProtocolStrategy) EnvDecode(val string) (err error) {
-	var as AppProtocolStrategy
-	if val == "" {
-		as = Http2Probe
-	} else if as, err = NewAppProtocolStrategy(val); err != nil {
-		return err
-	}
-	*aps = as
-	return nil
-}
-
-func (aps *AppProtocolStrategy) UnmarshalYAML(node *yaml.Node) (err error) {
-	var s string
-	if err := node.Decode(&s); err != nil {
-		return err
-	}
-	return aps.EnvDecode(s)
-}
-
 type Intercept struct {
-	AppProtocolStrategy AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
-	DefaultPort         int                 `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
+	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
+	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
 }
 
 func (ic *Intercept) merge(o *Intercept) {
-	if o.AppProtocolStrategy != Http2Probe {
+	if o.AppProtocolStrategy != k8sapi.Http2Probe {
 		ic.AppProtocolStrategy = o.AppProtocolStrategy
 	}
 	if o.DefaultPort != 0 {
@@ -764,7 +708,7 @@ func (ic Intercept) MarshalYAML() (interface{}, error) {
 	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
 		im["defaultPort"] = ic.DefaultPort
 	}
-	if ic.AppProtocolStrategy != Http2Probe {
+	if ic.AppProtocolStrategy != k8sapi.Http2Probe {
 		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
 	}
 	return im, nil

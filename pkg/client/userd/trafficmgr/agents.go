@@ -9,12 +9,12 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot
@@ -93,10 +93,12 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
-func (tm *TrafficManager) addAgent(c context.Context, workload kates.Object, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16) *rpc.InterceptResult {
+func (tm *TrafficManager) addAgent(
+	c context.Context, workload k8sapi.Workload, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16,
+) *rpc.InterceptResult {
 	svcUID, kind, err := tm.EnsureAgent(c, workload, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
-	agentName := workload.GetName()
-	namespace := workload.GetNamespace()
+	agentName := k8sapi.GetName(workload)
+	namespace := k8sapi.GetNamespace(workload)
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{

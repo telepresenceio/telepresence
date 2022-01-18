@@ -11,12 +11,13 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/hashicorp/go-multierror"
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // Public interface-y pieces ///////////////////////////////////////////////////
@@ -27,23 +28,23 @@ type partialAction interface {
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
 
-	Do(obj kates.Object) error
-	Undo(ver semver.Version, obj kates.Object) error
+	Do(obj k8sapi.Object) error
+	Undo(ver semver.Version, obj k8sapi.Object) error
 
-	ExplainDo(obj kates.Object, out io.Writer)
-	ExplainUndo(obj kates.Object, out io.Writer)
+	ExplainDo(obj k8sapi.Object, out io.Writer)
+	ExplainUndo(obj k8sapi.Object, out io.Writer)
 
-	IsDone(obj kates.Object) bool
+	IsDone(obj k8sapi.Object) bool
 }
 
 // A completeAction is a set of smaller partialActions that may be applied to an object.
 type completeAction interface {
 	// These five methods are the same as partialAction, except 'Undo' is different.
-	Do(obj kates.Object) error
-	Undo(obj kates.Object) error
-	ExplainDo(obj kates.Object, out io.Writer)
-	ExplainUndo(obj kates.Object, out io.Writer)
-	IsDone(obj kates.Object) bool
+	Do(obj k8sapi.Object) error
+	Undo(obj k8sapi.Object) error
+	ExplainDo(obj k8sapi.Object, out io.Writer)
+	ExplainUndo(obj k8sapi.Object, out io.Writer)
+	IsDone(obj k8sapi.Object) bool
 
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
@@ -51,30 +52,35 @@ type completeAction interface {
 	MarshalAnnotation() (string, error)
 	UnmarshalAnnotation(string) error
 
-	// For actions-that-we-well-do, this is the currently running Telepresence version.  For
+	// TelVersion For actions-that-we-well-do, this is the currently running Telepresence version.  For
 	// actions that we've read from in-cluster annotations, this is the Telepresence version
 	// that originally performed the action.
 	TelVersion() (semver.Version, error)
 }
 
-func explainDo(c context.Context, a completeAction, obj kates.Object) {
+func nameAndNamespace(obj k8sapi.Object) string {
+	mObj := obj.(meta.ObjectMetaAccessor).GetObjectMeta()
+	return mObj.GetName() + "." + mObj.GetNamespace()
+}
+
+func explainDo(c context.Context, a completeAction, obj k8sapi.Object) {
 	var buf strings.Builder
 	a.ExplainDo(obj, &buf)
 	if buf.Len() > 0 {
 		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
-			obj.GetObjectKind().GroupVersionKind().Kind,
-			obj.GetName(),
+			obj.GetKind(),
+			nameAndNamespace(obj),
 			buf.String()))
 	}
 }
 
-func explainUndo(c context.Context, a completeAction, obj kates.Object) {
+func explainUndo(c context.Context, a completeAction, obj k8sapi.Object) {
 	var buf strings.Builder
 	a.ExplainUndo(obj, &buf)
 	if buf.Len() > 0 {
 		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
-			obj.GetObjectKind().GroupVersionKind().Kind,
-			obj.GetName(),
+			obj.GetKind(),
+			nameAndNamespace(obj),
 			buf.String()))
 	}
 }
@@ -86,9 +92,9 @@ func explainUndo(c context.Context, a completeAction, obj kates.Object) {
 type multiAction []partialAction
 
 func (ma multiAction) explain(
-	obj kates.Object,
+	obj k8sapi.Object,
 	out io.Writer,
-	ef func(partialAction partialAction, obj kates.Object, out io.Writer),
+	ef func(partialAction partialAction, obj k8sapi.Object, out io.Writer),
 ) {
 	for i, action := range ma {
 		switch i {
@@ -103,15 +109,15 @@ func (ma multiAction) explain(
 	}
 }
 
-func (ma multiAction) ExplainDo(obj kates.Object, out io.Writer) {
+func (ma multiAction) ExplainDo(obj k8sapi.Object, out io.Writer) {
 	ma.explain(obj, out, partialAction.ExplainDo)
 }
 
-func (ma multiAction) ExplainUndo(obj kates.Object, out io.Writer) {
+func (ma multiAction) ExplainUndo(obj k8sapi.Object, out io.Writer) {
 	ma.explain(obj, out, partialAction.ExplainUndo)
 }
 
-func (ma multiAction) Do(obj kates.Object) error {
+func (ma multiAction) Do(obj k8sapi.Object) error {
 	for _, partialAction := range ma {
 		if err := partialAction.Do(obj); err != nil {
 			return err
@@ -120,7 +126,7 @@ func (ma multiAction) Do(obj kates.Object) error {
 	return nil
 }
 
-func (ma multiAction) IsDone(obj kates.Object) bool {
+func (ma multiAction) IsDone(obj k8sapi.Object) bool {
 	for _, partialAction := range ma {
 		if !partialAction.IsDone(obj) {
 			return false
@@ -129,7 +135,7 @@ func (ma multiAction) IsDone(obj kates.Object) bool {
 	return true
 }
 
-func (ma multiAction) Undo(ver semver.Version, obj kates.Object) error {
+func (ma multiAction) Undo(ver semver.Version, obj k8sapi.Object) error {
 	var result *multierror.Error
 	for i := len(ma) - 1; i >= 0; i-- {
 		err := ma[i].Undo(ver, obj)
@@ -153,7 +159,7 @@ func unmarshalString(in string, out completeAction) error {
 }
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
-// symbolic name so that an traffic-agent in a designated Workload can reference the symbol
+// symbolic name so that an traffic-agent in a designated Object can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
 type makePortSymbolicAction struct {
 	PortName     string
@@ -170,19 +176,23 @@ func (m *makePortSymbolicAction) portName(port string) string {
 	return m.PortName + "." + port
 }
 
-func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.IntOrString) (*kates.ServicePort, error) {
-	ports := svc.(*kates.Service).Spec.Ports
+func (m *makePortSymbolicAction) getPort(o k8sapi.Object, targetPort intstr.IntOrString) (*core.ServicePort, error) {
+	svc, ok := k8sapi.ServiceImpl(o)
+	if !ok {
+		return nil, k8sapi.ObjErrorf(o, "not a Service")
+	}
+	ports := svc.Spec.Ports
 	for i := range ports {
 		p := &ports[i]
 		if p.TargetPort == targetPort && p.Name == m.PortName {
 			return p, nil
 		}
 	}
-	return nil, install.ObjErrorf(svc, "unable to find target port %q",
+	return nil, k8sapi.ObjErrorf(o, "unable to find target port %q",
 		m.portName(targetPort.String()))
 }
 
-func (m *makePortSymbolicAction) Do(svc kates.Object) error {
+func (m *makePortSymbolicAction) Do(svc k8sapi.Object) error {
 	p, err := m.getPort(svc, intstr.FromInt(int(m.TargetPort)))
 	if err != nil {
 		return err
@@ -191,22 +201,22 @@ func (m *makePortSymbolicAction) Do(svc kates.Object) error {
 	return nil
 }
 
-func (m *makePortSymbolicAction) ExplainDo(_ kates.Object, out io.Writer) {
+func (m *makePortSymbolicAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "make service port %s symbolic with name %q",
 		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
-func (m *makePortSymbolicAction) ExplainUndo(_ kates.Object, out io.Writer) {
+func (m *makePortSymbolicAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "restore symbolic service port %s to numeric %d",
 		m.portName(m.SymbolicName), m.TargetPort)
 }
 
-func (m *makePortSymbolicAction) IsDone(svc kates.Object) bool {
+func (m *makePortSymbolicAction) IsDone(svc k8sapi.Object) bool {
 	_, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	return err == nil
 }
 
-func (m *makePortSymbolicAction) Undo(ver semver.Version, svc kates.Object) error {
+func (m *makePortSymbolicAction) Undo(ver semver.Version, svc k8sapi.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
@@ -226,8 +236,12 @@ type addSymbolicPortAction struct {
 
 var _ partialAction = (*addSymbolicPortAction)(nil)
 
-func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*kates.ServicePort, error) {
-	ports := svc.(*kates.Service).Spec.Ports
+func (m *addSymbolicPortAction) getPort(o k8sapi.Object, targetPort int32) (*core.ServicePort, error) {
+	svc, ok := k8sapi.ServiceImpl(o)
+	if !ok {
+		return nil, k8sapi.ObjErrorf(o, "not a Service")
+	}
+	ports := svc.Spec.Ports
 	for i := range ports {
 		p := &ports[i]
 		if p.TargetPort.Type == intstr.Int && p.TargetPort.IntVal == 0 && p.Port == targetPort {
@@ -235,15 +249,15 @@ func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*ka
 			return p, nil
 		}
 	}
-	return nil, install.ObjErrorf(svc, "unable to find port %d", targetPort)
+	return nil, k8sapi.ObjErrorf(o, "unable to find port %d", targetPort)
 }
 
-func (m *addSymbolicPortAction) ExplainDo(_ kates.Object, out io.Writer) {
+func (m *addSymbolicPortAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add targetPort to service port %s symbolic with name %q",
 		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
-func (m *addSymbolicPortAction) Do(svc kates.Object) error {
+func (m *addSymbolicPortAction) Do(svc k8sapi.Object) error {
 	p, err := m.getPort(svc, int32(m.TargetPort))
 	if err != nil {
 		return err
@@ -252,11 +266,11 @@ func (m *addSymbolicPortAction) Do(svc kates.Object) error {
 	return nil
 }
 
-func (m *addSymbolicPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
+func (m *addSymbolicPortAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove symbolic service port %s", m.portName(m.SymbolicName))
 }
 
-func (m *addSymbolicPortAction) Undo(ver semver.Version, svc kates.Object) error {
+func (m *addSymbolicPortAction) Undo(ver semver.Version, svc k8sapi.Object) error {
 	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
@@ -285,23 +299,23 @@ func (s *svcActions) actions() (actions multiAction) {
 	return actions
 }
 
-func (s *svcActions) Do(svc kates.Object) (err error) {
+func (s *svcActions) Do(svc k8sapi.Object) (err error) {
 	return s.actions().Do(svc)
 }
 
-func (s *svcActions) ExplainDo(svc kates.Object, out io.Writer) {
+func (s *svcActions) ExplainDo(svc k8sapi.Object, out io.Writer) {
 	s.actions().ExplainDo(svc, out)
 }
 
-func (s *svcActions) ExplainUndo(svc kates.Object, out io.Writer) {
+func (s *svcActions) ExplainUndo(svc k8sapi.Object, out io.Writer) {
 	s.actions().ExplainUndo(svc, out)
 }
 
-func (s *svcActions) IsDone(svc kates.Object) bool {
+func (s *svcActions) IsDone(svc k8sapi.Object) bool {
 	return s.actions().IsDone(svc)
 }
 
-func (s *svcActions) Undo(svc kates.Object) (err error) {
+func (s *svcActions) Undo(svc k8sapi.Object) (err error) {
 	ver, err := s.TelVersion()
 	if err != nil {
 		return err
@@ -327,11 +341,11 @@ func (s *svcActions) TelVersion() (semver.Version, error) {
 // pod template spec.
 type addTrafficAgentAction struct {
 	// The information of the pre-existing container port that the agent will take over.
-	ContainerPortName     string          `json:"container_port_name"`
-	ContainerPortProto    corev1.Protocol `json:"container_port_proto"`
-	ContainerPortAppProto string          `json:"container_port_app_proto,omitempty"`
-	ContainerPortNumber   uint16          `json:"app_port"`
-	APIPortNumber         uint16          `json:"api_port,omitempty"`
+	ContainerPortName     string        `json:"container_port_name"`
+	ContainerPortProto    core.Protocol `json:"container_port_proto"`
+	ContainerPortAppProto string        `json:"container_port_app_proto,omitempty"`
+	ContainerPortNumber   uint16        `json:"app_port"`
+	APIPortNumber         uint16        `json:"api_port,omitempty"`
 
 	// The image name of the agent to add
 	ImageName string `json:"image_name"`
@@ -348,7 +362,7 @@ type addTrafficAgentAction struct {
 
 var _ partialAction = (*addTrafficAgentAction)(nil)
 
-func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Container {
+func (ata *addTrafficAgentAction) appContainer(cns []core.Container) *core.Container {
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name == ata.containerName {
@@ -358,15 +372,12 @@ func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Con
 	return nil
 }
 
-func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
+func (ata *addTrafficAgentAction) Do(obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
-		return install.ObjErrorf(obj, "unable to find app container %q in", ata.containerName)
+		return k8sapi.ObjErrorf(obj, "unable to find app container %q in", ata.containerName)
 	}
 
 	// Under some odd circumstances, the agent volume can be left over after an uninstall.
@@ -377,10 +388,10 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 	tplSpec.Spec.Volumes = append(tplSpec.Spec.Volumes, install.AgentVolume())
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers,
 		install.AgentContainer(
-			obj.GetName(),
+			obj.(meta.ObjectMetaAccessor).GetObjectMeta().GetName(),
 			ata.ImageName,
 			appContainer,
-			corev1.ContainerPort{
+			core.ContainerPort{
 				Name:          ata.ContainerPortName,
 				Protocol:      ata.ContainerPortProto,
 				ContainerPort: 9900,
@@ -394,19 +405,16 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 	return nil
 }
 
-func (ata *addTrafficAgentAction) ExplainDo(_ kates.Object, out io.Writer) {
+func (ata *addTrafficAgentAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
+func (ata *addTrafficAgentAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return false
-	}
+func (ata *addTrafficAgentAction) IsDone(obj k8sapi.Object) bool {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
@@ -417,7 +425,7 @@ func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
 	return false
 }
 
-func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tplSpec *corev1.PodTemplateSpec) error {
+func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj k8sapi.Object, tplSpec *core.PodTemplateSpec) error {
 	volumeIdx := -1
 	for i := range tplSpec.Spec.Volumes {
 		if tplSpec.Spec.Volumes[i].Name == install.AgentAnnotationVolumeName {
@@ -427,7 +435,7 @@ func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tp
 	}
 
 	if volumeIdx < 0 {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName), "cannot delete volume")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName), "cannot delete volume")
 	}
 	if len(tplSpec.Spec.Volumes) == 1 {
 		tplSpec.Spec.Volumes = nil
@@ -437,12 +445,8 @@ func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj kates.Object, tp
 	return nil
 }
 
-func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
-
+func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	containerIdx := -1
 	for i := range tplSpec.Spec.Containers {
 		if tplSpec.Spec.Containers[i].Name == install.AgentContainerName {
@@ -451,7 +455,7 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 		}
 	}
 	if containerIdx < 0 {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName), "cannot undo agent container")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName), "cannot undo agent container")
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
@@ -471,8 +475,8 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj kates.Object) err
 // pod template spec.
 type addInitContainerAction struct {
 	// The information of the pre-existing container port that the agent will take over.
-	AppPortProto  corev1.Protocol `json:"container_port_proto"`
-	AppPortNumber uint16          `json:"app_port"`
+	AppPortProto  core.Protocol `json:"container_port_proto"`
+	AppPortNumber uint16        `json:"app_port"`
 
 	// The image name of the initContainer to add -- usually the same as the traffic agent image that will be used
 	ImageName string `json:"image_name"`
@@ -480,17 +484,14 @@ type addInitContainerAction struct {
 
 var _ partialAction = (*addInitContainerAction)(nil)
 
-func (ica *addInitContainerAction) Do(obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
+func (ica *addInitContainerAction) Do(obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	if tplSpec.Spec.InitContainers == nil {
-		tplSpec.Spec.InitContainers = []corev1.Container{}
+		tplSpec.Spec.InitContainers = []core.Container{}
 	}
 	tplSpec.Spec.InitContainers = append(tplSpec.Spec.InitContainers, install.InitContainer(
 		ica.ImageName,
-		corev1.ContainerPort{
+		core.ContainerPort{
 			ContainerPort: 9900,
 			Protocol:      ica.AppPortProto,
 		},
@@ -500,19 +501,16 @@ func (ica *addInitContainerAction) Do(obj kates.Object) error {
 	return nil
 }
 
-func (ica *addInitContainerAction) ExplainDo(_ kates.Object, out io.Writer) {
+func (ica *addInitContainerAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add %s initContainer with image %s", install.InitContainerName, ica.ImageName)
 }
 
-func (ica *addInitContainerAction) ExplainUndo(_ kates.Object, out io.Writer) {
+func (ica *addInitContainerAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove %s initContainer with image %s", install.InitContainerName, ica.ImageName)
 }
 
-func (ica *addInitContainerAction) IsDone(obj kates.Object) bool {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return false
-	}
+func (ica *addInitContainerAction) IsDone(obj k8sapi.Object) bool {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.InitContainers
 	if cns == nil {
 		return false
@@ -526,16 +524,12 @@ func (ica *addInitContainerAction) IsDone(obj kates.Object) bool {
 	return false
 }
 
-func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) error {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
-
+func (ica *addInitContainerAction) Undo(ver semver.Version, obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	containerIdx := -1
 	cns := tplSpec.Spec.InitContainers
 	if cns == nil {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
 	}
 	for i := range cns {
 		if tplSpec.Spec.Containers[i].Name == install.InitContainerName {
@@ -544,7 +538,7 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj kates.Object) er
 		}
 	}
 	if containerIdx < 0 {
-		return install.NewAlreadyUndone(install.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
 	}
 	tplSpec.Spec.InitContainers = append(tplSpec.Spec.InitContainers[:containerIdx], tplSpec.Spec.InitContainers[containerIdx+1:]...)
 	return nil
@@ -556,7 +550,7 @@ type addTPEnvironmentAction struct {
 	Env           map[string]string
 }
 
-func (ae *addTPEnvironmentAction) Do(obj kates.Object) error {
+func (ae *addTPEnvironmentAction) Do(obj k8sapi.Object) error {
 	cn, err := ae.getContainer(obj)
 	if err != nil {
 		return err
@@ -570,17 +564,17 @@ func (ae *addTPEnvironmentAction) Do(obj kates.Object) error {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		cn.Env = append(cn.Env, corev1.EnvVar{Name: k, Value: env[k]})
+		cn.Env = append(cn.Env, core.EnvVar{Name: k, Value: env[k]})
 	}
 	return nil
 }
 
-func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj kates.Object) error {
+func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj k8sapi.Object) error {
 	cn, err := ae.getContainer(obj)
 	if err != nil {
 		return err
 	}
-	cEnv := make([]corev1.EnvVar, 0, len(cn.Env))
+	cEnv := make([]core.EnvVar, 0, len(cn.Env))
 	for _, env := range cn.Env {
 		if _, ok := ae.Env[env.Name]; !ok {
 			cEnv = append(cEnv, env)
@@ -593,15 +587,15 @@ func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj kates.Object) error
 	return nil
 }
 
-func (ae *addTPEnvironmentAction) ExplainDo(_ kates.Object, out io.Writer) {
+func (ae *addTPEnvironmentAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add environment %v to container %s", ae.Env, ae.ContainerName)
 }
 
-func (ae *addTPEnvironmentAction) ExplainUndo(_ kates.Object, out io.Writer) {
+func (ae *addTPEnvironmentAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove environment %v from container %s", ae.Env, ae.ContainerName)
 }
 
-func (ae *addTPEnvironmentAction) IsDone(obj kates.Object) bool {
+func (ae *addTPEnvironmentAction) IsDone(obj k8sapi.Object) bool {
 	cn, err := ae.getContainer(obj)
 	if err != nil {
 		return false
@@ -615,18 +609,15 @@ func (ae *addTPEnvironmentAction) IsDone(obj kates.Object) bool {
 	return count == len(ae.Env)
 }
 
-func (ae *addTPEnvironmentAction) getContainer(obj kates.Object) (*kates.Container, error) {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return nil, err
-	}
+func (ae *addTPEnvironmentAction) getContainer(obj k8sapi.Object) (*core.Container, error) {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		if cn := &cns[i]; cn.Name == ae.ContainerName {
 			return cn, nil
 		}
 	}
-	return nil, install.ObjErrorf(obj, "does not contain a %q container", ae.ContainerName)
+	return nil, k8sapi.ObjErrorf(obj, "does not contain a %q container", ae.ContainerName)
 }
 
 // hideContainerPortAction /////////////////////////////////////////////////////
@@ -648,28 +639,25 @@ type hideContainerPortAction struct {
 
 var _ partialAction = (*hideContainerPortAction)(nil)
 
-func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	tplSpec, err := install.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return nil, nil, err
-	}
+func (hcp *hideContainerPortAction) getPort(obj k8sapi.Object, name string) (*core.Container, *core.ContainerPort, error) {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name != hcp.ContainerName {
 			continue
 		}
-		p, err := install.GetPort(cn, name)
+		p, err := k8sapi.GetPort(cn, name)
 		if err != nil {
-			return nil, nil, install.ObjErrorf(obj, err.Error())
+			return nil, nil, k8sapi.ObjErrorf(obj, err.Error())
 		}
 		return cn, p, nil
 	}
-	return nil, nil, install.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
+	return nil, nil, k8sapi.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
 }
 
-func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {
-	for _, probe := range []*corev1.Probe{cn.LivenessProbe, cn.ReadinessProbe, cn.StartupProbe} {
+func swapPortName(cn *core.Container, p *core.ContainerPort, from, to string) {
+	for _, probe := range []*core.Probe{cn.LivenessProbe, cn.ReadinessProbe, cn.StartupProbe} {
 		if probe == nil {
 			continue
 		}
@@ -683,11 +671,11 @@ func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string)
 	p.Name = to
 }
 
-func (hcp *hideContainerPortAction) Do(obj kates.Object) error {
+func (hcp *hideContainerPortAction) Do(obj k8sapi.Object) error {
 	return hcp.do(obj)
 }
 
-func (hcp *hideContainerPortAction) do(obj kates.Object) error {
+func (hcp *hideContainerPortAction) do(obj k8sapi.Object) error {
 	cn, p, err := hcp.getPort(obj, hcp.PortName)
 	if err != nil {
 		return err
@@ -699,26 +687,26 @@ func (hcp *hideContainerPortAction) do(obj kates.Object) error {
 	return nil
 }
 
-func (hcp *hideContainerPortAction) ExplainDo(_ kates.Object, out io.Writer) {
+func (hcp *hideContainerPortAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "hide port %q in container %s from service by renaming it to %q",
 		hcp.PortName, hcp.ContainerName, hcp.HiddenName)
 }
 
-func (hcp *hideContainerPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
+func (hcp *hideContainerPortAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "reveal hidden port %q in container %s by restoring its origina name %q",
 		hcp.HiddenName, hcp.ContainerName, hcp.PortName)
 }
 
-func (hcp *hideContainerPortAction) IsDone(obj kates.Object) bool {
+func (hcp *hideContainerPortAction) IsDone(obj k8sapi.Object) bool {
 	_, _, err := hcp.getPort(obj, hcp.HiddenName)
 	return err == nil
 }
 
-func (hcp *hideContainerPortAction) Undo(ver semver.Version, obj kates.Object) error {
+func (hcp *hideContainerPortAction) Undo(ver semver.Version, obj k8sapi.Object) error {
 	return hcp.undo(obj)
 }
 
-func (hcp *hideContainerPortAction) undo(obj kates.Object) error {
+func (hcp *hideContainerPortAction) undo(obj k8sapi.Object) error {
 	cn, p, err := hcp.getPort(obj, hcp.HiddenName)
 	if err != nil {
 		return err
@@ -758,23 +746,23 @@ func (d *workloadActions) actions() (actions multiAction) {
 	return actions
 }
 
-func (d *workloadActions) ExplainDo(dep kates.Object, out io.Writer) {
+func (d *workloadActions) ExplainDo(dep k8sapi.Object, out io.Writer) {
 	d.actions().ExplainDo(dep, out)
 }
 
-func (d *workloadActions) Do(dep kates.Object) (err error) {
+func (d *workloadActions) Do(dep k8sapi.Object) (err error) {
 	return d.actions().Do(dep)
 }
 
-func (d *workloadActions) ExplainUndo(dep kates.Object, out io.Writer) {
+func (d *workloadActions) ExplainUndo(dep k8sapi.Object, out io.Writer) {
 	d.actions().ExplainUndo(dep, out)
 }
 
-func (d *workloadActions) IsDone(dep kates.Object) bool {
+func (d *workloadActions) IsDone(dep k8sapi.Object) bool {
 	return d.actions().IsDone(dep)
 }
 
-func (d *workloadActions) Undo(dep kates.Object) (err error) {
+func (d *workloadActions) Undo(dep k8sapi.Object) (err error) {
 	ver, err := d.TelVersion()
 	if err != nil {
 		return err

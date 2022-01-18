@@ -21,7 +21,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -36,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -215,7 +215,7 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			portForwards.cancelUnwanted(ctx)
 			tm.reconcileMountPoints(ctx, allNames)
 			if ctx.Err() == nil {
-				tm.SetInterceptedNamespaces(ctx, namespaces)
+				tm.setInterceptedNamespaces(ctx, namespaces)
 			}
 		}
 
@@ -272,9 +272,9 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 }
 
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
-// only if the returned rpc.InterceptResult is nil. The returned kates.Object is either nil, indicating a local
+// only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object) {
+func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload) {
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
@@ -282,7 +282,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent)), nil
 	}
 
-	if _, inUse := tm.LocalIntercepts[spec.Name]; inUse {
+	if _, inUse := tm.localIntercepts[spec.Name]; inUse {
 		return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
 	}
 
@@ -313,10 +313,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 			ErrorText: err.Error(),
 		}, nil
 	}
-	var podTpl *kates.PodTemplateSpec
-	if podTpl, err = install.GetPodTemplateFromObject(obj); err != nil {
-		return interceptError(rpc.InterceptError_UNSUPPORTED_WORKLOAD, errcat.User.New(spec.WorkloadKind)), nil
-	}
+	podTpl := obj.GetPodTemplate()
 
 	// Check if the workload is auto installed. This also verifies annotation consistency
 	autoInstall, err := useAutoInstall(podTpl)
@@ -587,7 +584,7 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 // RemoveIntercept removes one intercept by name
 func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error {
-	if ns, ok := tm.LocalIntercepts[name]; ok {
+	if ns, ok := tm.localIntercepts[name]; ok {
 		return tm.RemoveLocalOnlyIntercept(c, name, ns)
 	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
@@ -707,4 +704,47 @@ func (tm *TrafficManager) Intercepts(ctx context.Context, callerID string, h htt
 	}
 	dlog.Debugf(ctx, "%s: %s does not match %s", callerID, m, header.Stringer(h))
 	return false, nil
+}
+
+// AddLocalOnlyIntercept adds a local-only intercept
+func (tm *TrafficManager) AddLocalOnlyIntercept(c context.Context, spec *manager.InterceptSpec) (*rpc.InterceptResult, error) {
+	tm.insLock.Lock()
+	if tm.localInterceptedNamespaces == nil {
+		tm.localInterceptedNamespaces = map[string]struct{}{}
+	}
+	tm.localIntercepts[spec.Name] = spec.Namespace
+	_, found := tm.interceptedNamespaces[spec.Namespace]
+	if !found {
+		_, found = tm.localInterceptedNamespaces[spec.Namespace]
+	}
+	tm.localInterceptedNamespaces[spec.Namespace] = struct{}{}
+	tm.insLock.Unlock()
+	if !found {
+		tm.updateDaemonNamespaces(c)
+	}
+	return &rpc.InterceptResult{
+		InterceptInfo: &manager.InterceptInfo{
+			Spec:              spec,
+			Disposition:       manager.InterceptDispositionType_ACTIVE,
+			MechanismArgsDesc: "as local-only",
+		},
+	}, nil
+}
+
+func (tm *TrafficManager) RemoveLocalOnlyIntercept(c context.Context, name, namespace string) error {
+	dlog.Debugf(c, "removing local-only intercept %s", name)
+	delete(tm.localIntercepts, name)
+	for _, otherNs := range tm.localIntercepts {
+		if otherNs == namespace {
+			return nil
+		}
+	}
+
+	// Ensure that namespace is removed from localInterceptedNamespaces if this was the last local intercept
+	// for the given namespace.
+	tm.insLock.Lock()
+	delete(tm.localInterceptedNamespaces, namespace)
+	tm.insLock.Unlock()
+	tm.updateDaemonNamespaces(c)
+	return nil
 }

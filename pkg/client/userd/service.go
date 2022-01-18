@@ -60,7 +60,7 @@ type service struct {
 
 	session       trafficmgr.Session
 	sessionCancel context.CancelFunc
-	sessionLock   sync.Mutex
+	sessionLock   sync.RWMutex
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
@@ -129,14 +129,18 @@ func (s *service) manageSessions(c context.Context) error {
 
 		// Respond by setting the session and returning the error (or nil
 		// if everything is ok)
+		s.sessionLock.Lock() // Locked until Run
 		var rsp *rpc.ConnectInfo
 		s.session, rsp = trafficmgr.NewSession(c, s.scout, oi, s)
 		select {
 		case <-c.Done():
+			s.sessionLock.Unlock()
 			return nil
 		case s.connectResponse <- rsp:
 		}
 		if rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
+			s.session = nil
+			s.sessionLock.Unlock()
 			continue
 		}
 
@@ -151,6 +155,8 @@ func (s *service) manageSessions(c context.Context) error {
 
 			// The d.session.Cancel is called from Disconnect
 			c, s.sessionCancel = context.WithCancel(c)
+			c = s.session.WithK8sInterface(c)
+			s.sessionLock.Unlock()
 			if err := s.session.Run(c); err != nil {
 				dlog.Error(c, err)
 			}

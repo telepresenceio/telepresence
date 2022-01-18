@@ -22,9 +22,10 @@ import (
 
 	"golang.org/x/net/nettest"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/kubelet/cri/streaming/portforward"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
@@ -105,7 +106,7 @@ func (s *mockAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		bs, _ := json.Marshal(data)
-		w.Header().Set("Content-Type", "text/json")
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(bs)
 	} else if urlpath == "/api/v1" {
 		data := map[string]interface{}{
@@ -130,7 +131,7 @@ func (s *mockAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		bs, _ := json.Marshal(data)
-		w.Header().Set("Content-Type", "text/json")
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(bs)
 	} else if match := regexp.MustCompile(`^/api/v1/namespaces/([^/]+)/pods/([^/]+)$`).FindStringSubmatch(urlpath); match != nil {
 		// "/api/v1/namespaces/{namespace}/pods/{podname}"
@@ -150,7 +151,7 @@ func (s *mockAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		bs, _ := json.Marshal(data)
-		w.Header().Set("Content-Type", "text/json")
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(bs)
 	} else if match := regexp.MustCompile(`^/api/v1/namespaces/([^/]+)/pods/([^/]+)/portforward$`).FindStringSubmatch(urlpath); match != nil {
 		// "/api/v1/namespaces/{namespace}/pods/{podname}/portforward"
@@ -266,15 +267,19 @@ func TestKubectlPortForward(t *testing.T) {
 			}
 		}()
 
-		kubeFlags := &kates.ConfigFlags{
+		kubeFlags := &genericclioptions.ConfigFlags{
 			KubeConfig: strPtr("/dev/null"),
 			APIServer:  strPtr(fmt.Sprintf("http://localhost:%d", apiserverListener.Addr().(*net.TCPAddr).Port)),
 		}
-		katesClient, err := kates.NewClientFromConfigFlags(kubeFlags)
+		kubeConfig, err := kubeFlags.ToRESTConfig()
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		dial, err := dnet.NewK8sPortForwardDialer(ctx, kubeFlags, katesClient)
+		ki, err := kubernetes.NewForConfig(kubeConfig)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		dial, err := dnet.NewK8sPortForwardDialer(ctx, kubeConfig, ki)
 		if err != nil {
 			return nil, nil, nil, err
 		}

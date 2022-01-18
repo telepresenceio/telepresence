@@ -7,17 +7,18 @@ import (
 	"strconv"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // svcPortByNameOrNumber iterates through a list of ports in a service and
 // only returns the ports that match the given nameOrNumber
-func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.ServicePort {
-	svcPorts := make([]*kates.ServicePort, 0)
+func svcPortByNameOrNumber(svc *core.Service, nameOrNumber string) []*core.ServicePort {
+	svcPorts := make([]*core.ServicePort, 0)
 	ports := svc.Spec.Ports
 	validName := validation.IsValidPortName(nameOrNumber)
 	isName := len(validName) == 0
@@ -48,11 +49,22 @@ func svcPortByNameOrNumber(svc *kates.Service, nameOrNumber string) []*kates.Ser
 	return svcPorts
 }
 
-func FindMatchingServices(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*kates.Service, error) {
+func FindMatchingServices(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*core.Service, error) {
 	// TODO: Expensive on large clusters but the problem goes away once we move the installer to the traffic-manager
-	var svcs []*kates.Service
-	if err := client.List(c, kates.Query{Name: svcName, Kind: "Service", Namespace: namespace}, &svcs); err != nil {
-		return nil, err
+	si := k8sapi.GetK8sInterface(c).CoreV1().Services(namespace)
+	var ss []core.Service
+	if svcName != "" {
+		s, err := si.Get(c, svcName, meta.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		ss = []core.Service{*s}
+	} else {
+		sl, err := si.List(c, meta.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		ss = sl.Items
 	}
 
 	// Returns true if selector is completely included in labels
@@ -68,8 +80,9 @@ func FindMatchingServices(c context.Context, client *kates.Client, portNameOrNum
 		return true
 	}
 
-	var matching []*kates.Service
-	for _, svc := range svcs {
+	var matching []*core.Service
+	for i := range ss {
+		svc := &ss[i]
 		if (svcName == "" || svc.Name == svcName) && labelsMatch(svc.Spec.Selector) && len(svcPortByNameOrNumber(svc, portNameOrNumber)) > 0 {
 			matching = append(matching, svc)
 		}
@@ -77,8 +90,8 @@ func FindMatchingServices(c context.Context, client *kates.Client, portNameOrNum
 	return matching, nil
 }
 
-func FindMatchingService(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) (*kates.Service, error) {
-	matchingSvcs, err := FindMatchingServices(c, client, portNameOrNumber, svcName, namespace, labels)
+func FindMatchingService(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
+	matchingSvcs, err := FindMatchingServices(c, portNameOrNumber, svcName, namespace, labels)
 	if err != nil {
 		return nil, err
 	}
@@ -105,9 +118,9 @@ func FindMatchingService(c context.Context, client *kates.Client, portNameOrNumb
 
 // FindMatchingPort finds the matching container associated with portNameOrNumber
 // in the given service.
-func FindMatchingPort(cns []corev1.Container, portNameOrNumber string, svc *kates.Service) (
-	sPort *kates.ServicePort,
-	cn *kates.Container,
+func FindMatchingPort(cns []core.Container, portNameOrNumber string, svc *core.Service) (
+	sPort *core.ServicePort,
+	cn *core.Container,
 	cPortIndex int,
 	err error,
 ) {
@@ -125,8 +138,8 @@ Please specify the Service port you want to intercept by passing the --port=loca
 	default:
 	}
 	port := ports[0]
-	var matchingServicePort *corev1.ServicePort
-	var matchingContainer *corev1.Container
+	var matchingServicePort *core.ServicePort
+	var matchingContainer *core.Container
 	var containerPortIndex int
 
 	if port.TargetPort.Type == intstr.String {

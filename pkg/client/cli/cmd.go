@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
@@ -170,7 +170,7 @@ func initGlobalFlagGroups() {
 	deprecatedGlobalFlags = pflag.NewFlagSet("deprecated global flags", 0)
 
 	kubeFlags := pflag.NewFlagSet("", 0)
-	kates.NewConfigFlags(false).AddFlags(kubeFlags)
+	genericclioptions.NewConfigFlags(false).AddFlags(kubeFlags)
 	deprecatedGlobalFlags.AddFlagSet(kubeFlags)
 
 	netflags := pflag.NewFlagSet("", 0)
