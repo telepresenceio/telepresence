@@ -1,4 +1,4 @@
-package actions
+package k8sapi
 
 import (
 	"context"

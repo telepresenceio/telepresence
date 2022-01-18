@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -12,7 +14,6 @@ import (
 	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -33,7 +34,7 @@ func ClusterIdCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			clusterID, err := actions.GetClusterID(cmd.Context(), client)
+			clusterID, err := k8sapi.GetClusterID(cmd.Context(), client)
 			if err != nil {
 				return err
 			}

@@ -21,7 +21,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -385,7 +384,7 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 }
 
 func (kc *Cluster) GetClusterId(ctx context.Context) string {
-	clusterID, _ := actions.GetClusterID(ctx, kc.client)
+	clusterID, _ := k8sapi.GetClusterID(ctx, kc.client)
 	return clusterID
 }
 
