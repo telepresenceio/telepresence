@@ -4,20 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/blang/semver"
-	"google.golang.org/grpc"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
 	k8err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 
 	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
 )
@@ -32,24 +33,24 @@ type objName struct {
 	nameMeta `json:"metadata"`
 }
 
-type Callbacks struct {
-	SetDNSSearchPath func(ctx context.Context, in *daemon.Paths, opts ...grpc.CallOption) (*empty.Empty, error)
-}
-
 type ResourceFinder interface {
 	FindDeployment(c context.Context, namespace, name string) (*kates.Deployment, error)
 	FindPod(c context.Context, namespace, name string) (*kates.Pod, error)
 	FindSvc(c context.Context, namespace, name string) (*kates.Service, error)
 }
 
-// k8sCluster is a Kubernetes cluster reference
+// Cluster is a Kubernetes cluster reference
 type Cluster struct {
 	*Config
 	mappedNamespaces []string
 
+	ingressInfo []*manager.IngressInfo
+
 	// Main
-	client    *kates.Client
-	callbacks Callbacks
+	client *kates.Client
+
+	// search paths are propagated to the rootDaemon
+	rootDaemon daemon.DaemonClient
 
 	lastNamespaces []string
 
@@ -60,7 +61,6 @@ type Cluster struct {
 	localInterceptedNamespaces map[string]struct{}
 
 	accLock         sync.Mutex
-	accWait         chan struct{}
 	LocalIntercepts map[string]string
 
 	// Current Namespace snapshot, get set by acc.Update().
@@ -281,21 +281,41 @@ func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*kates.Se
 	return rs, nil
 }
 
-// findAllSvc finds services with the given service type in all namespaces of the cluster returns
+// findAllSvcByType finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
 func (kc *Cluster) findAllSvcByType(c context.Context, svcType corev1.ServiceType) ([]*kates.Service, error) {
 	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
-	var svcs []*kates.Service
-	if err := kc.client.List(c, kates.Query{Kind: "Service"}, &svcs); err != nil {
-		return nil, err
-	}
 	var typedSvcs []*kates.Service
-	for _, svc := range svcs {
-		if svc.Spec.Type == svcType {
-			typedSvcs = append(typedSvcs, svc)
-			break
+	findTyped := func(ns string) error {
+		var svcs []*kates.Service
+		if err := kc.client.List(c, kates.Query{Kind: "Service", Namespace: ns}, &svcs); err != nil {
+			return err
 		}
+		for _, svc := range svcs {
+			if svc.Spec.Type == svcType {
+				typedSvcs = append(typedSvcs, svc)
+			}
+		}
+		return nil
+	}
+
+	kc.accLock.Lock()
+	var mns []string
+	if len(kc.mappedNamespaces) > 0 {
+		mns = make([]string, len(kc.mappedNamespaces))
+		copy(mns, kc.mappedNamespaces)
+	}
+	kc.accLock.Unlock()
+
+	if len(mns) > 0 {
+		for _, ns := range mns {
+			if err := findTyped(ns); err != nil {
+				return nil, err
+			}
+		}
+	} else if err := findTyped(""); err != nil {
+		return nil, err
 	}
 	return typedSvcs, nil
 }
@@ -312,20 +332,24 @@ func (kc *Cluster) namespaceExists(namespace string) (exists bool) {
 	return exists
 }
 
-func NewCluster(c context.Context, kubeFlags *Config, mappedNamespaces []string, callbacks Callbacks) (*Cluster, error) {
+func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootDaemon daemon.DaemonClient) (*Cluster, error) {
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.ConfigFlags)
 	if err != nil {
 		return nil, client.CheckTimeout(c, fmt.Errorf("k8s client create failed: %w", err))
 	}
+	if len(namespaces) == 1 && namespaces[0] == "all" {
+		namespaces = nil
+	} else {
+		sort.Strings(namespaces)
+	}
 
 	ret := &Cluster{
 		Config:           kubeFlags,
-		mappedNamespaces: mappedNamespaces,
+		mappedNamespaces: namespaces,
 		client:           kc,
-		callbacks:        callbacks,
+		rootDaemon:       rootDaemon,
 		LocalIntercepts:  map[string]string{},
-		accWait:          make(chan struct{}),
 	}
 
 	if err := ret.check(c); err != nil {
@@ -335,16 +359,17 @@ func NewCluster(c context.Context, kubeFlags *Config, mappedNamespaces []string,
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
 
-	return ret, nil
-}
-
-func (kc *Cluster) WaitUntilReady(ctx context.Context) error {
+	firstSnapshotArrived := make(chan struct{})
+	go func() {
+		if err := ret.nsWatcher(dgroup.WithGoroutineName(c, "ns-watcher"), firstSnapshotArrived); err != nil {
+			dlog.Error(c, err)
+		}
+	}()
 	select {
-	case <-kc.accWait:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-c.Done():
+	case <-firstSnapshotArrived:
 	}
+	return ret, nil
 }
 
 func (kc *Cluster) GetClusterId(ctx context.Context) string {

@@ -17,7 +17,7 @@ func commas(s string) string {
 	return strings.Trim(strings.Join(strings.Fields(s), ","), "[]")
 }
 
-func TestToFromRPC(t *testing.T) {
+func TestToFromRPC(t *testing.T) { //nolint:gocognit,gocyclo // it's a long list
 	// I apologize in advance if you're reading this test; it's very repetitive, but I couldn't figure out
 	// a type-safe way to make this all generic
 	rCmd := &cobra.Command{

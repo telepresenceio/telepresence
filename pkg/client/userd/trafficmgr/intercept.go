@@ -156,7 +156,6 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	portForwards := newPortForwards()
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
-		<-tm.startup
 		stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
 		if err != nil {
 			err = fmt.Errorf("manager.WatchIntercepts dial: %w", err)
@@ -280,14 +279,13 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
-		return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil
+		return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent)), nil
 	}
 
 	if _, inUse := tm.LocalIntercepts[spec.Name]; inUse {
 		return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
 	}
 
-	<-tm.startup
 	for _, iCept := range tm.getCurrentIntercepts() {
 		if iCept.Spec.Name == spec.Name {
 			return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
@@ -422,7 +420,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		}()
 	}
 
-	apiKey, err := tm.callbacks.GetCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
+	apiKey, err := tm.getCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNotLoggedIn) {
 			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
@@ -434,7 +432,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
 	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
 	defer cancel()
-	<-tm.startup
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
@@ -594,7 +591,6 @@ func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error 
 		return tm.RemoveLocalOnlyIntercept(c, name, ns)
 	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
-	<-tm.startup
 	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,
@@ -604,7 +600,6 @@ func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error 
 
 // clearIntercepts removes all intercepts
 func (tm *TrafficManager) clearIntercepts(c context.Context) error {
-	<-tm.startup
 	for _, cept := range tm.getCurrentIntercepts() {
 		err := tm.RemoveIntercept(c, cept.Spec.Name)
 		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {

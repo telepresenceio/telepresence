@@ -72,7 +72,6 @@ func daemonStatus(cmd *cobra.Command) error {
 				fmt.Fprintf(out, "    - %s\n", iputil.IPNetFromRPC(subnet))
 			}
 		}
-
 		return nil
 	})
 	if err != nil {
@@ -126,9 +125,7 @@ func connectorStatus(cmd *cobra.Command) error {
 			fields = append(fields, kv{"Ambassador Cloud", "Logged in"})
 		}
 
-		status, err := connectorClient.Status(ctx, &connector.ConnectRequest{
-			KubeFlags: kubeFlagMap(),
-		})
+		status, err := connectorClient.Status(ctx, &empty.Empty{})
 		if err != nil {
 			return err
 		}
@@ -151,11 +148,6 @@ func connectorStatus(cmd *cobra.Command) error {
 		}
 		fields = append(fields, kv{"Kubernetes server", status.ClusterServer})
 		fields = append(fields, kv{"Kubernetes context", status.ClusterContext})
-		if status.BridgeOk {
-			fields = append(fields, kv{"Telepresence proxy", "ON (networking to the cluster is enabled)"})
-		} else {
-			fields = append(fields, kv{"Telepresence proxy", "OFF (attempting to connect...)"})
-		}
 		intercepts := fmt.Sprintf("%d total\n", len(status.GetIntercepts().GetIntercepts()))
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
 			intercepts += fmt.Sprintf("%s: %s\n", icept.Spec.Name, icept.Spec.Client)
@@ -165,7 +157,7 @@ func connectorStatus(cmd *cobra.Command) error {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, cliutil.ErrNoConnector) {
+		if errors.Is(err, cliutil.ErrNoUserDaemon) {
 			fmt.Fprintln(out, "User Daemon: Not running")
 			return nil
 		}

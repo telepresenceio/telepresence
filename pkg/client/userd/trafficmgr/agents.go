@@ -56,7 +56,6 @@ func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
 func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
-		<-tm.startup
 		stream, err := tm.managerClient.WatchAgents(ctx, tm.session())
 		if err != nil {
 			err = fmt.Errorf("manager.WatchAgents dial: %w", err)

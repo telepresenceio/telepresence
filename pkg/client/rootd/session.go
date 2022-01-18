@@ -243,8 +243,10 @@ func (s *session) clusterLookup(ctx context.Context, key string) ([][]byte, erro
 }
 
 func (s *session) getInfo() *rpc.OutboundInfo {
-	info := rpc.OutboundInfo{}
-	info.Dns = s.dnsServer.GetConfig()
+	info := rpc.OutboundInfo{
+		Session: s.session,
+		Dns:     s.dnsServer.GetConfig(),
+	}
 	if s.dnsLocalAddr != nil {
 		info.Dns.RemoteIp = s.dnsLocalAddr.IP
 	}

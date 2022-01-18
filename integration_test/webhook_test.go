@@ -50,7 +50,7 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 	ctx := itest.WithUser(s.Context(), "default")
 	defer func() {
 		itest.TelepresenceOk(ctx, "connect")
-		itest.TelepresenceQuitOk(ctx)
+		itest.TelepresenceDisconnectOk(ctx)
 	}()
 
 	// Use a config with agentImage and webhookAgentImage to validate that it's the

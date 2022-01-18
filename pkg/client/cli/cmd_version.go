@@ -49,7 +49,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: %s (api v%d)\n",
 			version.Version, version.ApiVersion)
-	case err == cliutil.ErrNoConnector:
+	case err == cliutil.ErrNoUserDaemon:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: not running\n")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: error: %v\n", err)

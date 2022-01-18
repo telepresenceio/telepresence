@@ -14,8 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -181,7 +179,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 			Agents:         gl.trafficAgents,
 			GetPodYaml:     gl.podYaml,
 		}
-		err = withConnector(cmd, false, func(_ context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
+		err = withConnector(cmd, false, nil, func(_ context.Context, _ *connectorState) error {
 			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				lr, err := managerClient.GetLogs(ctx, rq)
 				if err != nil {

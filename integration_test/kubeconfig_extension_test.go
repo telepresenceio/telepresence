@@ -40,7 +40,10 @@ func getClusterIPs(cluster *api.Cluster) ([]net.IP, error) {
 func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	require := s.Require()
 	var ips []net.IP
-	ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
+	ctx := s.Context()
+	itest.TelepresenceQuitOk(ctx)
+
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
 		var apiServers []string
 		var err error
 		ips, err = getClusterIPs(cluster)
@@ -52,7 +55,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	})
 
 	itest.TelepresenceOk(ctx, "connect")
-	defer itest.TelepresenceQuitOk(ctx)
+	defer itest.TelepresenceQuitOk(ctx) // WithKubeConfigExtension sets env which gets sticky, so quitting is a must here
 	stdout := itest.TelepresenceOk(ctx, "status")
 	require.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", len(ips)))
 	for _, ip := range ips {
@@ -61,12 +64,13 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		rng[len(rng)-1] = 0
 		require.Contains(stdout, fmt.Sprintf("- %s/24", rng), fmt.Sprintf("Expecting to find '- %s/24'", rng))
 	}
-	require.Contains(stdout, "networking to the cluster is enabled")
 }
 
 func (s *notConnectedSuite) Test_NeverProxy() {
 	require := s.Require()
 	ctx := s.Context()
+	itest.TelepresenceQuitOk(ctx)
+
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
 	ip, err := itest.Output(ctx, "kubectl",
@@ -84,6 +88,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	})
 	itest.TelepresenceOk(ctx, "connect")
 	defer itest.TelepresenceQuitOk(ctx)
+
 	stdout := itest.TelepresenceOk(ctx, "status")
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
 	require.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", len(ips)+1))
@@ -93,14 +98,15 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 }
 
 func (s *notConnectedSuite) Test_ConflictingProxies() {
-	ctx := s.Context()
+	topCtx := s.Context()
+	itest.TelepresenceQuitOk(topCtx)
 
 	testIP := &net.IPNet{
 		IP:   net.ParseIP("10.128.0.32"),
 		Mask: net.CIDRMask(32, 32),
 	}
 	// We don't really care if we can't route this with TP disconnected provided the result is the same once we connect
-	originalRoute, _ := routing.GetRoute(ctx, testIP)
+	originalRoute, _ := routing.GetRoute(topCtx, testIP)
 	for name, t := range map[string]struct {
 		alsoProxy  []string
 		neverProxy []string
@@ -119,7 +125,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	} {
 		s.Run(name, func() {
 			require := s.Require()
-			ctx := itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
+			ctx := itest.WithKubeConfigExtension(topCtx, func(cluster *api.Cluster) map[string]interface{} {
 				return map[string]interface{}{
 					"never-proxy": t.neverProxy,
 					"also-proxy":  t.alsoProxy,
@@ -150,7 +156,10 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 }
 
 func (s *notConnectedSuite) Test_DNSIncludes() {
-	ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
+	ctx := s.Context()
+	itest.TelepresenceQuitOk(ctx)
+
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
 		return map[string]interface{}{"dns": map[string][]string{"include-suffixes": {".org"}}}
 	})
 	require := s.Require()

@@ -21,7 +21,7 @@ service Daemon {
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
   // Connect creates a new session that provides outbound connectivity to the cluster
-  rpc Connect(OutboundInfo) returns (google.protobuf.Empty);
+  rpc Connect(OutboundInfo) returns (DaemonStatus);
 
   // Disconnect disconnects the current session.
   rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);

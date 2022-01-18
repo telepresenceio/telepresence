@@ -21,9 +21,12 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-  // Status is much like Connect, except that it doesn't actually do
-  // anything.  It's a dry-run.
-  rpc Status(ConnectRequest) returns (ConnectInfo);
+  // Disconnects the cluster
+  rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // Status returns the status of the current connection or DISCONNECTED
+  // if no connection has been established.
+  rpc Status(google.protobuf.Empty) returns (ConnectInfo);
 
   // Queries the connector whether it is possible to create the given intercept.
   rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);
@@ -58,6 +61,8 @@ service Connector {
   rpc GetCloudAPIKey(KeyRequest) returns (KeyData);
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
+
+  rpc GetIngressInfos(google.protobuf.Empty) returns (IngressInfos);
 
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
@@ -141,15 +146,19 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
-  bool bridge_ok = 5;
+  reserved 5;
   reserved 6;
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
-  repeated manager.IngressInfo ingress_infos = 9;
+  reserved 9;
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+}
+
+message IngressInfos {
+  repeated manager.IngressInfo ingress_infos = 1;
 }
 
 message UninstallRequest {

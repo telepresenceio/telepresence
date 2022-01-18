@@ -7,11 +7,14 @@ import (
 	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
+var userDaemonRunning = false
 var commandGroupMap = make(map[string]cliutil.CommandGroups)
 var globalFlagGroups []cliutil.FlagGroup
+var deprecatedGlobalFlags *pflag.FlagSet
 
 func init() {
 	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {
@@ -19,6 +22,9 @@ func init() {
 	})
 	cobra.AddTemplateFunc("globalFlagGroups", func() []cliutil.FlagGroup {
 		return globalFlagGroups
+	})
+	cobra.AddTemplateFunc("userDaemonRunning", func() bool {
+		return userDaemonRunning
 	})
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
 		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
@@ -77,7 +83,7 @@ Aliases:
 Examples:
 {{.Example}}{{end}}{{if .HasAvailableSubCommands}}
 
-Available Commands:
+Available Commands{{- if not userDaemonRunning }} (list may be incomplete because the User Daemon isn't running){{- end}}:
 {{- if commandGroups .}}
 {{- range $name, $commands := commandGroups .}}
   {{$name}}:{{range $commands}}

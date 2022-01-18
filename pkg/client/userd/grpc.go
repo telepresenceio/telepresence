@@ -9,7 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -17,7 +20,6 @@ import (
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/spf13/cobra"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -64,31 +66,70 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
-	s.logCall(c, "Connect", func(c context.Context) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		ci, err = s.connect(c, cr, false), nil
+func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
+	s.logCall(ctx, "Connect", func(c context.Context) {
+		s.sessionLock.Lock()
+		defer s.sessionLock.Unlock()
+		if s.session != nil {
+			result = s.session.UpdateStatus(ctx, cr)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			err = status.Error(codes.Unavailable, ctx.Err().Error())
+			return
+		case s.connectRequest <- cr:
+		}
+		select {
+		case <-ctx.Done():
+			err = status.Error(codes.Unavailable, ctx.Err().Error())
+		case result = <-s.connectResponse:
+		}
 	})
-	return
+	return result, err
 }
 
-func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	s.logCall(c, "Disconnect", func(c context.Context) {
+		s.sessionLock.Lock()
+		defer s.sessionLock.Unlock()
+		if s.session != nil {
+			s.sessionCancel()
+		}
+	})
+	return &empty.Empty{}, nil
+}
+
+func (s *service) currentSession() (trafficmgr.Session, error) {
+	s.sessionLock.Lock()
+	defer s.sessionLock.Unlock()
+	if s.session == nil {
+		return nil, status.Error(codes.Unavailable, "no active session")
+	}
+	return s.session, nil
+}
+
+func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectInfo, err error) {
 	s.logCall(c, "Status", func(c context.Context) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		ci, err = s.connect(c, cr, true), nil
+		s.sessionLock.Lock()
+		defer s.sessionLock.Unlock()
+		if s.session == nil {
+			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
+		} else {
+			result = s.session.Status(c)
+		}
 	})
 	return
 }
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	s.logCall(c, "CanIntercept", func(c context.Context) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		var mgr *trafficmgr.TrafficManager
-		if result, mgr = s.sharedState.GetTrafficManagerReadyToIntercept(); result != nil {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
 			return
 		}
 		var wl kates.Object
-		if result, wl = mgr.CanIntercept(c, ir); result == nil {
+		if result, wl = session.CanIntercept(c, ir); result == nil {
 			var kind string
 			if wl != nil {
 				kind = wl.GetObjectKind().GroupVersionKind().Kind
@@ -104,25 +145,25 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	s.logCall(c, "CreateIntercept", func(c context.Context) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		var mgr *trafficmgr.TrafficManager
-		if result, mgr = s.sharedState.GetTrafficManagerReadyToIntercept(); result != nil {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
 			return
 		}
-		result, err = mgr.AddIntercept(c, ir)
+		defer func() { err = callRecovery(c, recover(), err) }()
+		result, err = session.AddIntercept(c, ir)
 	})
 	return
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	s.logCall(c, "RemoveIntercept", func(c context.Context) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		var mgr *trafficmgr.TrafficManager
-		if result, mgr = s.sharedState.GetTrafficManagerReadyToIntercept(); result != nil {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
 			return
 		}
+		defer func() { err = callRecovery(c, recover(), err) }()
 		result = &rpc.InterceptResult{}
-		if err = mgr.RemoveIntercept(c, rr.Name); err != nil {
+		if err = session.RemoveIntercept(c, rr.Name); err != nil {
 			if grpcStatus.Code(err) == grpcCodes.NotFound {
 				result.Error = rpc.InterceptError_NOT_FOUND
 				result.ErrorText = rr.Name
@@ -139,32 +180,24 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	s.logCall(c, "List", func(c context.Context) {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
+			return
+		}
 		defer func() { err = callRecovery(c, recover(), err) }()
-		haveManager := false
-		var mgr *trafficmgr.TrafficManager
-		mgr, _ = s.sharedState.GetTrafficManagerBlocking(c)
-		if mgr != nil {
-			managerClient, _ := mgr.GetClientNonBlocking()
-			haveManager = (managerClient != nil)
-		}
-		if haveManager {
-			result, err = mgr.WorkloadInfoSnapshot(c, lr), nil
-		} else {
-			result = &rpc.WorkloadInfoSnapshot{}
-		}
+		result, err = session.WorkloadInfoSnapshot(c, lr), nil
 	})
 	return
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	s.logCall(c, "Uninstall", func(c context.Context) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		var mgr *trafficmgr.TrafficManager
-		mgr, err = s.sharedState.GetTrafficManagerBlocking(c)
-		if mgr == nil {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
 			return
 		}
-		result, err = mgr.Uninstall(c, ur)
+		defer func() { err = callRecovery(c, recover(), err) }()
+		result, err = session.Uninstall(c, ur)
 	})
 	return
 }
@@ -232,7 +265,7 @@ func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest
 }
 
 func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (result *rpc.KeyData, err error) {
-	s.logCall(ctx, "GetCloudUserInfo", func(c context.Context) {
+	s.logCall(ctx, "GetCloudAPIKey", func(c context.Context) {
 		var key string
 		if key, err = s.loginExecutor.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin()); err == nil {
 			result = &rpc.KeyData{ApiKey: key}
@@ -258,6 +291,21 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 	return
 }
 
+func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
+	s.logCall(c, "GetIngressInfos", func(c context.Context) {
+		var session trafficmgr.Session
+		if session, err = s.currentSession(); err != nil {
+			return
+		}
+		defer func() { err = callRecovery(c, recover(), err) }()
+		var iis []*manager.IngressInfo
+		if iis, err = session.IngressInfos(c); err == nil {
+			result = &rpc.IngressInfos{IngressInfos: iis}
+		}
+	})
+	return
+}
+
 func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
 		duration := time.Duration(0)
@@ -275,7 +323,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 
 func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(ctx, "Quit", func(c context.Context) {
-		s.cancel()
+		s.quit()
 	})
 	return &empty.Empty{}, nil
 }
