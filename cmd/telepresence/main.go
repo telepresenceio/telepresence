@@ -14,6 +14,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -47,7 +49,7 @@ func main() {
 			SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 			SilenceUsage:  true, // our FlagErrorFunc will handle it
 		}
-		cmd.AddCommand(userd.Command())
+		cmd.AddCommand(userd.Command(commands.GetCommands, []userd.DaemonService{}, []trafficmgr.SessionService{}))
 		cmd.AddCommand(rootd.Command())
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
