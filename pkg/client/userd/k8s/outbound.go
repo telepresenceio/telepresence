@@ -74,20 +74,21 @@ func sortedStringSlicesEqual(as, bs []string) bool {
 
 func (kc *Cluster) IngressInfos(c context.Context) ([]*manager.IngressInfo, error) {
 	kc.accLock.Lock()
-	if kc.ingressInfo == nil {
+	defer kc.accLock.Unlock()
+
+	ingressInfo := kc.ingressInfo
+	if ingressInfo == nil {
 		kc.accLock.Unlock()
 		ingressInfo, err := kc.detectIngressBehavior(c)
+		kc.accLock.Lock()
 		if err != nil {
-			// Don't fetch again unless namespaces change
-			kc.ingressInfo = []*manager.IngressInfo{}
+			kc.ingressInfo = nil
 			return nil, err
 		}
-		kc.accLock.Lock()
 		kc.ingressInfo = ingressInfo
 	}
 	is := make([]*manager.IngressInfo, len(kc.ingressInfo))
 	copy(is, kc.ingressInfo)
-	kc.accLock.Unlock()
 	return is, nil
 }
 

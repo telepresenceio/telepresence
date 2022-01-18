@@ -44,8 +44,6 @@ type Cluster struct {
 	*Config
 	mappedNamespaces []string
 
-	// If ingressInfo is nil, it's not computed
-	// If it is an empty slice, then it is computed, but no ingress was found
 	ingressInfo []*manager.IngressInfo
 
 	// Main
