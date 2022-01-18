@@ -165,6 +165,10 @@ $ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/cli
 
 See https://www.notion.so/datawire/To-Release-Telepresence-2-x-x-2752ef26968444b99d807979cde06f2f
 
+## Updating license documentation
+
+Run `make generate` and commit changes to `LICENSES.md` and `OPENSOURCE.md`
+
 ## Developing on Windows
 
 ### Building on Windows
