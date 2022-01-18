@@ -13,10 +13,12 @@ import (
 	"text/template"
 
 	"github.com/stretchr/testify/assert"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -29,11 +31,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 	type testcase struct {
 		InputVersion  string
 		InputPortName string
-		InputWorkload kates.Object
-		InputService  *kates.Service
+		InputWorkload runtime.Object
+		InputService  *core.Service
 
-		OutputWorkload kates.Object
-		OutputService  *kates.Service
+		OutputWorkload runtime.Object
+		OutputService  *core.Service
 	}
 	testcases := map[string]testcase{}
 
@@ -197,10 +199,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 	})
 }
 
-func sanitizeWorkload(obj kates.Object) {
-	obj.SetResourceVersion("")
-	obj.SetGeneration(int64(0))
-	obj.SetCreationTimestamp(metav1.Time{})
+func sanitizeWorkload(obj runtime.Object) {
+	mObj := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	mObj.SetResourceVersion("")
+	mObj.SetGeneration(int64(0))
+	mObj.SetCreationTimestamp(metav1.Time{})
 	podTemplate, _ := k8sapi.GetPodTemplateFromObject(obj)
 	for i, c := range podTemplate.Spec.Containers {
 		c.TerminationMessagePath = ""
@@ -216,21 +219,21 @@ func sanitizeWorkload(obj kates.Object) {
 	}
 }
 
-func sanitizeService(svc *kates.Service) {
+func sanitizeService(svc *core.Service) {
 	svc.ObjectMeta.ResourceVersion = ""
 	svc.ObjectMeta.Generation = 0
 	svc.ObjectMeta.CreationTimestamp = metav1.Time{}
 }
 
-func deepCopyObject(obj kates.Object) kates.Object {
+func deepCopyObject(obj runtime.Object) runtime.Object {
 	objValue := reflect.ValueOf(obj)
 	retValues := objValue.MethodByName("DeepCopy").Call([]reflect.Value{})
-	return retValues[0].Interface().(kates.Object)
+	return retValues[0].Interface().(runtime.Object)
 }
 
 // loadFile is a helper function that reads test data files and converts them
 // to a format that can be used in the tests.
-func loadFile(filename, inputVersion string) (workload kates.Object, service *kates.Service, portname string, err error) {
+func loadFile(filename, inputVersion string) (workload runtime.Object, service *core.Service, portname string, err error) {
 	tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToWorkload", filename))
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("read template: %s: %w", filename, err)
@@ -245,12 +248,12 @@ func loadFile(filename, inputVersion string) (workload kates.Object, service *ka
 	}
 
 	var dat struct {
-		Deployment  *kates.Deployment  `json:"deployment"`
-		ReplicaSet  *kates.ReplicaSet  `json:"replicaset"`
-		StatefulSet *kates.StatefulSet `json:"statefulset"`
+		Deployment  *apps.Deployment  `json:"deployment"`
+		ReplicaSet  *apps.ReplicaSet  `json:"replicaset"`
+		StatefulSet *apps.StatefulSet `json:"statefulset"`
 
-		Service       *kates.Service `json:"service"`
-		InterceptPort string         `json:"interceptPort"`
+		Service       *core.Service `json:"service"`
+		InterceptPort string        `json:"interceptPort"`
 	}
 	if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
 		return nil, nil, "", fmt.Errorf("parse yaml: %s: %w", filename, err)

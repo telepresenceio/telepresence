@@ -6,14 +6,147 @@ import (
 	"reflect"
 	"strings"
 
+	admreg "k8s.io/api/admissionregistration/v1"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	rbac "k8s.io/api/rbac/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
 )
+
+// Get returns a fresh version of the given object.
+func Get(c context.Context, o runtime.Object) (runtime.Object, error) {
+	ki := GetK8sInterface(c)
+	opts := meta.GetOptions{}
+	switch o := o.(type) {
+	case *core.Service:
+		return ki.CoreV1().Services(o.Namespace).Get(c, o.Name, opts)
+	case *core.Pod:
+		return ki.CoreV1().Pods(o.Namespace).Get(c, o.Name, opts)
+	case *core.Secret:
+		return ki.CoreV1().Secrets(o.Namespace).Get(c, o.Name, opts)
+	case *core.ServiceAccount:
+		return ki.CoreV1().ServiceAccounts(o.Namespace).Get(c, o.Name, opts)
+	case *apps.Deployment:
+		return ki.AppsV1().Deployments(o.Namespace).Get(c, o.Name, opts)
+	case *apps.ReplicaSet:
+		return ki.AppsV1().ReplicaSets(o.Namespace).Get(c, o.Name, opts)
+	case *apps.StatefulSet:
+		return ki.AppsV1().StatefulSets(o.Namespace).Get(c, o.Name, opts)
+	case *apps.DaemonSet:
+		return ki.AppsV1().DaemonSets(o.Namespace).Get(c, o.Name, opts)
+	case *rbac.ClusterRole:
+		return ki.RbacV1().ClusterRoles().Get(c, o.Name, opts)
+	case *rbac.ClusterRoleBinding:
+		return ki.RbacV1().ClusterRoleBindings().Get(c, o.Name, opts)
+	case *rbac.Role:
+		return ki.RbacV1().Roles(o.Namespace).Get(c, o.Name, opts)
+	case *rbac.RoleBinding:
+		return ki.RbacV1().RoleBindings(o.Namespace).Get(c, o.Name, opts)
+	case *admreg.MutatingWebhookConfiguration:
+		return ki.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(c, o.Name, opts)
+	default:
+		return nil, ObjErrorf(o, "unsupported object type %T", o)
+	}
+}
+
+// Delete deletes an object in the cluster.
+func Delete(c context.Context, o runtime.Object) error {
+	ki := GetK8sInterface(c)
+	opts := meta.DeleteOptions{}
+	switch o := o.(type) {
+	case *core.Service:
+		return ki.CoreV1().Services(o.Namespace).Delete(c, o.Name, opts)
+	case *core.Pod:
+		return ki.CoreV1().Pods(o.Namespace).Delete(c, o.Name, opts)
+	case *core.Secret:
+		return ki.CoreV1().Secrets(o.Namespace).Delete(c, o.Name, opts)
+	case *core.ServiceAccount:
+		return ki.CoreV1().ServiceAccounts(o.Namespace).Delete(c, o.Name, opts)
+	case *apps.Deployment:
+		return ki.AppsV1().Deployments(o.Namespace).Delete(c, o.Name, opts)
+	case *apps.ReplicaSet:
+		return ki.AppsV1().ReplicaSets(o.Namespace).Delete(c, o.Name, opts)
+	case *apps.StatefulSet:
+		return ki.AppsV1().StatefulSets(o.Namespace).Delete(c, o.Name, opts)
+	case *apps.DaemonSet:
+		return ki.AppsV1().DaemonSets(o.Namespace).Delete(c, o.Name, opts)
+	case *rbac.ClusterRole:
+		return ki.RbacV1().ClusterRoles().Delete(c, o.Name, opts)
+	case *rbac.ClusterRoleBinding:
+		return ki.RbacV1().ClusterRoleBindings().Delete(c, o.Name, opts)
+	case *rbac.Role:
+		return ki.RbacV1().Roles(o.Namespace).Delete(c, o.Name, opts)
+	case *rbac.RoleBinding:
+		return ki.RbacV1().RoleBindings(o.Namespace).Delete(c, o.Name, opts)
+	case *admreg.MutatingWebhookConfiguration:
+		return ki.AdmissionregistrationV1().MutatingWebhookConfigurations().Delete(c, o.Name, opts)
+	default:
+		return ObjErrorf(o, "unsupported object type %T", o)
+	}
+}
+
+// Patch patches an object in the cluster.
+func Patch(c context.Context, o runtime.Object, pt types.PatchType, data []byte, subresources ...string) (runtime.Object, error) {
+	ki := GetK8sInterface(c)
+	opts := meta.PatchOptions{}
+	switch o := o.(type) {
+	case *core.Service:
+		return ki.CoreV1().Services(o.Namespace).Patch(c, o.Name, pt, data, opts, subresources...)
+	case *core.Pod:
+		return ki.CoreV1().Pods(o.Namespace).Patch(c, o.Name, pt, data, opts, subresources...)
+	case *apps.Deployment:
+		return ki.AppsV1().Deployments(o.Namespace).Patch(c, o.Name, pt, data, opts, subresources...)
+	case *apps.ReplicaSet:
+		return ki.AppsV1().ReplicaSets(o.Namespace).Patch(c, o.Name, pt, data, opts, subresources...)
+	case *apps.StatefulSet:
+		return ki.AppsV1().StatefulSets(o.Namespace).Patch(c, o.Name, pt, data, opts, subresources...)
+	case *apps.DaemonSet:
+		return ki.AppsV1().DaemonSets(o.Namespace).Patch(c, o.Name, pt, data, opts, subresources...)
+	default:
+		return nil, ObjErrorf(o, "unsupported object type %T", o)
+	}
+}
+
+// Update updates an object in the cluster.
+func Update(c context.Context, o runtime.Object) (runtime.Object, error) {
+	ki := GetK8sInterface(c)
+	opts := meta.UpdateOptions{}
+	switch o := o.(type) {
+	case *core.Service:
+		return ki.CoreV1().Services(o.Namespace).Update(c, o, opts)
+	case *core.Pod:
+		return ki.CoreV1().Pods(o.Namespace).Update(c, o, opts)
+	case *core.Secret:
+		return ki.CoreV1().Secrets(o.Namespace).Update(c, o, opts)
+	case *core.ServiceAccount:
+		return ki.CoreV1().ServiceAccounts(o.Namespace).Update(c, o, opts)
+	case *apps.Deployment:
+		return ki.AppsV1().Deployments(o.Namespace).Update(c, o, opts)
+	case *apps.ReplicaSet:
+		return ki.AppsV1().ReplicaSets(o.Namespace).Update(c, o, opts)
+	case *apps.StatefulSet:
+		return ki.AppsV1().StatefulSets(o.Namespace).Update(c, o, opts)
+	case *apps.DaemonSet:
+		return ki.AppsV1().DaemonSets(o.Namespace).Update(c, o, opts)
+	case *rbac.ClusterRole:
+		return ki.RbacV1().ClusterRoles().Update(c, o, opts)
+	case *rbac.ClusterRoleBinding:
+		return ki.RbacV1().ClusterRoleBindings().Update(c, o, opts)
+	case *rbac.Role:
+		return ki.RbacV1().Roles(o.Namespace).Update(c, o, opts)
+	case *rbac.RoleBinding:
+		return ki.RbacV1().RoleBindings(o.Namespace).Update(c, o, opts)
+	case *admreg.MutatingWebhookConfiguration:
+		return ki.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(c, o, opts)
+	default:
+		return nil, ObjErrorf(o, "unsupported object type %T", o)
+	}
+}
 
 func WithK8sInterface(ctx context.Context, ki kubernetes.Interface) context.Context {
 	return context.WithValue(ctx, kiKey{}, ki)
@@ -105,6 +238,14 @@ func ObjErrorf(o runtime.Object, format string, args ...interface{}) error {
 	return fmt.Errorf("%s name=%q namespace=%q: %w",
 		GetKind(o), GetName(o), GetNamespace(o),
 		fmt.Errorf(format, args...))
+}
+
+func GetAnnotations(o runtime.Object) map[string]string {
+	return o.(meta.ObjectMetaAccessor).GetObjectMeta().GetAnnotations()
+}
+
+func GetGeneration(o runtime.Object) int64 {
+	return o.(meta.ObjectMetaAccessor).GetObjectMeta().GetGeneration()
 }
 
 func GetKind(o runtime.Object) string {

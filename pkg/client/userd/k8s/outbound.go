@@ -4,10 +4,10 @@ import (
 	"context"
 	"sort"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
-	"github.com/datawire/dlib/derror"
-	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	core "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -17,47 +17,33 @@ import (
 // the DNS-resolver in the root daemon each time an update arrives.
 //
 // The first update will close the firstSnapshotArrived channel.
-func (kc *Cluster) nsWatcher(c context.Context, firstSnapshotArrived chan<- struct{}) (err error) {
-	defer func() {
-		if firstSnapshotArrived != nil {
-			close(firstSnapshotArrived)
-		}
-		if r := derror.PanicToError(recover()); r != nil {
-			err = r
-		}
-	}()
-
-	acc := kc.client.Watch(c,
-		kates.Query{
-			Name: "Namespaces",
-			Kind: "namespace",
-		})
-
-	for {
-		select {
-		case <-c.Done():
-			return nil
-		case <-acc.Changed():
-			if kc.onNamespacesChange(c, acc) {
-				if firstSnapshotArrived != nil {
-					close(firstSnapshotArrived)
-					firstSnapshotArrived = nil // accWait is one-shot
-				}
-			}
-		}
-	}
-}
-
-func (kc *Cluster) onNamespacesChange(c context.Context, acc *kates.Accumulator) bool {
-	changed := func() bool {
-		kc.accLock.Lock()
-		defer kc.accLock.Unlock()
-		return acc.Update(&kc.curSnapshot)
-	}()
-	if changed {
-		changed = kc.refreshNamespaces(c)
-	}
-	return changed
+func (kc *Cluster) startNamespaceWatcher(c context.Context) {
+	informerFactory := informers.NewSharedInformerFactory(kc.ki, 0)
+	nsc := informerFactory.Core().V1().Namespaces()
+	informer := nsc.Informer()
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(ns interface{}) {
+			kc.nsLock.Lock()
+			kc.currentNamespaces[ns.(*core.Namespace).Name] = struct{}{}
+			kc.nsLock.Unlock()
+			kc.refreshNamespaces(c)
+		},
+		DeleteFunc: func(ns interface{}) {
+			kc.nsLock.Lock()
+			delete(kc.currentNamespaces, ns.(*core.Namespace).Name)
+			kc.nsLock.Unlock()
+			kc.refreshNamespaces(c)
+		},
+		UpdateFunc: func(oldNs, newNs interface{}) {
+			kc.nsLock.Lock()
+			delete(kc.currentNamespaces, oldNs.(*core.Namespace).Name)
+			kc.currentNamespaces[newNs.(*core.Namespace).Name] = struct{}{}
+			kc.nsLock.Unlock()
+			kc.refreshNamespaces(c)
+		},
+	})
+	informerFactory.Start(c.Done())
+	informerFactory.WaitForCacheSync(c.Done())
 }
 
 func sortedStringSlicesEqual(as, bs []string) bool {
@@ -73,14 +59,14 @@ func sortedStringSlicesEqual(as, bs []string) bool {
 }
 
 func (kc *Cluster) IngressInfos(c context.Context) ([]*manager.IngressInfo, error) {
-	kc.accLock.Lock()
-	defer kc.accLock.Unlock()
+	kc.nsLock.Lock()
+	defer kc.nsLock.Unlock()
 
 	ingressInfo := kc.ingressInfo
 	if ingressInfo == nil {
-		kc.accLock.Unlock()
+		kc.nsLock.Unlock()
 		ingressInfo, err := kc.detectIngressBehavior(c)
-		kc.accLock.Lock()
+		kc.nsLock.Lock()
 		if err != nil {
 			kc.ingressInfo = nil
 			return nil, err
@@ -99,12 +85,12 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) e
 		sort.Strings(namespaces)
 	}
 
-	kc.accLock.Lock()
+	kc.nsLock.Lock()
 	equal := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
 	if !equal {
 		kc.mappedNamespaces = namespaces
 	}
-	kc.accLock.Unlock()
+	kc.nsLock.Unlock()
 
 	if equal {
 		return nil
@@ -114,26 +100,30 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) e
 	return nil
 }
 
-func (kc *Cluster) refreshNamespaces(c context.Context) bool {
-	kc.accLock.Lock()
-	namespaces := make([]string, 0, len(kc.curSnapshot.Namespaces))
-	for _, ns := range kc.curSnapshot.Namespaces {
-		if kc.shouldBeWatched(ns.Name) {
-			namespaces = append(namespaces, ns.Name)
+func (kc *Cluster) SetNamespaceListener(nsListener func(context.Context)) {
+	kc.nsLock.Lock()
+	kc.namespaceListener = nsListener
+	kc.nsLock.Unlock()
+}
+
+func (kc *Cluster) refreshNamespaces(c context.Context) {
+	kc.nsLock.Lock()
+	namespaces := make([]string, 0, len(kc.currentNamespaces))
+	for ns := range kc.currentNamespaces {
+		if kc.shouldBeWatched(ns) {
+			namespaces = append(namespaces, ns)
 		}
 	}
 	sort.Strings(namespaces)
-	equal := sortedStringSlicesEqual(namespaces, kc.lastNamespaces)
+	equal := sortedStringSlicesEqual(namespaces, kc.currentMappedNamespaces)
 	if !equal {
-		kc.lastNamespaces = namespaces
+		kc.currentMappedNamespaces = namespaces
 	}
-	kc.accLock.Unlock()
-
-	if equal {
-		return false
+	nsListener := kc.namespaceListener
+	kc.nsLock.Unlock()
+	if !equal && nsListener != nil {
+		nsListener(c)
 	}
-	kc.updateDaemonNamespaces(c)
-	return true
 }
 
 func (kc *Cluster) shouldBeWatched(namespace string) bool {
@@ -148,51 +138,4 @@ func (kc *Cluster) shouldBeWatched(namespace string) bool {
 		}
 	}
 	return false
-}
-
-func (kc *Cluster) SetInterceptedNamespaces(c context.Context, interceptedNamespaces map[string]struct{}) {
-	kc.accLock.Lock()
-	kc.interceptedNamespaces = interceptedNamespaces
-	kc.accLock.Unlock()
-	kc.updateDaemonNamespaces(c)
-}
-
-// updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
-// send it to the DNS-resolver in the daemon.
-func (kc *Cluster) updateDaemonNamespaces(c context.Context) {
-	if kc.rootDaemon == nil {
-		// NOTE! Some tests dont't set the rootDaemon
-		return
-	}
-
-	kc.accLock.Lock()
-	if len(kc.curSnapshot.Namespaces) == 0 {
-		// daemon must not be updated until the namespace watcher has made its first delivery
-		kc.accLock.Unlock()
-		return
-	}
-	namespaces := make([]string, 0, len(kc.interceptedNamespaces)+len(kc.LocalIntercepts))
-	for ns := range kc.interceptedNamespaces {
-		namespaces = append(namespaces, ns)
-	}
-	for ns := range kc.localInterceptedNamespaces {
-		if _, found := kc.interceptedNamespaces[ns]; !found {
-			namespaces = append(namespaces, ns)
-		}
-	}
-
-	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
-	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
-	paths := make([]string, len(kc.lastNamespaces), len(kc.lastNamespaces)+len(namespaces))
-	copy(paths, kc.lastNamespaces)
-
-	// Avoid being locked for the remainder of this function.
-	kc.accLock.Unlock()
-
-	sort.Strings(namespaces)
-	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
-	if _, err := kc.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
-		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
-	}
-	dlog.Debug(c, "search paths posted successfully")
 }

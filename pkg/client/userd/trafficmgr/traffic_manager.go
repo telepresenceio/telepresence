@@ -11,16 +11,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	apps "k8s.io/api/apps/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -45,7 +45,7 @@ import (
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, kates.Object)
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, runtime.Object)
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	RemoveIntercept(context.Context, string) error
@@ -79,6 +79,9 @@ type TrafficManager struct {
 	// manager client
 	managerClient manager.ManagerClient
 
+	// search paths are propagated to the rootDaemon
+	rootDaemon daemon.DaemonClient
+
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
 	// Map of desired mount points for intercepts
@@ -87,6 +90,16 @@ type TrafficManager struct {
 	// Map of mutexes, so that we don't create and delete
 	// mount points concurrently
 	mountMutexes sync.Map
+
+	insLock sync.Mutex
+
+	// Currently intercepted namespaces by remote intercepts
+	interceptedNamespaces map[string]struct{}
+
+	// Currently intercepted namespaces by local intercepts
+	localInterceptedNamespaces map[string]struct{}
+
+	localIntercepts map[string]string
 
 	// currentIntercepts is the latest snapshot returned by the intercept watcher
 	currentIntercepts     []*manager.InterceptInfo
@@ -120,7 +133,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	}
 
 	dlog.Info(c, "Connecting to k8s cluster...")
-	cluster, err := connectCluster(c, cr, rootDaemon)
+	cluster, err := connectCluster(c, cr)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		return nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -138,7 +151,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(c, cluster, sr.InstallID(), svc)
+	tmgr, err := connectMgr(c, cluster, sr.InstallID(), svc, rootDaemon)
 
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -176,6 +189,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
 		}
 	}
+	tmgr.SetNamespaceListener(tmgr.updateDaemonNamespaces)
 
 	// Collect data on how long connection time took
 	sr.Report(c, "finished_connecting_traffic_manager", scout.Entry{
@@ -194,7 +208,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 }
 
 // connectCluster returns a configured cluster instance
-func connectCluster(c context.Context, cr *rpc.ConnectRequest, rootDaemon daemon.DaemonClient) (*k8s.Cluster, error) {
+func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
 	config, err := k8s.NewConfig(c, cr.KubeFlags)
 	if err != nil {
 		return nil, err
@@ -208,11 +222,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest, rootDaemon daemon
 
 	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
 	defer cancel()
-	cluster, err := k8s.NewCluster(c,
-		config,
-		mappedNamespaces,
-		rootDaemon,
-	)
+	cluster, err := k8s.NewCluster(c, config, mappedNamespaces)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +230,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest, rootDaemon daemon
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
-func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service) (*TrafficManager, error) {
+func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(c)
 	tos := &clientConfig.Timeouts
 
@@ -302,12 +312,14 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:      ti.(*installer),
-		installID:      installID,
-		userAndHost:    userAndHost,
-		getCloudAPIKey: svc.LoginExecutor().GetCloudAPIKey,
-		managerClient:  mClient,
-		sessionInfo:    si,
+		installer:       ti.(*installer),
+		installID:       installID,
+		userAndHost:     userAndHost,
+		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
+		managerClient:   mClient,
+		sessionInfo:     si,
+		rootDaemon:      rootDaemon,
+		localIntercepts: map[string]string{},
 	}, nil
 }
 
@@ -317,6 +329,40 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 		ErrorText:     err.Error(),
 		ErrorCategory: int32(errcat.GetCategory(err)),
 	}
+}
+
+func (tm *TrafficManager) setInterceptedNamespaces(c context.Context, interceptedNamespaces map[string]struct{}) {
+	tm.insLock.Lock()
+	tm.interceptedNamespaces = interceptedNamespaces
+	tm.insLock.Unlock()
+	tm.updateDaemonNamespaces(c)
+}
+
+// updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
+// send it to the DNS-resolver in the daemon.
+func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
+	tm.insLock.Lock()
+	namespaces := make([]string, 0, len(tm.interceptedNamespaces)+len(tm.localIntercepts))
+	for ns := range tm.interceptedNamespaces {
+		namespaces = append(namespaces, ns)
+	}
+	for ns := range tm.localInterceptedNamespaces {
+		if _, found := tm.interceptedNamespaces[ns]; !found {
+			namespaces = append(namespaces, ns)
+		}
+	}
+	// Avoid being locked for the remainder of this function.
+	tm.insLock.Unlock()
+	sort.Strings(namespaces)
+
+	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
+	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
+	paths := tm.GetCurrentNamespaces()
+	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
+	if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
+	}
+	dlog.Debug(c, "search paths posted successfully")
 }
 
 // Run (1) starts up with ensuring that the manager is installed and running,
@@ -342,8 +388,8 @@ func (tm *TrafficManager) session() *manager.SessionInfo {
 // hasOwner parses an object and determines whether the object has an
 // owner that is of a kind we prefer. Currently the only owner that we
 // prefer is a Deployment, but this may grow in the future
-func (tm *TrafficManager) hasOwner(obj kates.Object) bool {
-	for _, owner := range obj.GetOwnerReferences() {
+func (tm *TrafficManager) hasOwner(obj runtime.Object) bool {
+	for _, owner := range obj.(meta.ObjectMetaAccessor).GetObjectMeta().GetOwnerReferences() {
 		if owner.Kind == "Deployment" {
 			return true
 		}
@@ -353,29 +399,29 @@ func (tm *TrafficManager) hasOwner(obj kates.Object) bool {
 
 // getReasonAndLabels gets the workload's associated labels, as well as a reason
 // it cannot be intercepted if that is the case.
-func (tm *TrafficManager) getReasonAndLabels(workload kates.Object) (map[string]string, string, error) {
+func (tm *TrafficManager) getReasonAndLabels(workload runtime.Object) (map[string]string, string, error) {
 	var labels map[string]string
 	var reason string
 	switch workload := workload.(type) {
-	case *kates.Deployment:
+	case *apps.Deployment:
 		if workload.Status.Replicas == int32(0) {
 			reason = "Has 0 replicas"
 		}
 		labels = workload.Spec.Template.Labels
 
-	case *kates.ReplicaSet:
+	case *apps.ReplicaSet:
 		if workload.Status.Replicas == int32(0) {
 			reason = "Has 0 replicas"
 		}
 		labels = workload.Spec.Template.Labels
 
-	case *kates.StatefulSet:
+	case *apps.StatefulSet:
 		if workload.Status.Replicas == int32(0) {
 			reason = "Has 0 replicas"
 		}
 		labels = workload.Spec.Template.Labels
 	default:
-		reason = "No workload telepresence knows how to intercept"
+		reason = fmt.Sprintf("telepresence does not know how to intercept %T", workload)
 	}
 	return labels, reason, nil
 }
@@ -386,7 +432,7 @@ func (tm *TrafficManager) getReasonAndLabels(workload kates.Object) (map[string]
 // or ignore based on the filter criteria.
 func (tm *TrafficManager) getInfosForWorkloads(
 	ctx context.Context,
-	workloads []kates.Object,
+	workloads []runtime.Object,
 	namespace string,
 	iMap map[string]*manager.InterceptInfo,
 	aMap map[string]*manager.AgentInfo,
@@ -394,7 +440,8 @@ func (tm *TrafficManager) getInfosForWorkloads(
 ) []*rpc.WorkloadInfo {
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 	for _, workload := range workloads {
-		name := workload.GetName()
+		name := k8sapi.GetName(workload)
+		dlog.Debugf(ctx, "Getting info for %s %s.%s", k8sapi.GetKind(workload), name, k8sapi.GetNamespace(workload))
 		iCept, ok := iMap[name]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
@@ -429,7 +476,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			// If we have a reason, that means it's not interceptable, so we only
 			// pass the workload through if they want to see all workloads, not
 			// just the interceptable ones
-			if !ok && filter <= rpc.ListRequest_INTERCEPTABLE && reason != "" {
+			if filter <= rpc.ListRequest_INTERCEPTABLE && reason != "" {
 				continue
 			}
 		}
@@ -439,7 +486,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			NotInterceptableReason: reason,
 			AgentInfo:              agent,
 			InterceptInfo:          iCept,
-			WorkloadResourceType:   workload.GetObjectKind().GroupVersionKind().Kind,
+			WorkloadResourceType:   k8sapi.GetKind(workload),
 		})
 	}
 	return workloadInfos
@@ -467,7 +514,7 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 
 	// These are all the workloads we care about and their associated function
 	// to get the names of those workloads
-	workloadsToGet := map[string]func(context.Context, string) ([]kates.Object, error){
+	workloadsToGet := map[string]func(context.Context, string) ([]runtime.Object, error){
 		"Deployment":  tm.Deployments,
 		"ReplicaSet":  tm.ReplicaSets,
 		"StatefulSet": tm.StatefulSets,
@@ -484,7 +531,7 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 		workloadInfos = append(workloadInfos, newWorkloadInfos...)
 	}
 
-	for localIntercept, localNs := range tm.LocalIntercepts {
+	for localIntercept, localNs := range tm.localIntercepts {
 		if localNs == namespace {
 			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
 				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},

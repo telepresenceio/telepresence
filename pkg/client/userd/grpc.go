@@ -15,8 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 func callRecovery(r interface{}, err error) error {
@@ -124,11 +125,11 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) {
-		var wl kates.Object
+		var wl runtime.Object
 		if result, wl = session.CanIntercept(c, ir); result == nil {
 			var kind string
 			if wl != nil {
-				kind = wl.GetObjectKind().GroupVersionKind().Kind
+				kind = k8sapi.GetKind(wl)
 			}
 			result = &rpc.InterceptResult{
 				Error:        rpc.InterceptError_UNSPECIFIED,

@@ -163,7 +163,7 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 
 	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{"kubeconfig": itest.KubeConfig(ctx), "namespace": is.ManagerNamespace()})
 	require.NoError(err)
-	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, nil)
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
 	ctx = kc.WithK8sInterface(ctx)
 	require.NoError(err)
 
@@ -189,7 +189,6 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 
 	require.NoError(ti.EnsureManager(ctx))
 
-	kc.Client().InvalidateCache()
 	dep, err := ti.FindDeployment(ctx, is.ManagerNamespace(), install.ManagerAppName)
 	require.NoError(err)
 	require.NotNil(dep)
@@ -235,7 +234,7 @@ func (is *installSuite) cluster(ctx context.Context, managerNamespace string) (c
 		"context":    "default",
 		"namespace":  managerNamespace})
 	require.NoError(err)
-	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil, nil)
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
 	require.NoError(err)
 	return kc.WithK8sInterface(ctx), kc
 }

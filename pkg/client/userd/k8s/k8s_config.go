@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -61,7 +61,7 @@ type Config struct {
 	Server      string
 	flagMap     map[string]string
 	flagArgs    []string
-	ConfigFlags *kates.ConfigFlags
+	ConfigFlags *genericclioptions.ConfigFlags
 	config      *rest.Config
 }
 
@@ -73,7 +73,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	delete(flagMap, "namespace")
 
 	flagArgs := make([]string, 0, len(flagMap))
-	configFlags := kates.NewConfigFlags(false)
+	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
 	for k, v := range flagMap {

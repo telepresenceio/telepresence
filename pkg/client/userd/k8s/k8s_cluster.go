@@ -9,16 +9,15 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
-	corev1 "k8s.io/api/core/v1"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	k8err "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -26,18 +25,10 @@ import (
 
 const supportedKubeAPIVersion = "1.17.0"
 
-type nameMeta struct {
-	Name string `json:"name"`
-}
-
-type objName struct {
-	nameMeta `json:"metadata"`
-}
-
 type ResourceFinder interface {
-	FindDeployment(c context.Context, namespace, name string) (*kates.Deployment, error)
-	FindPod(c context.Context, namespace, name string) (*kates.Pod, error)
-	FindSvc(c context.Context, namespace, name string) (*kates.Service, error)
+	FindDeployment(c context.Context, namespace, name string) (*apps.Deployment, error)
+	FindPod(c context.Context, namespace, name string) (*core.Pod, error)
+	FindSvc(c context.Context, namespace, name string) (*core.Service, error)
 }
 
 // Cluster is a Kubernetes cluster reference
@@ -48,27 +39,19 @@ type Cluster struct {
 	ingressInfo []*manager.IngressInfo
 
 	// Main
-	client *kates.Client
-	ki     kubernetes.Interface
+	ki kubernetes.Interface
 
-	// search paths are propagated to the rootDaemon
-	rootDaemon daemon.DaemonClient
+	// nsLock protects currentNamespaces and namespaceListener
+	nsLock sync.Mutex
 
-	lastNamespaces []string
+	// Current Namespace snapshot, get set by namespace watcher.
+	currentNamespaces map[string]struct{}
 
-	// Currently intercepted namespaces by remote intercepts
-	interceptedNamespaces map[string]struct{}
+	// Current Namespace snapshot, filtered by mappedNamespaces
+	currentMappedNamespaces []string
 
-	// Currently intercepted namespaces by local intercepts
-	localInterceptedNamespaces map[string]struct{}
-
-	accLock         sync.Mutex
-	LocalIntercepts map[string]string
-
-	// Current Namespace snapshot, get set by acc.Update().
-	curSnapshot struct {
-		Namespaces []*objName
-	}
+	// Namespace listener. Notified when the currentNamespaces changes
+	namespaceListener func(c context.Context)
 }
 
 func (kc *Cluster) ActualNamespace(namespace string) string {
@@ -129,83 +112,71 @@ func (kc *Cluster) check(c context.Context) error {
 }
 
 // Deployments returns all deployments found in the given Namespace
-func (kc *Cluster) Deployments(c context.Context, namespace string) ([]kates.Object, error) {
-	var deployments []*kates.Deployment
-	if err := kc.client.List(c, kates.Query{Kind: "Deployment", Namespace: namespace}, &deployments); err != nil {
+func (kc *Cluster) Deployments(c context.Context, namespace string) ([]runtime.Object, error) {
+	ds, err := kc.ki.AppsV1().Deployments(namespace).List(c, meta.ListOptions{})
+	if err != nil {
 		return nil, err
 	}
-	objs := make([]kates.Object, len(deployments))
-	for i, dep := range deployments {
-		objs[i] = dep
+	di := ds.Items
+	objs := make([]runtime.Object, len(di))
+	for i := range di {
+		objs[i] = &di[i]
 	}
 	return objs, nil
 }
 
 // ReplicaSets returns all replica sets found in the given Namespace
-func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]kates.Object, error) {
-	var replicaSets []*kates.ReplicaSet
-	if err := kc.client.List(c, kates.Query{Kind: "ReplicaSet", Namespace: namespace}, &replicaSets); err != nil {
+func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]runtime.Object, error) {
+	rs, err := kc.ki.AppsV1().ReplicaSets(namespace).List(c, meta.ListOptions{})
+	if err != nil {
 		return nil, err
 	}
-	objs := make([]kates.Object, len(replicaSets))
-	for i, rs := range replicaSets {
-		objs[i] = rs
+	ri := rs.Items
+	objs := make([]runtime.Object, len(ri))
+	for i := range ri {
+		objs[i] = &ri[i]
 	}
 	return objs, nil
 }
 
 // StatefulSets returns all stateful sets found in the given Namespace
-func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]kates.Object, error) {
-	var statefulSets []*kates.StatefulSet
-	if err := kc.client.List(c, kates.Query{Kind: "StatefulSet", Namespace: namespace}, &statefulSets); err != nil {
+func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]runtime.Object, error) {
+	ss, err := kc.ki.AppsV1().StatefulSets(namespace).List(c, meta.ListOptions{})
+	if err != nil {
 		return nil, err
 	}
-	objs := make([]kates.Object, len(statefulSets))
-	for i, ss := range statefulSets {
-		objs[i] = ss
+	si := ss.Items
+	objs := make([]runtime.Object, len(si))
+	for i := range si {
+		objs[i] = &si[i]
 	}
 	return objs, nil
 }
 
 // Pods returns all pods found in the given Namespace
-func (kc *Cluster) Pods(c context.Context, namespace string) ([]*kates.Pod, error) {
-	var pods []*kates.Pod
-	if err := kc.client.List(c, kates.Query{Kind: "Pod", Namespace: namespace}, &pods); err != nil {
+func (kc *Cluster) Pods(c context.Context, namespace string) ([]core.Pod, error) {
+	ps, err := kc.ki.CoreV1().Pods(namespace).List(c, meta.ListOptions{})
+	if err != nil {
 		return nil, err
 	}
-	return pods, nil
+	return ps.Items, nil
 }
 
 // FindDeployment returns a deployment with the given name in the given namespace or nil
 // if no such deployment could be found.
-func (kc *Cluster) FindDeployment(c context.Context, namespace, name string) (*kates.Deployment, error) {
-	dep := &kates.Deployment{
-		TypeMeta:   kates.TypeMeta{Kind: "Deployment"},
-		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
-	}
-	if err := kc.client.Get(c, dep, dep); err != nil {
-		return nil, err
-	}
-	return dep, nil
-}
-
-// FindAgain returns a fresh version of the given object.
-func (kc *Cluster) FindAgain(c context.Context, obj kates.Object) (kates.Object, error) {
-	if err := kc.client.Get(c, obj, obj); err != nil {
-		return nil, err
-	}
-	return obj, nil
+func (kc *Cluster) FindDeployment(c context.Context, namespace, name string) (*apps.Deployment, error) {
+	return kc.ki.AppsV1().Deployments(namespace).Get(c, name, meta.GetOptions{})
 }
 
 // FindPodFromSelector returns a pod with the given name-hex-hex
-func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*kates.Pod, error) {
+func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*core.Pod, error) {
 	pods, err := kc.Pods(c, namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, pod := range pods {
-		podLabels := pod.GetLabels()
+	for i := range pods {
+		podLabels := pods[i].GetLabels()
 		match := true
 		// check if selector is in labels
 		for key, val := range selector {
@@ -215,7 +186,7 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 			}
 		}
 		if match {
-			return pod, nil
+			return &pods[i], nil
 		}
 	}
 
@@ -224,15 +195,8 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 
 // FindPod returns a pod with the given name in the given namespace or nil
 // if no such replica set could be found.
-func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Pod, error) {
-	pod := &kates.Pod{
-		TypeMeta:   kates.TypeMeta{Kind: "Pod"},
-		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
-	}
-	if err := kc.client.Get(c, pod, pod); err != nil {
-		return nil, err
-	}
-	return pod, nil
+func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*core.Pod, error) {
+	return kc.ki.CoreV1().Pods(namespace).Get(c, name, meta.GetOptions{})
 }
 
 // FindWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
@@ -243,72 +207,64 @@ func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*kates.Po
 //   3. StatefulSets
 //
 // The first match is returned.
-func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (kates.Object, error) {
-	type workLoad struct {
-		kind string
-		obj  kates.Object
-	}
-	for _, wl := range []workLoad{{"Deployment", &kates.Deployment{}}, {"ReplicaSet", &kates.ReplicaSet{}}, {"StatefulSet", &kates.StatefulSet{}}} {
-		if workloadKind != "" && workloadKind != wl.kind {
-			continue
-		}
-		wl.obj.(schema.ObjectKind).SetGroupVersionKind(schema.GroupVersionKind{Kind: wl.kind})
-		wl.obj.SetName(name)
-		wl.obj.SetNamespace(namespace)
-		dlog.Debugf(c, "Get %s %s.%s", wl.kind, name, namespace)
-		if err := kc.client.Get(c, wl.obj, wl.obj); err != nil {
-			if kates.IsNotFound(err) {
-				continue
+func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (obj runtime.Object, err error) {
+	ai := kc.ki.AppsV1()
+	switch workloadKind {
+	case "Deployment":
+		obj, err = ai.Deployments(namespace).Get(c, name, meta.GetOptions{})
+	case "ReplicaSet":
+		obj, err = ai.ReplicaSets(namespace).Get(c, name, meta.GetOptions{})
+	case "StatefulSet":
+		obj, err = ai.StatefulSets(namespace).Get(c, name, meta.GetOptions{})
+	case "":
+		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
+			if obj, err = kc.FindWorkload(c, namespace, name, wk); err == nil {
+				return obj, nil
 			}
-			return nil, err
+			if !k8err.IsNotFound(err) {
+				return nil, err
+			}
 		}
-		return wl.obj, nil
+		err = k8err.NewNotFound(core.Resource("workload"), name+"."+namespace)
+	default:
+		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
 	}
-	if workloadKind == "" {
-		workloadKind = "workload"
-	}
-	return nil, k8err.NewNotFound(corev1.Resource(workloadKind), name+"."+namespace)
+	return obj, err
 }
 
 // FindSvc finds a service with the given name in the given Namespace and returns
 // either a copy of that service or nil if no such service could be found.
-func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*kates.Service, error) {
-	rs := &kates.Service{
-		TypeMeta:   kates.TypeMeta{Kind: "Service"},
-		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
-	}
-	if err := kc.client.Get(c, rs, rs); err != nil {
-		return nil, err
-	}
-	return rs, nil
+func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*core.Service, error) {
+	return kc.ki.CoreV1().Services(namespace).Get(c, name, meta.GetOptions{})
 }
 
 // findAllSvcByType finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
-func (kc *Cluster) findAllSvcByType(c context.Context, svcType corev1.ServiceType) ([]*kates.Service, error) {
+func (kc *Cluster) findAllSvcByType(c context.Context, svcType core.ServiceType) ([]*core.Service, error) {
 	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
-	var typedSvcs []*kates.Service
+	var typedSvcs []*core.Service
 	findTyped := func(ns string) error {
-		var svcs []*kates.Service
-		if err := kc.client.List(c, kates.Query{Kind: "Service", Namespace: ns}, &svcs); err != nil {
+		ss, err := kc.ki.CoreV1().Services(ns).List(c, meta.ListOptions{})
+		if err != nil {
 			return err
 		}
-		for _, svc := range svcs {
-			if svc.Spec.Type == svcType {
-				typedSvcs = append(typedSvcs, svc)
+		for i := range ss.Items {
+			s := &ss.Items[i]
+			if s.Spec.Type == svcType {
+				typedSvcs = append(typedSvcs, s)
 			}
 		}
 		return nil
 	}
 
-	kc.accLock.Lock()
+	kc.nsLock.Lock()
 	var mns []string
 	if len(kc.mappedNamespaces) > 0 {
 		mns = make([]string, len(kc.mappedNamespaces))
 		copy(mns, kc.mappedNamespaces)
 	}
-	kc.accLock.Unlock()
+	kc.nsLock.Unlock()
 
 	if len(mns) > 0 {
 		for _, ns := range mns {
@@ -323,28 +279,23 @@ func (kc *Cluster) findAllSvcByType(c context.Context, svcType corev1.ServiceTyp
 }
 
 func (kc *Cluster) namespaceExists(namespace string) (exists bool) {
-	kc.accLock.Lock()
-	for _, n := range kc.lastNamespaces {
+	kc.nsLock.Lock()
+	for _, n := range kc.currentMappedNamespaces {
 		if n == namespace {
 			exists = true
 			break
 		}
 	}
-	kc.accLock.Unlock()
+	kc.nsLock.Unlock()
 	return exists
 }
 
-func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootDaemon daemon.DaemonClient) (*Cluster, error) {
-	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
-	kc, err := kates.NewClientFromConfigFlags(kubeFlags.ConfigFlags)
-	if err != nil {
-		return nil, client.CheckTimeout(c, fmt.Errorf("k8s client create failed: %w", err))
-	}
+func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Cluster, error) {
 	rs, err := kubeFlags.ConfigFlags.ToRESTConfig()
 	if err != nil {
 		return nil, err
 	}
-	ki, err := kubernetes.NewForConfig(rs)
+	cs, err := kubernetes.NewForConfig(rs)
 	if err != nil {
 		return nil, err
 	}
@@ -355,12 +306,10 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 	}
 
 	ret := &Cluster{
-		Config:           kubeFlags,
-		mappedNamespaces: namespaces,
-		client:           kc,
-		ki:               ki,
-		rootDaemon:       rootDaemon,
-		LocalIntercepts:  map[string]string{},
+		Config:            kubeFlags,
+		mappedNamespaces:  namespaces,
+		ki:                cs,
+		currentNamespaces: make(map[string]struct{}),
 	}
 
 	if err := ret.check(c); err != nil {
@@ -370,17 +319,16 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string, rootD
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
 
-	firstSnapshotArrived := make(chan struct{})
-	go func() {
-		if err := ret.nsWatcher(dgroup.WithGoroutineName(c, "ns-watcher"), firstSnapshotArrived); err != nil {
-			dlog.Error(c, err)
-		}
-	}()
-	select {
-	case <-c.Done():
-	case <-firstSnapshotArrived:
-	}
+	ret.startNamespaceWatcher(c)
 	return ret, nil
+}
+
+func (kc *Cluster) GetCurrentNamespaces() []string {
+	kc.nsLock.Lock()
+	nss := make([]string, len(kc.currentMappedNamespaces))
+	copy(nss, kc.currentMappedNamespaces)
+	kc.nsLock.Unlock()
+	return nss
 }
 
 func (kc *Cluster) GetClusterId(ctx context.Context) string {
@@ -390,8 +338,4 @@ func (kc *Cluster) GetClusterId(ctx context.Context) string {
 
 func (kc *Cluster) WithK8sInterface(c context.Context) context.Context {
 	return k8sapi.WithK8sInterface(c, kc.ki)
-}
-
-func (kc *Cluster) Client() *kates.Client {
-	return kc.client
 }

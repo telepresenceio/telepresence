@@ -4,17 +4,21 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -31,7 +35,7 @@ type installer struct {
 
 type Installer interface {
 	k8s.ResourceFinder
-	EnsureAgent(c context.Context, obj kates.Object, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
+	EnsureAgent(c context.Context, obj runtime.Object, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
 	EnsureManager(c context.Context) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
@@ -59,7 +63,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 	}
 
 	// Remove the agent from all deployments
-	webhookAgentChannel := make(chan kates.Object, len(agents))
+	webhookAgentChannel := make(chan runtime.Object, len(agents))
 	wg := sync.WaitGroup{}
 	wg.Add(len(agents))
 	for _, ai := range agents {
@@ -76,7 +80,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 
 			// Assume that the agent was added using the mutating webhook when no actions
 			// annotation can be found in the workload.
-			ann := agent.GetAnnotations()
+			ann := k8sapi.GetAnnotations(agent)
 			if ann == nil {
 				webhookAgentChannel <- agent
 				return
@@ -108,7 +112,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 		webhookWaitGroup := sync.WaitGroup{}
 		webhookWaitGroup.Add(len(webhookAgentChannel))
 		for agent := range webhookAgentChannel {
-			go func(obj kates.Object) {
+			go func(obj runtime.Object) {
 				defer webhookWaitGroup.Done()
 				err := ki.rolloutRestart(c, obj)
 				if err != nil {
@@ -135,24 +139,25 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 	return nil
 }
 
-// recreates "kubectl rollout restart <obj>" for kates.obj
-func (ki *installer) rolloutRestart(c context.Context, obj kates.Object) error {
+// recreates "kubectl rollout restart <obj>" for obj
+func (ki *installer) rolloutRestart(c context.Context, obj runtime.Object) error {
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
 		install.DomainPrefix,
 		time.Now().Format(time.RFC3339),
 	)
-	return ki.Client().Patch(c, obj, kates.StrategicMergePatchType, []byte(restartAnnotation), obj)
+	_, err := k8sapi.Patch(c, obj, types.StrategicMergePatchType, []byte(restartAnnotation))
+	return err
 }
 
 // Finds the Referenced Service in an objects' annotations
-func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object) (*kates.Service, error) {
+func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj runtime.Object) (*core.Service, error) {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
 		return nil, err
 	}
-	namespace := obj.GetNamespace()
+	namespace := k8sapi.GetNamespace(obj)
 	if !annotationsFound {
 		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 	}
@@ -162,7 +167,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 	}
 
 	svc, err := ki.FindSvc(c, namespace, svcName)
-	if err != nil && !kates.IsNotFound(err) {
+	if err != nil && !errors2.IsNotFound(err) {
 		return nil, err
 	}
 	if svc == nil {
@@ -175,7 +180,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 // the port to-be-intercepted has changed. It raises an error if either of these
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
-func checkSvcSame(_ context.Context, obj kates.Object, svcName, portNameOrNumber string) error {
+func checkSvcSame(_ context.Context, obj runtime.Object, svcName, portNameOrNumber string) error {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -211,9 +216,9 @@ func (ki *installer) getSvcForInjectedPod(
 	name,
 	svcName,
 	portNameOrNumber string,
-	podTemplate *kates.PodTemplateSpec,
-	obj kates.Object,
-) (*kates.Service, error) {
+	podTemplate *core.PodTemplateSpec,
+	obj runtime.Object,
+) (*core.Service, error) {
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
 	// agent is injected using a mutating webhook, or manually. Get its service and skip the rest
@@ -260,7 +265,7 @@ func (ki *installer) getSvcForInjectedPod(
 	return svc, nil
 }
 
-func useAutoInstall(podTpl *kates.PodTemplateSpec) (bool, error) {
+func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 	a := podTpl.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
 	manuallyManaged := a != nil && a[install.ManualInjectAnnotation] == "true"
@@ -275,18 +280,20 @@ func useAutoInstall(podTpl *kates.PodTemplateSpec) (bool, error) {
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) EnsureAgent(c context.Context, obj kates.Object,
+func (ki *installer) EnsureAgent(c context.Context, obj runtime.Object,
 	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
 	podTemplate, err := k8sapi.GetPodTemplateFromObject(obj)
 	if err != nil {
 		return "", "", err
 	}
 
-	kind := obj.GetObjectKind().GroupVersionKind().Kind
-	name := obj.GetName()
-	namespace := obj.GetNamespace()
+	kind := k8sapi.GetKind(obj)
+	name := k8sapi.GetName(obj)
+	namespace := k8sapi.GetNamespace(obj)
+	rf := reflect.ValueOf(obj).Elem()
+	dlog.Debugf(c, "%s %s.%s %s.%s", kind, name, namespace, rf.Type().PkgPath(), rf.Type().Name())
 
-	var svc *kates.Service
+	var svc *core.Service
 	autoInstall, err := useAutoInstall(podTemplate)
 	if err != nil {
 		return "", "", err
@@ -299,7 +306,7 @@ func (ki *installer) EnsureAgent(c context.Context, obj kates.Object,
 		return string(svc.GetUID()), kind, nil
 	}
 
-	var agentContainer *kates.Container
+	var agentContainer *core.Container
 	for i := range podTemplate.Spec.Containers {
 		container := &podTemplate.Spec.Containers[i]
 		if container.Name == install.AgentContainerName {
@@ -313,7 +320,7 @@ func (ki *installer) EnsureAgent(c context.Context, obj kates.Object,
 			`%s already being used for intercept with a different service
 configuration. To intercept this with your new configuration, please use
 telepresence uninstall --agent %s This will cancel any intercepts that
-already exist for this service`, kind, obj.GetName())
+already exist for this service`, kind, name)
 		return "", "", errors.Wrap(err, msg)
 	}
 
@@ -358,12 +365,14 @@ already exist for this service`, kind, obj.GetName())
 	}
 
 	if update {
-		if err := ki.Client().Update(c, obj, obj); err != nil {
+		if obj, err = k8sapi.Update(c, obj); err != nil {
 			return "", "", err
 		}
 		if updateSvc {
-			if err := ki.Client().Update(c, svc, svc); err != nil {
+			if svcObj, err := k8sapi.Update(c, svc); err != nil {
 				return "", "", err
+			} else {
+				svc = svcObj.(*core.Service)
 			}
 		}
 		if err := ki.waitForApply(c, namespace, name, obj); err != nil {
@@ -386,7 +395,7 @@ already exist for this service`, kind, obj.GetName())
 // determining if that specific workload type has successfully been updated
 // based on the object's metadata. We have separate ones for each object
 // because the criteria is slightly different for each.
-func replicaSetUpdated(rs *kates.ReplicaSet, origGeneration int64) bool {
+func replicaSetUpdated(rs *apps.ReplicaSet, origGeneration int64) bool {
 	applied := rs.ObjectMeta.Generation >= origGeneration &&
 		rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
 		(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
@@ -395,7 +404,7 @@ func replicaSetUpdated(rs *kates.ReplicaSet, origGeneration int64) bool {
 	return applied
 }
 
-func deploymentUpdated(dep *kates.Deployment, origGeneration int64) bool {
+func deploymentUpdated(dep *apps.Deployment, origGeneration int64) bool {
 	applied := dep.ObjectMeta.Generation >= origGeneration &&
 		dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
 		(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
@@ -404,7 +413,7 @@ func deploymentUpdated(dep *kates.Deployment, origGeneration int64) bool {
 	return applied
 }
 
-func statefulSetUpdated(statefulSet *kates.StatefulSet, origGeneration int64) bool {
+func statefulSetUpdated(statefulSet *apps.StatefulSet, origGeneration int64) bool {
 	applied := statefulSet.ObjectMeta.Generation >= origGeneration &&
 		statefulSet.Status.ObservedGeneration == statefulSet.ObjectMeta.Generation &&
 		(statefulSet.Spec.Replicas == nil || statefulSet.Status.UpdatedReplicas >= *statefulSet.Spec.Replicas) &&
@@ -413,18 +422,18 @@ func statefulSetUpdated(statefulSet *kates.StatefulSet, origGeneration int64) bo
 	return applied
 }
 
-func (ki *installer) waitForApply(c context.Context, namespace, name string, obj kates.Object) error {
+func (ki *installer) waitForApply(c context.Context, namespace, name string, obj runtime.Object) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
 
 	origGeneration := int64(0)
 	if obj != nil {
-		origGeneration = obj.GetGeneration()
+		origGeneration = k8sapi.GetGeneration(obj)
 	}
 
 	var err error
-	if rs, ok := obj.(*kates.ReplicaSet); ok {
+	if rs, ok := obj.(*apps.ReplicaSet); ok {
 		if err = ki.refreshReplicaSet(c, namespace, rs); err != nil {
 			return err
 		}
@@ -435,21 +444,21 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 			return err
 		}
 
-		if obj, err = ki.FindAgain(c, obj); err != nil {
+		if obj, err = k8sapi.Get(c, obj); err != nil {
 			return client.CheckTimeout(c, err)
 		}
 
 		updated := false
 		switch obj := obj.(type) {
-		case *kates.ReplicaSet:
+		case *apps.ReplicaSet:
 			updated = replicaSetUpdated(obj, origGeneration)
-		case *kates.Deployment:
+		case *apps.Deployment:
 			updated = deploymentUpdated(obj, origGeneration)
-		case *kates.StatefulSet:
+		case *apps.StatefulSet:
 			updated = statefulSetUpdated(obj, origGeneration)
 		}
 		if updated {
-			dlog.Debugf(c, "%s %s.%s successfully applied", obj.GetObjectKind().GroupVersionKind().Kind, name, namespace)
+			dlog.Debugf(c, "%s %s.%s successfully applied", k8sapi.GetKind(obj), name, namespace)
 			return nil
 		}
 	}
@@ -458,7 +467,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 // refreshReplicaSet finds pods owned by a given ReplicaSet and deletes them.
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
-func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *kates.ReplicaSet) error {
+func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *apps.ReplicaSet) error {
 	pods, err := ki.Pods(c, namespace)
 	if err != nil {
 		return err
@@ -468,17 +477,17 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 		for _, ownerRef := range pod.OwnerReferences {
 			if ownerRef.UID == rs.UID {
 				dlog.Infof(c, "Deleting pod %s.%s owned by rs %s", pod.Name, pod.Namespace, rs.Name)
-				pod := &kates.Pod{
-					TypeMeta: kates.TypeMeta{
+				pod := &core.Pod{
+					TypeMeta: meta.TypeMeta{
 						Kind: "Pod",
 					},
-					ObjectMeta: kates.ObjectMeta{
+					ObjectMeta: meta.ObjectMeta{
 						Namespace: pod.Namespace,
 						Name:      pod.Name,
 					},
 				}
-				if err = ki.Client().Delete(c, pod, nil); err != nil {
-					if kates.IsNotFound(err) || kates.IsConflict(err) {
+				if err = k8sapi.Delete(c, pod); err != nil {
+					if errors2.IsNotFound(err) || errors2.IsConflict(err) {
 						// If an intercept creates a new pod by installing an agent, and the agent is then uninstalled shortly after, the
 						// old pod may still show up here during removal, and even after it has been removed if the removal completed
 						// after we obtained the pods list. This is OK. This pod will not be in our way.
@@ -491,8 +500,8 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 	return nil
 }
 
-func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
-	ann := obj.GetAnnotations()
+func getAnnotation(obj runtime.Object, data completeAction) (bool, error) {
+	ann := k8sapi.GetAnnotations(obj)
 	if ann == nil {
 		return false, nil
 	}
@@ -521,13 +530,13 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	return true, nil
 }
 
-func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
+func (ki *installer) undoObjectMods(c context.Context, obj runtime.Object) error {
 	referencedService, err := undoObjectMods(c, obj)
 	if err != nil {
 		return err
 	}
-	svc, err := ki.FindSvc(c, obj.GetNamespace(), referencedService)
-	if err != nil && !kates.IsNotFound(err) {
+	svc, err := ki.FindSvc(c, k8sapi.GetNamespace(obj), referencedService)
+	if err != nil && !errors2.IsNotFound(err) {
 		return err
 	}
 	if svc != nil {
@@ -535,10 +544,11 @@ func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
 			return err
 		}
 	}
-	return ki.Client().Update(c, obj, obj)
+	_, err = k8sapi.Update(c, obj)
+	return err
 }
 
-func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
+func undoObjectMods(c context.Context, obj runtime.Object) (string, error) {
 	var actions workloadActions
 	ok, err := getAnnotation(obj, &actions)
 	if !ok {
@@ -555,23 +565,24 @@ func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
 			return "", err
 		}
 	}
-	annotations := obj.GetAnnotations()
+	mObj := obj.(meta.ObjectMetaAccessor).GetObjectMeta()
+	annotations := mObj.GetAnnotations()
 	delete(annotations, annTelepresenceActions)
 	if len(annotations) == 0 {
-		obj.SetAnnotations(nil)
+		mObj.SetAnnotations(nil)
 	}
 	explainUndo(c, &actions, obj)
 	return actions.ReferencedService, nil
 }
 
-func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) error {
-	if err := undoServiceMods(c, svc); err != nil {
-		return err
+func (ki *installer) undoServiceMods(c context.Context, svc *core.Service) (err error) {
+	if err = undoServiceMods(c, svc); err == nil {
+		_, err = k8sapi.Update(c, svc)
 	}
-	return ki.Client().Update(c, svc, svc)
+	return err
 }
 
-func undoServiceMods(c context.Context, svc *kates.Service) error {
+func undoServiceMods(c context.Context, svc *core.Service) error {
 	var actions svcActions
 	ok, err := getAnnotation(svc, &actions)
 	if !ok {
@@ -601,10 +612,10 @@ func addAgentToWorkload(
 	agentImageName string,
 	trafficManagerNamespace string,
 	telepresenceAPIPort uint16,
-	object kates.Object, matchingService *kates.Service,
+	object runtime.Object, matchingService *core.Service,
 ) (
-	kates.Object,
-	*kates.Service,
+	runtime.Object,
+	*core.Service,
 	bool,
 	error,
 ) {
@@ -618,7 +629,7 @@ func addAgentToWorkload(
 	if err != nil {
 		return nil, nil, false, k8sapi.ObjErrorf(object, err.Error())
 	}
-	dlog.Debugf(c, "using service %q port %q when intercepting %s %q",
+	dlog.Debugf(c, "using service %q port %q when intercepting %s %s",
 		matchingService.Name,
 		func() string {
 			if servicePort.Name != "" {
@@ -626,8 +637,8 @@ func addAgentToWorkload(
 			}
 			return strconv.Itoa(int(servicePort.Port))
 		}(),
-		object.GetObjectKind().GroupVersionKind().Kind,
-		object.GetName())
+		k8sapi.GetKind(object),
+		nameAndNamespace(object))
 
 	version := client.Semver().String()
 
@@ -635,7 +646,7 @@ func addAgentToWorkload(
 	var containerPort struct {
 		Name     string // If the existing container port doesn't have a name, we'll make one up.
 		Number   uint16
-		Protocol corev1.Protocol
+		Protocol core.Protocol
 	}
 
 	// Start by filling from the servicePort; if these are the zero values, that's OK.
@@ -758,15 +769,16 @@ func addAgentToWorkload(
 	if err = workloadMod.Do(object); err != nil {
 		return nil, nil, false, err
 	}
-	annotations := object.GetAnnotations()
-	if object.GetAnnotations() == nil {
+	mObj := object.(meta.ObjectMetaAccessor).GetObjectMeta()
+	annotations := mObj.GetAnnotations()
+	if annotations == nil {
 		annotations = make(map[string]string)
 	}
 	annotations[annTelepresenceActions], err = workloadMod.MarshalAnnotation()
 	if err != nil {
 		return nil, nil, false, err
 	}
-	object.SetAnnotations(annotations)
+	mObj.SetAnnotations(annotations)
 	explainDo(c, workloadMod, object)
 
 	// Apply the actions on the Service.
