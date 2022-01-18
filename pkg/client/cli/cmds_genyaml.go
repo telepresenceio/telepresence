@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -180,21 +181,11 @@ func (i *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 	if err != nil {
 		return fmt.Errorf("unable to parse yaml in %s: %w", i.inputFile, err)
 	}
-	var containers []corev1.Container
-	name := ""
-	switch o := obj.(type) {
-	case *appsv1.Deployment:
-		containers = o.Spec.Template.Spec.Containers
-		name = o.Name
-	case *appsv1.StatefulSet:
-		containers = o.Spec.Template.Spec.Containers
-		name = o.Name
-	case *appsv1.ReplicaSet:
-		containers = o.Spec.Template.Spec.Containers
-		name = o.Name
-	default:
-		return fmt.Errorf("unexpected object of kind %s; please pass in a Deployment or StatefulSet", kind)
+	wl, err := k8sapi.WrapWorkload(obj)
+	if err != nil {
+		return fmt.Errorf("unexpected object of kind %s; please pass in a Deployment, ReplicaSet, or StatefulSet", kind)
 	}
+	containers := wl.GetPodTemplate().Spec.Containers
 	containerIdx := -1
 	for j, c := range containers {
 		if c.Name == i.containerName {
@@ -208,7 +199,7 @@ func (i *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 	container := &containers[containerIdx]
 
 	if i.serviceName == "" {
-		i.serviceName = name
+		i.serviceName = k8sapi.GetName(wl)
 	}
 
 	cfg := client.GetConfig(ctx)

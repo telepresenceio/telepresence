@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
@@ -125,11 +124,11 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) {
-		var wl runtime.Object
+		var wl k8sapi.Workload
 		if result, wl = session.CanIntercept(c, ir); result == nil {
 			var kind string
 			if wl != nil {
-				kind = k8sapi.GetKind(wl)
+				kind = wl.GetKind()
 			}
 			result = &rpc.InterceptResult{
 				Error:        rpc.InterceptError_UNSPECIFIED,

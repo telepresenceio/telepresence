@@ -19,9 +19,7 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
-	runtime2 "k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
@@ -276,7 +274,7 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, runtime2.Object) {
+func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload) {
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
@@ -315,10 +313,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 			ErrorText: err.Error(),
 		}, nil
 	}
-	var podTpl *core.PodTemplateSpec
-	if podTpl, err = k8sapi.GetPodTemplateFromObject(obj); err != nil {
-		return interceptError(rpc.InterceptError_UNSUPPORTED_WORKLOAD, errcat.User.New(spec.WorkloadKind)), nil
-	}
+	podTpl := obj.GetPodTemplate()
 
 	// Check if the workload is auto installed. This also verifies annotation consistency
 	autoInstall, err := useAutoInstall(podTpl)

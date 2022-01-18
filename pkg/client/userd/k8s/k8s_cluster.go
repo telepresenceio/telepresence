@@ -9,11 +9,9 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
-	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	k8err "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 
@@ -24,12 +22,6 @@ import (
 )
 
 const supportedKubeAPIVersion = "1.17.0"
-
-type ResourceFinder interface {
-	FindDeployment(c context.Context, namespace, name string) (*apps.Deployment, error)
-	FindPod(c context.Context, namespace, name string) (*core.Pod, error)
-	FindSvc(c context.Context, namespace, name string) (*core.Service, error)
-}
 
 // Cluster is a Kubernetes cluster reference
 type Cluster struct {
@@ -112,43 +104,43 @@ func (kc *Cluster) check(c context.Context) error {
 }
 
 // Deployments returns all deployments found in the given Namespace
-func (kc *Cluster) Deployments(c context.Context, namespace string) ([]runtime.Object, error) {
+func (kc *Cluster) Deployments(c context.Context, namespace string) ([]k8sapi.Workload, error) {
 	ds, err := kc.ki.AppsV1().Deployments(namespace).List(c, meta.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	di := ds.Items
-	objs := make([]runtime.Object, len(di))
+	objs := make([]k8sapi.Workload, len(di))
 	for i := range di {
-		objs[i] = &di[i]
+		objs[i] = k8sapi.Deployment(&di[i])
 	}
 	return objs, nil
 }
 
 // ReplicaSets returns all replica sets found in the given Namespace
-func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]runtime.Object, error) {
+func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]k8sapi.Workload, error) {
 	rs, err := kc.ki.AppsV1().ReplicaSets(namespace).List(c, meta.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	ri := rs.Items
-	objs := make([]runtime.Object, len(ri))
+	objs := make([]k8sapi.Workload, len(ri))
 	for i := range ri {
-		objs[i] = &ri[i]
+		objs[i] = k8sapi.ReplicaSet(&ri[i])
 	}
 	return objs, nil
 }
 
 // StatefulSets returns all stateful sets found in the given Namespace
-func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]runtime.Object, error) {
+func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]k8sapi.Workload, error) {
 	ss, err := kc.ki.AppsV1().StatefulSets(namespace).List(c, meta.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	si := ss.Items
-	objs := make([]runtime.Object, len(si))
+	objs := make([]k8sapi.Workload, len(si))
 	for i := range si {
-		objs[i] = &si[i]
+		objs[i] = k8sapi.StatefulSet(&si[i])
 	}
 	return objs, nil
 }
@@ -160,12 +152,6 @@ func (kc *Cluster) Pods(c context.Context, namespace string) ([]core.Pod, error)
 		return nil, err
 	}
 	return ps.Items, nil
-}
-
-// FindDeployment returns a deployment with the given name in the given namespace or nil
-// if no such deployment could be found.
-func (kc *Cluster) FindDeployment(c context.Context, namespace, name string) (*apps.Deployment, error) {
-	return kc.ki.AppsV1().Deployments(namespace).Get(c, name, meta.GetOptions{})
 }
 
 // FindPodFromSelector returns a pod with the given name-hex-hex
@@ -193,12 +179,6 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 	return nil, errors.New("pod not found")
 }
 
-// FindPod returns a pod with the given name in the given namespace or nil
-// if no such replica set could be found.
-func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*core.Pod, error) {
-	return kc.ki.CoreV1().Pods(namespace).Get(c, name, meta.GetOptions{})
-}
-
 // FindWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
 // is optional. A search is performed in the following order if it is empty:
 //
@@ -207,15 +187,14 @@ func (kc *Cluster) FindPod(c context.Context, namespace, name string) (*core.Pod
 //   3. StatefulSets
 //
 // The first match is returned.
-func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (obj runtime.Object, err error) {
-	ai := kc.ki.AppsV1()
+func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (obj k8sapi.Workload, err error) {
 	switch workloadKind {
 	case "Deployment":
-		obj, err = ai.Deployments(namespace).Get(c, name, meta.GetOptions{})
+		obj, err = k8sapi.GetDeployment(c, name, namespace)
 	case "ReplicaSet":
-		obj, err = ai.ReplicaSets(namespace).Get(c, name, meta.GetOptions{})
+		obj, err = k8sapi.GetReplicaSet(c, name, namespace)
 	case "StatefulSet":
-		obj, err = ai.StatefulSets(namespace).Get(c, name, meta.GetOptions{})
+		obj, err = k8sapi.GetStatefulSet(c, name, namespace)
 	case "":
 		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
 			if obj, err = kc.FindWorkload(c, namespace, name, wk); err == nil {

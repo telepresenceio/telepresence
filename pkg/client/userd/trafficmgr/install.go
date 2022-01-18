@@ -15,7 +15,6 @@ import (
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -34,8 +33,7 @@ type installer struct {
 }
 
 type Installer interface {
-	k8s.ResourceFinder
-	EnsureAgent(c context.Context, obj runtime.Object, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
+	EnsureAgent(c context.Context, obj k8sapi.Workload, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
 	EnsureManager(c context.Context) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
@@ -63,7 +61,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 	}
 
 	// Remove the agent from all deployments
-	webhookAgentChannel := make(chan runtime.Object, len(agents))
+	webhookAgentChannel := make(chan k8sapi.Object, len(agents))
 	wg := sync.WaitGroup{}
 	wg.Add(len(agents))
 	for _, ai := range agents {
@@ -112,7 +110,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 		webhookWaitGroup := sync.WaitGroup{}
 		webhookWaitGroup.Add(len(webhookAgentChannel))
 		for agent := range webhookAgentChannel {
-			go func(obj runtime.Object) {
+			go func(obj k8sapi.Object) {
 				defer webhookWaitGroup.Done()
 				err := ki.rolloutRestart(c, obj)
 				if err != nil {
@@ -140,18 +138,17 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 }
 
 // recreates "kubectl rollout restart <obj>" for obj
-func (ki *installer) rolloutRestart(c context.Context, obj runtime.Object) error {
+func (ki *installer) rolloutRestart(c context.Context, obj k8sapi.Object) error {
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
 		install.DomainPrefix,
 		time.Now().Format(time.RFC3339),
 	)
-	_, err := k8sapi.Patch(c, obj, types.StrategicMergePatchType, []byte(restartAnnotation))
-	return err
+	return obj.Patch(c, types.StrategicMergePatchType, []byte(restartAnnotation))
 }
 
 // Finds the Referenced Service in an objects' annotations
-func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj runtime.Object) (*core.Service, error) {
+func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (*core.Service, error) {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -180,7 +177,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj runtime.Obje
 // the port to-be-intercepted has changed. It raises an error if either of these
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
-func checkSvcSame(_ context.Context, obj runtime.Object, svcName, portNameOrNumber string) error {
+func checkSvcSame(_ context.Context, obj k8sapi.Object, svcName, portNameOrNumber string) error {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -217,7 +214,7 @@ func (ki *installer) getSvcForInjectedPod(
 	svcName,
 	portNameOrNumber string,
 	podTemplate *core.PodTemplateSpec,
-	obj runtime.Object,
+	obj k8sapi.Object,
 ) (*core.Service, error) {
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
@@ -280,14 +277,10 @@ func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) EnsureAgent(c context.Context, obj runtime.Object,
+func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
 	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
-	podTemplate, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return "", "", err
-	}
-
-	kind := k8sapi.GetKind(obj)
+	podTemplate := obj.GetPodTemplate()
+	kind := obj.GetKind()
 	name := k8sapi.GetName(obj)
 	namespace := k8sapi.GetNamespace(obj)
 	rf := reflect.ValueOf(obj).Elem()
@@ -365,14 +358,15 @@ already exist for this service`, kind, name)
 	}
 
 	if update {
-		if obj, err = k8sapi.Update(c, obj); err != nil {
+		if err = obj.Update(c); err != nil {
 			return "", "", err
 		}
 		if updateSvc {
-			if svcObj, err := k8sapi.Update(c, svc); err != nil {
+			svcObj := k8sapi.Service(svc)
+			if err := svcObj.Update(c); err != nil {
 				return "", "", err
 			} else {
-				svc = svcObj.(*core.Service)
+				svc, _ = k8sapi.ServiceImpl(svcObj)
 			}
 		}
 		if err := ki.waitForApply(c, namespace, name, obj); err != nil {
@@ -391,38 +385,7 @@ already exist for this service`, kind, name)
 	return string(svc.GetUID()), kind, nil
 }
 
-// The following <workload>Updated functions all contain the logic for
-// determining if that specific workload type has successfully been updated
-// based on the object's metadata. We have separate ones for each object
-// because the criteria is slightly different for each.
-func replicaSetUpdated(rs *apps.ReplicaSet, origGeneration int64) bool {
-	applied := rs.ObjectMeta.Generation >= origGeneration &&
-		rs.Status.ObservedGeneration == rs.ObjectMeta.Generation &&
-		(rs.Spec.Replicas == nil || rs.Status.Replicas >= *rs.Spec.Replicas) &&
-		rs.Status.FullyLabeledReplicas == rs.Status.Replicas &&
-		rs.Status.AvailableReplicas == rs.Status.Replicas
-	return applied
-}
-
-func deploymentUpdated(dep *apps.Deployment, origGeneration int64) bool {
-	applied := dep.ObjectMeta.Generation >= origGeneration &&
-		dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
-		(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
-		dep.Status.UpdatedReplicas == dep.Status.Replicas &&
-		dep.Status.AvailableReplicas == dep.Status.Replicas
-	return applied
-}
-
-func statefulSetUpdated(statefulSet *apps.StatefulSet, origGeneration int64) bool {
-	applied := statefulSet.ObjectMeta.Generation >= origGeneration &&
-		statefulSet.Status.ObservedGeneration == statefulSet.ObjectMeta.Generation &&
-		(statefulSet.Spec.Replicas == nil || statefulSet.Status.UpdatedReplicas >= *statefulSet.Spec.Replicas) &&
-		statefulSet.Status.UpdatedReplicas == statefulSet.Status.Replicas &&
-		statefulSet.Status.CurrentReplicas == statefulSet.Status.Replicas
-	return applied
-}
-
-func (ki *installer) waitForApply(c context.Context, namespace, name string, obj runtime.Object) error {
+func (ki *installer) waitForApply(c context.Context, namespace, name string, obj k8sapi.Workload) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
@@ -433,7 +396,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	}
 
 	var err error
-	if rs, ok := obj.(*apps.ReplicaSet); ok {
+	if rs, ok := k8sapi.ReplicaSetImpl(obj); ok {
 		if err = ki.refreshReplicaSet(c, namespace, rs); err != nil {
 			return err
 		}
@@ -444,21 +407,11 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 			return err
 		}
 
-		if obj, err = k8sapi.Get(c, obj); err != nil {
+		if err = obj.Refresh(c); err != nil {
 			return client.CheckTimeout(c, err)
 		}
-
-		updated := false
-		switch obj := obj.(type) {
-		case *apps.ReplicaSet:
-			updated = replicaSetUpdated(obj, origGeneration)
-		case *apps.Deployment:
-			updated = deploymentUpdated(obj, origGeneration)
-		case *apps.StatefulSet:
-			updated = statefulSetUpdated(obj, origGeneration)
-		}
-		if updated {
-			dlog.Debugf(c, "%s %s.%s successfully applied", k8sapi.GetKind(obj), name, namespace)
+		if obj.Updated(origGeneration) {
+			dlog.Debugf(c, "%s %s.%s successfully applied", obj.GetKind(), name, namespace)
 			return nil
 		}
 	}
@@ -477,16 +430,7 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 		for _, ownerRef := range pod.OwnerReferences {
 			if ownerRef.UID == rs.UID {
 				dlog.Infof(c, "Deleting pod %s.%s owned by rs %s", pod.Name, pod.Namespace, rs.Name)
-				pod := &core.Pod{
-					TypeMeta: meta.TypeMeta{
-						Kind: "Pod",
-					},
-					ObjectMeta: meta.ObjectMeta{
-						Namespace: pod.Namespace,
-						Name:      pod.Name,
-					},
-				}
-				if err = k8sapi.Delete(c, pod); err != nil {
+				if err = k8sapi.Pod(&pod).Delete(c); err != nil {
 					if errors2.IsNotFound(err) || errors2.IsConflict(err) {
 						// If an intercept creates a new pod by installing an agent, and the agent is then uninstalled shortly after, the
 						// old pod may still show up here during removal, and even after it has been removed if the removal completed
@@ -500,7 +444,7 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 	return nil
 }
 
-func getAnnotation(obj runtime.Object, data completeAction) (bool, error) {
+func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
 	ann := k8sapi.GetAnnotations(obj)
 	if ann == nil {
 		return false, nil
@@ -530,12 +474,12 @@ func getAnnotation(obj runtime.Object, data completeAction) (bool, error) {
 	return true, nil
 }
 
-func (ki *installer) undoObjectMods(c context.Context, obj runtime.Object) error {
+func (ki *installer) undoObjectMods(c context.Context, obj k8sapi.Object) error {
 	referencedService, err := undoObjectMods(c, obj)
 	if err != nil {
 		return err
 	}
-	svc, err := ki.FindSvc(c, k8sapi.GetNamespace(obj), referencedService)
+	svc, err := k8sapi.GetService(c, referencedService, k8sapi.GetNamespace(obj))
 	if err != nil && !errors2.IsNotFound(err) {
 		return err
 	}
@@ -544,11 +488,10 @@ func (ki *installer) undoObjectMods(c context.Context, obj runtime.Object) error
 			return err
 		}
 	}
-	_, err = k8sapi.Update(c, obj)
-	return err
+	return obj.Update(c)
 }
 
-func undoObjectMods(c context.Context, obj runtime.Object) (string, error) {
+func undoObjectMods(c context.Context, obj k8sapi.Object) (string, error) {
 	var actions workloadActions
 	ok, err := getAnnotation(obj, &actions)
 	if !ok {
@@ -575,14 +518,14 @@ func undoObjectMods(c context.Context, obj runtime.Object) (string, error) {
 	return actions.ReferencedService, nil
 }
 
-func (ki *installer) undoServiceMods(c context.Context, svc *core.Service) (err error) {
+func (ki *installer) undoServiceMods(c context.Context, svc k8sapi.Object) (err error) {
 	if err = undoServiceMods(c, svc); err == nil {
-		_, err = k8sapi.Update(c, svc)
+		err = svc.Update(c)
 	}
 	return err
 }
 
-func undoServiceMods(c context.Context, svc *core.Service) error {
+func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 	var actions svcActions
 	ok, err := getAnnotation(svc, &actions)
 	if !ok {
@@ -595,10 +538,13 @@ func undoServiceMods(c context.Context, svc *core.Service) error {
 			return err
 		}
 	}
-	delete(svc.Annotations, annTelepresenceActions)
-	if len(svc.Annotations) == 0 {
-		svc.Annotations = nil
+	mSvc := svc.GetObjectMeta()
+	anns := mSvc.GetAnnotations()
+	delete(anns, annTelepresenceActions)
+	if len(anns) == 0 {
+		anns = nil
 	}
+	mSvc.SetAnnotations(anns)
 	explainUndo(c, &actions, svc)
 	return nil
 }
@@ -612,18 +558,14 @@ func addAgentToWorkload(
 	agentImageName string,
 	trafficManagerNamespace string,
 	telepresenceAPIPort uint16,
-	object runtime.Object, matchingService *core.Service,
+	object k8sapi.Workload, matchingService *core.Service,
 ) (
-	runtime.Object,
+	k8sapi.Workload,
 	*core.Service,
 	bool,
 	error,
 ) {
-	podTemplate, err := k8sapi.GetPodTemplateFromObject(object)
-	if err != nil {
-		return nil, nil, false, err
-	}
-
+	podTemplate := object.GetPodTemplate()
 	cns := podTemplate.Spec.Containers
 	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, matchingService)
 	if err != nil {
@@ -637,7 +579,7 @@ func addAgentToWorkload(
 			}
 			return strconv.Itoa(int(servicePort.Port))
 		}(),
-		k8sapi.GetKind(object),
+		object.GetKind(),
 		nameAndNamespace(object))
 
 	version := client.Semver().String()
@@ -784,7 +726,7 @@ func addAgentToWorkload(
 	// Apply the actions on the Service.
 	updateService := false
 	if serviceMod != nil {
-		if err = serviceMod.Do(matchingService); err != nil {
+		if err = serviceMod.Do(k8sapi.Service(matchingService)); err != nil {
 			return nil, nil, false, err
 		}
 		if matchingService.Annotations == nil {
@@ -794,7 +736,7 @@ func addAgentToWorkload(
 		if err != nil {
 			return nil, nil, false, err
 		}
-		explainDo(c, serviceMod, matchingService)
+		explainDo(c, serviceMod, k8sapi.Service(matchingService))
 		updateService = true
 	}
 

@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/datawire/dlib/dlog"
@@ -29,23 +28,23 @@ type partialAction interface {
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
 
-	Do(obj runtime.Object) error
-	Undo(ver semver.Version, obj runtime.Object) error
+	Do(obj k8sapi.Object) error
+	Undo(ver semver.Version, obj k8sapi.Object) error
 
-	ExplainDo(obj runtime.Object, out io.Writer)
-	ExplainUndo(obj runtime.Object, out io.Writer)
+	ExplainDo(obj k8sapi.Object, out io.Writer)
+	ExplainUndo(obj k8sapi.Object, out io.Writer)
 
-	IsDone(obj runtime.Object) bool
+	IsDone(obj k8sapi.Object) bool
 }
 
 // A completeAction is a set of smaller partialActions that may be applied to an object.
 type completeAction interface {
 	// These five methods are the same as partialAction, except 'Undo' is different.
-	Do(obj runtime.Object) error
-	Undo(obj runtime.Object) error
-	ExplainDo(obj runtime.Object, out io.Writer)
-	ExplainUndo(obj runtime.Object, out io.Writer)
-	IsDone(obj runtime.Object) bool
+	Do(obj k8sapi.Object) error
+	Undo(obj k8sapi.Object) error
+	ExplainDo(obj k8sapi.Object, out io.Writer)
+	ExplainUndo(obj k8sapi.Object, out io.Writer)
+	IsDone(obj k8sapi.Object) bool
 
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
@@ -59,28 +58,28 @@ type completeAction interface {
 	TelVersion() (semver.Version, error)
 }
 
-func nameAndNamespace(obj runtime.Object) string {
+func nameAndNamespace(obj k8sapi.Object) string {
 	mObj := obj.(meta.ObjectMetaAccessor).GetObjectMeta()
 	return mObj.GetName() + "." + mObj.GetNamespace()
 }
 
-func explainDo(c context.Context, a completeAction, obj runtime.Object) {
+func explainDo(c context.Context, a completeAction, obj k8sapi.Object) {
 	var buf strings.Builder
 	a.ExplainDo(obj, &buf)
 	if buf.Len() > 0 {
 		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
-			k8sapi.GetKind(obj),
+			obj.GetKind(),
 			nameAndNamespace(obj),
 			buf.String()))
 	}
 }
 
-func explainUndo(c context.Context, a completeAction, obj runtime.Object) {
+func explainUndo(c context.Context, a completeAction, obj k8sapi.Object) {
 	var buf strings.Builder
 	a.ExplainUndo(obj, &buf)
 	if buf.Len() > 0 {
 		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
-			k8sapi.GetKind(obj),
+			obj.GetKind(),
 			nameAndNamespace(obj),
 			buf.String()))
 	}
@@ -93,9 +92,9 @@ func explainUndo(c context.Context, a completeAction, obj runtime.Object) {
 type multiAction []partialAction
 
 func (ma multiAction) explain(
-	obj runtime.Object,
+	obj k8sapi.Object,
 	out io.Writer,
-	ef func(partialAction partialAction, obj runtime.Object, out io.Writer),
+	ef func(partialAction partialAction, obj k8sapi.Object, out io.Writer),
 ) {
 	for i, action := range ma {
 		switch i {
@@ -110,15 +109,15 @@ func (ma multiAction) explain(
 	}
 }
 
-func (ma multiAction) ExplainDo(obj runtime.Object, out io.Writer) {
+func (ma multiAction) ExplainDo(obj k8sapi.Object, out io.Writer) {
 	ma.explain(obj, out, partialAction.ExplainDo)
 }
 
-func (ma multiAction) ExplainUndo(obj runtime.Object, out io.Writer) {
+func (ma multiAction) ExplainUndo(obj k8sapi.Object, out io.Writer) {
 	ma.explain(obj, out, partialAction.ExplainUndo)
 }
 
-func (ma multiAction) Do(obj runtime.Object) error {
+func (ma multiAction) Do(obj k8sapi.Object) error {
 	for _, partialAction := range ma {
 		if err := partialAction.Do(obj); err != nil {
 			return err
@@ -127,7 +126,7 @@ func (ma multiAction) Do(obj runtime.Object) error {
 	return nil
 }
 
-func (ma multiAction) IsDone(obj runtime.Object) bool {
+func (ma multiAction) IsDone(obj k8sapi.Object) bool {
 	for _, partialAction := range ma {
 		if !partialAction.IsDone(obj) {
 			return false
@@ -136,7 +135,7 @@ func (ma multiAction) IsDone(obj runtime.Object) bool {
 	return true
 }
 
-func (ma multiAction) Undo(ver semver.Version, obj runtime.Object) error {
+func (ma multiAction) Undo(ver semver.Version, obj k8sapi.Object) error {
 	var result *multierror.Error
 	for i := len(ma) - 1; i >= 0; i-- {
 		err := ma[i].Undo(ver, obj)
@@ -160,7 +159,7 @@ func unmarshalString(in string, out completeAction) error {
 }
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
-// symbolic name so that an traffic-agent in a designated Workload can reference the symbol
+// symbolic name so that an traffic-agent in a designated Object can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
 type makePortSymbolicAction struct {
 	PortName     string
@@ -177,19 +176,23 @@ func (m *makePortSymbolicAction) portName(port string) string {
 	return m.PortName + "." + port
 }
 
-func (m *makePortSymbolicAction) getPort(svc runtime.Object, targetPort intstr.IntOrString) (*core.ServicePort, error) {
-	ports := svc.(*core.Service).Spec.Ports
+func (m *makePortSymbolicAction) getPort(o k8sapi.Object, targetPort intstr.IntOrString) (*core.ServicePort, error) {
+	svc, ok := k8sapi.ServiceImpl(o)
+	if !ok {
+		return nil, k8sapi.ObjErrorf(o, "not a Service")
+	}
+	ports := svc.Spec.Ports
 	for i := range ports {
 		p := &ports[i]
 		if p.TargetPort == targetPort && p.Name == m.PortName {
 			return p, nil
 		}
 	}
-	return nil, k8sapi.ObjErrorf(svc, "unable to find target port %q",
+	return nil, k8sapi.ObjErrorf(o, "unable to find target port %q",
 		m.portName(targetPort.String()))
 }
 
-func (m *makePortSymbolicAction) Do(svc runtime.Object) error {
+func (m *makePortSymbolicAction) Do(svc k8sapi.Object) error {
 	p, err := m.getPort(svc, intstr.FromInt(int(m.TargetPort)))
 	if err != nil {
 		return err
@@ -198,22 +201,22 @@ func (m *makePortSymbolicAction) Do(svc runtime.Object) error {
 	return nil
 }
 
-func (m *makePortSymbolicAction) ExplainDo(_ runtime.Object, out io.Writer) {
+func (m *makePortSymbolicAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "make service port %s symbolic with name %q",
 		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
-func (m *makePortSymbolicAction) ExplainUndo(_ runtime.Object, out io.Writer) {
+func (m *makePortSymbolicAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "restore symbolic service port %s to numeric %d",
 		m.portName(m.SymbolicName), m.TargetPort)
 }
 
-func (m *makePortSymbolicAction) IsDone(svc runtime.Object) bool {
+func (m *makePortSymbolicAction) IsDone(svc k8sapi.Object) bool {
 	_, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	return err == nil
 }
 
-func (m *makePortSymbolicAction) Undo(ver semver.Version, svc runtime.Object) error {
+func (m *makePortSymbolicAction) Undo(ver semver.Version, svc k8sapi.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
@@ -233,8 +236,12 @@ type addSymbolicPortAction struct {
 
 var _ partialAction = (*addSymbolicPortAction)(nil)
 
-func (m *addSymbolicPortAction) getPort(svc runtime.Object, targetPort int32) (*core.ServicePort, error) {
-	ports := svc.(*core.Service).Spec.Ports
+func (m *addSymbolicPortAction) getPort(o k8sapi.Object, targetPort int32) (*core.ServicePort, error) {
+	svc, ok := k8sapi.ServiceImpl(o)
+	if !ok {
+		return nil, k8sapi.ObjErrorf(o, "not a Service")
+	}
+	ports := svc.Spec.Ports
 	for i := range ports {
 		p := &ports[i]
 		if p.TargetPort.Type == intstr.Int && p.TargetPort.IntVal == 0 && p.Port == targetPort {
@@ -242,15 +249,15 @@ func (m *addSymbolicPortAction) getPort(svc runtime.Object, targetPort int32) (*
 			return p, nil
 		}
 	}
-	return nil, k8sapi.ObjErrorf(svc, "unable to find port %d", targetPort)
+	return nil, k8sapi.ObjErrorf(o, "unable to find port %d", targetPort)
 }
 
-func (m *addSymbolicPortAction) ExplainDo(_ runtime.Object, out io.Writer) {
+func (m *addSymbolicPortAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add targetPort to service port %s symbolic with name %q",
 		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
-func (m *addSymbolicPortAction) Do(svc runtime.Object) error {
+func (m *addSymbolicPortAction) Do(svc k8sapi.Object) error {
 	p, err := m.getPort(svc, int32(m.TargetPort))
 	if err != nil {
 		return err
@@ -259,11 +266,11 @@ func (m *addSymbolicPortAction) Do(svc runtime.Object) error {
 	return nil
 }
 
-func (m *addSymbolicPortAction) ExplainUndo(_ runtime.Object, out io.Writer) {
+func (m *addSymbolicPortAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove symbolic service port %s", m.portName(m.SymbolicName))
 }
 
-func (m *addSymbolicPortAction) Undo(ver semver.Version, svc runtime.Object) error {
+func (m *addSymbolicPortAction) Undo(ver semver.Version, svc k8sapi.Object) error {
 	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
@@ -292,23 +299,23 @@ func (s *svcActions) actions() (actions multiAction) {
 	return actions
 }
 
-func (s *svcActions) Do(svc runtime.Object) (err error) {
+func (s *svcActions) Do(svc k8sapi.Object) (err error) {
 	return s.actions().Do(svc)
 }
 
-func (s *svcActions) ExplainDo(svc runtime.Object, out io.Writer) {
+func (s *svcActions) ExplainDo(svc k8sapi.Object, out io.Writer) {
 	s.actions().ExplainDo(svc, out)
 }
 
-func (s *svcActions) ExplainUndo(svc runtime.Object, out io.Writer) {
+func (s *svcActions) ExplainUndo(svc k8sapi.Object, out io.Writer) {
 	s.actions().ExplainUndo(svc, out)
 }
 
-func (s *svcActions) IsDone(svc runtime.Object) bool {
+func (s *svcActions) IsDone(svc k8sapi.Object) bool {
 	return s.actions().IsDone(svc)
 }
 
-func (s *svcActions) Undo(svc runtime.Object) (err error) {
+func (s *svcActions) Undo(svc k8sapi.Object) (err error) {
 	ver, err := s.TelVersion()
 	if err != nil {
 		return err
@@ -365,11 +372,8 @@ func (ata *addTrafficAgentAction) appContainer(cns []core.Container) *core.Conta
 	return nil
 }
 
-func (ata *addTrafficAgentAction) Do(obj runtime.Object) error {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
+func (ata *addTrafficAgentAction) Do(obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
@@ -401,19 +405,16 @@ func (ata *addTrafficAgentAction) Do(obj runtime.Object) error {
 	return nil
 }
 
-func (ata *addTrafficAgentAction) ExplainDo(_ runtime.Object, out io.Writer) {
+func (ata *addTrafficAgentAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) ExplainUndo(_ runtime.Object, out io.Writer) {
+func (ata *addTrafficAgentAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) IsDone(obj runtime.Object) bool {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return false
-	}
+func (ata *addTrafficAgentAction) IsDone(obj k8sapi.Object) bool {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
@@ -424,7 +425,7 @@ func (ata *addTrafficAgentAction) IsDone(obj runtime.Object) bool {
 	return false
 }
 
-func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj runtime.Object, tplSpec *core.PodTemplateSpec) error {
+func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj k8sapi.Object, tplSpec *core.PodTemplateSpec) error {
 	volumeIdx := -1
 	for i := range tplSpec.Spec.Volumes {
 		if tplSpec.Spec.Volumes[i].Name == install.AgentAnnotationVolumeName {
@@ -444,12 +445,8 @@ func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj runtime.Object, 
 	return nil
 }
 
-func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj runtime.Object) error {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
-
+func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	containerIdx := -1
 	for i := range tplSpec.Spec.Containers {
 		if tplSpec.Spec.Containers[i].Name == install.AgentContainerName {
@@ -487,11 +484,8 @@ type addInitContainerAction struct {
 
 var _ partialAction = (*addInitContainerAction)(nil)
 
-func (ica *addInitContainerAction) Do(obj runtime.Object) error {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
+func (ica *addInitContainerAction) Do(obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	if tplSpec.Spec.InitContainers == nil {
 		tplSpec.Spec.InitContainers = []core.Container{}
 	}
@@ -507,19 +501,16 @@ func (ica *addInitContainerAction) Do(obj runtime.Object) error {
 	return nil
 }
 
-func (ica *addInitContainerAction) ExplainDo(_ runtime.Object, out io.Writer) {
+func (ica *addInitContainerAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add %s initContainer with image %s", install.InitContainerName, ica.ImageName)
 }
 
-func (ica *addInitContainerAction) ExplainUndo(_ runtime.Object, out io.Writer) {
+func (ica *addInitContainerAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove %s initContainer with image %s", install.InitContainerName, ica.ImageName)
 }
 
-func (ica *addInitContainerAction) IsDone(obj runtime.Object) bool {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return false
-	}
+func (ica *addInitContainerAction) IsDone(obj k8sapi.Object) bool {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.InitContainers
 	if cns == nil {
 		return false
@@ -533,12 +524,8 @@ func (ica *addInitContainerAction) IsDone(obj runtime.Object) bool {
 	return false
 }
 
-func (ica *addInitContainerAction) Undo(ver semver.Version, obj runtime.Object) error {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return err
-	}
-
+func (ica *addInitContainerAction) Undo(ver semver.Version, obj k8sapi.Object) error {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	containerIdx := -1
 	cns := tplSpec.Spec.InitContainers
 	if cns == nil {
@@ -563,7 +550,7 @@ type addTPEnvironmentAction struct {
 	Env           map[string]string
 }
 
-func (ae *addTPEnvironmentAction) Do(obj runtime.Object) error {
+func (ae *addTPEnvironmentAction) Do(obj k8sapi.Object) error {
 	cn, err := ae.getContainer(obj)
 	if err != nil {
 		return err
@@ -582,7 +569,7 @@ func (ae *addTPEnvironmentAction) Do(obj runtime.Object) error {
 	return nil
 }
 
-func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj runtime.Object) error {
+func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj k8sapi.Object) error {
 	cn, err := ae.getContainer(obj)
 	if err != nil {
 		return err
@@ -600,15 +587,15 @@ func (ae *addTPEnvironmentAction) Undo(_ semver.Version, obj runtime.Object) err
 	return nil
 }
 
-func (ae *addTPEnvironmentAction) ExplainDo(_ runtime.Object, out io.Writer) {
+func (ae *addTPEnvironmentAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "add environment %v to container %s", ae.Env, ae.ContainerName)
 }
 
-func (ae *addTPEnvironmentAction) ExplainUndo(_ runtime.Object, out io.Writer) {
+func (ae *addTPEnvironmentAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove environment %v from container %s", ae.Env, ae.ContainerName)
 }
 
-func (ae *addTPEnvironmentAction) IsDone(obj runtime.Object) bool {
+func (ae *addTPEnvironmentAction) IsDone(obj k8sapi.Object) bool {
 	cn, err := ae.getContainer(obj)
 	if err != nil {
 		return false
@@ -622,11 +609,8 @@ func (ae *addTPEnvironmentAction) IsDone(obj runtime.Object) bool {
 	return count == len(ae.Env)
 }
 
-func (ae *addTPEnvironmentAction) getContainer(obj runtime.Object) (*core.Container, error) {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return nil, err
-	}
+func (ae *addTPEnvironmentAction) getContainer(obj k8sapi.Object) (*core.Container, error) {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		if cn := &cns[i]; cn.Name == ae.ContainerName {
@@ -655,11 +639,8 @@ type hideContainerPortAction struct {
 
 var _ partialAction = (*hideContainerPortAction)(nil)
 
-func (hcp *hideContainerPortAction) getPort(obj runtime.Object, name string) (*core.Container, *core.ContainerPort, error) {
-	tplSpec, err := k8sapi.GetPodTemplateFromObject(obj)
-	if err != nil {
-		return nil, nil, err
-	}
+func (hcp *hideContainerPortAction) getPort(obj k8sapi.Object, name string) (*core.Container, *core.ContainerPort, error) {
+	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
@@ -690,11 +671,11 @@ func swapPortName(cn *core.Container, p *core.ContainerPort, from, to string) {
 	p.Name = to
 }
 
-func (hcp *hideContainerPortAction) Do(obj runtime.Object) error {
+func (hcp *hideContainerPortAction) Do(obj k8sapi.Object) error {
 	return hcp.do(obj)
 }
 
-func (hcp *hideContainerPortAction) do(obj runtime.Object) error {
+func (hcp *hideContainerPortAction) do(obj k8sapi.Object) error {
 	cn, p, err := hcp.getPort(obj, hcp.PortName)
 	if err != nil {
 		return err
@@ -706,26 +687,26 @@ func (hcp *hideContainerPortAction) do(obj runtime.Object) error {
 	return nil
 }
 
-func (hcp *hideContainerPortAction) ExplainDo(_ runtime.Object, out io.Writer) {
+func (hcp *hideContainerPortAction) ExplainDo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "hide port %q in container %s from service by renaming it to %q",
 		hcp.PortName, hcp.ContainerName, hcp.HiddenName)
 }
 
-func (hcp *hideContainerPortAction) ExplainUndo(_ runtime.Object, out io.Writer) {
+func (hcp *hideContainerPortAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 	fmt.Fprintf(out, "reveal hidden port %q in container %s by restoring its origina name %q",
 		hcp.HiddenName, hcp.ContainerName, hcp.PortName)
 }
 
-func (hcp *hideContainerPortAction) IsDone(obj runtime.Object) bool {
+func (hcp *hideContainerPortAction) IsDone(obj k8sapi.Object) bool {
 	_, _, err := hcp.getPort(obj, hcp.HiddenName)
 	return err == nil
 }
 
-func (hcp *hideContainerPortAction) Undo(ver semver.Version, obj runtime.Object) error {
+func (hcp *hideContainerPortAction) Undo(ver semver.Version, obj k8sapi.Object) error {
 	return hcp.undo(obj)
 }
 
-func (hcp *hideContainerPortAction) undo(obj runtime.Object) error {
+func (hcp *hideContainerPortAction) undo(obj k8sapi.Object) error {
 	cn, p, err := hcp.getPort(obj, hcp.HiddenName)
 	if err != nil {
 		return err
@@ -765,23 +746,23 @@ func (d *workloadActions) actions() (actions multiAction) {
 	return actions
 }
 
-func (d *workloadActions) ExplainDo(dep runtime.Object, out io.Writer) {
+func (d *workloadActions) ExplainDo(dep k8sapi.Object, out io.Writer) {
 	d.actions().ExplainDo(dep, out)
 }
 
-func (d *workloadActions) Do(dep runtime.Object) (err error) {
+func (d *workloadActions) Do(dep k8sapi.Object) (err error) {
 	return d.actions().Do(dep)
 }
 
-func (d *workloadActions) ExplainUndo(dep runtime.Object, out io.Writer) {
+func (d *workloadActions) ExplainUndo(dep k8sapi.Object, out io.Writer) {
 	d.actions().ExplainUndo(dep, out)
 }
 
-func (d *workloadActions) IsDone(dep runtime.Object) bool {
+func (d *workloadActions) IsDone(dep k8sapi.Object) bool {
 	return d.actions().IsDone(dep)
 }
 
-func (d *workloadActions) Undo(dep runtime.Object) (err error) {
+func (d *workloadActions) Undo(dep k8sapi.Object) (err error) {
 	ver, err := d.TelVersion()
 	if err != nil {
 		return err

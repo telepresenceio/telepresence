@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	apps "k8s.io/api/apps/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -45,7 +44,7 @@ import (
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, runtime.Object)
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload)
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	RemoveIntercept(context.Context, string) error
@@ -399,31 +398,12 @@ func (tm *TrafficManager) hasOwner(obj runtime.Object) bool {
 
 // getReasonAndLabels gets the workload's associated labels, as well as a reason
 // it cannot be intercepted if that is the case.
-func (tm *TrafficManager) getReasonAndLabels(workload runtime.Object) (map[string]string, string, error) {
-	var labels map[string]string
-	var reason string
-	switch workload := workload.(type) {
-	case *apps.Deployment:
-		if workload.Status.Replicas == int32(0) {
-			reason = "Has 0 replicas"
-		}
-		labels = workload.Spec.Template.Labels
-
-	case *apps.ReplicaSet:
-		if workload.Status.Replicas == int32(0) {
-			reason = "Has 0 replicas"
-		}
-		labels = workload.Spec.Template.Labels
-
-	case *apps.StatefulSet:
-		if workload.Status.Replicas == int32(0) {
-			reason = "Has 0 replicas"
-		}
-		labels = workload.Spec.Template.Labels
-	default:
-		reason = fmt.Sprintf("telepresence does not know how to intercept %T", workload)
+func (tm *TrafficManager) getReasonAndLabels(workload k8sapi.Workload) (labels map[string]string, reason string) {
+	labels = workload.GetPodTemplate().Labels
+	if workload.Replicas() == 0 {
+		reason = "Has 0 replicas"
 	}
-	return labels, reason, nil
+	return
 }
 
 // getInfosForWorkload creates a WorkloadInfo for every workload in names
@@ -432,7 +412,7 @@ func (tm *TrafficManager) getReasonAndLabels(workload runtime.Object) (map[strin
 // or ignore based on the filter criteria.
 func (tm *TrafficManager) getInfosForWorkloads(
 	ctx context.Context,
-	workloads []runtime.Object,
+	workloads []k8sapi.Workload,
 	namespace string,
 	iMap map[string]*manager.InterceptInfo,
 	aMap map[string]*manager.AgentInfo,
@@ -441,7 +421,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 	for _, workload := range workloads {
 		name := k8sapi.GetName(workload)
-		dlog.Debugf(ctx, "Getting info for %s %s.%s", k8sapi.GetKind(workload), name, k8sapi.GetNamespace(workload))
+		dlog.Debugf(ctx, "Getting info for %s %s.%s", workload.GetKind(), name, k8sapi.GetNamespace(workload))
 		iCept, ok := iMap[name]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
@@ -452,11 +432,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 		}
 		reason := ""
 		if agent == nil && iCept == nil {
-			var labels map[string]string
-			var err error
-			if labels, reason, err = tm.getReasonAndLabels(workload); err != nil {
-				continue
-			}
+			labels, reason := tm.getReasonAndLabels(workload)
 			if reason == "" {
 				// If an object is owned by a higher level workload, then users should
 				// intercept that workload, so we will not include it in our slice.
@@ -486,7 +462,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			NotInterceptableReason: reason,
 			AgentInfo:              agent,
 			InterceptInfo:          iCept,
-			WorkloadResourceType:   k8sapi.GetKind(workload),
+			WorkloadResourceType:   workload.GetKind(),
 		})
 	}
 	return workloadInfos
@@ -514,7 +490,7 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 
 	// These are all the workloads we care about and their associated function
 	// to get the names of those workloads
-	workloadsToGet := map[string]func(context.Context, string) ([]runtime.Object, error){
+	workloadsToGet := map[string]func(context.Context, string) ([]k8sapi.Workload, error){
 		"Deployment":  tm.Deployments,
 		"ReplicaSet":  tm.ReplicaSets,
 		"StatefulSet": tm.StatefulSets,

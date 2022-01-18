@@ -18,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -34,13 +35,13 @@ func init() {
 
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	ctx := is.Context()
-	ctx, ti := is.installer(ctx)
+	ctx, _ = is.installer(ctx)
 
 	sv := version.Version
 	version.Version = "v0.0.0-bogus"
 	defer func() { version.Version = sv }()
 
-	_, err := ti.FindDeployment(ctx, is.ManagerNamespace(), install.ManagerAppName)
+	_, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 	is.Error(err, "expected find to not find traffic-manager deployment")
 }
 
@@ -104,10 +105,11 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 	require.NoError(ti.EnsureManager(ctx))
 	require.Eventually(func() bool {
-		deploy, err := ti.FindDeployment(ctx, is.ManagerNamespace(), install.ManagerAppName)
+		obj, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 		if err != nil {
 			return false
 		}
+		deploy, _ := k8sapi.DeploymentImpl(obj)
 		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
 	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
 }
@@ -146,10 +148,11 @@ func (is *installSuite) Test_EnsureManager_upgrades() {
 	require.Error(ti.EnsureManager(ctx))
 
 	require.Eventually(func() bool {
-		deploy, err := ti.FindDeployment(ctx, is.ManagerNamespace(), install.ManagerAppName)
+		obj, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 		if err != nil {
 			return false
 		}
+		deploy, _ := k8sapi.DeploymentImpl(obj)
 		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
 	}, 30*time.Second, 5*time.Second, "timeout waiting for deployment to update")
 
@@ -189,11 +192,11 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 
 	require.NoError(ti.EnsureManager(ctx))
 
-	dep, err := ti.FindDeployment(ctx, is.ManagerNamespace(), install.ManagerAppName)
+	dep, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 	require.NoError(err)
 	require.NotNil(dep)
-	require.Contains(dep.Spec.Template.Spec.Containers[0].Image, "2.4.0")
-	require.Equal(dep.Labels["helm.sh/chart"], "telepresence-1.9.9")
+	require.Contains(dep.GetPodTemplate().Spec.Containers[0].Image, "2.4.0")
+	require.Equal(dep.GetObjectMeta().GetLabels()["helm.sh/chart"], "telepresence-1.9.9")
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
@@ -215,13 +218,13 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace
 	require.NoError(err)
 	require.NoError(ti.EnsureManager(ctx))
 	require.Eventually(func() bool {
-		dep, err := ti.FindDeployment(ctx, namespace, install.ManagerAppName)
+		dep, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, namespace)
 		if err != nil {
 			dlog.Error(ctx, err)
 			return false
 		}
 		v := strings.TrimPrefix(version.Version, "v")
-		img := dep.Spec.Template.Spec.Containers[0].Image
+		img := dep.GetPodTemplate().Spec.Containers[0].Image
 		dlog.Infof(ctx, "traffic-manager image %s, our version %s", img, v)
 		return strings.Contains(img, v)
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
