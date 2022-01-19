@@ -286,7 +286,7 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 		Config:            kubeFlags,
 		mappedNamespaces:  namespaces,
 		ki:                cs,
-		currentNamespaces: make(map[string]struct{}),
+		currentNamespaces: make(map[string]bool),
 	}
 
 	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)

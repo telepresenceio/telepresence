@@ -4,10 +4,14 @@ import (
 	"context"
 	"sort"
 
+	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
+	typedAuth "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -18,13 +22,16 @@ import (
 //
 // The first update will close the firstSnapshotArrived channel.
 func (kc *Cluster) startNamespaceWatcher(c context.Context) {
+	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
 	informerFactory := informers.NewSharedInformerFactory(kc.ki, 0)
 	nsc := informerFactory.Core().V1().Namespaces()
 	informer := nsc.Informer()
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(ns interface{}) {
+			name := ns.(*core.Namespace).Name
+			ok := kc.canAccessNS(c, authHandler, name)
 			kc.nsLock.Lock()
-			kc.currentNamespaces[ns.(*core.Namespace).Name] = struct{}{}
+			kc.currentNamespaces[name] = ok
 			kc.nsLock.Unlock()
 			kc.refreshNamespaces(c)
 		},
@@ -35,15 +42,57 @@ func (kc *Cluster) startNamespaceWatcher(c context.Context) {
 			kc.refreshNamespaces(c)
 		},
 		UpdateFunc: func(oldNs, newNs interface{}) {
+			oldName := oldNs.(*core.Namespace).Name
+			newName := newNs.(*core.Namespace).Name
+			if oldName == newName {
+				return
+			}
+			ok := kc.canAccessNS(c, authHandler, newName)
 			kc.nsLock.Lock()
-			delete(kc.currentNamespaces, oldNs.(*core.Namespace).Name)
-			kc.currentNamespaces[newNs.(*core.Namespace).Name] = struct{}{}
+			delete(kc.currentNamespaces, oldName)
+			kc.currentNamespaces[newName] = ok
 			kc.nsLock.Unlock()
 			kc.refreshNamespaces(c)
 		},
 	})
 	informerFactory.Start(c.Done())
 	informerFactory.WaitForCacheSync(c.Done())
+}
+
+func (kc *Cluster) canAccessNS(c context.Context, authHandler typedAuth.SelfSubjectAccessReviewInterface, namespace string) bool {
+	// The access rights lister here is the bare minimum needed when using the webhook agent injector
+	for _, ra := range []*auth.ResourceAttributes{
+		{
+			Namespace: namespace,
+			Verb:      "watch",
+			Resource:  "services",
+		},
+		{
+			Namespace: namespace,
+			Verb:      "get",
+			Resource:  "services",
+		},
+		{
+			Namespace: namespace,
+			Verb:      "get",
+			Resource:  "deployments",
+		},
+	} {
+		ar, err := authHandler.Create(c, &auth.SelfSubjectAccessReview{
+			Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra},
+		}, meta.CreateOptions{})
+		if err != nil {
+			if c.Err() == nil {
+				dlog.Errorf(c, `unable to do "can-i" check verb %q, kind %q, in namespace %q: %v`, ra.Verb, ra.Resource, ra.Namespace, err)
+			}
+			return false
+		}
+		if !ar.Status.Allowed {
+			dlog.Debugf(c, "namespace %q is not accessible", namespace)
+			return false
+		}
+	}
+	return true
 }
 
 func sortedStringSlicesEqual(as, bs []string) bool {
@@ -109,8 +158,8 @@ func (kc *Cluster) SetNamespaceListener(nsListener func(context.Context)) {
 func (kc *Cluster) refreshNamespaces(c context.Context) {
 	kc.nsLock.Lock()
 	namespaces := make([]string, 0, len(kc.currentNamespaces))
-	for ns := range kc.currentNamespaces {
-		if kc.shouldBeWatched(ns) {
+	for ns, ok := range kc.currentNamespaces {
+		if ok && kc.shouldBeWatched(ns) {
 			namespaces = append(namespaces, ns)
 		}
 	}
