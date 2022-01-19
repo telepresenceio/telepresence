@@ -12,7 +12,6 @@ import (
 	core "k8s.io/api/core/v1"
 	k8err "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
@@ -62,12 +61,8 @@ func (kc *Cluster) check(c context.Context) error {
 	// context has no effect.
 	errCh := make(chan error)
 	go func() {
-		dc, err := discovery.NewDiscoveryClientForConfig(kc.config)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		info, err := dc.ServerVersion()
+		defer close(errCh)
+		info, err := k8sapi.GetK8sInterface(c).Discovery().ServerVersion()
 		if err != nil {
 			errCh <- err
 			return
@@ -87,7 +82,6 @@ func (kc *Cluster) check(c context.Context) error {
 				"kubernetes server versions older than %s are not supported, using %s .",
 				supportedKubeAPIVersion, info.GitVersion)
 		}
-		close(errCh)
 	}()
 
 	select {
@@ -278,6 +272,8 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	if err != nil {
 		return nil, err
 	}
+	c = k8sapi.WithK8sInterface(c, cs)
+
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
 	} else {
