@@ -21,7 +21,7 @@ rules:
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "update"]
+  verbs: ["watch", "get", "list", "update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]

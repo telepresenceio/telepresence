@@ -36,7 +36,9 @@ type Cluster struct {
 	nsLock sync.Mutex
 
 	// Current Namespace snapshot, get set by namespace watcher.
-	currentNamespaces map[string]struct{}
+	// The boolean value indicates if this client is allowed to
+	// watch services and retrieve workloads in the namespace
+	currentNamespaces map[string]bool
 
 	// Current Namespace snapshot, filtered by mappedNamespaces
 	currentMappedNamespaces []string
@@ -287,7 +289,9 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 		currentNamespaces: make(map[string]struct{}),
 	}
 
-	if err := ret.check(c); err != nil {
+	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
+	defer cancel()
+	if err := ret.check(timedC); err != nil {
 		return nil, err
 	}
 

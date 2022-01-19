@@ -238,8 +238,6 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	}
 	sort.Strings(mappedNamespaces)
 
-	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
-	defer cancel()
 	cluster, err := k8s.NewCluster(c, config, mappedNamespaces)
 	if err != nil {
 		return nil, err
