@@ -20,8 +20,14 @@ service Daemon {
   // Quit quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  // SetOutboundInfo provides the information needed to set up outbound connectivity
-  rpc SetOutboundInfo(OutboundInfo) returns (google.protobuf.Empty);
+  // Connect creates a new session that provides outbound connectivity to the cluster
+  rpc Connect(OutboundInfo) returns (DaemonStatus);
+
+  // Disconnect disconnects the current session.
+  rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // GetClusterSubnets gets the outbound info that has been set on daemon
+  rpc GetClusterSubnets(google.protobuf.Empty) returns (ClusterSubnets);
 
   // SetDnsSearchPath sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
@@ -82,4 +88,13 @@ message OutboundInfo {
   // never_proxy_subnets are subnets that the daemon should not proxy but resolve
   // via the underlying network interface.
   repeated manager.IPNet never_proxy_subnets = 6;
+}
+
+// ClusterSubnets are the cluster subnets that the daemon has detected that need to be
+// routed
+message ClusterSubnets {
+  // pod_subnets are the subnets that pods go into
+  repeated manager.IPNet pod_subnets = 1;
+  // svc_subnets are subnets that services go into
+  repeated manager.IPNet svc_subnets = 2;
 }

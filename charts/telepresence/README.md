@@ -53,6 +53,7 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | agentInjector.agentImage.registry | The registry for the injected agent image                                                                      |  `docker.io/datawire`                                                                             |
 | agentInjector.agentImage.name | The name of the injected agent image                                                                               |  `tel2`                                                                                           |
 | agentInjector.agentImage.tag | The tag for the injected agent image                                                                                |  `""` (Defined in `appVersion` Chart.yaml)                                                        |
+| agentInjector.appProtocolStrategy | The strategy to use when determining the application protocol to use for intercepts | `http2Probe` |
 | agentInjector.certificate.regenerate   | Define whether you want to regenerate certificate used for mutating webhook.                                                                             | `false`                                                                                 |
 | agentInjector.service.type   | Type of service for the agent-injector.                                                                             | `ClusterIP`                                                                                 |
 | agentInjector.secret.name  | The name of the secret the agent-injector webhook uses for authorization with the kubernetes api will expose.                                                                                                    | `mutator-webhook-tls`                                                                                        |
@@ -69,8 +70,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | clientRbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `false`                                                                                  |
 | clientRbac.namespaces          | The namespaces to give users access to.                                                                                 | `["ambassador"]`                                                                                           |
 | managerRbac.create              | Create RBAC resources for traffic-manager with this release.                                                           | `true`                                                                                            |
-| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false`
-| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]`
+| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false` |
+| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]` |
+| telepresenceAPI.port     | The port on agent's localhost where the Telepresence API server can be found                              | |
 
 
 ## License Key 

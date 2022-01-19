@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -16,26 +20,75 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const configFile = "config.yml"
 
 // Config contains all configuration values for the telepresence CLI
 type Config struct {
-	Timeouts  Timeouts  `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	LogLevels LogLevels `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
-	Images    Images    `json:"images,omitempty" yaml:"images,omitempty"`
-	Cloud     Cloud     `json:"cloud,omitempty" yaml:"cloud,omitempty"`
-	Grpc      Grpc      `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	Timeouts        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
+	LogLevels       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
+	Images          Images          `json:"images,omitempty" yaml:"images,omitempty"`
+	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
+	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
 }
 
-// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+// Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) Merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
 	c.Images.merge(&o.Images)
 	c.Cloud.merge(&o.Cloud)
 	c.Grpc.merge(&o.Grpc)
+	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
+	c.Intercept.merge(&o.Intercept)
+}
+
+// Watch uses a file system watcher that receives events when the configuration changes
+// and calls the given function when that happens.
+func Watch(c context.Context, onReload func(context.Context) error) error {
+	configFile := GetConfigFile(c)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+
+	// The directory containing the config file must be watched because editing
+	// the file will typically end with renaming the original and then creating
+	// a new file. A watcher that follows the inode will not see when the new
+	// file is created.
+	if err = watcher.Add(filepath.Dir(configFile)); err != nil {
+		return err
+	}
+
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		if err := onReload(c); err != nil {
+			dlog.Error(c, err)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case err = <-watcher.Errors:
+			dlog.Error(c, err)
+		case event := <-watcher.Events:
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
+				// The config file was created or modified. Let's defer the load just a little bit
+				// in case there are more modifications (a write out with vi will typically cause
+				// one CREATE event and at least one WRITE event).
+				delay.Reset(5 * time.Millisecond)
+			}
+		}
+	}
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -46,7 +99,7 @@ func stringKey(n *yaml.Node) (string, error) {
 	return s, nil
 }
 
-func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
+func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("config must be an object", node))
 	}
@@ -59,32 +112,24 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 		switch {
 		case kv == "timeouts":
-			err := ms[i+1].Decode(&c.Timeouts)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Timeouts)
 		case kv == "logLevels":
-			err := ms[i+1].Decode(&c.LogLevels)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.LogLevels)
 		case kv == "images":
-			err := ms[i+1].Decode(&c.Images)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Images)
 		case kv == "cloud":
-			err := ms[i+1].Decode(&c.Cloud)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Cloud)
 		case kv == "grpc":
-			err := ms[i+1].Decode(&c.Grpc)
-			if err != nil {
-				return err
-			}
+			err = ms[i+1].Decode(&c.Grpc)
+		case kv == "telepresenceAPI":
+			err = ms[i+1].Decode(&c.TelepresenceAPI)
+		case kv == "intercept":
+			err = ms[i+1].Decode(&c.Intercept)
 		case parseContext != nil:
 			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -631,6 +676,44 @@ func (g Grpc) MarshalYAML() (interface{}, error) {
 	return cm, nil
 }
 
+type TelepresenceAPI struct {
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
+}
+
+func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
+	if o.Port != 0 {
+		g.Port = o.Port
+	}
+}
+
+const defaultInterceptDefaultPort = 8080
+
+type Intercept struct {
+	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
+	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
+}
+
+func (ic *Intercept) merge(o *Intercept) {
+	if o.AppProtocolStrategy != k8sapi.Http2Probe {
+		ic.AppProtocolStrategy = o.AppProtocolStrategy
+	}
+	if o.DefaultPort != 0 {
+		ic.DefaultPort = o.DefaultPort
+	}
+}
+
+// MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
+func (ic Intercept) MarshalYAML() (interface{}, error) {
+	im := make(map[string]interface{})
+	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
+		im["defaultPort"] = ic.DefaultPort
+	}
+	if ic.AppProtocolStrategy != k8sapi.Http2Probe {
+		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
+	}
+	return im, nil
+}
+
 var parseContext context.Context
 
 type parsedFile struct{}
@@ -648,15 +731,21 @@ type configKey struct{}
 
 // WithConfig returns a context with the given Config
 func WithConfig(ctx context.Context, config *Config) context.Context {
-	return context.WithValue(ctx, configKey{}, config)
+	return context.WithValue(ctx, configKey{}, (*unsafe.Pointer)(unsafe.Pointer(&config)))
 }
 
 func GetConfig(ctx context.Context) *Config {
-	config, ok := ctx.Value(configKey{}).(*Config)
-	if !ok {
-		return nil
+	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
+		return (*Config)(atomic.LoadPointer(configPtr))
 	}
-	return config
+	return nil
+}
+
+// ReplaceConfig replaces the config last stored using WithConfig with the given Config
+func ReplaceConfig(ctx context.Context, config *Config) {
+	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
+		atomic.StorePointer(configPtr, unsafe.Pointer(config))
+	}
 }
 
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir
@@ -690,13 +779,18 @@ func GetDefaultConfig(c context.Context) Config {
 			SystemaHost:     defaultCloudSystemAHost,
 			SystemaPort:     defaultCloudSystemAPort,
 		},
-		Grpc: Grpc{},
+		Grpc:            Grpc{},
+		TelepresenceAPI: TelepresenceAPI{},
+		Intercept: Intercept{
+			DefaultPort: defaultInterceptDefaultPort,
+		},
 	}
-	env := GetEnv(c)
-	cfg.Images.Registry = env.Registry
-	cfg.Images.WebhookRegistry = env.Registry
-	cfg.Images.AgentImage = env.AgentImage
-	cfg.Images.WebhookAgentImage = env.AgentImage
+	if env := GetEnv(c); env != nil {
+		cfg.Images.Registry = env.Registry
+		cfg.Images.WebhookRegistry = env.Registry
+		cfg.Images.AgentImage = env.AgentImage
+		cfg.Images.WebhookAgentImage = env.AgentImage
+	}
 	return cfg
 }
 

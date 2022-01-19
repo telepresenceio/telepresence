@@ -24,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -303,7 +304,7 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
 		GitVersion: "v1.17.0",
 	}
-	ctx = managerutil.WithK8SClientset(ctx, fakeClient)
+	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
 		MaxReceiveSize:  resource.Quantity{},
 		PodCIDRStrategy: "environment",

@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
@@ -58,10 +59,10 @@ type info struct {
 func NewInfo(ctx context.Context) Info {
 	oi := info{}
 	oi.waiter.L = &oi.accLock
-	clientset := managerutil.GetK8sClientset(ctx)
+	ki := k8sapi.GetK8sInterface(ctx)
 
 	// Validate that the kubernetes server version is supported
-	dc := clientset.Discovery()
+	dc := ki.Discovery()
 	info, err := dc.ServerVersion()
 	if err != nil {
 		dlog.Errorf(ctx, "error getting server information: %s", err)
@@ -81,7 +82,7 @@ func NewInfo(ctx context.Context) Info {
 		}
 	}
 
-	client := clientset.CoreV1()
+	client := ki.CoreV1()
 	// Get the clusterID from the default namespaces
 	// We use a default clusterID because we don't want to fail if
 	// the traffic-manager doesn't have the ability to get the namespace
@@ -197,7 +198,7 @@ func NewInfo(ctx context.Context) Info {
 func (oi *info) watchNodeSubnets(ctx context.Context) bool {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	informerFactory := informers.NewSharedInformerFactory(managerutil.GetK8sClientset(ctx), 0)
+	informerFactory := informers.NewSharedInformerFactory(k8sapi.GetK8sInterface(ctx), 0)
 	nodeController := informerFactory.Core().V1().Nodes()
 	nodeLister := nodeController.Lister()
 	nodeInformer := nodeController.Informer()
@@ -218,7 +219,7 @@ func (oi *info) watchNodeSubnets(ctx context.Context) bool {
 func (oi *info) watchPodSubnets(ctx context.Context) bool {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	informerFactory := informers.NewSharedInformerFactory(managerutil.GetK8sClientset(ctx), 0)
+	informerFactory := informers.NewSharedInformerFactory(k8sapi.GetK8sInterface(ctx), 0)
 	podController := informerFactory.Core().V1().Pods()
 	podLister := podController.Lister()
 	podInformer := podController.Informer()
@@ -325,8 +326,7 @@ func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*core
 	if agents == "None" {
 		return nil, nil
 	}
-	clientset := managerutil.GetK8sClientset(ctx)
-	client := clientset.CoreV1()
+	client := k8sapi.GetK8sInterface(ctx).CoreV1()
 	podList, err := client.Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -355,8 +355,7 @@ func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*core
 // GetTrafficManagerPods gets all pods in the manager's namespace that have
 // `traffic-manager` in the name
 func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error) {
-	clientset := managerutil.GetK8sClientset(ctx)
-	client := clientset.CoreV1()
+	client := k8sapi.GetK8sInterface(ctx).CoreV1()
 	env := managerutil.GetEnv(ctx)
 	podList, err := client.Pods(env.ManagerNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {

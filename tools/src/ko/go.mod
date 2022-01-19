@@ -2,7 +2,7 @@ module local
 
 go 1.17
 
-require github.com/google/ko v0.8.4-0.20210915102043-eef795f19cc0
+require github.com/google/ko v0.9.3
 
 require (
 	github.com/BurntSushi/toml v0.4.1 // indirect
@@ -42,14 +42,14 @@ require (
 	github.com/spf13/cobra v1.2.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/spf13/viper v1.8.1 // indirect
+	github.com/spf13/viper v1.9.0 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect
+	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
+	golang.org/x/sys v0.0.0-20210823070655-63515b42dcdf // indirect
 	golang.org/x/text v0.3.6 // indirect
-	golang.org/x/tools v0.1.5 // indirect
+	golang.org/x/tools v0.1.6 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto v0.0.0-20210915214522-86cf1236ec46 // indirect
 	google.golang.org/grpc v1.40.0 // indirect
@@ -57,8 +57,8 @@ require (
 	gopkg.in/ini.v1 v1.63.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	gotest.tools/v3 v3.0.3 // indirect
-	k8s.io/apimachinery v0.22.1 // indirect
+	gotest.tools/v3 v3.1.0 // indirect
+	k8s.io/apimachinery v0.22.2 // indirect
 	k8s.io/klog/v2 v2.20.0 // indirect
 	sigs.k8s.io/kind v0.11.1 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect

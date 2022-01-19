@@ -6,11 +6,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -19,17 +18,10 @@ import (
 func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 	ctx, cancel := context.WithCancel(dcontext.WithSoftness(s.Context()))
 	defer cancel()
-	services := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	const svc = "echo-headless"
 
-	services.Go("intercept", func(ctx context.Context) error {
-		sc := &dhttp.ServerConfig{
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
-			}),
-		}
-		return sc.ListenAndServe(ctx, ":9092")
-	})
+	svcPort, svcCancel := itest.StartLocalHttpEchoServer(ctx, svc)
+	defer svcCancel()
 
 	s.ApplyApp(ctx, "echo-headless", "statefulset/echo-headless")
 	defer s.DeleteSvcAndWorkload(ctx, "statefulset", "echo-headless")
@@ -53,8 +45,9 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 			if test.webhook {
 				require.NoError(annotateForWebhook(ctx, "statefulset", "echo-headless", s.AppNamespace(), 8080))
 			}
-			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "9092")
+			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", strconv.Itoa(svcPort))
 			require.Contains(stdout, "Using StatefulSet echo-headless")
+			s.CapturePodLogs(ctx, "service=echo-headless", "traffic-agent", s.AppNamespace())
 
 			defer func() {
 				itest.TelepresenceOk(ctx, "leave", "echo-headless-"+s.AppNamespace())

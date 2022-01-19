@@ -2,14 +2,16 @@ package cli
 
 import (
 	"context"
-	"runtime"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your
@@ -29,12 +31,6 @@ the processes runs with superuser privileges because it modifies the network.
 Unless the daemons are already started, an attempt will be made to start them.
 This will involve a call to sudo unless this command is run as root (not
 recommended) which in turn may result in a password prompt.`
-
-// global options
-var dnsIP string
-var mappedNamespaces []string
-var kubeFlags *pflag.FlagSet
-var kubeConfig *kates.ConfigFlags
 
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
@@ -107,6 +103,16 @@ func Command(ctx context.Context) *cobra.Command {
 		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:       true, // our FlagErrorFunc will handle it
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			// Allow deprecated global flags so that scripts using them don't break, but print
+			// a warning that their values are ignored.
+			deprecatedGlobalFlags.VisitAll(func(f *pflag.Flag) {
+				if f.Changed {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"use of global flag '--%s' is deprecated and its value is ignored\n", f.Name)
+				}
+			})
+		},
 	}
 
 	// Since we had to DisableFlagParsing so we can parse legacy commands, this
@@ -132,67 +138,48 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
+	groups, err := getRemoteCommands(ctx)
+	if err != nil {
+		groups = commands.GetCommandsForLocal(err)
+	} else {
+		userDaemonRunning = true
+	}
 	rootCmd.InitDefaultHelpCmd()
-	AddCommandGroups(rootCmd, []CommandGroup{
-		{
-			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		},
-		{
-			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
-		},
-		{
-			Name:     "Debug Commands",
-			Commands: []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		},
-		{
-			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand()},
-		},
-	})
+	static := cliutil.CommandGroups{
+		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
+		"Traffic Commands": []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
+		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
+		"Other Commands":   []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+	}
+	for name, cmds := range static {
+		if _, ok := groups[name]; !ok {
+			groups[name] = []*cobra.Command{}
+		}
+		groups[name] = append(groups[name], cmds...)
+	}
+	AddCommandGroups(rootCmd, groups)
 	initGlobalFlagGroups()
 	for _, group := range globalFlagGroups {
 		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
 	}
+	rootCmd.PersistentFlags().AddFlagSet(deprecatedGlobalFlags)
 	return rootCmd
 }
 
 func initGlobalFlagGroups() {
-	globalFlagGroups = []FlagGroup{
-		{
-			Name: "Kubernetes flags",
-			Flags: func() *pflag.FlagSet {
-				kubeFlags = pflag.NewFlagSet("", 0)
-				kubeConfig = kates.NewConfigFlags(false)
-				kubeConfig.Namespace = nil // some of the subcommands, like "connect", don't take --namespace
-				kubeConfig.AddFlags(kubeFlags)
-				return kubeFlags
-			}(),
-		}}
+	deprecatedGlobalFlags = pflag.NewFlagSet("deprecated global flags", 0)
 
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
-		Name: "Telepresence networking flags",
-		Flags: func() *pflag.FlagSet {
-			netflags := pflag.NewFlagSet("", 0)
-			// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
-			//  that's unknown until it's been tested during the first connect attempt.
-			if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
-				netflags.StringVarP(&dnsIP,
-					"dns", "", "",
-					"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-				)
-			}
-			netflags.StringSliceVar(&mappedNamespaces,
-				"mapped-namespaces", nil, ``+
-					`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
-					`Defaults to all namespaces`)
+	kubeFlags := pflag.NewFlagSet("", 0)
+	genericclioptions.NewConfigFlags(false).AddFlags(kubeFlags)
+	deprecatedGlobalFlags.AddFlagSet(kubeFlags)
 
-			return netflags
-		}(),
-	})
+	netflags := pflag.NewFlagSet("", 0)
+	netflags.StringP("dns", "", "", "")
+	netflags.StringSlice("mapped-namespaces", nil, "")
 
-	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+	deprecatedGlobalFlags.AddFlagSet(netflags)
+
+	globalFlagGroups = []cliutil.FlagGroup{{
 		Name: "other Telepresence flags",
 		Flags: func() *pflag.FlagSet {
 			flags := pflag.NewFlagSet("", 0)
@@ -202,5 +189,5 @@ func initGlobalFlagGroups() {
 			)
 			return flags
 		}(),
-	})
+	}}
 }

@@ -6,33 +6,34 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/util"
+	"k8s.io/kubectl/pkg/util/podutils"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 )
 
 type k8sPortForwardDialer struct {
 	// static
-	logCtx          context.Context
-	kubeFlags       *kates.ConfigFlags
-	kubeRESTClient  *rest.RESTClient
-	kubeKatesClient *kates.Client
-	spdyTransport   http.RoundTripper
-	spdyUpgrader    spdy.Upgrader
+	logCtx        context.Context
+	k8sInterface  kubernetes.Interface
+	spdyTransport http.RoundTripper
+	spdyUpgrader  spdy.Upgrader
 
 	// state
 	nextRequestID int64
@@ -44,32 +45,19 @@ type k8sPortForwardDialer struct {
 // grpc.WithContextDialer) that dials to a port on a Kubernetes Pod, in the manor of `kubectl
 // port-forward`.  It returns the direct connection to the apiserver; it does not establish a local
 // port being forwarded from or otherwise pump data over the connection.
-func NewK8sPortForwardDialer(logCtx context.Context, kubeFlags *kates.ConfigFlags, kubeKatesClient *kates.Client) (func(context.Context, string) (net.Conn, error), error) {
-	kubeConfig, err := kubeFlags.ToRESTConfig()
-	if err != nil {
-		return nil, err
-	}
-
+func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (func(context.Context, string) (net.Conn, error), error) {
 	if err := setKubernetesDefaults(kubeConfig); err != nil {
 		return nil, err
 	}
-
-	kubeRESTClient, err := rest.RESTClientFor(kubeConfig)
-	if err != nil {
-		return nil, err
-	}
-
 	spdyTransport, spdyUpgrader, err := spdy.RoundTripperFor(kubeConfig)
 	if err != nil {
 		return nil, err
 	}
 	dialer := &k8sPortForwardDialer{
-		logCtx:          logCtx,
-		kubeFlags:       kubeFlags,
-		kubeRESTClient:  kubeRESTClient,
-		kubeKatesClient: kubeKatesClient,
-		spdyTransport:   spdyTransport,
-		spdyUpgrader:    spdyUpgrader,
+		logCtx:        logCtx,
+		k8sInterface:  k8sInterface,
+		spdyTransport: spdyTransport,
+		spdyUpgrader:  spdyUpgrader,
 
 		spdyStreams: make(map[string]httpstream.Connection),
 	}
@@ -85,20 +73,21 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 	if err != nil {
 		return nil, err
 	}
-	conn, err = pf.dial(ctx, pod, podPortNumber)
+	inner, err := pf.dial(ctx, pod, podPortNumber)
 	if err != nil {
-		dlog.Errorf(ctx, "Error with k8sPortForwardDialer dial: %s", err)
+		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
+		return nil, err
 	}
-	return conn, err
+	return wrapUnbufferedConn(inner), nil
 }
 
-func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kates.Pod, uint16, error) {
-	hostName, portName, err := net.SplitHostPort(addr)
+func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *core.Pod, podPortNumber uint16, err error) {
+	var hostName, portName string
+	hostName, portName, err = net.SplitHostPort(addr)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// 1. Get the object.
 	var objKind, objQName string
 	if slash := strings.Index(hostName, "/"); slash < 0 {
 		objKind = "Pod."
@@ -115,44 +104,15 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kate
 		objName = objQName[:dot]
 		objNamespace = objQName[dot+1:]
 	}
-	objUn := &kates.Unstructured{
-		Object: map[string]interface{}{
-			"kind": objKind,
-			"metadata": map[string]interface{}{
-				"name":      objName,
-				"namespace": objNamespace,
-			},
-		},
-	}
-	dlog.Debugf(pf.logCtx, "kates.Get(%s %s.%s)", objKind, objName, objNamespace)
-	if err := pf.kubeKatesClient.Get(ctx, objUn, objUn); err != nil {
-		return nil, 0, fmt.Errorf("unable to get %s %s.%s: %w", objKind, objName, objNamespace, err)
-	}
-	obj, err := kates.NewObjectFromUnstructured(objUn)
-	if err != nil {
-		return nil, 0, err
-	}
 
-	// 2. Resolve that object to a Pod (it might be something else that refers to a Pod, such as
-	// a Service).
-	pod, err := polymorphichelpers.AttachablePodForObjectFn(pf.kubeFlags, obj, func() time.Duration {
-		// This is the same timeout that the `kubectl port-forward` `--pod-running-timeout`
-		// flag sets.
-		if deadline, ok := ctx.Deadline(); ok {
-			return time.Until(deadline)
+	coreV1 := pf.k8sInterface.CoreV1()
+	switch objKind {
+	case "svc":
+		// Get the service.
+		var svc *core.Service
+		if svc, err = coreV1.Services(objNamespace).Get(ctx, objName, meta.GetOptions{}); err != nil {
+			return nil, 0, err
 		}
-		// Fall back to the same default as --pod-running-timeout.
-		return time.Minute
-	}())
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// 3. Resolve the port number.
-	var podPortNumber uint16
-	switch obj := obj.(type) {
-	case *corev1.Service:
-		svc := obj
 		svcPortNumber, err := func() (int32, error) {
 			if svcPortNumber, err := strconv.Atoi(portName); err == nil {
 				return int32(svcPortNumber), nil
@@ -160,30 +120,52 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*kate
 			return util.LookupServicePortNumberByName(*svc, portName)
 		}()
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("cannot find service port in %s.%s: %v", objName, objNamespace, err)
+		}
+
+		// Resolve the Service to a Pod.
+		var selector labels.Selector
+		var podNS string
+		podNS, selector, err = polymorphichelpers.SelectorsForObject(svc)
+		if err != nil {
+			return nil, 0, fmt.Errorf("cannot attach to %T: %v", svc, err)
+		}
+		timeout := func() time.Duration {
+			if deadline, ok := ctx.Deadline(); ok {
+				return time.Until(deadline)
+			}
+			// Fall back to the same default as --pod-running-timeout.
+			return time.Minute
+		}()
+
+		sortBy := func(pods []*core.Pod) sort.Interface { return sort.Reverse(podutils.ActivePods(pods)) }
+		pod, _, err = polymorphichelpers.GetFirstPod(coreV1, podNS, selector.String(), timeout, sortBy)
+		if err != nil {
+			return nil, 0, fmt.Errorf("cannot find first pod for %s.%s: %v", objName, objNamespace, err)
 		}
 		containerPortNumber, err := util.LookupContainerPortNumberByServicePort(*svc, *pod, svcPortNumber)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
 		}
 		podPortNumber = uint16(containerPortNumber)
 	default:
-		containerPortNumber, err := func() (int32, error) {
-			if containerPortNumber, err := strconv.Atoi(portName); err == nil {
-				return int32(containerPortNumber), nil
-			}
-			return util.LookupContainerPortNumberByName(*pod, portName)
-		}()
+		// Get the pod.
+		pod, err = coreV1.Pods(objNamespace).Get(ctx, objName, meta.GetOptions{})
 		if err != nil {
+			return nil, 0, fmt.Errorf("unable to get %s %s.%s: %w", objKind, objName, objNamespace, err)
+		}
+		var pn int32
+		if p, err := strconv.Atoi(portName); err == nil {
+			pn = int32(p)
+		} else if pn, err = util.LookupContainerPortNumberByName(*pod, portName); err != nil {
 			return nil, 0, err
 		}
-		podPortNumber = uint16(containerPortNumber)
+		podPortNumber = uint16(pn)
 	}
-
 	return pod, podPortNumber, nil
 }
 
-func (pf *k8sPortForwardDialer) spdyStream(pod *kates.Pod) (httpstream.Connection, error) {
+func (pf *k8sPortForwardDialer) spdyStream(pod *core.Pod) (httpstream.Connection, error) {
 	cacheKey := pod.Name + "." + pod.Namespace
 	pf.spdyStreamsMu.Lock()
 	defer pf.spdyStreamsMu.Unlock()
@@ -195,7 +177,7 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *kates.Pod) (httpstream.Connectio
 	// helps us with.  So in order to get the URL to use in the SPDY request, we're going to
 	// build a standard Kubernetes HTTP/2 *rest.Request and extract the URL from that, and
 	// discard the rest of the *rest.Request.
-	reqURL := pf.kubeRESTClient.
+	reqURL := pf.k8sInterface.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
 		Namespace(pod.Namespace).
@@ -224,8 +206,8 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *kates.Pod) (httpstream.Connectio
 	return spdyStream, nil
 }
 
-func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port uint16) (conn *kpfConn, err error) {
-	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, %s.%s, %d)",
+func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *core.Pod, port uint16) (conn *kpfConn, err error) {
+	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, Pod./%s.%s, %d)",
 		pod.Name,
 		pod.Namespace,
 		port)
@@ -246,8 +228,8 @@ func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port u
 	requestID := atomic.AddInt64(&pf.nextRequestID, 1) - 1
 
 	headers := http.Header{}
-	headers.Set(corev1.PortHeader, strconv.FormatInt(int64(port), 10))
-	headers.Set(corev1.PortForwardRequestIDHeader, strconv.FormatInt(requestID, 10))
+	headers.Set(core.PortHeader, strconv.FormatInt(int64(port), 10))
+	headers.Set(core.PortForwardRequestIDHeader, strconv.FormatInt(requestID, 10))
 
 	// Quick note: spdyStream.CreateStream returns httpstream.Stream objects.  These have
 	// confusing method names compared to net.Conn objects:
@@ -258,7 +240,7 @@ func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port u
 	//   | close just the 'read' end  | CloseRead()  | -                 |
 	//   | close just the 'write' end | CloseWrite() | Close()           |
 
-	headers.Set(corev1.StreamType, corev1.StreamTypeError)
+	headers.Set(core.StreamType, core.StreamTypeError)
 	errorStream, err := spdyStream.CreateStream(headers)
 	if err != nil {
 		return nil, fmt.Errorf("create port-forward error stream: %w", err)
@@ -266,43 +248,43 @@ func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *kates.Pod, port u
 	// errorStream is read-only, we can go ahead and close the 'write' end.
 	_ = errorStream.Close()
 
-	headers.Set(corev1.StreamType, corev1.StreamTypeData)
+	headers.Set(core.StreamType, core.StreamTypeData)
 	dataStream, err := spdyStream.CreateStream(headers)
 	if err != nil {
 		return nil, fmt.Errorf("create port-forward data stream: %w", err)
 	}
 
 	conn = &kpfConn{
-		remoteAddr: net.JoinHostPort(pod.Name+"."+pod.Namespace, strconv.FormatInt(int64(port), 10)),
-
+		remoteAddr:  net.JoinHostPort(pod.Name+"."+pod.Namespace, strconv.FormatInt(int64(port), 10)),
 		errorStream: errorStream,
 		dataStream:  dataStream,
-
-		oobErrCh: make(chan struct{}),
-
-		readDeadline:  makePipeDeadline(),
-		writeDeadline: makePipeDeadline(),
 	}
-	go conn.oobWorker()
+	conn.init()
 	return conn, nil
 }
 
 type kpfConn struct {
-	remoteAddr string
+	// Configuration
 
+	remoteAddr string
+	// See the above comment about httpstream.Stream close semantics.
 	errorStream httpstream.Stream
 	dataStream  httpstream.Stream
 
+	// Internal data
+
 	oobErrCh chan struct{}
-	oobErr   error
+	oobErr   error // may only access .oobErr if .oobErrCh is closed (unless you're .oobWorker()).
 
-	readMu       sync.Mutex
-	readDeadline pipeDeadline
-	readErr      error
+	readBuff []byte
+	readErr  error
+	writeErr error
+}
 
-	writeMu       sync.Mutex
-	writeDeadline pipeDeadline
-	writeErr      error
+func (c *kpfConn) init() {
+	c.oobErrCh = make(chan struct{})
+	c.readBuff = make([]byte, c.MTU())
+	go c.oobWorker()
 }
 
 func (c *kpfConn) oobWorker() {
@@ -316,52 +298,47 @@ func (c *kpfConn) oobWorker() {
 	close(c.oobErrCh)
 }
 
-// Read implements net.Conn.
-func (c *kpfConn) Read(b []byte) (int, error) {
-	c.readMu.Lock()
-	defer c.readMu.Unlock()
-
-	if c.readErr != nil {
-		return 0, c.readErr
-	}
-	switch {
-	case isClosedChan(c.oobErrCh) && c.oobErr != nil:
-		return 0, c.oobErr
-	case isClosedChan(c.readDeadline.wait()):
-		return 0, os.ErrDeadlineExceeded
-	}
-
-	n, err := c.dataStream.Read(b)
-	if err != nil {
-		c.readErr = err
-	}
-	return n, err
+// MTU implements unbufferedConn.
+func (c *kpfConn) MTU() int {
+	// 4MiB... I don't have a good reason why.  The gRPC-based unbufferedConns use an MTU of
+	// 3MiB, but we have less overhead than them, so let's go a bit bigger?
+	return 4 * 1024 * 1024
 }
 
-// Write implements net.Conn.
-func (c *kpfConn) Write(b []byte) (int, error) {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-
-	if c.writeErr != nil {
-		return 0, c.writeErr
-	}
+// Recv implements unbufferedConn.
+func (c *kpfConn) Recv() ([]byte, error) {
 	switch {
+	case c.readErr != nil:
+		return nil, c.readErr
 	case isClosedChan(c.oobErrCh) && c.oobErr != nil:
-		return 0, c.oobErr
-	case isClosedChan(c.writeDeadline.wait()):
-		return 0, os.ErrDeadlineExceeded
+		return nil, c.oobErr
+	default:
+		n, err := c.dataStream.Read(c.readBuff)
+		if err != nil {
+			c.readErr = err
+		}
+		return c.readBuff[:n], err
 	}
-
-	n, err := c.dataStream.Write(b)
-	if err != nil {
-		c.writeErr = err
-	}
-	return n, err
 }
 
-// Close implements net.Conn.
-func (c *kpfConn) Close() error {
+// Send implements unbufferedConn.
+func (c *kpfConn) Send(b []byte) error {
+	switch {
+	case c.writeErr != nil:
+		return c.writeErr
+	case isClosedChan(c.oobErrCh) && c.oobErr != nil:
+		return c.oobErr
+	default:
+		_, err := c.dataStream.Write(b)
+		if err != nil {
+			c.writeErr = err
+		}
+		return err
+	}
+}
+
+// CloseOnce implements unbufferedConn.
+func (c *kpfConn) CloseOnce() error {
 	closeErr := c.dataStream.Reset()
 	<-c.oobErrCh
 	if c.oobErr != nil {
@@ -373,19 +350,7 @@ func (c *kpfConn) Close() error {
 	return nil
 }
 
-// CloseWrite augments net.Conn.
-func (c *kpfConn) CloseWrite() error {
-	closeErr := c.dataStream.Close()
-	if isClosedChan(c.oobErrCh) && c.oobErr != nil {
-		return c.oobErr
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return nil
-}
-
-// LocalAddr implements net.Conn.
+// LocalAddr implements unbufferedConn.
 func (c *kpfConn) LocalAddr() net.Addr {
 	return addr{
 		net:  "kubectl-port-forward",
@@ -393,29 +358,10 @@ func (c *kpfConn) LocalAddr() net.Addr {
 	}
 }
 
-// RemoteAddr implements net.Conn.
+// RemoteAddr implements unbufferedConn.
 func (c *kpfConn) RemoteAddr() net.Addr {
 	return addr{
 		net:  "kubectl-port-forward",
 		addr: c.remoteAddr,
 	}
-}
-
-// SetDeadline implements net.Conn.
-func (c *kpfConn) SetDeadline(t time.Time) error {
-	c.readDeadline.set(t)
-	c.writeDeadline.set(t)
-	return nil
-}
-
-// SetReadDeadline implements net.Conn.
-func (c *kpfConn) SetReadDeadline(t time.Time) error {
-	c.readDeadline.set(t)
-	return nil
-}
-
-// SetWriteDeadline implements net.Conn.
-func (c *kpfConn) SetWriteDeadline(t time.Time) error {
-	c.writeDeadline.set(t)
-	return nil
 }

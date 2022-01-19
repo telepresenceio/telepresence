@@ -25,3 +25,4 @@ $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
 include build-aux/prelude.mk
 include build-aux/tools.mk
 include build-aux/main.mk
+include build-aux/docs.mk

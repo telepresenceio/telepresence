@@ -1,0 +1,88 @@
+deployment:
+  apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    annotations:
+      deployment.kubernetes.io/revision: "1"
+    creationTimestamp: "2020-12-19T07:17:54Z"
+    generation: 1
+    labels:
+      app: hello-2
+    name: hello-2
+    namespace: telepresence-5759
+    resourceVersion: "492"
+    selfLink: /apis/extensions/v1beta1/namespaces/telepresence-5759/deployments/hello-2
+    uid: 4fd291d9-41ca-11eb-b40f-0242ac110002
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app: hello-2
+    strategy:
+      rollingUpdate:
+        maxSurge: 25%
+        maxUnavailable: 25%
+      type: RollingUpdate
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: hello-2
+      spec:
+        containers:
+        - image: jmalloc/echo-server:0.1.0
+          imagePullPolicy: IfNotPresent
+          name: echo-server
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    conditions:
+    - lastTransitionTime: "2020-12-19T07:18:54Z"
+      lastUpdateTime: "2020-12-19T07:18:54Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2020-12-19T07:18:00Z"
+      lastUpdateTime: "2020-12-19T07:18:54Z"
+      message: ReplicaSet "hello-2-7d6c8856b5" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+    updatedReplicas: 1
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: "2020-12-19T07:17:54Z"
+    labels:
+      app: hello-2
+    name: hello-2
+    namespace: telepresence-5759
+    resourceVersion: "215"
+    selfLink: /api/v1/namespaces/telepresence-5759/services/hello-2
+    uid: 501babcb-41ca-11eb-b40f-0242ac110002
+  spec:
+    clusterIP: 10.43.193.45
+    ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: hello-2
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}

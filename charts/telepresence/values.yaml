@@ -170,7 +170,15 @@ agentInjector:
     failurePolicy: Ignore
     sideEffects: None
     timeoutSeconds: 5
+  appPortStrategy: http2Probe
 
+################################################################################
+## Telepresence API Server Configuration
+################################################################################
+telepresenceAPI:
+  # The port on agent's localhost where the API service can be found
+  # Default: 0
+  port: 0
 
 ################################################################################
 ## User Configuration

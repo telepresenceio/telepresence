@@ -43,7 +43,7 @@ type dialer struct {
 // and the given connection.
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
-// and call the release function it got from the connpool.Pool to ensure that it gets properly released.
+// and call the release function it got from the tunnel.Pool to ensure that it gets properly released.
 func NewDialer(stream Stream) Endpoint {
 	return NewConnEndpoint(stream, nil)
 }
@@ -128,6 +128,14 @@ func (h *dialer) handleControl(ctx context.Context, cm Message) {
 		h.Close(ctx)
 	case KeepAlive:
 		h.resetIdle()
+	case DialOK:
+		// So how can a dialer get a DialOK from a peer? Surely, there cannot be a dialer at both ends?
+		// Well, the story goes like this:
+		// 1. A request to the service is made on the workstation.
+		// 2. This agent's listener receives a connection.
+		// 3. Since an intercept is active, the agent creates a tunnel to the workstation
+		// 4. A new dialer is attached to that tunnel (reused as a tunnel endpoint)
+		// 5. The dialer at the workstation dials and responds with DialOK, and here we are.
 	default:
 		dlog.Errorf(ctx, "!! CONN %s: unhandled connection control message: %s", h.stream.ID(), cm)
 	}

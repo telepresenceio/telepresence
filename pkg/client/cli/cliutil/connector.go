@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -20,7 +22,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-var ErrNoConnector = errors.New("telepresence user daemon is not running")
+var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
+var ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
 
 // WithConnector (1) ensures that the connector is running, (2) establishes a connection to it, and
 // (3) runs the given function with that connection.
@@ -31,19 +34,18 @@ var ErrNoConnector = errors.New("telepresence user daemon is not running")
 //
 // Nested calls to WithConnector will reuse the outer connection.
 func WithConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, true, fn)
+	return withConnector(ctx, true, true, fn)
 }
 
-// WithStartedConnector is like WithConnector, but returns ErrNoConnector if the connector is not
+// WithStartedConnector is like WithConnector, but returns ErrNoUserDaemon if the connector is not
 // already running, rather than starting it.
-func WithStartedConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, false, fn)
+func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
+	return withConnector(ctx, false, withNotify, fn)
 }
 
 type connectorConnCtxKey struct{}
-type connectorStartedCtxKey struct{}
 
-func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context, connector.ConnectorClient) error) error {
+func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
 	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
 		conn := untyped.(*grpc.ClientConn)
 		connectorClient := connector.NewConnectorClient(conn)
@@ -59,7 +61,7 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 			break
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			err = ErrNoConnector
+			err = ErrNoUserDaemon
 			if maybeStart {
 				fmt.Println("Launching Telepresence User Daemon")
 				if err = proc.StartInBackground(client.GetExe(), "connector-foreground"); err != nil {
@@ -79,13 +81,15 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	}
 	defer conn.Close()
 	ctx = context.WithValue(ctx, connectorConnCtxKey{}, conn)
-	ctx = context.WithValue(ctx, connectorStartedCtxKey{}, started)
 	connectorClient := connector.NewConnectorClient(conn)
 	if !started {
 		// Ensure that the already running daemon has the correct version
 		if err := versionCheck(ctx, "User", connectorClient); err != nil {
 			return err
 		}
+	}
+	if !withNotify {
+		return fn(ctx, connectorClient)
 	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
@@ -119,30 +123,44 @@ func withConnector(ctx context.Context, maybeStart bool, fn func(context.Context
 	return grp.Wait()
 }
 
-// DidLaunchConnector returns whether WithConnector launched the connector or merely connected to a
-// running instance.  If there are nested calls to WithConnector, it returns the answer for the
-// inner-most call; even if the outer-most call launches the connector false will be returned.
-func DidLaunchConnector(ctx context.Context) bool {
-	launched, _ := ctx.Value(connectorStartedCtxKey{}).(bool)
-	return launched
-}
-
-func QuitConnector(ctx context.Context) error {
-	err := WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		fmt.Print("Telepresence User Daemon quitting...")
-		_, err := connectorClient.Quit(ctx, &empty.Empty{})
+func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
+	fmt.Print("Telepresence Traffic Manager ")
+	err := WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
+		defer func() {
+			if err == nil {
+				fmt.Println("done")
+			}
+		}()
+		if quitUserDaemon {
+			fmt.Print("quitting...")
+		} else {
+			var ci *connector.ConnectInfo
+			if ci, err = connectorClient.Status(ctx, &empty.Empty{}); err != nil {
+				return err
+			}
+			if ci.Error == connector.ConnectInfo_DISCONNECTED {
+				return ErrNoUserDaemon
+			}
+			fmt.Print("disconnecting...")
+			if _, err = connectorClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
+				// nil or not unimplemented
+				return err
+			}
+			// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
+		}
+		_, err = connectorClient.Quit(ctx, &empty.Empty{})
 		return err
 	})
-	if err == nil {
-		err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
+	if err == nil && quitUserDaemon {
+		err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
 	}
-	if err != nil {
-		if errors.Is(err, ErrNoConnector) {
-			fmt.Println("Telepresence User Daemon is already stopped")
-			return nil
+	if errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable {
+		if quitUserDaemon {
+			fmt.Println("had already quit")
+		} else {
+			fmt.Println("is already disconnected")
 		}
-		return err
+		err = nil
 	}
-	fmt.Println(" done")
-	return nil
+	return err
 }

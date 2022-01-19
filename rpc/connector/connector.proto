@@ -21,9 +21,15 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-  // Status is much like Connect, except that it doesn't actually do
-  // anything.  It's a dry-run.
-  rpc Status(ConnectRequest) returns (ConnectInfo);
+  // Disconnects the cluster
+  rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // Status returns the status of the current connection or DISCONNECTED
+  // if no connection has been established.
+  rpc Status(google.protobuf.Empty) returns (ConnectInfo);
+
+  // Queries the connector whether it is possible to create the given intercept.
+  rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);
 
   // Adds an intercept to a workload.  Requires having already called
   // Connect.
@@ -56,11 +62,49 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
+  rpc GetIngressInfos(google.protobuf.Empty) returns (IngressInfos);
+
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
+  rpc ListCommands(google.protobuf.Empty) returns (CommandGroups);
+
+  // RunCommand executes a CLI command.
+  rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+}
+
+message CommandGroups {
+  message Flag {
+    string type = 1;
+    string flag = 2;
+    string help = 3;
+    string shorthand = 4;
+    string default_value = 5;
+  }
+  message Command {
+    string name = 1;
+    string short_help = 2;
+    string long_help = 3;
+    repeated Flag flags = 4;
+  }
+  message Commands {
+    repeated Command commands = 1;
+  }
+
+  map<string, Commands> command_groups = 1;
+}
+
+message RunCommandRequest {
+  repeated string os_args = 1;
+}
+
+message RunCommandResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -102,15 +146,19 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
-  bool bridge_ok = 5;
+  reserved 5;
   reserved 6;
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
-  repeated manager.IngressInfo ingress_infos = 9;
+  reserved 9;
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+}
+
+message IngressInfos {
+  repeated manager.IngressInfo ingress_infos = 1;
 }
 
 message UninstallRequest {
@@ -161,9 +209,11 @@ enum InterceptError {
   NO_ACCEPTABLE_WORKLOAD = 8;
   AMBIGUOUS_MATCH = 9;
   FAILED_TO_ESTABLISH = 10;
-  reserved 11;
+  UNSUPPORTED_WORKLOAD = 11;
+  MISCONFIGURED_WORKLOAD = 14;
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
+  UNKNOWN_FLAG = 15;
 }
 
 message ListRequest {

@@ -4,32 +4,27 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/docker/docker/pkg/term"
+	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-// CommandGroup represents a group of commands and the name of that group
-type CommandGroup struct {
-	Name     string
-	Commands []*cobra.Command
-}
-
-// FlagGroup represents a group of flags and the name of that group
-type FlagGroup struct {
-	Name  string
-	Flags *pflag.FlagSet
-}
-
-var commandGroupMap = make(map[string][]CommandGroup)
-var globalFlagGroups []FlagGroup
+var userDaemonRunning = false
+var commandGroupMap = make(map[string]cliutil.CommandGroups)
+var globalFlagGroups []cliutil.FlagGroup
+var deprecatedGlobalFlags *pflag.FlagSet
 
 func init() {
-	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) []CommandGroup {
+	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {
 		return commandGroupMap[cmd.Name()]
 	})
-	cobra.AddTemplateFunc("globalFlagGroups", func() []FlagGroup {
+	cobra.AddTemplateFunc("globalFlagGroups", func() []cliutil.FlagGroup {
 		return globalFlagGroups
+	})
+	cobra.AddTemplateFunc("userDaemonRunning", func() bool {
+		return userDaemonRunning
 	})
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
 		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
@@ -64,15 +59,15 @@ func init() {
 	})
 }
 
-func setCommandGroups(cmd *cobra.Command, groups []CommandGroup) {
+func setCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
 	commandGroupMap[cmd.Name()] = groups
 }
 
-// AddCommandGroups adds all the groups in the given CommandGroup to the command,  replaces
+// AddCommandGroups adds all the groups in the given CommandGroups to the command,  replaces
 // the its standard usage template with a template that groups the commands according to that group.
-func AddCommandGroups(cmd *cobra.Command, groups []CommandGroup) {
-	for _, group := range groups {
-		cmd.AddCommand(group.Commands...)
+func AddCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
+	for _, commands := range groups {
+		cmd.AddCommand(commands...)
 	}
 	setCommandGroups(cmd, groups)
 
@@ -88,10 +83,10 @@ Aliases:
 Examples:
 {{.Example}}{{end}}{{if .HasAvailableSubCommands}}
 
-Available Commands:
+Available Commands{{- if not userDaemonRunning }} (list may be incomplete because the User Daemon isn't running){{- end}}:
 {{- if commandGroups .}}
-{{- range $group := commandGroups .}}
-  {{$group.Name}}:{{range $group.Commands}}
+{{- range $name, $commands := commandGroups .}}
+  {{$name}}:{{range $commands}}
     {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}
 {{- else}}
 {{- range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}

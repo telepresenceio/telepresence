@@ -7,6 +7,7 @@ const (
 	DomainPrefix              = "telepresence.getambassador.io/"
 	InjectAnnotation          = DomainPrefix + "inject-" + AgentContainerName
 	ServicePortAnnotation     = DomainPrefix + "inject-service-port"
+	ServiceNameAnnotation     = DomainPrefix + "inject-service-name"
 	ManualInjectAnnotation    = DomainPrefix + "manually-injected"
 	ManagerAppName            = "traffic-manager"
 	ManagerPortHTTP           = 8081

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,7 +43,7 @@ const TestUser = "telepresence-test-developer"
 const TestUserAccount = "system:serviceaccount:default:" + TestUser
 
 type Cluster interface {
-	CapturePodLogs(ctx context.Context, app, ns string)
+	CapturePodLogs(ctx context.Context, app, container, ns string)
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
@@ -76,7 +77,7 @@ type cluster struct {
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
-	s.suffix, s.isCI = os.LookupEnv("CIRCLE_SHA1")
+	s.suffix, s.isCI = os.LookupEnv("GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
 		if len(s.suffix) > 7 {
@@ -116,6 +117,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		assert.NoError(t, err)
 	}
 	s.ensureQuitAndLoggedOut(ctx)
+	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	defer s.tearDown(ctx)
 	if !t.Failed() {
 		f(WithUser(s.withBasicConfig(ctx, t), TestUser))
@@ -134,7 +136,10 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that no telepresence is running when the tests start
-	_, _, _ = Telepresence(ctx, "quit") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
+
+	// Ensure that the daemon-socket is non-existent.
+	_ = rmAsRoot(client.DaemonSocketName)
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
@@ -282,6 +287,9 @@ func (s *cluster) GlobalEnv() map[string]string {
 		includeEnv["TMP"] = yes
 		includeEnv["Path"] = yes
 		includeEnv["PATHEXT"] = yes
+		includeEnv["ProgramFiles"] = yes
+		includeEnv["ProgramData"] = yes
+		includeEnv["SystemDrive"] = yes
 		includeEnv["USERPROFILE"] = yes
 		includeEnv["USERNAME"] = yes
 		includeEnv["windir"] = yes
@@ -325,11 +333,11 @@ func (s *cluster) TelepresenceVersion() string {
 	return s.testVersion
 }
 
-func (s *cluster) CapturePodLogs(ctx context.Context, app, ns string) {
+func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
 		var err error
-		pods, err = KubectlOut(ctx, ns, "get", "pods", "-l", "app="+app, "-o", "jsonpath={.items[*].metadata.name}")
+		pods, err = KubectlOut(ctx, ns, "get", "pods", "--field-selector", "status.phase=Running", "-l", app, "-o", "jsonpath={.items[*].metadata.name}")
 		if err != nil {
 			dlog.Errorf(ctx, "failed to get %s pod in namespace %s: %v", app, ns, err)
 			return
@@ -357,14 +365,18 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, ns string) {
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, pod+"-"+ns+".log"))
+		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", pod, dtime.Now().Format("20060102T150405"))))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
 			return
 		}
 
-		cmd := Command(ctx, "kubectl", "--namespace", ns, "logs", "-f", pod)
+		args := []string{"--namespace", ns, "logs", "-f", pod}
+		if container != "" {
+			args = append(args, "-c", container)
+		}
+		cmd := Command(ctx, "kubectl", args...)
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 		go func(pod string) {
@@ -396,7 +408,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
-			s.CapturePodLogs(ctx, "traffic-manager", managerNamespace)
+			s.CapturePodLogs(ctx, "app=traffic-manager", "", managerNamespace)
 		}
 	}
 	return err
@@ -424,7 +436,7 @@ func KubeConfig(ctx context.Context) string {
 func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
 	getT(ctx).Helper()
 	// Ensure that command has timestamp and is somewhat readable
-	dlog.Debug(ctx, "executing ", shellquote.ShellString(executable, args))
+	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
 	cmd := dexec.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
@@ -490,12 +502,14 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
 	})
 
-	if user := GetUser(ctx); user != "default" {
-		na := make([]string, len(args)+2)
-		na[0] = "--as"
-		na[1] = "system:serviceaccount:default:" + user
-		copy(na[2:], args)
-		args = na
+	if len(args) > 0 && args[0] == "connect" {
+		if user := GetUser(ctx); user != "default" {
+			na := make([]string, len(args)+2)
+			na[0] = "--as"
+			na[1] = "system:serviceaccount:default:" + user
+			copy(na[2:], args)
+			args = na
+		}
 	}
 	cmd := Command(ctx, GetGlobalHarness(ctx).executable, args...)
 	cmd.Stdout = &stdout
@@ -503,18 +517,38 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	return cmd
 }
 
+// TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output
+func TelepresenceDisconnectOk(ctx context.Context) {
+	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
+}
+
+// AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command
+func AssertDisconnectOutput(ctx context.Context, stdout string) {
+	t := getT(ctx)
+	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Network is already disconnected"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Traffic Manager is already disconnected"))
+	if t.Failed() {
+		t.Logf("Disconnect output was %q", stdout)
+	}
+}
+
 // TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output
 func TelepresenceQuitOk(ctx context.Context) {
-	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit"))
+	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-ur"))
 }
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Root Daemon quitting... done") ||
-		strings.Contains(stdout, "Telepresence Root Daemon is already stopped"))
-	assert.True(t, strings.Contains(stdout, "Telepresence User Daemon quitting... done") ||
-		strings.Contains(stdout, "Telepresence User Daemon is already stopped"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Network quitting...done") ||
+		strings.Contains(stdout, "Telepresence Network had already quit"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager quitting...done") ||
+		strings.Contains(stdout, "Telepresence Traffic Manager had already quit"))
+	if t.Failed() {
+		t.Logf("Quit output was %q", stdout)
+	}
 }
 
 // RunError checks if the given err is a *exit.ExitError, and if so, extracts
@@ -607,7 +641,7 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 }
 
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	switch {
 	case strings.HasPrefix(workload, "pod/"):
@@ -664,18 +698,21 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 }
 
 // StartLocalHttpEchoServer starts a local http server that echoes a line with the given name and
-// the current URL path. A function that cancels the server is returned.
-func StartLocalHttpEchoServer(ctx context.Context, name string, port int) context.CancelFunc {
+// the current URL path. The port is returned together with function that cancels the server.
+func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", "localhost:0")
+	require.NoError(getT(ctx), err, "failed to listen on localhost")
 	go func() {
 		sc := &dhttp.ServerConfig{
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "%s from intercept at %s", name, r.URL.Path)
 			}),
 		}
-		_ = sc.ListenAndServe(ctx, fmt.Sprintf(":%d", port))
+		_ = sc.Serve(ctx, l)
 	}()
-	return cancel
+	return l.Addr().(*net.TCPAddr).Port, cancel
 }
 
 func WithConfig(c context.Context, addConfig *client.Config) context.Context {

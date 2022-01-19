@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	goRuntime "runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -37,8 +40,9 @@ func (s *interceptMountSuite) SetupSuite() {
 		s.Require().NoError(err)
 	}
 	ctx := s.Context()
-	s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName(), 9010)
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", s.mountPoint, "--port", "9010")
+	var port int
+	port, s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", s.mountPoint, "--port", strconv.Itoa(port))
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 }
 
@@ -46,6 +50,11 @@ func (s *interceptMountSuite) TearDownSuite() {
 	ctx := s.Context()
 	itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
 	s.cancelLocal()
+	s.Eventually(func() bool {
+		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
+	}, 10*time.Second, time.Second)
+
 	// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 	go func() {
 		time.Sleep(2 * time.Second)
@@ -54,6 +63,9 @@ func (s *interceptMountSuite) TearDownSuite() {
 }
 
 func (s *interceptMountSuite) Test_InterceptMount() {
+	if runtime.GOOS == "darwin" {
+		s.T().SkipNow()
+	}
 	require := s.Require()
 	ctx := s.Context()
 

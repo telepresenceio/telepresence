@@ -3,21 +3,22 @@ package mutator
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	admission "k8s.io/api/admission/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-var podResource = metav1.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
+var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
 var findMatchingService = install.FindMatchingService
 
 func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patchOperation, error) {
@@ -36,7 +37,7 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 
 	// Parse the Pod object.
 	raw := req.Object.Raw
-	pod := corev1.Pod{}
+	pod := core.Pod{}
 	if _, _, err := universalDeserializer.Decode(raw, nil, &pod); err != nil {
 		return nil, fmt.Errorf("could not deserialize pod object: %v", err)
 	}
@@ -67,25 +68,20 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		return nil, nil
 	}
 
-	// Make the kates client available in the context
-	// TODO: Use the kubernetes SharedInformerFactory instead
-	client, err := kates.NewClient(kates.ClientConfig{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new kates client: %w", err)
-	}
-
-	svc, err := findMatchingService(ctx, client, "", "", podNamespace, pod.Labels)
+	svcName := pod.Annotations[install.ServiceNameAnnotation]
+	svc, err := findMatchingService(ctx, "", svcName, podNamespace, pod.Labels)
 	if err != nil {
 		dlog.Error(ctx, err)
-		return nil, nil
+		return nil, err
 	}
 
 	// The ServicePortAnnotation is expected to contain a string that identifies the service port.
 	portNameOrNumber := pod.Annotations[install.ServicePortAnnotation]
 	servicePort, appContainer, containerPortIndex, err := install.FindMatchingPort(pod.Spec.Containers, portNameOrNumber, svc)
 	if err != nil {
+		err := fmt.Errorf("unable to find port to intercept; try the %s annotation: %w", install.ServicePortAnnotation, err)
 		dlog.Error(ctx, err)
-		return nil, nil
+		return nil, err
 	}
 	if appContainer.Name == install.AgentContainerName {
 		dlog.Infof(ctx, "service %s/%s is already pointing at agent container %s; skipping", svc.Namespace, svc.Name, appContainer.Name)
@@ -96,18 +92,18 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	ports := appContainer.Ports
 	for i := range ports {
 		if ports[i].ContainerPort == env.AgentPort {
-			dlog.Infof(ctx, "the %s pod container %s is exposing the same port (%d) as the %s sidecar; skipping",
-				refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
-			return nil, nil
+			err := fmt.Errorf("the %s pod container %s is exposing the same port (%d) as the %s sidecar", refPodName, appContainer.Name, env.AgentPort, install.AgentContainerName)
+			dlog.Info(ctx, err)
+			return nil, err
 		}
 	}
 
-	var appPort corev1.ContainerPort
+	var appPort core.ContainerPort
 	switch {
 	case containerPortIndex >= 0:
 		appPort = appContainer.Ports[containerPortIndex]
 	case servicePort.TargetPort.Type == intstr.Int:
-		appPort = corev1.ContainerPort{
+		appPort = core.ContainerPort{
 			Protocol:      servicePort.Protocol,
 			ContainerPort: servicePort.TargetPort.IntVal,
 		}
@@ -129,6 +125,11 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	} else {
 		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
 	}
+	tpEnv := make(map[string]string)
+	if env.APIPort != 0 {
+		tpEnv["TELEPRESENCE_API_PORT"] = strconv.Itoa(int(env.APIPort))
+	}
+	patches = addTPEnv(&pod, appContainer, tpEnv, patches)
 	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, setGID, podName, podNamespace, patches)
 	if err != nil {
 		return nil, err
@@ -137,13 +138,13 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	return patches, nil
 }
 
-func addInitContainer(ctx context.Context, pod *corev1.Pod, svcPort *corev1.ServicePort, appPort *corev1.ContainerPort, patches []patchOperation) []patchOperation {
+func addInitContainer(ctx context.Context, pod *core.Pod, svcPort *core.ServicePort, appPort *core.ContainerPort, patches []patchOperation) []patchOperation {
 	env := managerutil.GetEnv(ctx)
 	proto := svcPort.Protocol
 	if proto == "" {
 		proto = appPort.Protocol
 	}
-	containerPort := corev1.ContainerPort{
+	containerPort := core.ContainerPort{
 		Protocol:      proto,
 		ContainerPort: env.AgentPort,
 	}
@@ -157,7 +158,7 @@ func addInitContainer(ctx context.Context, pod *corev1.Pod, svcPort *corev1.Serv
 		patches = append(patches, patchOperation{
 			Op:    "add",
 			Path:  "/spec/initContainers",
-			Value: []corev1.Container{},
+			Value: []core.Container{},
 		})
 	} else {
 		for i, container := range pod.Spec.InitContainers {
@@ -181,7 +182,7 @@ func addInitContainer(ctx context.Context, pod *corev1.Pod, svcPort *corev1.Serv
 	})
 }
 
-func addAgentVolume(pod *corev1.Pod, patches []patchOperation) []patchOperation {
+func addAgentVolume(pod *core.Pod, patches []patchOperation) []patchOperation {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == install.AgentAnnotationVolumeName {
 			return patches
@@ -197,11 +198,11 @@ func addAgentVolume(pod *corev1.Pod, patches []patchOperation) []patchOperation 
 // addAgentContainer creates a patch operation to add the traffic-agent container
 func addAgentContainer(
 	ctx context.Context,
-	svc *corev1.Service,
-	pod *corev1.Pod,
-	svcPort *corev1.ServicePort,
-	appContainer *corev1.Container,
-	appPort *corev1.ContainerPort,
+	svc *core.Service,
+	pod *core.Pod,
+	svcPort *core.ServicePort,
+	appContainer *core.Container,
+	appPort *core.ContainerPort,
 	setGID bool,
 	podName, namespace string,
 	patches []patchOperation,
@@ -256,7 +257,7 @@ func addAgentContainer(
 	if proto == "" {
 		proto = appPort.Protocol
 	}
-	containerPort := corev1.ContainerPort{
+	containerPort := core.ContainerPort{
 		Protocol:      proto,
 		ContainerPort: env.AgentPort,
 	}
@@ -272,6 +273,8 @@ func addAgentContainer(
 			appContainer,
 			containerPort,
 			int(appPort.ContainerPort),
+			k8sapi.GetAppProto(ctx, env.AppProtocolStrategy, svcPort),
+			int(env.APIPort),
 			env.ManagerNamespace,
 			setGID,
 		)})
@@ -279,9 +282,50 @@ func addAgentContainer(
 	return patches, nil
 }
 
+// addTPEnv adds telepresence specific environment variables to the app container
+func addTPEnv(pod *core.Pod, cn *core.Container, env map[string]string, patches []patchOperation) []patchOperation {
+	if len(env) == 0 {
+		return patches
+	}
+	cns := pod.Spec.Containers
+	var containerPath string
+	for i := range cns {
+		if &cns[i] == cn {
+			containerPath = fmt.Sprintf("/spec/containers/%d", i)
+			break
+		}
+	}
+	keys := make([]string, len(env))
+	i := 0
+	for k := range env {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	if cn.Env == nil {
+		patches = append(patches, patchOperation{
+			Op:    "replace",
+			Path:  fmt.Sprintf("%s/%s", containerPath, "env"),
+			Value: []core.EnvVar{},
+		})
+	}
+	for _, k := range keys {
+		patches = append(patches, patchOperation{
+			Op:   "add",
+			Path: fmt.Sprintf("%s/%s", containerPath, "env/-"),
+			Value: core.EnvVar{
+				Name:      k,
+				Value:     env[k],
+				ValueFrom: nil,
+			},
+		})
+	}
+	return patches
+}
+
 // hidePorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container
-func hidePorts(pod *corev1.Pod, cn *corev1.Container, portName string, patches []patchOperation) []patchOperation {
+func hidePorts(pod *core.Pod, cn *core.Container, portName string, patches []patchOperation) []patchOperation {
 	cns := pod.Spec.Containers
 	var containerPath string
 	for i := range cns {
@@ -307,7 +351,7 @@ func hidePorts(pod *corev1.Pod, cn *corev1.Container, portName string, patches [
 		}
 	}
 
-	probes := []*corev1.Probe{cn.LivenessProbe, cn.ReadinessProbe, cn.StartupProbe}
+	probes := []*core.Probe{cn.LivenessProbe, cn.ReadinessProbe, cn.StartupProbe}
 	probeNames := []string{"livenessProbe/", "readinessProbe/", "startupProbe/"}
 
 	for i, probe := range probes {

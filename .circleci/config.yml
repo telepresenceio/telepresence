@@ -51,267 +51,7 @@ commands:
             fi
             go version
 
-  "install-kubectl":
-    parameters:
-      version:
-        type: string
-        default: "1.19.3"
-    steps:
-      - run:
-          name: "Install kubectl << parameters.version >>"
-          command: |
-            if [[ $OS == Windows_NT ]]; then
-              curl -LO https://dl.k8s.io/release/v<< parameters.version >>/bin/windows/amd64/kubectl.exe
-              mv kubectl.exe /c/kubectl.exe
-            else
-              curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
-              sudo install /tmp/kubectl /usr/local/bin/kubectl
-            fi
-
-  "prepare-kluster":
-    parameters:
-      platform:
-        type: string
-    steps:
-      - run:
-          name: "Create cluster"
-          command: |
-            go run ./build-aux/kubeception create "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1:0:7}" > "$HOME/kubeconfig"
-            export KUBECONFIG="$HOME/kubeconfig"
-            go run ./build-aux/wait_for_cluster "$KUBECONFIG"
-            KUBECTL=kubectl
-            IMAGE=/tmp/workspace/tel2-image.tar
-            if [[ $OS == Windows_NT ]]; then
-              KUBECTL=/c/kubectl.exe
-              IMAGE=/c/workspace/tel2-image.tar
-            fi
-            $KUBECTL apply -f build-aux/image-importer.yaml
-            POD_NAME=$($KUBECTL get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
-            $KUBECTL wait --for=condition=ready pod $POD_NAME
-            $KUBECTL cp "$IMAGE" "$POD_NAME:/tmp/image.tar"
-            $KUBECTL exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar
-
-  "cleanup-kluster":
-    parameters:
-      platform:
-        type: string
-    steps:
-      - run:
-          name: "Destroy cluster"
-          command: |
-            # We don't allow the destroy to fail the build; if the kluster couldn't be destroyed now, it'll just be cleaned up when it times out
-            go run ./build-aux/kubeception destroy "tp-ci-<< parameters.platform >>-${CIRCLE_SHA1:0:7}" > "$HOME/kubeconfig" || true
-
-  "install-sshfs-win":
-    steps:
-      # The version of sshfs-win on choco is _ancient_ so we instead download it from github and install it manually.
-      # This requires some wrangling of the system PATH
-      - run:
-          name: "Download sshfs"
-          command: |
-            curl -L -o /c/winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
-            curl -L -o /c/sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
-      - run:
-          name: "Install sshfs"
-          shell: powershell.exe
-          command: |
-            Start-Process msiexec -Wait -verb runAs -Args "/i C:\\winfsp.msi /passive /qn /L*V winfsp-install.log"
-            Start-Process msiexec -Wait -verb runAs -Args "/i C:\\sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
-            [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
-
-  "install-sshfs":
-    steps:
-      - run:
-          name: "Install sshfs"
-          command: |
-            sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-            sudo apt-get update
-            sudo apt-get install -y sshfs
-            sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
-
-  "install-sshfs-macos":
-    steps:
-      - run:
-          name: "Brew install macfuse"
-          command: |
-            brew update
-            brew install --cask macfuse
-            brew install gromgit/fuse/sshfs-mac
-            brew link --overwrite sshfs-mac
-
-  "dirty-check":
-    steps:
-      - run:
-          name: "Dirty check"
-          command: |
-            # On Windows, `git status` doesn't record no-op
-            # line-ending changes in to the index, so things show as
-            # dirty even if they aren't.  Trying to `add` them does
-            # trigger the appropriate index update.  So do a `git add`
-            # *before* the `git status --porcelain` to work around
-            # Windows being terrible; we'd otherwise put the `git add`
-            # inside of the `if` block to help generate better output
-            # for `git diff`.
-            git add .
-            if [[ -n "$(git status --porcelain)" ]]; then
-               PAGER= git diff --cached
-               exit 1
-            fi
-
-  "save-logs":
-    steps:
-      - run:
-          name: "Gather logs"
-          when: always
-          command: |
-            LOGS=/tmp/test-logs
-            if [[ $OS == Windows_NT ]]; then
-              LOGS=/c/tmp/test-logs
-            fi
-            if [[ $OS == Windows_NT ]]; then
-              mkdir -p "$LOGS"
-            else
-              rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . "$LOGS"
-            fi
-            for file in \
-              {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence","$LOCALAPPDATA/telepresence/logs"}/*.log
-            do
-              if [ -s "$file" ]; then
-                cp "$file" "$LOGS"
-              fi
-            done
-      - store_artifacts:
-          name: "Store logs"
-          path: /tmp/test-logs
-          destination: test-logs
-
 jobs:
-
-  "build-dev-image":
-    executor: vm-linux
-    steps:
-      - checkout
-      - install-go
-      - run:
-          name: Build dev image
-          command: |
-            TAG="2.4.5-gotest.${CIRCLE_SHA1:0:7}"
-            TELEPRESENCE_VERSION="v${TAG}" make image
-            mkdir -p /tmp/workspace
-            docker save "datawire/tel2:${TAG}" > /tmp/workspace/tel2-image.tar
-      - persist_to_workspace:
-          root: /tmp/workspace
-          paths:
-            - tel2-image.tar
-
-  "build-and-test-windows":
-    executor:
-      name: win/default
-      shell: bash.exe
-    steps:
-      - checkout
-      - install-go
-      - install-kubectl
-      - run: choco install make
-      - install-sshfs-win
-      # - run: choco install rsync
-      - run:
-          name: Download wintun
-          command: |
-            mkdir -p build-output/bin
-            curl -L https://www.wintun.net/builds/wintun-0.12.zip | tar -vf - -Ox wintun/bin/amd64/wintun.dll > "build-output/bin/wintun.dll"
-      - attach_workspace:
-          at: "C:\\workspace"
-      - prepare-kluster:
-          platform: windows
-      - run:
-          command: |
-            # We want to validate that tests still pass, even if the metrics host
-            # points to a broken IP
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-            DTEST_KUBECONFIG="$HOME/kubeconfig" PATH="/c/:/c/Program Files/SSHFS-Win/bin:$PATH" DTEST_REGISTRY="docker.io/datawire" make test
-          no_output_timeout: &testsTimeout 30m
-      - cleanup-kluster:
-          platform: windows
-      - save-logs
-
-  "build-and-test-macos":
-    executor: vm-macos
-    steps:
-      - checkout
-      - install-go
-      - run: make build
-      - install-kubectl
-      - install-sshfs-macos
-      - attach_workspace:
-          at: /tmp/workspace
-      - prepare-kluster:
-          platform: macos
-      - run:
-          command: |
-            # We want to validate that tests still pass, even if the metrics host
-            # points to a broken IP
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
-          # Both CircleCI and `go test` itself time out after 10m by
-          # default.  `go test` gives us helpful output when that
-          # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
-          # just a bit, so `go test`'s timeout output isn't hidden.
-          no_output_timeout: *testsTimeout
-      - cleanup-kluster:
-          platform: macos
-      - save-logs
-
-  "build-and-test":
-    executor: vm-linux
-    steps:
-      - checkout
-      - install-go
-      - run: make build
-      - install-kubectl
-      - install-sshfs
-      - attach_workspace:
-          at: /tmp/workspace
-      - prepare-kluster:
-          platform: linux
-      - run:
-          command: |
-            # We want to validate that tests still pass, even if the metrics host
-            # points to a broken IP
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-            DTEST_KUBECONFIG="$HOME/kubeconfig" DTEST_REGISTRY="docker.io/datawire" make test
-          # Both CircleCI and `go test` itself time out after 10m by
-          # default.  `go test` gives us helpful output when that
-          # happens, CircleCI doesn't.  So lengthen CircleCI's timeout
-          # just a bit, so `go test`'s timeout output isn't hidden.
-          no_output_timeout: *testsTimeout
-      - save-logs
-      - cleanup-kluster:
-          platform: linux
-
-  "lint":
-    executor: vm-linux
-    steps:
-      - checkout
-      - install-go
-      # Split prep out to reduce noise in the output, and help with
-      # timeouts.
-      - run: make lint-deps
-      # Don't hold the Go compiler against golangci-lint's timeout.
-      - run: |
-          GOOS=linux   make build-tests
-          GOOS=darwin  make build-tests
-          GOOS=windows make build-tests
-      # Run the linters.
-      - run: make lint
-
-  "generate":
-    executor: vm-linux
-    steps:
-      - checkout
-      - install-go
-      - run: make generate
-      - dirty-check
 
   "release-linux":
     executor: vm-linux
@@ -336,13 +76,18 @@ jobs:
       # once we update our mac runner to a version past Catalina (12.5.1+)
       # we can remove this.  But since we all run Big Sur on our machines right now
       # we thought we should keep testing Catalina in our CI.
+      # UPDATE: Macfuse doesn't seem to be working on any exectutor past Catalina,
+      # so we need to figure that out...
       # https://blog.bytesguy.com/resolving-lets-encrypt-issues-with-curl-on-macos
       - run:
           name: Update Let's Encrypt Certs
           command: |
             curl -k https://curl.se/ca/cacert.pem -o ~/.cacert.pem
+            # These work for non-sudo cases
             export CURL_CA_BUNDLE=~/.cacert.pem
             export AWS_CA_BUNDLE=~/.cacert.pem
+            # This makes it work when using sudo with curl
+            sudo cp ~/.cacert.pem /etc/ssl/cert.pem
       - run:
           name: "Publish macos (arch amd64)"
           command: |
@@ -396,6 +141,10 @@ jobs:
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag make push-images push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-linux-artifacts
 
   "publish-nightly-windows":
     executor:
@@ -412,6 +161,10 @@ jobs:
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag make push-executable
           TELEPRESENCE_VERSION=$newTag make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-windows-artifacts
 
   "publish-nightly-macos":
     executor: vm-macos
@@ -425,39 +178,22 @@ jobs:
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make push-executable
           TELEPRESENCE_VERSION=$newTag GOARCH=amd64 make promote-nightly
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-macos-amd64-artifacts
     - run:
         name: "Publish nightly macos (arch arm64)"
         command: |
           newTag=$(go run ./build-aux/genversion nightly)
           TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make push-executable
           TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make promote-nightly
-
-#  "release-finalize":
-#    executor: vm-linux
-#    steps:
-#      - checkout
-#      - run: pip3 install awscli
-#      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+    - store_artifacts:
+        name: "Store nightly artifacts"
+        path: build-output/
+        destination: nightly-macos-arm64-artifacts
 
 workflows:
-
-  'Dev':
-    jobs:
-      - build-dev-image
-      - build-and-test:
-          context: telepresence2-release
-          requires:
-            - build-dev-image
-      - build-and-test-windows:
-          context: telepresence2-release
-          requires:
-            - build-dev-image
-      - build-and-test-macos:
-          context: telepresence2-release
-          requires:
-            - build-dev-image
-      - lint
-      - generate
 
   'Release':
     jobs:
@@ -505,13 +241,3 @@ workflows:
           context: telepresence2-release
       - publish-nightly-windows:
           context: telepresence2-release
-      #- release-finalize:
-      #    context: telepresence2-release
-      #    requires:
-      #      - release-linux
-      #      - release-macos
-      #    filters:
-      #      tags:
-      #        only: /^v[0-9]+\.[0-9]+\.[0-9+]$/
-      #      branches:
-      #        ignore: /.*/

@@ -50,7 +50,7 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 	ctx := itest.WithUser(s.Context(), "default")
 	defer func() {
 		itest.TelepresenceOk(ctx, "connect")
-		itest.TelepresenceQuitOk(ctx)
+		itest.TelepresenceDisconnectOk(ctx)
 	}()
 
 	// Use a config with agentImage and webhookAgentImage to validate that it's the
@@ -90,5 +90,5 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 	require.NoError(err)
 	s.Equal("imageFromConfig:0.0.1", image)
 	s.Equal(s.Registry(), actualRegistry)
-	s.CapturePodLogs(ctx, "traffic-manager", s.ManagerNamespace())
+	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 }

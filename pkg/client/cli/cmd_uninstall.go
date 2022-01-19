@@ -56,7 +56,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 	doQuit := false
-	err := withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo) error {
+	err := withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
 			Namespace:     u.namespace,
@@ -70,7 +70,7 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		default:
 			ur.UninstallType = connector.UninstallRequest_EVERYTHING
 		}
-		r, err := connectorClient.Uninstall(ctx, ur)
+		r, err := cs.userD.Uninstall(ctx, ur)
 		if err != nil {
 			return err
 		}
@@ -85,12 +85,12 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
 			// No need to keep daemons once everything is uninstalled
 			doQuit = true
-			return removeClusterFromUserCache(ctx, connInfo)
+			return removeClusterFromUserCache(ctx, cs.ConnectInfo)
 		}
 		return nil
 	})
 	if err == nil && doQuit {
-		err = cliutil.QuitDaemon(cmd.Context())
+		err = cliutil.Disconnect(cmd.Context(), true, true)
 	}
 	return err
 }

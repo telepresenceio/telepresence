@@ -67,15 +67,19 @@ func (tm *MAPTYPE) unlockedIsClosed() bool {
 	}
 }
 
-// LoadAll returns a deepcopy of all key/value pairs in the map.
-func (tm *MAPTYPE) LoadAll() map[string]VALTYPE {
-	tm.lock.RLock()
-	defer tm.lock.RUnlock()
+func (tm *MAPTYPE) unlockedLoadAll() map[string]VALTYPE {
 	ret := make(map[string]VALTYPE, len(tm.value))
 	for k, v := range tm.value {
 		ret[k] = proto.Clone(v).(VALTYPE)
 	}
 	return ret
+}
+
+// LoadAll returns a deepcopy of all key/value pairs in the map.
+func (tm *MAPTYPE) LoadAll() map[string]VALTYPE {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	return tm.unlockedLoadAll()
 }
 
 // LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
@@ -85,9 +89,9 @@ func (tm *MAPTYPE) LoadAllMatching(filter func(string, VALTYPE) bool) map[string
 	defer tm.lock.RUnlock()
 	ret := make(map[string]VALTYPE)
 	for k, v := range tm.value {
-        if filter(k, v) {
-    		ret[k] = proto.Clone(v).(VALTYPE)
-        }
+		if filter(k, v) {
+			ret[k] = proto.Clone(v).(VALTYPE)
+		}
 	}
 	return ret
 }
@@ -229,17 +233,17 @@ func (tm *MAPTYPE) Close() {
 
 // internalSubscribe returns a channel (that blocks on both ends), that is written to on each map
 // update.  If the map is already Close()ed, then this returns nil.
-func (tm *MAPTYPE) internalSubscribe(ctx context.Context) <-chan MAPTYPEUpdate {
+func (tm *MAPTYPE) internalSubscribe(ctx context.Context) (<-chan MAPTYPEUpdate, map[string]VALTYPE) {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
 	tm.unlockedInit()
 
 	ret := make(chan MAPTYPEUpdate)
 	if tm.unlockedIsClosed() {
-		return nil
+		return nil, nil
 	}
 	tm.subscribers[ret] = ret
-	return ret
+	return ret, tm.unlockedLoadAll()
 }
 
 // Subscribe returns a channel that will emits a complete snapshot of the map immediately after the
@@ -265,7 +269,7 @@ func (tm *MAPTYPE) Subscribe(ctx context.Context) <-chan MAPTYPESnapshot {
 // new snapshot to be emitted.  If the value for a key changes from satisfying the predicate to not
 // satisfying it, then this is treated as a delete operation, and a new snapshot is generated.
 func (tm *MAPTYPE) SubscribeSubset(ctx context.Context, include func(string, VALTYPE) bool) <-chan MAPTYPESnapshot {
-	upstream := tm.internalSubscribe(ctx)
+	upstream, initialSnapshot := tm.internalSubscribe(ctx)
 	downstream := make(chan MAPTYPESnapshot)
 
 	if upstream == nil {
@@ -274,7 +278,7 @@ func (tm *MAPTYPE) SubscribeSubset(ctx context.Context, include func(string, VAL
 	}
 
 	tm.wg.Add(1)
-	go tm.coalesce(ctx, include, upstream, downstream)
+	go tm.coalesce(ctx, include, upstream, downstream, initialSnapshot)
 
 	return downstream
 }
@@ -284,6 +288,7 @@ func (tm *MAPTYPE) coalesce(
 	includep func(string, VALTYPE) bool,
 	upstream <-chan MAPTYPEUpdate,
 	downstream chan<- MAPTYPESnapshot,
+	initialSnapshot map[string]VALTYPE,
 ) {
 	defer tm.wg.Done()
 	defer close(downstream)
@@ -307,7 +312,7 @@ func (tm *MAPTYPE) coalesce(
 	// received from 'upstream', with any entries removed that do not satisfy the predicate
 	// 'includep'.
 	cur := make(map[string]VALTYPE)
-	for k, v := range tm.LoadAll() {
+	for k, v := range initialSnapshot {
 		if includep(k, v) {
 			cur[k] = v
 		}

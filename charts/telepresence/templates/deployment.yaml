@@ -47,6 +47,12 @@ spec:
             value: {{ .Values.systemaPort | quote }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.agentInjector.agentImage.registry }}
+          {{- with .Values.telepresenceAPI }}
+          {{- if .port }}
+          - name: TELEPRESENCE_API_PORT
+            value: {{ .port | quote }}
+          {{- end }}
+          {{- end }}
           {{- if .Values.grpc }}
           {{- if .Values.grpc.maxReceiveSize }}
           - name: TELEPRESENCE_MAX_RECEIVE_SIZE
@@ -56,6 +62,8 @@ spec:
           {{- if .Values.agentInjector.create }}
           - name: TELEPRESENCE_AGENT_IMAGE
             value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
+          - name: TELEPRESENCE_APP_PROTO_STRATEGY
+            value: {{ .Values.agentInjector.appProtocolStrategy }}
           {{- end }}
           - name: MANAGER_NAMESPACE
             valueFrom:

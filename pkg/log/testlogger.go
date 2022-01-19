@@ -48,15 +48,17 @@ func (w *tbWrapper) WithField(key string, value interface{}) dlog.Logger {
 	return &ret
 }
 
-func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
+func (w *tbWrapper) Log(level dlog.LogLevel, args ...interface{}) {
 	if level > w.level {
 		return
 	}
 	w.Helper()
 	sb := strings.Builder{}
 	sb.WriteString(time.Now().Format("15:04:05.0000"))
-	sb.WriteString(" ")
-	sb.WriteString(msg)
+	for _, arg := range args {
+		sb.WriteString(" ")
+		fmt.Fprint(&sb, arg)
+	}
 
 	if len(w.fields) > 0 {
 		parts := make([]string, 0, len(w.fields))
@@ -73,4 +75,12 @@ func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
 		}
 	}
 	w.TB.Log(sb.String())
+}
+
+func (w *tbWrapper) Logf(level dlog.LogLevel, format string, args ...interface{}) {
+	w.Log(level, fmt.Sprintf(format, args...))
+}
+
+func (w *tbWrapper) Logln(level dlog.LogLevel, args ...interface{}) {
+	w.Log(level, fmt.Sprintln(args...))
 }

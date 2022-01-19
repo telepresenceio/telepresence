@@ -18,7 +18,7 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 	cmd := dexec.CommandContext(ctx, cmdName, cmdArgs...)
 	cmd.Stdin = peer
 	cmd.Stdout = peer
-	cmd.Stderr = io.Discard   // Ensure error logging by passing a non nil, non *os.File here
+	cmd.Stderr = dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
 	cmd.DisableLogging = true // Avoid data logging (peer is not a *os.File)
 
 	cmdLine := shellquote.ShellString(cmd.Path, cmd.Args)
@@ -28,6 +28,7 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 
 	ctx = dlog.WithField(ctx, "dexec.pid", cmd.Process.Pid)
 	dlog.Infof(ctx, "started command %s", cmdLine)
+	defer dlog.Infof(ctx, "ended command %s", cmdName)
 	runFinished := make(chan error)
 	go func() {
 		defer close(runFinished)
