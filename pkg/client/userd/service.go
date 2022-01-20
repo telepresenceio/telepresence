@@ -18,10 +18,12 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -40,6 +42,24 @@ Examine the ` + titleName + `'s log output in
     ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
 to troubleshoot problems.
 `
+
+type parsedConnectRequest struct {
+	*rpc.ConnectRequest
+	*k8s.Config
+}
+
+type WithSession func(c context.Context, callName string, f func(context.Context, trafficmgr.Session)) (err error)
+
+// A daemon service is one that runs during the entire lifecycle of the daemon.
+// This should be used to augment the daemon with GRPC services.
+type DaemonService interface {
+	Name() string
+	// Start should start the daemon service. It's expected that it returns and does not block. Any long-running tasks should be
+	// managed as goroutines started by Start.
+	Start(ctx context.Context, scout *scout.Reporter, grpcServer *grpc.Server, withSession WithSession) error
+}
+
+type CommandFactory func() cliutil.CommandGroups
 
 // service represents the long running state of the Telepresence User Daemon
 type service struct {
@@ -65,6 +85,9 @@ type service struct {
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
+
+	// This is used for the service to know which CLI commands it supports
+	getCommands CommandFactory
 }
 
 func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
@@ -91,7 +114,7 @@ func (s *service) LoginExecutor() auth.LoginExecutor {
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
-func Command() *cobra.Command {
+func Command(getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
@@ -99,7 +122,7 @@ func Command() *cobra.Command {
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context())
+			return run(cmd.Context(), getCommands, daemonServices, sessionServices)
 		},
 	}
 	return c
@@ -114,7 +137,7 @@ func (s *service) configReload(c context.Context) error {
 // manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *service) manageSessions(c context.Context) error {
+func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	c, s.quit = context.WithCancel(c)
@@ -131,7 +154,7 @@ func (s *service) manageSessions(c context.Context) error {
 		// if everything is ok)
 		s.sessionLock.Lock() // Locked until Run
 		var rsp *rpc.ConnectInfo
-		s.session, rsp = trafficmgr.NewSession(c, s.scout, oi, s)
+		s.session, rsp = trafficmgr.NewSession(c, s.scout, oi, s, sessionServices)
 		select {
 		case <-c.Done():
 			s.sessionLock.Unlock()
@@ -165,7 +188,7 @@ func (s *service) manageSessions(c context.Context) error {
 }
 
 // run is the main function when executing as the connector
-func run(c context.Context) error {
+func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -208,6 +231,7 @@ func run(c context.Context) error {
 		loginExecutor:     auth.NewStandardLoginExecutor(cliio, sr),
 		userNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
 		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+		getCommands:       getCommands,
 	}
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
@@ -240,6 +264,10 @@ func run(c context.Context) error {
 		s.svc = grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(s.svc, s)
 		manager.RegisterManagerServer(s.svc, s.managerProxy)
+		for _, ds := range daemonServices {
+			dlog.Infof(c, "Starting additional daemon service %s", ds.Name())
+			ds.Start(c, sr, s.svc, s.withSession)
+		}
 
 		sc := &dhttp.ServerConfig{Handler: s.svc}
 		dlog.Info(c, "gRPC server started")
@@ -255,7 +283,9 @@ func run(c context.Context) error {
 	})
 
 	g.Go("config-reload", s.configReload)
-	g.Go("session", s.manageSessions)
+	g.Go("session", func(c context.Context) error {
+		return s.manageSessions(c, sessionServices)
+	})
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
 	// Ambassador Cloud login flow.

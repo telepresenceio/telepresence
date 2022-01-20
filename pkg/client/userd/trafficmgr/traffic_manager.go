@@ -41,6 +41,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
+// A SessionService represents a service that should be started together with each daemon session.
+// Can be used when passing in custom commands to start up any resources needed for the commands.
+type SessionService interface {
+	Name() string
+	// Run should run the Session service. Run will be launched in its onw goroutine and it's expected that it blocks until the context is finished.
+	Run(ctx context.Context, scout *scout.Reporter, session Session) error
+}
+
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
@@ -53,6 +61,7 @@ type Session interface {
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
 	WithK8sInterface(context.Context) context.Context
 	WorkloadInfoSnapshot(context.Context, *rpc.ListRequest) *rpc.WorkloadInfoSnapshot
+	ManagerClient() manager.ManagerClient
 }
 
 type Service interface {
@@ -115,6 +124,9 @@ type TrafficManager struct {
 
 	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
 	agentWaiters sync.Map
+
+	sessionServices []SessionService
+	sr              *scout.Reporter
 }
 
 // interceptResult is what gets written to the activeInterceptsWaiters channels
@@ -123,7 +135,7 @@ type interceptResult struct {
 	err       error
 }
 
-func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service) (Session, *connector.ConnectInfo) {
+func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (Session, *connector.ConnectInfo) {
 	sr.Report(c, "connect")
 
 	rootDaemon, err := svc.RootDaemonClient(c)
@@ -156,6 +168,9 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
+
+	tmgr.sessionServices = extraServices
+	tmgr.sr = sr
 
 	// Must call SetManagerClient before calling daemon.Connect which tells the
 	// daemon to use the proxy.
@@ -204,6 +219,10 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
 	}
 	return tmgr, ret
+}
+
+func (tmgr *TrafficManager) ManagerClient() manager.ManagerClient {
+	return tmgr.managerClient
 }
 
 // connectCluster returns a configured cluster instance
@@ -377,6 +396,12 @@ func (tm *TrafficManager) Run(c context.Context) error {
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
+	for _, svc := range tm.sessionServices {
+		g.Go(svc.Name(), func(c context.Context) error {
+			return svc.Run(c, tm.sr, tm)
+		})
+	}
+
 	return g.Wait()
 }
 
