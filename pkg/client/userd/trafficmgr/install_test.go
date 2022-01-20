@@ -137,8 +137,9 @@ func TestAddAgentToWorkload(t *testing.T) {
 				assert.Equal(t, expectedWrk, actualWrk)
 
 				if actualSvc != nil {
-					sanitizeService(actualSvc)
-					assert.Equal(t, expectedSvc, actualSvc)
+					actualSvcImpl, _ := k8sapi.ServiceImpl(actualSvc)
+					sanitizeService(actualSvcImpl)
+					assert.Equal(t, expectedSvc, actualSvcImpl)
 				}
 
 				if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {

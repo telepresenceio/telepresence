@@ -96,60 +96,9 @@ func (kc *Cluster) check(c context.Context) error {
 	return c.Err()
 }
 
-// Deployments returns all deployments found in the given Namespace
-func (kc *Cluster) Deployments(c context.Context, namespace string) ([]k8sapi.Workload, error) {
-	ds, err := kc.ki.AppsV1().Deployments(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	di := ds.Items
-	objs := make([]k8sapi.Workload, len(di))
-	for i := range di {
-		objs[i] = k8sapi.Deployment(&di[i])
-	}
-	return objs, nil
-}
-
-// ReplicaSets returns all replica sets found in the given Namespace
-func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]k8sapi.Workload, error) {
-	rs, err := kc.ki.AppsV1().ReplicaSets(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	ri := rs.Items
-	objs := make([]k8sapi.Workload, len(ri))
-	for i := range ri {
-		objs[i] = k8sapi.ReplicaSet(&ri[i])
-	}
-	return objs, nil
-}
-
-// StatefulSets returns all stateful sets found in the given Namespace
-func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]k8sapi.Workload, error) {
-	ss, err := kc.ki.AppsV1().StatefulSets(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	si := ss.Items
-	objs := make([]k8sapi.Workload, len(si))
-	for i := range si {
-		objs[i] = k8sapi.StatefulSet(&si[i])
-	}
-	return objs, nil
-}
-
-// Pods returns all pods found in the given Namespace
-func (kc *Cluster) Pods(c context.Context, namespace string) ([]core.Pod, error) {
-	ps, err := kc.ki.CoreV1().Pods(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return ps.Items, nil
-}
-
 // FindPodFromSelector returns a pod with the given name-hex-hex
-func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*core.Pod, error) {
-	pods, err := kc.Pods(c, namespace)
+func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (k8sapi.Object, error) {
+	pods, err := k8sapi.Pods(c, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +114,7 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 			}
 		}
 		if match {
-			return &pods[i], nil
+			return pods[i], nil
 		}
 	}
 

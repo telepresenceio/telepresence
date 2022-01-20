@@ -17,8 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -412,8 +411,8 @@ func (tm *TrafficManager) session() *manager.SessionInfo {
 // hasOwner parses an object and determines whether the object has an
 // owner that is of a kind we prefer. Currently the only owner that we
 // prefer is a Deployment, but this may grow in the future
-func (tm *TrafficManager) hasOwner(obj runtime.Object) bool {
-	for _, owner := range obj.(meta.ObjectMetaAccessor).GetObjectMeta().GetOwnerReferences() {
+func (tm *TrafficManager) hasOwner(obj k8sapi.Object) bool {
+	for _, owner := range obj.GetOwnerReferences() {
 		if owner.Kind == "Deployment" {
 			return true
 		}
@@ -515,14 +514,14 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(ctx context.Context, rq *rpc.List
 
 	// These are all the workloads we care about and their associated function
 	// to get the names of those workloads
-	workloadsToGet := map[string]func(context.Context, string) ([]k8sapi.Workload, error){
-		"Deployment":  tm.Deployments,
-		"ReplicaSet":  tm.ReplicaSets,
-		"StatefulSet": tm.StatefulSets,
+	workloadsToGet := map[string]func(context.Context, string, labels.Set) ([]k8sapi.Workload, error){
+		"Deployment":  k8sapi.Deployments,
+		"ReplicaSet":  k8sapi.ReplicaSets,
+		"StatefulSet": k8sapi.StatefulSets,
 	}
 
 	for workloadKind, getFunc := range workloadsToGet {
-		workloads, err := getFunc(ctx, namespace)
+		workloads, err := getFunc(ctx, namespace, nil)
 		if err != nil {
 			dlog.Error(ctx, err)
 			dlog.Infof(ctx, "Skipping getting info for workloads: %s", workloadKind)

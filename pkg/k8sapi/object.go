@@ -29,6 +29,20 @@ func GetService(c context.Context, name, namespace string) (Object, error) {
 	return &service{d}, nil
 }
 
+// Services returns all services found in the given Namespace
+func Services(c context.Context, namespace string) ([]Object, error) {
+	ls, err := services(c, namespace).List(c, meta.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	is := ls.Items
+	os := make([]Object, len(is))
+	for i := range is {
+		os[i] = Service(&is[i])
+	}
+	return os, nil
+}
+
 func Service(d *core.Service) Object {
 	return &service{d}
 }
@@ -48,6 +62,20 @@ func GetPod(c context.Context, name, namespace string) (Object, error) {
 		return nil, err
 	}
 	return &pod{d}, nil
+}
+
+// Pods returns all pods found in the given Namespace
+func Pods(c context.Context, namespace string) ([]Object, error) {
+	ls, err := pods(c, namespace).List(c, meta.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	is := ls.Items
+	os := make([]Object, len(is))
+	for i := range is {
+		os[i] = Pod(&is[i])
+	}
+	return os, nil
 }
 
 func Pod(d *core.Pod) Object {
