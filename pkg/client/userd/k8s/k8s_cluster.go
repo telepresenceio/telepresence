@@ -9,9 +9,6 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
-	core "k8s.io/api/core/v1"
-	k8err "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
@@ -119,44 +116,6 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 	}
 
 	return nil, errors.New("pod not found")
-}
-
-// FindWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
-// is optional. A search is performed in the following order if it is empty:
-//
-//   1. Deployments
-//   2. ReplicaSets
-//   3. StatefulSets
-//
-// The first match is returned.
-func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (obj k8sapi.Workload, err error) {
-	switch workloadKind {
-	case "Deployment":
-		obj, err = k8sapi.GetDeployment(c, name, namespace)
-	case "ReplicaSet":
-		obj, err = k8sapi.GetReplicaSet(c, name, namespace)
-	case "StatefulSet":
-		obj, err = k8sapi.GetStatefulSet(c, name, namespace)
-	case "":
-		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
-			if obj, err = kc.FindWorkload(c, namespace, name, wk); err == nil {
-				return obj, nil
-			}
-			if !k8err.IsNotFound(err) {
-				return nil, err
-			}
-		}
-		err = k8err.NewNotFound(core.Resource("workload"), name+"."+namespace)
-	default:
-		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
-	}
-	return obj, err
-}
-
-// FindSvc finds a service with the given name in the given Namespace and returns
-// either a copy of that service or nil if no such service could be found.
-func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*core.Service, error) {
-	return kc.ki.CoreV1().Services(namespace).Get(c, name, meta.GetOptions{})
 }
 
 func (kc *Cluster) namespaceExists(namespace string) (exists bool) {

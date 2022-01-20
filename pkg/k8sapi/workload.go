@@ -6,6 +6,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,6 +19,38 @@ type Workload interface {
 	GetPodTemplate() *core.PodTemplateSpec
 	Replicas() int
 	Updated(int64) bool
+}
+
+// GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
+// is optional. A search is performed in the following order if it is empty:
+//
+//   1. Deployments
+//   2. ReplicaSets
+//   3. StatefulSets
+//
+// The first match is returned.
+func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj Workload, err error) {
+	switch workloadKind {
+	case "Deployment":
+		obj, err = GetDeployment(c, name, namespace)
+	case "ReplicaSet":
+		obj, err = GetReplicaSet(c, name, namespace)
+	case "StatefulSet":
+		obj, err = GetStatefulSet(c, name, namespace)
+	case "":
+		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
+			if obj, err = GetWorkload(c, name, namespace, wk); err == nil {
+				return obj, nil
+			}
+			if !errors2.IsNotFound(err) {
+				return nil, err
+			}
+		}
+		err = errors2.NewNotFound(core.Resource("workload"), name+"."+namespace)
+	default:
+		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
+	}
+	return obj, err
 }
 
 func WrapWorkload(workload runtime.Object) (Workload, error) {

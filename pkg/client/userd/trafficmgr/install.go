@@ -68,7 +68,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.FindWorkload(c, ai.Namespace, ai.Name, "")
+			agent, err := k8sapi.GetWorkload(c, ai.Name, ai.Namespace, "")
 			if err != nil {
 				if !errors2.IsNotFound(err) {
 					addError(err)
