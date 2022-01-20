@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -26,8 +25,6 @@ const supportedKubeAPIVersion = "1.17.0"
 type Cluster struct {
 	*Config
 	mappedNamespaces []string
-
-	ingressInfo []*manager.IngressInfo
 
 	// Main
 	ki kubernetes.Interface
@@ -211,46 +208,6 @@ func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind
 // either a copy of that service or nil if no such service could be found.
 func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*core.Service, error) {
 	return kc.ki.CoreV1().Services(namespace).Get(c, name, meta.GetOptions{})
-}
-
-// findAllSvcByType finds services with the given service type in all namespaces of the cluster returns
-// a slice containing a copy of those services.
-func (kc *Cluster) findAllSvcByType(c context.Context, svcType core.ServiceType) ([]*core.Service, error) {
-	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
-	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
-	var typedSvcs []*core.Service
-	findTyped := func(ns string) error {
-		ss, err := kc.ki.CoreV1().Services(ns).List(c, meta.ListOptions{})
-		if err != nil {
-			return err
-		}
-		for i := range ss.Items {
-			s := &ss.Items[i]
-			if s.Spec.Type == svcType {
-				typedSvcs = append(typedSvcs, s)
-			}
-		}
-		return nil
-	}
-
-	kc.nsLock.Lock()
-	var mns []string
-	if len(kc.mappedNamespaces) > 0 {
-		mns = make([]string, len(kc.mappedNamespaces))
-		copy(mns, kc.mappedNamespaces)
-	}
-	kc.nsLock.Unlock()
-
-	if len(mns) > 0 {
-		for _, ns := range mns {
-			if err := findTyped(ns); err != nil {
-				return nil, err
-			}
-		}
-	} else if err := findTyped(""); err != nil {
-		return nil, err
-	}
-	return typedSvcs, nil
 }
 
 func (kc *Cluster) namespaceExists(namespace string) (exists bool) {

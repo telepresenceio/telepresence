@@ -12,7 +12,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 // nsWatcher runs a Kubernetes watcher that provide information about the cluster's namespaces'.
@@ -107,27 +106,7 @@ func sortedStringSlicesEqual(as, bs []string) bool {
 	return true
 }
 
-func (kc *Cluster) IngressInfos(c context.Context) ([]*manager.IngressInfo, error) {
-	kc.nsLock.Lock()
-	defer kc.nsLock.Unlock()
-
-	ingressInfo := kc.ingressInfo
-	if ingressInfo == nil {
-		kc.nsLock.Unlock()
-		ingressInfo, err := kc.detectIngressBehavior(c)
-		kc.nsLock.Lock()
-		if err != nil {
-			kc.ingressInfo = nil
-			return nil, err
-		}
-		kc.ingressInfo = ingressInfo
-	}
-	is := make([]*manager.IngressInfo, len(kc.ingressInfo))
-	copy(is, kc.ingressInfo)
-	return is, nil
-}
-
-func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) error {
+func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) bool {
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
 	} else {
@@ -142,11 +121,10 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) e
 	kc.nsLock.Unlock()
 
 	if equal {
-		return nil
+		return false
 	}
 	kc.refreshNamespaces(c)
-	kc.ingressInfo = nil
-	return nil
+	return true
 }
 
 func (kc *Cluster) SetNamespaceListener(nsListener func(context.Context)) {

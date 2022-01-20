@@ -84,6 +84,8 @@ type TrafficManager struct {
 
 	getCloudAPIKey func(context.Context, string, bool) (string, error)
 
+	ingressInfo []*manager.IngressInfo
+
 	// manager client
 	managerClient manager.ManagerClient
 
@@ -583,8 +585,10 @@ func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest
 		}
 	}
 
-	if err = tm.SetMappedNamespaces(c, cr.MappedNamespaces); err != nil {
-		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+	if tm.SetMappedNamespaces(c, cr.MappedNamespaces) {
+		tm.insLock.Lock()
+		tm.ingressInfo = nil
+		tm.insLock.Unlock()
 	}
 	return tm.Status(c)
 }
