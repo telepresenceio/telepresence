@@ -82,22 +82,6 @@ func GetAppProto(ctx context.Context, aps AppProtocolStrategy, p *core.ServicePo
 
 func ObjErrorf(o Object, format string, args ...interface{}) error {
 	return fmt.Errorf("%s name=%q namespace=%q: %w",
-		o.GetKind(), GetName(o), GetNamespace(o),
+		o.GetKind(), o.GetName(), o.GetNamespace(),
 		fmt.Errorf(format, args...))
-}
-
-func GetAnnotations(o Object) map[string]string {
-	return o.GetObjectMeta().GetAnnotations()
-}
-
-func GetGeneration(o Object) int64 {
-	return o.GetObjectMeta().GetGeneration()
-}
-
-func GetName(o Object) string {
-	return o.GetObjectMeta().GetName()
-}
-
-func GetNamespace(o Object) string {
-	return o.GetObjectMeta().GetNamespace()
 }

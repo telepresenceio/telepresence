@@ -78,7 +78,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 
 			// Assume that the agent was added using the mutating webhook when no actions
 			// annotation can be found in the workload.
-			ann := k8sapi.GetAnnotations(agent)
+			ann := agent.GetAnnotations()
 			if ann == nil {
 				webhookAgentChannel <- agent
 				return
@@ -154,7 +154,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj k8sapi.Objec
 	if err != nil {
 		return nil, err
 	}
-	namespace := k8sapi.GetNamespace(obj)
+	namespace := obj.GetNamespace()
 	if !annotationsFound {
 		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 	}
@@ -281,8 +281,8 @@ func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
 	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
 	podTemplate := obj.GetPodTemplate()
 	kind := obj.GetKind()
-	name := k8sapi.GetName(obj)
-	namespace := k8sapi.GetNamespace(obj)
+	name := obj.GetName()
+	namespace := obj.GetNamespace()
 	rf := reflect.ValueOf(obj).Elem()
 	dlog.Debugf(c, "%s %s.%s %s.%s", kind, name, namespace, rf.Type().PkgPath(), rf.Type().Name())
 
@@ -392,7 +392,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 
 	origGeneration := int64(0)
 	if obj != nil {
-		origGeneration = k8sapi.GetGeneration(obj)
+		origGeneration = obj.GetGeneration()
 	}
 
 	var err error
@@ -445,7 +445,7 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 }
 
 func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
-	ann := k8sapi.GetAnnotations(obj)
+	ann := obj.GetAnnotations()
 	if ann == nil {
 		return false, nil
 	}
@@ -479,7 +479,7 @@ func (ki *installer) undoObjectMods(c context.Context, obj k8sapi.Object) error 
 	if err != nil {
 		return err
 	}
-	svc, err := k8sapi.GetService(c, referencedService, k8sapi.GetNamespace(obj))
+	svc, err := k8sapi.GetService(c, referencedService, obj.GetNamespace())
 	if err != nil && !errors2.IsNotFound(err) {
 		return err
 	}
@@ -538,13 +538,12 @@ func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 			return err
 		}
 	}
-	mSvc := svc.GetObjectMeta()
-	anns := mSvc.GetAnnotations()
+	anns := svc.GetAnnotations()
 	delete(anns, annTelepresenceActions)
 	if len(anns) == 0 {
 		anns = nil
 	}
-	mSvc.SetAnnotations(anns)
+	svc.SetAnnotations(anns)
 	explainUndo(c, &actions, svc)
 	return nil
 }

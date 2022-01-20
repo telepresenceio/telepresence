@@ -12,8 +12,8 @@ import (
 
 type Object interface {
 	runtime.Object
-	meta.ObjectMetaAccessor
-
+	meta.Object
+	GetAnnotations() map[string]string
 	GetKind() string
 	Delete(context.Context) error
 	Refresh(context.Context) error

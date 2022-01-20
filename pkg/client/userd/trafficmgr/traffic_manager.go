@@ -443,8 +443,8 @@ func (tm *TrafficManager) getInfosForWorkloads(
 ) []*rpc.WorkloadInfo {
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 	for _, workload := range workloads {
-		name := k8sapi.GetName(workload)
-		dlog.Debugf(ctx, "Getting info for %s %s.%s", workload.GetKind(), name, k8sapi.GetNamespace(workload))
+		name := workload.GetName()
+		dlog.Debugf(ctx, "Getting info for %s %s.%s", workload.GetKind(), name, workload.GetNamespace())
 		iCept, ok := iMap[name]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
