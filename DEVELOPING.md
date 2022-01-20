@@ -16,7 +16,7 @@
 
  - `DTEST_KUBECONFIG` (optional) is the cluster that is used by tests,
    if set.  Otherwise the tests will automatically use a K3s cluster
-   running locally in Docker.  It is not normally nescessary to set
+   running locally in Docker.  It is not normally necessary to set
    this, but it is useful to set it in order to test against different
    Kubernetes versions/configurations than what
    https://github.com/datawire/dtest uses.
@@ -25,7 +25,7 @@
    pushed to by the tests, if set.  Otherwise, the tests will
    automatically use a registry running locally in Docker
    ("localhost:5000").  The tests will push images named `tel2` and
-   `tel2-base` with various version tags.  It is not nescessary to set
+   `tel2-base` with various version tags.  It is not necessary to set
    this unless you have set `DTEST_KUBECONFIG`.
 
 The output of `make help` has a bit more information.
@@ -142,7 +142,7 @@ GOOS=linux GOARCH=amd64 go run ./build-aux/package_embedded_chart/main.go v2.4.9
 
 The first time you run the tests, you should use `make check`, to get
 `make` to automatically create the requisite `ko` and `heml` tool
-binaries.  Howver, after that initial run, you can isntead use
+binaries.  However, after that initial run, you can instead use
 `gotestsum` or `go test` if you prefer.
 
 ### I've made a change to the agent-installer, how do I update the testdata output files?
@@ -164,6 +164,10 @@ $ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/cli
 ## Building for Release
 
 See https://www.notion.so/datawire/To-Release-Telepresence-2-x-x-2752ef26968444b99d807979cde06f2f
+
+## Updating license documentation
+
+Run `make generate` and commit changes to `LICENSES.md` and `OPENSOURCE.md`
 
 ## Developing on Windows
 
@@ -251,6 +255,7 @@ environment.
 
 ### Errors from `make generate`
 
+#### Outdated or missing bash
 When running `make generate` you may hit errors that look like:
 
 ```
@@ -264,4 +269,20 @@ In MacOS this can be done installing it from Homebrew:
 
 ```bash
 brew install bash
+```
+
+#### Missing go.sum entries
+If you get an error like this:
+
+```
+cd tools/src/go-mkopensource && GOOS= GOARCH= go build -o /home/andres/source/production/telepresence/tools/bin/go-mkopensource $(sed -En 's,^import "(.*)".*,\1,p' pin.go)
+missing go.sum entry for module providing package github.com/datawire/go-mkopensource; to add:
+	go mod download github.com/datawire/go-mkopensource
+```
+
+Add the missing entries by going to the folder that caused the failure (in this case it's
+/home/andres/source/production/telepresence/tools/bin/go-mkopensource) and run the command provided by go:
+
+```
+go mod download github.com/datawire/go-mkopensource
 ```

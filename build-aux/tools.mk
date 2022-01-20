@@ -107,7 +107,7 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 # Instead of having "VERSION" variables here, the versions are
 # controlled by `tools/src/${thing}/go.mod` files.  Having those in
 # separate per-tool go.mod files avoids conflicts between tools and
-# avoid them poluting our main go.mod file.
+# avoid them polluting our main go.mod file.
 tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go
 tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc
 tools/ko                 = $(TOOLSBINDIR)/ko
