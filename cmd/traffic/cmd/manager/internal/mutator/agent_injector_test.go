@@ -10,12 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	admission "k8s.io/api/admission/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -24,7 +23,7 @@ import (
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 
 func TestTrafficAgentInjector(t *testing.T) {
-	type svcFinder func(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) (*kates.Service, error)
+	type svcFinder func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error)
 	env := &managerutil.Env{
 		User:        "",
 		ServerHost:  "tel-example",
@@ -40,19 +39,19 @@ func TestTrafficAgentInjector(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
 	ctx = managerutil.WithEnv(ctx, env)
 
-	defaultSvc := &kates.Service{
-		TypeMeta: metav1.TypeMeta{
+	defaultSvc := &core.Service{
+		TypeMeta: meta.TypeMeta{
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
+		ObjectMeta: meta.ObjectMeta{
 			Name:        "some-name",
 			Namespace:   "some-ns",
 			Labels:      nil,
 			Annotations: nil,
 		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{{
+		Spec: core.ServiceSpec{
+			Ports: []core.ServicePort{{
 				Name:       "proxied",
 				Protocol:   "TCP",
 				Port:       80,
@@ -63,23 +62,23 @@ func TestTrafficAgentInjector(t *testing.T) {
 			},
 		},
 	}
-	defaultSvcFinder := func(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) (*kates.Service, error) {
+	defaultSvcFinder := func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
 		return defaultSvc, nil
 	}
-	numericPortSvcFinder := func(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) (*kates.Service, error) {
-		return &kates.Service{
-			TypeMeta: metav1.TypeMeta{
+	numericPortSvcFinder := func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
+		return &core.Service{
+			TypeMeta: meta.TypeMeta{
 				Kind:       "Service",
 				APIVersion: "v1",
 			},
-			ObjectMeta: metav1.ObjectMeta{
+			ObjectMeta: meta.ObjectMeta{
 				Name:        "some-name",
 				Namespace:   "some-ns",
 				Labels:      nil,
 				Annotations: nil,
 			},
-			Spec: corev1.ServiceSpec{
-				Ports: []corev1.ServicePort{{
+			Spec: core.ServiceSpec{
+				Ports: []core.ServicePort{{
 					Protocol:   "TCP",
 					Port:       80,
 					TargetPort: intstr.FromInt(8888),
@@ -90,7 +89,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			},
 		}, nil
 	}
-	multiSvcFinder := func(c context.Context, client *kates.Client, portNameOrNumber, svcName, namespace string, labels map[string]string) (*kates.Service, error) {
+	multiSvcFinder := func(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
 		// simulate not being given a service name and finding multiple services
 		if svcName == "" {
 			return nil, fmt.Errorf("multiple services found")
@@ -111,8 +110,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 	}{
 		{
 			"Skip Precondition: Not the right type of resource",
-			toAdmissionRequest(metav1.GroupVersionResource{Resource: "IgnoredResourceType"}, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			toAdmissionRequest(meta.GroupVersionResource{Resource: "IgnoredResourceType"}, core.Pod{
+				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
 					install.InjectAnnotation: "enabled",
 				}, Namespace: "some-ns", Name: "some-name"},
 			}),
@@ -131,8 +130,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Skip Precondition: No annotation",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "some-ns", Name: "some-name"},
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{Namespace: "some-ns", Name: "some-name"},
 			}),
 			"",
 			"",
@@ -141,8 +140,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Skip Precondition: No name/namespace",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
 					install.InjectAnnotation: "enabled",
 				}},
 			}),
@@ -153,25 +152,25 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Skip Precondition: Sidecar already injected",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
 					install.InjectAnnotation: "enabled",
 				}, Namespace: "some-ns", Name: "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
+				Spec: core.PodSpec{
+					Containers: []core.Container{
 						{
-							Ports: []corev1.ContainerPort{
+							Ports: []core.ContainerPort{
 								{Name: "tm-http", ContainerPort: 8888},
 							},
 						},
 						{
 							Name: install.AgentContainerName,
-							Ports: []corev1.ContainerPort{
+							Ports: []core.ContainerPort{
 								{Name: "http", ContainerPort: 9900},
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
+					Volumes: []core.Volume{
 						{
 							Name: install.AgentAnnotationVolumeName,
 						},
@@ -185,13 +184,13 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Error Precondition: No port specified",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
 					install.InjectAnnotation: "enabled",
 				}, Namespace: "some-ns", Name: "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{Ports: []corev1.ContainerPort{}},
+				Spec: core.PodSpec{
+					Containers: []core.Container{
+						{Ports: []core.ContainerPort{}},
 					},
 				},
 			}),
@@ -202,8 +201,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Error Precondition: Sidecar has port collision",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -212,9 +211,9 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{Ports: []corev1.ContainerPort{
+				Spec: core.PodSpec{
+					Containers: []core.Container{
+						{Ports: []core.ContainerPort{
 							{Name: "http", ContainerPort: env.AgentPort},
 						}},
 					},
@@ -227,8 +226,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: Named port",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -237,11 +236,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{
+						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						}},
 					},
@@ -279,8 +278,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: Telepresence API Port",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -289,11 +288,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{
+						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						}},
 					},
@@ -335,8 +334,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Error Precondition: Multiple services",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -345,11 +344,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{
+						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						}},
 					},
@@ -362,8 +361,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Error Precondition: Invalid service name",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation:      "enabled",
 						install.ServiceNameAnnotation: "khruangbin",
@@ -373,11 +372,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{
+						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						}},
 					},
@@ -390,8 +389,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: Multiple services",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation:      "enabled",
 						install.ServiceNameAnnotation: defaultSvc.Name,
@@ -401,11 +400,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{
+						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						}},
 					},
@@ -443,8 +442,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: Numeric port",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -453,11 +452,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{ContainerPort: 8888}}},
+						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
 					},
 				},
 			}),
@@ -506,8 +505,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: Numeric port with init containers",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -516,15 +515,15 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{{
+				Spec: core.PodSpec{
+					InitContainers: []core.Container{{
 						Name:  "some-init-container",
 						Image: "some-init-image",
 					}},
-					Containers: []corev1.Container{{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{ContainerPort: 8888}}},
+						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
 					},
 				},
 			}),
@@ -572,8 +571,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: Numeric port re-processing",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -582,8 +581,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
+				Spec: core.PodSpec{
+					InitContainers: []core.Container{
 						{
 							Name: install.InitContainerName,
 						},
@@ -592,18 +591,18 @@ func TestTrafficAgentInjector(t *testing.T) {
 							Image: "some-init-image",
 						},
 					},
-					Containers: []corev1.Container{
+					Containers: []core.Container{
 						{
 							Name:  "some-app-name",
 							Image: "some-app-image",
-							Ports: []corev1.ContainerPort{{ContainerPort: 8888}},
+							Ports: []core.ContainerPort{{ContainerPort: 8888}},
 						},
 						{
 							Name:  install.AgentContainerName,
-							Ports: []corev1.ContainerPort{{ContainerPort: 9900}},
+							Ports: []core.ContainerPort{{ContainerPort: 9900}},
 						},
 					},
-					Volumes: []corev1.Volume{{
+					Volumes: []core.Volume{{
 						Name: install.AgentAnnotationVolumeName,
 					}},
 				},
@@ -629,8 +628,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 		},
 		{
 			"Apply Patch: volumes are copied",
-			toAdmissionRequest(podResource, corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
+			toAdmissionRequest(podResource, core.Pod{
+				ObjectMeta: meta.ObjectMeta{
 					Annotations: map[string]string{
 						install.InjectAnnotation: "enabled",
 					},
@@ -639,14 +638,14 @@ func TestTrafficAgentInjector(t *testing.T) {
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
 						Name:  "some-app-name",
 						Image: "some-app-image",
-						Ports: []corev1.ContainerPort{{
+						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						},
-						VolumeMounts: []corev1.VolumeMount{
+						VolumeMounts: []core.VolumeMount{
 							{Name: "some-token", ReadOnly: true, MountPath: serviceAccountMountPath},
 						}},
 					},
@@ -735,7 +734,7 @@ func requireContains(t *testing.T, err error, expected string) {
 	require.Contains(t, err.Error(), expected)
 }
 
-func toAdmissionRequest(resource metav1.GroupVersionResource, object interface{}) *admission.AdmissionRequest {
+func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) *admission.AdmissionRequest {
 	bytes, _ := json.Marshal(object)
 	return &admission.AdmissionRequest{
 		Resource:  resource,

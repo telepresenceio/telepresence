@@ -39,7 +39,7 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 					Preference: 100,
 					Flags: map[string]FlagInfo{
 						"match": {
-							Type:    "string-array",
+							Type:    "stringArray",
 							Default: json.RawMessage(`["auto"]`),
 							Usage: `` +
 								`Rather than intercepting all traffic service, only intercept traffic that matches this "HTTP2_HEADER=REGEXP" specifier. ` +

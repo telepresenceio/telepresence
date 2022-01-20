@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -61,6 +63,10 @@ func parseLegacyCommand(args []string) *legacyCommand {
 		}
 		return ""
 	}
+	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeConfig := genericclioptions.NewConfigFlags(false)
+	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.AddFlags(kubeFlags)
 Parsing:
 	for i, v := range args {
 		switch {
@@ -105,14 +111,12 @@ Parsing:
 			break Parsing
 		case len(v) > 2 && strings.HasPrefix(v, "--"):
 			g := v[2:]
-			for _, group := range globalFlagGroups {
-				if gf := group.Flags.Lookup(g); gf != nil {
-					lc.globalFlags = append(lc.globalFlags, v)
-					if gv := getArg(i + 1); gv != "" && !strings.HasPrefix(gv, "-") {
-						lc.globalFlags = append(lc.globalFlags, gv)
-					}
-					continue Parsing
+			if gf := kubeFlags.Lookup(g); gf != nil {
+				lc.globalFlags = append(lc.globalFlags, v)
+				if gv := getArg(i + 1); gv != "" && !strings.HasPrefix(gv, "-") {
+					lc.globalFlags = append(lc.globalFlags, gv)
 				}
+				continue Parsing
 			}
 			lc.unsupportedFlags = append(lc.unsupportedFlags, v)
 		}

@@ -22,7 +22,6 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -237,18 +236,18 @@ func leaveCommand() *cobra.Command {
 func intercept(cmd *cobra.Command, args interceptArgs) error {
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+		return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 			})
 		})
 	}
 
 	// start intercept, run command, then stop the intercept
-	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
+	return withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 			return client.WithEnsuredState(ctx, is, false, func() error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
@@ -263,9 +262,8 @@ func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
 	args interceptArgs,
-	connectorClient connector.ConnectorClient,
+	cs *connectorState,
 	managerClient manager.ManagerClient,
-	connInfo *connector.ConnectInfo,
 ) *interceptState {
 	is := &interceptState{
 		cmd:  cmd,
@@ -273,9 +271,9 @@ func newInterceptState(
 
 		scout: scout.NewReporter(ctx, "cli"),
 
-		connectorClient: connectorClient,
+		connectorClient: cs.userD,
 		managerClient:   managerClient,
-		connInfo:        connInfo,
+		connInfo:        cs.ConnectInfo,
 	}
 	is.scout.Start(log.WithDiscardingLogger(ctx))
 	return is
@@ -325,6 +323,10 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
 	case connector.InterceptError_MOUNT_POINT_BUSY:
 		msg = fmt.Sprintf("Mount point already in use by intercept %q", r.ErrorText)
+	case connector.InterceptError_MISCONFIGURED_WORKLOAD:
+		msg = r.ErrorText
+	case connector.InterceptError_UNKNOWN_FLAG:
+		msg = fmt.Sprintf("Unknown flag: %s", r.ErrorText)
 	default:
 		msg = fmt.Sprintf("Unknown error code %d", r.Error)
 	}
@@ -549,39 +551,51 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 	return nil
 }
 
+func (is *interceptState) ensureIngress(ctx context.Context, args *interceptArgs, ir *connector.CreateInterceptRequest, needLogin bool) error {
+	spec := args.previewSpec
+	if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
+		ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
+		if err != nil {
+			return err
+		}
+		spec.Ingress = ingress
+	}
+
+	if spec.Ingress == nil || needLogin {
+		// Ensure that the intercept can be made before logging in or asking the user questions about ingress
+		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
+			return err
+		}
+	}
+
+	if spec.Ingress == nil {
+		// Fill defaults
+		iis, err := is.connectorClient.GetIngressInfos(ctx, &empty.Empty{})
+		if err != nil {
+			return err
+		}
+		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace, iis.IngressInfos)
+		if err != nil {
+			return err
+		}
+		spec.Ingress = ingress
+	}
+	return nil
+}
+
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	ir, err := is.createRequest(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	args := is.args
+	args := &is.args
 	needLogin := !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin)
 
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if args.previewEnabled {
-		if args.previewSpec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
-			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
-			if err != nil {
-				return false, err
-			}
-			args.previewSpec.Ingress = ingress
-		}
-
-		if args.previewSpec.Ingress == nil || needLogin {
-			// Ensure that the intercept can be made before logging in or asking the user questions about ingress
-			if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
-				return false, err
-			}
-		}
-
-		if args.previewSpec.Ingress == nil {
-			// Fill defaults
-			ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace)
-			if err != nil {
-				return false, err
-			}
-			args.previewSpec.Ingress = ingress
+		if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
+			return false, err
 		}
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
@@ -910,6 +924,7 @@ func selectIngress(
 	connInfo *connector.ConnectInfo,
 	interceptName string,
 	interceptNamespace string,
+	ingressInfos []*manager.IngressInfo,
 ) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
@@ -919,7 +934,7 @@ func selectIngress(
 	selectOrConfirm := "Confirm"
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
-		iis := connInfo.IngressInfos
+		iis := ingressInfos
 		if len(iis) > 0 {
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {

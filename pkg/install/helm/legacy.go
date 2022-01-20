@@ -6,133 +6,135 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-multierror"
-	admreg "k8s.io/api/admissionregistration/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-func getLegacyObjects(namespace string) []kates.Object {
+func getLegacyFuncs(ctx context.Context, namespace string) []func() error {
 	selector := map[string]string{
 		"app":          install.ManagerAppName,
 		"telepresence": "manager",
 	}
-	return []kates.Object{
-		&kates.ServiceAccount{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "ServiceAccount",
-				APIVersion: "v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.ManagerAppName,
-			},
+	getOpts := meta.GetOptions{}
+	updOpts := meta.UpdateOptions{}
+	ki := k8sapi.GetK8sInterface(ctx)
+	return []func() error{
+		func() error {
+			kif := ki.CoreV1().ServiceAccounts(namespace)
+			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "ServiceAccount", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.ClusterRole{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "ClusterRole",
-				APIVersion: "rbac.authorization.k8s.io/v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Name: fmt.Sprintf("%s-%s", install.ManagerAppName, namespace),
-			},
+		func() error {
+			kif := ki.RbacV1().ClusterRoles()
+			o, err := kif.Get(ctx, fmt.Sprintf("%s-%s", install.ManagerAppName, namespace), getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "ClusterRole", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.ClusterRoleBinding{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "ClusterRoleBinding",
-				APIVersion: "rbac.authorization.k8s.io/v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Name: fmt.Sprintf("%s-%s", install.ManagerAppName, namespace),
-			},
+		func() error {
+			kif := ki.RbacV1().ClusterRoleBindings()
+			o, err := kif.Get(ctx, fmt.Sprintf("%s-%s", install.ManagerAppName, namespace), getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "ClusterRoleBinding", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.Role{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "Role",
-				APIVersion: "rbac.authorization.k8s.io/v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.ManagerAppName,
-			},
+		func() error {
+			kif := ki.RbacV1().Roles(namespace)
+			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "Role", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.RoleBinding{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "RoleBinding",
-				APIVersion: "rbac.authorization.k8s.io/v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.ManagerAppName,
-			},
+		func() error {
+			kif := ki.RbacV1().RoleBindings(namespace)
+			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "RoleBinding", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.Secret{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "Secret",
-				APIVersion: "v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.MutatorWebhookTLSName,
-			},
+		func() error {
+			kif := ki.CoreV1().Secrets(namespace)
+			o, err := kif.Get(ctx, install.MutatorWebhookTLSName, getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "Secret", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.Service{
-			TypeMeta: kates.TypeMeta{
-				Kind: "Service",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.ManagerAppName,
-			},
+		func() error {
+			kif := ki.CoreV1().Services(namespace)
+			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "Service", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.Service{
-			TypeMeta: kates.TypeMeta{
-				Kind: "Service",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.AgentInjectorName,
-			},
+		func() error {
+			kif := ki.CoreV1().Services(namespace)
+			o, err := kif.Get(ctx, install.AgentInjectorName, getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "Service", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&admreg.MutatingWebhookConfiguration{
-			TypeMeta: kates.TypeMeta{
-				Kind:       "MutatingWebhookConfiguration",
-				APIVersion: "admissionregistration.k8s.io/v1",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Name: fmt.Sprintf("%s-webhook-%s", install.AgentInjectorName, namespace),
-			},
+		func() error {
+			kif := ki.AdmissionregistrationV1().MutatingWebhookConfigurations()
+			o, err := kif.Get(ctx, fmt.Sprintf("%s-webhook-%s", install.AgentInjectorName, namespace), getOpts)
+			if err == nil {
+				if err = amendObject(&o.ObjectMeta, "MutatingWebhookConfiguration", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
-		&kates.Deployment{
-			TypeMeta: kates.TypeMeta{
-				Kind: "Deployment",
-			},
-			ObjectMeta: kates.ObjectMeta{
-				Namespace: namespace,
-				Name:      install.ManagerAppName,
-				Labels:    selector,
-			},
+		func() error {
+			kif := ki.AppsV1().Deployments(namespace)
+			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			if err == nil {
+				o.ObjectMeta.Labels = selector
+				if err = amendObject(&o.ObjectMeta, "Deployment", namespace); err == nil {
+					_, err = kif.Update(ctx, o, updOpts)
+				}
+			}
+			return err
 		},
 	}
 }
 
-func importObject(ctx context.Context, obj kates.Object, namespace string, client *kates.Client) error {
-	into := obj.DeepCopyObject().(kates.Object)
-	if err := client.Get(ctx, obj, into); err != nil {
-		// If the object isn't there we're not worried: it'll be created by the helm chart if necessary
-		if !kates.IsNotFound(err) {
-			return fmt.Errorf("error getting resource %s/%s: %w", obj.GetObjectKind(), obj.GetName(), err)
-		}
-		return nil
-	}
-	labels := into.GetLabels()
+func amendObject(obj *meta.ObjectMeta, kind, namespace string) error {
+	labels := obj.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
 	}
 	labels["app.kubernetes.io/managed-by"] = "Helm"
-	into.SetLabels(labels)
-	annotations := into.GetAnnotations()
+	obj.SetLabels(labels)
+	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
@@ -140,38 +142,35 @@ func importObject(ctx context.Context, obj kates.Object, namespace string, clien
 	// This is really done out of an abundance of caution, as EnsureTrafficManager should validate that there is no existing
 	// release before calling importLegacy
 	if release, ok := annotations["meta.helm.sh/release-name"]; ok && release != releaseName {
-		return fmt.Errorf("refusing to replace existing release annotation %s in object %s/%s", release, obj.GetObjectKind(), obj.GetName())
+		return fmt.Errorf("refusing to replace existing release annotation %s in %s %s.%s", release, kind, obj.GetName(), obj.GetNamespace())
 	}
 	if ns, ok := annotations["meta.helm.sh/release-namespace"]; ok && ns != namespace {
-		return fmt.Errorf("refusing to replace existing namespace annotation %s in object %s/%s", ns, obj.GetObjectKind(), obj.GetName())
+		return fmt.Errorf("refusing to replace existing namespace annotation %s in %s %s.%s", ns, kind, obj.GetName(), obj.GetNamespace())
 	}
 	annotations["meta.helm.sh/release-name"] = releaseName
 	annotations["meta.helm.sh/release-namespace"] = namespace
-	into.SetAnnotations(annotations)
-	if err := client.Update(ctx, into, nil); err != nil {
-		return fmt.Errorf("error updating resource %s/%s: %w", obj.GetObjectKind(), obj.GetName(), err)
-	}
+	obj.SetAnnotations(annotations)
 	return nil
 }
 
-func importLegacy(ctx context.Context, namespace string, client *kates.Client) error {
-	objects := getLegacyObjects(namespace)
+func importLegacy(ctx context.Context, namespace string) error {
+	fns := getLegacyFuncs(ctx, namespace)
 	wg := sync.WaitGroup{}
-	wg.Add(len(objects))
-	errors := make(chan (error), len(objects))
-	for _, o := range objects {
-		obj := o
+	wg.Add(len(fns))
+	errs := make(chan error, len(fns))
+	for _, fn := range fns {
+		fn := fn
 		go func() {
 			defer wg.Done()
-			if err := importObject(ctx, obj, namespace, client); err != nil {
-				errors <- err
+			if err := fn(); !(err == nil || errors.IsNotFound(err)) {
+				errs <- err
 			}
 		}()
 	}
 	wg.Wait()
-	close(errors)
+	close(errs)
 	var result error
-	for err := range errors {
+	for err := range errs {
 		dlog.Error(ctx, err)
 		result = multierror.Append(result, err)
 	}

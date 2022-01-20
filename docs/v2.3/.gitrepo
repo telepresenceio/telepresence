@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/telepresenceio/docs
+	branch = release/v2.3
+	commit = a60003df7d8dd5825430ef04151cabbb02b774c8
+	parent = 737f2ee60db4d3e0686792f46c830c48e5c23027
+	method = merge
+	cmdver = 0.4.3

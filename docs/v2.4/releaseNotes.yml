@@ -39,7 +39,7 @@ changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELO
 
 items:
   - version: 2.4.10
-    date: "(TBD)"
+    date: "2022-01-13"
     notes:
       - type: feature
         title: Application Protocol Strategy
@@ -47,6 +47,7 @@ items:
           The strategy used when selecting the application protocol for personal intercepts can now be configured using
           the <code>intercept.appProtocolStrategy</code> in the <code>config.yml</code> file.
         docs: reference/config/#intercept
+        image: telepresence-2.4.10-intercept-config.png
       - type: feature
         title: Helm value for the Application Protocol Strategy
         body: >-
@@ -54,7 +55,7 @@ items:
           mutating webhook can now be configured using the <code>agentInjector.appProtocolStrategy</code> in the Helm chart.
         docs: install/helm
       - type: feature
-        title: New <code>--http-plaintext</code> option
+        title: New --http-plaintext option
         body: >-
           The flag <code>--http-plaintext</code> can be used to ensure that an intercept uses plaintext http or grpc when
           communicating with the workstation process.

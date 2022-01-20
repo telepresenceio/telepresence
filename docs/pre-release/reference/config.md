@@ -138,9 +138,9 @@ See [RESTful API server](../restapi) for more info.
 #### Intercept
 The `intercept` controls applies to how telepresence will intercept the communications to the intercepted service.
 
-The `defaultPort` controls what port that will be selected when no `--port` flag is given to the `telepresence intercept` command. The default value is "8080".
+The `defaultPort` controls which port is selected when no `--port` flag is given to the `telepresence intercept` command. The default value is "8080".
 
-The `appProtocolStrategy` is only relevant when using personal intercepts and controls how telepresence selects the application protocol to use when intercepting a service that has no `service.ports.appProtocol` defined. Valid values are:
+The `appProtocolStrategy` is only relevant when using personal intercepts. This controls how telepresence selects the application protocol to use when intercepting a service that has no `service.ports.appProtocol` defined. Valid values are:
 
 | Value        | Resulting action                                                                                       |
 |--------------|--------------------------------------------------------------------------------------------------------|

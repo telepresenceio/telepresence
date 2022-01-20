@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -615,7 +616,7 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 		PodYaml: make(map[string]string),
 	}
 	var errMsg string
-	clientset := managerutil.GetK8sClientset(ctx)
+	ki := k8sapi.GetK8sInterface(ctx)
 
 	// getPodLogs is a helper function for getting the logs from the container
 	// of a given pod. If we are unable to get a log for a given pod, we will
@@ -636,7 +637,7 @@ func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rp
 				// we add the namespace into the name so that it's easier to make
 				// sense of the logs
 				podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
-				req := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, plo)
+				req := ki.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, plo)
 				podLogs, err := req.Stream(ctx)
 				if err != nil {
 					logWriteMutex.Lock()

@@ -7,7 +7,7 @@ import (
 	"github.com/sethvargo/go-envconfig"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -24,7 +24,7 @@ type Env struct {
 	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
 	APIPort             int32                      `env:"TELEPRESENCE_API_PORT,default="`
 	MaxReceiveSize      resource.Quantity          `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
-	AppProtocolStrategy client.AppProtocolStrategy `env:"TELEPRESENCE_APP_PROTO_STRATEGY,default="`
+	AppProtocolStrategy k8sapi.AppProtocolStrategy `env:"TELEPRESENCE_APP_PROTO_STRATEGY,default="`
 
 	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`
 	PodCIDRs        string `env:"POD_CIDRS,default="`

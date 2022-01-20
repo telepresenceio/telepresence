@@ -8,16 +8,19 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -120,33 +123,42 @@ type genContainerInfo struct {
 }
 
 func genContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
+	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
 	info := genContainerInfo{genYAMLInfo: yamlInfo}
 	cmd := &cobra.Command{
 		Use:   "container",
 		Args:  cobra.NoArgs,
 		Short: "Generate YAML for the traffic-agent container.",
 		Long:  "Generate YAML for the traffic-agent container. See genyaml for more info on what this means",
-		RunE:  info.run,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return info.run(cmd, kubeFlagMap(kubeFlags))
+		},
 	}
-	cmd.Flags().StringVar(&info.containerName, "container-name", "",
+	flags := cmd.Flags()
+	flags.StringVar(&info.containerName, "container-name", "",
 		"The name of the container hosting the application you wish to intercept.")
-	cmd.Flags().IntVar(&info.port, "port", 0,
+	flags.IntVar(&info.port, "port", 0,
 		"The port number you wish to intercept")
-	cmd.Flags().StringVar(&info.proto, "protocol", string(corev1.ProtocolTCP),
+	flags.StringVar(&info.proto, "protocol", string(corev1.ProtocolTCP),
 		`The transport protocol the port speaks, i.e. "tcp" or "udp"`)
-	cmd.Flags().StringVar(&info.appProto, "app-protocol", "",
+	flags.StringVar(&info.appProto, "app-protocol", "",
 		`The application protocol the port speaks, i.e. "http", "grpc", "https", ...`)
-	cmd.Flags().IntVar(&info.agentPort, "agent-port", 9900,
+	flags.IntVar(&info.agentPort, "agent-port", 9900,
 		"The port number you wish the agent to listen on.")
-	cmd.Flags().StringVar(&info.serviceName, "service-name", "",
+	flags.StringVar(&info.serviceName, "service-name", "",
 		`The name of the service that's exposing this deployment and that you will wish to intercept.
 Defaults to the name of the deployment.`)
 	_ = cmd.MarkFlagRequired("container-name")
 	_ = cmd.MarkFlagRequired("port")
+
+	kubeConfig := genericclioptions.NewConfigFlags(false)
+	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.AddFlags(kubeFlags)
+	flags.AddFlagSet(kubeFlags)
 	return cmd
 }
 
-func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
+func (i *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
 	ctx := cmd.Context()
 
 	f, err := i.getInputReader()
@@ -169,21 +181,11 @@ func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("unable to parse yaml in %s: %w", i.inputFile, err)
 	}
-	var containers []corev1.Container
-	name := ""
-	switch o := obj.(type) {
-	case *appsv1.Deployment:
-		containers = o.Spec.Template.Spec.Containers
-		name = o.Name
-	case *appsv1.StatefulSet:
-		containers = o.Spec.Template.Spec.Containers
-		name = o.Name
-	case *appsv1.ReplicaSet:
-		containers = o.Spec.Template.Spec.Containers
-		name = o.Name
-	default:
-		return fmt.Errorf("unexpected object of kind %s; please pass in a Deployment or StatefulSet", kind)
+	wl, err := k8sapi.WrapWorkload(obj)
+	if err != nil {
+		return fmt.Errorf("unexpected object of kind %s; please pass in a Deployment, ReplicaSet, or StatefulSet", kind)
 	}
+	containers := wl.GetPodTemplate().Spec.Containers
 	containerIdx := -1
 	for j, c := range containers {
 		if c.Name == i.containerName {
@@ -197,11 +199,11 @@ func (i *genContainerInfo) run(cmd *cobra.Command, _ []string) error {
 	container := &containers[containerIdx]
 
 	if i.serviceName == "" {
-		i.serviceName = name
+		i.serviceName = k8sapi.GetName(wl)
 	}
 
 	cfg := client.GetConfig(ctx)
-	k8sConfig, err := userd_k8s.NewConfig(ctx, kubeFlagMap())
+	k8sConfig, err := k8s.NewConfig(ctx, kubeFlags)
 	if err != nil {
 		return fmt.Errorf("unable to get k8s config: %w", err)
 	}

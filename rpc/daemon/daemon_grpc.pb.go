@@ -28,7 +28,7 @@ type DaemonClient interface {
 	// Quit quits (terminates) the service.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Connect creates a new session that provides outbound connectivity to the cluster
-	Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Disconnect disconnects the current session.
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
@@ -74,8 +74,8 @@ func (c *daemonClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc
 	return out, nil
 }
 
-func (c *daemonClient) Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daemonClient) Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*DaemonStatus, error) {
+	out := new(DaemonStatus)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Connect", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ type DaemonServer interface {
 	// Quit quits (terminates) the service.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// Connect creates a new session that provides outbound connectivity to the cluster
-	Connect(context.Context, *OutboundInfo) (*emptypb.Empty, error)
+	Connect(context.Context, *OutboundInfo) (*DaemonStatus, error)
 	// Disconnect disconnects the current session.
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
@@ -155,7 +155,7 @@ func (UnimplementedDaemonServer) Status(context.Context, *emptypb.Empty) (*Daemo
 func (UnimplementedDaemonServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) Connect(context.Context, *OutboundInfo) (*emptypb.Empty, error) {
+func (UnimplementedDaemonServer) Connect(context.Context, *OutboundInfo) (*DaemonStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
 func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {

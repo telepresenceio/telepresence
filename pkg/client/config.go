@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,6 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const configFile = "config.yml"
@@ -42,6 +45,50 @@ func (c *Config) Merge(o *Config) {
 	c.Grpc.merge(&o.Grpc)
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
 	c.Intercept.merge(&o.Intercept)
+}
+
+// Watch uses a file system watcher that receives events when the configuration changes
+// and calls the given function when that happens.
+func Watch(c context.Context, onReload func(context.Context) error) error {
+	configFile := GetConfigFile(c)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+
+	// The directory containing the config file must be watched because editing
+	// the file will typically end with renaming the original and then creating
+	// a new file. A watcher that follows the inode will not see when the new
+	// file is created.
+	if err = watcher.Add(filepath.Dir(configFile)); err != nil {
+		return err
+	}
+
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		if err := onReload(c); err != nil {
+			dlog.Error(c, err)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-c.Done():
+			return nil
+		case err = <-watcher.Errors:
+			dlog.Error(c, err)
+		case event := <-watcher.Events:
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
+				// The config file was created or modified. Let's defer the load just a little bit
+				// in case there are more modifications (a write out with vi will typically cause
+				// one CREATE event and at least one WRITE event).
+				delay.Reset(5 * time.Millisecond)
+			}
+		}
+	}
 }
 
 func stringKey(n *yaml.Node) (string, error) {
@@ -641,70 +688,13 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 
 const defaultInterceptDefaultPort = 8080
 
-// AppProtocolStrategy specifies how the application protocol for a service port is determined
-// in case the service.spec.ports.appProtocol is not set.
-type AppProtocolStrategy int
-
-var apsNames = [...]string{"http2Probe", "portName", "http", "http2"}
-
-const (
-	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior)
-	Http2Probe AppProtocolStrategy = iota
-
-	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 probe
-	// if no such guess can be made.
-	PortName
-
-	// Http means just assume HTTP/1.1
-	Http
-
-	// Http2 means just assume HTTP/2
-	Http2
-)
-
-func (aps AppProtocolStrategy) String() string {
-	return apsNames[aps]
-}
-
-func NewAppProtocolStrategy(s string) (AppProtocolStrategy, error) {
-	for i, n := range apsNames {
-		if s == n {
-			return AppProtocolStrategy(i), nil
-		}
-	}
-	return 0, fmt.Errorf("invalid AppProtcolStrategy: %q", s)
-}
-
-func (aps AppProtocolStrategy) MarshalYAML() (interface{}, error) {
-	return aps.String(), nil
-}
-
-func (aps *AppProtocolStrategy) EnvDecode(val string) (err error) {
-	var as AppProtocolStrategy
-	if val == "" {
-		as = Http2Probe
-	} else if as, err = NewAppProtocolStrategy(val); err != nil {
-		return err
-	}
-	*aps = as
-	return nil
-}
-
-func (aps *AppProtocolStrategy) UnmarshalYAML(node *yaml.Node) (err error) {
-	var s string
-	if err := node.Decode(&s); err != nil {
-		return err
-	}
-	return aps.EnvDecode(s)
-}
-
 type Intercept struct {
-	AppProtocolStrategy AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
-	DefaultPort         int                 `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
+	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
+	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
 }
 
 func (ic *Intercept) merge(o *Intercept) {
-	if o.AppProtocolStrategy != Http2Probe {
+	if o.AppProtocolStrategy != k8sapi.Http2Probe {
 		ic.AppProtocolStrategy = o.AppProtocolStrategy
 	}
 	if o.DefaultPort != 0 {
@@ -718,7 +708,7 @@ func (ic Intercept) MarshalYAML() (interface{}, error) {
 	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
 		im["defaultPort"] = ic.DefaultPort
 	}
-	if ic.AppProtocolStrategy != Http2Probe {
+	if ic.AppProtocolStrategy != k8sapi.Http2Probe {
 		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
 	}
 	return im, nil
