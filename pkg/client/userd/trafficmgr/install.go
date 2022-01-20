@@ -91,7 +91,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 				addError(err)
 				return
 			}
-			if err = ki.waitForApply(c, ai.Namespace, ai.Name, agent); err != nil {
+			if err = ki.waitForApply(c, ai.Name, ai.Namespace, agent); err != nil {
 				addError(err)
 			}
 		}()
@@ -210,8 +210,8 @@ var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) getSvcForInjectedPod(
 	c context.Context,
-	namespace,
 	name,
+	namespace,
 	svcName,
 	portNameOrNumber string,
 	podTemplate *core.PodTemplateSpec,
@@ -294,7 +294,7 @@ func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
 		return "", "", err
 	}
 	if !autoInstall {
-		svc, err := ki.getSvcForInjectedPod(c, namespace, name, svcName, portNameOrNumber, podTemplate, obj)
+		svc, err := ki.getSvcForInjectedPod(c, name, namespace, svcName, portNameOrNumber, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
@@ -384,7 +384,7 @@ already exist for this service`, kind, name)
 	return string(svc.GetUID()), kind, nil
 }
 
-func (ki *installer) waitForApply(c context.Context, namespace, name string, obj k8sapi.Workload) error {
+func (ki *installer) waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
