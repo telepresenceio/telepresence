@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"encoding/json"
-	"sort"
 
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +59,6 @@ type Config struct {
 	Context     string
 	Server      string
 	flagMap     map[string]string
-	flagArgs    []string
 	ConfigFlags *genericclioptions.ConfigFlags
 	config      *rest.Config
 }
@@ -72,12 +70,10 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	// respect to this option.
 	delete(flagMap, "namespace")
 
-	flagArgs := make([]string, 0, len(flagMap))
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
 	for k, v := range flagMap {
-		flagArgs = append(flagArgs, "--"+k+"="+v)
 		if err := flags.Set(k, v); err != nil {
 			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
 		}
@@ -118,15 +114,11 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 		namespace = "default"
 	}
 
-	// Sort for easy comparison
-	sort.Strings(flagArgs)
-
 	k := &Config{
 		Context:     ctxName,
 		Server:      cluster.Server,
 		Namespace:   namespace,
 		flagMap:     flagMap,
-		flagArgs:    flagArgs,
 		ConfigFlags: configFlags,
 		config:      restConfig,
 	}
@@ -154,19 +146,19 @@ func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
-		sliceEqual(kf.flagArgs, okf.flagArgs)
+		mapEqual(kf.flagMap, okf.flagMap)
 }
 
 func (kf *Config) GetManagerNamespace() string {
 	return kf.kubeconfigExtension.Manager.Namespace
 }
 
-func sliceEqual(a, b []string) bool {
+func mapEqual(a, b map[string]string) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i] != b[i] {
+	for k, v := range a {
+		if v != b[k] {
 			return false
 		}
 	}
