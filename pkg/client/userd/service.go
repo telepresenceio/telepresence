@@ -262,7 +262,9 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		manager.RegisterManagerServer(s.svc, s.managerProxy)
 		for _, ds := range daemonServices {
 			dlog.Infof(c, "Starting additional daemon service %s", ds.Name())
-			ds.Start(c, sr, s.svc, s.withSession)
+			if err := ds.Start(c, sr, s.svc, s.withSession); err != nil {
+				return err
+			}
 		}
 
 		sc := &dhttp.ServerConfig{Handler: s.svc}
