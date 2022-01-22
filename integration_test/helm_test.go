@@ -95,7 +95,6 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	s.Run("Can be connected to", func() {
 		stdout := itest.TelepresenceOk(ctx, "connect")
 		s.Contains(stdout, "Connected to context")
-		itest.TelepresenceOk(ctx, "loglevel", "trace")
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--connect-timeout", "1", fmt.Sprintf("%s.%s", svc, s.appSpace2)) == nil
 		}, 7*time.Second, 1*time.Second)
