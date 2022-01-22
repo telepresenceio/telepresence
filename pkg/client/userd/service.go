@@ -23,7 +23,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -43,12 +42,7 @@ Examine the ` + titleName + `'s log output in
 to troubleshoot problems.
 `
 
-type parsedConnectRequest struct {
-	*rpc.ConnectRequest
-	*k8s.Config
-}
-
-type WithSession func(c context.Context, callName string, f func(context.Context, trafficmgr.Session)) (err error)
+type WithSession func(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error)
 
 // A daemon service is one that runs during the entire lifecycle of the daemon.
 // This should be used to augment the daemon with GRPC services.
@@ -78,9 +72,10 @@ type service struct {
 
 	quit func()
 
-	session       trafficmgr.Session
-	sessionCancel context.CancelFunc
-	sessionLock   sync.RWMutex
+	session        trafficmgr.Session
+	sessionCancel  context.CancelFunc
+	sessionContext context.Context
+	sessionLock    sync.RWMutex
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
@@ -179,6 +174,7 @@ func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr
 			// The d.session.Cancel is called from Disconnect
 			c, s.sessionCancel = context.WithCancel(c)
 			c = s.session.WithK8sInterface(c)
+			s.sessionContext = c
 			s.sessionLock.Unlock()
 			if err := s.session.Run(c); err != nil {
 				dlog.Error(c, err)

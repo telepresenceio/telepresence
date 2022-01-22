@@ -4,7 +4,6 @@ import (
 	"context"
 
 	core "k8s.io/api/core/v1"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -84,20 +83,20 @@ func (tm *TrafficManager) findAllSvcByType(c context.Context, svcType core.Servi
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
 	var typedSvcs []*core.Service
 	findTyped := func(ns string) error {
-		ss, err := k8sapi.GetK8sInterface(c).CoreV1().Services(ns).List(c, meta.ListOptions{})
+		ss, err := k8sapi.Services(c, ns)
 		if err != nil {
 			return err
 		}
-		for i := range ss.Items {
-			s := &ss.Items[i]
-			if s.Spec.Type == svcType {
-				typedSvcs = append(typedSvcs, s)
+		for _, s := range ss {
+			si, _ := k8sapi.ServiceImpl(s)
+			if si.Spec.Type == svcType {
+				typedSvcs = append(typedSvcs, si)
 			}
 		}
 		return nil
 	}
 
-	mns := tm.GetCurrentNamespaces()
+	mns := tm.GetCurrentNamespaces(true)
 	if len(mns) > 0 {
 		for _, ns := range mns {
 			if err := findTyped(ns); err != nil {

@@ -275,6 +275,8 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
 func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload) {
+	tm.WaitForNSSync(c)
+	tm.wlWatcher.waitForSync(c)
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {

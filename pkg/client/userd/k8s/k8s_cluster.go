@@ -26,16 +26,16 @@ type Cluster struct {
 	// Main
 	ki kubernetes.Interface
 
-	// nsLock protects currentNamespaces and namespaceListener
-	nsLock sync.Mutex
-
-	// Current Namespace snapshot, get set by namespace watcher.
+	// Current Namespace snapshot, get set by namespace Watcher.
 	// The boolean value indicates if this client is allowed to
 	// watch services and retrieve workloads in the namespace
-	currentNamespaces map[string]bool
+	nsWatcher *Watcher
+
+	// nsLock protects currentMappedNamespaces and namespaceListener
+	nsLock sync.Mutex
 
 	// Current Namespace snapshot, filtered by mappedNamespaces
-	currentMappedNamespaces []string
+	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
 	namespaceListener func(c context.Context)
@@ -45,7 +45,7 @@ func (kc *Cluster) ActualNamespace(namespace string) string {
 	if namespace == "" {
 		namespace = kc.Namespace
 	}
-	if !kc.namespaceExists(namespace) {
+	if !kc.namespaceAccessible(namespace) {
 		namespace = ""
 	}
 	return namespace
@@ -118,16 +118,13 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 	return nil, errors.New("pod not found")
 }
 
-func (kc *Cluster) namespaceExists(namespace string) (exists bool) {
+// namespaceAccessible answers the question if the namespace is present and accessible
+// to this client
+func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 	kc.nsLock.Lock()
-	for _, n := range kc.currentMappedNamespaces {
-		if n == namespace {
-			exists = true
-			break
-		}
-	}
+	ok := kc.currentMappedNamespaces[namespace]
 	kc.nsLock.Unlock()
-	return exists
+	return ok
 }
 
 func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Cluster, error) {
@@ -148,10 +145,9 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	}
 
 	ret := &Cluster{
-		Config:            kubeFlags,
-		mappedNamespaces:  namespaces,
-		ki:                cs,
-		currentNamespaces: make(map[string]bool),
+		Config:           kubeFlags,
+		mappedNamespaces: namespaces,
+		ki:               cs,
 	}
 
 	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
@@ -167,11 +163,26 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	return ret, nil
 }
 
-func (kc *Cluster) GetCurrentNamespaces() []string {
+// GetCurrentNamespaces returns the names of the namespaces that this client
+// is mapping. If the forClientAccess is true, then the namespaces are restricted
+// to those where an intercept can take place, i.e. the namespaces where this
+// client can Watch and get services and deployments.
+func (kc *Cluster) GetCurrentNamespaces(forClientAccess bool) []string {
 	kc.nsLock.Lock()
-	nss := make([]string, len(kc.currentMappedNamespaces))
-	copy(nss, kc.currentMappedNamespaces)
+	nss := make([]string, 0, len(kc.currentMappedNamespaces))
+	if forClientAccess {
+		for ns, ok := range kc.currentMappedNamespaces {
+			if ok {
+				nss = append(nss, ns)
+			}
+		}
+	} else {
+		for ns := range kc.currentMappedNamespaces {
+			nss = append(nss, ns)
+		}
+	}
 	kc.nsLock.Unlock()
+	sort.Strings(nss)
 	return nss
 }
 
