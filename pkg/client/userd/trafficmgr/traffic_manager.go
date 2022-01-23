@@ -58,6 +58,7 @@ type Session interface {
 	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
+	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, rpc.Connector_WatchWorkloadsServer) error
 	WithK8sInterface(context.Context) context.Context
 	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
 	ManagerClient() manager.ManagerClient

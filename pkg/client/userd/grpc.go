@@ -174,6 +174,12 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	return
 }
 
+func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
+	return s.withSession(server.Context(), "WatchWorkloads", func(c context.Context, session trafficmgr.Session) error {
+		return session.WatchWorkloads(c, wr, server)
+	})
+}
+
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.Uninstall(c, ur)

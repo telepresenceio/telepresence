@@ -4,14 +4,7 @@ following Free and Open Source software:
     Name                                                                Version                                    License(s)
     ----                                                                -------                                    ----------
     the Go language standard library ("std")                            v1.17.6                                    3-clause BSD license
-    cloud.google.com/go                                                 v0.54.0                                    Apache License 2.0
     github.com/Azure/go-ansiterm                                        v0.0.0-20170929234023-d6e3b3328b78         MIT license
-    github.com/Azure/go-autorest                                        v14.2.0+incompatible                       Apache License 2.0
-    github.com/Azure/go-autorest/autorest                               v0.11.12                                   Apache License 2.0
-    github.com/Azure/go-autorest/autorest/adal                          v0.9.5                                     Apache License 2.0
-    github.com/Azure/go-autorest/autorest/date                          v0.3.0                                     Apache License 2.0
-    github.com/Azure/go-autorest/logger                                 v0.2.0                                     Apache License 2.0
-    github.com/Azure/go-autorest/tracing                                v0.6.0                                     Apache License 2.0
     github.com/BurntSushi/toml                                          v0.3.1                                     MIT license
     github.com/MakeNowJust/heredoc                                      v0.0.0-20170808103936-bb23615498cd         MIT license
     github.com/Masterminds/goutils                                      v1.1.1                                     Apache License 2.0
@@ -46,7 +39,6 @@ following Free and Open Source software:
     github.com/exponent-io/jsonpath                                     v0.0.0-20151013193312-d6023ce2651d         MIT license
     github.com/fatih/camelcase                                          v1.0.0                                     MIT license
     github.com/fatih/color                                              v1.10.0                                    MIT license
-    github.com/form3tech-oss/jwt-go                                     v3.2.2+incompatible                        MIT license
     github.com/fsnotify/fsnotify                                        v1.4.9                                     3-clause BSD license
     github.com/go-errors/errors                                         v1.0.1                                     MIT license
     github.com/go-logr/logr                                             v0.4.0                                     Apache License 2.0
@@ -89,7 +81,6 @@ following Free and Open Source software:
     github.com/miekg/dns                                                v1.1.35                                    3-clause BSD license
     github.com/mitchellh/copystructure                                  v1.1.1                                     MIT license
     github.com/mitchellh/go-wordwrap                                    v1.0.0                                     MIT license
-    github.com/mitchellh/mapstructure                                   v1.1.2                                     MIT license
     github.com/mitchellh/reflectwalk                                    v1.0.1                                     MIT license
     github.com/moby/spdystream                                          v0.2.0                                     Apache License 2.0
     github.com/moby/term                                                v0.0.0-20201216013528-df9cb8a40635         Apache License 2.0
@@ -154,11 +145,7 @@ following Free and Open Source software:
     k8s.io/kube-openapi                                                 v0.0.0-20210305001622-591a79e4bda7         Apache License 2.0
     k8s.io/kubectl                                                      v0.21.0                                    Apache License 2.0
     k8s.io/kubernetes                                                   v1.21.0                                    Apache License 2.0
-    k8s.io/metrics                                                      v0.21.0                                    Apache License 2.0
     k8s.io/utils                                                        v0.0.0-20201110183641-67b214c5f920         Apache License 2.0
-    sigs.k8s.io/apiserver-network-proxy/konnectivity-client             v0.0.15                                    Apache License 2.0
-    sigs.k8s.io/controller-runtime                                      v0.8.0                                     Apache License 2.0
-    sigs.k8s.io/gateway-api                                             v0.2.0                                     Apache License 2.0
     sigs.k8s.io/kustomize/api                                           v0.8.5                                     Apache License 2.0
     sigs.k8s.io/kustomize/kyaml                                         v0.10.15                                   Apache License 2.0, MIT license
     sigs.k8s.io/structured-merge-diff/v4                                v4.1.0                                     Apache License 2.0
