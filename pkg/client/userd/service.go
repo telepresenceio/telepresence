@@ -165,12 +165,6 @@ func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr
 		// Run the session synchronously and ensure that it is cleaned
 		// up properly when the context is cancelled
 		func(c context.Context) {
-			defer func() {
-				s.sessionLock.Lock()
-				s.session = nil
-				s.sessionLock.Unlock()
-			}()
-
 			// The d.session.Cancel is called from Disconnect
 			c, s.sessionCancel = context.WithCancel(c)
 			c = s.session.WithK8sInterface(c)
