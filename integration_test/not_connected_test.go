@@ -22,6 +22,7 @@ func (s *notConnectedSuite) SetupSuite() {
 	ctx := itest.WithUser(s.Context(), "default")
 	stdout := itest.TelepresenceOk(ctx, "connect")
 	s.Contains(stdout, "Connected to context")
+	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
 }
 
@@ -30,9 +31,6 @@ func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	stdout := itest.TelepresenceOk(ctx, "connect", "--", s.Executable(), "status")
 	s.Contains(stdout, "Connected to context")
 	s.Contains(stdout, "Kubernetes context:")
-	if s.T().Failed() {
-		s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
-	}
 	itest.TelepresenceDisconnectOk(ctx)
 }
 
