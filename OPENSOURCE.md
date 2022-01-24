@@ -3,7 +3,7 @@ following Free and Open Source software:
 
     Name                                                                Version                                    License(s)
     ----                                                                -------                                    ----------
-    the Go language standard library ("std")                            v1.17.6                                    3-clause BSD license
+    the Go language standard library ("std")                            v1.17.5                                    3-clause BSD license
     github.com/Azure/go-ansiterm                                        v0.0.0-20170929234023-d6e3b3328b78         MIT license
     github.com/BurntSushi/toml                                          v0.3.1                                     MIT license
     github.com/MakeNowJust/heredoc                                      v0.0.0-20170808103936-bb23615498cd         MIT license
