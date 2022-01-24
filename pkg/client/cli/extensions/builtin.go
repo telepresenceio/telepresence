@@ -48,6 +48,11 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 								`If this flag is given multiple times, then it will only intercept traffic that matches *all* of the specifiers. ` +
 								`(default "auto" if you are logged in with 'telepresence login', default "all" otherwise)`,
 						},
+						"meta": {
+							Type: "stringArray",
+							Usage: `` +
+								`Associates key=value pairs with the intercept that can later be retrieved using the Telepresence API service`,
+						},
 						"plaintext": {
 							Type: "bool",
 							Usage: `` +

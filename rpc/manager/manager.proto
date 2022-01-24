@@ -210,6 +210,9 @@ message InterceptInfo {
 
   // Headers used by the workstation API-server
   map<string,string> headers = 14;
+
+  // Metadata used by the workstation API-server
+  map<string,string> metadata = 15;
 }
 
 message SessionInfo {
@@ -266,6 +269,9 @@ message ReviewInterceptRequest {
 
   // Headers used by the workstation API-server
   map<string,string> headers = 8;
+
+  // Metadata used by the workstation API-server
+  map<string,string> metadata = 9;
 }
 
 message RemainRequest {

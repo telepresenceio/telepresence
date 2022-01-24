@@ -2,11 +2,9 @@ package restapi_test
 
 import (
 	"context"
-	"fmt"
-	"io"
+	"encoding/json"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"testing"
 
@@ -17,115 +15,166 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
-type yesNo bool
+type yesNoClient bool
+type yesNoCluster bool
 
-func (yn yesNo) Intercepts(_ context.Context, _ string, _ http.Header) (bool, error) {
-	return bool(yn), nil
+func (yn yesNoClient) InterceptInfo(_ context.Context, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: true}, nil
+}
+
+func (yn yesNoCluster) InterceptInfo(_ context.Context, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: false}, nil
 }
 
 type textMatcher map[string]string
+type textMatcherClient textMatcher
+type textMatcherCluster textMatcher
 
-func (t textMatcher) Intercepts(_ context.Context, _ string, header http.Header) (bool, error) {
+func (t textMatcher) intercepted(header http.Header) bool {
 	for k, v := range t {
 		if header.Get(k) != v {
-			return false, nil
+			return false
 		}
 	}
-	return true, nil
+	return true
+}
+
+func (t textMatcherClient) InterceptInfo(_ context.Context, _ string, header http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(header), ClientSide: true}, nil
+}
+
+func (t textMatcherCluster) InterceptInfo(_ context.Context, _ string, header http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(header), ClientSide: false}, nil
+}
+
+type matcherWithMetadata struct {
+	textMatcherCluster
+	meta map[string]string
+}
+
+func (t *matcherWithMetadata) InterceptInfo(c context.Context, p string, header http.Header) (*restapi.InterceptInfo, error) {
+	ret, _ := t.textMatcherCluster.InterceptInfo(c, p, header)
+	ret.Metadata = t.meta
+	return ret, nil
 }
 
 type callerIdMatcher string
 
-func (c callerIdMatcher) Intercepts(_ context.Context, callerId string, _ http.Header) (bool, error) {
-	return callerId == string(c), nil
+func (c callerIdMatcher) InterceptInfo(_ context.Context, callerId string, _ http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: true}, nil
+}
+
+type callerIdMatcherCluster string
+
+func (c callerIdMatcherCluster) InterceptInfo(_ context.Context, callerId string, _ http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: false}, nil
 }
 
 func Test_server_intercepts(t *testing.T) {
-	yes := yesNo(true)
-	no := yesNo(false)
-
 	tests := []struct {
-		name    string
-		agent   restapi.AgentState
-		headers map[string]string
-		client  bool
-		want    bool
+		name     string
+		agent    restapi.AgentState
+		headers  map[string]string
+		endpoint string
+		want     interface{}
 	}{
 		{
-			"true",
-			yes,
+			"client true",
+			yesNoClient(true),
 			nil,
-			true,
-			true,
-		},
-		{
-			"false",
-			no,
-			nil,
-			true,
-			false,
-		},
-		{
-			"true",
-			yes,
-			nil,
-			false,
-			false,
-		},
-		{
-			"false",
-			no,
-			nil,
-			false,
+			restapi.EndPointConsumeHere,
 			true,
 		},
 		{
-			"header - match",
-			textMatcher{
+			"client false",
+			yesNoClient(false),
+			nil,
+			restapi.EndPointConsumeHere,
+			false,
+		},
+		{
+			"cluster true",
+			yesNoCluster(true),
+			nil,
+			restapi.EndPointConsumeHere,
+			false,
+		},
+		{
+			"cluster false",
+			yesNoCluster(false),
+			nil,
+			restapi.EndPointConsumeHere,
+			true,
+		},
+		{
+			"client header - match",
+			textMatcherClient{
 				restapi.HeaderInterceptID: "abc:123",
 			},
 			map[string]string{
 				restapi.HeaderInterceptID: "abc:123",
 			},
-			true,
+			restapi.EndPointConsumeHere,
 			true,
 		},
 		{
-			"header - no match",
-			textMatcher{
-				restapi.HeaderInterceptID: "abc:123",
-			},
-			map[string]string{
-				restapi.HeaderInterceptID: "xyz:123",
-			},
-			true,
-			false,
-		},
-		{
-			"header - match",
-			textMatcher{
-				restapi.HeaderInterceptID: "abc:123",
-			},
-			map[string]string{
-				restapi.HeaderInterceptID: "abc:123",
-			},
-			false,
-			false,
-		},
-		{
-			"header - no match",
-			textMatcher{
+			"client header - no match",
+			textMatcherClient{
 				restapi.HeaderInterceptID: "abc:123",
 			},
 			map[string]string{
 				restapi.HeaderInterceptID: "xyz:123",
 			},
+			restapi.EndPointConsumeHere,
 			false,
+		},
+		{
+			"cluster header - match",
+			textMatcherCluster{
+				restapi.HeaderInterceptID: "abc:123",
+			},
+			map[string]string{
+				restapi.HeaderInterceptID: "abc:123",
+			},
+			restapi.EndPointConsumeHere,
+			false,
+		},
+		{
+			"cluster header - match",
+			&matcherWithMetadata{
+				textMatcherCluster: textMatcherCluster{
+					restapi.HeaderInterceptID: "abc:123",
+				},
+				meta: map[string]string{
+					"a": "A",
+				},
+			},
+			map[string]string{
+				restapi.HeaderInterceptID: "abc:123",
+			},
+			restapi.EndPointInterceptInfo,
+			&restapi.InterceptInfo{
+				Intercepted: true,
+				ClientSide:  false,
+				Metadata: map[string]string{
+					"a": "A",
+				},
+			},
+		},
+		{
+			"cluster header - no match",
+			textMatcherCluster{
+				restapi.HeaderInterceptID: "abc:123",
+			},
+			map[string]string{
+				restapi.HeaderInterceptID: "xyz:123",
+			},
+			restapi.EndPointConsumeHere,
 			true,
 		},
 		{
-			"multi header - all matched",
-			textMatcher{
+			"client multi header - all matched",
+			textMatcherClient{
 				"header-a": "value-a",
 				"header-b": "value-b",
 			},
@@ -134,12 +183,12 @@ func Test_server_intercepts(t *testing.T) {
 				"header-b": "value-b",
 				"header-c": "value-c",
 			},
-			true,
+			restapi.EndPointConsumeHere,
 			true,
 		},
 		{
-			"multi header - not all matched",
-			textMatcher{
+			"client multi header - not all matched",
+			textMatcherClient{
 				"header-a": "value-a",
 				"header-b": "value-b",
 				"header-c": "value-c",
@@ -148,26 +197,48 @@ func Test_server_intercepts(t *testing.T) {
 				"header-a": "value-a",
 				"header-b": "value-b",
 			},
-			true,
+			restapi.EndPointConsumeHere,
 			false,
 		},
 		{
-			"caller intercept id - match",
+			"client caller intercept id - match",
 			callerIdMatcher("abc:123"),
 			map[string]string{
 				restapi.HeaderCallerInterceptID: "abc:123",
 			},
+			restapi.EndPointConsumeHere,
 			true,
-			true,
+		},
+		{
+			"client caller intercept id - match",
+			callerIdMatcher("abc:123"),
+			map[string]string{
+				restapi.HeaderCallerInterceptID: "abc:123",
+			},
+			restapi.EndPointInterceptInfo,
+			&restapi.InterceptInfo{
+				Intercepted: true,
+				ClientSide:  true,
+				Metadata:    nil,
+			},
+		},
+		{
+			"cluster caller intercept id - match",
+			callerIdMatcherCluster("abc:123"),
+			map[string]string{
+				restapi.HeaderCallerInterceptID: "abc:123",
+			},
+			restapi.EndPointInterceptInfo,
+			&restapi.InterceptInfo{
+				Intercepted: true,
+				ClientSide:  false,
+				Metadata:    nil,
+			},
 		},
 	}
 
 	for _, tt := range tests {
-		who := "agent"
-		if tt.client {
-			who = "client"
-		}
-		t.Run(fmt.Sprintf("%s: %s", who, tt.name), func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			c, cancel := context.WithCancel(dlog.NewTestContext(t, false))
 			ln, err := net.Listen("tcp", ":0")
 			require.NoError(t, err)
@@ -175,9 +246,9 @@ func Test_server_intercepts(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				assert.NoError(t, restapi.NewServer(tt.agent, tt.client).Serve(c, ln))
+				assert.NoError(t, restapi.NewServer(tt.agent).Serve(c, ln))
 			}()
-			rq, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+restapi.EndPointConsumeHere, nil)
+			rq, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+tt.endpoint, nil)
 			for k, v := range tt.headers {
 				rq.Header.Set(k, v)
 			}
@@ -186,11 +257,15 @@ func Test_server_intercepts(t *testing.T) {
 			require.NoError(t, err)
 			defer r.Body.Close()
 			assert.Equal(t, r.StatusCode, http.StatusOK)
-			bt, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
-			rpl, err := strconv.ParseBool(string(bt))
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, rpl)
+			if _, ok := tt.want.(bool); ok {
+				var rpl bool
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&rpl))
+				assert.Equal(t, tt.want, rpl)
+			} else {
+				var rpl restapi.InterceptInfo
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&rpl))
+				assert.Equal(t, tt.want, &rpl)
+			}
 			cancel()
 			wg.Wait()
 		})
