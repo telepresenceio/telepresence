@@ -27,7 +27,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy) (c
 
 	// Start with DebugLevel so that the config is read using that level
 	logger.SetLevel(logrus.DebugLevel)
-	logger.ReportCaller = true
+	logger.ReportCaller = false // turned on when level >= logrus.TraceLevel
 
 	if IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = log.NewFormatter("15:04:05.0000")

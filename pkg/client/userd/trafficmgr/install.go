@@ -68,7 +68,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.FindWorkload(c, ai.Namespace, ai.Name, "")
+			agent, err := k8sapi.GetWorkload(c, ai.Name, ai.Namespace, "")
 			if err != nil {
 				if !errors2.IsNotFound(err) {
 					addError(err)
@@ -78,7 +78,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 
 			// Assume that the agent was added using the mutating webhook when no actions
 			// annotation can be found in the workload.
-			ann := k8sapi.GetAnnotations(agent)
+			ann := agent.GetAnnotations()
 			if ann == nil {
 				webhookAgentChannel <- agent
 				return
@@ -91,7 +91,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 				addError(err)
 				return
 			}
-			if err = ki.waitForApply(c, ai.Namespace, ai.Name, agent); err != nil {
+			if err = ki.waitForApply(c, ai.Name, ai.Namespace, agent); err != nil {
 				addError(err)
 			}
 		}()
@@ -148,13 +148,13 @@ func (ki *installer) rolloutRestart(c context.Context, obj k8sapi.Object) error 
 }
 
 // Finds the Referenced Service in an objects' annotations
-func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (*core.Service, error) {
+func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (k8sapi.Object, error) {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
 		return nil, err
 	}
-	namespace := k8sapi.GetNamespace(obj)
+	namespace := obj.GetNamespace()
 	if !annotationsFound {
 		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 	}
@@ -163,12 +163,13 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj k8sapi.Objec
 		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" is not set", annTelepresenceActions)
 	}
 
-	svc, err := ki.FindSvc(c, namespace, svcName)
+	svc, err := k8sapi.GetService(c, svcName, namespace)
 	if err != nil && !errors2.IsNotFound(err) {
 		return nil, err
 	}
 	if svc == nil {
-		return nil, k8sapi.ObjErrorf(obj, "annotations[%q]: field \"ReferencedService\" references unfound service %q", annTelepresenceActions, svcName)
+		return nil, k8sapi.ObjErrorf(obj, `annotations[%q]: field \"ReferencedService\" references unfound service %s.%s`,
+			annTelepresenceActions, svcName, namespace)
 	}
 	return svc, nil
 }
@@ -209,8 +210,8 @@ var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) getSvcForInjectedPod(
 	c context.Context,
-	namespace,
 	name,
+	namespace,
 	svcName,
 	portNameOrNumber string,
 	podTemplate *core.PodTemplateSpec,
@@ -242,7 +243,8 @@ func (ki *installer) getSvcForInjectedPod(
 
 	// Check pod for agent. If missing and webhookInjected, roll pod
 	roll := true
-	for _, containter := range pod.Spec.Containers {
+	podImpl, _ := k8sapi.PodImpl(pod)
+	for _, containter := range podImpl.Spec.Containers {
 		if containter.Name == install.AgentContainerName {
 			roll = false
 			break
@@ -281,18 +283,18 @@ func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
 	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
 	podTemplate := obj.GetPodTemplate()
 	kind := obj.GetKind()
-	name := k8sapi.GetName(obj)
-	namespace := k8sapi.GetNamespace(obj)
+	name := obj.GetName()
+	namespace := obj.GetNamespace()
 	rf := reflect.ValueOf(obj).Elem()
 	dlog.Debugf(c, "%s %s.%s %s.%s", kind, name, namespace, rf.Type().PkgPath(), rf.Type().Name())
 
-	var svc *core.Service
+	var svc k8sapi.Object
 	autoInstall, err := useAutoInstall(podTemplate)
 	if err != nil {
 		return "", "", err
 	}
 	if !autoInstall {
-		svc, err := ki.getSvcForInjectedPod(c, namespace, name, svcName, portNameOrNumber, podTemplate, obj)
+		svc, err := ki.getSvcForInjectedPod(c, name, namespace, svcName, portNameOrNumber, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
@@ -362,14 +364,11 @@ already exist for this service`, kind, name)
 			return "", "", err
 		}
 		if updateSvc {
-			svcObj := k8sapi.Service(svc)
-			if err := svcObj.Update(c); err != nil {
+			if err := svc.Update(c); err != nil {
 				return "", "", err
-			} else {
-				svc, _ = k8sapi.ServiceImpl(svcObj)
 			}
 		}
-		if err := ki.waitForApply(c, namespace, name, obj); err != nil {
+		if err := ki.waitForApply(c, name, namespace, obj); err != nil {
 			return "", "", err
 		}
 	}
@@ -385,14 +384,14 @@ already exist for this service`, kind, name)
 	return string(svc.GetUID()), kind, nil
 }
 
-func (ki *installer) waitForApply(c context.Context, namespace, name string, obj k8sapi.Workload) error {
+func (ki *installer) waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
 
 	origGeneration := int64(0)
 	if obj != nil {
-		origGeneration = k8sapi.GetGeneration(obj)
+		origGeneration = obj.GetGeneration()
 	}
 
 	var err error
@@ -421,16 +420,17 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
 func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *apps.ReplicaSet) error {
-	pods, err := ki.Pods(c, namespace)
+	pods, err := k8sapi.Pods(c, namespace)
 	if err != nil {
 		return err
 	}
 
 	for _, pod := range pods {
-		for _, ownerRef := range pod.OwnerReferences {
+		podImpl, _ := k8sapi.PodImpl(pod)
+		for _, ownerRef := range podImpl.OwnerReferences {
 			if ownerRef.UID == rs.UID {
-				dlog.Infof(c, "Deleting pod %s.%s owned by rs %s", pod.Name, pod.Namespace, rs.Name)
-				if err = k8sapi.Pod(&pod).Delete(c); err != nil {
+				dlog.Infof(c, "Deleting pod %s.%s owned by rs %s", podImpl.Name, podImpl.Namespace, rs.Name)
+				if err = pod.Delete(c); err != nil {
 					if errors2.IsNotFound(err) || errors2.IsConflict(err) {
 						// If an intercept creates a new pod by installing an agent, and the agent is then uninstalled shortly after, the
 						// old pod may still show up here during removal, and even after it has been removed if the removal completed
@@ -445,7 +445,7 @@ func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *
 }
 
 func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
-	ann := k8sapi.GetAnnotations(obj)
+	ann := obj.GetAnnotations()
 	if ann == nil {
 		return false, nil
 	}
@@ -479,7 +479,7 @@ func (ki *installer) undoObjectMods(c context.Context, obj k8sapi.Object) error 
 	if err != nil {
 		return err
 	}
-	svc, err := k8sapi.GetService(c, referencedService, k8sapi.GetNamespace(obj))
+	svc, err := k8sapi.GetService(c, referencedService, obj.GetNamespace())
 	if err != nil && !errors2.IsNotFound(err) {
 		return err
 	}
@@ -538,13 +538,12 @@ func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 			return err
 		}
 	}
-	mSvc := svc.GetObjectMeta()
-	anns := mSvc.GetAnnotations()
+	anns := svc.GetAnnotations()
 	delete(anns, annTelepresenceActions)
 	if len(anns) == 0 {
 		anns = nil
 	}
-	mSvc.SetAnnotations(anns)
+	svc.SetAnnotations(anns)
 	explainUndo(c, &actions, svc)
 	return nil
 }
@@ -561,7 +560,7 @@ func addAgentToWorkload(
 	object k8sapi.Workload, matchingService *core.Service,
 ) (
 	k8sapi.Workload,
-	*core.Service,
+	k8sapi.Object,
 	bool,
 	error,
 ) {
@@ -725,8 +724,9 @@ func addAgentToWorkload(
 
 	// Apply the actions on the Service.
 	updateService := false
+	svc := k8sapi.Service(matchingService)
 	if serviceMod != nil {
-		if err = serviceMod.Do(k8sapi.Service(matchingService)); err != nil {
+		if err = serviceMod.Do(svc); err != nil {
 			return nil, nil, false, err
 		}
 		if matchingService.Annotations == nil {
@@ -740,7 +740,7 @@ func addAgentToWorkload(
 		updateService = true
 	}
 
-	return object, matchingService, updateService, nil
+	return object, svc, updateService, nil
 }
 
 func (ki *installer) EnsureManager(c context.Context) error {

@@ -2,7 +2,12 @@
 
 ### 2.5.0 (TBD)
 
-- Drop backward compatibility with versions 2.4.4 or older by removing the deprecated multiplexing tunnel functionality.
+- Change: The verb "watch" was added to the set of required verbs when accessing services and workloads for the client RBAC ClusterRole
+
+- Change: Telepresence is no longer backward compatible with versions 2.4.4 or older because the deprecated multiplexing tunnel functionality was removed.
+
+- Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
+  The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`. 
 
 ### 2.4.10 (January 13, 2022)
 

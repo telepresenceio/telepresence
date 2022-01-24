@@ -21,7 +21,7 @@ rules:
 - apiGroups:
   - ""
   resources: ["services"]
-  verbs: ["get", "list", "update"]
+  verbs: ["watch", "get", "list", "update"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]
@@ -29,7 +29,7 @@ rules:
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update", "patch"]
+  verbs: ["watch", "get", "list", "update", "patch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]

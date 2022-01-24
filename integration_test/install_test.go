@@ -196,7 +196,7 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 	require.NoError(err)
 	require.NotNil(dep)
 	require.Contains(dep.GetPodTemplate().Spec.Containers[0].Image, "2.4.0")
-	require.Equal(dep.GetObjectMeta().GetLabels()["helm.sh/chart"], "telepresence-1.9.9")
+	require.Equal(dep.GetLabels()["helm.sh/chart"], "telepresence-1.9.9")
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {

@@ -47,6 +47,9 @@ service Connector {
   // Requires having already called Connect.
   rpc List(ListRequest) returns (WorkloadInfoSnapshot);
 
+  // Watch all workloads in the mapped namespaces
+  rpc WatchWorkloads(WatchWorkloadsRequest) returns (stream WorkloadInfoSnapshot);
+
   // Returns a stream of messages to display to the user.  Does NOT
   // require having called anything else first.
   rpc UserNotifications(google.protobuf.Empty) returns (stream Notification);
@@ -230,11 +233,19 @@ message ListRequest {
   string namespace = 2;
 }
 
+message WatchWorkloadsRequest {
+  // Namespace to watch.
+  repeated string namespaces = 1;
+}
+
 // WorkloadInfo contains information about a workload
 // https://kubernetes.io/docs/concepts/workloads/
 message WorkloadInfo {
   // Name of workload
   string name = 1;
+
+  // Namespace of workload
+  string namespace = 6;
 
   // Reason why workload cannot be intercepted, or empty if it can.
   string not_interceptable_reason = 2;

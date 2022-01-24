@@ -148,13 +148,12 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 			}
 			// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 		}
-		_, err = connectorClient.Quit(ctx, &empty.Empty{})
+		if _, err = connectorClient.Quit(ctx, &empty.Empty{}); err == nil || grpcStatus.Code(err) == grpcCodes.Unavailable {
+			err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
+		}
 		return err
 	})
-	if err == nil && quitUserDaemon {
-		err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
-	}
-	if errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable {
+	if err != nil && (errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable) {
 		if quitUserDaemon {
 			fmt.Println("had already quit")
 		} else {

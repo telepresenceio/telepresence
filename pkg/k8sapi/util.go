@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
@@ -82,22 +84,14 @@ func GetAppProto(ctx context.Context, aps AppProtocolStrategy, p *core.ServicePo
 
 func ObjErrorf(o Object, format string, args ...interface{}) error {
 	return fmt.Errorf("%s name=%q namespace=%q: %w",
-		o.GetKind(), GetName(o), GetNamespace(o),
+		o.GetKind(), o.GetName(), o.GetNamespace(),
 		fmt.Errorf(format, args...))
 }
 
-func GetAnnotations(o Object) map[string]string {
-	return o.GetObjectMeta().GetAnnotations()
-}
-
-func GetGeneration(o Object) int64 {
-	return o.GetObjectMeta().GetGeneration()
-}
-
-func GetName(o Object) string {
-	return o.GetObjectMeta().GetName()
-}
-
-func GetNamespace(o Object) string {
-	return o.GetObjectMeta().GetNamespace()
+func listOptions(labelSelector labels.Set) meta.ListOptions {
+	opts := meta.ListOptions{}
+	if len(labelSelector) > 0 {
+		opts.LabelSelector = labels.SelectorFromSet(labelSelector).String()
+	}
+	return opts
 }

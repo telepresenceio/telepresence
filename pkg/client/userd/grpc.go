@@ -51,8 +51,8 @@ func (s *service) logCall(c context.Context, callName string, f func(context.Con
 	f(c)
 }
 
-func (s *service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session)) (err error) {
-	s.logCall(c, callName, func(ctx context.Context) {
+func (s *service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
+	s.logCall(c, callName, func(_ context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
@@ -60,7 +60,7 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 			return
 		}
 		defer func() { err = callRecovery(recover(), err) }()
-		f(s.session.WithK8sInterface(c), s.session)
+		err = f(s.sessionContext, s.session)
 	})
 	return
 }
@@ -76,8 +76,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	s.logCall(ctx, "Connect", func(c context.Context) {
 		s.sessionLock.RLock()
 		if s.session != nil {
-			ctx = s.session.WithK8sInterface(ctx)
-			result = s.session.UpdateStatus(ctx, cr)
+			result = s.session.UpdateStatus(s.sessionContext, cr)
 			s.sessionLock.RUnlock()
 			return
 		}
@@ -103,6 +102,7 @@ func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, e
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session != nil {
+			s.session = nil
 			s.sessionCancel()
 		}
 	})
@@ -116,14 +116,14 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 		if s.session == nil {
 			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
 		} else {
-			result = s.session.Status(s.session.WithK8sInterface(c))
+			result = s.session.Status(s.sessionContext)
 		}
 	})
 	return
 }
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) {
+	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
 		var wl k8sapi.Workload
 		if result, wl = session.CanIntercept(c, ir); result == nil {
 			var kind string
@@ -135,21 +135,23 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 				WorkloadKind: kind,
 			}
 		}
+		return nil
 	})
 	return
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) {
+	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.AddIntercept(c, ir)
+		return err
 	})
 	return
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	err = s.withSession(c, "RemoveIntercept", func(c context.Context, session trafficmgr.Session) {
+	err = s.withSession(c, "RemoveIntercept", func(c context.Context, session trafficmgr.Session) error {
 		result = &rpc.InterceptResult{}
-		if err = session.RemoveIntercept(c, rr.Name); err != nil {
+		if err := session.RemoveIntercept(c, rr.Name); err != nil {
 			if grpcStatus.Code(err) == grpcCodes.NotFound {
 				result.Error = rpc.InterceptError_NOT_FOUND
 				result.ErrorText = rr.Name
@@ -160,20 +162,29 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
+		return nil
 	})
 	return
 }
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
-	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) {
-		result = session.WorkloadInfoSnapshot(c, lr)
+	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) error {
+		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
+		return err
 	})
 	return
 }
 
+func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
+	return s.withSession(server.Context(), "WatchWorkloads", func(c context.Context, session trafficmgr.Session) error {
+		return session.WatchWorkloads(c, wr, server)
+	})
+}
+
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
-	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) {
+	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.Uninstall(c, ur)
+		return err
 	})
 	return
 }
@@ -268,11 +279,12 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 }
 
 func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
-	err = s.withSession(c, "GetIngressInfos", func(c context.Context, session trafficmgr.Session) {
+	err = s.withSession(c, "GetIngressInfos", func(c context.Context, session trafficmgr.Session) error {
 		var iis []*manager.IngressInfo
 		if iis, err = session.IngressInfos(c); err == nil {
 			result = &rpc.IngressInfos{IngressInfos: iis}
 		}
+		return err
 	})
 	return
 }
@@ -294,6 +306,9 @@ func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 
 func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(ctx, "Quit", func(c context.Context) {
+		s.sessionLock.Lock()
+		defer s.sessionLock.Unlock()
+		s.session = nil
 		s.quit()
 	})
 	return &empty.Empty{}, nil

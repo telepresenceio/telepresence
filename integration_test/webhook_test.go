@@ -61,16 +61,30 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 			WebhookAgentImage: "imageFromConfig:0.0.1",
 		},
 	})
+
 	// Remove the traffic-manager since we are altering config that applies to
 	// creating the traffic-manager
-	itest.TelepresenceOk(ctx, "uninstall", "--everything")
+	uninstallEverything := func() {
+		stdout := itest.TelepresenceOk(ctx, "uninstall", "--everything")
+		itest.AssertQuitOutput(ctx, stdout)
+		s.Require().Eventually(
+			func() bool {
+				stdout, _ := itest.KubectlOut(ctx, s.ManagerNamespace(),
+					"get", "svc,deploy", "traffic-manager", "--ignore-not-found")
+				return stdout == ""
+			},
+			5*time.Second,        // waitFor
+			500*time.Millisecond, // polling interval
+		)
+	}
+	uninstallEverything()
 
 	// And reinstall it
 	itest.TelepresenceOk(ctxAI, "connect")
 
 	// When this function ends we uninstall the manager
 	defer func() {
-		itest.TelepresenceOk(ctxAI, "uninstall", "--everything")
+		uninstallEverything()
 	}()
 
 	image, err := itest.Output(ctx, "kubectl",

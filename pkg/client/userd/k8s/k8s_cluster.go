@@ -9,14 +9,9 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
-	core "k8s.io/api/core/v1"
-	k8err "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -28,19 +23,19 @@ type Cluster struct {
 	*Config
 	mappedNamespaces []string
 
-	ingressInfo []*manager.IngressInfo
-
 	// Main
 	ki kubernetes.Interface
 
-	// nsLock protects currentNamespaces and namespaceListener
+	// Current Namespace snapshot, get set by namespace Watcher.
+	// The boolean value indicates if this client is allowed to
+	// watch services and retrieve workloads in the namespace
+	nsWatcher *Watcher
+
+	// nsLock protects currentMappedNamespaces and namespaceListener
 	nsLock sync.Mutex
 
-	// Current Namespace snapshot, get set by namespace watcher.
-	currentNamespaces map[string]struct{}
-
 	// Current Namespace snapshot, filtered by mappedNamespaces
-	currentMappedNamespaces []string
+	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
 	namespaceListener func(c context.Context)
@@ -50,7 +45,7 @@ func (kc *Cluster) ActualNamespace(namespace string) string {
 	if namespace == "" {
 		namespace = kc.Namespace
 	}
-	if !kc.namespaceExists(namespace) {
+	if !kc.namespaceAccessible(namespace) {
 		namespace = ""
 	}
 	return namespace
@@ -62,12 +57,8 @@ func (kc *Cluster) check(c context.Context) error {
 	// context has no effect.
 	errCh := make(chan error)
 	go func() {
-		dc, err := discovery.NewDiscoveryClientForConfig(kc.config)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		info, err := dc.ServerVersion()
+		defer close(errCh)
+		info, err := k8sapi.GetK8sInterface(c).Discovery().ServerVersion()
 		if err != nil {
 			errCh <- err
 			return
@@ -87,7 +78,6 @@ func (kc *Cluster) check(c context.Context) error {
 				"kubernetes server versions older than %s are not supported, using %s .",
 				supportedKubeAPIVersion, info.GitVersion)
 		}
-		close(errCh)
 	}()
 
 	select {
@@ -103,60 +93,9 @@ func (kc *Cluster) check(c context.Context) error {
 	return c.Err()
 }
 
-// Deployments returns all deployments found in the given Namespace
-func (kc *Cluster) Deployments(c context.Context, namespace string) ([]k8sapi.Workload, error) {
-	ds, err := kc.ki.AppsV1().Deployments(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	di := ds.Items
-	objs := make([]k8sapi.Workload, len(di))
-	for i := range di {
-		objs[i] = k8sapi.Deployment(&di[i])
-	}
-	return objs, nil
-}
-
-// ReplicaSets returns all replica sets found in the given Namespace
-func (kc *Cluster) ReplicaSets(c context.Context, namespace string) ([]k8sapi.Workload, error) {
-	rs, err := kc.ki.AppsV1().ReplicaSets(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	ri := rs.Items
-	objs := make([]k8sapi.Workload, len(ri))
-	for i := range ri {
-		objs[i] = k8sapi.ReplicaSet(&ri[i])
-	}
-	return objs, nil
-}
-
-// StatefulSets returns all stateful sets found in the given Namespace
-func (kc *Cluster) StatefulSets(c context.Context, namespace string) ([]k8sapi.Workload, error) {
-	ss, err := kc.ki.AppsV1().StatefulSets(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	si := ss.Items
-	objs := make([]k8sapi.Workload, len(si))
-	for i := range si {
-		objs[i] = k8sapi.StatefulSet(&si[i])
-	}
-	return objs, nil
-}
-
-// Pods returns all pods found in the given Namespace
-func (kc *Cluster) Pods(c context.Context, namespace string) ([]core.Pod, error) {
-	ps, err := kc.ki.CoreV1().Pods(namespace).List(c, meta.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return ps.Items, nil
-}
-
 // FindPodFromSelector returns a pod with the given name-hex-hex
-func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (*core.Pod, error) {
-	pods, err := kc.Pods(c, namespace)
+func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (k8sapi.Object, error) {
+	pods, err := k8sapi.Pods(c, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -172,101 +111,20 @@ func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, sele
 			}
 		}
 		if match {
-			return &pods[i], nil
+			return pods[i], nil
 		}
 	}
 
 	return nil, errors.New("pod not found")
 }
 
-// FindWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
-// is optional. A search is performed in the following order if it is empty:
-//
-//   1. Deployments
-//   2. ReplicaSets
-//   3. StatefulSets
-//
-// The first match is returned.
-func (kc *Cluster) FindWorkload(c context.Context, namespace, name, workloadKind string) (obj k8sapi.Workload, err error) {
-	switch workloadKind {
-	case "Deployment":
-		obj, err = k8sapi.GetDeployment(c, name, namespace)
-	case "ReplicaSet":
-		obj, err = k8sapi.GetReplicaSet(c, name, namespace)
-	case "StatefulSet":
-		obj, err = k8sapi.GetStatefulSet(c, name, namespace)
-	case "":
-		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
-			if obj, err = kc.FindWorkload(c, namespace, name, wk); err == nil {
-				return obj, nil
-			}
-			if !k8err.IsNotFound(err) {
-				return nil, err
-			}
-		}
-		err = k8err.NewNotFound(core.Resource("workload"), name+"."+namespace)
-	default:
-		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
-	}
-	return obj, err
-}
-
-// FindSvc finds a service with the given name in the given Namespace and returns
-// either a copy of that service or nil if no such service could be found.
-func (kc *Cluster) FindSvc(c context.Context, namespace, name string) (*core.Service, error) {
-	return kc.ki.CoreV1().Services(namespace).Get(c, name, meta.GetOptions{})
-}
-
-// findAllSvcByType finds services with the given service type in all namespaces of the cluster returns
-// a slice containing a copy of those services.
-func (kc *Cluster) findAllSvcByType(c context.Context, svcType core.ServiceType) ([]*core.Service, error) {
-	// NOTE: This is expensive in terms of bandwidth on a large cluster. We currently only use this
-	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
-	var typedSvcs []*core.Service
-	findTyped := func(ns string) error {
-		ss, err := kc.ki.CoreV1().Services(ns).List(c, meta.ListOptions{})
-		if err != nil {
-			return err
-		}
-		for i := range ss.Items {
-			s := &ss.Items[i]
-			if s.Spec.Type == svcType {
-				typedSvcs = append(typedSvcs, s)
-			}
-		}
-		return nil
-	}
-
+// namespaceAccessible answers the question if the namespace is present and accessible
+// to this client
+func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 	kc.nsLock.Lock()
-	var mns []string
-	if len(kc.mappedNamespaces) > 0 {
-		mns = make([]string, len(kc.mappedNamespaces))
-		copy(mns, kc.mappedNamespaces)
-	}
+	ok := kc.currentMappedNamespaces[namespace]
 	kc.nsLock.Unlock()
-
-	if len(mns) > 0 {
-		for _, ns := range mns {
-			if err := findTyped(ns); err != nil {
-				return nil, err
-			}
-		}
-	} else if err := findTyped(""); err != nil {
-		return nil, err
-	}
-	return typedSvcs, nil
-}
-
-func (kc *Cluster) namespaceExists(namespace string) (exists bool) {
-	kc.nsLock.Lock()
-	for _, n := range kc.currentMappedNamespaces {
-		if n == namespace {
-			exists = true
-			break
-		}
-	}
-	kc.nsLock.Unlock()
-	return exists
+	return ok
 }
 
 func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Cluster, error) {
@@ -278,6 +136,8 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	if err != nil {
 		return nil, err
 	}
+	c = k8sapi.WithK8sInterface(c, cs)
+
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
 	} else {
@@ -285,13 +145,14 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	}
 
 	ret := &Cluster{
-		Config:            kubeFlags,
-		mappedNamespaces:  namespaces,
-		ki:                cs,
-		currentNamespaces: make(map[string]struct{}),
+		Config:           kubeFlags,
+		mappedNamespaces: namespaces,
+		ki:               cs,
 	}
 
-	if err := ret.check(c); err != nil {
+	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
+	defer cancel()
+	if err := ret.check(timedC); err != nil {
 		return nil, err
 	}
 
@@ -302,11 +163,26 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	return ret, nil
 }
 
-func (kc *Cluster) GetCurrentNamespaces() []string {
+// GetCurrentNamespaces returns the names of the namespaces that this client
+// is mapping. If the forClientAccess is true, then the namespaces are restricted
+// to those where an intercept can take place, i.e. the namespaces where this
+// client can Watch and get services and deployments.
+func (kc *Cluster) GetCurrentNamespaces(forClientAccess bool) []string {
 	kc.nsLock.Lock()
-	nss := make([]string, len(kc.currentMappedNamespaces))
-	copy(nss, kc.currentMappedNamespaces)
+	nss := make([]string, 0, len(kc.currentMappedNamespaces))
+	if forClientAccess {
+		for ns, ok := range kc.currentMappedNamespaces {
+			if ok {
+				nss = append(nss, ns)
+			}
+		}
+	} else {
+		for ns := range kc.currentMappedNamespaces {
+			nss = append(nss, ns)
+		}
+	}
 	kc.nsLock.Unlock()
+	sort.Strings(nss)
 	return nss
 }
 

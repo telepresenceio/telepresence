@@ -275,6 +275,8 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
 func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload) {
+	tm.WaitForNSSync(c)
+	tm.wlWatcher.waitForSync(c)
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
@@ -303,7 +305,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		return nil, nil
 	}
 
-	obj, err := tm.FindWorkload(c, spec.Namespace, spec.Agent, spec.WorkloadKind)
+	obj, err := k8sapi.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
 		if errors2.IsNotFound(err) {
 			return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil

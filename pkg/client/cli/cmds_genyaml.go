@@ -199,7 +199,7 @@ func (i *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 	container := &containers[containerIdx]
 
 	if i.serviceName == "" {
-		i.serviceName = k8sapi.GetName(wl)
+		i.serviceName = wl.GetName()
 	}
 
 	cfg := client.GetConfig(ctx)

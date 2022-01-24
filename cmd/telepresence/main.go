@@ -63,6 +63,9 @@ func main() {
 		}
 		ctx = client.WithConfig(ctx, cfg)
 		cmd = cli.Command(ctx)
+		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			return errcat.User.New(err)
+		})
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			if errcat.GetCategory(err) > errcat.NoLogs {

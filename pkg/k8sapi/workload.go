@@ -6,7 +6,9 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	typedApps "k8s.io/client-go/kubernetes/typed/apps/v1"
@@ -17,6 +19,38 @@ type Workload interface {
 	GetPodTemplate() *core.PodTemplateSpec
 	Replicas() int
 	Updated(int64) bool
+}
+
+// GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
+// is optional. A search is performed in the following order if it is empty:
+//
+//   1. Deployments
+//   2. ReplicaSets
+//   3. StatefulSets
+//
+// The first match is returned.
+func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj Workload, err error) {
+	switch workloadKind {
+	case "Deployment":
+		obj, err = GetDeployment(c, name, namespace)
+	case "ReplicaSet":
+		obj, err = GetReplicaSet(c, name, namespace)
+	case "StatefulSet":
+		obj, err = GetStatefulSet(c, name, namespace)
+	case "":
+		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
+			if obj, err = GetWorkload(c, name, namespace, wk); err == nil {
+				return obj, nil
+			}
+			if !errors2.IsNotFound(err) {
+				return nil, err
+			}
+		}
+		err = errors2.NewNotFound(core.Resource("workload"), name+"."+namespace)
+	default:
+		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
+	}
+	return obj, err
 }
 
 func WrapWorkload(workload runtime.Object) (Workload, error) {
@@ -40,6 +74,20 @@ func GetDeployment(c context.Context, name, namespace string) (Workload, error) 
 	return &deployment{d}, nil
 }
 
+// Deployments returns all deployments found in the given Namespace
+func Deployments(c context.Context, namespace string, labelSelector labels.Set) ([]Workload, error) {
+	ls, err := deployments(c, namespace).List(c, listOptions(labelSelector))
+	if err != nil {
+		return nil, err
+	}
+	is := ls.Items
+	os := make([]Workload, len(is))
+	for i := range is {
+		os[i] = Deployment(&is[i])
+	}
+	return os, nil
+}
+
 func Deployment(d *apps.Deployment) Workload {
 	return &deployment{d}
 }
@@ -61,6 +109,20 @@ func GetReplicaSet(c context.Context, name, namespace string) (Workload, error) 
 	return &replicaSet{d}, nil
 }
 
+// ReplicaSets returns all replica sets found in the given Namespace
+func ReplicaSets(c context.Context, namespace string, labelSelector labels.Set) ([]Workload, error) {
+	ls, err := replicaSets(c, namespace).List(c, listOptions(labelSelector))
+	if err != nil {
+		return nil, err
+	}
+	is := ls.Items
+	os := make([]Workload, len(is))
+	for i := range is {
+		os[i] = ReplicaSet(&is[i])
+	}
+	return os, nil
+}
+
 func ReplicaSet(d *apps.ReplicaSet) Workload {
 	return &replicaSet{d}
 }
@@ -80,6 +142,20 @@ func GetStatefulSet(c context.Context, name, namespace string) (Workload, error)
 		return nil, err
 	}
 	return &statefulSet{d}, nil
+}
+
+// StatefulSets returns all stateful sets found in the given Namespace
+func StatefulSets(c context.Context, namespace string, labelSelector labels.Set) ([]Workload, error) {
+	ls, err := statefulSets(c, namespace).List(c, listOptions(labelSelector))
+	if err != nil {
+		return nil, err
+	}
+	is := ls.Items
+	os := make([]Workload, len(is))
+	for i := range is {
+		os[i] = StatefulSet(&is[i])
+	}
+	return os, nil
 }
 
 func StatefulSet(d *apps.StatefulSet) Workload {

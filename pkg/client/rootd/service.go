@@ -47,15 +47,21 @@ Examine the ` + titleName + `'s log output in
 to troubleshoot problems.
 `
 
+type sessionReply struct {
+	status *rpc.DaemonStatus
+	err    error
+}
+
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	quit          context.CancelFunc
-	connectCh     chan *rpc.OutboundInfo
-	connectErrCh  chan error
-	sessionLock   sync.Mutex
-	session       *session
-	timedLogLevel log.TimedLevel
+	quit           context.CancelFunc
+	connectCh      chan *rpc.OutboundInfo
+	connectReplyCh chan sessionReply
+	sessionLock    sync.Mutex
+	sessionContext context.Context
+	session        *session
+	timedLogLevel  log.TimedLevel
 
 	scout *scout.Reporter
 }
@@ -93,26 +99,23 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 
 func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
+	d.sessionLock.Lock()
+	defer d.sessionLock.Unlock()
+	d.session = nil
 	d.quit()
 	return &empty.Empty{}, nil
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	session, err := d.currentSession()
-	if err != nil {
-		return nil, err
-	}
-	session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
-	return &empty.Empty{}, nil
+	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
+		session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
+		return nil
+	})
+	return &empty.Empty{}, err
 }
 
 func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.DaemonStatus, error) {
 	dlog.Debug(ctx, "Received gRPC Connect")
-	d.sessionLock.Lock()
-	defer d.sessionLock.Unlock()
-	if d.session != nil {
-		return &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}, nil
-	}
 	select {
 	case <-ctx.Done():
 		return nil, status.Error(codes.Canceled, ctx.Err().Error())
@@ -121,12 +124,9 @@ func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.Dae
 	select {
 	case <-ctx.Done():
 		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	case err := <-d.connectErrCh:
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	case reply := <-d.connectReplyCh:
+		return reply.status, reply.err
 	}
-	return &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}, nil
 }
 
 func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
@@ -134,48 +134,51 @@ func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty,
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	if d.session != nil {
+		defer func() {
+			d.session = nil
+		}()
 		d.session.cancel()
 	}
 	return &empty.Empty{}, nil
 }
 
-func (d *service) currentSession() (*session, error) {
+func (d *service) withSession(c context.Context, f func(context.Context, *session) error) error {
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	if d.session == nil {
-		return nil, status.Error(codes.Unavailable, "no active session")
+		return status.Error(codes.Unavailable, "no active session")
 	}
-	return d.session, nil
+	return f(d.sessionContext, d.session)
 }
 
 func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
-	session, err := d.currentSession()
-	if err != nil {
-		return nil, err
-	}
-
-	// The manager can sometimes send the different subnets in different Sends, but after 5 seconds of listening to it
-	// we should expect to have everything
-	tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer tCancel()
-	infoStream, err := session.managerClient.WatchClusterInfo(tCtx, session.session)
-	if err != nil {
-		return nil, err
-	}
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
-	for {
-		mgrInfo, err := infoStream.Recv()
+	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
+		// The manager can sometimes send the different subnets in different Sends, but after 5 seconds of listening to it
+		// we should expect to have everything
+		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer tCancel()
+		infoStream, err := session.managerClient.WatchClusterInfo(tCtx, session.session)
 		if err != nil {
-			if tCtx.Err() == nil && !errors.Is(err, io.EOF) {
-				return nil, err
+			return err
+		}
+		for {
+			mgrInfo, err := infoStream.Recv()
+			if err != nil {
+				if tCtx.Err() != nil || errors.Is(err, io.EOF) {
+					err = nil
+				}
+				return err
 			}
-			break
+			if mgrInfo.ServiceSubnet != nil {
+				svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
+			}
+			podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
 		}
-		if mgrInfo.ServiceSubnet != nil {
-			svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
-		}
-		podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }
@@ -212,32 +215,34 @@ func (d *service) manageSessions(c context.Context) error {
 
 		// Respond by setting the session and returning the error (or nil
 		// if everything is ok)
-		var err error
-		d.session, err = newSession(c, d.scout, oi)
+		reply := sessionReply{}
+		d.sessionLock.Lock()
+		if d.session != nil {
+			reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+		} else {
+			d.session, reply.err = newSession(c, d.scout, oi)
+			if reply.err == nil {
+				reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+			}
+		}
 		select {
 		case <-c.Done():
+			d.sessionLock.Unlock()
 			return nil
-		case d.connectErrCh <- err:
+		case d.connectReplyCh <- reply:
 		}
-		if err != nil {
+		if reply.err != nil {
+			d.sessionLock.Unlock()
 			continue
 		}
 
-		// Run the session synchronously and ensure that it is cleaned
-		// up properly when the context is cancelled
-		func(c context.Context) {
-			defer func() {
-				d.sessionLock.Lock()
-				d.session = nil
-				d.sessionLock.Unlock()
-			}()
-
-			// The d.session.cancel is called from Disconnect
-			c, d.session.cancel = context.WithCancel(c)
-			if err := d.session.run(c); err != nil {
-				dlog.Error(c, err)
-			}
-		}(c)
+		// Run the session synchronously and assign the cancellation context used for disconnect
+		// The d.session.cancel is called from Disconnect
+		d.sessionContext, d.session.cancel = context.WithCancel(c)
+		d.sessionLock.Unlock()
+		if err := d.session.run(d.sessionContext); err != nil {
+			dlog.Error(c, err)
+		}
 	}
 }
 
@@ -316,10 +321,10 @@ func run(c context.Context, loggingDir, configDir string) error {
 	dlog.Debug(c, "Listener opened")
 
 	d := &service{
-		scout:         scout.NewReporter(c, "daemon"),
-		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
-		connectCh:     make(chan *rpc.OutboundInfo),
-		connectErrCh:  make(chan error),
+		scout:          scout.NewReporter(c, "daemon"),
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
+		connectCh:      make(chan *rpc.OutboundInfo),
+		connectReplyCh: make(chan sessionReply),
 	}
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err

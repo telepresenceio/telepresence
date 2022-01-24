@@ -49,6 +49,8 @@ type ConnectorClient interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
+	// Watch all workloads in the mapped namespaces
+	WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error)
 	// Returns a stream of messages to display to the user.  Does NOT
 	// require having called anything else first.
 	UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
@@ -158,8 +160,40 @@ func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grp
 	return out, nil
 }
 
+func (c *connectorClient) WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[0], "/telepresence.connector.Connector/WatchWorkloads", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &connectorWatchWorkloadsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Connector_WatchWorkloadsClient interface {
+	Recv() (*WorkloadInfoSnapshot, error)
+	grpc.ClientStream
+}
+
+type connectorWatchWorkloadsClient struct {
+	grpc.ClientStream
+}
+
+func (x *connectorWatchWorkloadsClient) Recv() (*WorkloadInfoSnapshot, error) {
+	m := new(WorkloadInfoSnapshot)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *connectorClient) UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[0], "/telepresence.connector.Connector/UserNotifications", opts...)
+	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[1], "/telepresence.connector.Connector/UserNotifications", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +346,8 @@ type ConnectorServer interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
+	// Watch all workloads in the mapped namespaces
+	WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error
 	// Returns a stream of messages to display to the user.  Does NOT
 	// require having called anything else first.
 	UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error
@@ -363,6 +399,9 @@ func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
+}
+func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
 }
 func (UnimplementedConnectorServer) UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error {
 	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
@@ -570,6 +609,27 @@ func _Connector_List_Handler(srv interface{}, ctx context.Context, dec func(inte
 		return srv.(ConnectorServer).List(ctx, req.(*ListRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_WatchWorkloads_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchWorkloadsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ConnectorServer).WatchWorkloads(m, &connectorWatchWorkloadsServer{stream})
+}
+
+type Connector_WatchWorkloadsServer interface {
+	Send(*WorkloadInfoSnapshot) error
+	grpc.ServerStream
+}
+
+type connectorWatchWorkloadsServer struct {
+	grpc.ServerStream
+}
+
+func (x *connectorWatchWorkloadsServer) Send(m *WorkloadInfoSnapshot) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Connector_UserNotifications_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -858,6 +918,11 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchWorkloads",
+			Handler:       _Connector_WatchWorkloads_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "UserNotifications",
 			Handler:       _Connector_UserNotifications_Handler,
