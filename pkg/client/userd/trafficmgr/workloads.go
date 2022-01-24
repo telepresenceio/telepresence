@@ -175,6 +175,16 @@ func newWASWatcher() *workloadsAndServicesWatcher {
 	return w
 }
 
+func (w *workloadsAndServicesWatcher) getWatchedNamespaces() []string {
+	w.Lock()
+	defer w.Unlock()
+	nss := []string{}
+	for ns := range w.nsWatchers {
+		nss = append(nss, ns)
+	}
+	return nss
+}
+
 // eachService iterates over the workloads in the current snapshot. Unless namespace
 // is the empty string, the iteration is limited to the workloads matching that namespace.
 func (w *workloadsAndServicesWatcher) eachService(c context.Context, namespaces []string, f func(*core.Service)) {

@@ -240,6 +240,10 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	return tmgr, ret
 }
 
+func (tm *TrafficManager) GetWatchedNamespaces() []string {
+	return tm.wlWatcher.getWatchedNamespaces()
+}
+
 func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
 	return tm.managerClient
 }
