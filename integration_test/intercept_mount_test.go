@@ -55,11 +55,13 @@ func (s *interceptMountSuite) TearDownSuite() {
 		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
-	go func() {
-		time.Sleep(2 * time.Second)
-		_ = os.RemoveAll(s.mountPoint)
-	}()
+	if goRuntime.GOOS != "windows" {
+		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
+		go func() {
+			time.Sleep(2 * time.Second)
+			_ = os.RemoveAll(s.mountPoint)
+		}()
+	}
 }
 
 func (s *interceptMountSuite) Test_InterceptMount() {
@@ -72,7 +74,11 @@ func (s *interceptMountSuite) Test_InterceptMount() {
 	stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
 	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
 
-	st, err := os.Stat(s.mountPoint)
+	mp := s.mountPoint
+	if goRuntime.GOOS == "windows" {
+		mp += `\`
+	}
+	st, err := os.Stat(mp)
 	require.NoError(err, "Stat on <mount point> failed")
 	require.True(st.IsDir(), "Mount point is not a directory")
 	st, err = os.Stat(filepath.Join(s.mountPoint, "var"))
