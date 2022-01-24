@@ -74,11 +74,8 @@ func (s *interceptMountSuite) Test_InterceptMount() {
 	stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
 	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
 
-	mp := s.mountPoint
-	if goRuntime.GOOS == "windows" {
-		mp += `\`
-	}
-	st, err := os.Stat(mp)
+	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
+	st, err := os.Stat(s.mountPoint)
 	require.NoError(err, "Stat on <mount point> failed")
 	require.True(st.IsDir(), "Mount point is not a directory")
 	st, err = os.Stat(filepath.Join(s.mountPoint, "var"))
