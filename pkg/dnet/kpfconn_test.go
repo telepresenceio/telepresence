@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -14,19 +13,15 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-
-	"github.com/datawire/dlib/dtime"
-
-	"github.com/datawire/dlib/dexec"
-
-	"k8s.io/client-go/kubernetes"
-
 	"golang.org/x/net/nettest"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 )
 
@@ -58,7 +53,7 @@ func TestKubectlPortForward(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.SkipNow()
 	}
-	if _, err := exec.LookPath("socat"); err != nil {
+	if _, err := dexec.LookPath("socat"); err != nil {
 		if runtime.GOOS == "linux" && os.Getenv("CI") != "" {
 			t.Fatal("would skip this test in CI, which isn't OK")
 		}
@@ -139,7 +134,7 @@ func TestKubectlPortForward(t *testing.T) {
 				if rsp, err = http.DefaultClient.Get(fmt.Sprintf("http://localhost:%d/api", apiserverAddr.Port)); err == nil {
 					rsp.Body.Close()
 					close(apiReady)
-					cmd.Wait()
+					_ = cmd.Wait()
 					return nil
 				}
 			}
