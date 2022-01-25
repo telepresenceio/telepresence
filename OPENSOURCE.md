@@ -144,7 +144,6 @@ following Free and Open Source software:
     k8s.io/klog/v2                                                      v2.10.0                                    Apache License 2.0
     k8s.io/kube-openapi                                                 v0.0.0-20210305001622-591a79e4bda7         Apache License 2.0
     k8s.io/kubectl                                                      v0.21.0                                    Apache License 2.0
-    k8s.io/kubernetes                                                   v1.21.0                                    Apache License 2.0
     k8s.io/utils                                                        v0.0.0-20201110183641-67b214c5f920         Apache License 2.0
     sigs.k8s.io/kustomize/api                                           v0.8.5                                     Apache License 2.0
     sigs.k8s.io/kustomize/kyaml                                         v0.10.15                                   Apache License 2.0, MIT license
