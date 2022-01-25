@@ -52,6 +52,11 @@ service SystemAProxy {
   rpc ReverseConnection(stream Chunk) returns (stream Chunk);
 }
 
+// A copy of SystemAProxy for userd connections on the same server as SystemAProxy on SystemA
+service UserDaemonSystemAProxy {
+  rpc ReverseConnection(stream Chunk) returns (stream Chunk);
+}
+
 message CreateDomainRequest {
   string intercept_id = 1;
   bool display_banner = 2;
