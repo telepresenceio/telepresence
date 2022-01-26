@@ -33,9 +33,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -687,7 +687,7 @@ func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
 }
 
 func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
-	m, err := header.NewMatcher(ic.Headers)
+	m, err := matcher.NewHeaders(ic.Headers)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
@@ -711,11 +711,11 @@ func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID string, h 
 	case am == nil:
 		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
 	case am.headerMatcher.Matches(h):
-		dlog.Debugf(ctx, "%s: %s matches %s", callerID, am.headerMatcher, header.Stringer(h))
+		dlog.Debugf(ctx, "%s: %s matches %s", callerID, am.headerMatcher, matcher.Stringer(h))
 		r.Intercepted = true
 		r.Metadata = am.metadata
 	default:
-		dlog.Debugf(ctx, "%s: %s does not match %s", callerID, am.headerMatcher, header.Stringer(h))
+		dlog.Debugf(ctx, "%s: %s does not match %s", callerID, am.headerMatcher, matcher.Stringer(h))
 	}
 	return r, nil
 }

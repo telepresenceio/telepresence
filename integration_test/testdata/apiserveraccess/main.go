@@ -15,8 +15,8 @@ import (
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
 func main() {
@@ -118,7 +118,7 @@ func consumeHere(c context.Context, url string, hm map[string]string) (bool, err
 	for k, v := range hm {
 		rq.Header.Set(k, v)
 	}
-	dlog.Debugf(c, "%s with headers\n%s", url, header.Stringer(rq.Header))
+	dlog.Debugf(c, "%s with headers\n%s", url, matcher.Stringer(rq.Header))
 	rs, err := http.DefaultClient.Do(rq)
 	if err != nil {
 		return false, err

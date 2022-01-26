@@ -1,4 +1,4 @@
-package header
+package matcher
 
 import (
 	"net/http"
