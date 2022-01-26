@@ -359,3 +359,122 @@ var SystemAProxy_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "rpc/systema/manager2systama.proto",
 }
+
+// UserDaemonSystemAProxyClient is the client API for UserDaemonSystemAProxy service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type UserDaemonSystemAProxyClient interface {
+	ReverseConnection(ctx context.Context, opts ...grpc.CallOption) (UserDaemonSystemAProxy_ReverseConnectionClient, error)
+}
+
+type userDaemonSystemAProxyClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewUserDaemonSystemAProxyClient(cc grpc.ClientConnInterface) UserDaemonSystemAProxyClient {
+	return &userDaemonSystemAProxyClient{cc}
+}
+
+func (c *userDaemonSystemAProxyClient) ReverseConnection(ctx context.Context, opts ...grpc.CallOption) (UserDaemonSystemAProxy_ReverseConnectionClient, error) {
+	stream, err := c.cc.NewStream(ctx, &UserDaemonSystemAProxy_ServiceDesc.Streams[0], "/telepresence.systema.UserDaemonSystemAProxy/ReverseConnection", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &userDaemonSystemAProxyReverseConnectionClient{stream}
+	return x, nil
+}
+
+type UserDaemonSystemAProxy_ReverseConnectionClient interface {
+	Send(*Chunk) error
+	Recv() (*Chunk, error)
+	grpc.ClientStream
+}
+
+type userDaemonSystemAProxyReverseConnectionClient struct {
+	grpc.ClientStream
+}
+
+func (x *userDaemonSystemAProxyReverseConnectionClient) Send(m *Chunk) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *userDaemonSystemAProxyReverseConnectionClient) Recv() (*Chunk, error) {
+	m := new(Chunk)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// UserDaemonSystemAProxyServer is the server API for UserDaemonSystemAProxy service.
+// All implementations must embed UnimplementedUserDaemonSystemAProxyServer
+// for forward compatibility
+type UserDaemonSystemAProxyServer interface {
+	ReverseConnection(UserDaemonSystemAProxy_ReverseConnectionServer) error
+	mustEmbedUnimplementedUserDaemonSystemAProxyServer()
+}
+
+// UnimplementedUserDaemonSystemAProxyServer must be embedded to have forward compatible implementations.
+type UnimplementedUserDaemonSystemAProxyServer struct {
+}
+
+func (UnimplementedUserDaemonSystemAProxyServer) ReverseConnection(UserDaemonSystemAProxy_ReverseConnectionServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReverseConnection not implemented")
+}
+func (UnimplementedUserDaemonSystemAProxyServer) mustEmbedUnimplementedUserDaemonSystemAProxyServer() {
+}
+
+// UnsafeUserDaemonSystemAProxyServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to UserDaemonSystemAProxyServer will
+// result in compilation errors.
+type UnsafeUserDaemonSystemAProxyServer interface {
+	mustEmbedUnimplementedUserDaemonSystemAProxyServer()
+}
+
+func RegisterUserDaemonSystemAProxyServer(s grpc.ServiceRegistrar, srv UserDaemonSystemAProxyServer) {
+	s.RegisterService(&UserDaemonSystemAProxy_ServiceDesc, srv)
+}
+
+func _UserDaemonSystemAProxy_ReverseConnection_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(UserDaemonSystemAProxyServer).ReverseConnection(&userDaemonSystemAProxyReverseConnectionServer{stream})
+}
+
+type UserDaemonSystemAProxy_ReverseConnectionServer interface {
+	Send(*Chunk) error
+	Recv() (*Chunk, error)
+	grpc.ServerStream
+}
+
+type userDaemonSystemAProxyReverseConnectionServer struct {
+	grpc.ServerStream
+}
+
+func (x *userDaemonSystemAProxyReverseConnectionServer) Send(m *Chunk) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *userDaemonSystemAProxyReverseConnectionServer) Recv() (*Chunk, error) {
+	m := new(Chunk)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// UserDaemonSystemAProxy_ServiceDesc is the grpc.ServiceDesc for UserDaemonSystemAProxy service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var UserDaemonSystemAProxy_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "telepresence.systema.UserDaemonSystemAProxy",
+	HandlerType: (*UserDaemonSystemAProxyServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ReverseConnection",
+			Handler:       _UserDaemonSystemAProxy_ReverseConnection_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "rpc/systema/manager2systama.proto",
+}

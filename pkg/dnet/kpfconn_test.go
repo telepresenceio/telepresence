@@ -12,9 +12,6 @@ import (
 	"testing"
 	"time"
 
-	//nolint:depguard // We really do want the socat to be minimal
-	"os/exec"
-
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/nettest"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -56,7 +53,7 @@ func TestKubectlPortForward(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.SkipNow()
 	}
-	if _, err := exec.LookPath("socat"); err != nil {
+	if _, err := dexec.LookPath("socat"); err != nil {
 		if runtime.GOOS == "linux" && os.Getenv("CI") != "" {
 			t.Fatal("would skip this test in CI, which isn't OK")
 		}
