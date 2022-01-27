@@ -9,6 +9,8 @@
 - Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
   The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`. 
 
+- Bugfix: Allow traffic-manager release name to be anything when `managerRbac.namespaced`
+
 ### 2.4.10 (January 13, 2022)
 
 - Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 
