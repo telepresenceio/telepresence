@@ -688,7 +688,7 @@ func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
 }
 
 func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
-	m, err := matcher.NewHeaders(ic.Headers)
+	m, err := matcher.NewRequest(ic.Headers)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
@@ -697,12 +697,12 @@ func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptI
 		tm.currentMatchers = make(map[string]*apiMatcher)
 	}
 	tm.currentMatchers[ic.Id] = &apiMatcher{
-		headerMatcher: m,
-		metadata:      ic.Metadata,
+		requestMatcher: m,
+		metadata:       ic.Metadata,
 	}
 }
 
-func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID string, h http.Header) (*restapi.InterceptInfo, error) {
+func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID, path string, h http.Header) (*restapi.InterceptInfo, error) {
 	tm.currentInterceptsLock.Lock()
 	defer tm.currentInterceptsLock.Unlock()
 
@@ -711,12 +711,12 @@ func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID string, h 
 	switch {
 	case am == nil:
 		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
-	case am.headerMatcher.Matches(h):
-		dlog.Debugf(ctx, "%s: %s matches %s", callerID, am.headerMatcher, matcher.Stringer(h))
+	case am.requestMatcher.Matches(path, h):
+		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(h))
 		r.Intercepted = true
 		r.Metadata = am.metadata
 	default:
-		dlog.Debugf(ctx, "%s: %s does not match %s", callerID, am.headerMatcher, matcher.Stringer(h))
+		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(h))
 	}
 	return r, nil
 }

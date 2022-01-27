@@ -7,7 +7,7 @@ import (
 )
 
 func TestStringer_String(t *testing.T) {
-	newStringer := func(s ...string) Stringer {
+	newStringer := func(s ...string) HeaderStringer {
 		h := http.Header{}
 		for i := 0; i < len(s); i += 2 {
 			k := s[i]
@@ -17,12 +17,12 @@ func TestStringer_String(t *testing.T) {
 				h.Add(k, vs[i])
 			}
 		}
-		return Stringer(h)
+		return HeaderStringer(h)
 	}
 
 	tests := []struct {
 		name string
-		s    Stringer
+		s    HeaderStringer
 		want string
 	}{
 		{

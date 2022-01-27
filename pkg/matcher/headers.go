@@ -13,7 +13,7 @@ type Headers interface {
 	// used as an argument to NewHeaders to create an identical Headers.
 	Map() map[string]string
 
-	// Matches returns true if all ValueMatchers in this Headers are matched by the given http.Header.
+	// Matches returns true if all Value matchers in this instance are matched by the given http.Header.
 	// Header name comparison is made using the textproto.CanonicalMIMEHeaderKey form of the keys.
 	Matches(header http.Header) bool
 }
@@ -33,6 +33,8 @@ func NewHeaders(hs map[string]string) (Headers, error) {
 	return hm, nil
 }
 
+// Map returns the map correspondence of this instance. The returned value can be
+// used as an argument to NewHeaders to create an identical Headers.
 func (m headers) Map() map[string]string {
 	r := make(map[string]string, len(m))
 	for k, v := range m {
@@ -41,7 +43,7 @@ func (m headers) Map() map[string]string {
 	return r
 }
 
-// Matches returns true if all ValueMatchers in this Headers are matched by the given http.Header.
+// Matches returns true if all Value matchers in this instance are matched by the given http.Header.
 // Header name comparison is made using the textproto.CanonicalMIMEHeaderKey form of the keys.
 func (m headers) Matches(h http.Header) bool {
 	for name, vm := range m {
@@ -53,15 +55,13 @@ func (m headers) Matches(h http.Header) bool {
 }
 
 func (m headers) String() string {
-	if len(m) == 0 {
-		return "match=all"
-	}
 	sb := strings.Builder{}
-	for k, v := range m {
-		if sb.Len() > 0 {
-			sb.WriteByte('\n')
-		}
-		fmt.Fprintf(&sb, "match=%s%s%s", k, v.Op(), v)
-	}
+	m.appendString(&sb, "")
 	return sb.String()
+}
+
+func (m headers) appendString(sb *strings.Builder, indent string) {
+	for k, v := range m {
+		fmt.Fprintf(sb, "\n%s%s %s %s", indent, k, v.Op(), v)
+	}
 }

@@ -31,7 +31,7 @@ type state struct {
 	sftpPort    int32
 }
 
-func (s *state) InterceptInfo(_ context.Context, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (s *state) InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*restapi.InterceptInfo, error) {
 	// The OSS agent is either intercepting or it isn't. There's no way to tell what it is that's being intercepted.
 	return s.forwarder.InterceptInfo(), nil
 }

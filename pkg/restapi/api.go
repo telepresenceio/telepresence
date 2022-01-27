@@ -31,7 +31,7 @@ type InterceptInfo struct {
 type AgentState interface {
 	// InterceptInfo returns information about an ongoing intercept that matches
 	// the given arguments.
-	InterceptInfo(context.Context, string, http.Header) (*InterceptInfo, error)
+	InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*InterceptInfo, error)
 }
 
 type Server interface {
@@ -62,8 +62,8 @@ func (s *server) ListenAndServe(c context.Context, apiPort int) error {
 	return s.Serve(c, ln)
 }
 
-func (s *server) interceptInfo(c context.Context, h http.Header) (*InterceptInfo, error) {
-	return s.agent.InterceptInfo(c, h.Get(HeaderCallerInterceptID), h)
+func (s *server) interceptInfo(c context.Context, p string, h http.Header) (*InterceptInfo, error) {
+	return s.agent.InterceptInfo(c, h.Get(HeaderCallerInterceptID), p, h)
 }
 
 // Serve starts the API server. It terminates when the given context is done.
@@ -78,7 +78,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 	mux.HandleFunc(EndPointConsumeHere, func(w http.ResponseWriter, r *http.Request) {
 		dlog.Debugf(c, "Received %s", EndPointConsumeHere)
 		w.Header().Set("Content-Type", "application/json")
-		if ii, err := s.interceptInfo(c, r.Header); err != nil {
+		if ii, err := s.interceptInfo(c, r.FormValue("path"), r.Header); err != nil {
 			writeError(w, err)
 		} else {
 			// Client must consume intercepted messages. Agent must not.
@@ -94,7 +94,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 	mux.HandleFunc(EndPointInterceptInfo, func(w http.ResponseWriter, r *http.Request) {
 		dlog.Debugf(c, "Received %s", EndPointInterceptInfo)
 		w.Header().Set("Content-Type", "application/json")
-		if ii, err := s.interceptInfo(c, r.Header); err != nil {
+		if ii, err := s.interceptInfo(c, r.FormValue("path"), r.Header); err != nil {
 			writeError(w, err)
 		} else if err = json.NewEncoder(w).Encode(&ii); err != nil {
 			dlog.Errorf(c, "error %v when responding with %v", err, ii)

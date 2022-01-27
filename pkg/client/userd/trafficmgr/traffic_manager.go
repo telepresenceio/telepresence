@@ -76,8 +76,8 @@ type apiServer struct {
 }
 
 type apiMatcher struct {
-	headerMatcher matcher.Headers
-	metadata      map[string]string
+	requestMatcher matcher.Request
+	metadata       map[string]string
 }
 
 type TrafficManager struct {
