@@ -359,8 +359,9 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				ir.Spec.MechanismArgs = mas[:l+1]
 			case semver.MustParse("1.11.8").GE(*agentVer):
 				for _, ma := range ir.Spec.MechanismArgs {
-					if ma == "--meta" {
-						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-meta")), nil
+					switch ma {
+					case "--meta", "--path-equal", "--path-prefix", "--path-regex":
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-"+ma)), nil
 					}
 				}
 			}
