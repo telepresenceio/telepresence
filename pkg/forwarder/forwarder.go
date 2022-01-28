@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -118,6 +119,17 @@ func (f *Forwarder) Target() (string, int32) {
 	defer f.mu.Unlock()
 
 	return f.targetHost, f.targetPort
+}
+
+func (f *Forwarder) InterceptInfo() *restapi.InterceptInfo {
+	ii := &restapi.InterceptInfo{}
+	f.mu.Lock()
+	if f.intercept != nil {
+		ii.Intercepted = true
+		ii.Metadata = f.intercept.Metadata
+	}
+	f.mu.Unlock()
+	return ii
 }
 
 func (f *Forwarder) Intercepting() bool {

@@ -342,7 +342,8 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 			}
 		}
 		if agentVer != nil {
-			if semver.MustParse("1.11.7").GE(*agentVer) {
+			switch {
+			case semver.MustParse("1.11.7").GE(*agentVer):
 				mas := ir.Spec.MechanismArgs
 				l := len(mas) - 1
 				for i, ma := range mas {
@@ -356,6 +357,12 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 					}
 				}
 				ir.Spec.MechanismArgs = mas[:l+1]
+			case semver.MustParse("1.11.8").GE(*agentVer):
+				for _, ma := range ir.Spec.MechanismArgs {
+					if ma == "--meta" {
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-meta")), nil
+					}
+				}
 			}
 		}
 	}
@@ -664,13 +671,13 @@ func (tm *TrafficManager) reconcileAPIServers(ctx context.Context) {
 }
 
 func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
-	s := restapi.NewServer(tm, true)
+	s := restapi.NewServer(tm)
 	as := apiServer{Server: s}
 	ctx, as.cancel = context.WithCancel(ctx)
 	if tm.currentAPIServers == nil {
-		tm.currentAPIServers = map[int]apiServer{port: as}
+		tm.currentAPIServers = map[int]*apiServer{port: &as}
 	} else {
-		tm.currentAPIServers[port] = as
+		tm.currentAPIServers[port] = &as
 	}
 	go func() {
 		if err := s.ListenAndServe(ctx, port); err != nil {
@@ -686,26 +693,31 @@ func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptI
 		return
 	}
 	if tm.currentMatchers == nil {
-		tm.currentMatchers = map[string]header.Matcher{ic.Id: m}
-	} else {
-		tm.currentMatchers[ic.Id] = m
+		tm.currentMatchers = make(map[string]*apiMatcher)
+	}
+	tm.currentMatchers[ic.Id] = &apiMatcher{
+		headerMatcher: m,
+		metadata:      ic.Metadata,
 	}
 }
 
-func (tm *TrafficManager) Intercepts(ctx context.Context, callerID string, h http.Header) (bool, error) {
+func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID string, h http.Header) (*restapi.InterceptInfo, error) {
 	tm.currentInterceptsLock.Lock()
 	defer tm.currentInterceptsLock.Unlock()
-	m := tm.currentMatchers[callerID]
-	if m == nil {
+
+	r := &restapi.InterceptInfo{ClientSide: true}
+	am := tm.currentMatchers[callerID]
+	switch {
+	case am == nil:
 		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
-		return false, nil
+	case am.headerMatcher.Matches(h):
+		dlog.Debugf(ctx, "%s: %s matches %s", callerID, am.headerMatcher, header.Stringer(h))
+		r.Intercepted = true
+		r.Metadata = am.metadata
+	default:
+		dlog.Debugf(ctx, "%s: %s does not match %s", callerID, am.headerMatcher, header.Stringer(h))
 	}
-	if m.Matches(h) {
-		dlog.Debugf(ctx, "%s: %s matches %s", callerID, m, header.Stringer(h))
-		return true, nil
-	}
-	dlog.Debugf(ctx, "%s: %s does not match %s", callerID, m, header.Stringer(h))
-	return false, nil
+	return r, nil
 }
 
 // AddLocalOnlyIntercept adds a local-only intercept

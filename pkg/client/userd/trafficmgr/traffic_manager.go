@@ -81,6 +81,11 @@ type apiServer struct {
 	cancel context.CancelFunc
 }
 
+type apiMatcher struct {
+	headerMatcher header.Matcher
+	metadata      map[string]string
+}
+
 type TrafficManager struct {
 	*installer // installer is also a k8sCluster
 
@@ -122,8 +127,8 @@ type TrafficManager struct {
 	// currentIntercepts is the latest snapshot returned by the intercept watcher
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
-	currentMatchers       map[string]header.Matcher
-	currentAPIServers     map[int]apiServer
+	currentMatchers       map[string]*apiMatcher
+	currentAPIServers     map[int]*apiServer
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo

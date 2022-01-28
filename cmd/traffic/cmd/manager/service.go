@@ -505,6 +505,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
 			intercept.Headers = rIReq.Headers
+			intercept.Metadata = rIReq.Metadata
 		}
 	})
 

@@ -153,6 +153,7 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	if debug {
 		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})
 		fields = append(fields, kv{"Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs)})
+		fields = append(fields, kv{"Metadata", fmt.Sprintf("%q", ii.Metadata)})
 	}
 
 	if ii.Spec.MountPoint != "" {
@@ -163,7 +164,10 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 
 	fields = append(fields, kv{"Intercepting", func() string {
 		if ii.MechanismArgsDesc == "" {
-			return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
+			if len(ii.Spec.MechanismArgs) > 0 {
+				return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
+			}
+			return fmt.Sprintf("using mechanism=%q", ii.Spec.Mechanism)
 		}
 		return ii.MechanismArgsDesc
 	}()})
