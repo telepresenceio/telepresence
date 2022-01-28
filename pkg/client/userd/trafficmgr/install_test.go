@@ -121,7 +121,10 @@ func TestAddAgentToWorkload(t *testing.T) {
 				if tcName == "cur/deployment-tpapi" {
 					apiPort = 9901
 				}
-				servicePort, container, containerPortIndex, err := exploreSvc(ctx, tc.InputService.DeepCopy(), tc.InputPortName, managerImageName(ctx), deepCopyObject(tc.InputWorkload))
+				svc := tc.InputService.DeepCopy()
+				obj := deepCopyObject(tc.InputWorkload)
+				svcname := managerImageName(ctx)
+				servicePort, container, containerPortIndex, err := exploreSvc(ctx, svc, tc.InputPortName, svcname, obj)
 				if !assert.NoError(t, err) {
 					return
 				}
@@ -130,11 +133,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 					servicePort,
 					container,
 					containerPortIndex,
-					managerImageName(ctx), // ignore extensions
+					svcname, // ignore extensions
 					env.ManagerNamespace,
 					apiPort,
-					deepCopyObject(tc.InputWorkload),
-					tc.InputService.DeepCopy(),
+					obj,
+					svc,
 				)
 				if !assert.NoError(t, actualErr) {
 					return
