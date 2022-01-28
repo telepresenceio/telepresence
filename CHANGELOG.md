@@ -17,6 +17,9 @@
 
 - Bugfix: Telepresence will now parse device names containing dashes correctly when determining routes that it should never block.
 
+- Bugfix: The cluster domain (typically "cluster.local") is no longer added to the DNS `search` on Linux using `systemd-resolved`. Instead,
+  it is added as a `domain` so that names ending with it are routed to the DNS server.
+
 ### 2.4.10 (January 13, 2022)
 
 - Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 
