@@ -58,9 +58,9 @@ func (t *matcherWithMetadata) InterceptInfo(c context.Context, p string, header 
 	return ret, nil
 }
 
-type callerIdMatcher string
+type callerIdMatcherClient string
 
-func (c callerIdMatcher) InterceptInfo(_ context.Context, callerId string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (c callerIdMatcherClient) InterceptInfo(_ context.Context, callerId string, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: true}, nil
 }
 
@@ -202,7 +202,7 @@ func Test_server_intercepts(t *testing.T) {
 		},
 		{
 			"client caller intercept id - match",
-			callerIdMatcher("abc:123"),
+			callerIdMatcherClient("abc:123"),
 			map[string]string{
 				restapi.HeaderCallerInterceptID: "abc:123",
 			},
@@ -211,7 +211,7 @@ func Test_server_intercepts(t *testing.T) {
 		},
 		{
 			"client caller intercept id - match",
-			callerIdMatcher("abc:123"),
+			callerIdMatcherClient("abc:123"),
 			map[string]string{
 				restapi.HeaderCallerInterceptID: "abc:123",
 			},
