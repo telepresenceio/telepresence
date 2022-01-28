@@ -213,36 +213,40 @@ func (d *service) manageSessions(c context.Context) error {
 		case oi = <-d.connectCh:
 		}
 
+		var session *session
+		reply := sessionReply{}
+
 		// Respond by setting the session and returning the error (or nil
 		// if everything is ok)
-		reply := sessionReply{}
 		d.sessionLock.Lock()
 		if d.session != nil {
 			reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
 		} else {
-			d.session, reply.err = newSession(c, d.scout, oi)
+			session, reply.err = newSession(c, d.scout, oi)
 			if reply.err == nil {
+				d.session = session
+				d.sessionContext, session.cancel = context.WithCancel(c)
 				reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
 			}
 		}
+		d.sessionLock.Unlock()
+
 		select {
 		case <-c.Done():
-			d.sessionLock.Unlock()
 			return nil
 		case d.connectReplyCh <- reply:
 		}
 		if reply.err != nil {
-			d.sessionLock.Unlock()
 			continue
 		}
 
-		// Run the session synchronously and assign the cancellation context used for disconnect
-		// The d.session.cancel is called from Disconnect
-		d.sessionContext, d.session.cancel = context.WithCancel(c)
-		d.sessionLock.Unlock()
-		if err := d.session.run(d.sessionContext); err != nil {
-			dlog.Error(c, err)
-		}
+		// Run the session asynchronously. We must be able to respond to connect (with getInfo) while
+		// the session is running. The d.session.cancel is called from Disconnect
+		go func() {
+			if err := d.session.run(d.sessionContext); err != nil {
+				dlog.Error(c, err)
+			}
+		}()
 	}
 }
 

@@ -74,20 +74,13 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 
 func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
 	s.logCall(ctx, "Connect", func(c context.Context) {
-		s.sessionLock.RLock()
-		if s.session != nil {
-			result = s.session.UpdateStatus(s.sessionContext, cr)
-			s.sessionLock.RUnlock()
-			return
-		}
-		s.sessionLock.RUnlock()
-
 		select {
 		case <-ctx.Done():
 			err = status.Error(codes.Unavailable, ctx.Err().Error())
 			return
 		case s.connectRequest <- cr:
 		}
+
 		select {
 		case <-ctx.Done():
 			err = status.Error(codes.Unavailable, ctx.Err().Error())
@@ -99,8 +92,8 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 
 func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(c, "Disconnect", func(c context.Context) {
-		s.sessionLock.RLock()
-		defer s.sessionLock.RUnlock()
+		s.sessionLock.Lock()
+		defer s.sessionLock.Unlock()
 		if s.session != nil {
 			s.session = nil
 			s.sessionCancel()
