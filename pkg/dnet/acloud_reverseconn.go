@@ -41,7 +41,7 @@ func WrapAmbassadorCloudTunnelClient(impl systema.SystemAProxy_ReverseConnection
 // It is important to call `.Close()` when you are done with the connection, in order to release
 // resources associated with it.  The GC will not be able to collect it if you do not call
 // `.Close()`.
-func WrapAmbassadorCloudTunnelServer(impl systema.SystemAProxy_ReverseConnectionServer, closeFn func()) net.Conn {
+func WrapAmbassadorCloudTunnelServer(impl systema.SystemAProxy_ReverseConnectionServer, closeFn func()) Conn {
 	return wrapUnbufferedConn(reverseConn{conn: impl, close: closeFn})
 }
 

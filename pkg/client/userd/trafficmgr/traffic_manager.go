@@ -48,6 +48,10 @@ type SessionService interface {
 	Run(ctx context.Context, scout *scout.Reporter, session Session) error
 }
 
+type WatchWorkloadsStream interface {
+	Send(*rpc.WorkloadInfoSnapshot) error
+}
+
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
@@ -58,10 +62,12 @@ type Session interface {
 	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
-	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, rpc.Connector_WatchWorkloadsServer) error
+	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WithK8sInterface(context.Context) context.Context
 	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
 	ManagerClient() manager.ManagerClient
+	GetCurrentNamespaces(forClientAccess bool) []string
+	ActualNamespace(string) string
 }
 
 type Service interface {
@@ -407,9 +413,12 @@ func (tm *TrafficManager) Run(c context.Context) error {
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
 	for _, svc := range tm.sessionServices {
-		g.Go(svc.Name(), func(c context.Context) error {
-			return svc.Run(c, tm.sr, tm)
-		})
+		func(svc SessionService) {
+			dlog.Infof(c, "Starting additional session service %s", svc.Name())
+			g.Go(svc.Name(), func(c context.Context) error {
+				return svc.Run(c, tm.sr, tm)
+			})
+		}(svc)
 	}
 	return g.Wait()
 }
@@ -436,10 +445,24 @@ func (tm *TrafficManager) getInfosForWorkloads(
 		for _, workload := range wls {
 			name := workload.GetName()
 			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
+			ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
+			for _, p := range svc.Spec.Ports {
+				ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
+					Name: p.Name,
+					Port: p.Port,
+				})
+			}
 			wlInfo := &rpc.WorkloadInfo{
 				Name:                 name,
 				Namespace:            workload.GetNamespace(),
 				WorkloadResourceType: workload.GetKind(),
+				Uid:                  string(workload.GetUID()),
+				Service: &rpc.WorkloadInfo_ServiceReference{
+					Name:      svc.Name,
+					Namespace: svc.Namespace,
+					Uid:       string(svc.UID),
+					Ports:     ports,
+				},
 			}
 			var ok bool
 			wlInfo.InterceptInfo, ok = iMap[name]
@@ -457,14 +480,14 @@ func (tm *TrafficManager) getInfosForWorkloads(
 	return wis, nil
 }
 
-func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream rpc.Connector_WatchWorkloadsServer) error {
+func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
 	snapshotAvailable := tm.wlWatcher.subscribe(c)
 	for {
 		select {
 		case <-c.Done():
 			return nil
 		case <-snapshotAvailable:
-			snapshot, err := tm.WorkloadInfoSnapshot(c, wr.Namespaces, rpc.ListRequest_INTERCEPTABLE, false)
+			snapshot, err := tm.WorkloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "failed to create WorkloadInfoSnapshot: %v", err)
 			}
