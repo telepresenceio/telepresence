@@ -260,14 +260,14 @@ message WorkloadInfo {
   string workload_resource_type = 5;
 
   message ServiceReference {
+    string name = 1;
+    string namespace = 2;
+    string uid = 3;
+    message Port {
       string name = 1;
-      string namespace = 2;
-      string uid = 3;
-      message Port {
-        string name = 1;
-        int32 port = 2;
-      }
-      repeated Port ports = 4;
+      int32 port = 2;
+    }
+    repeated Port ports = 4;
   }
 
   optional ServiceReference service = 7;
