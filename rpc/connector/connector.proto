@@ -293,6 +293,10 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
+
+  // The port number that service_port_identifer resolved into is
+  // used as the default port for the ingress for pro intercepts
+  int32 service_port_number = 8;
 }
 
 message Notification {

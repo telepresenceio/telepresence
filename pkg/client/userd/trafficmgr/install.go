@@ -33,7 +33,7 @@ type installer struct {
 }
 
 type Installer interface {
-	EnsureAgent(c context.Context, obj k8sapi.Workload, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error)
+	EnsureAgent(c context.Context, obj k8sapi.Workload, svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, int32, error)
 	EnsureManager(c context.Context) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
@@ -210,20 +210,13 @@ var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) getSvcForInjectedPod(
 	c context.Context,
-	name,
-	namespace,
-	svcName,
-	portNameOrNumber string,
+	svc *core.Service,
+	name, namespace string,
 	podTemplate *core.PodTemplateSpec,
 	obj k8sapi.Object,
 ) (*core.Service, error) {
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
-	// agent is injected using a mutating webhook, or manually. Get its service and skip the rest
-	svc, err := install.FindMatchingService(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
-	if err != nil {
-		return nil, err
-	}
 
 	// Find pod from svc.
 	// On fail, assume agent not present and roll (only if injected via webhook; rolling a manually managed deployment will do no good)
@@ -275,12 +268,28 @@ func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 	return !(webhookInjected || manuallyManaged), nil
 }
 
+func exploreSvc(c context.Context, svc *core.Service, portNameOrNumber, svcName string, obj k8sapi.Workload) (*core.ServicePort, *core.Container, int, error) {
+	// The port number of the selected service is used as the ingress default value for pro intercepts
+	// so it is returned through the rpc call in all successful cases
+	podTemplate := obj.GetPodTemplate()
+	cns := podTemplate.Spec.Containers
+	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, svc)
+	if err != nil {
+		return nil, nil, 0, k8sapi.ObjErrorf(obj, err.Error())
+	}
+	return servicePort, container, containerPortIndex, err
+}
+
 // EnsureAgent does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
-	svcName, portNameOrNumber, agentImageName string, telepresenceAPIPort uint16) (string, string, error) {
+func (ki *installer) EnsureAgent(
+	c context.Context,
+	obj k8sapi.Workload,
+	svcName, portNameOrNumber, agentImageName string,
+	telepresenceAPIPort uint16,
+) (string, string, int32, error) {
 	podTemplate := obj.GetPodTemplate()
 	kind := obj.GetKind()
 	name := obj.GetName()
@@ -291,14 +300,27 @@ func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
 	var svc k8sapi.Object
 	autoInstall, err := useAutoInstall(podTemplate)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
+
+	matchingSvc, err := install.FindMatchingService(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+	if err != nil {
+		return "", "", 0, err
+	}
+	// The port number of the selected service is used as the ingress default value for pro intercepts
+	// so it is returned through the rpc call in all successful cases
+	servicePort, container, containerPortIndex, err := exploreSvc(c, matchingSvc, portNameOrNumber, svcName, obj)
+	if err != nil {
+		return "", "", 0, err
+	}
+
 	if !autoInstall {
-		svc, err := ki.getSvcForInjectedPod(c, name, namespace, svcName, portNameOrNumber, podTemplate, obj)
+		svc, err := ki.getSvcForInjectedPod(c, matchingSvc, name, namespace, podTemplate, obj)
 		if err != nil {
-			return "", "", err
+			return "", "", 0, err
 		}
-		return string(svc.GetUID()), kind, nil
+		// assume only one port ?
+		return string(svc.GetUID()), kind, servicePort.Port, nil
 	}
 
 	var agentContainer *core.Container
@@ -316,7 +338,7 @@ func (ki *installer) EnsureAgent(c context.Context, obj k8sapi.Workload,
 configuration. To intercept this with your new configuration, please use
 telepresence uninstall --agent %s This will cancel any intercepts that
 already exist for this service`, kind, name)
-		return "", "", errors.Wrap(err, msg)
+		return "", "", 0, errors.Wrap(err, msg)
 	}
 
 	update := true
@@ -327,22 +349,19 @@ already exist for this service`, kind, name)
 		if portNameOrNumber != "" {
 			dlog.Infof(c, "Using port name or number %q", portNameOrNumber)
 		}
-		matchingSvc, err := install.FindMatchingService(c, portNameOrNumber, svcName, namespace, podTemplate.Labels)
+
+		obj, svc, updateSvc, err = addAgentToWorkload(c, servicePort, container, containerPortIndex, agentImageName, ki.GetManagerNamespace(), telepresenceAPIPort, obj, matchingSvc)
 		if err != nil {
-			return "", "", err
-		}
-		obj, svc, updateSvc, err = addAgentToWorkload(c, portNameOrNumber, agentImageName, ki.GetManagerNamespace(), telepresenceAPIPort, obj, matchingSvc)
-		if err != nil {
-			return "", "", err
+			return "", "", 0, err
 		}
 	case agentContainer.Image != agentImageName:
 		var actions workloadActions
 		ok, err := getAnnotation(obj, &actions)
 		if err != nil {
-			return "", "", err
+			return "", "", 0, err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return "", "", k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
+			return "", "", 0, k8sapi.ObjErrorf(obj, "annotations[%q]: annotation is not set", annTelepresenceActions)
 		}
 
 		dlog.Debugf(c, "Updating agent for %s %s.%s", kind, name, namespace)
@@ -361,15 +380,15 @@ already exist for this service`, kind, name)
 
 	if update {
 		if err = obj.Update(c); err != nil {
-			return "", "", err
+			return "", "", 0, err
 		}
 		if updateSvc {
 			if err := svc.Update(c); err != nil {
-				return "", "", err
+				return "", "", 0, err
 			}
 		}
 		if err := ki.waitForApply(c, name, namespace, obj); err != nil {
-			return "", "", err
+			return "", "", 0, err
 		}
 	}
 
@@ -378,10 +397,10 @@ already exist for this service`, kind, name)
 		// So we get the service from the deployments annotation so that we can extract the UID.
 		svc, err = ki.getSvcFromObjAnnotation(c, obj)
 		if err != nil {
-			return "", "", err
+			return "", "", 0, err
 		}
 	}
-	return string(svc.GetUID()), kind, nil
+	return string(svc.GetUID()), kind, servicePort.Port, nil
 }
 
 func (ki *installer) waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
@@ -553,23 +572,20 @@ func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 // prepares and performs modifications to the obj and/or service.
 func addAgentToWorkload(
 	c context.Context,
-	portNameOrNumber string,
+	servicePort *core.ServicePort,
+	container *core.Container,
+	containerPortIndex int,
 	agentImageName string,
 	trafficManagerNamespace string,
 	telepresenceAPIPort uint16,
-	object k8sapi.Workload, matchingService *core.Service,
+	object k8sapi.Workload,
+	matchingService *core.Service,
 ) (
 	k8sapi.Workload,
 	k8sapi.Object,
 	bool,
 	error,
 ) {
-	podTemplate := object.GetPodTemplate()
-	cns := podTemplate.Spec.Containers
-	servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, portNameOrNumber, matchingService)
-	if err != nil {
-		return nil, nil, false, k8sapi.ObjErrorf(object, err.Error())
-	}
 	dlog.Debugf(c, "using service %q port %q when intercepting %s %s",
 		matchingService.Name,
 		func() string {
@@ -707,6 +723,7 @@ func addAgentToWorkload(
 	}
 
 	// Apply the actions on the workload.
+	var err error
 	if err = workloadMod.Do(object); err != nil {
 		return nil, nil, false, err
 	}
