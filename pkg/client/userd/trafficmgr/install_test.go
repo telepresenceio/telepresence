@@ -24,23 +24,23 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func TestAddAgentToWorkload(t *testing.T) {
-	// Part 1: Build the testcases /////////////////////////////////////////
-	type testcase struct {
-		InputVersion  string
-		InputPortName string
-		InputWorkload k8sapi.Workload
-		InputService  *core.Service
+type testcase struct {
+	InputVersion  string
+	InputPortName string
+	InputWorkload k8sapi.Workload
+	InputService  *core.Service
 
-		OutputWorkload k8sapi.Workload
-		OutputService  *core.Service
-	}
-	testcases := map[string]testcase{}
+	OutputWorkload k8sapi.Workload
+	OutputService  *core.Service
+}
 
+func getTests(t *testing.T) map[string]testcase {
 	dirinfos, err := os.ReadDir("testdata/addAgentToWorkload")
 	if err != nil {
 		t.Fatal(err)
 	}
+	testcases := map[string]testcase{}
+
 	i := 0
 	for _, di := range dirinfos {
 		fileinfos, err := os.ReadDir(filepath.Join("testdata/addAgentToWorkload", di.Name()))
@@ -77,6 +77,12 @@ func TestAddAgentToWorkload(t *testing.T) {
 			testcases[tcName] = tc
 		}
 	}
+	return testcases
+}
+
+func TestAddAgentToWorkload(t *testing.T) {
+	// Part 1: Build the testcases /////////////////////////////////////////
+	testcases := getTests(t)
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
 	ctx := dlog.NewTestContext(t, true)
