@@ -2,6 +2,9 @@
 
 ### 2.5.0 (TBD)
 
+- Feature: The flags `--http-path-equal`, `--http-path-prefix`, and `--http-path-regex` can can be used in addition to the `--http-match`
+  flag to filter personal intercepts by the request URL path 
+
 - Feature: The flag `--http-meta` can be used to declare metadata key value pairs that will be returned by the Telepresence rest API
   endpoint /intercept-info
 

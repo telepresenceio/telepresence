@@ -1,4 +1,4 @@
-package header
+package matcher
 
 import (
 	"net/http"
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_headerMatcher_Matches(t *testing.T) {
+func Test_headers_Matches(t *testing.T) {
 	header := func(hm map[string]string) http.Header {
 		hd := make(http.Header, len(hm))
 		for k, v := range hm {
@@ -76,14 +76,14 @@ func Test_headerMatcher_Matches(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			hm, err := NewMatcher(tt.match)
+			hm, err := NewHeaders(tt.match)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, hm.Matches(tt.header))
 		})
 	}
 }
-func Test_NewMatcher_error(t *testing.T) {
-	m, err := NewMatcher(map[string]string{"a": "un(balanced"})
+func Test_NewHeaders_error(t *testing.T) {
+	m, err := NewHeaders(map[string]string{"a": "un(balanced"})
 	sErr := &syntax.Error{}
 	require.ErrorAs(t, err, &sErr)
 	assert.Contains(t, err.Error(), "value of match a=")

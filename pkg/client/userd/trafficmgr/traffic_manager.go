@@ -33,10 +33,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -82,8 +82,8 @@ type apiServer struct {
 }
 
 type apiMatcher struct {
-	headerMatcher header.Matcher
-	metadata      map[string]string
+	requestMatcher matcher.Request
+	metadata       map[string]string
 }
 
 type TrafficManager struct {

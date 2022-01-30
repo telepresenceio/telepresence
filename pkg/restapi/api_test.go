@@ -18,11 +18,11 @@ import (
 type yesNoClient bool
 type yesNoCluster bool
 
-func (yn yesNoClient) InterceptInfo(_ context.Context, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (yn yesNoClient) InterceptInfo(_ context.Context, _, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: true}, nil
 }
 
-func (yn yesNoCluster) InterceptInfo(_ context.Context, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (yn yesNoCluster) InterceptInfo(_ context.Context, _, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: false}, nil
 }
 
@@ -39,11 +39,11 @@ func (t textMatcher) intercepted(header http.Header) bool {
 	return true
 }
 
-func (t textMatcherClient) InterceptInfo(_ context.Context, _ string, header http.Header) (*restapi.InterceptInfo, error) {
+func (t textMatcherClient) InterceptInfo(_ context.Context, _, _ string, header http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(header), ClientSide: true}, nil
 }
 
-func (t textMatcherCluster) InterceptInfo(_ context.Context, _ string, header http.Header) (*restapi.InterceptInfo, error) {
+func (t textMatcherCluster) InterceptInfo(_ context.Context, _, _ string, header http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(header), ClientSide: false}, nil
 }
 
@@ -52,21 +52,21 @@ type matcherWithMetadata struct {
 	meta map[string]string
 }
 
-func (t *matcherWithMetadata) InterceptInfo(c context.Context, p string, header http.Header) (*restapi.InterceptInfo, error) {
-	ret, _ := t.textMatcherCluster.InterceptInfo(c, p, header)
+func (t *matcherWithMetadata) InterceptInfo(c context.Context, ci, p string, header http.Header) (*restapi.InterceptInfo, error) {
+	ret, _ := t.textMatcherCluster.InterceptInfo(c, ci, p, header)
 	ret.Metadata = t.meta
 	return ret, nil
 }
 
 type callerIdMatcherClient string
 
-func (c callerIdMatcherClient) InterceptInfo(_ context.Context, callerId string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (c callerIdMatcherClient) InterceptInfo(_ context.Context, callerId, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: true}, nil
 }
 
 type callerIdMatcherCluster string
 
-func (c callerIdMatcherCluster) InterceptInfo(_ context.Context, callerId string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (c callerIdMatcherCluster) InterceptInfo(_ context.Context, callerId, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: false}, nil
 }
 

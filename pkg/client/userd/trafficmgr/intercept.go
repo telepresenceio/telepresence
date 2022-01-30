@@ -33,9 +33,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -359,8 +359,9 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				ir.Spec.MechanismArgs = mas[:l+1]
 			case semver.MustParse("1.11.8").GE(*agentVer):
 				for _, ma := range ir.Spec.MechanismArgs {
-					if ma == "--meta" {
-						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-meta")), nil
+					switch ma {
+					case "--meta", "--path-equal", "--path-prefix", "--path-regex":
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-"+ma)), nil
 					}
 				}
 			}
@@ -687,7 +688,7 @@ func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
 }
 
 func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
-	m, err := header.NewMatcher(ic.Headers)
+	m, err := matcher.NewRequest(ic.Headers)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
@@ -696,12 +697,12 @@ func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptI
 		tm.currentMatchers = make(map[string]*apiMatcher)
 	}
 	tm.currentMatchers[ic.Id] = &apiMatcher{
-		headerMatcher: m,
-		metadata:      ic.Metadata,
+		requestMatcher: m,
+		metadata:       ic.Metadata,
 	}
 }
 
-func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID string, h http.Header) (*restapi.InterceptInfo, error) {
+func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID, path string, h http.Header) (*restapi.InterceptInfo, error) {
 	tm.currentInterceptsLock.Lock()
 	defer tm.currentInterceptsLock.Unlock()
 
@@ -710,12 +711,12 @@ func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID string, h 
 	switch {
 	case am == nil:
 		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
-	case am.headerMatcher.Matches(h):
-		dlog.Debugf(ctx, "%s: %s matches %s", callerID, am.headerMatcher, header.Stringer(h))
+	case am.requestMatcher.Matches(path, h):
+		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(h))
 		r.Intercepted = true
 		r.Metadata = am.metadata
 	default:
-		dlog.Debugf(ctx, "%s: %s does not match %s", callerID, am.headerMatcher, header.Stringer(h))
+		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(h))
 	}
 	return r, nil
 }
