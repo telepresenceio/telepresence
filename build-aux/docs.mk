@@ -30,6 +30,7 @@ check-subrepo-installed:
 .PHONY: check-subrepo-installed
 
 PUSH_PREFIX ?= $(USER)/from-telepresence.io-$(shell date +%Y-%m-%d)/
+PULL_PREFIX ?=
 
 dir2branch = $(patsubst docs/%,release/%,$(subst pre-release,v2,$1))
 
