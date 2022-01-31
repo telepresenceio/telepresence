@@ -5,8 +5,8 @@
 ;
 [subrepo]
 	remote = https://github.com/telepresenceio/docs
-	branch = release/v2.0
-	commit = b42cf349ea3d535af164a6d7451b61c8e5c543fd
-	parent = be9ab9a40c05e01666ec214a383b101b46e3a0cd
+	branch = donaldyung/from-getambassador.io-2022-01-31/release/v2.0
+	commit = 7d5ef34d6ca6df4fb37c5003c5c55cb4fba93495
+	parent = 0c365d27bfb812bbd1e11c80b15dcec29e5ba869
 	method = merge
 	cmdver = 0.4.3
