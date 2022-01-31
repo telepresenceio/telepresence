@@ -71,7 +71,7 @@ func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 				return err
 			}
 		}
-		args = append([]string{"sudo", "--non-interactive", "--preserve-env"}, args...)
+		args = append([]string{"sudo", "--non-interactive"}, args...)
 	}
 
 	return startInBackground(args...)
