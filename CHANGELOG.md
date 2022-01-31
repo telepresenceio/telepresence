@@ -17,6 +17,8 @@
 
 - Bugfix: The also-proxy and never-proxy subnets are now displayed correctly when using the `telepresence status` command
 
+- Bugfix: Telepresence will no longer require `SETENV` privileges when starting the root daemon.
+
 - Bugfix: Telepresence will now parse device names containing dashes correctly when determining routes that it should never block.
 
 - Bugfix: The cluster domain (typically "cluster.local") is no longer added to the DNS `search` on Linux using `systemd-resolved`. Instead,
