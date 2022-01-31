@@ -20,6 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -129,15 +130,21 @@ func TestAddAgentToWorkload(t *testing.T) {
 				}
 				svc := tc.InputService.DeepCopy()
 				obj := deepCopyObject(tc.InputWorkload)
+				cns := obj.GetPodTemplate().Spec.Containers
 				agent_image_name := managerImageName(ctx)
 
-				svcprops, err := ExploreSvc(ctx, tc.InputPortName, svc.Name, obj)
-				if !assert.NoError(t, err) {
+				servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, tc.InputPortName, svc)
+				if err != nil {
 					return
 				}
 
-				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(ctx,
-					svcprops,
+				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(
+					ctx,
+					&ServiceProps{
+						Service:            svc,
+						ServicePort:        servicePort,
+						Container:          container,
+						ContainerPortIndex: containerPortIndex},
 					agent_image_name, // ignore extensions
 					env.ManagerNamespace,
 					apiPort,
