@@ -1,0 +1,84 @@
+ - title: Quick start
+   link: quick-start
+ - title: Install Telepresence
+   items:
+     - title: Install
+       link: install/
+     - title: Upgrade
+       link: install/upgrade/
+     - title: Install Traffic Manager with Helm
+       link: install/helm/
+     - title: Telepresence Pro
+       link: install/telepresence-pro/
+     - title: Migrate from legacy Telepresence
+       link: install/migrate-from-legacy/
+ - title: Core concepts
+   items:
+     - title: The changing development workflow
+       link: concepts/devworkflow
+     - title: The developer experience and the inner dev loop
+       link: concepts/devloop
+     - title: 'Making the remote local: Faster feedback, collaboration and debugging'
+       link: concepts/faster
+     - title: Context propagation
+       link: concepts/context-prop
+     - title: Types of intercepts
+       link: concepts/intercepts
+ - title: How do I...
+   items:
+     - title: Intercept a service in your own environment
+       link: howtos/intercepts
+     - title: Share dev environments with preview URLs
+       link: howtos/preview-urls
+     - title: Proxy outbound traffic to my cluster
+       link: howtos/outbound
+     - title: Send requests to an intercepted service
+       link: howtos/request
+ - title: Technical reference
+   items:
+     - title: Architecture
+       link: reference/architecture
+     - title: Client reference
+       link: reference/client
+       items:
+         - title: login
+           link: reference/client/login
+     - title: Laptop-side configuration
+       link: reference/config
+     - title: Cluster-side configuration
+       link: reference/cluster-config
+     - title: Using Docker for intercepts
+       link: reference/docker-run
+     - title: Running Telepresence in a Docker container
+       link: reference/inside-container
+     - title: Environment variables
+       link: reference/environment
+     - title: Intercepts
+       link: reference/intercepts/
+       items:
+         - title: Manually injecting the Traffic Agent
+           link: reference/intercepts/manual-agent
+     - title: Volume mounts
+       link: reference/volume
+     - title: RESTful API service
+       link: reference/restapi
+     - title: DNS resolution
+       link: reference/dns
+     - title: RBAC
+       link: reference/rbac
+     - title: Telepresence and VPNs
+       link: reference/vpn
+     - title: Networking through Virtual Network Interface
+       link: reference/tun-device
+     - title: Connection Routing
+       link: reference/routing
+     - title: Using Telepresence with Linkerd
+       link: reference/linkerd
+ - title: FAQs
+   link: faqs
+ - title: Troubleshooting
+   link: troubleshooting
+ - title: Community
+   link: community
+ - title: Release Notes
+   link: release-notes
