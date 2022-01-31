@@ -42,34 +42,32 @@ $ telepresence intercept example-service --port 8080 --env-file ~/ex-svc.env
           You may use an IP address or a DNS name (this is usually a
           "service.namespace" DNS name).
 
-             [default: example-service.default]: ambassador.ambassador
+            [default: -]: ambassador.ambassador
 
      2/4: What's your ingress' TCP port number?
 
             [default: -]: 80
 
-      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+     3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
 
-             [default: n]: y
+            [default: n]: y
 
      4/4: If required by your ingress, specify a different hostname
           (TLS-SNI, HTTP "Host" header) to be used in requests.
 
-             [default: ambassador.ambassador]: dev-environment.edgestack.me
+            [default: ambassador.ambassador]: dev-environment.edgestack.me
 
-      Using Deployment example-service
-      intercepted
+     Using deployment example-service
+     intercepted
          Intercept name         : example-service
          State                  : ACTIVE
-         Workload kind          : Deployment
          Destination            : 127.0.0.1:8080
          Service Port Identifier: http
          Intercepting           : HTTP requests that match all of:
            header("x-telepresence-intercept-id") ~= regexp("<intercept id>:example-service")
          Preview URL            : https://<random domain name>.preview.edgestack.me
          Layer 5 Hostname       : dev-environment.edgestack.me
-
-  ```
+   ```
 
 5. Start your local environment using the environment variables retrieved in the previous step.
 

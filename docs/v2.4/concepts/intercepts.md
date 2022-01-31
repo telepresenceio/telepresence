@@ -70,7 +70,7 @@ export function TabsContainer({ children, ...props }) {
 <TabsContainer>
 <TabPanel class="TabBody" value="regular">
 
-## No intercept
+# No intercept
 
 <Paper style="padding: 1em">
 <Animation class="mode-regular" />
@@ -81,7 +81,7 @@ This is the normal operation of your cluster without Telepresence.
 </TabPanel>
 <TabPanel class="TabBody" value="global">
 
-## Global intercept
+# Global intercept
 
 <Paper style="padding: 1em">
 <Animation class="mode-global" />
@@ -117,7 +117,7 @@ with all your dev tools.
 </TabPanel>
 <TabPanel class="TabBody" value="personal">
 
-## Personal intercept
+# Personal intercept
 
 **Personal intercepts** allow you to be selective and intercept only
 some of the traffic to a service while not interfering with the rest

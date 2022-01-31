@@ -49,7 +49,7 @@ After you finish your deployment, you need to configure a copy of a single servi
 2. Change your directory to the source directory with `cd <your-directory>`.
  To follow the previous example, enter: `cd emojivoto-voting-svc/api`
 3. Ensure that your development environment is configured to support the automatic reloading of the service when your source code changes.
- In the example, the Go applicationapplication source code is being monitored for changes, and the application is rebuilt with [Air's live-reloading utility](https://github.com/cosmtrek/air).
+ In the example, the Go application source code is being monitored for changes, and the application is rebuilt with [Air's live-reloading utility](https://github.com/cosmtrek/air).
 4. Add a Dockerfile for your development. 
  Alternatively, you can use a Cloud Native Buildpack, such as those provided by Google Cloud. The [Google Go buildpack](https://github.com/GoogleCloudPlatform/buildpacks) has live-reloading configured by default.
 5. Next, test that the container is working properly. In the root directory of your source rep, enter: 

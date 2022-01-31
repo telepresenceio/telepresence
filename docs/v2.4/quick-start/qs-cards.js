@@ -28,12 +28,13 @@ export default function CenteredGrid() {
         <Grid item xs={4}>
           <Paper variant="outlined" className={classes.paper}>
             <Typography variant="h6" component="h2">
-              <a href="../../install/qs-java-advanced/">
+              <a href="../qs-java/">
                 <b>Create a Local K8s Dev Environment</b>
               </a>
             </Typography>
             <Typography variant="body2" component="p">
-              Read the advanced guide on how to create your own complete Kubernetes development environment.
+              Read the advanced guide on how to create your own complete
+              Kubernetes development environment.
             </Typography>
           </Paper>
         </Grid>

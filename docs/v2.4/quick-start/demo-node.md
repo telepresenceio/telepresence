@@ -50,6 +50,7 @@ Telepresence connects your local workstation with a remote Kubernetes cluster. I
     The Service Catalog gives you a consolidated view of all your services across development, staging, and production. After exploring the Service Catalog, continue with this tutorial to test the application in your demo cluster.
 
 <DemoClusterWarning />
+<DemoClusterMetadataError/>
 
 <div className="docs-opaque-section">
 
