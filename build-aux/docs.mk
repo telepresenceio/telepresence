@@ -37,12 +37,12 @@ dir2branch = $(patsubst docs/%,release/%,$(subst pre-release,v2,$1))
 pull-docs-subrepos: ## Update ./docs from https://github.com/telepresenceio/docs
 pull-docs-subrepos: check-subrepo-installed
 	$(foreach subdir,$(shell find docs -mindepth 1 -maxdepth 1 -type d|sort -V),\
-          git subrepo pull $(subdir) -b $(PULL_PREFIX)$(call dir2branch,$(subdir))$(nl))
-.PHONY: pull-docs
+          git subrepo pull -f $(subdir) -b $(PULL_PREFIX)$(call dir2branch,$(subdir))$(nl))
+.PHONY: pull-docs-subrepos
 
 PUSH_BRANCH ?= $(USER)/from-telepresence.io-$(shell date +%Y-%m-%d)
 push-docs-subrepos: ## Publish ./docs to https://github.com/telepresenceio/docs
 push-docs-subrepos:
 	$(foreach subdir,$(shell find docs -mindepth 1 -maxdepth 1 -type d|sort -V),\
           git subrepo push $(subdir) -b $(PUSH_PREFIX)$(call dir2branch,$(subdir))$(nl))
-.PHONY: push-docs
+.PHONY: push-docs-subrepos
