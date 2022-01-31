@@ -147,7 +147,7 @@ metadata:
     app.kubernetes.io/name: staging
 ```
 
-You can also use `kubectl label` to add the label to an existing namespace, e.g.:
+You can also use `kubectl label` to add the label to an existing namespace, e.g:
 
 ```shell
 kubectl label namespace staging app.kubernetes.io/name=staging
