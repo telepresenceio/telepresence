@@ -274,23 +274,23 @@ func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload) {
+func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload, *ServiceProps) {
 	tm.WaitForNSSync(c)
 	tm.wlWatcher.waitForSync(c)
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
-		return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent)), nil
+		return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent)), nil, nil
 	}
 
 	if _, inUse := tm.localIntercepts[spec.Name]; inUse {
-		return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
+		return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil, nil
 	}
 
 	for _, iCept := range tm.getCurrentIntercepts() {
 		if iCept.Spec.Name == spec.Name {
-			return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil
+			return interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name)), nil, nil
 		}
 		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
 			return &rpc.InterceptResult{
@@ -298,29 +298,29 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				ErrorText:     spec.Name,
 				ErrorCategory: int32(errcat.User),
 				InterceptInfo: iCept,
-			}, nil
+			}, nil, nil
 		}
 	}
 	if spec.Agent == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	obj, err := k8sapi.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
 		if errors2.IsNotFound(err) {
-			return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil
+			return interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name)), nil, nil
 		}
 		return &rpc.InterceptResult{
 			Error:     rpc.InterceptError_TRAFFIC_MANAGER_ERROR,
 			ErrorText: err.Error(),
-		}, nil
+		}, nil, nil
 	}
 	podTpl := obj.GetPodTemplate()
 
 	// Check if the workload is auto installed. This also verifies annotation consistency
 	autoInstall, err := useAutoInstall(podTpl)
 	if err != nil {
-		return interceptError(rpc.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err)), nil
+		return interceptError(rpc.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err)), nil, nil
 	}
 
 	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
@@ -348,7 +348,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				for i, ma := range mas {
 					switch ma {
 					case "--plaintext=true":
-						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-plaintext")), nil
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-plaintext")), nil, nil
 					case "--plaintext=false":
 						// Not supported by <= 1.11.7. Just remove it
 						mas[i] = mas[l]
@@ -359,12 +359,19 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 			}
 		}
 	}
-	return nil, obj
+
+	svcprops, err := ExploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, obj)
+	if err != nil {
+		// Intercept is not established here, so I am not sure this is still the right error type
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, err), nil, nil
+	}
+
+	return nil, obj, svcprops
 }
 
 // AddIntercept adds one intercept
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	result, wl := tm.CanIntercept(c, ir)
+	result, wl, svcprops := tm.CanIntercept(c, ir)
 	if result != nil {
 		return result, nil
 	}
@@ -394,7 +401,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
-	result = tm.addAgent(c, wl, spec.ServiceName, spec.ServicePortIdentifier, ir.AgentImage, apiPort)
+	result = tm.addAgent(c, wl, svcprops, ir.AgentImage, apiPort)
 	if result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}

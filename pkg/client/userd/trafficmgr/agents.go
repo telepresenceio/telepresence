@@ -96,12 +96,13 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 func (tm *TrafficManager) addAgent(
 	c context.Context,
 	workload k8sapi.Workload,
-	svcName, svcPortIdentifier, agentImageName string,
+	svcprops *ServiceProps,
+	agentImageName string,
 	telepresenceAPIPort uint16,
 ) *rpc.InterceptResult {
 	agentName := workload.GetName()
 	namespace := workload.GetNamespace()
-	svcUID, kind, svcPort, err := tm.EnsureAgent(c, workload, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
+	svcUID, kind, err := tm.EnsureAgent(c, workload, svcprops, agentImageName, telepresenceAPIPort)
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
@@ -131,7 +132,7 @@ func (tm *TrafficManager) addAgent(
 		Environment:       agent.Environment,
 		ServiceUid:        svcUID,
 		WorkloadKind:      kind,
-		ServicePortNumber: svcPort,
+		ServicePortNumber: svcprops.ServicePort.Port,
 	}
 }
 

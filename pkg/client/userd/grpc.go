@@ -125,7 +125,7 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
 		var wl k8sapi.Workload
-		if result, wl = session.CanIntercept(c, ir); result == nil {
+		if result, wl, _ = session.CanIntercept(c, ir); result == nil {
 			var kind string
 			if wl != nil {
 				kind = wl.GetKind()

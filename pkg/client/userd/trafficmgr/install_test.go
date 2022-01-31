@@ -129,21 +129,19 @@ func TestAddAgentToWorkload(t *testing.T) {
 				}
 				svc := tc.InputService.DeepCopy()
 				obj := deepCopyObject(tc.InputWorkload)
-				svcname := managerImageName(ctx)
-				servicePort, container, containerPortIndex, err := exploreSvc(ctx, svc, tc.InputPortName, svcname, obj)
+				agent_image_name := managerImageName(ctx)
+
+				svcprops, err := ExploreSvc(ctx, tc.InputPortName, svc.Name, obj)
 				if !assert.NoError(t, err) {
 					return
 				}
 
 				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(ctx,
-					servicePort,
-					container,
-					containerPortIndex,
-					svcname, // ignore extensions
+					svcprops,
+					agent_image_name, // ignore extensions
 					env.ManagerNamespace,
 					apiPort,
 					obj,
-					svc,
 				)
 				if !assert.NoError(t, actualErr) {
 					return
