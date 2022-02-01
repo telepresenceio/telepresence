@@ -207,13 +207,15 @@ func (d *service) configReload(c context.Context) error {
 func (d *service) manageSessions(c context.Context) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
+	wg := sync.WaitGroup{}
 	c, d.quit = context.WithCancel(c)
+nextSession:
 	for {
 		// Wait for a connection request
 		var oi *rpc.OutboundInfo
 		select {
 		case <-c.Done():
-			return nil
+			break nextSession
 		case oi = <-d.connectCh:
 		}
 
@@ -237,7 +239,7 @@ func (d *service) manageSessions(c context.Context) error {
 
 		select {
 		case <-c.Done():
-			return nil
+			break nextSession
 		case d.connectReplyCh <- reply:
 		default:
 			// Nobody left to read the response? That's fine really. Just means that
@@ -251,12 +253,16 @@ func (d *service) manageSessions(c context.Context) error {
 
 		// Run the session asynchronously. We must be able to respond to connect (with getInfo) while
 		// the session is running. The d.session.cancel is called from Disconnect
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			if err := d.session.run(d.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}
 		}()
 	}
+	wg.Wait()
+	return nil
 }
 
 func (d *service) serveGrpc(c context.Context, l net.Listener) error {

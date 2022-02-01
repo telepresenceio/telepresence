@@ -135,13 +135,15 @@ func (s *service) configReload(c context.Context) error {
 func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
+	wg := sync.WaitGroup{}
 	c, s.quit = context.WithCancel(c)
+nextSession:
 	for {
 		// Wait for a connection request
 		var cr *rpc.ConnectRequest
 		select {
 		case <-c.Done():
-			return nil
+			break nextSession
 		case cr = <-s.connectRequest:
 		}
 
@@ -167,7 +169,7 @@ func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr
 
 		select {
 		case <-c.Done():
-			return nil
+			break nextSession
 		case s.connectResponse <- rsp:
 		default:
 			// Nobody there to read the response? That's fine. The user may have got
@@ -181,12 +183,16 @@ func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr
 
 		// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
 		// the session is running. The s.sessionCancel is called from Disconnect
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			if err := s.session.Run(s.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}
 		}()
 	}
+	wg.Wait()
+	return nil
 }
 
 func (s *service) cancelSession() {
