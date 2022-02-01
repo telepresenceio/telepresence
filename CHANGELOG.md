@@ -15,6 +15,8 @@
 - Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
   The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`. 
 
+- Bugfix: The also-proxy and never-proxy subnets are now displayed correctly when using the `telepresence status` command
+
 - Bugfix: Telepresence will now parse device names containing dashes correctly when determining routes that it should never block.
 
 - Bugfix: The cluster domain (typically "cluster.local") is no longer added to the DNS `search` on Linux using `systemd-resolved`. Instead,
