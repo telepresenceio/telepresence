@@ -163,7 +163,7 @@ func GetTelepresencePro(ctx context.Context) (string, error) {
 		// TODO: replace the hardcoded 0.0.1 with this once publishing is working
 		clientVersion := strings.Trim(client.Version(), "v")
 		systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
-		installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
+		installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
 
 		resp, err := http.Get(installString)
 		if err != nil {
