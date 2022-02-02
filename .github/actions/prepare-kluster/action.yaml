@@ -40,7 +40,7 @@ runs:
       run: |
         export KUBECONFIG="$HOME/kubeconfig"
         kubectl apply -f build-aux/image-importer.yaml
+        kubectl rollout status -w deployment/image-importer
         POD_NAME=$(kubectl get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
-        kubectl wait --for=condition=ready pod $POD_NAME
         kubectl cp "${{ inputs.tel-image }}" "$POD_NAME:/tmp/image.tar"
         kubectl exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar

@@ -60,10 +60,11 @@ func run() error {
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 			kubeconfig, err := kubeceptionRequest(ctx, cli, "PUT", token, clusterName, map[string]string{
-				"wait":        "true",
-				"timeoutSecs": "7200",
-				"version":     "1.19",
-				"provider":    "production"})
+				"wait":           "true",
+				"timeoutSecs":    "7200",
+				"version":        "1.19",
+				"provider":       "preview",
+				"enableSNIRelay": "true"})
 			if err != nil {
 				return err
 			}
