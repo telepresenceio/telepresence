@@ -21,6 +21,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -584,6 +585,11 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		}
 		err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
 		time.Sleep(time.Second)
+
+		// sshfs sometimes leave the mount point in a bad state. This will clean it up
+		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
+		defer cancel()
+		_ = dexec.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
 		return err
 	}, 3*time.Second, 6*time.Second)
 
