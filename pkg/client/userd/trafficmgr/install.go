@@ -280,8 +280,7 @@ type ServiceProps struct {
 	ContainerPortIndex int
 }
 
-// The port number of the selected service is used as the ingress default value for pro intercepts
-// so it is returned through the rpc call in all successful cases
+// ExploreSvc finds the matching service, its comtainters, and their ports
 func ExploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*ServiceProps, error) {
 	podTemplate := obj.GetPodTemplate()
 	cns := podTemplate.Spec.Containers

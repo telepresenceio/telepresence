@@ -17,12 +17,14 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/systema_proxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -260,6 +262,15 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 				return err
 			}
 		}
+
+		s.withSession(c, "", func(c context.Context, session trafficmgr.Session) error {
+			proxy, err := systema_proxy.NewSystemAProxy(c, session)
+			if err != nil {
+				return err
+			}
+			systema.RegisterConnSystemAProxyServer(s.svc, proxy)
+			return nil
+		})
 
 		sc := &dhttp.ServerConfig{Handler: s.svc}
 		dlog.Info(c, "gRPC server started")

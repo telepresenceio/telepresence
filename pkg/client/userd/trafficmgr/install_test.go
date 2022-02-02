@@ -144,7 +144,8 @@ func TestAddAgentToWorkload(t *testing.T) {
 						Service:            svc,
 						ServicePort:        servicePort,
 						Container:          container,
-						ContainerPortIndex: containerPortIndex},
+						ContainerPortIndex: containerPortIndex,
+					},
 					agent_image_name, // ignore extensions
 					env.ManagerNamespace,
 					apiPort,

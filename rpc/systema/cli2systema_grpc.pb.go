@@ -112,3 +112,89 @@ var SystemACli_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/systema/cli2systema.proto",
 }
+
+// ConnSystemAProxyClient is the client API for ConnSystemAProxy service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ConnSystemAProxyClient interface {
+	ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error)
+}
+
+type connSystemAProxyClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewConnSystemAProxyClient(cc grpc.ClientConnInterface) ConnSystemAProxyClient {
+	return &connSystemAProxyClient{cc}
+}
+
+func (c *connSystemAProxyClient) ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error) {
+	out := new(IngressInfoResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.systema.ConnSystemAProxy/ResolveIngressInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ConnSystemAProxyServer is the server API for ConnSystemAProxy service.
+// All implementations must embed UnimplementedConnSystemAProxyServer
+// for forward compatibility
+type ConnSystemAProxyServer interface {
+	ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error)
+	mustEmbedUnimplementedConnSystemAProxyServer()
+}
+
+// UnimplementedConnSystemAProxyServer must be embedded to have forward compatible implementations.
+type UnimplementedConnSystemAProxyServer struct {
+}
+
+func (UnimplementedConnSystemAProxyServer) ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
+}
+func (UnimplementedConnSystemAProxyServer) mustEmbedUnimplementedConnSystemAProxyServer() {}
+
+// UnsafeConnSystemAProxyServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ConnSystemAProxyServer will
+// result in compilation errors.
+type UnsafeConnSystemAProxyServer interface {
+	mustEmbedUnimplementedConnSystemAProxyServer()
+}
+
+func RegisterConnSystemAProxyServer(s grpc.ServiceRegistrar, srv ConnSystemAProxyServer) {
+	s.RegisterService(&ConnSystemAProxy_ServiceDesc, srv)
+}
+
+func _ConnSystemAProxy_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IngressInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnSystemAProxyServer).ResolveIngressInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.systema.ConnSystemAProxy/ResolveIngressInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnSystemAProxyServer).ResolveIngressInfo(ctx, req.(*IngressInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ConnSystemAProxy_ServiceDesc is the grpc.ServiceDesc for ConnSystemAProxy service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ConnSystemAProxy_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "telepresence.systema.ConnSystemAProxy",
+	HandlerType: (*ConnSystemAProxyServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveIngressInfo",
+			Handler:    _ConnSystemAProxy_ResolveIngressInfo_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/systema/cli2systema.proto",
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -128,11 +129,17 @@ func (tm *TrafficManager) addAgent(
 	}
 	dlog.Infof(c, "Agent found or created for %s %s.%s", kind, agentName, namespace)
 	return &rpc.InterceptResult{
-		Error:             rpc.InterceptError_UNSPECIFIED,
-		Environment:       agent.Environment,
-		ServiceUid:        svcUID,
-		WorkloadKind:      kind,
-		ServicePortNumber: svcprops.ServicePort.Port,
+		Error:        rpc.InterceptError_UNSPECIFIED,
+		Environment:  agent.Environment,
+		ServiceUid:   svcUID,
+		WorkloadKind: kind,
+		ServiceProps: &systema.IngressInfoRequest{
+			ServiceUid:            svcUID,
+			ServiceName:           svcprops.Service.Name,
+			ServicePortIdentifier: string(svcprops.ServicePort.Port),
+			ServicePort:           svcprops.ServicePort.Port,
+			Namespace:             namespace,
+		},
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -92,6 +93,7 @@ type interceptState struct {
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
+	systemAClient   systema.ConnSystemAProxyClient
 	connInfo        *connector.ConnectInfo
 
 	// set later ///////////////////////////////////////////////////////////
@@ -594,9 +596,20 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if args.previewEnabled {
-		if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
-			return false, err
+		spec := args.previewSpec
+
+		if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
+			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
+			if err != nil {
+				return false, err
+			}
+			spec.Ingress = ingress
 		}
+		/*
+			if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
+				return false, err
+			}
+		*/
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
 			return false, err
@@ -665,6 +678,20 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	is.scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 
 	if args.previewEnabled {
+		if args.previewSpec.Ingress == nil {
+			ingressInfo, err := is.systemAClient.ResolveIngressInfo(ctx, r.GetServiceProps())
+			if err != nil {
+				return true, err
+			}
+
+			args.previewSpec.Ingress = &manager.IngressInfo{
+				Host:   ingressInfo.Host,
+				Port:   ingressInfo.Port,
+				UseTls: ingressInfo.UseTls,
+				L5Host: ingressInfo.Host,
+			}
+		}
+
 		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 			Session: is.connInfo.SessionInfo,
 			Name:    args.name,

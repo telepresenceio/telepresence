@@ -4,6 +4,7 @@ package telepresence.connector;
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
+import "rpc/systema/cli2systema.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/connector";
 
@@ -296,7 +297,7 @@ message InterceptResult {
 
   // The port number that service_port_identifer resolved into is
   // used as the default port for the ingress for pro intercepts
-  int32 service_port_number = 8;
+  telepresence.systema.IngressInfoRequest service_props = 8;
 }
 
 message Notification {
