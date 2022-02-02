@@ -583,10 +583,10 @@ func (is *interceptState) ensureIngress(ctx context.Context, args *interceptArgs
 	return nil
 }
 
-func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	ir, err := is.createRequest(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	args := &is.args
@@ -595,12 +595,36 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if args.previewEnabled {
 		if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
-			return false, err
+			return nil, err
 		}
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
-			return false, err
+			return nil, err
 		}
+	}
+	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return ir, nil
+}
+
+func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+	args := &is.args
+
+	// Add whatever metadata we already have to scout
+	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
+	is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
+	mechanism, _ := args.extState.Mechanism()
+	mechanismArgs, _ := args.extState.MechanismArgs()
+	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
+	is.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(mechanismArgs))
+
+	ir, err := is.createAndValidateRequest(ctx)
+	if err != nil {
+		is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
+		return false, err
 	}
 
 	if ir.MountPoint != "" {
@@ -612,19 +636,6 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}()
 		is.mountPoint = ir.MountPoint
 	}
-
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	// Add whatever metadata we already have to scout
-	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
-	is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
-	mechanism, _ := args.extState.Mechanism()
-	mechanismArgs, _ := args.extState.MechanismArgs()
-	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
-	is.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(mechanismArgs))
 
 	defer func() {
 		if err != nil {

@@ -8,6 +8,7 @@ The following metrics are collected:
 |              Metric Name              | Description                                                                                                                                         |
 | ------------------------------------- |-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | `intercept_fail`                      | An attempt to create an intercept has failed. Includes an `error` trait detailing the error.                                                        |
+| `intercept_validation_fail`           | There has been an attempt to creat an invalid intercept. Includes an `error` trait detailing the error.                                             |
 | `intercept_success`                   | An attempt to create an intercept has succeeded.                                                                                                    |
 | `preview_domain_create_fail`          | An attempt to create an intercept with a preview URL has failed. Includes an `error` trait                                                          |
 | `Used legacy syntax`                  | A [legacy command](https://www.telepresence.io/docs/latest/install/migrate-from-legacy/#using-legacy-telepresence-commands) has been used           |
