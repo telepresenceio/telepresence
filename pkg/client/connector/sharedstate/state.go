@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
@@ -49,6 +50,7 @@ type TrafficManager interface {
 }
 
 type State struct {
+	Scout             *scout.Reporter
 	LoginExecutor     userd_auth.LoginExecutor
 	UserNotifications broadcastqueue.BroadcastQueue
 
@@ -61,10 +63,11 @@ type State struct {
 	timedLogLevel       log.TimedLevel
 }
 
-func NewState(ctx context.Context, procName string) (*State, error) {
+func NewState(ctx context.Context, procName string, reporter *scout.Reporter) (*State, error) {
 	s := &State{
 		//LoginExecutor:     "Caller will initialize this later",
 		//UserNotifications: "The zero value is fine",
+		Scout:               reporter,
 		clusterFinalized:    make(chan struct{}),
 		trafficMgrFinalized: make(chan struct{}),
 		procName:            procName,
