@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"unsafe"
 
+	//nolint:depguard // We want no logging and no soft-context signal handling
+	"os/exec"
+
 	"golang.org/x/sys/windows"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 )
 
@@ -20,7 +22,7 @@ type processInfo struct {
 	exe  string
 }
 
-func killProcess(ctx context.Context, cmd *dexec.Cmd) {
+func killProcess(ctx context.Context, cmd *exec.Cmd) {
 	pes := make([]*processInfo, 0, 100)
 	err := eachProcess(func(pe *windows.ProcessEntry32) bool {
 		pes = append(pes, &processInfo{

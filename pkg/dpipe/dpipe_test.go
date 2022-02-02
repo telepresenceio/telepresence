@@ -60,7 +60,7 @@ func TestDPipe_stdout(t *testing.T) {
 	peer := &bufClose{}
 	assert.NoError(t, DPipe(ctx, peer, echoBinary, "-d", "1", "hello stdout"))
 	assert.Empty(t, log)
-	assert.Equal(t, peer.String(), "hello stdout\n")
+	assert.Equal(t, "hello stdout\n", peer.String())
 }
 
 // Test that stderr of a process executed by DPipe is logged as errors
@@ -70,5 +70,5 @@ func TestDPipe_stderr(t *testing.T) {
 	peer := &bufClose{}
 	assert.NoError(t, DPipe(ctx, peer, echoBinary, "-d", "2", "hello stderr"))
 	assert.Contains(t, log.String(), `level=error msg="hello stderr"`)
-	assert.Empty(t, peer)
+	assert.Empty(t, peer.String())
 }
