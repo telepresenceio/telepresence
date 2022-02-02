@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v2"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -26,7 +28,7 @@ import (
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
-	_, err := GetTelepresencePro(ctx)
+	err := GetTelepresencePro(ctx)
 	if err != nil {
 		return connector.LoginResult_UNSPECIFIED, err
 	}
@@ -141,54 +143,88 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 	return licenseData.GetLicense(), licenseData.GetHostDomain(), nil
 }
 
-func GetTelepresencePro(ctx context.Context) (string, error) {
+func GetTelepresencePro(ctx context.Context) error {
 	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
-		return "", errcat.Unknown.Newf("Unable to get path to config files: %s", err)
+		return errcat.Unknown.Newf("Unable to get path to config files: %s", err)
 	}
 
+	// If telepresence-pro doesn't exist, then we should ask the user
+	// if they want to install it
 	telProLocation := fmt.Sprintf("%s/telepresence-pro", dir)
 	if _, err := os.Stat(telProLocation); os.IsNotExist(err) {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
 		reply, err := reader.ReadString('\n')
 		if err != nil {
-			return "", err
+			return errcat.Unknown.Newf("error reading input: %s", err)
 		}
 
+		// If the user doesn't want to install it, then we we'll proceed
+		// with launching the daemon normally
 		reply = strings.TrimSpace(reply)
 		if reply == "n" {
-			return "", nil
+			return nil
 		}
-		// TODO: replace the hardcoded 0.0.1 with this once publishing is working
+
+		// We install the correct version of telepresence-pro based on
+		// the OSS version that is associated with this client since
+		// daemon versions need to match
 		clientVersion := strings.Trim(client.Version(), "v")
 		systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
 		installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
 
 		resp, err := http.Get(installString)
 		if err != nil {
-			return "", errcat.User.Newf("unable to install Telepresence Pro: %s", err)
+			return errcat.User.Newf("unable to install Telepresence Pro: %s", err)
 		}
 		defer resp.Body.Close()
 
 		out, err := os.Create(telProLocation)
 		if err != nil {
-			return "", errcat.User.Newf("unable to create file %s for Telepresence Pro: %s", telProLocation, err)
+			return errcat.User.Newf("unable to create file %s for Telepresence Pro: %s", telProLocation, err)
 		}
 		defer out.Close()
 
 		_, err = io.Copy(out, resp.Body)
 		if err != nil {
-			return "", errcat.User.Newf("unable to copy Telepresence Pro to %s: %s", telProLocation, err)
+			return errcat.User.Newf("unable to copy Telepresence Pro to %s: %s", telProLocation, err)
 		}
 
 		err = os.Chmod(telProLocation, 0755)
 		if err != nil {
-			return "", errcat.User.Newf("unable to set permissions of Telepresence Pro to 755: %s", err)
+			return errcat.User.Newf("unable to set permissions of Telepresence Pro to 755: %s", err)
 		}
 
-		//TODO: fix update the config to use the new telepresence cli instead of erroring
-		return "", errcat.User.Newf("Update daemons.userDaemonBinary in %s to %s", client.GetConfigFile(ctx), telProLocation)
+		// Ask the user if they want to automatically update their config
+		// with the telepresence-pro binary.
+		// TODO: This will remove any comments that exist in the config file
+		// which it's yaml so that's _fine_ but it would be nice if we didn't
+		// do that.
+		fmt.Printf("Update your Telepresence config to use Telepresence Pro? (y/n)")
+		reply, err = reader.ReadString('\n')
+		if err != nil {
+			return errcat.Unknown.Newf("error reading input: %s", err)
+		}
+		if reply == "n" {
+			return nil
+		}
+		cfg := client.GetConfig(ctx)
+		cfg.Daemons.UserDaemonBinary = telProLocation
+
+		b, err := yaml.Marshal(cfg)
+		if err != nil {
+			errcat.User.Newf("error marshaling updating config: %s", err)
+		}
+		cfgFile := client.GetConfigFile(ctx)
+		_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			errcat.User.Newf("error opening config file: %s", err)
+		}
+		err = ioutil.WriteFile(cfgFile, b, 0644)
+		if err != nil {
+			errcat.User.Newf("error writing config file: %s", err)
+		}
 	}
-	return telProLocation, nil
+	return nil
 }
