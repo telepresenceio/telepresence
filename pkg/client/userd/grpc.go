@@ -27,10 +27,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 func callRecovery(r interface{}, err error) error {
@@ -111,6 +113,19 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 }
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		var msg string
+		if result.Error != rpc.InterceptError_UNSPECIFIED {
+			msg = result.Error.String()
+		} else if err != nil {
+			msg = err.Error()
+		}
+		if msg != "" {
+			s.scout.Report(log.WithDiscardingLogger(c), "connector_can_intercept_fail", scout.Entry{Key: "error", Value: msg})
+		} else {
+			s.scout.Report(log.WithDiscardingLogger(c), "connector_can_intercept_success")
+		}
+	}()
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
 		var wl k8sapi.Workload
 		if result, wl = session.CanIntercept(c, ir); result == nil {
@@ -129,6 +144,19 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		var msg string
+		if result.Error != rpc.InterceptError_UNSPECIFIED {
+			msg = result.Error.String()
+		} else if err != nil {
+			msg = err.Error()
+		}
+		if msg != "" {
+			s.scout.Report(log.WithDiscardingLogger(c), "connector_create_intercept_fail", scout.Entry{Key: "error", Value: msg})
+		} else {
+			s.scout.Report(log.WithDiscardingLogger(c), "connector_create_intercept_success")
+		}
+	}()
 	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.AddIntercept(c, ir)
 		return err
@@ -137,6 +165,19 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		var msg string
+		if result.Error != rpc.InterceptError_UNSPECIFIED {
+			msg = result.Error.String()
+		} else if err != nil {
+			msg = err.Error()
+		}
+		if msg != "" {
+			s.scout.Report(log.WithDiscardingLogger(c), "connector_remove_intercept_fail", scout.Entry{Key: "error", Value: msg})
+		} else {
+			s.scout.Report(log.WithDiscardingLogger(c), "connector_remove_intercept_success")
+		}
+	}()
 	err = s.withSession(c, "RemoveIntercept", func(c context.Context, session trafficmgr.Session) error {
 		result = &rpc.InterceptResult{}
 		if err := session.RemoveIntercept(c, rr.Name); err != nil {
