@@ -420,7 +420,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 }
 
 func (s *session) run(c context.Context) error {
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{ShutdownOnNonError: true})
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
 	cfgComplete := make(chan struct{})
 	g.Go("watch-cluster-info", func(ctx context.Context) error {
@@ -448,6 +448,8 @@ func (s *session) run(c context.Context) error {
 }
 
 func (s *session) stop(c context.Context) {
+	dlog.Debug(c, "Brining down TUN-device")
+
 	s.scout.Report(c, "incluster_dns_queries",
 		scout.Entry{Key: "total", Value: s.dnsLookups},
 		scout.Entry{Key: "failures", Value: s.dnsFailures})
@@ -473,10 +475,10 @@ func (s *session) stop(c context.Context) {
 		dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
 	}
 
-	dlog.Debug(c, "Sending quit message to connector")
-	_, _ = connector.NewConnectorClient(s.clientConn).Quit(c, &empty.Empty{})
+	dlog.Debug(c, "Sending disconnect message to connector")
+	_, _ = connector.NewConnectorClient(s.clientConn).Disconnect(c, &empty.Empty{})
 	s.clientConn.Close()
-	dlog.Debug(c, "Connector shutdown complete")
+	dlog.Debug(c, "Connector disconnect complete")
 }
 
 func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
