@@ -29,6 +29,7 @@ type state struct {
 	namespace   string
 	podIP       string
 	sftpPort    int32
+	env         map[string]string
 }
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*restapi.InterceptInfo, error) {
@@ -36,7 +37,12 @@ func (s *state) InterceptInfo(ctx context.Context, callerID, path string, header
 	return s.forwarder.InterceptInfo(), nil
 }
 
-func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP string, sftpPort int32) State {
+func NewState(
+	forwarder *forwarder.Forwarder,
+	managerHost, namespace, podIP string,
+	sftpPort int32,
+	env map[string]string,
+) State {
 	host, port := forwarder.Target()
 	return &state{
 		forwarder:   forwarder,
@@ -46,6 +52,7 @@ func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP stri
 		namespace:   namespace,
 		podIP:       podIP,
 		sftpPort:    sftpPort,
+		env:         env,
 	}
 }
 
@@ -117,6 +124,7 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 					PodIp:             s.podIP,
 					SftpPort:          s.sftpPort,
 					MechanismArgsDesc: "all TCP connections",
+					Environment:       s.env,
 				})
 			case chosenIntercept == nil:
 				// We don't have an intercept in play, so choose this one. All
@@ -133,6 +141,7 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 					PodIp:             s.podIP,
 					SftpPort:          s.sftpPort,
 					MechanismArgsDesc: "all TCP connections",
+					Environment:       s.env,
 				})
 			default:
 				// We already have an intercept in play, so reject this one.

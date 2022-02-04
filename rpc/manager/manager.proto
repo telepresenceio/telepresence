@@ -52,12 +52,11 @@ message AgentInfo {
   // it supports.
   repeated Mechanism mechanisms = 5;
 
-  // The environment of the app
-  map<string, string> environment = 6;
+  reserved 6;
 }
 
 message InterceptSpec {
-  // A human-friendly name for this intercept.  This is usally the
+  // A human-friendly name for this intercept.  This is usually the
   // same as the agent name below; the name/namespace of the
   // Workload, but it could be something else.  It is invalid for
   // the same client to attempt to create multiple intercepts with the
@@ -213,6 +212,9 @@ message InterceptInfo {
 
   // Metadata used by the workstation API-server
   map<string,string> metadata = 15;
+
+  // The environment of the intercepted app
+  map<string, string> environment = 16;
 }
 
 message SessionInfo {
@@ -277,6 +279,9 @@ message ReviewInterceptRequest {
 
   // Metadata used by the workstation API-server
   map<string,string> metadata = 9;
+
+  // The environment of the intercepted app
+  map<string, string> environment = 18;
 }
 
 message RemainRequest {

@@ -296,8 +296,7 @@ message InterceptResult {
   string error_text = 3;
   int32 error_category = 7;
 
-  // The environment of the app
-  map<string,string> environment = 4;
+  reserved 4;
 
   // The service uid associated with the workload intercepted
   string service_uid = 5;

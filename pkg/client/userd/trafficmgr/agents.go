@@ -202,8 +202,7 @@ func (tm *TrafficManager) addAgent(
 	}
 
 	dlog.Infof(c, "Waiting for agent for %s %s.%s", kind, agentName, namespace)
-	agent, err := tm.waitForAgent(c, agentName, namespace)
-	if err != nil {
+	if _, err = tm.waitForAgent(c, agentName, namespace); err != nil {
 		dlog.Error(c, err)
 		return &rpc.InterceptResult{
 			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
@@ -213,7 +212,6 @@ func (tm *TrafficManager) addAgent(
 	dlog.Infof(c, "Agent found or created for %s %s.%s", kind, agentName, namespace)
 	return &rpc.InterceptResult{
 		Error:        rpc.InterceptError_UNSPECIFIED,
-		Environment:  agent.Environment,
 		ServiceUid:   svcUID,
 		WorkloadKind: kind,
 		ServiceProps: &userdaemon.IngressInfoRequest{

@@ -220,12 +220,11 @@ func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "%+v", config)
 
 	info := &rpc.AgentInfo{
-		Name:        config.Name,
-		PodIp:       config.PodIP,
-		Product:     "telepresence",
-		Version:     version.Version,
-		Environment: AppEnvironment(),
-		Namespace:   config.Namespace,
+		Name:      config.Name,
+		PodIp:     config.PodIP,
+		Product:   "telepresence",
+		Version:   version.Version,
+		Namespace: config.Namespace,
 	}
 
 	// Select initial mechanism
@@ -242,12 +241,13 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	if err := config.AddSecretsMounts(ctx, info.Environment); err != nil {
+	env := AppEnvironment()
+	if err := config.AddSecretsMounts(ctx, env); err != nil {
 		dlog.Errorf(ctx, "There was a problem with agent mounts: %v", err)
 	}
 
 	sftpPortCh := make(chan int32)
-	if config.HasMounts(ctx, info.Environment) && user == "" {
+	if config.HasMounts(ctx, env) && user == "" {
 		g.Go("sftp-server", func(ctx context.Context) error {
 			return SftpServer(ctx, sftpPortCh)
 		})
@@ -287,7 +287,7 @@ func Main(ctx context.Context, args ...string) error {
 		}
 
 		sftpPort := <-sftpPortCh
-		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort, env)
 
 		if config.APIPort != 0 {
 			dgroup.ParentGroup(ctx).Go("API-server", func(ctx context.Context) error {

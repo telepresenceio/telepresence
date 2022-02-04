@@ -608,6 +608,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
 			intercept.Headers = rIReq.Headers
 			intercept.Metadata = rIReq.Metadata
+			intercept.Environment = rIReq.Environment
 		}
 	})
 
