@@ -191,7 +191,10 @@ func (s *session) tcp(c context.Context, pkt tcp.Packet) {
 		pkt.Release()
 		return
 	}
-	wf.(tcp.PacketHandler).HandlePacket(c, pkt)
+	// if wf is nil, the packet should simply be ignored
+	if wf != nil {
+		wf.(tcp.PacketHandler).HandlePacket(c, pkt)
+	}
 }
 
 func (s *session) udp(c context.Context, dg udp.Datagram) {
