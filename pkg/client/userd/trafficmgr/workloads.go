@@ -238,6 +238,26 @@ func (w *workloadsAndServicesWatcher) subscribe(c context.Context) <-chan struct
 				close(ch)
 				return
 			case ch <- struct{}{}:
+			default:
+				// Imagine this:
+				// receiver: receives msg := <- ch
+				// receiver: starts to process msg
+				// k8s cluster: updates, calls w.cond.Broadcast()
+				// subscribe: ch <- struct{}{} WHILE HOLDING THE LOCK
+				// receiver: still processing msg, calls eachService; tries to lock, fails.
+				// We are now deadlocked as the receiver will never arrive to read from ch again.
+				// So, if we can't write to ch, just schedule a re-broadcast of the update to give the receiver a chance to process the last one
+				go func() {
+					select {
+					case <-c.Done():
+						return
+					case <-time.After(1 * time.Second):
+					}
+					w.Lock()
+					defer w.Unlock()
+					w.cond.Broadcast()
+				}()
+				continue
 			}
 		}
 	}()
