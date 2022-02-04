@@ -165,7 +165,7 @@ func GetTelepresencePro(ctx context.Context) error {
 		// If the user doesn't want to install it, then we we'll proceed
 		// with launching the daemon normally
 		reply = strings.TrimSpace(reply)
-		if reply == "n" {
+		if reply != "y" {
 			return nil
 		}
 
@@ -208,7 +208,7 @@ func GetTelepresencePro(ctx context.Context) error {
 		if err != nil {
 			return errcat.Unknown.Newf("error reading input: %s", err)
 		}
-		if reply == "n" {
+		if reply != "y" {
 			return nil
 		}
 		cfg := client.GetConfig(ctx)
