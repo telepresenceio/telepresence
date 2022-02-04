@@ -8,6 +8,8 @@
 - Feature: The flag `--http-meta` can be used to declare metadata key value pairs that will be returned by the Telepresence rest API
   endpoint /intercept-info
 
+- Feature: Telepresence Login now prompts you to optionally install Telepresence Pro, which has some additional features when used with Ambassador Cloud.
+
 - Change: The verb "watch" was added to the set of required verbs when accessing services and workloads for the client RBAC ClusterRole
 
 - Change: Telepresence is no longer backward compatible with versions 2.4.4 or older because the deprecated multiplexing tunnel functionality was removed.
