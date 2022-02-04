@@ -213,13 +213,13 @@ func checkSvcSame(_ context.Context, obj k8sapi.Object, svcName, portNameOrNumbe
 
 var agentNotFound = errors.New("no such agent")
 
-func (ki *installer) getSvcForInjectedPod(
+func (ki *installer) ensureInjectedAgent(
 	c context.Context,
 	svc *core.Service,
 	name, namespace string,
 	podTemplate *core.PodTemplateSpec,
 	obj k8sapi.Object,
-) (*core.Service, error) {
+) error {
 	a := podTemplate.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
 
@@ -231,11 +231,11 @@ func (ki *installer) getSvcForInjectedPod(
 			dlog.Warnf(c, "Error finding pod for %s, rolling and proceeding anyway: %v", name, err)
 			err = ki.rolloutRestart(c, obj)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			return svc, nil
+			return nil
 		} else {
-			return nil, err
+			return err
 		}
 	}
 
@@ -252,14 +252,14 @@ func (ki *installer) getSvcForInjectedPod(
 		if webhookInjected {
 			err = ki.rolloutRestart(c, obj)
 			if err != nil {
-				return nil, err
+				return err
 			}
 		} else {
 			// The user claims to have manually added the agent but we can't find it; report the error.
-			return nil, fmt.Errorf("the %s annotation is set but no traffic agent was found in %s", install.ManualInjectAnnotation, name)
+			return fmt.Errorf("the %s annotation is set but no traffic agent was found in %s", install.ManualInjectAnnotation, name)
 		}
 	}
-	return svc, nil
+	return nil
 }
 
 func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
@@ -280,8 +280,8 @@ type ServiceProps struct {
 	ContainerPortIndex int
 }
 
-// ExploreSvc finds the matching service, its comtainters, and their ports
-func ExploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*ServiceProps, error) {
+// exploreSvc finds the matching service, its comtainters, and their ports
+func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*ServiceProps, error) {
 	podTemplate := obj.GetPodTemplate()
 	cns := podTemplate.Spec.Containers
 	namespace := obj.GetNamespace()
@@ -340,11 +340,11 @@ func (ki *installer) EnsureAgent(
 	}
 
 	if !autoInstall {
-		svc, err := ki.getSvcForInjectedPod(c, svcprops.Service, name, namespace, podTemplate, obj)
+		err := ki.ensureInjectedAgent(c, svcprops.Service, name, namespace, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
-		return string(svc.GetUID()), kind, nil
+		return string(svcprops.Service.GetUID()), kind, nil
 	}
 
 	var agentContainer *core.Container

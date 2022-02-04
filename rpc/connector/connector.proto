@@ -4,7 +4,6 @@ package telepresence.connector;
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
-import "rpc/systema/cli2systema.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/connector";
 
@@ -79,6 +78,10 @@ service Connector {
 
   // RunCommand executes a CLI command.
   rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+
+  // ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+  // the cloud for default ingress values
+  rpc ResolveIngressInfo(IngressInfoRequest) returns (IngressInfoResponse);
 }
 
 message CommandGroups {
@@ -297,7 +300,7 @@ message InterceptResult {
 
   // The port number that service_port_identifer resolved into is
   // used as the default port for the ingress for pro intercepts
-  telepresence.systema.IngressInfoRequest service_props = 8;
+  IngressInfoRequest service_props = 8;
 }
 
 message Notification {
@@ -356,4 +359,44 @@ message LicenseRequest {
 message LicenseData {
   string license = 1;
   string host_domain = 2;
+}
+
+// IngressInfoRequest represents the intercept properties required to resolve ingress info
+message IngressInfoRequest {
+  // The service uid defined in the service's metadata
+  string service_uid = 1;
+
+  // The service name
+  string service_name = 2;
+
+  // The port name as defined in the service specs
+  string service_port_identifier = 3;
+
+  // The port value as defined in the service specs
+  int32 service_port = 4;
+
+  // The namespace in which the intercept takes place
+  string namespace = 5;
+}
+
+// IngressInfoResponse represents the ingress properties required to configure a preview url
+message IngressInfoResponse {
+  // The layer-3 host
+  string host = 1;
+
+  // The layer-4 port
+  int32 port = 2;
+
+  // Whether or not to use TLS on the port
+  bool use_tls = 3;
+
+  // The layer-5 host
+  string l5host = 4;
+}
+
+// SystemA is copied from systema
+service SystemA {
+  // ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
+  // associated with an intercept
+  rpc ResolveIngressInfo(IngressInfoRequest) returns (IngressInfoResponse);
 }

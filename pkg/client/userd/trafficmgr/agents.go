@@ -13,7 +13,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -133,7 +132,7 @@ func (tm *TrafficManager) addAgent(
 		Environment:  agent.Environment,
 		ServiceUid:   svcUID,
 		WorkloadKind: kind,
-		ServiceProps: &systema.IngressInfoRequest{
+		ServiceProps: &rpc.IngressInfoRequest{
 			ServiceUid:            svcUID,
 			ServiceName:           svcprops.Service.Name,
 			ServicePortIdentifier: string(svcprops.ServicePort.Port),

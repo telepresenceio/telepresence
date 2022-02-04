@@ -1,4 +1,4 @@
-package systema_proxy
+package userd
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"net/url"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -16,26 +16,15 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// This proxy is a temporary solution to allow the client to get the
-// preferred ingress info from the cloud
-type SystemAProxy struct {
-	systemacli systema.ConnSystemAProxyClient
-	systema.UnimplementedConnSystemAProxyServer
-}
-
-func NewSystemAProxy(ctx context.Context, session trafficmgr.Session) (*SystemAProxy, error) {
-	conn, err := ConnectSessionToSystemA(ctx, session)
+func (s *service) ResolveIngressInfo(ctx context.Context, req *connector.IngressInfoRequest) (*connector.IngressInfoResponse, error) {
+	conn, err := ConnectSessionToSystemA(ctx, s.session)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SystemAProxy{
-		systemacli: systema.NewConnSystemAProxyClient(conn),
-	}, nil
-}
+	systemacli := connector.NewSystemAClient(conn)
 
-func (s *SystemAProxy) ResolveIngressInfo(ctx context.Context, req *systema.IngressInfoRequest) (*systema.IngressInfoResponse, error) {
-	return s.systemacli.ResolveIngressInfo(ctx, req)
+	return systemacli.ResolveIngressInfo(ctx, req)
 }
 
 type systemaCredentials string

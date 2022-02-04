@@ -23,7 +23,6 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -93,7 +92,6 @@ type interceptState struct {
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
-	systemAClient   systema.ConnSystemAProxyClient
 	connInfo        *connector.ConnectInfo
 
 	// set later ///////////////////////////////////////////////////////////
@@ -553,38 +551,6 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 	return nil
 }
 
-func (is *interceptState) ensureIngress(ctx context.Context, args *interceptArgs, ir *connector.CreateInterceptRequest, needLogin bool) error {
-	spec := args.previewSpec
-	if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
-		ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
-		if err != nil {
-			return err
-		}
-		spec.Ingress = ingress
-	}
-
-	if spec.Ingress == nil || needLogin {
-		// Ensure that the intercept can be made before logging in or asking the user questions about ingress
-		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
-			return err
-		}
-	}
-
-	if spec.Ingress == nil {
-		// Fill defaults
-		iis, err := is.connectorClient.GetIngressInfos(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace, iis.IngressInfos)
-		if err != nil {
-			return err
-		}
-		spec.Ingress = ingress
-	}
-	return nil
-}
-
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	ir, err := is.createRequest(ctx)
 	if err != nil {
@@ -605,11 +571,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			}
 			spec.Ingress = ingress
 		}
-		/*
-			if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
-				return false, err
-			}
-		*/
+
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
 			return false, err
@@ -679,7 +641,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	if args.previewEnabled {
 		if args.previewSpec.Ingress == nil {
-			ingressInfo, err := is.systemAClient.ResolveIngressInfo(ctx, r.GetServiceProps())
+			ingressInfo, err := is.connectorClient.ResolveIngressInfo(ctx, r.GetServiceProps())
 			if err != nil {
 				return true, err
 			}

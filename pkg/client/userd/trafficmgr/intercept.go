@@ -360,7 +360,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		}
 	}
 
-	svcprops, err := ExploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, obj)
+	svcprops, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, obj)
 	if err != nil {
 		// Intercept is not established here, so I am not sure this is still the right error type
 		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, err), nil, nil

@@ -69,6 +69,9 @@ type ConnectorClient interface {
 	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
+	// ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+	// the cloud for default ingress values
+	ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error)
 }
 
 type connectorClient struct {
@@ -314,6 +317,15 @@ func (c *connectorClient) RunCommand(ctx context.Context, in *RunCommandRequest,
 	return out, nil
 }
 
+func (c *connectorClient) ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error) {
+	out := new(IngressInfoResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ResolveIngressInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -366,6 +378,9 @@ type ConnectorServer interface {
 	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
+	// ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+	// the cloud for default ingress values
+	ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -435,6 +450,9 @@ func (UnimplementedConnectorServer) ListCommands(context.Context, *emptypb.Empty
 }
 func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
+}
+func (UnimplementedConnectorServer) ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -833,6 +851,24 @@ func _Connector_RunCommand_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IngressInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ResolveIngressInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/ResolveIngressInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ResolveIngressInfo(ctx, req.(*IngressInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -916,6 +952,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "RunCommand",
 			Handler:    _Connector_RunCommand_Handler,
 		},
+		{
+			MethodName: "ResolveIngressInfo",
+			Handler:    _Connector_ResolveIngressInfo_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -929,5 +969,95 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
+	Metadata: "rpc/connector/connector.proto",
+}
+
+// SystemAClient is the client API for SystemA service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SystemAClient interface {
+	// ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
+	// associated with an intercept
+	ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error)
+}
+
+type systemAClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSystemAClient(cc grpc.ClientConnInterface) SystemAClient {
+	return &systemAClient{cc}
+}
+
+func (c *systemAClient) ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error) {
+	out := new(IngressInfoResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.SystemA/ResolveIngressInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SystemAServer is the server API for SystemA service.
+// All implementations must embed UnimplementedSystemAServer
+// for forward compatibility
+type SystemAServer interface {
+	// ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
+	// associated with an intercept
+	ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error)
+	mustEmbedUnimplementedSystemAServer()
+}
+
+// UnimplementedSystemAServer must be embedded to have forward compatible implementations.
+type UnimplementedSystemAServer struct {
+}
+
+func (UnimplementedSystemAServer) ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
+}
+func (UnimplementedSystemAServer) mustEmbedUnimplementedSystemAServer() {}
+
+// UnsafeSystemAServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SystemAServer will
+// result in compilation errors.
+type UnsafeSystemAServer interface {
+	mustEmbedUnimplementedSystemAServer()
+}
+
+func RegisterSystemAServer(s grpc.ServiceRegistrar, srv SystemAServer) {
+	s.RegisterService(&SystemA_ServiceDesc, srv)
+}
+
+func _SystemA_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IngressInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemAServer).ResolveIngressInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.SystemA/ResolveIngressInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemAServer).ResolveIngressInfo(ctx, req.(*IngressInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SystemA_ServiceDesc is the grpc.ServiceDesc for SystemA service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SystemA_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "telepresence.connector.SystemA",
+	HandlerType: (*SystemAServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ResolveIngressInfo",
+			Handler:    _SystemA_ResolveIngressInfo_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/connector/connector.proto",
 }
