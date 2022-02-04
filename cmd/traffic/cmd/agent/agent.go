@@ -24,16 +24,36 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+type Intercept struct {
+	Service     string
+	AgentPort   int32
+	Container   string
+	MountPoint  string
+	AppProtocol string
+	Port        int32
+	Env         map[string]string
+}
+
 type Config struct {
 	Name        string `env:"_TEL_AGENT_NAME,required"`
 	Namespace   string `env:"_TEL_AGENT_NAMESPACE,default="`
 	PodIP       string `env:"_TEL_AGENT_POD_IP,default="`
-	AgentPort   int32  `env:"_TEL_AGENT_PORT,default=9900"`
-	AppMounts   string `env:"_TEL_AGENT_APP_MOUNTS,default=/tel_app_mounts"`
-	AppPort     int32  `env:"_TEL_AGENT_APP_PORT,required"`
 	ManagerHost string `env:"_TEL_AGENT_MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"_TEL_AGENT_MANAGER_PORT,default=8081"`
 	APIPort     int32  `env:"TELEPRESENCE_API_PORT,default="`
+	Intercepts  []*Intercept
+
+	// AppMounts
+	// Deprecated: Use Intercept.Mount
+	AppMounts string `env:"_TEL_AGENT_APP_MOUNTS,default=/tel_app_mounts"`
+
+	// AgentPort
+	// Deprecated: Use Intercept.AgentPort
+	AgentPort int32 `env:"_TEL_AGENT_PORT,default="`
+
+	// AppPort
+	// Deprecated: Use Intercept.Port
+	AppPort int32 `env:"_TEL_AGENT_APP_PORT,default="`
 }
 
 var skipKeys = map[string]bool{
@@ -57,6 +77,7 @@ var skipKeys = map[string]bool{
 // AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
+// Deprecated: Use the Config.Intercepts.Env
 func AppEnvironment() map[string]string {
 	osEnv := os.Environ()
 	// Keep track of the "TEL_APP_"-prefixed variables separately at first, so that we can
@@ -80,11 +101,13 @@ func AppEnvironment() map[string]string {
 
 const tpMountsEnv = "TELEPRESENCE_MOUNTS"
 
-func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) bool {
-	tpMounts := env[tpMountsEnv]
-	if tpMounts != "" {
-		dlog.Debugf(ctx, "agent mount paths: %s", tpMounts)
-		return true
+func (cfg *Config) HasMounts(ctx context.Context) bool {
+	for _, ic := range cfg.Intercepts {
+		tpMounts := ic.Env[tpMountsEnv]
+		if tpMounts != "" {
+			dlog.Debugf(ctx, "agent mount paths: %s", tpMounts)
+			return true
+		}
 	}
 	return false
 }
@@ -92,9 +115,7 @@ func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) bool {
 // AddSecretsMounts adds any token-rotating system secrets directories if they exist
 // e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
 // to the TELEPRESENCE_MOUNTS environment variable
-func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) error {
-	tpMounts := env[tpMountsEnv]
-
+func (cfg *Config) AddSecretsMounts(ctx context.Context) error {
 	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
 	secretsDir, err := os.Open("/var/run/secrets")
 	if err != nil {
@@ -107,42 +128,51 @@ func (cfg *Config) AddSecretsMounts(ctx context.Context, env map[string]string) 
 	secretsDir.Close()
 	for _, file := range fileInfo {
 		// Directories found in /var/run/secrets get a symlink in appmounts
-		if file.IsDir() {
-			dirPath := filepath.Join("/var/run/secrets/", file.Name())
-			dlog.Debugf(ctx, "checking agent secrets mount path: %s", dirPath)
-			stat, err := os.Stat(dirPath)
+		if !file.IsDir() {
+			continue
+		}
+		dirPath := filepath.Join("/var/run/secrets/", file.Name())
+		dlog.Debugf(ctx, "checking agent secrets mount path: %s", dirPath)
+		stat, err := os.Stat(dirPath)
+		if err != nil {
+			return err
+		}
+		if !stat.IsDir() {
+			continue
+		}
+		for _, ic := range cfg.Intercepts {
+			appMountsPath := filepath.Join(ic.MountPoint, dirPath)
+			dlog.Debugf(ctx, "checking appmounts directory: %s", dirPath)
+			// Make sure the path doesn't already exist
+			_, err = os.Stat(appMountsPath)
+			if err == nil {
+				return fmt.Errorf("appmounts '%s' already exists", appMountsPath)
+			}
+			dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
+			// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
+			err = os.MkdirAll(filepath.Dir(appMountsPath), 0700)
 			if err != nil {
 				return err
 			}
-			if stat.IsDir() {
-				appMountsPath := filepath.Join(cfg.AppMounts, dirPath)
-				dlog.Debugf(ctx, "checking appmounts directory: %s", dirPath)
-				// Make sure the path doesn't already exist
-				_, err = os.Stat(appMountsPath)
-				if err == nil {
-					return fmt.Errorf("appmounts '%s' already exists", appMountsPath)
-				}
-				dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
-				// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
-				err = os.MkdirAll(filepath.Dir(appMountsPath), 0700)
-				if err != nil {
-					return err
-				}
-				dlog.Debugf(ctx, "create appmounts symlink: %s %s", dirPath, appMountsPath)
-				err = os.Symlink(dirPath, appMountsPath)
-				if err != nil {
-					return err
-				}
-				dlog.Infof(ctx, "new agent secrets mount path: %s", dirPath)
-				if tpMounts == "" {
-					tpMounts = dirPath
-				} else {
-					tpMounts += ":" + dirPath
-				}
+			dlog.Debugf(ctx, "create appmounts symlink: %s %s", dirPath, appMountsPath)
+			err = os.Symlink(dirPath, appMountsPath)
+			if err != nil {
+				return err
 			}
+			dlog.Infof(ctx, "new agent secrets mount path: %s", dirPath)
+			tpMounts := ic.Env[tpMountsEnv]
+
+			if tpMounts == "" {
+				tpMounts = dirPath
+			} else {
+				tpMounts += ":" + dirPath
+			}
+			if ic.Env == nil {
+				ic.Env = make(map[string]string)
+			}
+			ic.Env[tpMountsEnv] = tpMounts
 		}
 	}
-	env[tpMountsEnv] = tpMounts
 	return nil
 }
 
@@ -217,6 +247,18 @@ func Main(ctx context.Context, args ...string) error {
 	if err := envconfig.Process(ctx, &config); err != nil {
 		return err
 	}
+
+	// Create the currently one-and-only intercept. This code will go away
+	// once the config is read from a ConfigMap
+	config.Intercepts = []*Intercept{{
+		Service:     "service",
+		AgentPort:   config.AgentPort,
+		Container:   "container",
+		MountPoint:  config.AppMounts,
+		AppProtocol: "tcp",
+		Port:        config.AppPort,
+		Env:         AppEnvironment(),
+	}}
 	dlog.Infof(ctx, "%+v", config)
 
 	info := &rpc.AgentInfo{
@@ -241,13 +283,12 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	env := AppEnvironment()
-	if err := config.AddSecretsMounts(ctx, env); err != nil {
+	if err := config.AddSecretsMounts(ctx); err != nil {
 		dlog.Errorf(ctx, "There was a problem with agent mounts: %v", err)
 	}
 
 	sftpPortCh := make(chan int32)
-	if config.HasMounts(ctx, env) && user == "" {
+	if config.HasMounts(ctx) && user == "" {
 		g.Go("sftp-server", func(ctx context.Context) error {
 			return SftpServer(ctx, sftpPortCh)
 		})
@@ -255,23 +296,6 @@ func Main(ctx context.Context, args ...string) error {
 		close(sftpPortCh)
 		dlog.Info(ctx, "Not starting sftp-server ($APP_MOUNTS is empty or $USER is set)")
 	}
-
-	forwarderChan := make(chan *forwarder.Forwarder)
-
-	// Manage the forwarder
-	g.Go("forward", func(ctx context.Context) error {
-		ctx = tunnel.WithPool(ctx, tunnel.NewPool())
-		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
-		if err != nil {
-			close(forwarderChan)
-			return err
-		}
-
-		forwarder := forwarder.NewForwarder(lisAddr, "", config.AppPort)
-		forwarderChan <- forwarder
-
-		return forwarder.Serve(ctx)
-	})
 
 	// Talk to the Traffic Manager
 	g.Go("client", func(ctx context.Context) error {
@@ -281,13 +305,22 @@ func Main(ctx context.Context, args ...string) error {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		forwarder := <-forwarderChan
-		if forwarder == nil {
-			return nil
-		}
-
 		sftpPort := <-sftpPortCh
-		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodIP, sftpPort, env)
+		state := NewState(config.ManagerHost, config.Namespace, config.PodIP, sftpPort)
+
+		// Manage the forwarders
+		for _, ic := range config.Intercepts {
+			lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", ic.AgentPort))
+			if err != nil {
+				return err
+			}
+
+			fwd := forwarder.NewForwarder(lisAddr, "", ic.Port)
+			state.AddIntercept(fwd, ic.MountPoint, ic.Env)
+			g.Go("forward-"+ic.Container, func(ctx context.Context) error {
+				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()))
+			})
+		}
 
 		if config.APIPort != 0 {
 			dgroup.ParentGroup(ctx).Go("API-server", func(ctx context.Context) error {

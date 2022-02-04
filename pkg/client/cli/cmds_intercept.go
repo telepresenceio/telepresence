@@ -685,7 +685,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	is.env = intercept.Environment
 	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
-	is.env["TELEPRESENCE_ROOT"] = intercept.Spec.MountPoint
+	is.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
 	if args.envFile != "" {
 		if err = is.writeEnvFile(); err != nil {
 			return true, err

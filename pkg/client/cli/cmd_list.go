@@ -185,8 +185,8 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 		fields = append(fields, kv{"Metadata", fmt.Sprintf("%q", ii.Metadata)})
 	}
 
-	if ii.Spec.MountPoint != "" {
-		fields = append(fields, kv{"Volume Mount Point", ii.Spec.MountPoint})
+	if ii.ClientMountPoint != "" {
+		fields = append(fields, kv{"Volume Mount Point", ii.ClientMountPoint})
 	} else if volumeMountsPrevented != nil {
 		fields = append(fields, kv{"Volume Mount Error", volumeMountsPrevented.Error()})
 	}

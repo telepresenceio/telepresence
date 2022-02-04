@@ -605,6 +605,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.Message = rIReq.Message
 			intercept.PodIp = rIReq.PodIp
 			intercept.SftpPort = rIReq.SftpPort
+			intercept.MountPoint = rIReq.MountPoint
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
 			intercept.Headers = rIReq.Headers
 			intercept.Metadata = rIReq.Metadata

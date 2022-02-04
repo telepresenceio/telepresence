@@ -19,52 +19,96 @@ type State interface {
 	AgentState() restapi.AgentState
 }
 
+type SimpleState interface {
+	State
+	AddIntercept(*forwarder.Forwarder, string, map[string]string)
+}
+
 // State of the Traffic Agent.
 type state struct {
-	forwarder   *forwarder.Forwarder
-	managerHost string
-	appHost     string
-	appPort     int32
-	chosenID    string
-	namespace   string
-	podIP       string
-	sftpPort    int32
-	env         map[string]string
+	managerHost     string
+	namespace       string
+	podIP           string
+	sftpPort        int32
+	interceptStates []*interceptState
 }
 
-func (s *state) InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*restapi.InterceptInfo, error) {
-	// The OSS agent is either intercepting or it isn't. There's no way to tell what it is that's being intercepted.
-	return s.forwarder.InterceptInfo(), nil
-}
-
-func NewState(
-	forwarder *forwarder.Forwarder,
-	managerHost, namespace, podIP string,
-	sftpPort int32,
-	env map[string]string,
-) State {
-	host, port := forwarder.Target()
+func NewState(managerHost, namespace, podIP string, sftpPort int32) SimpleState {
 	return &state{
-		forwarder:   forwarder,
 		managerHost: managerHost,
-		appHost:     host,
-		appPort:     port,
 		namespace:   namespace,
 		podIP:       podIP,
 		sftpPort:    sftpPort,
-		env:         env,
 	}
+}
+
+func (s *state) AddIntercept(forwarder *forwarder.Forwarder, mountPoint string, env map[string]string) {
+	s.interceptStates = append(s.interceptStates, newInterceptState(s, forwarder, mountPoint, env))
 }
 
 func (s *state) AgentState() restapi.AgentState {
 	return s
 }
 
+func (s *state) InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*restapi.InterceptInfo, error) {
+	for _, is := range s.interceptStates {
+		ii, err := is.interceptInfo(ctx, callerID, path, headers)
+		if err != nil {
+			return nil, err
+		}
+		if ii.Intercepted {
+			return ii, nil
+		}
+	}
+	return &restapi.InterceptInfo{}, nil
+}
+
 func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
-	s.forwarder.SetManager(sessionInfo, manager, version)
+	for _, is := range s.interceptStates {
+		is.setManager(sessionInfo, manager, version)
+	}
 }
 
 func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
+	var rs []*manager.ReviewInterceptRequest
+	for _, is := range s.interceptStates {
+		rs = append(rs, is.handleIntercepts(ctx, cepts)...)
+	}
+	return rs
+}
+
+type interceptState struct {
+	state      *state
+	forwarder  *forwarder.Forwarder
+	appHost    string
+	appPort    int32
+	mountPoint string
+	env        map[string]string
+	chosenID   string
+}
+
+func (s *interceptState) setManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+	s.forwarder.SetManager(sessionInfo, manager, version)
+}
+
+func (s *interceptState) interceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*restapi.InterceptInfo, error) {
+	// The OSS agent is either intercepting or it isn't. There's no way to tell what it is that's being intercepted.
+	return s.forwarder.InterceptInfo(), nil
+}
+
+func newInterceptState(s *state, forwarder *forwarder.Forwarder, mountPoint string, env map[string]string) *interceptState {
+	host, port := forwarder.Target()
+	return &interceptState{
+		state:      s,
+		forwarder:  forwarder,
+		appHost:    host,
+		appPort:    port,
+		mountPoint: mountPoint,
+		env:        env,
+	}
+}
+
+func (s *interceptState) handleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
 	var chosenIntercept, activeIntercept *manager.InterceptInfo
 
 	dlog.Debug(ctx, "HandleIntercepts called")
@@ -121,8 +165,9 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:                cept.Id,
 					Disposition:       manager.InterceptDispositionType_ACTIVE,
-					PodIp:             s.podIP,
-					SftpPort:          s.sftpPort,
+					PodIp:             s.state.podIP,
+					SftpPort:          s.state.sftpPort,
+					MountPoint:        s.mountPoint,
 					MechanismArgsDesc: "all TCP connections",
 					Environment:       s.env,
 				})
@@ -138,8 +183,9 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:                cept.Id,
 					Disposition:       manager.InterceptDispositionType_ACTIVE,
-					PodIp:             s.podIP,
-					SftpPort:          s.sftpPort,
+					PodIp:             s.state.podIP,
+					SftpPort:          s.state.sftpPort,
+					MountPoint:        s.mountPoint,
 					MechanismArgsDesc: "all TCP connections",
 					Environment:       s.env,
 				})
@@ -163,8 +209,4 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 	}
 
 	return reviews
-}
-
-func (s *state) Intercepting() bool {
-	return s.forwarder.Intercepting()
 }

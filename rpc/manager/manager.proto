@@ -55,6 +55,8 @@ message AgentInfo {
   reserved 6;
 }
 
+// InterceptSpec contains static information about an intercept. It is shared by
+// all running agent instances.
 message InterceptSpec {
   // A human-friendly name for this intercept.  This is usually the
   // same as the agent name below; the name/namespace of the
@@ -91,9 +93,6 @@ message InterceptSpec {
   // Identifier for the service port: either the name or port number
   string service_port_identifier = 10;
 
-  // Path to where the intercepted volumes were mounted locally
-  string mount_point = 11;
-
   // .uid.metadata of service associated with intercept
   string service_uid = 12;
 
@@ -110,6 +109,8 @@ message InterceptSpec {
 
   // The dial timeout to use when a dial is made on the intercepting workstation.
   int64 dial_timeout = 17;
+
+  reserved 11;
 }
 
 enum InterceptDispositionType {
@@ -171,6 +172,7 @@ message PreviewSpec {
   bool display_banner = 2;
 }
 
+// InterceptInfo contains information about a live intercept in an agent
 message InterceptInfo {
   InterceptSpec spec = 1;
 
@@ -181,8 +183,6 @@ message InterceptInfo {
   // if they are logged in.  This is used by extensions to
   // authenticate with external APIs, such as SystemA.
   string api_key = 13;
-
-  reserved 2;
 
   // preview_domain is the SystemA domain that will proxy in traffic
   // to this intercept, and preview_ingress is where it will get
@@ -203,6 +203,13 @@ message InterceptInfo {
   string pod_ip = 10;
   int32 sftp_port = 11;
 
+  // The directory where the client mounts the remote mount_point. Only
+  // set when obtaining InterceptInfo from the user daemon.
+  string client_mount_point = 2;
+
+  // The directory where the intercept mounts can be found in the agent
+  string mount_point = 16;
+
   // A human-friendly description of what the spec.mechanism_args say.
   // This is set by the agent's call to ReviewIntercept.
   string mechanism_args_desc = 12;
@@ -214,7 +221,7 @@ message InterceptInfo {
   map<string,string> metadata = 15;
 
   // The environment of the intercepted app
-  map<string, string> environment = 16;
+  map<string, string> environment = 17;
 }
 
 message SessionInfo {
@@ -270,6 +277,9 @@ message ReviewInterceptRequest {
   string pod_ip = 5;
   int32 sftp_port = 6;
 
+  // The directory where the intercept mounts can be found in the agent
+  string mount_point = 10;
+
   // A human-friendly description of what the
   // InterceptSpec.mechanism_args say.
   string mechanism_args_desc = 7;
@@ -281,7 +291,7 @@ message ReviewInterceptRequest {
   map<string,string> metadata = 9;
 
   // The environment of the intercepted app
-  map<string, string> environment = 18;
+  map<string, string> environment = 11;
 }
 
 message RemainRequest {

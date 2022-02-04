@@ -48,7 +48,8 @@ type forwardKey struct {
 
 type mountForward struct {
 	forwardKey
-	SftpPort int32
+	SftpPort         int32
+	RemoteMountPoint string
 }
 
 type portForward struct {
@@ -89,7 +90,7 @@ func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *m
 		if _, isLive := lpf.live[fk]; !isLive {
 			pfCtx, pfCancel := context.WithCancel(ctx)
 			livePortForward := &livePortForward{cancel: pfCancel}
-			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.Spec.ExtraPorts)
+			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint, ii.Spec.ExtraPorts)
 			dlog.Debugf(ctx, "Started forward for %+v", fk)
 			lpf.live[fk] = livePortForward
 		}
@@ -249,7 +250,7 @@ func (tm *TrafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 		ii := ii // Pin it
 		tm.mountPoints.Range(func(k, v interface{}) bool {
 			if v.(string) == ii.Spec.Name {
-				ii.Spec.MountPoint = k.(string)
+				ii.ClientMountPoint = k.(string)
 				return false
 			}
 			return true
@@ -526,7 +527,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		result.InterceptInfo = wr.intercept
 		if ir.MountPoint != "" && ii.SftpPort > 0 {
 			deleteMount = false // Mount-point is busy until intercept ends
-			ii.Spec.MountPoint = ir.MountPoint
+			ii.ClientMountPoint = ir.MountPoint
 		}
 		return result, nil
 	}
@@ -539,12 +540,12 @@ func (tm *TrafficManager) shouldForward(ii *manager.InterceptInfo) bool {
 
 // startForwards starts port forwards and mounts for the given forwardKey.
 // It assumes that the user has called shouldForward and is sure that something will be started.
-func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, extraPorts []int32) {
+func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, remoteMountPoint string, extraPorts []int32) {
 	if sftpPort > 0 {
 		// There's nothing to mount if the SftpPort is zero
 		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
 		wg.Add(1)
-		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort}, wg)
+		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort, remoteMountPoint}, wg)
 	}
 	for _, port := range extraPorts {
 		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, port))
@@ -629,8 +630,8 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 			// mount directives
 			"-o", "follow_symlinks",
 			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-			"localhost:" + install.TelAppMountPoint, // what to mount
-			mountPoint,                              // where to mount it
+			"localhost:" + mf.RemoteMountPoint, // what to mount
+			mountPoint,                         // where to mount it
 		}
 		exe := "sshfs"
 		if runtime.GOOS == "windows" {
