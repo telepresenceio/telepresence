@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -143,6 +142,9 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 	return licenseData.GetLicense(), licenseData.GetHostDomain(), nil
 }
 
+// GetTelepresencePro prompts the user to optionally install Telepresence Pro
+// if it isn't installed. If the user installs it, it also asks the user to
+// automatically update their configuration to use the new binary.
 func GetTelepresencePro(ctx context.Context) error {
 	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
@@ -214,16 +216,16 @@ func GetTelepresencePro(ctx context.Context) error {
 
 		b, err := yaml.Marshal(cfg)
 		if err != nil {
-			errcat.User.Newf("error marshaling updating config: %s", err)
+			return errcat.User.Newf("error marshaling updating config: %s", err)
 		}
 		cfgFile := client.GetConfigFile(ctx)
 		_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
-			errcat.User.Newf("error opening config file: %s", err)
+			return errcat.User.Newf("error opening config file: %s", err)
 		}
-		err = ioutil.WriteFile(cfgFile, b, 0644)
+		err = os.WriteFile(cfgFile, b, 0644)
 		if err != nil {
-			errcat.User.Newf("error writing config file: %s", err)
+			return errcat.User.Newf("error writing config file: %s", err)
 		}
 	}
 	return nil
