@@ -119,6 +119,7 @@ func connectorStatus(cmd *cobra.Command) error {
 			return err
 		}
 		fields = append(fields, kv{"Version", fmt.Sprintf("%s (api %d)", version.Version, version.ApiVersion)})
+		fields = append(fields, kv{"Executable", version.Executable})
 
 		if !cliutil.HasLoggedIn(ctx) {
 			fields = append(fields, kv{"Ambassador Cloud", "Logged out"})

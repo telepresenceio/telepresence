@@ -12,7 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func versionCheck(ctx context.Context, daemonType string, client interface {
+func versionCheck(ctx context.Context, daemonType string, daemonBinary string, client interface {
 	Version(context.Context, *empty.Empty, ...grpc.CallOption) (*common.VersionInfo, error)
 }) error {
 	if ctx.Value(quitting{}) != nil {
@@ -25,6 +25,11 @@ func versionCheck(ctx context.Context, daemonType string, client interface {
 	}
 	if version.Version != vi.Version {
 		return errcat.User.Newf("version mismatch. Client %s != %s Daemon %s, please quit telepresence and reconnect", version.Version, daemonType, vi.Version)
+	}
+	if daemonBinary != "" {
+		if vi.Executable != daemonBinary {
+			return errcat.User.Newf("executable mismatch. Connector using %s, configured to use %s, please quit telepresence and reconnect", vi.Executable, daemonBinary)
+		}
 	}
 	return nil
 }

@@ -249,6 +249,9 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
 
+	executable := s.Executable()
+	config.Daemons.UserDaemonBinary = executable
+
 	configYaml, err := yaml.Marshal(&config)
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
