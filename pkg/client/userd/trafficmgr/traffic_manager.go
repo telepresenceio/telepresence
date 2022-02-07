@@ -44,7 +44,7 @@ import (
 // Can be used when passing in custom commands to start up any resources needed for the commands.
 type SessionService interface {
 	Name() string
-	// Run should run the Session service. Run will be launched in its onw goroutine and it's expected that it blocks until the context is finished.
+	// Run should run the Session service. Run will be launched in its own goroutine and it's expected that it blocks until the context is finished.
 	Run(ctx context.Context, scout *scout.Reporter, session Session) error
 }
 
