@@ -571,7 +571,6 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 			}
 			spec.Ingress = ingress
 		}
-
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
 			return nil, err
