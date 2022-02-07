@@ -567,7 +567,7 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 		if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
 			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
 			if err != nil {
-				return false, err
+				return nil, err
 			}
 			spec.Ingress = ingress
 		}

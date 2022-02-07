@@ -362,7 +362,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				for _, ma := range ir.Spec.MechanismArgs {
 					switch ma {
 					case "--meta", "--path-equal", "--path-prefix", "--path-regex":
-						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-"+ma)), nil
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-"+ma)), nil, nil
 					}
 				}
 			}
