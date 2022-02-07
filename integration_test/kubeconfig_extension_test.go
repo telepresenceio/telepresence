@@ -89,9 +89,13 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	itest.TelepresenceOk(ctx, "connect")
 	defer itest.TelepresenceQuitOk(ctx)
 
-	stdout := itest.TelepresenceOk(ctx, "status")
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
-	require.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", len(ips)+1))
+	neverProxiedCount := len(ips) + 1
+	s.Eventually(func() bool {
+		stdout := itest.TelepresenceOk(ctx, "status")
+		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
+	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
+
 	s.Eventually(func() bool {
 		return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip) != nil
 	}, 15*time.Second, 2*time.Second, fmt.Sprintf("never-proxied IP %s is reachable", ip))

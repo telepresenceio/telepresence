@@ -42,11 +42,28 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 							Type:    "stringArray",
 							Default: json.RawMessage(`["auto"]`),
 							Usage: `` +
-								`Rather than intercepting all traffic service, only intercept traffic that matches this "HTTP2_HEADER=REGEXP" specifier. ` +
+								`Only intercept traffic that matches this "HTTP2_HEADER=REGEXP" specifier. ` +
 								`Instead of a "--http-match=HTTP2_HEADER=REGEXP" pair, you may say "--http-match=auto", which will automatically select a unique matcher for your intercept. ` +
 								`Alternatively, you may say "--http-match=all", which is a no-op, but will inhibit the default "--http-match=auto" when you are logged in. ` +
 								`If this flag is given multiple times, then it will only intercept traffic that matches *all* of the specifiers. ` +
 								`(default "auto" if you are logged in with 'telepresence login', default "all" otherwise)`,
+						},
+						"path-equal": {
+							Type:  "string",
+							Usage: `Only intercept traffic with paths that are exactly equal to this path once the query string is removed`,
+						},
+						"path-prefix": {
+							Type:  "string",
+							Usage: `Only intercept traffic with paths beginning with this prefix`,
+						},
+						"path-regex": {
+							Type:  "string",
+							Usage: `Only intercept traffic with paths that are entirely matched by this regular expression once the query string is removed`,
+						},
+						"meta": {
+							Type: "stringArray",
+							Usage: `` +
+								`Associates key=value pairs with the intercept that can later be retrieved using the Telepresence API service`,
 						},
 						"plaintext": {
 							Type: "bool",

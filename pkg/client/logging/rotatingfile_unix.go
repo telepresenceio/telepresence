@@ -4,20 +4,14 @@
 package logging
 
 import (
-	"io/fs"
-	"os"
+	"time"
 
 	"golang.org/x/term"
 )
 
-// createFile creates a new file or truncates an existing file.
-func createFile(fullPath string, perm fs.FileMode) (*os.File, error) {
-	return os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
-}
-
-// openForAppend opens a file for append or creates it if it doesn't exist.
-func openForAppend(logfilePath string, perm fs.FileMode) (*os.File, error) {
-	return os.OpenFile(logfilePath, os.O_WRONLY|os.O_APPEND, perm)
+// restoreCTimeAfterRename is a noop on unixes since the renamed file retains the creation time of the source.
+func restoreCTimeAfterRename(_ string, _ time.Time) error {
+	return nil
 }
 
 // IsTerminal returns whether the given file descriptor is a terminal

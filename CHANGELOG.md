@@ -2,12 +2,29 @@
 
 ### 2.5.0 (TBD)
 
+- Feature: The flags `--http-path-equal`, `--http-path-prefix`, and `--http-path-regex` can can be used in addition to the `--http-match`
+  flag to filter personal intercepts by the request URL path 
+
+- Feature: The flag `--http-meta` can be used to declare metadata key value pairs that will be returned by the Telepresence rest API
+  endpoint /intercept-info
+
+- Feature: Telepresence Login now prompts you to optionally install Telepresence Pro, which has some additional features when used with Ambassador Cloud.
+
 - Change: The verb "watch" was added to the set of required verbs when accessing services and workloads for the client RBAC ClusterRole
 
 - Change: Telepresence is no longer backward compatible with versions 2.4.4 or older because the deprecated multiplexing tunnel functionality was removed.
 
 - Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
   The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`. 
+
+- Bugfix: The also-proxy and never-proxy subnets are now displayed correctly when using the `telepresence status` command
+
+- Bugfix: Telepresence will no longer require `SETENV` privileges when starting the root daemon.
+
+- Bugfix: Telepresence will now parse device names containing dashes correctly when determining routes that it should never block.
+
+- Bugfix: The cluster domain (typically "cluster.local") is no longer added to the DNS `search` on Linux using `systemd-resolved`. Instead,
+  it is added as a `domain` so that names ending with it are routed to the DNS server.
 
 ### 2.4.10 (January 13, 2022)
 

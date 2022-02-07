@@ -162,6 +162,55 @@ func TestInitContext(t *testing.T) {
 		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg))
 	})
 
+	t.Run("birthtime updates after rotate", func(t *testing.T) {
+		ctx, _, _ := testSetup(t)
+		check := require.New(t)
+
+		c, err := InitContext(ctx, logName, NewRotateOnce())
+		loggerForTest.AddHook(&dtimeHook{})
+		check.NoError(err)
+		check.NotNil(c)
+		dlog.Info(c, "info message")
+		bt1 := loggerForTest.Out.(*RotatingFile).birthTime
+		closeLog(t)
+
+		c, err = InitContext(ctx, logName, NewRotateOnce())
+		loggerForTest.AddHook(&dtimeHook{})
+		check.NoError(err)
+		check.NotNil(c)
+		dlog.Info(c, "info message")
+		bt2 := loggerForTest.Out.(*RotatingFile).birthTime
+		closeLog(t)
+		check.Equal(bt1, bt2)
+	})
+
+	t.Run("next session appends when no rotate", func(t *testing.T) {
+		ctx, _, logFile := testSetup(t)
+		check := require.New(t)
+
+		c, err := InitContext(ctx, logName, RotateNever)
+		loggerForTest.AddHook(&dtimeHook{})
+		check.NoError(err)
+		check.NotNil(c)
+		infoMsg1 := "info message 1"
+		dlog.Info(c, infoMsg1)
+		closeLog(t)
+
+		c, err = InitContext(ctx, logName, RotateNever)
+		loggerForTest.AddHook(&dtimeHook{})
+		check.NoError(err)
+		check.NotNil(c)
+		infoMsg2 := "info message 2"
+		dlog.Info(c, infoMsg2)
+		closeLog(t)
+
+		bs, err := os.ReadFile(logFile)
+		check.NoError(err)
+		infoTs := dtime.Now().Format("2006-01-02 15:04:05.0000")
+		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg1))
+		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg2))
+	})
+
 	t.Run("old files are removed", func(t *testing.T) {
 		ctx, logDir, _ := testSetup(t)
 		check := require.New(t)

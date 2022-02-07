@@ -8,12 +8,13 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/sys/unix"
+	//nolint:depguard // We want no logging and no soft-context signal handling
+	"os/exec"
 
-	"github.com/datawire/dlib/dexec"
+	"golang.org/x/sys/unix"
 )
 
-func killProcess(_ context.Context, cmd *dexec.Cmd) {
+func killProcess(_ context.Context, cmd *exec.Cmd) {
 	// A process is sometimes not terminated gracefully by the SIGTERM, so we give
 	// it a second to succeed and then kill it forcefully.
 	time.AfterFunc(time.Second, func() {

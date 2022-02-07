@@ -21,6 +21,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -33,9 +34,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -342,7 +343,8 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 			}
 		}
 		if agentVer != nil {
-			if semver.MustParse("1.11.7").GE(*agentVer) {
+			switch {
+			case semver.MustParse("1.11.7").GE(*agentVer):
 				mas := ir.Spec.MechanismArgs
 				l := len(mas) - 1
 				for i, ma := range mas {
@@ -356,6 +358,13 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 					}
 				}
 				ir.Spec.MechanismArgs = mas[:l+1]
+			case semver.MustParse("1.11.8").GE(*agentVer):
+				for _, ma := range ir.Spec.MechanismArgs {
+					switch ma {
+					case "--meta", "--path-equal", "--path-prefix", "--path-regex":
+						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-"+ma)), nil
+					}
+				}
 			}
 		}
 	}
@@ -583,6 +592,11 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		}
 		err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
 		time.Sleep(time.Second)
+
+		// sshfs sometimes leave the mount point in a bad state. This will clean it up
+		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
+		defer cancel()
+		_ = dexec.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
 		return err
 	}, 3*time.Second, 6*time.Second)
 
@@ -671,13 +685,13 @@ func (tm *TrafficManager) reconcileAPIServers(ctx context.Context) {
 }
 
 func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
-	s := restapi.NewServer(tm, true)
+	s := restapi.NewServer(tm)
 	as := apiServer{Server: s}
 	ctx, as.cancel = context.WithCancel(ctx)
 	if tm.currentAPIServers == nil {
-		tm.currentAPIServers = map[int]apiServer{port: as}
+		tm.currentAPIServers = map[int]*apiServer{port: &as}
 	} else {
-		tm.currentAPIServers[port] = as
+		tm.currentAPIServers[port] = &as
 	}
 	go func() {
 		if err := s.ListenAndServe(ctx, port); err != nil {
@@ -687,32 +701,37 @@ func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
 }
 
 func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
-	m, err := header.NewMatcher(ic.Headers)
+	m, err := matcher.NewRequest(ic.Headers)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
 	if tm.currentMatchers == nil {
-		tm.currentMatchers = map[string]header.Matcher{ic.Id: m}
-	} else {
-		tm.currentMatchers[ic.Id] = m
+		tm.currentMatchers = make(map[string]*apiMatcher)
+	}
+	tm.currentMatchers[ic.Id] = &apiMatcher{
+		requestMatcher: m,
+		metadata:       ic.Metadata,
 	}
 }
 
-func (tm *TrafficManager) Intercepts(ctx context.Context, callerID string, h http.Header) (bool, error) {
+func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID, path string, h http.Header) (*restapi.InterceptInfo, error) {
 	tm.currentInterceptsLock.Lock()
 	defer tm.currentInterceptsLock.Unlock()
-	m := tm.currentMatchers[callerID]
-	if m == nil {
+
+	r := &restapi.InterceptInfo{ClientSide: true}
+	am := tm.currentMatchers[callerID]
+	switch {
+	case am == nil:
 		dlog.Debugf(ctx, "no matcher found for callerID %s", callerID)
-		return false, nil
+	case am.requestMatcher.Matches(path, h):
+		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(h))
+		r.Intercepted = true
+		r.Metadata = am.metadata
+	default:
+		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(h))
 	}
-	if m.Matches(h) {
-		dlog.Debugf(ctx, "%s: %s matches %s", callerID, m, header.Stringer(h))
-		return true, nil
-	}
-	dlog.Debugf(ctx, "%s: %s does not match %s", callerID, m, header.Stringer(h))
-	return false, nil
+	return r, nil
 }
 
 // AddLocalOnlyIntercept adds a local-only intercept

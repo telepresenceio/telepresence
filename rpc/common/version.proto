@@ -32,4 +32,7 @@ message VersionInfo {
 
   // Version is a "vSEMVER" string of the product version number.
   string version = 2;
+ 
+  // Executable is the path to the executable for the process.
+  string executable = 3;
 }

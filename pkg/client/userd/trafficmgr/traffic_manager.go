@@ -33,10 +33,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/header"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -81,6 +81,11 @@ type apiServer struct {
 	cancel context.CancelFunc
 }
 
+type apiMatcher struct {
+	requestMatcher matcher.Request
+	metadata       map[string]string
+}
+
 type TrafficManager struct {
 	*installer // installer is also a k8sCluster
 
@@ -122,8 +127,8 @@ type TrafficManager struct {
 	// currentIntercepts is the latest snapshot returned by the intercept watcher
 	currentIntercepts     []*manager.InterceptInfo
 	currentInterceptsLock sync.Mutex
-	currentMatchers       map[string]header.Matcher
-	currentAPIServers     map[int]apiServer
+	currentMatchers       map[string]*apiMatcher
+	currentAPIServers     map[int]*apiServer
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo

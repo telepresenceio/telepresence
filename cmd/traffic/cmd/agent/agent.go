@@ -282,7 +282,7 @@ func Main(ctx context.Context, args ...string) error {
 
 		if config.APIPort != 0 {
 			dgroup.ParentGroup(ctx).Go("API-server", func(ctx context.Context) error {
-				return restapi.NewServer(state.AgentState(), false).ListenAndServe(ctx, int(config.APIPort))
+				return restapi.NewServer(state.AgentState()).ListenAndServe(ctx, int(config.APIPort))
 			})
 		}
 

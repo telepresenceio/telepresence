@@ -31,9 +31,9 @@ type state struct {
 	sftpPort    int32
 }
 
-func (s *state) Intercepts(_ context.Context, _ string, _ http.Header) (bool, error) {
+func (s *state) InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*restapi.InterceptInfo, error) {
 	// The OSS agent is either intercepting or it isn't. There's no way to tell what it is that's being intercepted.
-	return s.forwarder.Intercepting(), nil
+	return s.forwarder.InterceptInfo(), nil
 }
 
 func NewState(forwarder *forwarder.Forwarder, managerHost, namespace, podIP string, sftpPort int32) State {

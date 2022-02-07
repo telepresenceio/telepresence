@@ -135,45 +135,72 @@ func (s *service) configReload(c context.Context) error {
 func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
+	wg := sync.WaitGroup{}
 	c, s.quit = context.WithCancel(c)
+nextSession:
 	for {
 		// Wait for a connection request
-		var oi *rpc.ConnectRequest
+		var cr *rpc.ConnectRequest
 		select {
 		case <-c.Done():
-			return nil
-		case oi = <-s.connectRequest:
+			break nextSession
+		case cr = <-s.connectRequest:
 		}
 
-		// Respond by setting the session and returning the error (or nil
-		// if everything is ok)
-		s.sessionLock.Lock() // Locked until Run
+		var session trafficmgr.Session
 		var rsp *rpc.ConnectInfo
-		s.session, rsp = trafficmgr.NewSession(c, s.scout, oi, s, sessionServices)
+
+		s.sessionLock.Lock() // Locked during creation
+		if s.session != nil {
+			// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
+			rsp = s.session.UpdateStatus(s.sessionContext, cr)
+		} else {
+			sCtx, sCancel := context.WithCancel(c)
+			session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices)
+			if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
+				s.sessionContext = session.WithK8sInterface(sCtx)
+				s.sessionCancel = sCancel
+				s.session = session
+			} else {
+				sCancel()
+			}
+		}
+		s.sessionLock.Unlock()
+
 		select {
 		case <-c.Done():
-			s.sessionLock.Unlock()
-			return nil
+			break nextSession
 		case s.connectResponse <- rsp:
+		default:
+			// Nobody there to read the response? That's fine. The user may have got
+			// impatient.
+			s.cancelSession()
+			continue
 		}
 		if rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
-			s.session = nil
-			s.sessionLock.Unlock()
 			continue
 		}
 
-		// Run the session synchronously and ensure that it is cleaned
-		// up properly when the context is cancelled
-		func(c context.Context) {
-			// The d.session.Cancel is called from Disconnect
-			c, s.sessionCancel = context.WithCancel(c)
-			c = s.session.WithK8sInterface(c)
-			s.sessionContext = c
-			s.sessionLock.Unlock()
-			if err := s.session.Run(c); err != nil {
+		// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
+		// the session is running. The s.sessionCancel is called from Disconnect
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.session.Run(s.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}
-		}(c)
+		}()
+	}
+	wg.Wait()
+	return nil
+}
+
+func (s *service) cancelSession() {
+	s.sessionLock.Lock()
+	defer s.sessionLock.Unlock()
+	if s.session != nil {
+		s.session = nil
+		s.sessionCancel()
 	}
 }
 

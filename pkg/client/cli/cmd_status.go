@@ -67,8 +67,11 @@ func daemonStatus(cmd *cobra.Command) error {
 			fmt.Fprintf(out, "    Include suffixes: %v\n", dns.IncludeSuffixes)
 			fmt.Fprintf(out, "    Timeout         : %v\n", dns.LookupTimeout.AsDuration())
 			fmt.Fprintf(out, "  Also Proxy : (%d subnets)\n", len(obc.AlsoProxySubnets))
-			fmt.Fprintf(out, "  Never Proxy: (%d subnets)\n", len(obc.NeverProxySubnets))
 			for _, subnet := range obc.AlsoProxySubnets {
+				fmt.Fprintf(out, "    - %s\n", iputil.IPNetFromRPC(subnet))
+			}
+			fmt.Fprintf(out, "  Never Proxy: (%d subnets)\n", len(obc.NeverProxySubnets))
+			for _, subnet := range obc.NeverProxySubnets {
 				fmt.Fprintf(out, "    - %s\n", iputil.IPNetFromRPC(subnet))
 			}
 		}
@@ -116,6 +119,7 @@ func connectorStatus(cmd *cobra.Command) error {
 			return err
 		}
 		fields = append(fields, kv{"Version", fmt.Sprintf("%s (api %d)", version.Version, version.ApiVersion)})
+		fields = append(fields, kv{"Executable", version.Executable})
 
 		if !cliutil.HasLoggedIn(ctx) {
 			fields = append(fields, kv{"Ambassador Cloud", "Logged out"})
