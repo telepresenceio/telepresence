@@ -7,7 +7,7 @@ import (
 	"net/url"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -16,13 +16,13 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func (s *service) ResolveIngressInfo(ctx context.Context, req *connector.IngressInfoRequest) (*connector.IngressInfoResponse, error) {
+func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
 	conn, err := ConnectSessionToSystemA(ctx, s.session)
 	if err != nil {
 		return nil, err
 	}
 
-	systemacli := connector.NewSystemAClient(conn)
+	systemacli := userdaemon.NewSystemAClient(conn)
 
 	return systemacli.ResolveIngressInfo(ctx, req)
 }
