@@ -17,6 +17,8 @@
 - Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
   The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`. 
 
+- Change: Telepresence now includes GOARCH of the binary in the metadata reprted.
+
 - Bugfix: The also-proxy and never-proxy subnets are now displayed correctly when using the `telepresence status` command
 
 - Bugfix: Telepresence will no longer require `SETENV` privileges when starting the root daemon.
