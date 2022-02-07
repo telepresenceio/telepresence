@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -93,31 +92,6 @@ func (kc *Cluster) check(c context.Context) error {
 		}
 	}
 	return c.Err()
-}
-
-// FindPodFromSelector returns a pod with the given name-hex-hex
-func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (k8sapi.Object, error) {
-	pods, err := k8sapi.Pods(c, namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range pods {
-		podLabels := pods[i].GetLabels()
-		match := true
-		// check if selector is in labels
-		for key, val := range selector {
-			if podLabels[key] != val {
-				match = false
-				break
-			}
-		}
-		if match {
-			return pods[i], nil
-		}
-	}
-
-	return nil, errors.New("pod not found")
 }
 
 // namespaceAccessible answers the question if the namespace is present and accessible

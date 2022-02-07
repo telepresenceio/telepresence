@@ -5,6 +5,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	typedCore "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,8 +31,8 @@ func GetService(c context.Context, name, namespace string) (Object, error) {
 }
 
 // Services returns all services found in the given Namespace
-func Services(c context.Context, namespace string) ([]Object, error) {
-	ls, err := services(c, namespace).List(c, meta.ListOptions{})
+func Services(c context.Context, namespace string, labelSelector labels.Set) ([]Object, error) {
+	ls, err := services(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +66,8 @@ func GetPod(c context.Context, name, namespace string) (Object, error) {
 }
 
 // Pods returns all pods found in the given Namespace
-func Pods(c context.Context, namespace string) ([]Object, error) {
-	ls, err := pods(c, namespace).List(c, meta.ListOptions{})
+func Pods(c context.Context, namespace string, labelSelector labels.Set) ([]Object, error) {
+	ls, err := pods(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
 		return nil, err
 	}
