@@ -18,6 +18,8 @@ import (
 
 const supportedKubeAPIVersion = "1.17.0"
 
+type NamespaceListener func(context.Context)
+
 // Cluster is a Kubernetes cluster reference
 type Cluster struct {
 	*Config
@@ -31,14 +33,14 @@ type Cluster struct {
 	// watch services and retrieve workloads in the namespace
 	nsWatcher *Watcher
 
-	// nsLock protects currentMappedNamespaces and namespaceListener
+	// nsLock protects currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex
 
 	// Current Namespace snapshot, filtered by mappedNamespaces
 	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
-	namespaceListener func(c context.Context)
+	namespaceListeners []NamespaceListener
 }
 
 func (kc *Cluster) ActualNamespace(namespace string) string {

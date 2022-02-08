@@ -68,6 +68,7 @@ type Session interface {
 	ManagerClient() manager.ManagerClient
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
+	AddNamespaceListener(k8s.NamespaceListener)
 }
 
 type Service interface {
@@ -221,7 +222,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		}
 	}
 	dlog.Debug(c, "Connected to root daemon")
-	tmgr.SetNamespaceListener(tmgr.updateDaemonNamespaces)
+	tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
 
 	// Collect data on how long connection time took
 	dlog.Debug(c, "Finished connecting to traffic manager")
