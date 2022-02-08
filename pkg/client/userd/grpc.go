@@ -29,7 +29,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -348,25 +347,31 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 	return &empty.Empty{}, nil
 }
 
-func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (*rpc.CommandGroups, error) {
-	return cliutil.CommandsToRPC(s.getCommands()), nil
+func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
+	s.logCall(ctx, "ListCommands", func(ctx context.Context) {
+		groups, err = cliutil.CommandsToRPC(s.getCommands()), nil
+	})
+	return
 }
 
-func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
-	cmd := &cobra.Command{
-		Use: "fauxmand",
-	}
-	cli.AddCommandGroups(cmd, commands.GetCommands())
-	cmd.SetArgs(req.GetOsArgs())
-	outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
-	cmd.SetOut(outW)
-	cmd.SetErr(errW)
-	err := cmd.ExecuteContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.RunCommandResponse{
-		Stdout: outW.Bytes(),
-		Stderr: errW.Bytes(),
-	}, nil
+func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
+	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
+		cmd := &cobra.Command{
+			Use: "fauxmand",
+		}
+		cli.AddCommandGroups(cmd, s.getCommands())
+		cmd.SetArgs(req.GetOsArgs())
+		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+		cmd.SetOut(outW)
+		cmd.SetErr(errW)
+		err = cmd.ExecuteContext(ctx)
+		if err != nil {
+			return
+		}
+		result = &rpc.RunCommandResponse{
+			Stdout: outW.Bytes(),
+			Stderr: errW.Bytes(),
+		}
+	})
+	return
 }
