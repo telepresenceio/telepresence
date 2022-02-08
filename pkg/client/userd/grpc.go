@@ -340,9 +340,8 @@ func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 
 func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(ctx, "Quit", func(c context.Context) {
-		s.sessionLock.Lock()
-		defer s.sessionLock.Unlock()
-		s.session = nil
+		s.sessionLock.RLock()
+		defer s.sessionLock.RUnlock()
 		s.quit()
 	})
 	return &empty.Empty{}, nil
