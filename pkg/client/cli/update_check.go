@@ -22,14 +22,14 @@ const checkDuration = 24 * time.Hour
 const binaryName = "telepresence"
 const cacheFilename = "update-checks.json"
 
-type updateChecker struct {
+type UpdateChecker struct {
 	NextCheck map[string]time.Time `json:"next_check"`
 	url       string
 }
 
 // newUpdateChecker returns a new update checker, possibly initialized from the users cache.
-func newUpdateChecker(ctx context.Context, url string) (*updateChecker, error) {
-	ts := &updateChecker{
+func NewUpdateChecker(ctx context.Context, url string) (*UpdateChecker, error) {
+	ts := &UpdateChecker{
 		url: url,
 	}
 
@@ -58,31 +58,31 @@ func forcedUpdateCheck(cmd *cobra.Command, _ []string) error {
 //   forcedCheck: if true, perform check regardless of if it's due or not
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	cloudCfg := client.GetConfig(cmd.Context()).Cloud
-	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
+	uc, err := NewUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}
 
 	ourVersion := client.Semver()
-	update, ok := uc.updateAvailable(&ourVersion, cmd.ErrOrStderr())
+	update, ok := uc.UpdateAvailable(&ourVersion, cmd.ErrOrStderr())
 	if !ok {
 		// Failed to read from remote server. Next attempt is due in an hour
-		return uc.storeNextCheck(cmd.Context(), time.Hour)
+		return uc.StoreNextCheck(cmd.Context(), time.Hour)
 	}
 	if update != nil {
 		fmt.Fprintf(cmd.OutOrStdout(),
 			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/telepresence/latest/install/upgrade/ for more info.\n",
 			binaryName, &ourVersion, update)
 	}
-	return uc.storeNextCheck(cmd.Context(), checkDuration)
+	return uc.StoreNextCheck(cmd.Context(), checkDuration)
 }
 
-func (uc *updateChecker) storeNextCheck(ctx context.Context, d time.Duration) error {
+func (uc *UpdateChecker) StoreNextCheck(ctx context.Context, d time.Duration) error {
 	uc.NextCheck[uc.url] = dtime.Now().Add(d)
 	return cache.SaveToUserCache(ctx, uc, cacheFilename)
 }
 
-func (uc *updateChecker) updateAvailable(currentVersion *semver.Version, errOut io.Writer) (*semver.Version, bool) {
+func (uc *UpdateChecker) UpdateAvailable(currentVersion *semver.Version, errOut io.Writer) (*semver.Version, bool) {
 	resp, err := http.Get(uc.url)
 	if err != nil {
 		// silently ignore connection failures
@@ -107,7 +107,7 @@ func (uc *updateChecker) updateAvailable(currentVersion *semver.Version, errOut 
 	return nil, true
 }
 
-func (uc *updateChecker) timeToCheck() bool {
+func (uc *UpdateChecker) timeToCheck() bool {
 	ts, ok := uc.NextCheck[uc.url]
 	return !ok || dtime.Now().After(ts)
 }
