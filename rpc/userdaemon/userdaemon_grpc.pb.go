@@ -7,6 +7,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -21,6 +22,8 @@ type SystemAClient interface {
 	// ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
 	// associated with an intercept
 	ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error)
+	// ReportAvailableNamespaces
+	ReportAvailableNamespaces(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableNamespacesClient, error)
 }
 
 type systemAClient struct {
@@ -40,6 +43,40 @@ func (c *systemAClient) ResolveIngressInfo(ctx context.Context, in *IngressInfoR
 	return out, nil
 }
 
+func (c *systemAClient) ReportAvailableNamespaces(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableNamespacesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &SystemA_ServiceDesc.Streams[0], "/telepresence.userdaemon.SystemA/ReportAvailableNamespaces", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &systemAReportAvailableNamespacesClient{stream}
+	return x, nil
+}
+
+type SystemA_ReportAvailableNamespacesClient interface {
+	Send(*AvailableNamespacesRequest) error
+	CloseAndRecv() (*emptypb.Empty, error)
+	grpc.ClientStream
+}
+
+type systemAReportAvailableNamespacesClient struct {
+	grpc.ClientStream
+}
+
+func (x *systemAReportAvailableNamespacesClient) Send(m *AvailableNamespacesRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *systemAReportAvailableNamespacesClient) CloseAndRecv() (*emptypb.Empty, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(emptypb.Empty)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SystemAServer is the server API for SystemA service.
 // All implementations must embed UnimplementedSystemAServer
 // for forward compatibility
@@ -47,6 +84,8 @@ type SystemAServer interface {
 	// ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
 	// associated with an intercept
 	ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error)
+	// ReportAvailableNamespaces
+	ReportAvailableNamespaces(SystemA_ReportAvailableNamespacesServer) error
 	mustEmbedUnimplementedSystemAServer()
 }
 
@@ -56,6 +95,9 @@ type UnimplementedSystemAServer struct {
 
 func (UnimplementedSystemAServer) ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
+}
+func (UnimplementedSystemAServer) ReportAvailableNamespaces(SystemA_ReportAvailableNamespacesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReportAvailableNamespaces not implemented")
 }
 func (UnimplementedSystemAServer) mustEmbedUnimplementedSystemAServer() {}
 
@@ -88,6 +130,32 @@ func _SystemA_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemA_ReportAvailableNamespaces_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SystemAServer).ReportAvailableNamespaces(&systemAReportAvailableNamespacesServer{stream})
+}
+
+type SystemA_ReportAvailableNamespacesServer interface {
+	SendAndClose(*emptypb.Empty) error
+	Recv() (*AvailableNamespacesRequest, error)
+	grpc.ServerStream
+}
+
+type systemAReportAvailableNamespacesServer struct {
+	grpc.ServerStream
+}
+
+func (x *systemAReportAvailableNamespacesServer) SendAndClose(m *emptypb.Empty) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *systemAReportAvailableNamespacesServer) Recv() (*AvailableNamespacesRequest, error) {
+	m := new(AvailableNamespacesRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SystemA_ServiceDesc is the grpc.ServiceDesc for SystemA service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +168,12 @@ var SystemA_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SystemA_ResolveIngressInfo_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ReportAvailableNamespaces",
+			Handler:       _SystemA_ReportAvailableNamespaces_Handler,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "rpc/userdaemon/userdaemon.proto",
 }

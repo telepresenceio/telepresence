@@ -116,9 +116,9 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) b
 	return !equal
 }
 
-func (kc *Cluster) SetNamespaceListener(nsListener func(context.Context)) {
+func (kc *Cluster) AddNamespaceListener(nsListener NamespaceListener) {
 	kc.nsLock.Lock()
-	kc.namespaceListener = nsListener
+	kc.namespaceListeners = append(kc.namespaceListeners, nsListener)
 	kc.nsLock.Unlock()
 }
 
@@ -149,10 +149,12 @@ func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
 		return
 	}
 	kc.currentMappedNamespaces = namespaces
-	if nsListener := kc.namespaceListener; nsListener != nil {
-		kc.nsLock.Unlock()
-		defer kc.nsLock.Lock()
-		nsListener(c)
+	for _, nsListener := range kc.namespaceListeners {
+		func() {
+			kc.nsLock.Unlock()
+			defer kc.nsLock.Lock()
+			nsListener(c)
+		}()
 	}
 }
 
