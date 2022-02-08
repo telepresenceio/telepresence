@@ -151,18 +151,20 @@ nextSession:
 		var rsp *rpc.ConnectInfo
 
 		s.sessionLock.Lock() // Locked during creation
-		if s.session != nil {
-			// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
-			rsp = s.session.UpdateStatus(s.sessionContext, cr)
-		} else {
-			sCtx, sCancel := context.WithCancel(c)
-			session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices)
-			if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
-				s.sessionContext = session.WithK8sInterface(sCtx)
-				s.sessionCancel = sCancel
-				s.session = session
+		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
+			if s.session != nil {
+				// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
+				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
-				sCancel()
+				sCtx, sCancel := context.WithCancel(c)
+				session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices)
+				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
+					s.sessionContext = session.WithK8sInterface(sCtx)
+					s.sessionCancel = sCancel
+					s.session = session
+				} else {
+					sCancel()
+				}
 			}
 		}
 		s.sessionLock.Unlock()

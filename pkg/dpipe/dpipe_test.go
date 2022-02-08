@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	//nolint:depguard // This short script has no logging and no Contexts.
 	"os/exec"
@@ -69,6 +70,7 @@ func TestDPipe_stderr(t *testing.T) {
 	ctx := makeLoggerOn(log)
 	peer := &bufClose{}
 	assert.NoError(t, DPipe(ctx, peer, echoBinary, "-d", "2", "hello stderr"))
+	time.Sleep(time.Second)
 	assert.Contains(t, log.String(), `level=error msg="hello stderr"`)
 	assert.Empty(t, peer.String())
 }
