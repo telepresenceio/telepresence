@@ -4,6 +4,7 @@ package telepresence.connector;
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
+import "rpc/userdaemon/userdaemon.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/connector";
 
@@ -78,6 +79,11 @@ service Connector {
 
   // RunCommand executes a CLI command.
   rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+
+  // ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+  // the cloud for default ingress values
+  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest) returns
+  (telepresence.userdaemon.IngressInfoResponse);
 }
 
 message CommandGroups {
@@ -293,6 +299,10 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
+
+  // The port number that service_port_identifer resolved into is
+  // used as the default port for the ingress for pro intercepts
+  telepresence.userdaemon.IngressInfoRequest service_props = 8;
 }
 
 message Notification {

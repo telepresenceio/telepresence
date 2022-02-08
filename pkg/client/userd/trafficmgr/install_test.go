@@ -20,27 +20,28 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dtest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func TestAddAgentToWorkload(t *testing.T) {
-	// Part 1: Build the testcases /////////////////////////////////////////
-	type testcase struct {
-		InputVersion  string
-		InputPortName string
-		InputWorkload k8sapi.Workload
-		InputService  *core.Service
+type testcase struct {
+	InputVersion  string
+	InputPortName string
+	InputWorkload k8sapi.Workload
+	InputService  *core.Service
 
-		OutputWorkload k8sapi.Workload
-		OutputService  *core.Service
-	}
-	testcases := map[string]testcase{}
+	OutputWorkload k8sapi.Workload
+	OutputService  *core.Service
+}
 
+func getTests(t *testing.T) map[string]testcase {
 	dirinfos, err := os.ReadDir("testdata/addAgentToWorkload")
 	if err != nil {
 		t.Fatal(err)
 	}
+	testcases := map[string]testcase{}
+
 	i := 0
 	for _, di := range dirinfos {
 		fileinfos, err := os.ReadDir(filepath.Join("testdata/addAgentToWorkload", di.Name()))
@@ -77,6 +78,12 @@ func TestAddAgentToWorkload(t *testing.T) {
 			testcases[tcName] = tc
 		}
 	}
+	return testcases
+}
+
+func TestAddAgentToWorkload(t *testing.T) {
+	// Part 1: Build the testcases /////////////////////////////////////////
+	testcases := getTests(t)
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
 	ctx := dlog.NewTestContext(t, true)
@@ -121,13 +128,28 @@ func TestAddAgentToWorkload(t *testing.T) {
 				if tcName == "cur/deployment-tpapi" {
 					apiPort = 9901
 				}
-				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(ctx,
-					tc.InputPortName,
-					managerImageName(ctx), // ignore extensions
+				svc := tc.InputService.DeepCopy()
+				obj := deepCopyObject(tc.InputWorkload)
+				cns := obj.GetPodTemplate().Spec.Containers
+				agent_image_name := managerImageName(ctx)
+
+				servicePort, container, containerPortIndex, err := install.FindMatchingPort(cns, tc.InputPortName, svc)
+				if err != nil {
+					return
+				}
+
+				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(
+					ctx,
+					&ServiceProps{
+						Service:            svc,
+						ServicePort:        servicePort,
+						Container:          container,
+						ContainerPortIndex: containerPortIndex,
+					},
+					agent_image_name, // ignore extensions
 					env.ManagerNamespace,
 					apiPort,
-					deepCopyObject(tc.InputWorkload),
-					tc.InputService.DeepCopy(),
+					obj,
 				)
 				if !assert.NoError(t, actualErr) {
 					return

@@ -1,0 +1,46 @@
+// This RPC is only used by the proprietary user-daemon and not the OSS one.
+
+syntax = "proto3";
+
+package telepresence.userdaemon;
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/userdaemon";
+
+service SystemA {
+  // ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
+  // associated with an intercept
+  rpc ResolveIngressInfo(IngressInfoRequest) returns (IngressInfoResponse);
+}
+
+// IngressInfoRequest represents the intercept properties required to resolve ingress info
+message IngressInfoRequest {
+  // The service uid defined in the service's metadata
+  string service_uid = 1;
+
+  // The service name
+  string service_name = 2;
+
+  // The port name as defined in the service specs
+  string service_port_identifier = 3;
+
+  // The port value as defined in the service specs
+  int32 service_port = 4;
+
+  // The namespace in which the intercept takes place
+  string namespace = 5;
+}
+
+// IngressInfoResponse represents the ingress properties required to configure a preview url
+message IngressInfoResponse {
+  // The layer-3 host
+  string host = 1;
+
+  // The layer-4 port
+  int32 port = 2;
+
+  // Whether or not to use TLS on the port
+  bool use_tls = 3;
+
+  // The layer-5 host
+  string l5host = 4;
+}

@@ -6,6 +6,7 @@ import (
 	context "context"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	userdaemon "github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -69,6 +70,9 @@ type ConnectorClient interface {
 	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
+	// ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+	// the cloud for default ingress values
+	ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error)
 }
 
 type connectorClient struct {
@@ -314,6 +318,15 @@ func (c *connectorClient) RunCommand(ctx context.Context, in *RunCommandRequest,
 	return out, nil
 }
 
+func (c *connectorClient) ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error) {
+	out := new(userdaemon.IngressInfoResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ResolveIngressInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -366,6 +379,9 @@ type ConnectorServer interface {
 	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
+	// ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+	// the cloud for default ingress values
+	ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -435,6 +451,9 @@ func (UnimplementedConnectorServer) ListCommands(context.Context, *emptypb.Empty
 }
 func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
+}
+func (UnimplementedConnectorServer) ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -833,6 +852,24 @@ func _Connector_RunCommand_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(userdaemon.IngressInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ResolveIngressInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/ResolveIngressInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ResolveIngressInfo(ctx, req.(*userdaemon.IngressInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -915,6 +952,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RunCommand",
 			Handler:    _Connector_RunCommand_Handler,
+		},
+		{
+			MethodName: "ResolveIngressInfo",
+			Handler:    _Connector_ResolveIngressInfo_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

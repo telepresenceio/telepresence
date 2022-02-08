@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -94,11 +95,15 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 }
 
 func (tm *TrafficManager) addAgent(
-	c context.Context, workload k8sapi.Workload, svcName, svcPortIdentifier, agentImageName string, telepresenceAPIPort uint16,
+	c context.Context,
+	workload k8sapi.Workload,
+	svcprops *ServiceProps,
+	agentImageName string,
+	telepresenceAPIPort uint16,
 ) *rpc.InterceptResult {
 	agentName := workload.GetName()
 	namespace := workload.GetNamespace()
-	svcUID, kind, err := tm.EnsureAgent(c, workload, svcName, svcPortIdentifier, agentImageName, telepresenceAPIPort)
+	svcUID, kind, err := tm.EnsureAgent(c, workload, svcprops, agentImageName, telepresenceAPIPort)
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
@@ -128,6 +133,13 @@ func (tm *TrafficManager) addAgent(
 		Environment:  agent.Environment,
 		ServiceUid:   svcUID,
 		WorkloadKind: kind,
+		ServiceProps: &userdaemon.IngressInfoRequest{
+			ServiceUid:            svcUID,
+			ServiceName:           svcprops.Service.Name,
+			ServicePortIdentifier: string(svcprops.ServicePort.Port),
+			ServicePort:           svcprops.ServicePort.Port,
+			Namespace:             namespace,
+		},
 	}
 }
 

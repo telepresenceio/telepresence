@@ -551,38 +551,6 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 	return nil
 }
 
-func (is *interceptState) ensureIngress(ctx context.Context, args *interceptArgs, ir *connector.CreateInterceptRequest, needLogin bool) error {
-	spec := args.previewSpec
-	if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
-		ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
-		if err != nil {
-			return err
-		}
-		spec.Ingress = ingress
-	}
-
-	if spec.Ingress == nil || needLogin {
-		// Ensure that the intercept can be made before logging in or asking the user questions about ingress
-		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
-			return err
-		}
-	}
-
-	if spec.Ingress == nil {
-		// Fill defaults
-		iis, err := is.connectorClient.GetIngressInfos(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, args.name, args.namespace, iis.IngressInfos)
-		if err != nil {
-			return err
-		}
-		spec.Ingress = ingress
-	}
-	return nil
-}
-
 func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	ir, err := is.createRequest(ctx)
 	if err != nil {
@@ -594,8 +562,14 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if args.previewEnabled {
-		if err = is.ensureIngress(ctx, args, ir, needLogin); err != nil {
-			return nil, err
+		spec := args.previewSpec
+
+		if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
+			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
+			if err != nil {
+				return nil, err
+			}
+			spec.Ingress = ingress
 		}
 	} else if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
@@ -676,6 +650,20 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	is.scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 
 	if args.previewEnabled {
+		if args.previewSpec.Ingress == nil {
+			ingressInfo, err := is.connectorClient.ResolveIngressInfo(ctx, r.GetServiceProps())
+			if err != nil {
+				return true, err
+			}
+
+			args.previewSpec.Ingress = &manager.IngressInfo{
+				Host:   ingressInfo.Host,
+				Port:   ingressInfo.Port,
+				UseTls: ingressInfo.UseTls,
+				L5Host: ingressInfo.Host,
+			}
+		}
+
 		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
 			Session: is.connInfo.SessionInfo,
 			Name:    args.name,

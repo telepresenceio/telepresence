@@ -133,7 +133,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	}()
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
 		var wl k8sapi.Workload
-		if result, wl = session.CanIntercept(c, ir); result == nil {
+		if result, wl, _ = session.CanIntercept(c, ir); result == nil {
 			var kind string
 			if wl != nil {
 				kind = wl.GetKind()
