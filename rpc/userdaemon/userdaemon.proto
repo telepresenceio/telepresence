@@ -4,12 +4,17 @@ syntax = "proto3";
 
 package telepresence.userdaemon;
 
+import "google/protobuf/empty.proto";
+
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/userdaemon";
 
 service SystemA {
   // ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
   // associated with an intercept
   rpc ResolveIngressInfo(IngressInfoRequest) returns (IngressInfoResponse);
+
+  // ReportAvailableNamespaces
+  rpc ReportAvailableNamespaces(stream AvailableNamespacesRequest) returns (google.protobuf.Empty);
 }
 
 // IngressInfoRequest represents the intercept properties required to resolve ingress info
@@ -43,4 +48,23 @@ message IngressInfoResponse {
 
   // The layer-5 host
   string l5host = 4;
+}
+
+// AvailableNamespacesRequest contains a list of namespaces that can be intercepted by the daemon
+message AvailableNamespacesRequest {
+  DaemonInfo daemon_info = 1;
+  repeated Namespace available_namespaces = 2;
+}
+
+message Namespace {
+  string uid = 1;
+  string name = 2;
+  bool is_default = 3;
+}
+
+// DaemonIdentity identifies a daemon so that System A can reach it back
+message DaemonInfo {
+  string daemon_id = 1;
+  string workstation_name = 2;
+  string kube_context_name = 3;
 }
