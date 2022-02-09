@@ -167,7 +167,7 @@ See https://www.notion.so/datawire/To-Release-Telepresence-2-x-x-2752ef26968444b
 
 ## Updating license documentation
 
-Run `make generate` and commit changes to `LICENSES.md` and `OPENSOURCE.md`
+Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDENCIES.md`
 
 ## Developing on Windows
 
