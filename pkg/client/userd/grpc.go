@@ -61,7 +61,8 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 			return
 		}
 		defer func() { err = callRecovery(recover(), err) }()
-		err = f(s.sessionContext, s.session)
+		ctx := dgroup.WithGoroutineName(s.sessionContext, "-"+callName)
+		err = f(ctx, s.session)
 	})
 	return
 }
