@@ -39,12 +39,18 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 					Preference: 100,
 					Flags: map[string]FlagInfo{
 						"match": {
+							Type:       "stringArray",
+							Default:    json.RawMessage(`["auto"]`),
+							Usage:      "",
+							Deprecated: "use --http-header",
+						},
+						"header": {
 							Type:    "stringArray",
 							Default: json.RawMessage(`["auto"]`),
 							Usage: `` +
 								`Only intercept traffic that matches this "HTTP2_HEADER=REGEXP" specifier. ` +
-								`Instead of a "--http-match=HTTP2_HEADER=REGEXP" pair, you may say "--http-match=auto", which will automatically select a unique matcher for your intercept. ` +
-								`Alternatively, you may say "--http-match=all", which is a no-op, but will inhibit the default "--http-match=auto" when you are logged in. ` +
+								`Instead of a "--http-header=HTTP2_HEADER=REGEXP" pair, you may say "--http-header=auto", which will automatically select a unique matcher for your intercept. ` +
+								`Alternatively, you may say "--http-header=all", which is a no-op, but will inhibit the default "--http-header=auto" when you are logged in. ` +
 								`If this flag is given multiple times, then it will only intercept traffic that matches *all* of the specifiers. ` +
 								`(default "auto" if you are logged in with 'telepresence login', default "all" otherwise)`,
 						},

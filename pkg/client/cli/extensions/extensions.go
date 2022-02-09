@@ -202,8 +202,13 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *Exte
 					flagname,
 					err)
 			}
-			es.flags.Var(val, mechname+"-"+flagname,
-				flagdata.Usage+fmt.Sprintf(" (implies %q)", "--mechanism="+mechname))
+			usage := ""
+			if flagdata.Usage != "" {
+				usage = fmt.Sprintf(`%s (implies "--mechanism=%s")`, flagdata.Usage, mechname)
+			}
+			flag := es.flags.VarPF(val, mechname+"-"+flagname, "", usage)
+			flag.Hidden = usage == ""
+			flag.Deprecated = flagdata.Deprecated
 		}
 	}
 
@@ -427,4 +432,10 @@ type FlagInfo struct {
 	// Default is the default value for this flag.  This field is optional; if it isn't
 	// specitified then the zero value is used.
 	Default json.RawMessage `json:"default,omitempty"`
+
+	//nolint:gocritic // this is not a deprecation comment
+	// Deprecated is set if the flag is deprecated in favor of something else. Deprecation
+	// means that the flag retains its original function, is hidden from help, and that using it will
+	// display this field as a warning.
+	Deprecated string `json:"deprecated,omitempty"`
 }
