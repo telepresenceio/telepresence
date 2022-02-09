@@ -61,11 +61,18 @@ generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.g
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	rm -rf ./vendor
+
 	export GOFLAGS=-mod=mod && go generate ./...
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod >OPENSOURCE.md
-	echo "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n" > LICENSES.md
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --output-type=json | jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' | sed -e 's/\[\([^]]*\)]()/\1/' >> LICENSES.md
+
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
+		--application-type=external >DEPENDENCIES.md
+	echo "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n" > DEPENDENCY_LICENSES.md
+
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --output-type=json --application-type=external \
+		| jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' \
+		| sed -e 's/\[\([^]]*\)]()/\1/' >> DEPENDENCY_LICENSES.md
+
 	rm -rf vendor
 
 .PHONY: generate-clean
@@ -75,8 +82,8 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 
 	rm -rf ./vendor
 	find pkg cmd -name 'generated_*.go' -delete
-	rm -f OPENSOURCE.md
-	rm -f LICENSES.md
+	rm -f DEPENDENCIES.md
+	rm -f DEPENDENCY_LICENSES.md
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
