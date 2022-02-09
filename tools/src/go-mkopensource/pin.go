@@ -3,4 +3,5 @@
 
 package ignore
 
-import "github.com/datawire/go-mkopensource"
+import "github.com/datawire/go-mkopensource/cmd/go-mkopensource"
+
