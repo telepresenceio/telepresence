@@ -65,13 +65,15 @@ generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.g
 	export GOFLAGS=-mod=mod && go generate ./...
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
-		--application-type=external >DEPENDENCIES.md
-	echo "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n" > DEPENDENCY_LICENSES.md
+	mkdir -p $(BUILDDIR)
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external >$(BUILDDIR)/DEPENDENCIES.txt
+	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[1-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --output-type=json --application-type=external \
-		| jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' \
-		| sed -e 's/\[\([^]]*\)]()/\1/' >> DEPENDENCY_LICENSES.md
+	echo "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n" > DEPENDENCY_LICENSES.md
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
+		--output-type=json --application-type=external > $(BUILDDIR)/DEPENDENCIES.json
+	jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' $(BUILDDIR)/DEPENDENCIES.json > $(BUILDDIR)/LICENSES.txt
+	sed -e 's/\[\([^]]*\)]()/\1/' $(BUILDDIR)/LICENSES.txt >> DEPENDENCY_LICENSES.md
 
 	rm -rf vendor
 
