@@ -28,6 +28,8 @@
 - Bugfix: The cluster domain (typically "cluster.local") is no longer added to the DNS `search` on Linux using `systemd-resolved`. Instead,
   it is added as a `domain` so that names ending with it are routed to the DNS server.
 
+- Bugfix: Fixed a bug where the `--json` flag did not output json for `telepresence list` when there were no workloads.
+
 ### 2.4.10 (January 13, 2022)
 
 - Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 
@@ -53,8 +55,6 @@
 
 - Bugfix: Auto installer will no longer not emit backslash separators for the `/tel-app-mounts` paths in the
   traffic-agent container spec when running on Windows
-
-- Bugfix: Fixed a bug where the `--json` flag did not output json for `telepresence list` when there were no workloads.
 
 ### 2.4.9 (December 9, 2021)
 
