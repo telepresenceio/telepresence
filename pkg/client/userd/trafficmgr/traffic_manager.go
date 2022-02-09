@@ -487,7 +487,11 @@ func (tm *TrafficManager) getInfosForWorkloads(
 }
 
 func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
-	snapshotAvailable := tm.wlWatcher.subscribe(c)
+	sCtx, sCancel := context.WithCancel(c)
+	// We need to make sure the subscription ends when we leave this method, since this is the one consuming the snapshotAvailable channel.
+	// Otherwise, the goroutine that writes to the channel will leak.
+	defer sCancel()
+	snapshotAvailable := tm.wlWatcher.subscribe(sCtx)
 	for {
 		select {
 		case <-c.Done():

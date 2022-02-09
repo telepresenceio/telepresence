@@ -41,8 +41,24 @@ func callRecovery(r interface{}, err error) error {
 	return err
 }
 
+type reqNumberKey struct{}
+
+func getReqNumber(ctx context.Context) int64 {
+	num := ctx.Value(reqNumberKey{})
+	if num == nil {
+		return 0
+	}
+	return num.(int64)
+}
+
+func withReqNumber(ctx context.Context, num int64) context.Context {
+	return context.WithValue(ctx, reqNumberKey{}, num)
+}
+
 func (s *service) callCtx(ctx context.Context, name string) context.Context {
-	return dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s-%d", name, atomic.AddInt64(&s.ucn, 1)))
+	num := atomic.AddInt64(&s.ucn, 1)
+	ctx = withReqNumber(ctx, num)
+	return dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s-%d", name, num))
 }
 
 func (s *service) logCall(c context.Context, callName string, f func(context.Context)) {
@@ -61,7 +77,9 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 			return
 		}
 		defer func() { err = callRecovery(recover(), err) }()
-		err = f(s.sessionContext, s.session)
+		num := getReqNumber(c)
+		ctx := dgroup.WithGoroutineName(s.sessionContext, fmt.Sprintf("/%s-%d", callName, num))
+		err = f(ctx, s.session)
 	})
 	return
 }
