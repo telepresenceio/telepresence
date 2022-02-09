@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -66,15 +65,15 @@ func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) er
 		return errcat.User.New("the local-only and remote-only options are mutually exclusive")
 	}
 
-	return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
+	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		rq := &manager.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
 		if !lls.remoteOnly {
-			_, err := connectorClient.SetLogLevel(ctx, rq)
+			_, err := cs.userD.SetLogLevel(ctx, rq)
 			if err != nil {
 				return err
 			}
 
-			err = cliutil.WithStartedDaemon(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+			err = cliutil.WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 				_, err := daemonClient.SetLogLevel(ctx, rq)
 				return err
 			})

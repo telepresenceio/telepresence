@@ -170,6 +170,7 @@ agentInjector:
     failurePolicy: Ignore
     sideEffects: None
     timeoutSeconds: 5
+  appPortStrategy: http2Probe
 
 ################################################################################
 ## Telepresence API Server Configuration

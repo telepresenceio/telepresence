@@ -10,10 +10,12 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -47,8 +49,8 @@ func main() {
 			SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 			SilenceUsage:  true, // our FlagErrorFunc will handle it
 		}
-		cmd.AddCommand(connector.Command())
-		cmd.AddCommand(daemon.Command())
+		cmd.AddCommand(userd.Command(commands.GetCommands, []userd.DaemonService{}, []trafficmgr.SessionService{}))
+		cmd.AddCommand(rootd.Command())
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			os.Exit(1)
@@ -61,6 +63,9 @@ func main() {
 		}
 		ctx = client.WithConfig(ctx, cfg)
 		cmd = cli.Command(ctx)
+		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			return errcat.User.New(err)
+		})
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			if errcat.GetCategory(err) > errcat.NoLogs {
@@ -87,7 +92,7 @@ func isDaemon() bool {
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
 	w := cmd.ErrOrStderr()
 	first := true
-	for _, proc := range []string{daemon.ProcessName, connector.ProcessName} {
+	for _, proc := range []string{rootd.ProcessName, userd.ProcessName} {
 		if summary, err := logging.SummarizeLog(ctx, proc); err != nil {
 			fmt.Fprintf(w, "failed to scan %s logs: %v\n", proc, err)
 		} else if summary != "" {

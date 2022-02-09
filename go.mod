@@ -9,6 +9,7 @@ require (
 	github.com/datawire/ambassador/v2 v2.0.2-rc.1.0.20210915144712-7bc28ed11dfc
 	github.com/datawire/dlib v1.2.4-0.20210629021142-e221f3b9c3b8
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/godbus/dbus/v5 v5.0.4
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.2
@@ -23,7 +24,7 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.4.9
+	github.com/telepresenceio/telepresence/rpc/v2 v2.5.0-test.1
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
@@ -32,25 +33,19 @@ require (
 	golang.zx2c4.com/wireguard/windows v0.3.11
 	google.golang.org/grpc v1.38.0
 	google.golang.org/protobuf v1.25.0
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 	helm.sh/helm/v3 v3.6.3
 	k8s.io/api v0.21.0
 	k8s.io/apimachinery v0.21.0
+	k8s.io/cli-runtime v0.21.0
 	k8s.io/client-go v0.21.0
 	k8s.io/kubectl v0.21.0
-	k8s.io/kubernetes v1.21.0
 	sigs.k8s.io/yaml v1.2.0
 )
 
 require (
-	cloud.google.com/go v0.54.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
-	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.12 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.5 // indirect
-	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
-	github.com/Azure/go-autorest/logger v0.2.0 // indirect
-	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
@@ -79,7 +74,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/fatih/color v1.10.0 // indirect
-	github.com/form3tech-oss/jwt-go v3.2.2+incompatible // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/go-logr/logr v0.4.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
@@ -115,7 +109,6 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mitchellh/copystructure v1.1.1 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
-	github.com/mitchellh/mapstructure v1.1.2 // indirect
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect
 	github.com/moby/spdystream v0.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -149,57 +142,16 @@ require (
 	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a // indirect
 	gopkg.in/gorp.v1 v1.7.2 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/apiextensions-apiserver v0.21.0 // indirect
 	k8s.io/apiserver v0.21.0 // indirect
-	k8s.io/cli-runtime v0.21.0 // indirect
 	k8s.io/component-base v0.21.0 // indirect
 	k8s.io/klog/v2 v2.10.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7 // indirect
-	k8s.io/metrics v0.21.0 // indirect
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
 	rsc.io/letsencrypt v0.0.3 // indirect
-	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.15 // indirect
-	sigs.k8s.io/controller-runtime v0.8.0 // indirect
-	sigs.k8s.io/gateway-api v0.2.0 // indirect
 	sigs.k8s.io/kustomize/api v0.8.5 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.10.15 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.0 // indirect
-)
-
-// Because we (unfortunately) need to require k8s.io/kubernetes, which
-// is (unfortunately) managed in a way that makes it hostile to being
-// used as a library (see
-// https://news.ycombinator.com/item?id=27827389) we need to provide
-// replacements for a bunch of k8s.io modules that it refers to by
-// bogus/broken v0.0.0 versions.
-replace (
-	k8s.io/api => k8s.io/api v0.21.0
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.21.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.21.0
-	k8s.io/apiserver => k8s.io/apiserver v0.21.0
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.21.0
-	k8s.io/client-go => k8s.io/client-go v0.21.0
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.21.0
-	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.21.0
-	k8s.io/code-generator => k8s.io/code-generator v0.21.0
-	k8s.io/component-base => k8s.io/component-base v0.21.0
-	k8s.io/component-helpers => k8s.io/component-helpers v0.21.0
-	k8s.io/controller-manager => k8s.io/controller-manager v0.21.0
-	k8s.io/cri-api => k8s.io/cri-api v0.21.0
-	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.21.0
-	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.21.0
-	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.21.0
-	k8s.io/kube-proxy => k8s.io/kube-proxy v0.21.0
-	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.21.0
-	k8s.io/kubectl => k8s.io/kubectl v0.21.0
-	k8s.io/kubelet => k8s.io/kubelet v0.21.0
-	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.21.0
-	k8s.io/metrics => k8s.io/metrics v0.21.0
-	k8s.io/mount-utils => k8s.io/mount-utils v0.21.0
-	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.21.0
-	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.21.0
-	k8s.io/sample-controller => k8s.io/sample-controller v0.21.0
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

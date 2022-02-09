@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
@@ -77,7 +76,7 @@ const (
 )
 
 type PacketHandler interface {
-	connpool.Handler
+	tunnel.Handler
 
 	// HandlePacket handles a packet that was read from the TUN device
 	HandlePacket(ctx context.Context, pkt Packet)
@@ -181,27 +180,10 @@ type handler struct {
 
 	// random generator for initial sequence number
 	rnd *rand.Rand
-
-	// synPacket is the initial syn packet received on a connect request. It is
-	// dropped once the manager responds to the connect attempt
-	// Deprecated
-	synPacket Packet
-
-	muxTunnel connpool.MuxTunnel    // Deprecated
-	fromMgr   chan connpool.Message // Deprecated
-
-	// isClosing indicates whether Close() has been called on the TUN-device
-	// Deprecated
-	isClosing int32
-
-	// readyToFin will be closed once it is safe for the handler to send a FIN packet and terminate the connection
-	// Deprecated
-	readyToFin chan interface{}
 }
 
 func NewHandler(
 	streamCreator StreamCreator,
-	muxTunnel connpool.MuxTunnel,
 	dispatcherClosing *int32,
 	toTun ip.Writer,
 	id tunnel.ConnID,
@@ -210,7 +192,6 @@ func NewHandler(
 ) PacketHandler {
 	h := &handler{
 		streamCreator:     streamCreator,
-		muxTunnel:         muxTunnel,
 		id:                id,
 		remove:            remove,
 		toTun:             toTun,
@@ -223,8 +204,6 @@ func NewHandler(
 		wfState:           stateIdle,
 		rnd:               rand.New(rndSource),
 		tunDone:           make(chan struct{}),
-		fromMgr:           make(chan connpool.Message, ioChannelSize),
-		readyToFin:        make(chan interface{}),
 	}
 	h.sendCondition = sync.NewCond(&h.sendLock)
 	return h
@@ -246,11 +225,6 @@ func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
 
 func (h *handler) Close(ctx context.Context) {
 	if h.state() == stateEstablished || h.state() == stateSynReceived {
-		if h.muxTunnel != nil {
-			// Wait for the fromMgr queue to drain before sending a FIN
-			atomic.StoreInt32(&h.isClosing, 1)
-			<-h.readyToFin
-		}
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
 	}
@@ -292,20 +266,13 @@ func (h *handler) Start(ctx context.Context) {
 			}
 		}()
 		defer func() {
-			if h.muxTunnel != nil {
-				_ = h.sendConnControl(ctx, connpool.Disconnect)
-			} else if h.stream != nil {
+			if h.stream != nil {
 				_ = h.stream.CloseSend(ctx)
 			}
 		}()
 		h.processPackets(ctx)
 		h.wg.Wait()
 	}()
-	if h.muxTunnel != nil {
-		h.fromMgr = make(chan connpool.Message, ioChannelSize)
-		h.readyToFin = make(chan interface{})
-		go h.readFromMgrMux(ctx) // Needs to start here to handle initial control packets
-	}
 }
 
 func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32, forceAck bool) {
@@ -508,19 +475,13 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 
 	h.setSequence(uint32(h.RandomSequence()))
 	h.setState(ctx, stateSynReceived)
-	if h.muxTunnel != nil {
-		h.synPacket = syn
-		err = h.sendConnControl(ctx, connpool.Connect)
-	} else {
-		// Reply to the SYN, then establish a connection. We send a reset if that fails.
-		h.sendSynReply(ctx, syn)
-		defer syn.Release()
-		if h.stream, err = h.streamCreator(ctx); err == nil {
-			go h.readFromMgrLoop(ctx)
-		}
+	// Reply to the SYN, then establish a connection. We send a reset if that fails.
+	h.sendSynReply(ctx, syn)
+	defer syn.Release()
+	if h.stream, err = h.streamCreator(ctx); err == nil {
+		go h.readFromMgrLoop(ctx)
 	}
 	if err != nil {
-		h.synPacket = nil
 		dlog.Error(ctx, err)
 		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
 			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
@@ -596,11 +557,14 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 			return quitByUs
 		}
 	case sq > lastAck:
+		if payloadLen == 0 {
+			break
+		}
 		if sq <= h.lastKnown {
 			// Previous packet lost by us. Don't ack this one, just treat it
 			// as the next lost packet.
 			if payloadLen > 0 {
-				lk := tcpHdr.Sequence() + uint32(payloadLen)
+				lk := sq + uint32(payloadLen)
 				if lk > h.lastKnown {
 					h.lastKnown = lk
 					h.packetsLost++
@@ -618,13 +582,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	case sq == lastAck-1 && payloadLen == 0:
 		// keep alive, force is needed because the ackNbr is unchanged
 		h.forceSendAck(ctx)
-		go func() {
-			if h.muxTunnel != nil {
-				_ = h.sendConnControl(ctx, connpool.KeepAlive)
-			} else {
-				h.sendStreamControl(ctx, tunnel.KeepAlive)
-			}
-		}()
+		go h.sendStreamControl(ctx, tunnel.KeepAlive)
 		return pleaseContinue
 	default:
 		// resend of already acknowledged packet. Just ignore
@@ -636,7 +594,7 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 
 	switch {
 	case payloadLen > 0:
-		h.lastKnown = tcpHdr.Sequence() + uint32(payloadLen)
+		h.lastKnown = sq + uint32(payloadLen)
 		release = false
 		if !h.sendToMgr(ctx, pkt) {
 			h.packetsLost++

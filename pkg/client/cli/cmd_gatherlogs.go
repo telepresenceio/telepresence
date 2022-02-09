@@ -14,8 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -87,7 +85,9 @@ type anonymizer struct {
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
 func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error {
-	scout := scout.NewScout(ctx, "cli")
+	scout := scout.NewReporter(ctx, "cli")
+	scout.Start(log.WithDiscardingLogger(ctx))
+
 	// Get the log directory and return the error if we can't get it
 	logDir, err := filelocation.AppUserLogDir(ctx)
 	if err != nil {
@@ -134,18 +134,19 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	default:
 		return errcat.User.New("Options for --daemons are: all, root, user, or None")
 	}
-	// Add metadata about the request so we can track usage + see which
+	// Add metadata about the request, so we can track usage + see which
 	// types of logs people are requesting more frequently.
 	// This also gives us an idea about how much usage this command is
 	// getting.
-	scout.SetMetadatum("daemon_logs", daemonLogs)
-	scout.SetMetadatum("traffic_manager_logs", gl.trafficManager)
-	scout.SetMetadatum("traffic_agent_logs", gl.trafficAgents)
-	scout.SetMetadatum("get_pod_yaml", gl.podYaml)
-	scout.SetMetadatum("anonymized_logs", gl.anon)
-	scout.Report(log.WithDiscardingLogger(ctx), "used_gather_logs")
+	dc := log.WithDiscardingLogger(ctx)
+	scout.SetMetadatum(dc, "daemon_logs", daemonLogs)
+	scout.SetMetadatum(dc, "traffic_manager_logs", gl.trafficManager)
+	scout.SetMetadatum(dc, "traffic_agent_logs", gl.trafficAgents)
+	scout.SetMetadatum(dc, "get_pod_yaml", gl.podYaml)
+	scout.SetMetadatum(dc, "anonymized_logs", gl.anon)
+	scout.Report(dc, "used_gather_logs")
 
-	// Get all logs from the logdir that match the daemons the user cares about.
+	// Get all logs from the logDir that match the daemons the user cares about.
 	logFiles, err := os.ReadDir(logDir)
 	if err != nil {
 		return errcat.User.New(err)
@@ -178,7 +179,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 			Agents:         gl.trafficAgents,
 			GetPodYaml:     gl.podYaml,
 		}
-		err = withConnector(cmd, false, func(_ context.Context, _ connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
+		err = withConnector(cmd, false, nil, func(_ context.Context, _ *connectorState) error {
 			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				lr, err := managerClient.GetLogs(ctx, rq)
 				if err != nil {

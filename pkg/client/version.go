@@ -21,6 +21,10 @@ func Semver() semver.Version {
 	return version.Structured()
 }
 
+func Executable() (string, error) {
+	return version.GetExecutable()
+}
+
 // GetInstallMechanism returns how the executable was installed on the machine.
 func GetInstallMechanism() (string, error) {
 	execPath, err := os.Executable()

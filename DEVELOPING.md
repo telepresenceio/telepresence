@@ -16,7 +16,7 @@
 
  - `DTEST_KUBECONFIG` (optional) is the cluster that is used by tests,
    if set.  Otherwise the tests will automatically use a K3s cluster
-   running locally in Docker.  It is not normally nescessary to set
+   running locally in Docker.  It is not normally necessary to set
    this, but it is useful to set it in order to test against different
    Kubernetes versions/configurations than what
    https://github.com/datawire/dtest uses.
@@ -25,7 +25,7 @@
    pushed to by the tests, if set.  Otherwise, the tests will
    automatically use a registry running locally in Docker
    ("localhost:5000").  The tests will push images named `tel2` and
-   `tel2-base` with various version tags.  It is not nescessary to set
+   `tel2-base` with various version tags.  It is not necessary to set
    this unless you have set `DTEST_KUBECONFIG`.
 
 The output of `make help` has a bit more information.
@@ -135,69 +135,14 @@ $ sudo id
 uid=0(root) gid=0(root) groups=0(root)
 
 $ make check
-[make] TELEPRESENCE_VERSION=v2.3.5-63-gbaf1db29-1626379548
-
-cd tools/src/ko && go build -o /home/lukeshu/src/github.com/telepresenceio/telepresence-x/tools/bin/ko $(sed -En 's,^import "(.*)"$,\1,p' pin.go)
-
-mkdir -p tools
-curl -sfL https://get.helm.sh/helm-v3.5.4-linux-amd64.tar.gz -o tools/helm-v3.5.4-linux-amd64.tar.gz
-mkdir -p tools/bin
-tar -C tools/bin -zxmf tools/helm-v3.5.4-linux-amd64.tar.gz --strip-components=1 linux-amd64/helm
-
-go test -timeout=15m ./...
-?       github.com/telepresenceio/telepresence/v2/build-aux     [no test files]
-?       github.com/telepresenceio/telepresence/v2/cmd/telepresence      [no test files]
-?       github.com/telepresenceio/telepresence/v2/cmd/traffic   [no test files]
-ok      github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent (cached)
-ok      github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager       (cached)
-?       github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster      [no test files]
-ok      github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator      (cached)
-ok      github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state        (cached)
-?       github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test [no test files]
-ok      github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable    (cached)
-ok      github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil   (cached)
-ok      github.com/telepresenceio/telepresence/v2/pkg/client    (cached)
-?       github.com/telepresenceio/telepresence/v2/pkg/client/actions    [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/cache      [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/client/cli        580.873s
-?       github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil        [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions     (cached)
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector  [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue  [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout   [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate      [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth       (cached)
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth/authdata      [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_grpc       [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_k8s        [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_trafficmgr 615.512s
-?       github.com/telepresenceio/telepresence/v2/pkg/client/daemon     [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dbus        [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/client/logging    (cached)
-?       github.com/telepresenceio/telepresence/v2/pkg/connpool  [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/dnet      [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/dpipe     [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/filelocation      (cached)
-?       github.com/telepresenceio/telepresence/v2/pkg/forwarder [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/install   [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/install/resource  [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/iputil    [no test files]
-ok      github.com/telepresenceio/telepresence/v2/pkg/subnet    (cached)
-?       github.com/telepresenceio/telepresence/v2/pkg/systema   [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/systema/internal/loopback [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/tun       [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/tun/buffer        [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/tun/icmp  [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/tun/ip    [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/tun/tcp   [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/tun/udp   [no test files]
-?       github.com/telepresenceio/telepresence/v2/pkg/version   [no test files]
+[make] TELEPRESENCE_VERSION=v2.4.9-1-g349d3bbb-1638829681
+GOOS=linux GOARCH=amd64 go run ./build-aux/package_embedded_chart/main.go v2.4.9-1-g349d3bbb-1638829681
+...
 ```
 
 The first time you run the tests, you should use `make check`, to get
 `make` to automatically create the requisite `ko` and `heml` tool
-binaries.  Howver, after that initial run, you can isntead use
+binaries.  However, after that initial run, you can instead use
 `gotestsum` or `go test` if you prefer.
 
 ### I've made a change to the agent-installer, how do I update the testdata output files?
@@ -213,12 +158,16 @@ run, though).  Be sure to look at the diff and make sure that new
 behavior is actually correct!
 
 ```console
-$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/connector/userd_trafficmgr
+$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/userd/trafficmgr
 ```
 
 ## Building for Release
 
 See https://www.notion.so/datawire/To-Release-Telepresence-2-x-x-2752ef26968444b99d807979cde06f2f
+
+## Updating license documentation
+
+Run `make generate` and commit changes to `LICENSES.md` and `OPENSOURCE.md`
 
 ## Developing on Windows
 
@@ -306,6 +255,7 @@ environment.
 
 ### Errors from `make generate`
 
+#### Outdated or missing bash
 When running `make generate` you may hit errors that look like:
 
 ```
@@ -319,4 +269,20 @@ In MacOS this can be done installing it from Homebrew:
 
 ```bash
 brew install bash
+```
+
+#### Missing go.sum entries
+If you get an error like this:
+
+```
+cd tools/src/go-mkopensource && GOOS= GOARCH= go build -o /home/andres/source/production/telepresence/tools/bin/go-mkopensource $(sed -En 's,^import "(.*)".*,\1,p' pin.go)
+missing go.sum entry for module providing package github.com/datawire/go-mkopensource; to add:
+	go mod download github.com/datawire/go-mkopensource
+```
+
+Add the missing entries by going to the folder that caused the failure (in this case it's
+/home/andres/source/production/telepresence/tools/bin/go-mkopensource) and run the command provided by go:
+
+```
+go mod download github.com/datawire/go-mkopensource
 ```

@@ -12,8 +12,8 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -33,7 +33,6 @@ type Forwarder struct {
 	sessionInfo *manager.SessionInfo
 
 	intercept  *manager.InterceptInfo
-	muxTunnel  connpool.MuxTunnel
 	mgrVersion semver.Version
 }
 
@@ -50,7 +49,6 @@ func (f *Forwarder) SetManager(sessionInfo *manager.SessionInfo, manager manager
 	defer f.mu.Unlock()
 	f.sessionInfo = sessionInfo
 	f.manager = manager
-	f.muxTunnel = nil // any existing tunnel is lost when a reconnect happens
 	f.mgrVersion = version
 }
 
@@ -112,12 +110,6 @@ func (f *Forwarder) Listen(ctx context.Context) (*net.TCPListener, error) {
 }
 
 func (f *Forwarder) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.muxTunnel != nil {
-		_ = f.muxTunnel.CloseSend()
-	}
 	f.lCancel()
 	return nil
 }
@@ -127,6 +119,17 @@ func (f *Forwarder) Target() (string, int32) {
 	defer f.mu.Unlock()
 
 	return f.targetHost, f.targetPort
+}
+
+func (f *Forwarder) InterceptInfo() *restapi.InterceptInfo {
+	ii := &restapi.InterceptInfo{}
+	f.mu.Lock()
+	if f.intercept != nil {
+		ii.Intercepted = true
+		ii.Metadata = f.intercept.Metadata
+	}
+	f.mu.Unlock()
+	return ii
 }
 
 func (f *Forwarder) Intercepting() bool {
@@ -161,24 +164,10 @@ func (f *Forwarder) SetIntercepting(intercept *manager.InterceptInfo) {
 	}
 
 	// Drop existing connections
-	if f.muxTunnel != nil {
-		_ = f.muxTunnel.CloseSend()
-		f.muxTunnel = nil
-	}
 	f.tCancel()
 
 	// Set up new target and lifetime
 	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
-	if intercept != nil {
-		if f.manager != nil {
-			muxTunnel, err := f.startManagerTunnel(f.tCtx, intercept.ClientSession)
-			if err != nil {
-				dlog.Error(f.tCtx, err)
-				return
-			}
-			f.muxTunnel = muxTunnel
-		}
-	}
 	f.intercept = intercept
 }
 
@@ -188,10 +177,9 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 	targetHost := f.targetHost
 	targetPort := f.targetPort
 	intercept := f.intercept
-	muxTunnel := f.muxTunnel
 	f.mu.Unlock()
 	if intercept != nil {
-		return f.interceptConn(ctx, clientConn, intercept, muxTunnel)
+		return f.interceptConn(ctx, clientConn, intercept)
 	}
 
 	targetAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort))
@@ -242,88 +230,7 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 	return nil
 }
 
-func (f *Forwarder) startManagerTunnel(ctx context.Context, clientSession *manager.SessionInfo) (connpool.MuxTunnel, error) {
-	agentTunnel, err := f.manager.AgentTunnel(ctx)
-	if err != nil {
-		err = fmt.Errorf("call to AgentTunnel() failed: %v", err)
-		return nil, err
-	}
-	muxTunnel := connpool.NewMuxTunnel(agentTunnel)
-	defer func() {
-		if err != nil {
-			_ = muxTunnel.CloseSend()
-		}
-	}()
-
-	if err = muxTunnel.Send(ctx, connpool.SessionInfoControl(f.sessionInfo)); err != nil {
-		err = fmt.Errorf("failed to send agent sessionID: %s", err)
-		return nil, err
-	}
-	if err = muxTunnel.Send(ctx, connpool.SessionInfoControl(clientSession)); err != nil {
-		err = fmt.Errorf("failed to send client sessionID: %s", err)
-		return nil, err
-	}
-	var peerVersion uint16
-	if f.mgrVersion.LE(semver.MustParse("2.4.2")) {
-		peerVersion = 0
-	} else {
-		if err = muxTunnel.Send(ctx, connpool.VersionControl()); err != nil {
-			err = fmt.Errorf("failed to send agent tunnel version: %s", err)
-			return nil, err
-		}
-		peerVersion, err = muxTunnel.ReadPeerVersion(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if peerVersion >= 2 {
-		// Versions >= 2 no longer use the multiplexing tunnel. Instead, each connection gets its own tunnel.Stream
-		_ = muxTunnel.CloseSend()
-		return nil, nil
-	}
-
-	go func() {
-		pool := tunnel.GetPool(ctx)
-		msgCh, errCh := muxTunnel.ReadLoop(ctx)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case err := <-errCh:
-				dlog.Error(ctx, err)
-				return
-			case msg := <-msgCh:
-				if msg == nil {
-					return
-				}
-				id := msg.ID()
-				var handler tunnel.Handler
-				if ctrl, ok := msg.(connpool.Control); ok {
-					switch ctrl.Code() {
-					// Don't establish a new Dialer just to say goodbye
-					case connpool.ReadClosed, connpool.WriteClosed, connpool.Disconnect, connpool.DisconnectOK:
-						if handler = pool.Get(id); handler == nil {
-							continue
-						}
-					}
-				}
-				if handler == nil {
-					handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
-						return connpool.NewDialer(id, muxTunnel, release), nil
-					})
-					if err != nil {
-						dlog.Error(ctx, err)
-						return
-					}
-				}
-				handler.(connpool.Handler).HandleMessage(ctx, msg)
-			}
-		}
-	}()
-	return muxTunnel, nil
-}
-
-func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo, muxTunnel connpool.MuxTunnel) error {
+func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
 	dlog.Infof(ctx, "Accept got connection from %s", conn.RemoteAddr())
 
 	srcIp, srcPort, err := iputil.SplitToIPPort(conn.RemoteAddr())
@@ -334,20 +241,6 @@ func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *man
 	spec := iCept.Spec
 	destIp := iputil.Parse(spec.TargetHost)
 	id := tunnel.NewConnID(tunnel.IPProto(conn.RemoteAddr().Network()), srcIp, destIp, srcPort, uint16(spec.TargetPort))
-
-	if muxTunnel != nil {
-		_, found, err := tunnel.GetPool(ctx).GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
-			return connpool.HandlerFromConn(id, muxTunnel, release, conn), nil
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create intercept tunnel connection for %s: %v", id, err)
-		}
-		if found {
-			// This should really never happen. It indicates that there are two connections originating from the same port.
-			return fmt.Errorf("multiple connections for %s", id)
-		}
-		return nil
-	}
 
 	ms, err := f.manager.Tunnel(ctx)
 	if err != nil {

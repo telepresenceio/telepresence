@@ -17,7 +17,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/connpool"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -133,54 +132,10 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 	ss.lastMarked = lastMarked
 }
 
-type agentTunnel struct {
-	name      string
-	namespace string
-	muxTunnel connpool.MuxTunnel
-}
-
 type clientSessionState struct {
 	sessionState
-	name         string
-	pool         *tunnel.Pool
-	muxTunnel    connpool.MuxTunnel
-	agentTunnels map[string]*agentTunnel
-}
-
-func (cs *clientSessionState) addAgentTunnel(agentSessionID, name, namespace string, muxTunnel connpool.MuxTunnel) {
-	cs.Lock()
-	cs.agentTunnels[agentSessionID] = &agentTunnel{
-		name:      name,
-		namespace: namespace,
-		muxTunnel: muxTunnel,
-	}
-	cs.Unlock()
-}
-
-func (cs *clientSessionState) deleteAgentTunnel(agentSessionID string) {
-	cs.Lock()
-	delete(cs.agentTunnels, agentSessionID)
-	cs.Unlock()
-}
-
-// getRandomAgentTunnel will return the tunnel of an intercepted agent provided all intercepted
-// agents live in the same namespace. The method will return nil if the client currently has no
-// intercepts or if it has several intercepts that span more than one namespace.
-func (cs *clientSessionState) getRandomAgentTunnel() (tunnel *agentTunnel) {
-	cs.Lock()
-	defer cs.Unlock()
-	prevNs := ""
-	for _, agentTunnel := range cs.agentTunnels {
-		tunnel = agentTunnel
-		if prevNs == "" {
-			prevNs = agentTunnel.namespace
-		} else if prevNs != agentTunnel.name {
-			return nil
-		}
-	}
-	// return the first tunnel found. In case there are several, the map will
-	// randomize which one
-	return tunnel
+	name string
+	pool *tunnel.Pool
 }
 
 type agentSessionState struct {
@@ -223,7 +178,6 @@ type State struct {
 	clients          watchable.ClientMap                  // info for client sessions
 	sessions         map[string]SessionState              // info for all sessions
 	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
-	listeners        map[string]connpool.Handler          // listeners for all intercepts
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
 	logLevelCond     sync.Cond
@@ -235,7 +189,6 @@ func NewState(ctx context.Context) *State {
 		sessions:         make(map[string]SessionState),
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
-		listeners:        make(map[string]connpool.Handler),
 		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
 		logLevelCond:     sync.Cond{L: &sync.Mutex{}},
 	}
@@ -435,9 +388,8 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 			lastMarked: now,
 			dials:      make(chan *rpc.DialRequest),
 		},
-		name:         client.Name,
-		pool:         tunnel.NewPool(),
-		agentTunnels: make(map[string]*agentTunnel),
+		name: client.Name,
+		pool: tunnel.NewPool(),
 	}
 	return sessionID
 }
@@ -638,17 +590,6 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 
 func (s *State) RemoveIntercept(interceptID string) bool {
 	_, didDelete := s.intercepts.LoadAndDelete(interceptID)
-	if didDelete {
-		s.mu.Lock()
-		l, ok := s.listeners[interceptID]
-		if ok {
-			delete(s.listeners, interceptID)
-		}
-		s.mu.Unlock()
-		if ok {
-			l.Close(s.ctx)
-		}
-	}
 	return didDelete
 }
 
@@ -692,63 +633,6 @@ func (s *State) WatchIntercepts(
 		return s.intercepts.Subscribe(ctx)
 	} else {
 		return s.intercepts.SubscribeSubset(ctx, filter)
-	}
-}
-
-func (s *State) ClientTunnel(ctx context.Context, muxTunnel connpool.MuxTunnel) error {
-	sessionID := managerutil.GetSessionID(ctx)
-	s.mu.Lock()
-	ss := s.sessions[sessionID]
-	s.mu.Unlock()
-	cs, ok := ss.(*clientSessionState)
-	if !ok {
-		return status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
-	}
-	dlog.Debug(ctx, "Established TCP tunnel")
-	pool := cs.pool // must have one pool per client
-	cs.muxTunnel = muxTunnel
-	defer pool.CloseAll(ctx)
-	msgCh, errCh := muxTunnel.ReadLoop(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case err := <-errCh:
-			return err
-		case msg := <-msgCh:
-			if msg == nil {
-				return nil
-			}
-
-			id := msg.ID()
-			var handler tunnel.Handler
-			if ctrl, ok := msg.(connpool.Control); ok {
-				switch ctrl.Code() {
-				// Don't establish a conn-forward or dialer just to say goodbye
-				case connpool.Disconnect, connpool.DisconnectOK:
-					if handler = pool.Get(id); handler == nil {
-						continue
-					}
-				}
-			}
-
-			if handler == nil {
-				// Retrieve the connection that is tracked for the given id. Create a new one if necessary
-				var err error
-				handler, _, err = pool.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
-					if agentTunnel := cs.getRandomAgentTunnel(); agentTunnel != nil {
-						// Dispatch directly to agent and let the dial happen there
-						dlog.Debugf(ctx, "|| FRWD %s forwarding client connection to agent %s.%s", id, agentTunnel.name, agentTunnel.namespace)
-						return newMuxTunnelForward(release, agentTunnel.muxTunnel), nil
-					}
-					return connpool.NewDialer(id, cs.muxTunnel, release), nil
-				})
-				if err != nil {
-					return fmt.Errorf("failed to get connection handler: %w", err)
-				}
-			}
-			handler.(connpool.Handler).HandleMessage(ctx, msg)
-		}
 	}
 }
 
@@ -828,104 +712,6 @@ func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
 		return nil
 	}
 	return ss.Dials()
-}
-
-type muxTunnelForward struct {
-	release     func()
-	toMuxTunnel connpool.MuxTunnel
-}
-
-func newMuxTunnelForward(release func(), toStream connpool.MuxTunnel) *muxTunnelForward {
-	return &muxTunnelForward{release: release, toMuxTunnel: toStream}
-}
-
-func (cf *muxTunnelForward) Close(_ context.Context) {
-	cf.release()
-}
-
-func (cf *muxTunnelForward) HandleMessage(ctx context.Context, msg connpool.Message) {
-	dlog.Debugf(ctx, ">> FRWD %s to agent", msg.ID())
-	if err := cf.toMuxTunnel.Send(ctx, msg); err != nil {
-		dlog.Errorf(ctx, "!! FRWD %s to agent, send failed: %v", msg.ID(), err)
-	}
-	if ctrl, ok := msg.(connpool.Control); ok {
-		switch ctrl.Code() {
-		case connpool.Disconnect, connpool.DisconnectOK:
-			// There will be no more messages coming our way
-			cf.Close(ctx)
-			dlog.Debugf(ctx, "-- FRWD %s to agent closed", msg.ID())
-		}
-	}
-}
-
-func (cf *muxTunnelForward) Start(_ context.Context) {
-}
-
-func (s *State) AgentTunnel(ctx context.Context, clientSessionInfo *rpc.SessionInfo, muxTunnel connpool.MuxTunnel) error {
-	agentSessionID := managerutil.GetSessionID(ctx)
-	as, cs, err := func() (*agentSessionState, *clientSessionState, error) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		ss := s.sessions[agentSessionID]
-		as, ok := ss.(*agentSessionState)
-		if !ok {
-			return nil, nil, status.Errorf(codes.NotFound, "agent session %q not found", agentSessionID)
-		}
-		clientSessionID := clientSessionInfo.GetSessionId()
-		ss = s.sessions[clientSessionID]
-		cs, ok := ss.(*clientSessionState)
-		if !ok {
-			return nil, nil, status.Errorf(codes.NotFound, "client session %q not found", clientSessionID)
-		}
-		return as, cs, nil
-	}()
-	if err != nil {
-		return err
-	}
-	dlog.Debugf(ctx, "Established TCP tunnel from agent %s (%s) to client %s", as.agent.Name, as.agent.PodIp, cs.name)
-
-	// During intercept, all requests that are made to this pool, are forwarded to the intercepted
-	// agent(s)
-	cs.addAgentTunnel(agentSessionID, as.agent.Name, as.agent.Namespace, muxTunnel)
-	defer cs.deleteAgentTunnel(agentSessionID)
-
-	pool := cs.pool
-	msgCh, errCh := muxTunnel.ReadLoop(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case err = <-errCh:
-			return err
-		case msg := <-msgCh:
-			if msg == nil {
-				return nil
-			}
-			ensureForward := true
-			if ctrl, ok := msg.(connpool.Control); ok {
-				switch ctrl.Code() {
-				// Don't establish a conn-forward just to say goodbye
-				case connpool.Disconnect, connpool.DisconnectOK:
-					ensureForward = false
-				}
-			}
-			if ensureForward {
-				// Ensure that a forward tunnel exists that the client can use for responses
-				_, _, err = pool.GetOrCreate(ctx, msg.ID(), func(ctx context.Context, release func()) (tunnel.Handler, error) {
-					return newMuxTunnelForward(release, muxTunnel), nil
-				})
-				if err != nil {
-					dlog.Error(ctx, err)
-					return status.Error(codes.Internal, err.Error())
-				}
-			}
-			dlog.Debugf(ctx, ">> FRWD %s to client", msg.ID())
-			if err = cs.muxTunnel.Send(ctx, msg); err != nil {
-				dlog.Errorf(ctx, "Send to client failed: %v", err)
-				return err
-			}
-		}
-	}
 }
 
 // AgentsLookup will send the given request to all agents currently intercepted by the client identified with

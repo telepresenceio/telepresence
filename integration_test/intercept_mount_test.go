@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	goRuntime "runtime"
 	"strconv"
 	"strings"
@@ -54,20 +55,26 @@ func (s *interceptMountSuite) TearDownSuite() {
 		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
-	go func() {
-		time.Sleep(2 * time.Second)
-		_ = os.RemoveAll(s.mountPoint)
-	}()
+	if goRuntime.GOOS != "windows" {
+		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
+		go func() {
+			time.Sleep(2 * time.Second)
+			_ = os.RemoveAll(s.mountPoint)
+		}()
+	}
 }
 
 func (s *interceptMountSuite) Test_InterceptMount() {
+	if runtime.GOOS == "darwin" {
+		s.T().SkipNow()
+	}
 	require := s.Require()
 	ctx := s.Context()
 
 	stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
 	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
 
+	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
 	st, err := os.Stat(s.mountPoint)
 	require.NoError(err, "Stat on <mount point> failed")
 	require.True(st.IsDir(), "Mount point is not a directory")

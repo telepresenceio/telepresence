@@ -8,17 +8,18 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/ambassador/v2/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const helmDriver = "secrets"
 const releaseName = "traffic-manager"
 const releaseOwner = "telepresence-cli"
 
-func getHelmConfig(ctx context.Context, configFlags *kates.ConfigFlags, namespace string) (*action.Configuration, error) {
+func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
 	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...interface{}) {
 		ctx := dlog.WithField(ctx, "source", "helm")
@@ -50,7 +51,8 @@ func getValues(ctx context.Context) map[string]interface{} {
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
-	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" {
+	apc := clientConfig.Intercept.AppProtocolStrategy
+	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" || apc != k8sapi.Http2Probe {
 		agentImage := make(map[string]interface{})
 		if imgConfig.WebhookAgentImage != "" {
 			parts := strings.Split(imgConfig.WebhookAgentImage, ":")
@@ -66,7 +68,11 @@ func getValues(ctx context.Context) map[string]interface{} {
 		if imgConfig.WebhookRegistry != "" {
 			agentImage["registry"] = imgConfig.WebhookRegistry
 		}
-		values["agentInjector"] = map[string]interface{}{"agentImage": agentImage}
+		agentInjector := map[string]interface{}{"agentImage": agentImage}
+		values["agentInjector"] = agentInjector
+		if apc != k8sapi.Http2Probe {
+			agentInjector["appProtocolStrategy"] = apc.String()
+		}
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
 		values["telepresenceAPI"] = map[string]interface{}{
@@ -134,7 +140,7 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, client *kates.Client, namespace string) error {
+func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
@@ -164,7 +170,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 		existing = nil
 	}
 	if existing == nil {
-		err := importLegacy(ctx, namespace, client)
+		err := importLegacy(ctx, namespace)
 		if err != nil {
 			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
 			// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
@@ -176,9 +182,6 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 		if err != nil {
 			return err
 		}
-		// We've just modified the resources totally outside of the kates client, so invalidate the cache to make sure
-		// it'll return fresh resources
-		client.InvalidateCache()
 		return nil
 	}
 	ver := releaseVer(existing)
@@ -187,7 +190,6 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 		if err != nil {
 			return err
 		}
-		client.InvalidateCache()
 		return nil
 	}
 	dlog.Infof(ctx, "Existing Traffic Manager %s not owned by cli or does not need upgrade, will not modify", ver)
@@ -195,7 +197,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, c
 }
 
 // DeleteTrafficManager deletes the traffic manager
-func DeleteTrafficManager(ctx context.Context, configFlags *kates.ConfigFlags, namespace string) error {
+func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)

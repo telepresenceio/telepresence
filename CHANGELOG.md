@@ -1,6 +1,58 @@
 # Changelog
 
-### 2.4.10 (TBD)
+### 2.5.0 (TBD)
+
+- Feature: The flags `--http-path-equal`, `--http-path-prefix`, and `--http-path-regex` can can be used in addition to the `--http-match`
+  flag to filter personal intercepts by the request URL path 
+
+- Feature: The flag `--http-meta` can be used to declare metadata key value pairs that will be returned by the Telepresence rest API
+  endpoint /intercept-info
+
+- Feature: Telepresence Login now prompts you to optionally install Telepresence Pro, which has some additional features when used with Ambassador Cloud.
+
+- Change: The verb "watch" was added to the set of required verbs when accessing services and workloads for the client RBAC ClusterRole
+
+- Change: Telepresence is no longer backward compatible with versions 2.4.4 or older because the deprecated multiplexing tunnel functionality was removed.
+
+- Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
+  The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`. 
+
+- Change: Telepresence now includes GOARCH of the binary in the metadata reprted.
+
+- Bugfix: The also-proxy and never-proxy subnets are now displayed correctly when using the `telepresence status` command
+
+- Bugfix: Telepresence will no longer require `SETENV` privileges when starting the root daemon.
+
+- Bugfix: Telepresence will now parse device names containing dashes correctly when determining routes that it should never block.
+
+- Bugfix: The cluster domain (typically "cluster.local") is no longer added to the DNS `search` on Linux using `systemd-resolved`. Instead,
+  it is added as a `domain` so that names ending with it are routed to the DNS server.
+
+### 2.4.10 (January 13, 2022)
+
+- Feature: The flag `--http-plaintext` can be used to ensure that an intercept uses plaintext http or grpc when 
+  communicating with the workstation process.
+
+- Feature: The port used by default in the `telepresence intercept` command (8080), can now be changed by setting
+  the `intercept.defaultPort` in the `config.yml` file.
+
+- Feature: The strategy when selecting the application protocol for personal intercepts in agents injected by the 
+  mutating webhook can now be configured using the `agentInjector.appProtocolStrategy` in the Helm chart.
+
+- Feature: The strategy when selecting the application protocol for personal intercepts can now be configured using
+  the `intercept.appProtocolStrategy` in the `config.yml` file.
+
+- Change: Telepresence CI now runs in Github Actions instead of Circle CI.
+
+- Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
+
+- Bugfix: User will not be asked to log in or add ingress information when creating an intercept until a check has been 
+  made that the intercept is possible.
+
+- Bugfix: Output to `stderr` from the traffic-agent's `sftp` and the client's `sshfs` processes are properly logged as errors.
+
+- Bugfix: Auto installer will no longer not emit backslash separators for the `/tel-app-mounts` paths in the
+  traffic-agent container spec when running on Windows
 
 - Bugfix: Fixed a bug where the `--json` flag did not output json for `telepresence list` when there were no workloads.
 

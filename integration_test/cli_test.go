@@ -30,6 +30,7 @@ func (s *cliSuite) Test_Version() {
 }
 
 func (s *cliSuite) Test_Status() {
+	itest.TelepresenceQuitOk(s.Context())
 	stdout, stderr, err := itest.Telepresence(s.Context(), "status")
 	if err != nil {
 		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence status isn't working, nothing will: %w", err))

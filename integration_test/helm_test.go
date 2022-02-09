@@ -51,7 +51,7 @@ func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	ctx := s.Context()
 	_, stderr, err := itest.Telepresence(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Error(err)
-	s.Contains(stderr, "Failed to establish intercept")
+	s.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`)
 }
 
 func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {
@@ -85,7 +85,7 @@ func (s *helmSuite) Test_HelmWebhookDoesntInjectInUnmanagedNamespace() {
 func (s *helmSuite) Test_HelmMultipleInstalls() {
 	ctx := s.Context()
 	svc := s.ServiceName()
-	itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceDisconnectOk(ctx)
 
 	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 	s.Run("Installs Successfully", func() {
@@ -95,7 +95,6 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	s.Run("Can be connected to", func() {
 		stdout := itest.TelepresenceOk(ctx, "connect")
 		s.Contains(stdout, "Connected to context")
-		itest.TelepresenceOk(ctx, "loglevel", "trace")
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--connect-timeout", "1", fmt.Sprintf("%s.%s", svc, s.appSpace2)) == nil
 		}, 7*time.Second, 1*time.Second)

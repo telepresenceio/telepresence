@@ -22,7 +22,6 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -89,7 +88,7 @@ type interceptState struct {
 	cmd  safeCobraCommand
 	args interceptArgs
 
-	Scout *scout.Scout
+	scout *scout.Reporter
 
 	connectorClient connector.ConnectorClient
 	managerClient   manager.ManagerClient
@@ -117,7 +116,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags := cmd.Flags()
 
 	flags.StringVarP(&args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
-	flags.StringVarP(&args.port, "port", "p", "8080", ``+
+	flags.StringVarP(&args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
 		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
@@ -234,52 +233,21 @@ func leaveCommand() *cobra.Command {
 	}
 }
 
-// Checks if login is necessary and then takes the necessary actions
-// depending if the cluster can connect to Ambassador Cloud
-func loginIfNeeded(ctx context.Context, args interceptArgs) error {
-	if !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin) {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, _ connector.ConnectorClient) error {
-			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				// We default to assuming they can connect to Ambassador Cloud
-				// unless the cluster tells us they can't
-				canConnect := true
-				if resp, err := managerClient.CanConnectAmbassadorCloud(ctx, &empty.Empty{}); err == nil {
-					// We got a response from the manager; trust that response.
-					canConnect = resp.CanConnect
-				}
-				if canConnect {
-					if _, err := cliutil.EnsureLoggedIn(ctx, ""); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		})
-	}
-	return nil
-}
-
 func intercept(cmd *cobra.Command, args interceptArgs) error {
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		return withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
-			if err := loginIfNeeded(ctx, args); err != nil {
-				return err
-			}
+		return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 			})
 		})
 	}
 
 	// start intercept, run command, then stop the intercept
-	return withConnector(cmd, false, func(ctx context.Context, connectorClient connector.ConnectorClient, connInfo *connector.ConnectInfo, _ daemon.DaemonClient) error {
-		if err := loginIfNeeded(ctx, args); err != nil {
-			return err
-		}
+	return withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, connectorClient, managerClient, connInfo)
+			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 			return client.WithEnsuredState(ctx, is, false, func() error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
@@ -294,20 +262,21 @@ func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
 	args interceptArgs,
-	connectorClient connector.ConnectorClient,
+	cs *connectorState,
 	managerClient manager.ManagerClient,
-	connInfo *connector.ConnectInfo,
 ) *interceptState {
-	return &interceptState{
+	is := &interceptState{
 		cmd:  cmd,
 		args: args,
 
-		Scout: scout.NewScout(ctx, "cli"),
+		scout: scout.NewReporter(ctx, "cli"),
 
-		connectorClient: connectorClient,
+		connectorClient: cs.userD,
 		managerClient:   managerClient,
-		connInfo:        connInfo,
+		connInfo:        cs.ConnectInfo,
 	}
+	is.scout.Start(log.WithDiscardingLogger(ctx))
+	return is
 }
 
 func interceptMessage(r *connector.InterceptResult) error {
@@ -331,7 +300,7 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
 			spec.TargetHost, spec.TargetPort, spec.Name)
 	case connector.InterceptError_NO_ACCEPTABLE_WORKLOAD:
-		msg = fmt.Sprintf("No interceptable deployment or replicaset matching %s found", r.ErrorText)
+		msg = fmt.Sprintf("No interceptable deployment, replicaset, or statefulset matching %s found", r.ErrorText)
 	case connector.InterceptError_AMBIGUOUS_MATCH:
 		var matches []manager.AgentInfo
 		err := json.Unmarshal([]byte(r.ErrorText), &matches)
@@ -348,10 +317,16 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = st.String()
 	case connector.InterceptError_FAILED_TO_ESTABLISH:
 		msg = fmt.Sprintf("Failed to establish intercept: %s", r.ErrorText)
+	case connector.InterceptError_UNSUPPORTED_WORKLOAD:
+		msg = fmt.Sprintf("Unsupported workload type: %s", r.ErrorText)
 	case connector.InterceptError_NOT_FOUND:
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
 	case connector.InterceptError_MOUNT_POINT_BUSY:
 		msg = fmt.Sprintf("Mount point already in use by intercept %q", r.ErrorText)
+	case connector.InterceptError_MISCONFIGURED_WORKLOAD:
+		msg = r.ErrorText
+	case connector.InterceptError_UNKNOWN_FLAG:
+		msg = fmt.Sprintf("Unknown flag: %s", r.ErrorText)
 	default:
 		msg = fmt.Sprintf("Unknown error code %d", r.Error)
 	}
@@ -499,11 +474,6 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	if err != nil {
 		return nil, err
 	}
-
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-	if err != nil {
-		return nil, err
-	}
 	return ir, nil
 }
 
@@ -552,43 +522,82 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 		ingressHost)
 }
 
-func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
-	// Add whatever metadata we already have to scout
-	is.Scout.SetMetadatum("service_name", is.args.agentName)
-	is.Scout.SetMetadatum("cluster_id", is.connInfo.ClusterId)
-	mechanism, _ := is.args.extState.Mechanism()
-	mechanismArgs, _ := is.args.extState.MechanismArgs()
-	is.Scout.SetMetadatum("intercept_mechanism", mechanism)
-	is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
-
-	defer func() {
-		if err != nil {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
-		} else {
-			is.Scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
-		}
-	}()
-
-	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
-	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil && (is.args.ingressHost != "" || is.args.ingressPort != 0 || is.args.ingressTLS || is.args.ingressL5 != "") {
-		ingress, err := makeIngressInfo(is.args.ingressHost, is.args.ingressPort, is.args.ingressTLS, is.args.ingressL5)
-		if err != nil {
-			return false, err
-		}
-		is.args.previewSpec.Ingress = ingress
+// canInterceptAndLogIn queries the connector if an intercept is possible, and if it is, and if a login is needed,
+// also performs a login. This function must be called before other user interaction takes place when creating
+// an intercept. It must not be called when no user interaction is expected.
+func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connector.CreateInterceptRequest, needLogin bool) error {
+	r, err := is.connectorClient.CanIntercept(ctx, ir)
+	if err != nil {
+		return fmt.Errorf("connector.CanIntercept: %w", err)
 	}
-
-	// Fill defaults
-	if is.args.previewEnabled && is.args.previewSpec.Ingress == nil {
-		ingress, err := selectIngress(ctx, is.cmd.InOrStdin(), is.cmd.OutOrStdout(), is.connInfo, is.args.name, is.args.namespace)
-		if err != nil {
-			return false, err
-		}
-		is.args.previewSpec.Ingress = ingress
+	if r.Error != connector.InterceptError_UNSPECIFIED {
+		return interceptMessage(r)
 	}
+	if needLogin {
+		// We default to assuming they can connect to Ambassador Cloud
+		// unless the cluster tells us they can't
+		canConnect := true
+		if resp, err := is.managerClient.CanConnectAmbassadorCloud(ctx, &empty.Empty{}); err == nil {
+			// We got a response from the manager; trust that response.
+			canConnect = resp.CanConnect
+		}
+		if canConnect {
+			if _, err := cliutil.ClientEnsureLoggedIn(ctx, "", is.connectorClient); err != nil {
+				return err
+			}
+		}
+	}
+	ir.Spec.WorkloadKind = r.WorkloadKind // Speeds things up slightly when finding the workload next time
+	return nil
+}
 
+func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	ir, err := is.createRequest(ctx)
 	if err != nil {
+		return nil, err
+	}
+
+	args := &is.args
+	needLogin := !client.GetConfig(ctx).Cloud.SkipLogin && (args.previewEnabled || args.extRequiresLogin)
+
+	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
+	if args.previewEnabled {
+		spec := args.previewSpec
+
+		if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
+			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
+			if err != nil {
+				return nil, err
+			}
+			spec.Ingress = ingress
+		}
+	} else if needLogin {
+		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
+			return nil, err
+		}
+	}
+	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return ir, nil
+}
+
+func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
+	args := &is.args
+
+	// Add whatever metadata we already have to scout
+	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
+	is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
+	mechanism, _ := args.extState.Mechanism()
+	mechanismArgs, _ := args.extState.MechanismArgs()
+	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
+	is.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(mechanismArgs))
+
+	ir, err := is.createAndValidateRequest(ctx)
+	if err != nil {
+		is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, err
 	}
 
@@ -602,76 +611,97 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		is.mountPoint = ir.MountPoint
 	}
 
+	defer func() {
+		if err != nil {
+			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
+		} else {
+			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
+		}
+	}()
+
 	// Submit the request
 	r, err := is.connectorClient.CreateIntercept(ctx, ir)
 	if err != nil {
 		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
 
-	switch r.Error {
-	case connector.InterceptError_UNSPECIFIED:
-		if is.args.agentName == "" {
-			// local-only
-			return true, nil
-		}
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.args.agentName)
-		var intercept *manager.InterceptInfo
-
-		// Add metadata to scout from InterceptResult
-		is.Scout.SetMetadatum("service_uid", r.GetServiceUid())
-		is.Scout.SetMetadatum("workload_kind", r.GetWorkloadKind())
-		// Since a user can create an intercept without specifying a namespace
-		// (thus using the default in their kubeconfig), we should be getting
-		// the namespace from the InterceptResult because that adds the namespace
-		// if it wasn't given on the cli by the user
-		is.Scout.SetMetadatum("service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
-
-		if is.args.previewEnabled {
-			intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-				Session: is.connInfo.SessionInfo,
-				Name:    is.args.name,
-				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-					AddPreviewDomain: is.args.previewSpec,
-				},
-			})
-			if err != nil {
-				is.Scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.ScoutMeta{Key: "error", Value: err.Error()})
-				err = fmt.Errorf("creating preview domain: %w", err)
-				return true, err
-			}
-			is.Scout.SetMetadatum("preview_url", intercept.PreviewDomain)
-		} else {
-			intercept = r.InterceptInfo
-		}
-		is.Scout.SetMetadatum("intercept_id", intercept.Id)
-
-		is.env = r.Environment
-		is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
-		if is.args.envFile != "" {
-			if err = is.writeEnvFile(); err != nil {
-				return true, err
-			}
-		}
-		if is.args.envJSON != "" {
-			if err = is.writeEnvJSON(); err != nil {
-				return true, err
-			}
-		}
-
-		var volumeMountProblem error
-		doMount, err := strconv.ParseBool(is.args.mount)
-		if doMount || err != nil {
-			volumeMountProblem = checkMountCapability(ctx)
-		}
-		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
-		return true, nil
-	default:
+	if r.Error != connector.InterceptError_UNSPECIFIED {
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
 			_ = is.DeactivateState(ctx)
 			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
 		}
 		return false, interceptMessage(r)
 	}
+
+	if args.agentName == "" {
+		// local-only
+		return true, nil
+	}
+	fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, args.agentName)
+	var intercept *manager.InterceptInfo
+
+	// Add metadata to scout from InterceptResult
+	is.scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
+	is.scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
+	// Since a user can create an intercept without specifying a namespace
+	// (thus using the default in their kubeconfig), we should be getting
+	// the namespace from the InterceptResult because that adds the namespace
+	// if it wasn't given on the cli by the user
+	is.scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
+
+	if args.previewEnabled {
+		if args.previewSpec.Ingress == nil {
+			ingressInfo, err := is.connectorClient.ResolveIngressInfo(ctx, r.GetServiceProps())
+			if err != nil {
+				return true, err
+			}
+
+			args.previewSpec.Ingress = &manager.IngressInfo{
+				Host:   ingressInfo.Host,
+				Port:   ingressInfo.Port,
+				UseTls: ingressInfo.UseTls,
+				L5Host: ingressInfo.Host,
+			}
+		}
+
+		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+			Session: is.connInfo.SessionInfo,
+			Name:    args.name,
+			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: args.previewSpec,
+			},
+		})
+		if err != nil {
+			is.scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
+			err = fmt.Errorf("creating preview domain: %w", err)
+			return true, err
+		}
+		is.scout.SetMetadatum(ctx, "preview_url", intercept.PreviewDomain)
+	} else {
+		intercept = r.InterceptInfo
+	}
+	is.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
+
+	is.env = r.Environment
+	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
+	if args.envFile != "" {
+		if err = is.writeEnvFile(); err != nil {
+			return true, err
+		}
+	}
+	if args.envJSON != "" {
+		if err = is.writeEnvJSON(); err != nil {
+			return true, err
+		}
+	}
+
+	var volumeMountProblem error
+	doMount, err := strconv.ParseBool(args.mount)
+	if doMount || err != nil {
+		volumeMountProblem = checkMountCapability(ctx)
+	}
+	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
+	return true, nil
 }
 
 func (is *interceptState) DeactivateState(ctx context.Context) error {
@@ -679,7 +709,7 @@ func (is *interceptState) DeactivateState(ctx context.Context) error {
 }
 
 func removeIntercept(ctx context.Context, name string) error {
-	return cliutil.WithStartedConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+	return cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var r *connector.InterceptResult
 		var err error
 		r, err = connectorClient.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})
@@ -893,6 +923,7 @@ func selectIngress(
 	connInfo *connector.ConnectInfo,
 	interceptName string,
 	interceptNamespace string,
+	ingressInfos []*manager.IngressInfo,
 ) (*manager.IngressInfo, error) {
 	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
@@ -902,7 +933,7 @@ func selectIngress(
 	selectOrConfirm := "Confirm"
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
-		iis := connInfo.IngressInfos
+		iis := ingressInfos
 		if len(iis) > 0 {
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {

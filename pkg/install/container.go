@@ -1,13 +1,10 @@
 package install
 
 import (
-	"path/filepath"
 	"strconv"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-
-	"github.com/datawire/ambassador/v2/pkg/kates"
+	core "k8s.io/api/core/v1"
 )
 
 const EnvPrefix = "_TEL_AGENT_"
@@ -18,33 +15,34 @@ const AgentUID = int64(7777)
 func AgentContainer(
 	name string,
 	imageName string,
-	appContainer *corev1.Container,
-	port corev1.ContainerPort,
+	appContainer *core.Container,
+	port core.ContainerPort,
 	appPort int,
+	appProto string,
 	apiPort int,
 	managerNamespace string,
 	setGID bool,
-) corev1.Container {
-	var securityContext *corev1.SecurityContext
+) core.Container {
+	var securityContext *core.SecurityContext
 	if setGID {
-		securityContext = &corev1.SecurityContext{
+		securityContext = &core.SecurityContext{
 			RunAsNonRoot: func() *bool { b := true; return &b }(),
 			RunAsGroup:   func() *int64 { i := AgentUID; return &i }(),
 			RunAsUser:    func() *int64 { i := AgentUID; return &i }(),
 		}
 	}
-	return corev1.Container{
+	return core.Container{
 		Name:            AgentContainerName,
 		Image:           imageName,
 		Args:            []string{"agent"},
-		Ports:           []corev1.ContainerPort{port},
-		Env:             agentEnvironment(name, appContainer, appPort, apiPort, managerNamespace, port),
+		Ports:           []core.ContainerPort{port},
+		Env:             agentEnvironment(name, appContainer, appPort, appProto, apiPort, managerNamespace, port),
 		EnvFrom:         appContainer.EnvFrom,
 		VolumeMounts:    agentVolumeMounts(appContainer.VolumeMounts),
 		SecurityContext: securityContext,
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
+		ReadinessProbe: &core.Probe{
+			Handler: core.Handler{
+				Exec: &core.ExecAction{
 					Command: []string{"/bin/stat", "/tmp/agent/ready"},
 				},
 			},
@@ -53,8 +51,8 @@ func AgentContainer(
 }
 
 // InitContainer will return a configured init container for an agent.
-func InitContainer(imageName string, port corev1.ContainerPort, appPort int) corev1.Container {
-	env := []corev1.EnvVar{
+func InitContainer(imageName string, port core.ContainerPort, appPort int) core.Container {
+	env := []core.EnvVar{
 		{
 			Name:  "APP_PORT",
 			Value: strconv.Itoa(appPort),
@@ -68,14 +66,14 @@ func InitContainer(imageName string, port corev1.ContainerPort, appPort int) cor
 			Value: string(port.Protocol),
 		},
 	}
-	return corev1.Container{
+	return core.Container{
 		Name:  InitContainerName,
 		Image: imageName,
 		Args:  []string{"agent-init"},
 		Env:   env,
-		SecurityContext: &corev1.SecurityContext{
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{
+		SecurityContext: &core.SecurityContext{
+			Capabilities: &core.Capabilities{
+				Add: []core.Capability{
 					"NET_ADMIN",
 				},
 			},
@@ -83,46 +81,59 @@ func InitContainer(imageName string, port corev1.ContainerPort, appPort int) cor
 	}
 }
 
-func agentEnvironment(agentName string, appContainer *kates.Container, appPort, apiPort int, managerNamespace string, port corev1.ContainerPort) []corev1.EnvVar {
+func agentEnvironment(
+	agentName string,
+	appContainer *core.Container,
+	appPort int,
+	appProto string,
+	apiPort int,
+	managerNamespace string,
+	port core.ContainerPort) []core.EnvVar {
 	appEnv := appEnvironment(appContainer, apiPort)
-	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+7)
+	env := make([]core.EnvVar, len(appEnv), len(appEnv)+7)
 	copy(env, appEnv)
 	env = append(env,
-		corev1.EnvVar{
+		core.EnvVar{
 			Name:  EnvPrefix + "LOG_LEVEL",
 			Value: "info",
 		},
-		corev1.EnvVar{
+		core.EnvVar{
 			Name:  EnvPrefix + "NAME",
 			Value: agentName,
 		},
-		corev1.EnvVar{
+		core.EnvVar{
 			Name: EnvPrefix + "NAMESPACE",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
+			ValueFrom: &core.EnvVarSource{
+				FieldRef: &core.ObjectFieldSelector{
 					FieldPath: "metadata.namespace",
 				},
 			},
 		},
-		corev1.EnvVar{
+		core.EnvVar{
 			Name: EnvPrefix + "POD_IP",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
+			ValueFrom: &core.EnvVarSource{
+				FieldRef: &core.ObjectFieldSelector{
 					FieldPath: "status.podIP",
 				},
 			},
 		},
-		corev1.EnvVar{
+		core.EnvVar{
 			Name:  EnvPrefix + "APP_PORT",
 			Value: strconv.Itoa(appPort),
 		},
-		corev1.EnvVar{
+		core.EnvVar{
 			Name:  EnvPrefix + "PORT",
 			Value: strconv.Itoa(int(port.ContainerPort)),
 		},
 	)
+	if appProto != "" {
+		env = append(env, core.EnvVar{
+			Name:  EnvPrefix + "APP_PROTO",
+			Value: appProto,
+		})
+	}
 	if len(appContainer.VolumeMounts) > 0 {
-		env = append(env, corev1.EnvVar{
+		env = append(env, core.EnvVar{
 			Name:  EnvPrefix + "APP_MOUNTS",
 			Value: TelAppMountPoint,
 		})
@@ -133,46 +144,47 @@ func agentEnvironment(agentName string, appContainer *kates.Container, appPort, 
 		for i := range appContainer.VolumeMounts {
 			mounts[i] = appContainer.VolumeMounts[i].MountPath
 		}
-		env = append(env, corev1.EnvVar{
+		env = append(env, core.EnvVar{
 			Name:  "TELEPRESENCE_MOUNTS",
 			Value: strings.Join(mounts, ":"),
 		})
 	}
-	env = append(env, corev1.EnvVar{
+	env = append(env, core.EnvVar{
 		Name:  EnvPrefix + "MANAGER_HOST",
 		Value: ManagerAppName + "." + managerNamespace,
 	})
 	return env
 }
 
-func agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
-	agentMounts := make([]corev1.VolumeMount, len(mounts)+1)
+func agentVolumeMounts(mounts []core.VolumeMount) []core.VolumeMount {
+	agentMounts := make([]core.VolumeMount, len(mounts)+1)
 	for i, mount := range mounts {
 		// Keep the ServiceAccount mount unaltered or a new one will be generated
 		if !strings.HasPrefix(mount.MountPath, "/var/run/secrets") {
-			mount.MountPath = filepath.Join(TelAppMountPoint, mount.MountPath)
+			// Don't use filepath.Join here. The target is never windows
+			mount.MountPath = TelAppMountPoint + "/" + strings.TrimPrefix(mount.MountPath, "/")
 		}
 		agentMounts[i] = mount
 	}
-	agentMounts[len(mounts)] = corev1.VolumeMount{
+	agentMounts[len(mounts)] = core.VolumeMount{
 		Name:      AgentAnnotationVolumeName,
 		MountPath: "/tel_pod_info",
 	}
 	return agentMounts
 }
 
-func appEnvironment(appContainer *kates.Container, apiPort int) []corev1.EnvVar {
+func appEnvironment(appContainer *core.Container, apiPort int) []core.EnvVar {
 	appEnv := appContainer.Env
 	envCount := len(appEnv)
-	envCopy := make([]corev1.EnvVar, envCount, envCount+2)
+	envCopy := make([]core.EnvVar, envCount, envCount+2)
 	copy(envCopy, appEnv)
 	if apiPort != 0 {
-		envCopy = append(envCopy, corev1.EnvVar{
+		envCopy = append(envCopy, core.EnvVar{
 			Name:  "TELEPRESENCE_API_PORT",
 			Value: strconv.Itoa(apiPort),
 		})
 	}
-	envCopy = append(envCopy, corev1.EnvVar{
+	envCopy = append(envCopy, core.EnvVar{
 		Name:  "TELEPRESENCE_CONTAINER",
 		Value: appContainer.Name,
 	})

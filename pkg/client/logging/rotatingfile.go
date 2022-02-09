@@ -134,10 +134,10 @@ func OpenRotatingFile(
 	}
 
 	// Try to open existing file for append.
-	if rf.file, err = openForAppend(logfilePath, rf.fileMode); err != nil {
+	if rf.file, err = os.OpenFile(logfilePath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
 		if os.IsNotExist(err) {
 			// There is no existing file, go ahead and create a new one.
-			if err := rf.openNew(nil); err == nil {
+			if err := rf.openNew(nil, ""); err == nil {
 				return rf, nil
 			}
 		}
@@ -230,52 +230,52 @@ func (rf *RotatingFile) fileTime(t time.Time) time.Time {
 	return t
 }
 
-func (rf *RotatingFile) openNew(prevInfo SysInfo) (err error) {
+func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error) {
 	fullPath := filepath.Join(rf.dirName, rf.fileName)
-	var newFile *os.File
+	var flag int
 	if rf.file == nil {
-		if newFile, err = createFile(fullPath, rf.fileMode); err != nil {
-			return fmt.Errorf("failed to createFile %s: %w", fullPath, err)
-		}
+		flag = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
 	} else {
 		// Open file with a different name so that a tail -F on the original doesn't fail with a permission denied
 		tmp := fullPath + ".tmp"
 		var tmpFile *os.File
-		if tmpFile, err = createFile(tmp, rf.fileMode); err != nil {
+		if tmpFile, err = os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
 			return fmt.Errorf("failed to createFile %s: %w", tmp, err)
 		}
 
-		si, err := FStat(tmpFile)
+		var si SysInfo
+		si, err = FStat(tmpFile)
 		_ = tmpFile.Close()
+
 		if err != nil {
 			return fmt.Errorf("failed to stat %s: %w", tmp, err)
 		}
 
 		if prevInfo != nil && !prevInfo.HaveSameOwnerAndGroup(si) {
 			if err = prevInfo.SetOwnerAndGroup(tmp); err != nil {
-				_ = os.Remove(tmp)
 				return fmt.Errorf("failed to SetOwnerAndGroup for %s: %w", tmp, err)
 			}
 		}
 
+		if err = rf.file.Close(); err != nil {
+			return fmt.Errorf("failed to close %s: %w", rf.file.Name(), err)
+		}
+		if err = os.Rename(fullPath, backupName); err != nil {
+			return fmt.Errorf("failed to rename %s to %s: %w", fullPath, backupName, err)
+		}
 		if err = os.Rename(tmp, fullPath); err != nil {
-			_ = os.Remove(tmp)
 			return fmt.Errorf("failed to rename %s to %s: %w", tmp, fullPath, err)
 		}
-		if newFile, err = openForAppend(fullPath, rf.fileMode); err != nil {
-			_ = os.Remove(fullPath)
-			return fmt.Errorf("failed to openForAppend %s: %w", fullPath, err)
+		// Need to restore birth time on Windows since it retains the birt time of the
+		// overwritten target of the rename operation.
+		if err = restoreCTimeAfterRename(fullPath, si.BirthTime()); err != nil {
+			return fmt.Errorf("failed to restore creation time of %s to %s: %w", tmp, si.BirthTime(), err)
 		}
+		flag = os.O_WRONLY | os.O_APPEND
 	}
-
-	oldFile := rf.file
-	rf.file = newFile
-	if oldFile != nil {
-		if err = oldFile.Close(); err != nil {
-			return fmt.Errorf("failed to close %s: %w", oldFile.Name(), err)
-		}
+	if rf.file, err = os.OpenFile(fullPath, flag, rf.fileMode); err != nil {
+		return fmt.Errorf("failed to open file %s: %w", fullPath, err)
 	}
-
 	rf.birthTime = rf.fileTime(dtime.Now())
 	rf.size = 0
 	rf.afterOpen()
@@ -332,6 +332,7 @@ func (rf *RotatingFile) removeOldFiles() {
 
 func (rf *RotatingFile) rotate() error {
 	var prevInfo SysInfo
+	var backupName string
 	if rf.maxFiles == 0 || rf.maxFiles > 1 {
 		var err error
 		prevInfo, err = FStat(rf.file)
@@ -343,10 +344,7 @@ func (rf *RotatingFile) rotate() error {
 		ex := filepath.Ext(rf.fileName)
 		sf := fullPath[:len(fullPath)-len(ex)]
 		ts := rf.fileTime(dtime.Now()).Format(rf.timeFormat)
-		fname := fmt.Sprintf("%s-%s%s", sf, ts, ex)
-		if err = os.Rename(fullPath, fname); err != nil {
-			return fmt.Errorf("failed to rename %s to %s: %w", fullPath, fname, err)
-		}
+		backupName = fmt.Sprintf("%s-%s%s", sf, ts, ex)
 	}
-	return rf.openNew(prevInfo)
+	return rf.openNew(prevInfo, backupName)
 }

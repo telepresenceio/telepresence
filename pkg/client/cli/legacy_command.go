@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -61,6 +63,10 @@ func parseLegacyCommand(args []string) *legacyCommand {
 		}
 		return ""
 	}
+	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeConfig := genericclioptions.NewConfigFlags(false)
+	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.AddFlags(kubeFlags)
 Parsing:
 	for i, v := range args {
 		switch {
@@ -105,14 +111,12 @@ Parsing:
 			break Parsing
 		case len(v) > 2 && strings.HasPrefix(v, "--"):
 			g := v[2:]
-			for _, group := range globalFlagGroups {
-				if gf := group.Flags.Lookup(g); gf != nil {
-					lc.globalFlags = append(lc.globalFlags, v)
-					if gv := getArg(i + 1); gv != "" && !strings.HasPrefix(gv, "-") {
-						lc.globalFlags = append(lc.globalFlags, gv)
-					}
-					continue Parsing
+			if gf := kubeFlags.Lookup(g); gf != nil {
+				lc.globalFlags = append(lc.globalFlags, v)
+				if gv := getArg(i + 1); gv != "" && !strings.HasPrefix(gv, "-") {
+					lc.globalFlags = append(lc.globalFlags, gv)
 				}
+				continue Parsing
 			}
 			lc.unsupportedFlags = append(lc.unsupportedFlags, v)
 		}
@@ -232,25 +236,27 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dlog.WithLogger(cmd.Context(), nil)
-	scout := scout.NewScout(cmd.Context(), "cli")
+	ctx := cmd.Context()
+	ctx = dlog.WithLogger(ctx, nil)
+	scout := scout.NewReporter(ctx, "cli")
+	scout.Start(log.WithDiscardingLogger(ctx))
 
 	// Add metadata for the main legacy Telepresence commands so we can
 	// track usage and see what legacy commands people are still using.
 	if lc.swapDeployment != "" {
-		scout.SetMetadatum("swap_deployment", true)
+		scout.SetMetadatum(ctx, "swap_deployment", true)
 	}
 	if lc.run {
-		scout.SetMetadatum("run", true)
+		scout.SetMetadatum(ctx, "run", true)
 	}
 	if lc.dockerRun {
-		scout.SetMetadatum("docker_run", true)
+		scout.SetMetadatum(ctx, "docker_run", true)
 	}
 	if lc.runShell {
-		scout.SetMetadatum("run_shell", true)
+		scout.SetMetadatum(ctx, "run_shell", true)
 	}
 	if lc.unsupportedFlags != nil {
-		scout.SetMetadatum("unsupported_flags", lc.unsupportedFlags)
+		scout.SetMetadatum(ctx, "unsupported_flags", lc.unsupportedFlags)
 	}
 	scout.Report(log.WithDiscardingLogger(cmd.Context()), "Used legacy syntax")
 

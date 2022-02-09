@@ -1,0 +1,135 @@
+name: "Build and Unit test"
+on:
+  pull_request:
+jobs:
+  "macos":
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+            #- uses: azure/setup-kubectl@v1
+            #if: steps.get_last_run.outputs.passed != 'success'
+            #with:
+            #version: 'v1.19.3'
+            #id: kubectl
+      - name: "Test arm64 build"
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: GOARCH=arm64 make build
+      - name: "Test amd64 build"
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: make build
+      - name: Run tests
+        if: steps.get_last_run.outputs.passed != 'success'
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            make check-unit
+      - name: Mark test as successful
+        run: echo "::set-output name=run_result::success" > run_result
+
+  "windows":
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - run: |
+          choco install make
+        if: steps.get_last_run.outputs.passed != 'success'
+        name: install dependencies
+      - run: make build
+        if: steps.get_last_run.outputs.passed != 'success'
+      - run: |
+          # We want to validate that tests still pass, even if the metrics host
+          # points to a broken IP
+          echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
+        if: steps.get_last_run.outputs.passed != 'success'
+        name: Update etc\hosts
+      - name: Run tests
+        if: steps.get_last_run.outputs.passed != 'success'
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
+            $ENV:DTEST_REGISTRY = "docker.io/datawire"
+            $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
+            make check-unit
+      - name: Mark test as successful
+        run: echo "::set-output name=run_result::success" > run_result
+  "linux":
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - name: Get last run
+        uses: ./.github/actions/rerun-cache
+        id: get_last_run
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y socat
+      - run: make build
+        if: steps.get_last_run.outputs.passed != 'success'
+      - name: Run tests
+        if: steps.get_last_run.outputs.passed != 'success'
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+            make check-unit
+      - name: Mark test as successful
+        run: echo "::set-output name=run_result::success" > run_result
+  "lint":
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.x'
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y socat
+      - name: Lint
+        run: make lint

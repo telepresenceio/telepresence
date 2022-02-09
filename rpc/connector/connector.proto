@@ -4,6 +4,7 @@ package telepresence.connector;
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
+import "rpc/userdaemon/userdaemon.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/connector";
 
@@ -21,9 +22,15 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-  // Status is much like Connect, except that it doesn't actually do
-  // anything.  It's a dry-run.
-  rpc Status(ConnectRequest) returns (ConnectInfo);
+  // Disconnects the cluster
+  rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // Status returns the status of the current connection or DISCONNECTED
+  // if no connection has been established.
+  rpc Status(google.protobuf.Empty) returns (ConnectInfo);
+
+  // Queries the connector whether it is possible to create the given intercept.
+  rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);
 
   // Adds an intercept to a workload.  Requires having already called
   // Connect.
@@ -41,6 +48,9 @@ service Connector {
   // Requires having already called Connect.
   rpc List(ListRequest) returns (WorkloadInfoSnapshot);
 
+  // Watch all workloads in the mapped namespaces
+  rpc WatchWorkloads(WatchWorkloadsRequest) returns (stream WorkloadInfoSnapshot);
+
   // Returns a stream of messages to display to the user.  Does NOT
   // require having called anything else first.
   rpc UserNotifications(google.protobuf.Empty) returns (stream Notification);
@@ -56,11 +66,54 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
+  rpc GetIngressInfos(google.protobuf.Empty) returns (IngressInfos);
+
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
+  rpc ListCommands(google.protobuf.Empty) returns (CommandGroups);
+
+  // RunCommand executes a CLI command.
+  rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+
+  // ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+  // the cloud for default ingress values
+  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest) returns
+  (telepresence.userdaemon.IngressInfoResponse);
+}
+
+message CommandGroups {
+  message Flag {
+    string type = 1;
+    string flag = 2;
+    string help = 3;
+    string shorthand = 4;
+    string default_value = 5;
+  }
+  message Command {
+    string name = 1;
+    string short_help = 2;
+    string long_help = 3;
+    repeated Flag flags = 4;
+  }
+  message Commands {
+    repeated Command commands = 1;
+  }
+
+  map<string, Commands> command_groups = 1;
+}
+
+message RunCommandRequest {
+  repeated string os_args = 1;
+}
+
+message RunCommandResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -102,15 +155,19 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
-  bool bridge_ok = 5;
+  reserved 5;
   reserved 6;
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
-  repeated manager.IngressInfo ingress_infos = 9;
+  reserved 9;
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+}
+
+message IngressInfos {
+  repeated manager.IngressInfo ingress_infos = 1;
 }
 
 message UninstallRequest {
@@ -161,9 +218,11 @@ enum InterceptError {
   NO_ACCEPTABLE_WORKLOAD = 8;
   AMBIGUOUS_MATCH = 9;
   FAILED_TO_ESTABLISH = 10;
-  reserved 11;
+  UNSUPPORTED_WORKLOAD = 11;
+  MISCONFIGURED_WORKLOAD = 14;
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
+  UNKNOWN_FLAG = 15;
 }
 
 message ListRequest {
@@ -180,11 +239,19 @@ message ListRequest {
   string namespace = 2;
 }
 
+message WatchWorkloadsRequest {
+  // Namespace to watch.
+  repeated string namespaces = 1;
+}
+
 // WorkloadInfo contains information about a workload
 // https://kubernetes.io/docs/concepts/workloads/
 message WorkloadInfo {
   // Name of workload
   string name = 1;
+
+  // Namespace of workload
+  string namespace = 6;
 
   // Reason why workload cannot be intercepted, or empty if it can.
   string not_interceptable_reason = 2;
@@ -197,6 +264,21 @@ message WorkloadInfo {
 
   // Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
   string workload_resource_type = 5;
+
+  message ServiceReference {
+    string name = 1;
+    string namespace = 2;
+    string uid = 3;
+    message Port {
+      string name = 1;
+      int32 port = 2;
+    }
+    repeated Port ports = 4;
+  }
+
+  optional ServiceReference service = 7;
+
+  string uid = 8;
 }
 
 message WorkloadInfoSnapshot {
@@ -217,6 +299,10 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
+
+  // The port number that service_port_identifer resolved into is
+  // used as the default port for the ingress for pro intercepts
+  telepresence.userdaemon.IngressInfoRequest service_props = 8;
 }
 
 message Notification {

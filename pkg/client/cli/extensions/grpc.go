@@ -16,10 +16,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-type systemaCredentials string
+type SystemACredentials string
 
 // GetRequestMetadata implements credentials.PerRPCCredentials.
-func (c systemaCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
+func (c SystemACredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
 	md := map[string]string{
 		"X-Ambassador-Api-Key": string(c),
 	}
@@ -27,7 +27,7 @@ func (c systemaCredentials) GetRequestMetadata(_ context.Context, _ ...string) (
 }
 
 // RequireTransportSecurity implements credentials.PerRPCCredentials.
-func (c systemaCredentials) RequireTransportSecurity() bool {
+func (c SystemACredentials) RequireTransportSecurity() bool {
 	return true
 }
 
@@ -41,7 +41,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 	if err != nil {
 		return "", fmt.Errorf("getting Ambassador Cloud preferred agent image: login error: %w", err)
 	}
-	creds := systemaCredentials(apikey)
+	creds := SystemACredentials(apikey)
 
 	conn, err := grpc.DialContext(ctx,
 		(&url.URL{Scheme: "dns", Path: "/" + u.Host}).String(), // https://github.com/grpc/grpc/blob/master/doc/naming.md

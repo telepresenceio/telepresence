@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,10 +15,23 @@ import (
 const HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
 const HeaderInterceptID = "x-telepresence-intercept-id"
 const EndPointConsumeHere = "/consume-here"
+const EndPointInterceptInfo = "/intercept-info"
+
+type InterceptInfo struct {
+	// True if the service is being intercepted
+	Intercepted bool `json:"intercepted"`
+
+	// True when queried on the workstation side, false if it is the cluster side agent.
+	ClientSide bool `json:"clientSide"`
+
+	// Metadata associated with the intercept. Only available on when Intercepted == ClientSide
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
 
 type AgentState interface {
-	// Intercepts returns true if the agent currently intercepts the given Header
-	Intercepts(context.Context, string, http.Header) (bool, error)
+	// InterceptInfo returns information about an ongoing intercept that matches
+	// the given arguments.
+	InterceptInfo(ctx context.Context, callerID, path string, headers http.Header) (*InterceptInfo, error)
 }
 
 type Server interface {
@@ -29,16 +43,14 @@ type ErrorResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func NewServer(agent AgentState, client bool) Server {
+func NewServer(agent AgentState) Server {
 	return &server{
-		agent:  agent,
-		client: client,
+		agent: agent,
 	}
 }
 
 type server struct {
-	agent  AgentState
-	client bool
+	agent AgentState
 }
 
 // ListenAndServe is like Serve but creates a TCP listener on "localhost:<apiPort>"
@@ -50,31 +62,42 @@ func (s *server) ListenAndServe(c context.Context, apiPort int) error {
 	return s.Serve(c, ln)
 }
 
-func (s *server) intercepts(c context.Context, h http.Header) (bool, error) {
-	return s.agent.Intercepts(c, h.Get(HeaderCallerInterceptID), h)
+func (s *server) interceptInfo(c context.Context, p string, h http.Header) (*InterceptInfo, error) {
+	return s.agent.InterceptInfo(c, h.Get(HeaderCallerInterceptID), p, h)
 }
 
 // Serve starts the API server. It terminates when the given context is done.
 func (s *server) Serve(c context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
+	writeError := func(w http.ResponseWriter, err error) {
+		w.WriteHeader(http.StatusInternalServerError)
+		if err := json.NewEncoder(w).Encode(&ErrorResponse{Error: err.Error()}); err != nil {
+			dlog.Errorf(c, "error %v when responding with error %v", err, err)
+		}
+	}
 	mux.HandleFunc(EndPointConsumeHere, func(w http.ResponseWriter, r *http.Request) {
 		dlog.Debugf(c, "Received %s", EndPointConsumeHere)
-		w.Header().Set("Content-Type", "text/plain")
-		intercepted, err := s.intercepts(c, r.Header)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			if _, wErr := w.Write([]byte(err.Error())); wErr != nil {
-				dlog.Errorf(c, "error %v when responding with error %v", wErr, err)
-			}
+		w.Header().Set("Content-Type", "application/json")
+		if ii, err := s.interceptInfo(c, r.FormValue("path"), r.Header); err != nil {
+			writeError(w, err)
 		} else {
 			// Client must consume intercepted messages. Agent must not.
-			consumeHere := intercepted
-			if !s.client {
+			consumeHere := ii.Intercepted
+			if !ii.ClientSide {
 				consumeHere = !consumeHere
 			}
-			if _, wErr := w.Write([]byte(strconv.FormatBool(consumeHere))); wErr != nil {
-				dlog.Errorf(c, "error %v when responding with %t", wErr, consumeHere)
+			if err = json.NewEncoder(w).Encode(consumeHere); err != nil {
+				dlog.Errorf(c, "error %v when responding with %t", err, consumeHere)
 			}
+		}
+	})
+	mux.HandleFunc(EndPointInterceptInfo, func(w http.ResponseWriter, r *http.Request) {
+		dlog.Debugf(c, "Received %s", EndPointInterceptInfo)
+		w.Header().Set("Content-Type", "application/json")
+		if ii, err := s.interceptInfo(c, r.FormValue("path"), r.Header); err != nil {
+			writeError(w, err)
+		} else if err = json.NewEncoder(w).Encode(&ii); err != nil {
+			dlog.Errorf(c, "error %v when responding with %v", err, ii)
 		}
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

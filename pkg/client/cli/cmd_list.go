@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -46,7 +45,7 @@ func listCommand() *cobra.Command {
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	var r *connector.WorkloadInfoSnapshot
 	var err error
-	err = withConnector(cmd, true, func(ctx context.Context, connectorClient connector.ConnectorClient, _ *connector.ConnectInfo, _ daemon.DaemonClient) error {
+	err = withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:
@@ -58,7 +57,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = connectorClient.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
+		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
 		return err
 	})
 	if err != nil {
@@ -158,6 +157,7 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	if debug {
 		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})
 		fields = append(fields, kv{"Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs)})
+		fields = append(fields, kv{"Metadata", fmt.Sprintf("%q", ii.Metadata)})
 	}
 
 	if ii.Spec.MountPoint != "" {
@@ -168,7 +168,10 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 
 	fields = append(fields, kv{"Intercepting", func() string {
 		if ii.MechanismArgsDesc == "" {
-			return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
+			if len(ii.Spec.MechanismArgs) > 0 {
+				return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
+			}
+			return fmt.Sprintf("using mechanism=%q", ii.Spec.Mechanism)
 		}
 		return ii.MechanismArgsDesc
 	}()})

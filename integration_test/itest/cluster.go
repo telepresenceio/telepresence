@@ -77,7 +77,7 @@ type cluster struct {
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
-	s.suffix, s.isCI = os.LookupEnv("CIRCLE_SHA1")
+	s.suffix, s.isCI = os.LookupEnv("GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
 		if len(s.suffix) > 7 {
@@ -117,6 +117,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		assert.NoError(t, err)
 	}
 	s.ensureQuitAndLoggedOut(ctx)
+	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	defer s.tearDown(ctx)
 	if !t.Failed() {
 		f(WithUser(s.withBasicConfig(ctx, t), TestUser))
@@ -135,7 +136,10 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that no telepresence is running when the tests start
-	_, _, _ = Telepresence(ctx, "quit") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
+
+	// Ensure that the daemon-socket is non-existent.
+	_ = rmAsRoot(client.DaemonSocketName)
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
@@ -245,6 +249,9 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
 
+	executable := s.Executable()
+	config.Daemons.UserDaemonBinary = executable
+
 	configYaml, err := yaml.Marshal(&config)
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
@@ -283,6 +290,9 @@ func (s *cluster) GlobalEnv() map[string]string {
 		includeEnv["TMP"] = yes
 		includeEnv["Path"] = yes
 		includeEnv["PATHEXT"] = yes
+		includeEnv["ProgramFiles"] = yes
+		includeEnv["ProgramData"] = yes
+		includeEnv["SystemDrive"] = yes
 		includeEnv["USERPROFILE"] = yes
 		includeEnv["USERNAME"] = yes
 		includeEnv["windir"] = yes
@@ -429,7 +439,7 @@ func KubeConfig(ctx context.Context) string {
 func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
 	getT(ctx).Helper()
 	// Ensure that command has timestamp and is somewhat readable
-	dlog.Debug(ctx, "executing ", shellquote.ShellString(executable, args))
+	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
 	cmd := dexec.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
@@ -495,12 +505,14 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
 	})
 
-	if user := GetUser(ctx); user != "default" {
-		na := make([]string, len(args)+2)
-		na[0] = "--as"
-		na[1] = "system:serviceaccount:default:" + user
-		copy(na[2:], args)
-		args = na
+	if len(args) > 0 && args[0] == "connect" {
+		if user := GetUser(ctx); user != "default" {
+			na := make([]string, len(args)+2)
+			na[0] = "--as"
+			na[1] = "system:serviceaccount:default:" + user
+			copy(na[2:], args)
+			args = na
+		}
 	}
 	cmd := Command(ctx, GetGlobalHarness(ctx).executable, args...)
 	cmd.Stdout = &stdout
@@ -508,18 +520,38 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	return cmd
 }
 
+// TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output
+func TelepresenceDisconnectOk(ctx context.Context) {
+	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
+}
+
+// AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command
+func AssertDisconnectOutput(ctx context.Context, stdout string) {
+	t := getT(ctx)
+	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Network is already disconnected"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Traffic Manager is already disconnected"))
+	if t.Failed() {
+		t.Logf("Disconnect output was %q", stdout)
+	}
+}
+
 // TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output
 func TelepresenceQuitOk(ctx context.Context) {
-	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit"))
+	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-ur"))
 }
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Root Daemon quitting... done") ||
-		strings.Contains(stdout, "Telepresence Root Daemon is already stopped"))
-	assert.True(t, strings.Contains(stdout, "Telepresence User Daemon quitting... done") ||
-		strings.Contains(stdout, "Telepresence User Daemon is already stopped"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Network quitting...done") ||
+		strings.Contains(stdout, "Telepresence Network had already quit"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager quitting...done") ||
+		strings.Contains(stdout, "Telepresence Traffic Manager had already quit"))
+	if t.Failed() {
+		t.Logf("Quit output was %q", stdout)
+	}
 }
 
 // RunError checks if the given err is a *exit.ExitError, and if so, extracts
@@ -612,7 +644,7 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 }
 
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	switch {
 	case strings.HasPrefix(workload, "pod/"):
