@@ -343,10 +343,8 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				break
 			}
 		}
-		if agentVer != nil {
-			if ir.Spec.MechanismArgs, err = makeFlagsCompatible(agentVer, ir.Spec.MechanismArgs); err != nil {
-				return interceptError(rpc.InterceptError_UNKNOWN_FLAG, err), nil, nil
-			}
+		if ir.Spec.MechanismArgs, err = makeFlagsCompatible(agentVer, ir.Spec.MechanismArgs); err != nil {
+			return interceptError(rpc.InterceptError_UNKNOWN_FLAG, err), nil, nil
 		}
 	}
 
@@ -378,19 +376,21 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 		delete(m, "header")
 		m["match"] = append(m["match"], hs...)
 	}
-	if agentVer.LE(semver.MustParse("1.11.8")) {
-		for ma := range m {
-			switch ma {
-			case "meta", "path-equal", "path-prefix", "path-regex":
-				return nil, errcat.User.New("--http-" + ma)
-			}
-		}
-		if agentVer.LE(semver.MustParse("1.11.7")) {
-			if pt, ok := m["plaintext"]; ok {
-				if len(pt) > 0 && pt[0] == "true" {
-					return nil, errcat.User.New("--http-plaintext")
+	if agentVer != nil {
+		if agentVer.LE(semver.MustParse("1.11.8")) {
+			for ma := range m {
+				switch ma {
+				case "meta", "path-equal", "path-prefix", "path-regex":
+					return nil, errcat.User.New("--http-" + ma)
 				}
-				delete(m, "plaintext")
+			}
+			if agentVer.LE(semver.MustParse("1.11.7")) {
+				if pt, ok := m["plaintext"]; ok {
+					if len(pt) > 0 && pt[0] == "true" {
+						return nil, errcat.User.New("--http-plaintext")
+					}
+					delete(m, "plaintext")
+				}
 			}
 		}
 	}
