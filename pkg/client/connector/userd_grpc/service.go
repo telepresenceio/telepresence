@@ -23,6 +23,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/sharedstate"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/userd_auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type Callbacks struct {
@@ -94,6 +96,20 @@ func (s *service) Status(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Con
 }
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		var msg string
+		if result.Error != rpc.InterceptError_UNSPECIFIED {
+			msg = result.Error.String()
+		} else if err != nil {
+			msg = err.Error()
+		}
+		sc := s.sharedState.Scout
+		if msg != "" {
+			sc.Report(log.WithDiscardingLogger(c), "connector_can_intercept_fail", scout.Entry{Key: "error", Value: msg})
+		} else {
+			sc.Report(log.WithDiscardingLogger(c), "connector_can_intercept_success")
+		}
+	}()
 	c = s.callCtx(c, "CanIntercept")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -114,10 +130,24 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		}
 	}
 	dlog.Debug(c, "returned")
-	return
+	return result, nil
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		var msg string
+		if result.Error != rpc.InterceptError_UNSPECIFIED {
+			msg = result.Error.String()
+		} else if err != nil {
+			msg = err.Error()
+		}
+		sc := s.sharedState.Scout
+		if msg != "" {
+			sc.Report(log.WithDiscardingLogger(c), "connector_create_intercept_fail", scout.Entry{Key: "error", Value: msg})
+		} else {
+			sc.Report(log.WithDiscardingLogger(c), "connector_create_intercept_success")
+		}
+	}()
 	c = s.callCtx(c, "CreateIntercept")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -132,6 +162,20 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		var msg string
+		if result.Error != rpc.InterceptError_UNSPECIFIED {
+			msg = result.Error.String()
+		} else if err != nil {
+			msg = err.Error()
+		}
+		sc := s.sharedState.Scout
+		if msg != "" {
+			sc.Report(log.WithDiscardingLogger(c), "connector_remove_intercept_fail", scout.Entry{Key: "error", Value: msg})
+		} else {
+			sc.Report(log.WithDiscardingLogger(c), "connector_remove_intercept_success")
+		}
+	}()
 	c = s.callCtx(c, "RemoveIntercept")
 	dlog.Debug(c, "called")
 	defer func() { err = callRecovery(c, recover(), err) }()

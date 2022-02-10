@@ -295,7 +295,7 @@ func run(c context.Context) error {
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 	}
-	if s.sharedState, err = sharedstate.NewState(c, ProcessName); err != nil {
+	if s.sharedState, err = sharedstate.NewState(c, ProcessName, s.scout); err != nil {
 		return err
 	}
 
