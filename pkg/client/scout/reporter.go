@@ -211,7 +211,7 @@ func (r *Reporter) Close() {
 	case r.buffer <- bufEntry{}:
 	default:
 	}
-	// Wait for the done channel to close. Give up after 2 seconds (that
+	// Wait for the done channel to close. Give up after 3 seconds (that
 	// should be plenty)
 	select {
 	case <-r.done:
