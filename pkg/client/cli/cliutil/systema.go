@@ -185,6 +185,7 @@ func GetTelepresencePro(ctx context.Context) error {
 		if err != nil {
 			return errcat.Unknown.Newf("error reading input: %s", err)
 		}
+		reply = strings.TrimSpace(reply)
 		if reply != "y" {
 			return nil
 		}
