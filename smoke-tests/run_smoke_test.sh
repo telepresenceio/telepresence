@@ -557,7 +557,7 @@ if [ -f "$config_file" ]; then
     $TELEPRESENCE quit > "$output_location"
 fi
 
-$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n' >"$output_location"
+$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-header=all <<<$'verylargejavaservice.default\n8080\nN\n' >"$output_location"
 sleep 1
 is_prop_traffic_agent true
 
@@ -631,7 +631,7 @@ finish_step
 ###############################################
 
 sleep 5 # avoid known agent mechanism-args race
-output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all <<<$'verylargejavaservice.default\n8080\nN\n')
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-header=all <<<$'verylargejavaservice.default\n8080\nN\n')
 sleep 1
 get_preview_url
 has_intercept_id false
@@ -652,7 +652,7 @@ finish_step
 #### Step 12 - licensed intercept all w/o preview url ####
 ##########################################################
 
-output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-match=all --preview-url=false)
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-header=all --preview-url=false)
 sleep 1
 has_intercept_id false
 has_preview_url false
@@ -723,7 +723,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     helm_install "smoke-tests/license-values.yaml"
 
     # Ensure we can intercept a persona intercept and that it works with the license
-    output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-match=auto)
+    output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-header=auto)
     sleep 1
     # Ensure we aren't logged in since we are testing air-gapped license support
     verify_logout
@@ -764,7 +764,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     helm_install "smoke-tests/license-values.yaml"
 
     # Ensure we can intercept a persona intercept and that it works with the license
-    output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-match=auto 2>&1)
+    output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-header=auto 2>&1)
     sleep 1
 
     # Ensure we aren't logged in since we are testing air-gapped license support
