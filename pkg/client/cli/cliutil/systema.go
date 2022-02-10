@@ -15,6 +15,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v2"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -148,7 +149,7 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 func GetTelepresencePro(ctx context.Context) error {
 	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
-		return errcat.Unknown.Newf("Unable to get path to config files: %s", err)
+		return errcat.Unknown.Newf("unable to get path to config files: %s", err)
 	}
 
 	// If telepresence-pro doesn't exist, then we should ask the user
@@ -169,33 +170,9 @@ func GetTelepresencePro(ctx context.Context) error {
 			return nil
 		}
 
-		// We install the correct version of telepresence-pro based on
-		// the OSS version that is associated with this client since
-		// daemon versions need to match
-		clientVersion := strings.Trim(client.Version(), "v")
-		systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
-		installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
-
-		resp, err := http.Get(installString)
+		err = installTelepresencePro(ctx, telProLocation)
 		if err != nil {
-			return errcat.User.Newf("unable to install Telepresence Pro: %s", err)
-		}
-		defer resp.Body.Close()
-
-		out, err := os.Create(telProLocation)
-		if err != nil {
-			return errcat.User.Newf("unable to create file %s for Telepresence Pro: %s", telProLocation, err)
-		}
-		defer out.Close()
-
-		_, err = io.Copy(out, resp.Body)
-		if err != nil {
-			return errcat.User.Newf("unable to copy Telepresence Pro to %s: %s", telProLocation, err)
-		}
-
-		err = os.Chmod(telProLocation, 0755)
-		if err != nil {
-			return errcat.User.Newf("unable to set permissions of Telepresence Pro to 755: %s", err)
+			return err
 		}
 
 		// Ask the user if they want to automatically update their config
@@ -211,22 +188,112 @@ func GetTelepresencePro(ctx context.Context) error {
 		if reply != "y" {
 			return nil
 		}
-		cfg := client.GetConfig(ctx)
-		cfg.Daemons.UserDaemonBinary = telProLocation
+		err = updateConfig(ctx, telProLocation)
+		if err != nil {
+			return err
+		}
+	} else {
+		// If the binary is present, we check its version to ensure it's compatible
+		// with the CLI
+		proCmd := dexec.CommandContext(ctx, telProLocation, "pro-version")
+		proCmd.DisableLogging = true
 
-		b, err := yaml.Marshal(cfg)
+		output, err := proCmd.CombinedOutput()
 		if err != nil {
-			return errcat.User.Newf("error marshaling updating config: %s", err)
+			return errcat.Unknown.Newf("Unable to get telepresence pro version")
 		}
-		cfgFile := client.GetConfigFile(ctx)
-		_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return errcat.User.Newf("error opening config file: %s", err)
+
+		if !strings.Contains(string(output), client.Version()) {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Printf("Telepresence Pro needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it? (y/n)",
+				client.Version())
+			reply, err := reader.ReadString('\n')
+			if err != nil {
+				return errcat.Unknown.Newf("error reading input: %s", err)
+			}
+
+			// If the user doesn't want to install it, then we we'll proceed
+			// with launching the daemon normally
+			reply = strings.TrimSpace(reply)
+			if reply != "y" {
+				return nil
+			}
+			err = os.Remove(telProLocation)
+			if err != nil {
+				return errcat.Unknown.Newf("error removing Telepresence Pro: %s", err)
+			}
+			// Since we've already asked the user for permission to upgrade,
+			// we can run these functions without asking permission again.
+			err = installTelepresencePro(ctx, telProLocation)
+			if err != nil {
+				return errcat.Unknown.Newf("error installing updated Telepresence Pro: %s",
+					err)
+			}
+
+			// The users configuration is most likely correct if they are upgrading,
+			// but we update it just to be extra sure.
+			err = updateConfig(ctx, telProLocation)
+			if err != nil {
+				return errcat.Unknown.Newf("error updating config: %s",
+					err)
+			}
 		}
-		err = os.WriteFile(cfgFile, b, 0644)
-		if err != nil {
-			return errcat.User.Newf("error writing config file: %s", err)
-		}
+	}
+	return nil
+}
+
+// installTelepresencePro installs the binary. Users should be asked for
+// permission before using this function
+func installTelepresencePro(ctx context.Context, telProLocation string) error {
+	// We install the correct version of telepresence-pro based on
+	// the OSS version that is associated with this client since
+	// daemon versions need to match
+	clientVersion := strings.Trim(client.Version(), "v")
+	systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
+	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
+
+	resp, err := http.Get(installString)
+	if err != nil {
+		return errcat.User.Newf("unable to install Telepresence Pro: %s", err)
+	}
+	defer resp.Body.Close()
+
+	out, err := os.Create(telProLocation)
+	if err != nil {
+		return errcat.User.Newf("unable to create file %s for Telepresence Pro: %s", telProLocation, err)
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return errcat.User.Newf("unable to copy Telepresence Pro to %s: %s", telProLocation, err)
+	}
+
+	err = os.Chmod(telProLocation, 0755)
+	if err != nil {
+		return errcat.User.Newf("unable to set permissions of Telepresence Pro to 755: %s", err)
+	}
+	return nil
+}
+
+// updateConfig updates the userDaemonBinary in the config to point to
+// telProLocation. Users should be asked for permission before this is done.
+func updateConfig(ctx context.Context, telProLocation string) error {
+	cfg := client.GetConfig(ctx)
+	cfg.Daemons.UserDaemonBinary = telProLocation
+
+	b, err := yaml.Marshal(cfg)
+	if err != nil {
+		return errcat.User.Newf("error marshaling updating config: %s", err)
+	}
+	cfgFile := client.GetConfigFile(ctx)
+	_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return errcat.User.Newf("error opening config file: %s", err)
+	}
+	err = os.WriteFile(cfgFile, b, 0644)
+	if err != nil {
+		return errcat.User.Newf("error writing config file: %s", err)
 	}
 	return nil
 }
