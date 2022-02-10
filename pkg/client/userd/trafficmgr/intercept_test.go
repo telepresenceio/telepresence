@@ -19,8 +19,8 @@ func Test_makeFlagsCompatible(t *testing.T) {
 		{
 			"1.11.7",
 			semver.MustParse("1.11.7"),
-			[]string{"--match=a=b", "--header=b=c", "--plaintext=false", "--meta=", "--path-prefix="},
-			[]string{"--match=a=b", "--match=b=c"},
+			[]string{"--match=auto", "--header=b=c", "--plaintext=false", "--meta=", "--path-prefix="},
+			[]string{"--match=b=c"},
 			assert.NoError,
 		},
 		{
@@ -51,9 +51,34 @@ func Test_makeFlagsCompatible(t *testing.T) {
 			[]string{"--meta=a=b", "--path-prefix=/api"},
 			assert.NoError,
 		},
+		{
+			"no agent version, one auto",
+			semver.Version{},
+			[]string{"--match=auto", "--header=auto"},
+			[]string{"--match=auto"},
+			assert.NoError,
+		},
+		{
+			"no agent version, strip header=auto",
+			semver.Version{},
+			[]string{"--header=auto", "--match=a=b"},
+			[]string{"--match=a=b"},
+			assert.NoError,
+		},
+		{
+			"no agent version, strip match=auto",
+			semver.Version{},
+			[]string{"--match=auto", "--header=a=b"},
+			[]string{"--match=a=b"},
+			assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ver := &tt.agentVer
+			if ver.Major == 0 {
+				ver = nil
+			}
 			got, err := makeFlagsCompatible(&tt.agentVer, tt.args)
 			if !tt.wantErr(t, err, fmt.Sprintf("makeFlagsCompatible(%v, %v)", tt.agentVer, tt.args)) {
 				return

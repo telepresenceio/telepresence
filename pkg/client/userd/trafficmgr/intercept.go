@@ -346,6 +346,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		if ir.Spec.MechanismArgs, err = makeFlagsCompatible(agentVer, ir.Spec.MechanismArgs); err != nil {
 			return interceptError(rpc.InterceptError_UNKNOWN_FLAG, err), nil, nil
 		}
+		dlog.Debugf(c, "Using %s flags %v", ir.Spec.Mechanism, ir.Spec.MechanismArgs)
 	}
 
 	svcprops, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, obj)
@@ -374,7 +375,18 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 	// All agent versions can handle --match.
 	if hs, ok := m["header"]; ok {
 		delete(m, "header")
-		m["match"] = append(m["match"], hs...)
+		hs = append(hs, m["match"]...)
+		ds := make([]string, 0, len(hs))
+		for _, h := range hs {
+			if h != "auto" {
+				ds = append(ds, h)
+			}
+		}
+		if len(ds) == 0 {
+			// restore the default
+			ds = append(ds, "auto")
+		}
+		m["match"] = ds
 	}
 	if agentVer != nil {
 		if agentVer.LE(semver.MustParse("1.11.8")) {
