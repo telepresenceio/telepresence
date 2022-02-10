@@ -302,13 +302,14 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	defer l.loginMu.Unlock()
 
 	// Whatever the result is, report it to the terminal and report it to Metriton.
-	var token *oauth2.Token
-	defer l.reportLoginResult(ctx, err, "browser")
+	defer func() {
+		l.reportLoginResult(ctx, err, "browser")
+	}()
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
-	pkceVerifier, err := NewCodeVerifier()
-	if err != nil {
+	var pkceVerifier CodeVerifier
+	if pkceVerifier, err = NewCodeVerifier(); err != nil {
 		return err
 	}
 	url := l.oauth2Config.AuthCodeURL(
@@ -318,7 +319,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	)
 
 	fmt.Fprintln(l.stdout, "Launching browser authentication flow...")
-	if err := l.OpenURLFunc(url); err != nil {
+	if l.OpenURLFunc(url) != nil {
 		fmt.Fprintf(l.stdout, "Could not open browser, please access this URL: %v\n", url)
 	}
 
@@ -333,6 +334,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 		}
 
 		// retrieve access token from callback code
+		var token *oauth2.Token
 		token, err = l.oauth2Config.Exchange(
 			ctx,
 			callback.Code,
