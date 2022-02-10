@@ -89,6 +89,7 @@ type anonymizer struct {
 func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error {
 	scout := scout.NewReporter(ctx, "cli")
 	scout.Start(log.WithDiscardingLogger(ctx))
+	defer scout.Close()
 
 	// Get the log directory and return the error if we can't get it
 	logDir, err := filelocation.AppUserLogDir(ctx)

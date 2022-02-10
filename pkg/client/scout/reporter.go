@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,7 @@ type bufEntry struct {
 type Reporter struct {
 	index    int
 	buffer   chan bufEntry
+	done     chan struct{}
 	reporter *metriton.Reporter
 }
 
@@ -160,6 +162,7 @@ func NewReporter(ctx context.Context, mode string) *Reporter {
 // initialization broken out or constructor for the benefit of testing
 func (r *Reporter) initialize(ctx context.Context, mode, goos string) {
 	r.buffer = make(chan bufEntry, bufferSize)
+	r.done = make(chan struct{})
 
 	// Fixed (growing) metadata passed with every report
 	baseMeta := getOsMetadata(ctx)
@@ -200,6 +203,22 @@ func (r *Reporter) Start(ctx context.Context) {
 	}()
 }
 
+func (r *Reporter) Close() {
+	// Send a zeroed bufEntry here instead of closing the buffer so that
+	// any stray Reports that arrive after the context is cancelled aren't
+	// sent on a closed channel
+	select {
+	case r.buffer <- bufEntry{}:
+	default:
+	}
+	// Wait for the done channel to close. Give up after 2 seconds (that
+	// should be plenty)
+	select {
+	case <-r.done:
+	case <-time.After(3 * time.Second):
+	}
+}
+
 // Run ensures that all reports on the send queue are sent to the endpoint
 func (r *Reporter) Run(ctx context.Context) error {
 	go func() {
@@ -214,6 +233,8 @@ func (r *Reporter) Run(ctx context.Context) error {
 		default:
 		}
 	}()
+
+	defer close(r.done)
 
 	hc := dcontext.HardContext(ctx)
 	for be := range r.buffer {
