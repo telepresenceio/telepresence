@@ -153,12 +153,12 @@ func NewReporter(ctx context.Context, mode string) *Reporter {
 			},
 		},
 	}
-	r.initialize(ctx, mode, runtime.GOOS)
+	r.initialize(ctx, mode, runtime.GOOS, runtime.GOARCH)
 	return r
 }
 
 // initialization broken out or constructor for the benefit of testing
-func (r *Reporter) initialize(ctx context.Context, mode, goos string) {
+func (r *Reporter) initialize(ctx context.Context, mode, goos, goarch string) {
 	r.buffer = make(chan bufEntry, bufferSize)
 
 	// Fixed (growing) metadata passed with every report
@@ -166,6 +166,7 @@ func (r *Reporter) initialize(ctx context.Context, mode, goos string) {
 	baseMeta["mode"] = mode
 	baseMeta["trace_id"] = uuid.New()
 	baseMeta["goos"] = goos
+	baseMeta["goarch"] = goarch
 
 	// Discover how Telepresence was installed based on the binary's location
 	installMethod, err := client.GetInstallMechanism()

@@ -327,6 +327,7 @@ func TestReport(t *testing.T) {
 		mockInstallID   = "00000000-1111-2222-3333-444444444444"
 		mockMode        = "test-mode"
 		mockOS          = "linux"
+		mockARCH        = "amd64"
 		mockAction      = "test-action"
 	)
 	type testcase struct {
@@ -340,6 +341,7 @@ func TestReport(t *testing.T) {
 				"action": mockAction,
 				"mode":   mockMode,
 				"goos":   mockOS,
+				"goarch": mockARCH,
 			},
 		},
 		"with-additional-scout-meta": {
@@ -357,6 +359,7 @@ func TestReport(t *testing.T) {
 				"action":        mockAction,
 				"mode":          mockMode,
 				"goos":          mockOS,
+				"goarch":        mockARCH,
 				"extra_field_1": "extra value 1",
 				"extra_field_2": "extra value 2",
 			},
@@ -370,6 +373,7 @@ func TestReport(t *testing.T) {
 				"action":        mockAction,
 				"mode":          mockMode,
 				"goos":          mockOS,
+				"goarch":        mockARCH,
 				"extra_field_1": "extra value 1",
 				"extra_field_2": "extra value 2",
 			},
@@ -389,6 +393,7 @@ func TestReport(t *testing.T) {
 				"action":        mockAction,
 				"mode":          mockMode,
 				"goos":          mockOS,
+				"goarch":        mockARCH,
 				"extra_field_1": "extra value 1",
 			},
 		},
@@ -403,6 +408,7 @@ func TestReport(t *testing.T) {
 				"action": mockAction,
 				"mode":   "overridden mode",
 				"goos":   mockOS,
+				"goarch": mockARCH,
 			},
 		},
 	}
@@ -452,7 +458,7 @@ func TestReport(t *testing.T) {
 					Endpoint: testServer.URL,
 				},
 			}
-			scout.initialize(ctx, mockMode, mockOS)
+			scout.initialize(ctx, mockMode, mockOS, mockARCH)
 
 			// Start scout report processing...
 			sc, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
