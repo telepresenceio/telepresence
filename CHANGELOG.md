@@ -10,6 +10,8 @@
 
 - Feature: Telepresence Login now prompts you to optionally install Telepresence Pro, which has some additional features when used with Ambassador Cloud.
 
+- Change: Both daemon logfiles now rotate daily instead of once for each new connect
+
 - Change: The flag `--http-match` was renamed to `--http-header`. Old flag still works, but is deprecated and doesn't
   show up in the help.
 
