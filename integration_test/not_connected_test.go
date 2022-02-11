@@ -1,6 +1,8 @@
 package integration_test
 
 import (
+	"runtime"
+
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -37,7 +39,11 @@ func (s *notConnectedSuite) Test_ConnectWithCommand() {
 func (s *notConnectedSuite) Test_InvalidKubeconfig() {
 	ctx := s.Context()
 	itest.TelepresenceOk(ctx, "quit", "-ur")
-	badEnvCtx := itest.WithEnv(ctx, map[string]string{"KUBECONFIG": "/dev/null"})
+	path := "/dev/null"
+	if runtime.GOOS == "windows" {
+		path = "C:\\NUL"
+	}
+	badEnvCtx := itest.WithEnv(ctx, map[string]string{"KUBECONFIG": path})
 	_, stderr, err := itest.Telepresence(badEnvCtx, "connect")
 	s.Contains(stderr, "kubeconfig has no context definition")
 	itest.TelepresenceQuitOk(ctx) // process is started with bad env, so get rid of it

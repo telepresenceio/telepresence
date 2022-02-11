@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -21,6 +22,12 @@ func kubeFlagMap(kubeFlags *pflag.FlagSet) map[string]string {
 	kubeFlags.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			kubeFlagMap[flag.Name] = flag.Value.String()
+		} else if flag.Name == "kubeconfig" {
+			// Certain options' default are bound to the connector daemon process; this is notably true of the kubeconfig file to use
+			// So if we connect, disconnect, switch kubeconfigs, and reconnect, we'll connect to our old context -- setting the flag explicitly will prevent that.
+			if cfg, ok := os.LookupEnv("KUBECONFIG"); ok {
+				kubeFlagMap[flag.Name] = cfg
+			}
 		}
 	})
 	return kubeFlagMap
