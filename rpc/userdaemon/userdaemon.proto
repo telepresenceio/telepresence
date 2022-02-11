@@ -67,4 +67,5 @@ message DaemonInfo {
   string daemon_id = 1;
   string workstation_name = 2;
   string kube_context_name = 3;
+  string session_id = 4;
 }
