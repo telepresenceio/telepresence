@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -342,31 +343,10 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 				break
 			}
 		}
-		if agentVer != nil {
-			switch {
-			case semver.MustParse("1.11.7").GE(*agentVer):
-				mas := ir.Spec.MechanismArgs
-				l := len(mas) - 1
-				for i, ma := range mas {
-					switch ma {
-					case "--plaintext=true":
-						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-plaintext")), nil, nil
-					case "--plaintext=false":
-						// Not supported by <= 1.11.7. Just remove it
-						mas[i] = mas[l]
-						l--
-					}
-				}
-				ir.Spec.MechanismArgs = mas[:l+1]
-			case semver.MustParse("1.11.8").GE(*agentVer):
-				for _, ma := range ir.Spec.MechanismArgs {
-					switch ma {
-					case "--meta", "--path-equal", "--path-prefix", "--path-regex":
-						return interceptError(rpc.InterceptError_UNKNOWN_FLAG, errcat.User.New("--http-"+ma)), nil, nil
-					}
-				}
-			}
+		if ir.Spec.MechanismArgs, err = makeFlagsCompatible(agentVer, ir.Spec.MechanismArgs); err != nil {
+			return interceptError(rpc.InterceptError_UNKNOWN_FLAG, err), nil, nil
 		}
+		dlog.Debugf(c, "Using %s flags %v", ir.Spec.Mechanism, ir.Spec.MechanismArgs)
 	}
 
 	svcprops, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, obj)
@@ -376,6 +356,64 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	return nil, obj, svcprops
+}
+
+func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, error) {
+	// We get a normalized representation of all flags here, regardless of if they've
+	// been set or not, so we start splitting them into flag and value and skipping
+	// those that aren't set.
+	m := make(map[string][]string, len(args))
+	ks := make([]string, 0, len(args))
+	for _, ma := range args {
+		if eqi := strings.IndexByte(ma, '='); eqi > 2 && eqi+1 < len(ma) {
+			k := ma[2:eqi]
+			ks = append(ks, k)
+			m[k] = append(m[k], ma[eqi+1:])
+		}
+	}
+	// Concat all --header flags (renamed to --match) with --match flags
+	// All agent versions can handle --match.
+	if hs, ok := m["header"]; ok {
+		delete(m, "header")
+		hs = append(hs, m["match"]...)
+		ds := make([]string, 0, len(hs))
+		for _, h := range hs {
+			if h != "auto" {
+				ds = append(ds, h)
+			}
+		}
+		if len(ds) == 0 {
+			// restore the default
+			ds = append(ds, "auto")
+		}
+		m["match"] = ds
+	}
+	if agentVer != nil {
+		if agentVer.LE(semver.MustParse("1.11.8")) {
+			for ma := range m {
+				switch ma {
+				case "meta", "path-equal", "path-prefix", "path-regex":
+					return nil, errcat.User.New("--http-" + ma)
+				}
+			}
+			if agentVer.LE(semver.MustParse("1.11.7")) {
+				if pt, ok := m["plaintext"]; ok {
+					if len(pt) > 0 && pt[0] == "true" {
+						return nil, errcat.User.New("--http-plaintext")
+					}
+					delete(m, "plaintext")
+				}
+			}
+		}
+	}
+	args = make([]string, 0, len(args))
+	sort.Strings(ks)
+	for _, k := range ks {
+		for _, v := range m[k] {
+			args = append(args, "--"+k+"="+v)
+		}
+	}
+	return args, nil
 }
 
 // AddIntercept adds one intercept

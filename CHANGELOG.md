@@ -10,6 +10,9 @@
 
 - Feature: Telepresence Login now prompts you to optionally install Telepresence Pro, which has some additional features when used with Ambassador Cloud.
 
+- Change: The flag `--http-match` was renamed to `--http-header`. Old flag still works, but is deprecated and doesn't
+  show up in the help.
+
 - Change: The verb "watch" was added to the set of required verbs when accessing services and workloads for the client RBAC ClusterRole
 
 - Change: Telepresence is no longer backward compatible with versions 2.4.4 or older because the deprecated multiplexing tunnel functionality was removed.
