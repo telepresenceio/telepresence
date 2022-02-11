@@ -132,8 +132,12 @@ End the service with `<ctrl>-C` and then try `curl hello.default` or `http://hel
 
 Now end the session too. Your desktop no longer has access to the cluster internals.
 ```console
-$ telepresence quit
-Telepresence Daemon quitting...done
+$ telepresence quit -u
+Telepresence Network is already disconnected
+Telepresence Traffic Manager had already quit
+$ telepresence quit -r
+Telepresence Network quitting...done
+Telepresence Traffic Manager is already disconnected
 $ curl hello.default
 curl: (6) Could not resolve host: hello.default
 ```
