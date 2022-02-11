@@ -2,57 +2,6 @@ name: "License verification"
 on:
   pull_request:
 jobs:
-  dependency_info_macos:
-    name: "macOs: Verify use of forbidden licenses"
-    runs-on: macos-latest
-    outputs:
-      is-up-to-date: ${{ steps.check.outputs.up-to-date }}
-      diff: ${{ steps.check.outputs.diff }}
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
-        with:
-          go-version: '^1.17.x'
-      - name: "Update bash"
-        shell: bash
-        run: brew install bash
-      - name: "Generate dependency information"
-        shell: bash
-        run: make generate
-      - name: "Check dependency files are up-to-date"
-        id: check
-        shell: bash
-        run: |
-          set -e
-          git add .
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo '::set-output name=diff::'$(PAGER= git diff --cached 2>&1 | base64)
-            echo "::set-output name=up-to-date::no"
-          else
-            echo "::set-output name=up-to-date::yes"
-          fi
-  up_to_date_check_macos:
-    name: "macOs: Check out-of-date licenses"
-    needs: dependency_info_macos
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Check dependency files are up-to-date"
-        shell: bash
-        run: |
-          set -e
-          if [[ "${{needs.dependency_info_macos.outputs.is-up-to-date}}" == "no" ]]; then
-            echo '::error:: Changes detected after dependency generation. Run ' \
-              '`make generate` and commit the latest version of the ' \
-              'dependency information files'
-
-            echo ${{needs.dependency_info_macos.outputs.diff}} | base64 -d
-            exit 1
-          fi
-
-          echo '::info:: Files are up-to-date'
   dependency_info_linux:
     name: "Linux: Verify use of forbidden licenses"
     runs-on: ubuntu-latest
