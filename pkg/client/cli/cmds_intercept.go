@@ -660,7 +660,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 				Host:   ingressInfo.Host,
 				Port:   ingressInfo.Port,
 				UseTls: ingressInfo.UseTls,
-				L5Host: ingressInfo.Host,
+				L5Host: ingressInfo.L5Host,
 			}
 		}
 
