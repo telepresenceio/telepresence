@@ -89,6 +89,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		reader       = bufio.NewReader(cmd.InOrStdin())
 	)
 	sc.Start(log.WithDiscardingLogger(ctx))
+	defer sc.Close()
 
 	err = cliutil.Disconnect(ctx, false, false)
 	if err != nil {
