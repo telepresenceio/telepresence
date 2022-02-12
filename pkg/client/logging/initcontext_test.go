@@ -87,7 +87,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce())
+		c, err := InitContext(ctx, logName, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -116,7 +116,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce())
+		c, err := InitContext(ctx, logName, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -135,26 +135,25 @@ func TestInitContext(t *testing.T) {
 		ctx, logDir, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce())
+		c, err := InitContext(ctx, logName, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
 		infoMsg := "info message"
 		dlog.Info(c, infoMsg)
 		closeLog(t)
+		ft.Step(time.Second)
 
-		c, err = InitContext(ctx, logName, NewRotateOnce())
+		c, err = InitContext(ctx, logName, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
+		dlog.Info(c, infoMsg)
+		check.FileExists(logFile)
 		defer closeLog(t)
 
-		check.FileExists(logFile)
-		backupFile := filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
-
-		ft.Step(time.Second)
 		infoTs := dtime.Now().Format("2006-01-02 15:04:05.0000")
-		dlog.Info(c, infoMsg)
+		backupFile := filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
 		check.FileExists(backupFile)
 
 		bs, err := os.ReadFile(logFile)
@@ -166,7 +165,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, _ := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce())
+		c, err := InitContext(ctx, logName, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -174,7 +173,7 @@ func TestInitContext(t *testing.T) {
 		bt1 := loggerForTest.Out.(*RotatingFile).birthTime
 		closeLog(t)
 
-		c, err = InitContext(ctx, logName, NewRotateOnce())
+		c, err = InitContext(ctx, logName, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -188,7 +187,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, RotateNever)
+		c, err := InitContext(ctx, logName, RotateNever, true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -196,7 +195,7 @@ func TestInitContext(t *testing.T) {
 		dlog.Info(c, infoMsg1)
 		closeLog(t)
 
-		c, err = InitContext(ctx, logName, RotateNever)
+		c, err = InitContext(ctx, logName, RotateNever, true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -223,7 +222,7 @@ func TestInitContext(t *testing.T) {
 		}
 		for i := 0; i < maxFiles+2; i++ {
 			ft.Step(24 * time.Hour)
-			c, err := InitContext(ctx, logName, NewRotateOnce())
+			c, err := InitContext(ctx, logName, NewRotateOnce(), true)
 			loggerForTest.AddHook(&dtimeHook{})
 			check.NoError(err)
 			check.NotNil(c)

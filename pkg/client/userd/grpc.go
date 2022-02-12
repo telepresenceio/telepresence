@@ -31,7 +31,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 func callRecovery(r interface{}, err error) error {
@@ -143,9 +142,9 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			msg = err.Error()
 		}
 		if msg != "" {
-			s.scout.Report(log.WithDiscardingLogger(c), "connector_can_intercept_fail", scout.Entry{Key: "error", Value: msg})
+			s.scout.Report(c, "connector_can_intercept_fail", scout.Entry{Key: "error", Value: msg})
 		} else {
-			s.scout.Report(log.WithDiscardingLogger(c), "connector_can_intercept_success")
+			s.scout.Report(c, "connector_can_intercept_success")
 		}
 	}()
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
@@ -174,9 +173,9 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 			msg = err.Error()
 		}
 		if msg != "" {
-			s.scout.Report(log.WithDiscardingLogger(c), "connector_create_intercept_fail", scout.Entry{Key: "error", Value: msg})
+			s.scout.Report(c, "connector_create_intercept_fail", scout.Entry{Key: "error", Value: msg})
 		} else {
-			s.scout.Report(log.WithDiscardingLogger(c), "connector_create_intercept_success")
+			s.scout.Report(c, "connector_create_intercept_success")
 		}
 	}()
 	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) error {
@@ -195,9 +194,9 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 			msg = err.Error()
 		}
 		if msg != "" {
-			s.scout.Report(log.WithDiscardingLogger(c), "connector_remove_intercept_fail", scout.Entry{Key: "error", Value: msg})
+			s.scout.Report(c, "connector_remove_intercept_fail", scout.Entry{Key: "error", Value: msg})
 		} else {
-			s.scout.Report(log.WithDiscardingLogger(c), "connector_remove_intercept_success")
+			s.scout.Report(c, "connector_remove_intercept_success")
 		}
 	}()
 	err = s.withSession(c, "RemoveIntercept", func(c context.Context, session trafficmgr.Session) error {

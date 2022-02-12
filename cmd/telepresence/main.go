@@ -62,6 +62,10 @@ func main() {
 			os.Exit(1)
 		}
 		ctx = client.WithConfig(ctx, cfg)
+		if ctx, err = logging.InitContext(ctx, "cli", logging.RotateDaily, false); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 		cmd = cli.Command(ctx)
 		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 			return errcat.User.New(err)
