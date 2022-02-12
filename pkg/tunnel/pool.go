@@ -19,6 +19,7 @@ type RecursionBlocker interface {
 	InitDone() <-chan struct{}
 	Proceed() bool
 	Reset(context.Context, ip.Packet) error
+	Discard(ip.Packet) bool
 }
 
 // The error returned when recursion is encountered
@@ -131,17 +132,17 @@ func (p *Pool) GetOrCreate(ctx context.Context, id ConnID, createHandler Handler
 func (p *Pool) GetOrCreateTCP(ctx context.Context, id ConnID, createHandler HandlerCreator, initialPacket ip.Packet) (Handler, bool, error) {
 	var blocker RecursionBlocker
 	p.lock.RLock()
-	handler, ok := p.handlers[id]
-	if !ok {
-		blocker = p.blockers[ip.MakeAddrKey(id.Destination(), id.DestinationPort())]
-	}
-	p.lock.RUnlock()
-
-	if ok {
+	if handler, ok := p.handlers[id]; ok {
+		p.lock.RUnlock()
 		return handler, true, nil
 	}
 
+	blocker = p.blockers[ip.MakeAddrKey(id.Destination(), id.DestinationPort())]
 	if blocker != nil {
+		p.lock.RUnlock()
+		if blocker.Discard(initialPacket) {
+			return nil, false, nil
+		}
 		<-blocker.InitDone()
 		if blocker.Proceed() {
 			return p.GetOrCreate(ctx, id, createHandler)
@@ -158,8 +159,8 @@ func (p *Pool) GetOrCreateTCP(ctx context.Context, id ConnID, createHandler Hand
 		cancel()
 	}
 
-	var err error
-	handler, err = createHandler(handlerCtx, release)
+	handler, err := createHandler(handlerCtx, release)
+	p.lock.RUnlock()
 	if err != nil {
 		return nil, false, err
 	}
@@ -169,6 +170,7 @@ func (p *Pool) GetOrCreateTCP(ctx context.Context, id ConnID, createHandler Hand
 
 	p.lock.Lock()
 	var old Handler
+	var ok bool
 	if old, ok = p.handlers[id]; !ok {
 		p.handlers[id] = handler
 		var isBlocker bool

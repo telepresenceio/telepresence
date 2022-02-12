@@ -43,16 +43,24 @@ func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 }
 
 func (h *handler) adjustReceiveWindow() {
-	// Adjust window size based on current queue sizes.
-	queueFactor := 2*ioChannelSize - (len(h.toMgrCh) + len(h.fromTun))
-	windowSize := 0
-	if queueFactor > 0 {
-		// Make window size dependent on the number o element on the queue
-		windowSize = queueFactor * (maxReceiveWindow / (2 * ioChannelSize))
+	// Adjust window size based on current queue sizes. Both channels
+	// are of ioChannelSize.
+	inBuffer := float64(len(h.toMgrCh) + len(h.fromTun))
+	bufSize := float64(2 * ioChannelSize)
+	ratio := inBuffer / bufSize // 0.0 means empty, 1.0 is completely full
+	ratio = 0.5 - ratio         // 0.5 means empty, below zero means more than half full
 
-		// Strip the last 8 bits so that we don't change so often
-		windowSize &^= 0xff
+	windowSize := 0
+
+	// windowSize will remain at zero as long as the buffer is more than half full
+	if ratio > 0.0 {
+		// Make window size dependent on the number o element on the queue
+		ratio *= 2 // 1.0 means empty buffer
+		windowSize = int(float64(maxReceiveWindow) * ratio)
 	}
+
+	// Strip the last 8 bits so that we don't change so often
+	windowSize &^= 0xff
 	h.setReceiveWindow(windowSize)
 }
 
