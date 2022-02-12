@@ -770,10 +770,6 @@ func GetConfigFile(c context.Context) string {
 
 // GetDefaultConfig returns the default configuration settings
 func GetDefaultConfig(c context.Context) Config {
-	executable, err := os.Executable()
-	if err != nil {
-		dlog.Errorf(c, "unable to get telepresence executable: %s", err)
-	}
 	cfg := Config{
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
@@ -799,9 +795,7 @@ func GetDefaultConfig(c context.Context) Config {
 		},
 		Grpc:            Grpc{},
 		TelepresenceAPI: TelepresenceAPI{},
-		Daemons: Daemons{
-			UserDaemonBinary: executable,
-		},
+		Daemons:         Daemons{},
 		Intercept: Intercept{
 			DefaultPort: defaultInterceptDefaultPort,
 		},
