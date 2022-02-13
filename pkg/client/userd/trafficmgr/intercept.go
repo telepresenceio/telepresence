@@ -656,6 +656,19 @@ func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error 
 	return err
 }
 
+// GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists
+func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
+	if ns, ok := tm.localIntercepts[name]; ok {
+		return &manager.InterceptSpec{Name: name, Namespace: ns, WorkloadKind: "local"}
+	}
+	for _, cept := range tm.getCurrentIntercepts() {
+		if cept.Spec.Name == name {
+			return cept.Spec
+		}
+	}
+	return nil
+}
+
 // clearIntercepts removes all intercepts
 func (tm *TrafficManager) clearIntercepts(c context.Context) error {
 	for _, cept := range tm.getCurrentIntercepts() {

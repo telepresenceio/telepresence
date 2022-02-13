@@ -56,6 +56,7 @@ type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload, *ServiceProps)
+	GetInterceptSpec(string) *manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	RemoveIntercept(context.Context, string) error
