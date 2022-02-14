@@ -21,15 +21,15 @@ import (
 var loggerForTest *logrus.Logger
 
 // InitContext sets up standard Telepresence logging for a background process
-func InitContext(ctx context.Context, name string, strategy RotationStrategy) (context.Context, error) {
+func InitContext(ctx context.Context, name string, strategy RotationStrategy, captureStd bool) (context.Context, error) {
 	logger := logrus.New()
 	loggerForTest = logger
 
-	// Start with DebugLevel so that the config is read using that level
-	logger.SetLevel(logrus.DebugLevel)
+	// Start with InfoLevel so that the config is read using that level
+	logger.SetLevel(logrus.InfoLevel)
 	logger.ReportCaller = false // turned on when level >= logrus.TraceLevel
 
-	if IsTerminal(int(os.Stdout.Fd())) {
+	if captureStd && IsTerminal(int(os.Stdout.Fd())) {
 		logger.Formatter = log.NewFormatter("15:04:05.0000")
 	} else {
 		logger.Formatter = log.NewFormatter("2006-01-02 15:04:05.0000")
@@ -45,7 +45,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy) (c
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, true, 0600, strategy, maxFiles)
+		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, captureStd, 0600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}

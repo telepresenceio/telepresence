@@ -13,7 +13,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
@@ -88,7 +87,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		clusterMasks = false
 		reader       = bufio.NewReader(cmd.InOrStdin())
 	)
-	sc.Start(log.WithDiscardingLogger(ctx))
+	sc.Start(ctx)
 	defer sc.Close()
 
 	err = cliutil.Disconnect(ctx, false, false)
@@ -98,15 +97,15 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 
 	defer func() {
 		if err != nil {
-			sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_error", scout.Entry{Key: "error", Value: err.Error()})
+			sc.Report(ctx, "vpn_diag_error", scout.Entry{Key: "error", Value: err.Error()})
 		} else {
 			if configIssues {
-				sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_fail",
+				sc.Report(ctx, "vpn_diag_fail",
 					scout.Entry{Key: "vpn_masks", Value: vpnMasks},
 					scout.Entry{Key: "cluster_masks", Value: clusterMasks},
 				)
 			} else {
-				sc.Report(log.WithDiscardingLogger(ctx), "vpn_diag_pass")
+				sc.Report(ctx, "vpn_diag_pass")
 			}
 		}
 	}()

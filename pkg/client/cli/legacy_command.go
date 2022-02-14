@@ -8,10 +8,8 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 // Here we handle parsing legacy commands, as well as generating Telepresence
@@ -237,9 +235,9 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
-	ctx = dlog.WithLogger(ctx, nil)
 	scout := scout.NewReporter(ctx, "cli")
-	scout.Start(log.WithDiscardingLogger(ctx))
+	scout.Start(ctx)
+	defer scout.Close()
 
 	// Add metadata for the main legacy Telepresence commands so we can
 	// track usage and see what legacy commands people are still using.
@@ -258,7 +256,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 	if lc.unsupportedFlags != nil {
 		scout.SetMetadatum(ctx, "unsupported_flags", lc.unsupportedFlags)
 	}
-	scout.Report(log.WithDiscardingLogger(cmd.Context()), "Used legacy syntax")
+	scout.Report(ctx, "Used legacy syntax")
 
 	// Generate output to user letting them know legacy Telepresence was used,
 	// what the Telepresence command is, and runs it.
