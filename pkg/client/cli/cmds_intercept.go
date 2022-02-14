@@ -738,7 +738,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if envFile == "" {
 		file, err := os.CreateTemp("", "tel-*.env")
 		if err != nil {
-			return errcat.NoLogs.Newf("failed to create temporary environment file. %w", err)
+			return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
 		}
 		defer os.Remove(file.Name())
 
@@ -784,7 +784,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 func (is *interceptState) writeEnvFile() error {
 	file, err := os.Create(is.args.envFile)
 	if err != nil {
-		return errcat.NoLogs.Newf("failed to create environment file %q: %w", is.args.envFile, err)
+		return errcat.NoDaemonLogs.Newf("failed to create environment file %q: %w", is.args.envFile, err)
 	}
 	return is.writeEnvToFileAndClose(file)
 }

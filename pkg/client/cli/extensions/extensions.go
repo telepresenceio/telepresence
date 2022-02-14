@@ -349,11 +349,11 @@ func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusOK {
-					return "", errcat.NoLogs.Newf("image URL %q returned HTTP %v", image, resp.StatusCode)
+					return "", errcat.NoDaemonLogs.Newf("image URL %q returned HTTP %v", image, resp.StatusCode)
 				}
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
-					return "", errcat.NoLogs.New(err)
+					return "", errcat.NoDaemonLogs.New(err)
 				}
 				return strings.TrimSpace(string(body)), nil
 			}()

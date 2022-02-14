@@ -149,7 +149,7 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 func GetTelepresencePro(ctx context.Context) error {
 	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
-		return errcat.Unknown.Newf("unable to get path to config files: %s", err)
+		return errcat.NoDaemonLogs.Newf("unable to get path to config files: %w", err)
 	}
 
 	// If telepresence-pro doesn't exist, then we should ask the user
@@ -160,7 +160,7 @@ func GetTelepresencePro(ctx context.Context) error {
 		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
 		reply, err := reader.ReadString('\n')
 		if err != nil {
-			return errcat.Unknown.Newf("error reading input: %s", err)
+			return errcat.User.Newf("error reading input: %w", err)
 		}
 
 		// If the user doesn't want to install it, then we we'll proceed
@@ -183,7 +183,7 @@ func GetTelepresencePro(ctx context.Context) error {
 		fmt.Printf("Update your Telepresence config to use Telepresence Pro? (y/n)")
 		reply, err = reader.ReadString('\n')
 		if err != nil {
-			return errcat.Unknown.Newf("error reading input: %s", err)
+			return errcat.User.Newf("error reading input: %w", err)
 		}
 		reply = strings.TrimSpace(reply)
 		if reply != "y" {
@@ -201,7 +201,7 @@ func GetTelepresencePro(ctx context.Context) error {
 
 		output, err := proCmd.CombinedOutput()
 		if err != nil {
-			return errcat.Unknown.Newf("Unable to get telepresence pro version")
+			return errcat.NoDaemonLogs.Newf("Unable to get telepresence pro version")
 		}
 
 		if !strings.Contains(string(output), client.Version()) {
@@ -210,7 +210,7 @@ func GetTelepresencePro(ctx context.Context) error {
 				client.Version())
 			reply, err := reader.ReadString('\n')
 			if err != nil {
-				return errcat.Unknown.Newf("error reading input: %s", err)
+				return errcat.NoDaemonLogs.Newf("error reading input: %w", err)
 			}
 
 			// If the user doesn't want to install it, then we we'll proceed
@@ -221,13 +221,13 @@ func GetTelepresencePro(ctx context.Context) error {
 			}
 			err = os.Remove(telProLocation)
 			if err != nil {
-				return errcat.Unknown.Newf("error removing Telepresence Pro: %s", err)
+				return errcat.NoDaemonLogs.Newf("error removing Telepresence Pro: %w", err)
 			}
 			// Since we've already asked the user for permission to upgrade,
 			// we can run these functions without asking permission again.
 			err = installTelepresencePro(ctx, telProLocation)
 			if err != nil {
-				return errcat.Unknown.Newf("error installing updated Telepresence Pro: %s",
+				return errcat.NoDaemonLogs.Newf("error installing updated Telepresence Pro: %w",
 					err)
 			}
 
@@ -235,7 +235,7 @@ func GetTelepresencePro(ctx context.Context) error {
 			// but we update it just to be extra sure.
 			err = updateConfig(ctx, telProLocation)
 			if err != nil {
-				return errcat.Unknown.Newf("error updating config: %s",
+				return errcat.NoDaemonLogs.Newf("error updating config: %w",
 					err)
 			}
 		}
@@ -255,24 +255,24 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 
 	resp, err := http.Get(installString)
 	if err != nil {
-		return errcat.User.Newf("unable to install Telepresence Pro: %s", err)
+		return errcat.NoDaemonLogs.Newf("unable to install Telepresence Pro: %w", err)
 	}
 	defer resp.Body.Close()
 
 	out, err := os.Create(telProLocation)
 	if err != nil {
-		return errcat.User.Newf("unable to create file %s for Telepresence Pro: %s", telProLocation, err)
+		return errcat.NoDaemonLogs.Newf("unable to create file %s for Telepresence Pro: %w", telProLocation, err)
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return errcat.User.Newf("unable to copy Telepresence Pro to %s: %s", telProLocation, err)
+		return errcat.NoDaemonLogs.Newf("unable to copy Telepresence Pro to %s: %w", telProLocation, err)
 	}
 
 	err = os.Chmod(telProLocation, 0755)
 	if err != nil {
-		return errcat.User.Newf("unable to set permissions of Telepresence Pro to 755: %s", err)
+		return errcat.NoDaemonLogs.Newf("unable to set permissions of Telepresence Pro to 755: %w", err)
 	}
 	return nil
 }
@@ -285,16 +285,16 @@ func updateConfig(ctx context.Context, telProLocation string) error {
 
 	b, err := yaml.Marshal(cfg)
 	if err != nil {
-		return errcat.User.Newf("error marshaling updating config: %s", err)
+		return errcat.NoDaemonLogs.Newf("error marshaling updating config: %w", err)
 	}
 	cfgFile := client.GetConfigFile(ctx)
 	_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return errcat.User.Newf("error opening config file: %s", err)
+		return errcat.NoDaemonLogs.Newf("error opening config file: %w", err)
 	}
 	err = os.WriteFile(cfgFile, b, 0644)
 	if err != nil {
-		return errcat.User.Newf("error writing config file: %s", err)
+		return errcat.NoDaemonLogs.Newf("error writing config file: %w", err)
 	}
 	return nil
 }

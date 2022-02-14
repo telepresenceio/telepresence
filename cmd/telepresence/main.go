@@ -72,7 +72,7 @@ func main() {
 		})
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			if errcat.GetCategory(err) > errcat.NoLogs {
+			if errcat.GetCategory(err) > errcat.NoDaemonLogs {
 				summarizeLogs(ctx, cmd)
 				// If the user gets here, it might be an actual bug that they found, so
 				// point them to the `gather-logs` command in case they want to open an
