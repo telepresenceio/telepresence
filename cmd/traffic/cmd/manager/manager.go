@@ -139,10 +139,6 @@ func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 						dlog.Errorln(ctx, "systema: release management connection:", err)
 					}
 				}
-				// Release the refcount on the proxy connection
-				if err := m.systema.Done(); err != nil {
-					dlog.Errorln(ctx, "systema: release proxy connection:", err)
-				}
 			}
 		}
 	}
