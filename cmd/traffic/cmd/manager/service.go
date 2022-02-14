@@ -340,6 +340,8 @@ func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name st
 	}
 }
 
+const systemaCallTimeout = 3 * time.Second
+
 func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
 	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
 	interceptID, err := m.makeinterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
@@ -371,8 +373,10 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 			// Have SystemA create the preview domain.
 			if domain == "" {
+				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
+				defer cancel()
 				var resp *systema.CreateDomainResponse
-				resp, err = sa.CreateDomain(ctx, &systema.CreateDomainRequest{
+				resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
 					InterceptId:   intercept.Id,
 					DisplayBanner: action.AddPreviewDomain.DisplayBanner,
 					InterceptSpec: intercept.Spec,
@@ -393,7 +397,9 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 			// Oh no, something went wrong.  Clean up.
 			if sa != nil {
 				if domain != "" {
-					_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+					tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
+					defer cancel()
+					_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
 						Domain: domain,
 					})
 					if err != nil {
@@ -425,7 +431,9 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 			if sa, err := m.systema.Get(); err != nil {
 				dlog.Errorln(ctx, "systema: acquire connection:", err)
 			} else {
-				_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
+				defer cancel()
+				_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
 					Domain: domain,
 				})
 				if err != nil {

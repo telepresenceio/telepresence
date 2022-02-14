@@ -230,6 +230,8 @@ func (h *handler) Close(ctx context.Context) {
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
 	}
+	// Wake up if waiting for larger window size (ends processPayload)
+	h.sendCondition.Broadcast()
 	select {
 	case <-h.establishedCh:
 		// already closed

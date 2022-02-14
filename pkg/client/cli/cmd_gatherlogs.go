@@ -104,7 +104,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		if err != nil {
 			return errcat.User.New(err)
 		}
-		gl.outputFile = fmt.Sprintf("%s/telepresence_logs.zip", pwd)
+		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip", pwd)
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
 		return errcat.User.New("output file must end in .zip")
 	}
@@ -224,7 +224,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 			continue
 		}
 
-		fullFileName := fmt.Sprintf("%s/%s", exportDir, entry.Name())
+		fullFileName := filepath.Join(exportDir, entry.Name())
 		// anonymize the log if necessary
 		if gl.anon {
 			if err := anonymizeLog(stdout, fullFileName, anonymizer); err != nil {
@@ -271,7 +271,7 @@ func writeResponseToFiles(lr *manager.LogsResponse, anonymizer *anonymizer, expo
 	// Write the pod yaml to files
 	for podName, yaml := range lr.PodYaml {
 		podName = getPodName(podName, anonymize, anonymizer)
-		podYamlFile := fmt.Sprintf("%s/%s.yaml", exportDir, podName)
+		podYamlFile := filepath.Join(exportDir, podName+".yaml")
 		if err := createFileWithContent(podYamlFile, yaml); err != nil {
 			return err
 		}
