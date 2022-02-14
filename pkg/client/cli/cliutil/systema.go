@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -154,7 +155,7 @@ func GetTelepresencePro(ctx context.Context) error {
 
 	// If telepresence-pro doesn't exist, then we should ask the user
 	// if they want to install it
-	telProLocation := fmt.Sprintf("%s/telepresence-pro", dir)
+	telProLocation := filepath.Join(dir, "telepresence-pro")
 	if _, err := os.Stat(telProLocation); os.IsNotExist(err) {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
