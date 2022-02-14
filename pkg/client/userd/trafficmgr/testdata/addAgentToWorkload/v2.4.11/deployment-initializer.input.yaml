@@ -1,0 +1,57 @@
+deployment:
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: sample-app
+    namespace: default
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        service: sample-app
+    template:
+      metadata:
+        annotations:
+          consul.hashicorp.com/connect-inject: 'false'
+          sidecar.istio.io/inject: 'false'
+        labels:
+          service: sample-app
+      spec:
+        containers:
+          - name: sample-app
+            image: gcr.io/datawire/k8s-initializer-sample-app:latest
+            imagePullPolicy: Always
+            env:
+              - name: LISTEN_PORT
+                value: '3000'
+            livenessProbe:
+              httpGet:
+                path: /health
+                port: someverylongnam
+              periodSeconds: 10
+            readinessProbe:
+              httpGet:
+                path: /health
+                port: someverylongnam
+              periodSeconds: 10
+            ports:
+              - containerPort: 3000
+                name: someverylongnam
+        restartPolicy: Always
+        securityContext:
+          runAsUser: 8888
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: sample-app
+    namespace: default
+    labels:
+      service: sample-app
+  spec:
+    ports:
+      - port: 80
+        name: someverylongnam
+        targetPort: someverylongnam
+    selector:
+      service: sample-app

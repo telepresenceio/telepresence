@@ -29,7 +29,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -239,6 +238,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 		return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
+				defer is.scout.Close()
 				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 			})
 		})
@@ -248,6 +248,7 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 	return withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
+			defer is.scout.Close()
 			return client.WithEnsuredState(ctx, is, false, func() error {
 				if args.dockerRun {
 					return is.runInDocker(ctx, is.cmd, args.cmdline)
@@ -275,7 +276,7 @@ func newInterceptState(
 		managerClient:   managerClient,
 		connInfo:        cs.ConnectInfo,
 	}
-	is.scout.Start(log.WithDiscardingLogger(ctx))
+	is.scout.Start(ctx)
 	return is
 }
 
@@ -597,7 +598,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	ir, err := is.createAndValidateRequest(ctx)
 	if err != nil {
-		is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
+		is.scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, err
 	}
 
@@ -613,9 +614,9 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	defer func() {
 		if err != nil {
-			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
+			is.scout.Report(ctx, "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
 		} else {
-			is.scout.Report(log.WithDiscardingLogger(ctx), "intercept_success")
+			is.scout.Report(ctx, "intercept_success")
 		}
 	}()
 
@@ -672,7 +673,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			},
 		})
 		if err != nil {
-			is.scout.Report(log.WithDiscardingLogger(ctx), "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
+			is.scout.Report(ctx, "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
 			err = fmt.Errorf("creating preview domain: %w", err)
 			return true, err
 		}
@@ -737,7 +738,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if envFile == "" {
 		file, err := os.CreateTemp("", "tel-*.env")
 		if err != nil {
-			return errcat.NoLogs.Newf("failed to create temporary environment file. %w", err)
+			return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
 		}
 		defer os.Remove(file.Name())
 
@@ -783,7 +784,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 func (is *interceptState) writeEnvFile() error {
 	file, err := os.Create(is.args.envFile)
 	if err != nil {
-		return errcat.NoLogs.Newf("failed to create environment file %q: %w", is.args.envFile, err)
+		return errcat.NoDaemonLogs.Newf("failed to create environment file %q: %w", is.args.envFile, err)
 	}
 	return is.writeEnvToFileAndClose(file)
 }

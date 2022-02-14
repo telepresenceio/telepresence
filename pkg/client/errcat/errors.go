@@ -15,11 +15,11 @@ type categorized struct {
 }
 
 const (
-	OK      = Category(iota)
-	User    // User made an error
-	Config  // Errors in config.yml, extensions, or kubeconfig
-	NoLogs  // Other error generated in the CLI process, so no use pointing the user to logs
-	Unknown // Something else. Consult the logs
+	OK           = Category(iota)
+	User         // User made an error
+	Config       // Errors in config.yml, extensions, or kubeconfig
+	NoDaemonLogs // Other error generated in the CLI process, so no use pointing the user to logs
+	Unknown      // Something else. Consult the logs
 )
 
 // New creates a new categorized error based in its argument. The argument

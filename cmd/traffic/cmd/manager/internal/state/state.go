@@ -613,12 +613,12 @@ func (s *State) RemoveInterceptAPIKey(interceptID string) bool {
 	// If the APIKey isn't present, then we return false since we didn't remove
 	// anything since no APIKey was associated with that intercept.
 	s.mu.Lock()
-	if _, ok := s.interceptAPIKeys[interceptID]; !ok {
-		return false
+	_, ok := s.interceptAPIKeys[interceptID]
+	if ok {
+		delete(s.interceptAPIKeys, interceptID)
 	}
-	delete(s.interceptAPIKeys, interceptID)
 	s.mu.Unlock()
-	return true
+	return ok
 }
 
 func (s *State) GetIntercept(interceptID string) (*rpc.InterceptInfo, bool) {

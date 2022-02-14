@@ -62,13 +62,17 @@ func main() {
 			os.Exit(1)
 		}
 		ctx = client.WithConfig(ctx, cfg)
+		if ctx, err = logging.InitContext(ctx, "cli", logging.RotateDaily, false); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 		cmd = cli.Command(ctx)
 		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 			return errcat.User.New(err)
 		})
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			if errcat.GetCategory(err) > errcat.NoLogs {
+			if errcat.GetCategory(err) > errcat.NoDaemonLogs {
 				summarizeLogs(ctx, cmd)
 				// If the user gets here, it might be an actual bug that they found, so
 				// point them to the `gather-logs` command in case they want to open an

@@ -180,6 +180,8 @@ type handler struct {
 
 	// random generator for initial sequence number
 	rnd *rand.Rand
+
+	synDiscardCount int
 }
 
 func NewHandler(
@@ -228,6 +230,8 @@ func (h *handler) Close(ctx context.Context) {
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)
 	}
+	// Wake up if waiting for larger window size (ends processPayload)
+	h.sendCondition.Broadcast()
 	select {
 	case <-h.establishedCh:
 		// already closed
@@ -247,6 +251,15 @@ func (h *handler) Proceed() bool {
 // Reset replies to the sender of the initialPacket with a RST packet.
 func (h *handler) Reset(ctx context.Context, initialPacket ip.Packet) error {
 	return h.toTun.Write(ctx, initialPacket.(Packet).Reset())
+}
+
+// Discard returns true if the package should be discarded
+func (h *handler) Discard(initialPacket ip.Packet) bool {
+	if initialPacket.(Packet).Header().SYN() {
+		h.synDiscardCount++
+		return h.synDiscardCount > 1 // Keep initial SYN packet
+	}
+	return false
 }
 
 func (h *handler) Start(ctx context.Context) {

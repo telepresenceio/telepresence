@@ -1,6 +1,6 @@
 github.com/datawire/dlib v1.2.5-0.20211116212847-0316f8d7af2b/go.mod h1:NiGDmetmbkBvtznpWSx6C0vA0s0LK9aHna3LJDqjruk=
-github.com/datawire/go-mkopensource v0.0.0-20220209184825-2ce061a5d63c h1:lVLaT4e1HJivqZuYPTYLneZ6KgD7+IqNGQNjERPQjh4=
-github.com/datawire/go-mkopensource v0.0.0-20220209184825-2ce061a5d63c/go.mod h1:vSYTDzFSY6rYxLW7ecVDF3gIs4YqOwCCPWdtIvc8hWQ=
+github.com/datawire/go-mkopensource v0.0.0-20220211184726-6da1292dcd62 h1:+jj0AQf00VEGSHjGStK/N2x3SGYjZDZD2JyewHAcTIQ=
+github.com/datawire/go-mkopensource v0.0.0-20220211184726-6da1292dcd62/go.mod h1:vSYTDzFSY6rYxLW7ecVDF3gIs4YqOwCCPWdtIvc8hWQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

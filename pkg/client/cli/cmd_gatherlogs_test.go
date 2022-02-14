@@ -251,13 +251,13 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 				var regexStr string
 				switch gl.daemons {
 				case "all":
-					regexStr = "connector|daemon"
+					regexStr = "cli|connector|daemon"
 				case "root":
 					regexStr = "daemon"
 				case "user":
 					regexStr = "connector"
 				case "None":
-					regexStr = "!connector|!daemon"
+					regexStr = "a^" // impossible to match
 				default:
 					// We shouldn't hit this
 					t.Fatal("Used an option for daemon that is impossible")

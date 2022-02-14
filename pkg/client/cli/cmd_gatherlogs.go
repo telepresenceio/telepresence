@@ -19,7 +19,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type gatherLogsArgs struct {
@@ -86,7 +85,8 @@ type anonymizer struct {
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
 func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error {
 	scout := scout.NewReporter(ctx, "cli")
-	scout.Start(log.WithDiscardingLogger(ctx))
+	scout.Start(ctx)
+	defer scout.Close()
 
 	// Get the log directory and return the error if we can't get it
 	logDir, err := filelocation.AppUserLogDir(ctx)
@@ -104,7 +104,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		if err != nil {
 			return errcat.User.New(err)
 		}
-		gl.outputFile = fmt.Sprintf("%s/telepresence_logs.zip", pwd)
+		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip", pwd)
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
 		return errcat.User.New("output file must end in .zip")
 	}
@@ -125,7 +125,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	var daemonLogs []string
 	switch gl.daemons {
 	case "all":
-		daemonLogs = append(daemonLogs, "connector", "daemon")
+		daemonLogs = append(daemonLogs, "cli", "connector", "daemon")
 	case "root":
 		daemonLogs = append(daemonLogs, "daemon")
 	case "user":
@@ -138,13 +138,12 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	// types of logs people are requesting more frequently.
 	// This also gives us an idea about how much usage this command is
 	// getting.
-	dc := log.WithDiscardingLogger(ctx)
-	scout.SetMetadatum(dc, "daemon_logs", daemonLogs)
-	scout.SetMetadatum(dc, "traffic_manager_logs", gl.trafficManager)
-	scout.SetMetadatum(dc, "traffic_agent_logs", gl.trafficAgents)
-	scout.SetMetadatum(dc, "get_pod_yaml", gl.podYaml)
-	scout.SetMetadatum(dc, "anonymized_logs", gl.anon)
-	scout.Report(dc, "used_gather_logs")
+	scout.SetMetadatum(ctx, "daemon_logs", daemonLogs)
+	scout.SetMetadatum(ctx, "traffic_manager_logs", gl.trafficManager)
+	scout.SetMetadatum(ctx, "traffic_agent_logs", gl.trafficAgents)
+	scout.SetMetadatum(ctx, "get_pod_yaml", gl.podYaml)
+	scout.SetMetadatum(ctx, "anonymized_logs", gl.anon)
+	scout.Report(ctx, "used_gather_logs")
 
 	// Get all logs from the logDir that match the daemons the user cares about.
 	logFiles, err := os.ReadDir(logDir)
@@ -157,8 +156,18 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		}
 		for _, logType := range daemonLogs {
 			if strings.Contains(entry.Name(), logType) {
-				srcFile := fmt.Sprintf("%s/%s", logDir, entry.Name())
-				dstFile := fmt.Sprintf("%s/%s", exportDir, entry.Name())
+				srcFile := filepath.Join(logDir, entry.Name())
+
+				// The cli.log is often empty, so this check is relevant.
+				empty, err := isEmpty(srcFile)
+				if err != nil {
+					fmt.Fprintf(stderr, "failed stat on %s: %s\n", entry.Name(), err)
+					continue
+				}
+				if empty {
+					continue
+				}
+				dstFile := filepath.Join(exportDir, entry.Name())
 				if err := copyFiles(dstFile, srcFile); err != nil {
 					// We don't want to fail / exit abruptly if we can't copy certain
 					// files, but we do want the user to know we were unsuccessful
@@ -215,7 +224,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 			continue
 		}
 
-		fullFileName := fmt.Sprintf("%s/%s", exportDir, entry.Name())
+		fullFileName := filepath.Join(exportDir, entry.Name())
 		// anonymize the log if necessary
 		if gl.anon {
 			if err := anonymizeLog(stdout, fullFileName, anonymizer); err != nil {
@@ -262,12 +271,20 @@ func writeResponseToFiles(lr *manager.LogsResponse, anonymizer *anonymizer, expo
 	// Write the pod yaml to files
 	for podName, yaml := range lr.PodYaml {
 		podName = getPodName(podName, anonymize, anonymizer)
-		podYamlFile := fmt.Sprintf("%s/%s.yaml", exportDir, podName)
+		podYamlFile := filepath.Join(exportDir, podName+".yaml")
 		if err := createFileWithContent(podYamlFile, yaml); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func isEmpty(file string) (bool, error) {
+	s, err := os.Stat(file)
+	if err != nil {
+		return false, err
+	}
+	return s.Size() == 0, err
 }
 
 // copyFiles copies files from one location into another.

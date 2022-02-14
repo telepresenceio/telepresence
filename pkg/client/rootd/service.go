@@ -317,7 +317,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 	c = client.WithConfig(c, cfg)
 
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
-	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily)
+	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}
