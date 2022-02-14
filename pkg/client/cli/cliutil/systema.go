@@ -3,6 +3,7 @@ package cliutil
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -255,25 +256,28 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
 
 	resp, err := http.Get(installString)
-	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to install Telepresence Pro: %w", err)
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			err = errors.New(resp.Status)
+		}
 	}
-	defer resp.Body.Close()
+	if err != nil {
+		return errcat.NoDaemonLogs.Newf("unable to download Telepresence Pro: %w", err)
+	}
 
 	out, err := os.Create(telProLocation)
 	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to create file %s for Telepresence Pro: %w", telProLocation, err)
+		return errcat.NoDaemonLogs.Newf("unable to create file %q for Telepresence Pro: %w", telProLocation, err)
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to copy Telepresence Pro to %s: %w", telProLocation, err)
+	if _, err = io.Copy(out, resp.Body); err != nil {
+		return errcat.NoDaemonLogs.Newf("unable to copy Telepresence Pro to %q: %w", telProLocation, err)
 	}
 
-	err = os.Chmod(telProLocation, 0755)
-	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to set permissions of Telepresence Pro to 755: %w", err)
+	if err = os.Chmod(telProLocation, 0755); err != nil {
+		return errcat.NoDaemonLogs.Newf("unable to set permissions of %q to 755: %w", telProLocation, err)
 	}
 	return nil
 }
