@@ -15,6 +15,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -45,11 +46,10 @@ func launchDaemon(ctx context.Context) error {
 		_ = fh.Close()
 	}
 
-	configDir, err := filelocation.AppUserConfigDir(ctx)
+	configDir, err := ensureAppUserConfigDir(ctx)
 	if err != nil {
 		return err
 	}
-
 	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
 }
 
@@ -170,4 +170,15 @@ func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err e
 		err = nil
 	}
 	return err
+}
+
+func ensureAppUserConfigDir(ctx context.Context) (string, error) {
+	configDir, err := filelocation.AppUserConfigDir(ctx)
+	if err != nil {
+		return "", errcat.NoDaemonLogs.New(err)
+	}
+	if err = os.MkdirAll(configDir, 0700); err != nil {
+		return "", errcat.NoDaemonLogs.Newf("unable to ensure that config directory %q exists: %w", configDir, err)
+	}
+	return configDir, nil
 }
