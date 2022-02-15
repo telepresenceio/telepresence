@@ -157,6 +157,9 @@ func GetTelepresencePro(ctx context.Context) error {
 	// If telepresence-pro doesn't exist, then we should ask the user
 	// if they want to install it
 	telProLocation := filepath.Join(dir, "telepresence-pro")
+	if runtime.GOOS == "windows" {
+		telProLocation += ".exe"
+	}
 	if _, err := os.Stat(telProLocation); os.IsNotExist(err) {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
@@ -253,7 +256,8 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	// daemon versions need to match
 	clientVersion := strings.Trim(client.Version(), "v")
 	systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
-	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
+	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/%s",
+		systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion, filepath.Base(telProLocation))
 
 	resp, err := http.Get(installString)
 	if err == nil {
