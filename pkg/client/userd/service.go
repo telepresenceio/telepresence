@@ -198,13 +198,18 @@ nextSession:
 }
 
 func (s *service) cancelSession() {
-	// We have to cancel the session before we can acquire this lock, because we need any long-running RPCs that may be holding the RLock to die.
-	s.sessionCancel()
-	s.sessionLock.Lock()
-	defer s.sessionLock.Unlock()
-	if s.session != nil {
-		s.session = nil
+	s.sessionLock.RLock()
+	if s.sessionCancel != nil {
+		s.sessionCancel()
 	}
+	s.sessionLock.RUnlock()
+
+	// We have to cancel the session before we can acquire this write-lock, because we need any long-running RPCs
+	// that may be holding the RLock to die.
+	s.sessionLock.Lock()
+	s.session = nil
+	s.sessionCancel = nil
+	s.sessionLock.Unlock()
 }
 
 // run is the main function when executing as the connector
