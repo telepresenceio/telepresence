@@ -1,15 +1,35 @@
 # Telepresence 2: fast, efficient local development for Kubernetes microservices
 
-Telepresence gives developers infinite scale development environments for Kubernetes. With Telepresence:
+[<img src="https://cncf-branding.netlify.app/img/projects/telepresence/horizontal/color/telepresence-horizontal-color.png" width="80"/>](https://cncf-branding.netlify.app/img/projects/telepresence/horizontal/color/telepresence-horizontal-color.png)
+
+Telepresence gives developers infinite scale development environments for Kubernetes. 
+
+Website: [https://www.telepresence.io](https://www.telepresence.io)  
+Slack: [Discuss](https://datawire-oss.slack.com/signup#/domain-signup)
+
+**With Telepresence:**
 
 * You run one service locally, using your favorite IDE and other tools
-* You run the rest of your application in the cloud, where there is unlimited memory and compute
+* You run the rest of your application in the [cloud](https://www.getambassador.io/products/ambassador-cloud/), where there is unlimited memory and compute
 
-This gives developers:
+**This gives developers:**
 
-* a fast local dev loop, with no waiting for a container build / push / deploy
-* ability to use their favorite local tools (IDE, debugger, etc.)
-* ability to run large-scale applications that can't run locally
+* A fast local dev loop, with no waiting for a container build / push / deploy
+* Ability to use their favorite local tools (IDE, debugger, etc.)
+* Ability to run large-scale applications that can't run locally
+
+## Quick Start
+
+A few quick ways to start using Telepresence
+
+* **Telepresence Quick Start:** [Quick Start](https://www.getambassador.io/docs/telepresence/latest/quick-start/)
+* **Install Telepresence:** [Install](https://www.getambassador.io/docs/telepresence/latest/install/)
+* **Contributor's Guide:** [Guide](https://github.com/telepresenceio/telepresence/blob/release/v2/DEVELOPING.md)
+* **Meetings:** Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers
+
+## Documentation
+Telepresence documentation is available on the Ambassador Labs webside:  
+[Documentation](https://www.getambassador.io/docs/telepresence/)
 
 ## Telepresence 2
 
