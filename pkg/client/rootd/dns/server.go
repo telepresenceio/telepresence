@@ -27,7 +27,7 @@ type Resolver func(ctx context.Context, domain string) ([]net.IP, error)
 // recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
 // is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
 // recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
-const recursionCheck = "tel2-recursion-check.kube-system"
+const recursionCheck = "tel2-recursion-check.kube-system."
 
 // defaultClusterDomain used unless traffic-manager reports otherwise
 const defaultClusterDomain = "cluster.local."
@@ -250,6 +250,14 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 					if err := processor(c, paths, dev); err != nil {
 						return err
 					}
+					if atomic.LoadInt32(&s.recursive) == 0 {
+						for _, p := range prevPaths {
+							if p == "kube-system" {
+								s.performRecursionCheck(c)
+								break
+							}
+						}
+					}
 				}
 			}
 		}
@@ -319,7 +327,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
 		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
-			if q.Name == recursionCheck+"." {
+			if q.Name == recursionCheck {
 				atomic.StoreInt32(&s.recursive, 2)
 			}
 			if atomic.LoadInt32(&s.recursive) != 1 {
@@ -355,6 +363,19 @@ func (d dfs) String() string {
 	return d()
 }
 
+func (s *Server) performRecursionCheck(c context.Context) {
+	rc := strings.TrimSuffix(recursionCheck, ".")
+	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
+	if _, err := net.DefaultResolver.LookupHost(c, rc); err != nil {
+		if err, ok := err.(*net.DNSError); ok {
+			if err.IsNotFound {
+				return
+			}
+		}
+		dlog.Errorf(c, "recursion check ended with %v", err)
+	}
+}
+
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	c := s.ctx
@@ -366,16 +387,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}()
 
 	q := &r.Question[0]
-	if atomic.CompareAndSwapInt64(&s.requestCount, 0, 1) {
-		// Perform the first recursion check query
-		go func() {
-			dlog.Debugf(c, "Performing initial recursion check with %s", recursionCheck)
-			_, err := net.DefaultResolver.LookupHost(c, recursionCheck)
-			dlog.Debugf(c, "recursion check ended with %v", err)
-		}()
-	} else {
-		atomic.AddInt64(&s.requestCount, 1)
-	}
+	atomic.AddInt64(&s.requestCount, 1)
 
 	answerString := func(a []dns.RR) string {
 		if a == nil {
