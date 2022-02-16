@@ -61,10 +61,10 @@ type Server struct {
 }
 
 type cacheEntry struct {
-	created   time.Time
-	recursion int32 // will be set to the current qType during call to cluster
-	answer    []dns.RR
-	wait      chan struct{}
+	created      time.Time
+	currentQType int32 // will be set to the current qType during call to cluster
+	answer       []dns.RR
+	wait         chan struct{}
 }
 
 // cacheTTL is the time to live for an entry in the local DNS cache.
@@ -297,7 +297,7 @@ func (s *Server) resolveThruCache(q *dns.Question) []dns.RR {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
 		oldDv := v.(*cacheEntry)
-		if atomic.LoadInt32(&s.recursive) == 2 && atomic.LoadInt32(&oldDv.recursion) == int32(q.Qtype) {
+		if atomic.LoadInt32(&s.recursive) == 2 && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
 			return nil
 		}
@@ -317,7 +317,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) []dns.RR {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
 		oldDv := v.(*cacheEntry)
-		if atomic.LoadInt32(&oldDv.recursion) == int32(q.Qtype) {
+		if atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			if q.Name == recursionCheck+"." {
 				atomic.StoreInt32(&s.recursive, 2)
 			}
@@ -410,9 +410,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 const dnsTTL = 4
 
 func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) []dns.RR {
-	atomic.StoreInt32(&dv.recursion, int32(q.Qtype))
+	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
 	defer func() {
-		atomic.StoreInt32(&dv.recursion, 0)
+		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
 		close(dv.wait)
 	}()
 
