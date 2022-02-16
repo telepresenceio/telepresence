@@ -78,7 +78,7 @@ following Free and Open Source software:
     github.com/mattn/go-isatty                                          v0.0.12                                    MIT license
     github.com/mattn/go-runewidth                                       v0.0.7                                     MIT license
     github.com/matttproud/golang_protobuf_extensions                    v1.0.2-0.20181231171920-c182affec369       Apache License 2.0
-    github.com/miekg/dns                                                v1.1.35                                    3-clause BSD license
+    github.com/miekg/dns                                                v1.1.46                                    3-clause BSD license
     github.com/mitchellh/copystructure                                  v1.1.1                                     MIT license
     github.com/mitchellh/go-wordwrap                                    v1.0.0                                     MIT license
     github.com/mitchellh/reflectwalk                                    v1.0.1                                     MIT license
@@ -115,13 +115,15 @@ following Free and Open Source software:
     go.opencensus.io                                                    v0.22.3                                    Apache License 2.0
     go.starlark.net                                                     v0.0.0-20200306205701-8dd3e2ee1dd5         3-clause BSD license
     golang.org/x/crypto                                                 v0.0.0-20210322153248-0c34fe9e7dc2         3-clause BSD license
+    golang.org/x/mod                                                    v0.4.2                                     3-clause BSD license
     golang.org/x/net                                                    v0.0.0-20210805182204-aaa1db679c0d         3-clause BSD license
     golang.org/x/oauth2                                                 v0.0.0-20200107190931-bf48bf16ab8d         3-clause BSD license
-    golang.org/x/sync                                                   v0.0.0-20201207232520-09787c993a3a         3-clause BSD license
+    golang.org/x/sync                                                   v0.0.0-20210220032951-036812b2e83c         3-clause BSD license
     golang.org/x/sys                                                    v0.0.0-20210630005230-0f9fa26af87c         3-clause BSD license
     golang.org/x/term                                                   v0.0.0-20210220032956-6a3ed077a48d         3-clause BSD license
     golang.org/x/text                                                   v0.3.7-0.20210411120140-c2d28a6ddf6c       3-clause BSD license
     golang.org/x/time                                                   v0.0.0-20210220033141-f8bda1e9f3ba         3-clause BSD license
+    golang.org/x/tools                                                  v0.1.6-0.20210726203631-07bc1bf47fb2       3-clause BSD license
     golang.org/x/xerrors                                                v0.0.0-20200804184101-5ec99f83aff1         3-clause BSD license
     golang.zx2c4.com/wireguard                                          v0.0.0-20210427022245-097af6e1351b         MIT license
     golang.zx2c4.com/wireguard/windows                                  v0.3.11                                    MIT license
