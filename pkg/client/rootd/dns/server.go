@@ -2,6 +2,8 @@ package dns
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -344,6 +346,15 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 	return answer, err
 }
 
+// dfs is a func that implements the fmt.Stringer interface. Used in log statements to ensure
+// that the function isn't evaluated until the log output is formatted (which will happen only
+// if the given loglevel is enabled).
+type dfs func() string
+
+func (d dfs) String() string {
+	return d()
+}
+
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	c := s.ctx
@@ -366,16 +377,37 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		atomic.AddInt64(&s.requestCount, 1)
 	}
 
-	if answer, err := s.cacheResolve(q); err == nil && answer != nil {
-		switch len(answer) {
-		case 0:
-			dlog.Debugf(c, "QTYPE[%v] %s -> EMPTY", q.Qtype, q.Name)
-		case 1:
-			dlog.Debugf(c, "QTYPE[%v] %s -> %s", q.Qtype, q.Name, answer[0])
-		default:
-			dlog.Debugf(c, "QTYPE[%v] %s -> %v", q.Qtype, q.Name, answer)
+	answerString := func(a []dns.RR) string {
+		if a == nil {
+			return ""
 		}
-		msg := new(dns.Msg)
+		switch len(a) {
+		case 0:
+			return "EMPTY"
+		case 1:
+			return a[0].String()
+		default:
+			return fmt.Sprintf("%v", a)
+		}
+	}
+
+	qts := dns.TypeToString[q.Qtype]
+	answer, err := s.cacheResolve(q)
+	var rc int
+	var pfx dfs = func() string { return "" }
+	var txt dfs = func() string { return "" }
+	var rct dfs = func() string { return dns.RcodeToString[rc] }
+
+	var msg *dns.Msg
+
+	defer func() {
+		dlog.Debugf(c, "%s%-6s %s -> %s %s", pfx, qts, q.Name, rct, txt)
+		_ = w.WriteMsg(msg)
+	}()
+
+	if err == nil && answer != nil {
+		rc = dns.RcodeSuccess
+		msg = new(dns.Msg)
 		msg.SetReply(r)
 		msg.Answer = answer
 		msg.Authoritative = true
@@ -384,23 +416,48 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		// single dns server, this will prevent us
 		// from intercepting all queries
 		msg.RecursionAvailable = true
-		_ = w.WriteMsg(msg)
-	} else {
-		if s.fallback != nil {
-			dlog.Debugf(c, "QTYPE[%v] %s -> FALLBACK", q.Qtype, q.Name)
-			client := dns.Client{Net: "udp"}
-			in, _, err := client.ExchangeWithConn(r, s.fallback)
-			if err != nil {
-				dlog.Error(c, err)
-				return
-			}
-			_ = w.WriteMsg(in)
+		txt = func() string { return answerString(msg.Answer) }
+		return
+	}
+
+	// The recursion check query, or queries that end with the cluster domain name, are not dispatched to the
+	// fallback DNS-server.
+	if s.fallback == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
+		if err == nil {
+			rc = dns.RcodeNameError
 		} else {
-			dlog.Debugf(c, "QTYPE[%v] %s -> NOT FOUND", q.Qtype, q.Name)
-			m := new(dns.Msg)
-			m.SetRcode(r, dns.RcodeNameError)
-			_ = w.WriteMsg(m)
+			rc = dns.RcodeServerFailure
+			if errors.Is(err, context.DeadlineExceeded) {
+				txt = func() string { return "timeout" }
+			} else {
+				txt = err.Error
+			}
 		}
+		msg = new(dns.Msg)
+		msg.SetRcode(r, rc)
+		return
+	}
+
+	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallback.RemoteAddr()) }
+	dc := dns.Client{Net: "udp", Timeout: 2 * time.Second}
+	msg, _, err = dc.ExchangeWithConn(r, s.fallback)
+	if err != nil {
+		msg = new(dns.Msg)
+		rc = dns.RcodeServerFailure
+		txt = err.Error
+		if err, ok := err.(net.Error); ok {
+			switch {
+			case err.Timeout():
+				txt = func() string { return "timeout" }
+			case err.Temporary():
+				rc = dns.RcodeRefused
+			default:
+			}
+		}
+		msg.SetRcode(r, rc)
+	} else {
+		rc = msg.Rcode
+		txt = func() string { return answerString(msg.Answer) }
 	}
 }
 
