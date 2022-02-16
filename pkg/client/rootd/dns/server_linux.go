@@ -107,7 +107,16 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 				fields := strings.Fields(line)
 				s.config.LocalIp = net.ParseIP(fields[1])
 				dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.config.LocalIp))
-				break
+			}
+
+			// The search entry in /etc/resolv.conf is not intended for this resolver so
+			// ensure that we just forward such queries without sending them to the cluster
+			// by adding corresponding entries to excludeSuffixes
+			if strings.HasPrefix(strings.TrimSpace(line), "search") {
+				fields := strings.Fields(line)
+				for _, field := range fields[1:] {
+					s.config.ExcludeSuffixes = append(s.config.ExcludeSuffixes, "."+field)
+				}
 			}
 		}
 	}
