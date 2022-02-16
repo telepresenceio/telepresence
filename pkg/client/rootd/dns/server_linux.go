@@ -178,7 +178,7 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr.Port, conn.LocalAddr().(*net.UDPAddr))
+			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr, conn.LocalAddr().(*net.UDPAddr))
 			if err != nil {
 				return err
 			}
@@ -288,42 +288,45 @@ func runNatTableCmd(c context.Context, args ...string) error {
 	return dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...).Run()
 }
 
-const tpDNSChain = "telepresence-dns"
+const tpDNSChain = "TELEPRESENCE_DNS"
 
 // routeDNS creates a new chain in the "nat" table with two rules in it. One rule ensures
 // that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
-func routeDNS(c context.Context, dnsIP net.IP, toPort int, fallback *net.UDPAddr) (err error) {
+func routeDNS(c context.Context, dnsIP net.IP, toAddr *net.UDPAddr, localDNS *net.UDPAddr) (err error) {
 	// create the chain
 	unrouteDNS(c)
+
+	// Create the TELEPRESENCE_DNS chain
 	if err = runNatTableCmd(c, "-N", tpDNSChain); err != nil {
 		return err
 	}
-	// Alter locally generated packets before routing
-	if err = runNatTableCmd(c, "-I", "OUTPUT", "1", "-j", tpDNSChain); err != nil {
-		return err
-	}
 
-	// This rule prevents that any rules in this table applies to the fallback address. I.e. we
-	// let the fallback reach the original DNS service
+	// This rule prevents that any rules in this table applies to the localDNS address when
+	// used as a source. I.e. we let the local DNS server reach the original DNS server
 	if err = runNatTableCmd(c, "-A", tpDNSChain,
 		"-p", "udp",
-		"--source", fallback.IP.String(),
-		"--sport", strconv.Itoa(fallback.Port),
+		"--source", localDNS.IP.String(),
+		"--sport", strconv.Itoa(localDNS.Port),
 		"-j", "RETURN",
 	); err != nil {
 		return err
 	}
 
 	// This rule redirects all packets intended for the DNS service to our local DNS service
-	return runNatTableCmd(c, "-A", tpDNSChain,
+	if err = runNatTableCmd(c, "-A", tpDNSChain,
 		"-p", "udp",
 		"--dest", dnsIP.String()+"/32",
 		"--dport", "53",
-		"-j", "REDIRECT",
-		"--to-ports", strconv.Itoa(toPort),
-	)
+		"-j", "DNAT",
+		"--to-destination", toAddr.String(),
+	); err != nil {
+		return err
+	}
+
+	// Alter locally generated packets before routing
+	return runNatTableCmd(c, "-I", "OUTPUT", "1", "-j", tpDNSChain)
 }
 
 // unrouteDNS removes the chain installed by routeDNS.
