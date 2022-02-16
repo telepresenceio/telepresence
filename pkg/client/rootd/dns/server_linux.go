@@ -78,18 +78,18 @@ func (s *Server) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (s *Server) resolveInSearch(c context.Context, query string) []net.IP {
+func (s *Server) resolveInSearch(c context.Context, query string) ([]net.IP, error) {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
 	if !s.shouldDoClusterLookup(query) {
-		return nil
+		return nil, nil
 	}
 
 	if s.shouldApplySearch(query) {
 		for _, sp := range s.search {
-			if ips := s.resolveInCluster(c, query+sp); len(ips) > 0 {
-				return ips
+			if ips, err := s.resolveInCluster(c, query+sp); err != nil || len(ips) > 0 {
+				return ips, err
 			}
 		}
 	}

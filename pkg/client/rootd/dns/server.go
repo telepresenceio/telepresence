@@ -20,7 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type Resolver func(ctx context.Context, domain string) []net.IP
+type Resolver func(ctx context.Context, domain string) ([]net.IP, error)
 
 // recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
 // is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
@@ -38,7 +38,7 @@ type Server struct {
 	requestCount int64
 	cache        sync.Map
 	recursive    int32 // 0 = never tested, 1 = not recursive, 2 = recursive
-	cacheResolve func(*dns.Question) []dns.RR
+	cacheResolve func(*dns.Question) ([]dns.RR, error)
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
@@ -142,7 +142,7 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	return true
 }
 
-func (s *Server) resolveInCluster(c context.Context, query string) (results []net.IP) {
+func (s *Server) resolveInCluster(c context.Context, query string) (results []net.IP, err error) {
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
@@ -154,11 +154,11 @@ func (s *Server) resolveInCluster(c context.Context, query string) (results []ne
 		// But it does, so I need this in order to be
 		// productive at home.  We should really
 		// root-cause this, because it's weird.
-		return localhostIPs
+		return localhostIPs, nil
 	}
 
 	if !s.shouldDoClusterLookup(query) {
-		return nil
+		return nil, nil
 	}
 
 	// Give the cluster lookup a reasonable timeout.
@@ -167,17 +167,16 @@ func (s *Server) resolveInCluster(c context.Context, query string) (results []ne
 
 	result, err := s.clusterLookup(c, query[:len(query)-1])
 	if err != nil {
-		dlog.Error(c, client.CheckTimeout(c, err))
-		return nil
+		return nil, client.CheckTimeout(c, err)
 	}
 	if len(result) == 0 {
-		return nil
+		return nil, nil
 	}
 	ips := make(iputil.IPs, len(result))
 	for i, ip := range result {
 		ips[i] = ip
 	}
-	return ips
+	return ips, nil
 }
 
 func (s *Server) GetConfig() *rpc.DNSConfig {
@@ -293,17 +292,17 @@ func copyRRs(rrs []dns.RR, qType uint16) []dns.RR {
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
-func (s *Server) resolveThruCache(q *dns.Question) []dns.RR {
+func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
 		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&s.recursive) == 2 && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
-			return nil
+			return nil, nil
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, q.Qtype)
+			return copyRRs(oldDv.answer, q.Qtype), nil
 		}
 		s.cache.Store(q.Name, newDv)
 	}
@@ -313,7 +312,7 @@ func (s *Server) resolveThruCache(q *dns.Question) []dns.RR {
 // resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
 // recursionCheck query has completed, and it has been determined whether a query that is propagated
 // to the cluster will recurse back to this resolver or not.
-func (s *Server) resolveWithRecursionCheck(q *dns.Question) []dns.RR {
+func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
 		oldDv := v.(*cacheEntry)
@@ -322,18 +321,18 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) []dns.RR {
 				atomic.StoreInt32(&s.recursive, 2)
 			}
 			if atomic.LoadInt32(&s.recursive) != 1 {
-				return nil
+				return nil, nil
 			}
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, q.Qtype)
+			return copyRRs(oldDv.answer, q.Qtype), nil
 		}
 		s.cache.Store(q.Name, newDv)
 	}
 
-	answer := s.resolveQuery(q, newDv)
-	if q.Name == recursionCheck+"." {
+	answer, err := s.resolveQuery(q, newDv)
+	if q.Name == recursionCheck {
 		if atomic.LoadInt32(&s.recursive) == 2 {
 			dlog.Debug(s.ctx, "DNS resolver is recursive")
 		} else {
@@ -342,7 +341,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) []dns.RR {
 		}
 		s.cacheResolve = s.resolveThruCache
 	}
-	return answer
+	return answer, err
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
@@ -367,7 +366,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		atomic.AddInt64(&s.requestCount, 1)
 	}
 
-	if answer := s.cacheResolve(q); answer != nil {
+	if answer, err := s.cacheResolve(q); err == nil && answer != nil {
 		switch len(answer) {
 		case 0:
 			dlog.Debugf(c, "QTYPE[%v] %s -> EMPTY", q.Qtype, q.Name)
@@ -409,20 +408,20 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 // keep this low to avoid such caching.
 const dnsTTL = 4
 
-func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) []dns.RR {
+func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, error) {
 	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
 	defer func() {
 		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
 		close(dv.wait)
 	}()
 
+	var err error
 	switch q.Qtype {
 	case dns.TypeA, dns.TypeAAAA:
-		ips := s.resolve(s.ctx, q.Name)
-		if len(ips) == 0 {
+		var ips []net.IP
+		if ips, err = s.resolve(s.ctx, q.Name); err != nil || len(ips) == 0 {
 			break
 		}
-
 		answer := make([]dns.RR, 0, len(ips))
 		for _, ip := range ips {
 			var rr dns.RR
@@ -441,19 +440,23 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) []dns.RR {
 		}
 		dv.answer = answer
 	default:
-		ips := s.resolve(s.ctx, q.Name)
+		var ips []net.IP
+		if ips, err = s.resolve(s.ctx, q.Name); err != nil {
+			break
+		}
 		if len(ips) > 0 {
+			// a reply exists, but for another type, so our reply here is EMPTY
 			dv.answer = []dns.RR{}
 		}
 	}
-	if len(dv.answer) == 0 {
+	if err != nil || len(dv.answer) == 0 {
 		s.cache.Delete(q.Name) // Don't cache unless the entry is found.
 	}
 
 	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
 	// also be empty if no RRs were found for the given query type and that is OK.
 	// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
-	return copyRRs(dv.answer, q.Qtype)
+	return copyRRs(dv.answer, q.Qtype), err
 }
 
 // Run starts the DNS server(s) and waits for them to end
