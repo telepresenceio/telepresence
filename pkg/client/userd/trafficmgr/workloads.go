@@ -310,7 +310,6 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 	}
 
 	var allWls []k8sapi.Workload
-	unique := make(map[string]struct{})
 	for i, wlw := range nw.wlWatchers {
 		for _, o := range wlw.List(c) {
 			var wl k8sapi.Workload
@@ -327,14 +326,7 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 				if err != nil {
 					return nil, err
 				}
-
-				// Need to keep the set unique because several replicasets may
-				// have the same deployment owner
-				uid := string(owl.GetUID())
-				if _, ok := unique[uid]; !ok {
-					unique[uid] = struct{}{}
-					allWls = append(allWls, owl)
-				}
+				allWls = append(allWls, owl)
 			}
 		}
 	}
