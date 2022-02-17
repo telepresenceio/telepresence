@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -101,6 +102,9 @@ type TrafficManager struct {
 
 	// manager client
 	managerClient manager.ManagerClient
+
+	// manager client connection
+	managerConn *grpc.ClientConn
 
 	// search paths are propagated to the rootDaemon
 	rootDaemon daemon.DaemonClient
@@ -355,6 +359,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		userAndHost:     userAndHost,
 		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
 		managerClient:   mClient,
+		managerConn:     conn,
 		sessionInfo:     si,
 		rootDaemon:      rootDaemon,
 		localIntercepts: map[string]string{},
@@ -442,7 +447,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 	aMap map[string]*manager.AgentInfo,
 	filter rpc.ListRequest_Filter,
 ) ([]*rpc.WorkloadInfo, error) {
-	wis := make([]*rpc.WorkloadInfo, 0)
+	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
 	var err error
 	tm.wlWatcher.eachService(ctx, namespaces, func(svc *core.Service) {
 		var wls []k8sapi.Workload
@@ -450,6 +455,9 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			return
 		}
 		for _, workload := range wls {
+			if _, ok := wiMap[workload.GetUID()]; ok {
+				continue
+			}
 			name := workload.GetName()
 			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
 			ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
@@ -480,11 +488,17 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
-			wis = append(wis, wlInfo)
+			wiMap[workload.GetUID()] = wlInfo
 		}
 	})
-	sort.Slice(wis, func(i, j int) bool { return wis[i].Name < wis[j].Name })
-	return wis, nil
+	wiz := make([]*rpc.WorkloadInfo, len(wiMap))
+	i := 0
+	for _, wi := range wiMap {
+		wiz[i] = wi
+		i++
+	}
+	sort.Slice(wiz, func(i, j int) bool { return wiz[i].Name < wiz[j].Name })
+	return wiz, nil
 }
 
 func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
@@ -573,12 +587,23 @@ nextIs:
 
 func (tm *TrafficManager) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		c = dcontext.WithoutCancel(c)
+		c, cancel := context.WithTimeout(c, 3*time.Second)
+		defer cancel()
+		if err := tm.clearIntercepts(c); err != nil {
+			dlog.Errorf(c, "failed to clear intercepts: %v", err)
+		}
+		if _, err := tm.managerClient.Depart(c, tm.session()); err != nil {
+			dlog.Errorf(c, "failed to depart from manager: %v", err)
+		}
+		tm.managerConn.Close()
+	}()
+
 	for {
 		select {
 		case <-c.Done():
-			_ = tm.clearIntercepts(dcontext.WithoutCancel(c))
-			_, _ = tm.managerClient.Depart(dcontext.WithoutCancel(c), tm.session())
 			return nil
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
