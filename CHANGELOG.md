@@ -37,6 +37,8 @@
 
 - Bugfix: Fixed a bug where the `--json` flag did not output json for `telepresence list` when there were no workloads.
 
+- Change: Updated README file with more details about the project. 
+
 ### 2.4.11 (February 10, 2022)
 
 - Change: Include goarch metadata for reporting to distinguish between Intel and Apple Silicon Macs
