@@ -102,6 +102,9 @@ type TrafficManager struct {
 	// manager client
 	managerClient manager.ManagerClient
 
+	// manager client connection
+	managerConn *grpc.ClientConn
+
 	// search paths are propagated to the rootDaemon
 	rootDaemon daemon.DaemonClient
 
@@ -355,6 +358,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		userAndHost:     userAndHost,
 		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
 		managerClient:   mClient,
+		managerConn:     conn,
 		sessionInfo:     si,
 		rootDaemon:      rootDaemon,
 		localIntercepts: map[string]string{},
@@ -573,12 +577,23 @@ nextIs:
 
 func (tm *TrafficManager) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		c = dcontext.WithoutCancel(c)
+		c, cancel := context.WithTimeout(c, 3*time.Second)
+		defer cancel()
+		if err := tm.clearIntercepts(c); err != nil {
+			dlog.Errorf(c, "failed to clear intercepts: %v", err)
+		}
+		if _, err := tm.managerClient.Depart(c, tm.session()); err != nil {
+			dlog.Errorf(c, "failed to depart from manager: %v", err)
+		}
+		tm.managerConn.Close()
+	}()
+
 	for {
 		select {
 		case <-c.Done():
-			_ = tm.clearIntercepts(dcontext.WithoutCancel(c))
-			_, _ = tm.managerClient.Depart(dcontext.WithoutCancel(c), tm.session())
 			return nil
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
