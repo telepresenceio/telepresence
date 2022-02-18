@@ -57,8 +57,8 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 	// latter that is used in the traffic-manager
 	ctxAI := itest.WithConfig(ctx, &client.Config{
 		Images: client.Images{
-			AgentImage:        "notUsed:0.0.1",
-			WebhookAgentImage: "imageFromConfig:0.0.1",
+			PrivateAgentImage:        "notUsed:0.0.1",
+			PrivateWebhookAgentImage: "imageFromConfig:0.0.1",
 		},
 	})
 

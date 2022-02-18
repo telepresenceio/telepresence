@@ -226,7 +226,7 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
-	config := client.GetDefaultConfig(c)
+	config := client.GetDefaultConfig()
 	config.LogLevels.UserDaemon = logrus.DebugLevel
 	config.LogLevels.RootDaemon = logrus.DebugLevel
 
@@ -243,8 +243,8 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	registry := s.Registry()
-	config.Images.Registry = registry
-	config.Images.WebhookRegistry = registry
+	config.Images.PrivateRegistry = registry
+	config.Images.PrivateWebhookRegistry = registry
 
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"

@@ -208,8 +208,8 @@ func (i *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 		return fmt.Errorf("unable to get k8s config: %w", err)
 	}
 
-	registry := cfg.Images.Registry
-	agentImage := cfg.Images.AgentImage
+	registry := cfg.Images.Registry(ctx)
+	agentImage := cfg.Images.AgentImage(ctx)
 	// Use sane defaults if the user hasn't configured the registry and/or image
 	if registry == "" {
 		registry = "datawire"

@@ -104,7 +104,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 		defer func() { version.Version = sv }()
 
 		testCfg := *cfg
-		testCfg.Images.Registry = "localhost:5000"
+		testCfg.Images.PrivateRegistry = "localhost:5000"
 		ctx = client.WithConfig(ctx, &testCfg)
 
 		for tcName, tc := range testcases {

@@ -297,12 +297,16 @@ func updateConfig(ctx context.Context, telProLocation string) error {
 		return errcat.NoDaemonLogs.Newf("error marshaling updating config: %w", err)
 	}
 	cfgFile := client.GetConfigFile(ctx)
-	_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if s, err := os.Stat(cfgFile); err == nil && s.Size() > 0 {
+		_ = os.Rename(cfgFile, cfgFile+".bak")
+	}
+
+	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("error opening config file: %w", err)
 	}
-	err = os.WriteFile(cfgFile, b, 0644)
-	if err != nil {
+	defer f.Close()
+	if _, err = f.Write(b); err != nil {
 		return errcat.NoDaemonLogs.Newf("error writing config file: %w", err)
 	}
 	return nil
