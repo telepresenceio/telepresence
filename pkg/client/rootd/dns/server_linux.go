@@ -109,7 +109,6 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 				if ip.To4() != nil {
 					s.config.LocalIp = ip.To4()
 					dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.config.LocalIp))
-					break
 				}
 			}
 
