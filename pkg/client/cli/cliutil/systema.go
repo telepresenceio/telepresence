@@ -160,11 +160,12 @@ func GetTelepresencePro(ctx context.Context) error {
 	defer sc.Close()
 	installRefused := false
 	defer func() {
-		if err != nil {
+		switch {
+		case err != nil:
 			sc.Report(ctx, "pro_connector_upgrade_fail", scout.Entry{Key: "error", Value: err.Error()})
-		} else if installRefused {
+		case installRefused:
 			sc.Report(ctx, "pro_connector_upgrade_refusal")
-		} else {
+		default:
 			sc.Report(ctx, "pro_connector_upgrade_success")
 		}
 	}()
