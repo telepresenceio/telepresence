@@ -105,8 +105,12 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
-				s.config.LocalIp = net.ParseIP(fields[1])
-				dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.config.LocalIp))
+				ip := net.ParseIP(fields[1])
+				if ip.To4() != nil {
+					s.config.LocalIp = ip.To4()
+					dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.config.LocalIp))
+					break
+				}
 			}
 
 			// The search entry in /etc/resolv.conf is not intended for this resolver so
