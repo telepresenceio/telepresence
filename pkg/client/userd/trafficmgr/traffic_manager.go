@@ -70,6 +70,7 @@ type Session interface {
 	ManagerClient() manager.ManagerClient
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
+	RemainWithToken(context.Context) error
 	AddNamespaceListener(k8s.NamespaceListener)
 }
 
@@ -244,6 +245,21 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
 	}
 	return tmgr, ret
+}
+
+func (tm *TrafficManager) RemainWithToken(ctx context.Context) error {
+	tok, err := tm.getCloudAPIKey(ctx, a8rcloud.KeyDescTrafficManager, false)
+	if err != nil {
+		return fmt.Errorf("failed to get api key: %w", err)
+	}
+	_, err = tm.managerClient.Remain(ctx, &manager.RemainRequest{
+		Session: tm.session(),
+		ApiKey:  tok,
+	})
+	if err != nil {
+		return fmt.Errorf("error calling Remain: %w", err)
+	}
+	return nil
 }
 
 func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
