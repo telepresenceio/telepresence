@@ -489,10 +489,10 @@ func (ll *LogLevels) merge(o *LogLevels) {
 }
 
 type Images struct {
-	Registry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
-	AgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
-	WebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
-	WebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
+	PrivateRegistry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
+	PrivateAgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
+	PrivateWebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
+	PrivateWebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -511,13 +511,13 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 		v := ms[i+1]
 		switch kv {
 		case "registry":
-			img.Registry = v.Value
+			img.PrivateRegistry = v.Value
 		case "agentImage":
-			img.AgentImage = v.Value
+			img.PrivateAgentImage = v.Value
 		case "webhookRegistry":
-			img.WebhookRegistry = v.Value
+			img.PrivateWebhookRegistry = v.Value
 		case "webhookAgentImage":
-			img.WebhookAgentImage = v.Value
+			img.PrivateWebhookAgentImage = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -527,19 +527,47 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-func (i *Images) merge(o *Images) {
-	if o.AgentImage != "" {
-		i.AgentImage = o.AgentImage
+func (img *Images) merge(o *Images) {
+	if o.PrivateAgentImage != "" {
+		img.PrivateAgentImage = o.PrivateAgentImage
 	}
-	if o.WebhookAgentImage != "" {
-		i.WebhookAgentImage = o.WebhookAgentImage
+	if o.PrivateWebhookAgentImage != "" {
+		img.PrivateWebhookAgentImage = o.PrivateWebhookAgentImage
 	}
-	if o.Registry != "" {
-		i.Registry = o.Registry
+	if o.PrivateRegistry != "" {
+		img.PrivateRegistry = o.PrivateRegistry
 	}
-	if o.WebhookRegistry != "" {
-		i.WebhookRegistry = o.WebhookRegistry
+	if o.PrivateWebhookRegistry != "" {
+		img.PrivateWebhookRegistry = o.PrivateWebhookRegistry
 	}
+}
+
+func (img *Images) Registry(c context.Context) string {
+	if img.PrivateRegistry != "" {
+		return img.PrivateRegistry
+	}
+	return GetEnv(c).Registry
+}
+
+func (img *Images) WebhookRegistry(c context.Context) string {
+	if img.PrivateWebhookRegistry != "" {
+		return img.PrivateWebhookRegistry
+	}
+	return GetEnv(c).Registry
+}
+
+func (img *Images) AgentImage(c context.Context) string {
+	if img.PrivateAgentImage != "" {
+		return img.PrivateAgentImage
+	}
+	return GetEnv(c).AgentImage
+}
+
+func (img *Images) WebhookAgentImage(c context.Context) string {
+	if img.PrivateWebhookAgentImage != "" {
+		return img.PrivateWebhookAgentImage
+	}
+	return GetEnv(c).AgentImage
 }
 
 type Cloud struct {
@@ -769,8 +797,8 @@ func GetConfigFile(c context.Context) string {
 }
 
 // GetDefaultConfig returns the default configuration settings
-func GetDefaultConfig(c context.Context) Config {
-	cfg := Config{
+func GetDefaultConfig() Config {
+	return Config{
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 			PrivateApply:                 defaultTimeoutsApply,
@@ -800,13 +828,6 @@ func GetDefaultConfig(c context.Context) Config {
 			DefaultPort: defaultInterceptDefaultPort,
 		},
 	}
-	if env := GetEnv(c); env != nil {
-		cfg.Images.Registry = env.Registry
-		cfg.Images.WebhookRegistry = env.Registry
-		cfg.Images.AgentImage = env.AgentImage
-		cfg.Images.WebhookAgentImage = env.AgentImage
-	}
-	return cfg
 }
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
@@ -824,7 +845,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		return nil, err
 	}
 
-	dflt := GetDefaultConfig(c)
+	dflt := GetDefaultConfig()
 	cfg = &dflt
 	readMerge := func(dir string) error {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory

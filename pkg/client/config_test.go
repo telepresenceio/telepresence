@@ -93,8 +93,8 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	env, err := LoadEnv(ctx)
 	require.NoError(t, err)
 	ctx = WithEnv(ctx, env)
-	cfg := GetDefaultConfig(ctx)
-	cfg.Images.AgentImage = "something:else"
+	cfg := GetDefaultConfig()
+	cfg.Images.PrivateAgentImage = "something:else"
 	cfg.Timeouts.PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
 	cfg.Cloud.RefreshMessages += 10 * time.Minute
 	cfg.LogLevels.UserDaemon = logrus.TraceLevel

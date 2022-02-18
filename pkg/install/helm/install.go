@@ -34,7 +34,7 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 func getValues(ctx context.Context) map[string]interface{} {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
-	imageRegistry := imgConfig.Registry
+	imageRegistry := imgConfig.Registry(ctx)
 	cloudConfig := clientConfig.Cloud
 	imageTag := strings.TrimPrefix(client.Version(), "v")
 	values := map[string]interface{}{
@@ -52,11 +52,11 @@ func getValues(ctx context.Context) map[string]interface{} {
 		}
 	}
 	apc := clientConfig.Intercept.AppProtocolStrategy
-	if imgConfig.WebhookAgentImage != "" || imgConfig.WebhookRegistry != "" || apc != k8sapi.Http2Probe {
+	if wai, wr := imgConfig.WebhookAgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
 		agentImage := make(map[string]interface{})
-		if imgConfig.WebhookAgentImage != "" {
-			parts := strings.Split(imgConfig.WebhookAgentImage, ":")
-			image := imgConfig.WebhookAgentImage
+		if wai != "" {
+			parts := strings.Split(wai, ":")
+			image := wai
 			tag := ""
 			if len(parts) > 1 {
 				image = parts[0]
@@ -65,8 +65,8 @@ func getValues(ctx context.Context) map[string]interface{} {
 			agentImage["name"] = image
 			agentImage["tag"] = tag
 		}
-		if imgConfig.WebhookRegistry != "" {
-			agentImage["registry"] = imgConfig.WebhookRegistry
+		if wr != "" {
+			agentImage["registry"] = wr
 		}
 		agentInjector := map[string]interface{}{"agentImage": agentImage}
 		values["agentInjector"] = agentInjector
