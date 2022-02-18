@@ -372,6 +372,24 @@ const defaultTimeoutsRoundtripLatency = 2 * time.Second
 const defaultTimeoutsTrafficManagerAPI = 15 * time.Second
 const defaultTimeoutsTrafficManagerConnect = 60 * time.Second
 
+var defaultTimeouts = Timeouts{
+	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
+	PrivateApply:                 defaultTimeoutsApply,
+	PrivateClusterConnect:        defaultTimeoutsClusterConnect,
+	PrivateEndpointDial:          defaultTimeoutsEndpointDial,
+	PrivateHelm:                  defaultTimeoutsHelm,
+	PrivateIntercept:             defaultTimeoutsIntercept,
+	PrivateProxyDial:             defaultTimeoutsProxyDial,
+	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
+	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
+	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (t Timeouts) IsZero() bool {
+	return t == defaultTimeouts
+}
+
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
 func (t Timeouts) MarshalYAML() (interface{}, error) {
 	tm := make(map[string]string)
@@ -442,9 +460,22 @@ func (t *Timeouts) merge(o *Timeouts) {
 	}
 }
 
+const defaultLogLevelsUserDaemon = logrus.InfoLevel
+const defaultLogLevelsRootDaemon = logrus.InfoLevel
+
+var defaultLogLevels = LogLevels{
+	UserDaemon: defaultLogLevelsUserDaemon,
+	RootDaemon: defaultLogLevelsRootDaemon,
+}
+
 type LogLevels struct {
 	UserDaemon logrus.Level `json:"userDaemon,omitempty" yaml:"userDaemon,omitempty"`
 	RootDaemon logrus.Level `json:"rootDaemon,omitempty" yaml:"rootDaemon,omitempty"`
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (ll LogLevels) IsZero() bool {
+	return ll == defaultLogLevels
 }
 
 // UnmarshalYAML parses the logrus log-levels
@@ -578,7 +609,7 @@ type Cloud struct {
 }
 
 // UnmarshalYAML parses the images YAML
-func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
+func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("cloud must be an object", node))
 	}
@@ -597,19 +628,19 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 			if err != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("bool expected for key %q", kv), ms[i]))
 			} else {
-				cloud.SkipLogin = val
+				c.SkipLogin = val
 			}
 		case "refreshMessages":
 			duration, err := time.ParseDuration(v.Value)
 			if err != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("duration expected for key %q", kv), ms[i]))
 			} else {
-				cloud.RefreshMessages = duration
+				c.RefreshMessages = duration
 			}
 		case "systemaHost":
-			cloud.SystemaHost = v.Value
+			c.SystemaHost = v.Value
 		case "systemaPort":
-			cloud.SystemaPort = v.Value
+			c.SystemaPort = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -623,36 +654,48 @@ const defaultCloudSystemAHost = "app.getambassador.io"
 const defaultCloudSystemAPort = "443"
 const defaultCloudRefreshMessages = 24 * 7 * time.Hour
 
+var defaultCloud = Cloud{
+	SkipLogin:       false,
+	RefreshMessages: defaultCloudRefreshMessages,
+	SystemaHost:     defaultCloudSystemAHost,
+	SystemaPort:     defaultCloudSystemAPort,
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (c Cloud) IsZero() bool {
+	return c == defaultCloud
+}
+
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
-func (cloud Cloud) MarshalYAML() (interface{}, error) {
+func (c Cloud) MarshalYAML() (interface{}, error) {
 	cm := make(map[string]interface{})
-	if cloud.RefreshMessages != 0 && cloud.RefreshMessages != defaultCloudRefreshMessages {
-		cm["refreshMessages"] = cloud.RefreshMessages.String()
+	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
+		cm["refreshMessages"] = c.RefreshMessages.String()
 	}
-	if cloud.SkipLogin {
+	if c.SkipLogin {
 		cm["skipLogin"] = true
 	}
-	if cloud.SystemaHost != "" && cloud.SystemaHost != defaultCloudSystemAHost {
-		cm["systemaHost"] = cloud.SystemaHost
+	if c.SystemaHost != "" && c.SystemaHost != defaultCloudSystemAHost {
+		cm["systemaHost"] = c.SystemaHost
 	}
-	if cloud.SystemaPort != "" && cloud.SystemaPort != defaultCloudSystemAPort {
-		cm["systemaPort"] = cloud.SystemaPort
+	if c.SystemaPort != "" && c.SystemaPort != defaultCloudSystemAPort {
+		cm["systemaPort"] = c.SystemaPort
 	}
 	return cm, nil
 }
 
-func (cloud *Cloud) merge(o *Cloud) {
+func (c *Cloud) merge(o *Cloud) {
 	if o.SkipLogin {
-		cloud.SkipLogin = o.SkipLogin
+		c.SkipLogin = o.SkipLogin
 	}
 	if o.RefreshMessages != 0 {
-		cloud.RefreshMessages = o.RefreshMessages
+		c.RefreshMessages = o.RefreshMessages
 	}
 	if o.SystemaHost != "" {
-		cloud.SystemaHost = o.SystemaHost
+		c.SystemaHost = o.SystemaHost
 	}
 	if o.SystemaPort != "" {
-		cloud.SystemaPort = o.SystemaPort
+		c.SystemaPort = o.SystemaPort
 	}
 }
 
@@ -730,6 +773,10 @@ func (d *Daemons) merge(o *Daemons) {
 
 const defaultInterceptDefaultPort = 8080
 
+var defaultIntercept = Intercept{
+	DefaultPort: defaultInterceptDefaultPort,
+}
+
 type Intercept struct {
 	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
 	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
@@ -742,6 +789,11 @@ func (ic *Intercept) merge(o *Intercept) {
 	if o.DefaultPort != 0 {
 		ic.DefaultPort = o.DefaultPort
 	}
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (ic Intercept) IsZero() bool {
+	return ic == defaultIntercept
 }
 
 // MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct

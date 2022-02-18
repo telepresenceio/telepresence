@@ -80,12 +80,12 @@ intercept:
 	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels.UserDaemon) // from sys2
 	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels.RootDaemon) // from user
 
-	assert.Equal(t, "testregistry.io", cfg.Images.Registry)                                      // from user
-	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.AgentImage)         // from user
-	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.WebhookAgentImage) // from user
-	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                              // from user
-	assert.Equal(t, k8sapi.PortName, cfg.Intercept.AppProtocolStrategy)                          // from user
-	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                             // from user
+	assert.Equal(t, "testregistry.io", cfg.Images.PrivateRegistry)                                      // from user
+	assert.Equal(t, "ambassador-telepresence-client-image:0.0.1", cfg.Images.PrivateAgentImage)         // from user
+	assert.Equal(t, "ambassador-telepresence-webhook-image:0.0.2", cfg.Images.PrivateWebhookAgentImage) // from user
+	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                                     // from user
+	assert.Equal(t, k8sapi.PortName, cfg.Intercept.AppProtocolStrategy)                                 // from user
+	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                                    // from user
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
@@ -114,4 +114,10 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg2, err := LoadConfig(ctx)
 	require.NoError(t, err)
 	require.Equal(t, &cfg, cfg2)
+}
+
+func Test_ConfigMarshalYAMLDefaults(t *testing.T) {
+	cfgBytes, err := yaml.Marshal(GetDefaultConfig())
+	require.NoError(t, err)
+	require.Equal(t, "{}\n", string(cfgBytes))
 }
