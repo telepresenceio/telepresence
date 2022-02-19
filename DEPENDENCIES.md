@@ -4,7 +4,14 @@ following Free and Open Source software:
     Name                                                                Version                                    License(s)
     ----                                                                -------                                    ----------
     the Go language standard library ("std")                            v1.17                                      3-clause BSD license
+    cloud.google.com/go                                                 v0.54.0                                    Apache License 2.0
     github.com/Azure/go-ansiterm                                        v0.0.0-20170929234023-d6e3b3328b78         MIT license
+    github.com/Azure/go-autorest                                        v14.2.0+incompatible                       Apache License 2.0
+    github.com/Azure/go-autorest/autorest                               v0.11.12                                   Apache License 2.0
+    github.com/Azure/go-autorest/autorest/adal                          v0.9.5                                     Apache License 2.0
+    github.com/Azure/go-autorest/autorest/date                          v0.3.0                                     Apache License 2.0
+    github.com/Azure/go-autorest/logger                                 v0.2.0                                     Apache License 2.0
+    github.com/Azure/go-autorest/tracing                                v0.6.0                                     Apache License 2.0
     github.com/BurntSushi/toml                                          v0.3.1                                     MIT license
     github.com/MakeNowJust/heredoc                                      v0.0.0-20170808103936-bb23615498cd         MIT license
     github.com/Masterminds/goutils                                      v1.1.1                                     Apache License 2.0
@@ -39,6 +46,7 @@ following Free and Open Source software:
     github.com/exponent-io/jsonpath                                     v0.0.0-20151013193312-d6023ce2651d         MIT license
     github.com/fatih/camelcase                                          v1.0.0                                     MIT license
     github.com/fatih/color                                              v1.10.0                                    MIT license
+    github.com/form3tech-oss/jwt-go                                     v3.2.2+incompatible                        MIT license
     github.com/fsnotify/fsnotify                                        v1.4.9                                     3-clause BSD license
     github.com/go-errors/errors                                         v1.0.1                                     MIT license
     github.com/go-logr/logr                                             v0.4.0                                     Apache License 2.0
