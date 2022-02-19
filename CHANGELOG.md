@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.0 (TBD)
+### 2.5.0 (February 18, 2022)
 
 - Feature: The flags `--http-path-equal`, `--http-path-prefix`, and `--http-path-regex` can can be used in addition to the `--http-match`
   flag to filter personal intercepts by the request URL path 
