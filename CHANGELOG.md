@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.1 (TBD)
+### 2.5.1 (February 19, 2022)
 
 - Bugfix: Fixed a bug where using a GKE cluster would error with: No Auth Provider found for name "gcp"
 
