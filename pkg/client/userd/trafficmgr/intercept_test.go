@@ -45,31 +45,45 @@ func Test_makeFlagsCompatible(t *testing.T) {
 			assert.Error,
 		},
 		{
+			"1.11.8, one auto",
+			semver.MustParse("1.11.8"),
+			[]string{"--match=auto", "--header=auto"},
+			[]string{"--match=auto"},
+			assert.NoError,
+		},
+		{
 			"1.11.9",
 			semver.MustParse("1.11.9"),
-			[]string{"--path-prefix=/api", "--meta=a=b"},
-			[]string{"--meta=a=b", "--path-prefix=/api"},
+			[]string{"--match=x=y", "--path-prefix=/api", "--meta=a=b"},
+			[]string{"--header=x=y", "--meta=a=b", "--path-prefix=/api"},
+			assert.NoError,
+		},
+		{
+			"1.11.9, strip match=auto",
+			semver.MustParse("1.11.9-rc.4"),
+			[]string{"--match=auto", "--header=a=b"},
+			[]string{"--header=a=b"},
 			assert.NoError,
 		},
 		{
 			"no agent version, one auto",
 			semver.Version{},
 			[]string{"--match=auto", "--header=auto"},
-			[]string{"--match=auto"},
+			[]string{"--header=auto"},
 			assert.NoError,
 		},
 		{
 			"no agent version, strip header=auto",
 			semver.Version{},
 			[]string{"--header=auto", "--match=a=b"},
-			[]string{"--match=a=b"},
+			[]string{"--header=a=b"},
 			assert.NoError,
 		},
 		{
 			"no agent version, strip match=auto",
 			semver.Version{},
 			[]string{"--match=auto", "--header=a=b"},
-			[]string{"--match=a=b"},
+			[]string{"--header=a=b"},
 			assert.NoError,
 		},
 	}
@@ -79,7 +93,7 @@ func Test_makeFlagsCompatible(t *testing.T) {
 			if ver.Major == 0 {
 				ver = nil
 			}
-			got, err := makeFlagsCompatible(&tt.agentVer, tt.args)
+			got, err := makeFlagsCompatible(ver, tt.args)
 			if !tt.wantErr(t, err, fmt.Sprintf("makeFlagsCompatible(%v, %v)", tt.agentVer, tt.args)) {
 				return
 			}
