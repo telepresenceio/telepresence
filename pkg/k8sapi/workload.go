@@ -18,7 +18,6 @@ type Workload interface {
 	Object
 	GetPodTemplate() *core.PodTemplateSpec
 	Replicas() int
-	Selector() *meta.LabelSelector
 	Updated(int64) bool
 }
 
@@ -216,8 +215,8 @@ func (o *deployment) Replicas() int {
 	return int(o.Status.Replicas)
 }
 
-func (o *deployment) Selector() *meta.LabelSelector {
-	return o.Spec.Selector
+func (o *deployment) Selector() (labels.Selector, error) {
+	return meta.LabelSelectorAsSelector(o.Spec.Selector)
 }
 
 func (o *deployment) Update(c context.Context) error {
@@ -281,8 +280,8 @@ func (o *replicaSet) Replicas() int {
 	return int(o.Status.Replicas)
 }
 
-func (o *replicaSet) Selector() *meta.LabelSelector {
-	return o.Spec.Selector
+func (o *replicaSet) Selector() (labels.Selector, error) {
+	return meta.LabelSelectorAsSelector(o.Spec.Selector)
 }
 
 func (o *replicaSet) Update(c context.Context) error {
@@ -346,8 +345,8 @@ func (o *statefulSet) Replicas() int {
 	return int(o.Status.Replicas)
 }
 
-func (o *statefulSet) Selector() *meta.LabelSelector {
-	return o.Spec.Selector
+func (o *statefulSet) Selector() (labels.Selector, error) {
+	return meta.LabelSelectorAsSelector(o.Spec.Selector)
 }
 
 func (o *statefulSet) Update(c context.Context) error {

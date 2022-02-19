@@ -18,6 +18,7 @@ type Object interface {
 	GetKind() string
 	Delete(context.Context) error
 	Refresh(context.Context) error
+	Selector() (labels.Selector, error)
 	Update(context.Context) error
 	Patch(context.Context, types.PatchType, []byte, ...string) error
 }
@@ -128,6 +129,13 @@ func (o *service) Refresh(c context.Context) error {
 	return err
 }
 
+func (o *service) Selector() (labels.Selector, error) {
+	if len(o.Spec.Selector) == 0 {
+		return nil, nil
+	}
+	return labels.SelectorFromSet(o.Spec.Selector), nil
+}
+
 func (o *service) Update(c context.Context) error {
 	d, err := o.ki(c).Update(c, o.Service, meta.UpdateOptions{})
 	if err == nil {
@@ -170,6 +178,10 @@ func (o *pod) Refresh(c context.Context) error {
 		o.Pod = d
 	}
 	return err
+}
+
+func (o *pod) Selector() (labels.Selector, error) {
+	return nil, nil
 }
 
 func (o *pod) Update(c context.Context) error {
