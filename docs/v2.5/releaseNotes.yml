@@ -39,6 +39,13 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.5.1
+    date: "2022-02-19"
+    notes:
+      - type: bugfix
+        title: Fix GKE auth issue
+        body: >-
+          Fixed a bug where using a GKE cluster would error with: No Auth Provider found for name "gcp"
   - version: 2.5.0
     date: "2022-02-18"
     notes:
