@@ -50,7 +50,7 @@ func NewTrafficManagerInstaller(kc *k8s.Cluster) (Installer, error) {
 const annTelepresenceActions = install.DomainPrefix + "actions"
 
 func managerImageName(ctx context.Context) string {
-	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry, strings.TrimPrefix(client.Version(), "v"))
+	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry(ctx), strings.TrimPrefix(client.Version(), "v"))
 }
 
 // RemoveManagerAndAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,

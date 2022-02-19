@@ -13,7 +13,7 @@ import (
 // CLI version number, which might not be initialized yet at init-time (esp. during `go test`).
 func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 	cfg := client.GetConfig(ctx)
-	registry := cfg.Images.Registry
+	registry := cfg.Images.Registry(ctx)
 	cloud := cfg.Cloud
 	version := strings.TrimPrefix(client.Version(), "v")
 	image := fmt.Sprintf("%s/tel2:%s", registry, version)

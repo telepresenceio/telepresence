@@ -564,7 +564,6 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 	// if any of the ingress flags are present, skip the ingress dialogue and use flag values
 	if args.previewEnabled {
 		spec := args.previewSpec
-
 		if spec.Ingress == nil && (args.ingressHost != "" || args.ingressPort != 0 || args.ingressTLS || args.ingressL5 != "") {
 			ingress, err := makeIngressInfo(args.ingressHost, args.ingressPort, args.ingressTLS, args.ingressL5)
 			if err != nil {
@@ -572,7 +571,8 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 			}
 			spec.Ingress = ingress
 		}
-	} else if needLogin {
+	}
+	if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
 			return nil, err
 		}

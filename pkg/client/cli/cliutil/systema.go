@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -154,13 +155,33 @@ func GetTelepresencePro(ctx context.Context) error {
 		return errcat.NoDaemonLogs.Newf("unable to get path to config files: %w", err)
 	}
 
+	sc := scout.NewReporter(ctx, "cli")
+	sc.Start(ctx)
+	defer sc.Close()
+	installRefused := false
+	defer func() {
+		switch {
+		case err != nil:
+			sc.Report(ctx, "pro_connector_upgrade_fail", scout.Entry{Key: "error", Value: err.Error()})
+		case installRefused:
+			sc.Report(ctx, "pro_connector_upgrade_refusal")
+		default:
+			sc.Report(ctx, "pro_connector_upgrade_success")
+		}
+	}()
+
 	// If telepresence-pro doesn't exist, then we should ask the user
 	// if they want to install it
 	telProLocation := filepath.Join(dir, "telepresence-pro")
-	if _, err := os.Stat(telProLocation); os.IsNotExist(err) {
+	if runtime.GOOS == "windows" {
+		telProLocation += ".exe"
+	}
+	if _, err = os.Stat(telProLocation); os.IsNotExist(err) {
+		sc.SetMetadatum(ctx, "first_install", true)
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
-		reply, err := reader.ReadString('\n')
+		var reply string
+		reply, err = reader.ReadString('\n')
 		if err != nil {
 			return errcat.User.Newf("error reading input: %w", err)
 		}
@@ -169,6 +190,7 @@ func GetTelepresencePro(ctx context.Context) error {
 		// with launching the daemon normally
 		reply = strings.TrimSpace(reply)
 		if reply != "y" {
+			installRefused = true
 			return nil
 		}
 
@@ -198,10 +220,12 @@ func GetTelepresencePro(ctx context.Context) error {
 	} else {
 		// If the binary is present, we check its version to ensure it's compatible
 		// with the CLI
+		sc.SetMetadatum(ctx, "first_install", false)
 		proCmd := dexec.CommandContext(ctx, telProLocation, "pro-version")
 		proCmd.DisableLogging = true
 
-		output, err := proCmd.CombinedOutput()
+		var output []byte
+		output, err = proCmd.CombinedOutput()
 		if err != nil {
 			return errcat.NoDaemonLogs.Newf("Unable to get telepresence pro version")
 		}
@@ -210,7 +234,8 @@ func GetTelepresencePro(ctx context.Context) error {
 			reader := bufio.NewReader(os.Stdin)
 			fmt.Printf("Telepresence Pro needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it? (y/n)",
 				client.Version())
-			reply, err := reader.ReadString('\n')
+			var reply string
+			reply, err = reader.ReadString('\n')
 			if err != nil {
 				return errcat.NoDaemonLogs.Newf("error reading input: %w", err)
 			}
@@ -219,6 +244,7 @@ func GetTelepresencePro(ctx context.Context) error {
 			// with launching the daemon normally
 			reply = strings.TrimSpace(reply)
 			if reply != "y" {
+				installRefused = true
 				return nil
 			}
 			err = os.Remove(telProLocation)
@@ -253,7 +279,8 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	// daemon versions need to match
 	clientVersion := strings.Trim(client.Version(), "v")
 	systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
-	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/telepresence-pro", systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion)
+	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/%s",
+		systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion, filepath.Base(telProLocation))
 
 	resp, err := http.Get(installString)
 	if err == nil {
@@ -293,12 +320,16 @@ func updateConfig(ctx context.Context, telProLocation string) error {
 		return errcat.NoDaemonLogs.Newf("error marshaling updating config: %w", err)
 	}
 	cfgFile := client.GetConfigFile(ctx)
-	_, err = os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+	if s, err := os.Stat(cfgFile); err == nil && s.Size() > 0 {
+		_ = os.Rename(cfgFile, cfgFile+".bak")
+	}
+
+	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("error opening config file: %w", err)
 	}
-	err = os.WriteFile(cfgFile, b, 0644)
-	if err != nil {
+	defer f.Close()
+	if _, err = f.Write(b); err != nil {
 		return errcat.NoDaemonLogs.Newf("error writing config file: %w", err)
 	}
 	return nil

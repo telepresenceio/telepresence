@@ -314,8 +314,8 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 // image attribute.
 func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
-	if cfg.Images.AgentImage != "" {
-		return fmt.Sprintf("%s/%s", cfg.Images.Registry, cfg.Images.AgentImage), nil
+	if ai := cfg.Images.AgentImage(ctx); ai != "" {
+		return fmt.Sprintf("%s/%s", cfg.Images.Registry(ctx), ai), nil
 	}
 	if es.cachedImage.Image != "" || es.cachedImage.Err != nil {
 		return es.cachedImage.Image, es.cachedImage.Err

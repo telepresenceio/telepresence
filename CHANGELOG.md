@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.0 (TBD)
+### 2.5.0 (February 18, 2022)
 
 - Feature: The flags `--http-path-equal`, `--http-path-prefix`, and `--http-path-regex` can can be used in addition to the `--http-match`
   flag to filter personal intercepts by the request URL path 
@@ -37,7 +37,9 @@
 
 - Bugfix: Fixed a bug where the `--json` flag did not output json for `telepresence list` when there were no workloads.
 
-- Change: Updated README file with more details about the project. 
+- Change: Updated README file with more details about the project.
+
+- Bugfix: Fixed a bug where the overriding DNS resolver would break down in Linux if /etc/resolv.conf listed an ipv6 resolver
 
 ### 2.4.11 (February 10, 2022)
 

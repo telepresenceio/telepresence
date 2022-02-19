@@ -372,6 +372,24 @@ const defaultTimeoutsRoundtripLatency = 2 * time.Second
 const defaultTimeoutsTrafficManagerAPI = 15 * time.Second
 const defaultTimeoutsTrafficManagerConnect = 60 * time.Second
 
+var defaultTimeouts = Timeouts{
+	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
+	PrivateApply:                 defaultTimeoutsApply,
+	PrivateClusterConnect:        defaultTimeoutsClusterConnect,
+	PrivateEndpointDial:          defaultTimeoutsEndpointDial,
+	PrivateHelm:                  defaultTimeoutsHelm,
+	PrivateIntercept:             defaultTimeoutsIntercept,
+	PrivateProxyDial:             defaultTimeoutsProxyDial,
+	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
+	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
+	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (t Timeouts) IsZero() bool {
+	return t == defaultTimeouts
+}
+
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
 func (t Timeouts) MarshalYAML() (interface{}, error) {
 	tm := make(map[string]string)
@@ -442,9 +460,22 @@ func (t *Timeouts) merge(o *Timeouts) {
 	}
 }
 
+const defaultLogLevelsUserDaemon = logrus.InfoLevel
+const defaultLogLevelsRootDaemon = logrus.InfoLevel
+
+var defaultLogLevels = LogLevels{
+	UserDaemon: defaultLogLevelsUserDaemon,
+	RootDaemon: defaultLogLevelsRootDaemon,
+}
+
 type LogLevels struct {
 	UserDaemon logrus.Level `json:"userDaemon,omitempty" yaml:"userDaemon,omitempty"`
 	RootDaemon logrus.Level `json:"rootDaemon,omitempty" yaml:"rootDaemon,omitempty"`
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (ll LogLevels) IsZero() bool {
+	return ll == defaultLogLevels
 }
 
 // UnmarshalYAML parses the logrus log-levels
@@ -489,10 +520,10 @@ func (ll *LogLevels) merge(o *LogLevels) {
 }
 
 type Images struct {
-	Registry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
-	AgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
-	WebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
-	WebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
+	PrivateRegistry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
+	PrivateAgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
+	PrivateWebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
+	PrivateWebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -511,13 +542,13 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 		v := ms[i+1]
 		switch kv {
 		case "registry":
-			img.Registry = v.Value
+			img.PrivateRegistry = v.Value
 		case "agentImage":
-			img.AgentImage = v.Value
+			img.PrivateAgentImage = v.Value
 		case "webhookRegistry":
-			img.WebhookRegistry = v.Value
+			img.PrivateWebhookRegistry = v.Value
 		case "webhookAgentImage":
-			img.WebhookAgentImage = v.Value
+			img.PrivateWebhookAgentImage = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -527,19 +558,47 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-func (i *Images) merge(o *Images) {
-	if o.AgentImage != "" {
-		i.AgentImage = o.AgentImage
+func (img *Images) merge(o *Images) {
+	if o.PrivateAgentImage != "" {
+		img.PrivateAgentImage = o.PrivateAgentImage
 	}
-	if o.WebhookAgentImage != "" {
-		i.WebhookAgentImage = o.WebhookAgentImage
+	if o.PrivateWebhookAgentImage != "" {
+		img.PrivateWebhookAgentImage = o.PrivateWebhookAgentImage
 	}
-	if o.Registry != "" {
-		i.Registry = o.Registry
+	if o.PrivateRegistry != "" {
+		img.PrivateRegistry = o.PrivateRegistry
 	}
-	if o.WebhookRegistry != "" {
-		i.WebhookRegistry = o.WebhookRegistry
+	if o.PrivateWebhookRegistry != "" {
+		img.PrivateWebhookRegistry = o.PrivateWebhookRegistry
 	}
+}
+
+func (img *Images) Registry(c context.Context) string {
+	if img.PrivateRegistry != "" {
+		return img.PrivateRegistry
+	}
+	return GetEnv(c).Registry
+}
+
+func (img *Images) WebhookRegistry(c context.Context) string {
+	if img.PrivateWebhookRegistry != "" {
+		return img.PrivateWebhookRegistry
+	}
+	return GetEnv(c).Registry
+}
+
+func (img *Images) AgentImage(c context.Context) string {
+	if img.PrivateAgentImage != "" {
+		return img.PrivateAgentImage
+	}
+	return GetEnv(c).AgentImage
+}
+
+func (img *Images) WebhookAgentImage(c context.Context) string {
+	if img.PrivateWebhookAgentImage != "" {
+		return img.PrivateWebhookAgentImage
+	}
+	return GetEnv(c).AgentImage
 }
 
 type Cloud struct {
@@ -550,7 +609,7 @@ type Cloud struct {
 }
 
 // UnmarshalYAML parses the images YAML
-func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
+func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("cloud must be an object", node))
 	}
@@ -569,19 +628,19 @@ func (cloud *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 			if err != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("bool expected for key %q", kv), ms[i]))
 			} else {
-				cloud.SkipLogin = val
+				c.SkipLogin = val
 			}
 		case "refreshMessages":
 			duration, err := time.ParseDuration(v.Value)
 			if err != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("duration expected for key %q", kv), ms[i]))
 			} else {
-				cloud.RefreshMessages = duration
+				c.RefreshMessages = duration
 			}
 		case "systemaHost":
-			cloud.SystemaHost = v.Value
+			c.SystemaHost = v.Value
 		case "systemaPort":
-			cloud.SystemaPort = v.Value
+			c.SystemaPort = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -595,36 +654,48 @@ const defaultCloudSystemAHost = "app.getambassador.io"
 const defaultCloudSystemAPort = "443"
 const defaultCloudRefreshMessages = 24 * 7 * time.Hour
 
+var defaultCloud = Cloud{
+	SkipLogin:       false,
+	RefreshMessages: defaultCloudRefreshMessages,
+	SystemaHost:     defaultCloudSystemAHost,
+	SystemaPort:     defaultCloudSystemAPort,
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (c Cloud) IsZero() bool {
+	return c == defaultCloud
+}
+
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
-func (cloud Cloud) MarshalYAML() (interface{}, error) {
+func (c Cloud) MarshalYAML() (interface{}, error) {
 	cm := make(map[string]interface{})
-	if cloud.RefreshMessages != 0 && cloud.RefreshMessages != defaultCloudRefreshMessages {
-		cm["refreshMessages"] = cloud.RefreshMessages.String()
+	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
+		cm["refreshMessages"] = c.RefreshMessages.String()
 	}
-	if cloud.SkipLogin {
+	if c.SkipLogin {
 		cm["skipLogin"] = true
 	}
-	if cloud.SystemaHost != "" && cloud.SystemaHost != defaultCloudSystemAHost {
-		cm["systemaHost"] = cloud.SystemaHost
+	if c.SystemaHost != "" && c.SystemaHost != defaultCloudSystemAHost {
+		cm["systemaHost"] = c.SystemaHost
 	}
-	if cloud.SystemaPort != "" && cloud.SystemaPort != defaultCloudSystemAPort {
-		cm["systemaPort"] = cloud.SystemaPort
+	if c.SystemaPort != "" && c.SystemaPort != defaultCloudSystemAPort {
+		cm["systemaPort"] = c.SystemaPort
 	}
 	return cm, nil
 }
 
-func (cloud *Cloud) merge(o *Cloud) {
+func (c *Cloud) merge(o *Cloud) {
 	if o.SkipLogin {
-		cloud.SkipLogin = o.SkipLogin
+		c.SkipLogin = o.SkipLogin
 	}
 	if o.RefreshMessages != 0 {
-		cloud.RefreshMessages = o.RefreshMessages
+		c.RefreshMessages = o.RefreshMessages
 	}
 	if o.SystemaHost != "" {
-		cloud.SystemaHost = o.SystemaHost
+		c.SystemaHost = o.SystemaHost
 	}
 	if o.SystemaPort != "" {
-		cloud.SystemaPort = o.SystemaPort
+		c.SystemaPort = o.SystemaPort
 	}
 }
 
@@ -702,6 +773,10 @@ func (d *Daemons) merge(o *Daemons) {
 
 const defaultInterceptDefaultPort = 8080
 
+var defaultIntercept = Intercept{
+	DefaultPort: defaultInterceptDefaultPort,
+}
+
 type Intercept struct {
 	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
 	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
@@ -714,6 +789,11 @@ func (ic *Intercept) merge(o *Intercept) {
 	if o.DefaultPort != 0 {
 		ic.DefaultPort = o.DefaultPort
 	}
+}
+
+// IsZero controls whether this element will be included in marshalled output
+func (ic Intercept) IsZero() bool {
+	return ic == defaultIntercept
 }
 
 // MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
@@ -769,8 +849,8 @@ func GetConfigFile(c context.Context) string {
 }
 
 // GetDefaultConfig returns the default configuration settings
-func GetDefaultConfig(c context.Context) Config {
-	cfg := Config{
+func GetDefaultConfig() Config {
+	return Config{
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 			PrivateApply:                 defaultTimeoutsApply,
@@ -800,13 +880,6 @@ func GetDefaultConfig(c context.Context) Config {
 			DefaultPort: defaultInterceptDefaultPort,
 		},
 	}
-	if env := GetEnv(c); env != nil {
-		cfg.Images.Registry = env.Registry
-		cfg.Images.WebhookRegistry = env.Registry
-		cfg.Images.AgentImage = env.AgentImage
-		cfg.Images.WebhookAgentImage = env.AgentImage
-	}
-	return cfg
 }
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
@@ -824,7 +897,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		return nil, err
 	}
 
-	dflt := GetDefaultConfig(c)
+	dflt := GetDefaultConfig()
 	cfg = &dflt
 	readMerge := func(dir string) error {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
