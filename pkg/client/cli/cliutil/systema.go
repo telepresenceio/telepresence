@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 
+	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -146,19 +147,48 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 	return licenseData.GetLicense(), licenseData.GetHostDomain(), nil
 }
 
+func askUserOK(question string) (bool, error) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("%s (y/n)", question)
+	reply, err := reader.ReadString('\n')
+	if err != nil {
+		return false, errcat.User.Newf("error reading input: %w", err)
+	}
+	return strings.TrimSpace(reply) == "y", nil
+}
+
+func telProBinary(ctx context.Context) (string, error) {
+	dir, err := filelocation.AppUserConfigDir(ctx)
+	if err != nil {
+		return "", errcat.NoDaemonLogs.Newf("unable to get path to config files: %w", err)
+	}
+
+	telProLocation := filepath.Join(dir, "telepresence-pro")
+	if runtime.GOOS == "windows" {
+		telProLocation += ".exe"
+	}
+	return telProLocation, nil
+}
+
+func checkProVersion(ctx context.Context, telProLocation string) (bool, error) {
+	proCmd := dexec.CommandContext(ctx, telProLocation, "pro-version")
+	proCmd.DisableLogging = true
+	output, err := proCmd.CombinedOutput()
+	if err != nil {
+		return false, errcat.NoDaemonLogs.Newf("Unable to get telepresence pro version: %w", err)
+	}
+	return strings.Contains(string(output), client.Version()), nil
+}
+
 // GetTelepresencePro prompts the user to optionally install Telepresence Pro
 // if it isn't installed. If the user installs it, it also asks the user to
 // automatically update their configuration to use the new binary.
-func GetTelepresencePro(ctx context.Context) error {
-	dir, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to get path to config files: %w", err)
-	}
-
+func GetTelepresencePro(ctx context.Context) (err error) {
 	sc := scout.NewReporter(ctx, "cli")
 	sc.Start(ctx)
 	defer sc.Close()
-	installRefused := false
+
+	var installRefused bool
 	defer func() {
 		switch {
 		case err != nil:
@@ -170,102 +200,55 @@ func GetTelepresencePro(ctx context.Context) error {
 		}
 	}()
 
-	// If telepresence-pro doesn't exist, then we should ask the user
-	// if they want to install it
-	telProLocation := filepath.Join(dir, "telepresence-pro")
-	if runtime.GOOS == "windows" {
-		telProLocation += ".exe"
+	var telProLocation string
+	if telProLocation, err = telProBinary(ctx); err != nil {
+		return err
 	}
-	if _, err = os.Stat(telProLocation); os.IsNotExist(err) {
+
+	var q string
+	var ok bool
+	if _, err := os.Stat(telProLocation); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
 		sc.SetMetadatum(ctx, "first_install", true)
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Printf("Telepresence Pro is recommended when using login features, can Telepresence install it? (y/n)")
-		var reply string
-		reply, err = reader.ReadString('\n')
-		if err != nil {
-			return errcat.User.Newf("error reading input: %w", err)
-		}
-
-		// If the user doesn't want to install it, then we we'll proceed
-		// with launching the daemon normally
-		reply = strings.TrimSpace(reply)
-		if reply != "y" {
-			installRefused = true
-			return nil
-		}
-
-		err = installTelepresencePro(ctx, telProLocation)
-		if err != nil {
-			return err
-		}
-
-		// Ask the user if they want to automatically update their config
-		// with the telepresence-pro binary.
-		// TODO: This will remove any comments that exist in the config file
-		// which it's yaml so that's _fine_ but it would be nice if we didn't
-		// do that.
-		fmt.Printf("Update your Telepresence config to use Telepresence Pro? (y/n)")
-		reply, err = reader.ReadString('\n')
-		if err != nil {
-			return errcat.User.Newf("error reading input: %w", err)
-		}
-		reply = strings.TrimSpace(reply)
-		if reply != "y" {
-			return nil
-		}
-		err = updateConfig(ctx, telProLocation)
-		if err != nil {
-			return err
-		}
+		q = "Telepresence Pro is recommended when using login features, can Telepresence install it?"
 	} else {
 		// If the binary is present, we check its version to ensure it's compatible
 		// with the CLI
-		sc.SetMetadatum(ctx, "first_install", false)
-		proCmd := dexec.CommandContext(ctx, telProLocation, "pro-version")
-		proCmd.DisableLogging = true
-
-		var output []byte
-		output, err = proCmd.CombinedOutput()
-		if err != nil {
-			return errcat.NoDaemonLogs.Newf("Unable to get telepresence pro version")
+		if ok, err = checkProVersion(ctx, telProLocation); err != nil {
+			return err
 		}
+		if ok {
+			return nil
+		}
+		q = fmt.Sprintf("Telepresence Pro needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it?", client.Version())
+	}
+	if ok, err = askUserOK(q); err != nil {
+		return err
+	}
 
-		if !strings.Contains(string(output), client.Version()) {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Telepresence Pro needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it? (y/n)",
-				client.Version())
-			var reply string
-			reply, err = reader.ReadString('\n')
-			if err != nil {
-				return errcat.NoDaemonLogs.Newf("error reading input: %w", err)
-			}
+	// If the user doesn't want to install it, then we'll proceed
+	// with launching the daemon normally
+	if !ok {
+		installRefused = true
+		return nil
+	}
 
-			// If the user doesn't want to install it, then we we'll proceed
-			// with launching the daemon normally
-			reply = strings.TrimSpace(reply)
-			if reply != "y" {
-				installRefused = true
-				return nil
-			}
-			err = os.Remove(telProLocation)
-			if err != nil {
-				return errcat.NoDaemonLogs.Newf("error removing Telepresence Pro: %w", err)
-			}
-			// Since we've already asked the user for permission to upgrade,
-			// we can run these functions without asking permission again.
-			err = installTelepresencePro(ctx, telProLocation)
-			if err != nil {
-				return errcat.NoDaemonLogs.Newf("error installing updated Telepresence Pro: %w",
-					err)
-			}
+	if err = installTelepresencePro(ctx, telProLocation); err != nil {
+		return errcat.NoDaemonLogs.Newf("error installing updated Telepresence Pro: %w", err)
+	}
 
-			// The users configuration is most likely correct if they are upgrading,
-			// but we update it just to be extra sure.
-			err = updateConfig(ctx, telProLocation)
-			if err != nil {
-				return errcat.NoDaemonLogs.Newf("error updating config: %w",
-					err)
-			}
+	if client.GetConfig(ctx).Daemons.UserDaemonBinary != telProLocation {
+		// Ask the user if they want to automatically update their config
+		// with the telepresence-pro binary.
+		// This will remove any comments that exist in the config file, but we do
+		// create a backup
+		if ok, err = askUserOK("Update your Telepresence config to use Telepresence Pro?"); err != nil {
+			return err
+		}
+		if ok {
+			return updateConfig(ctx, telProLocation)
 		}
 	}
 	return nil
@@ -279,10 +262,10 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	// daemon versions need to match
 	clientVersion := strings.Trim(client.Version(), "v")
 	systemAHost := client.GetConfig(ctx).Cloud.SystemaHost
-	installString := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/%s",
+	downloadURL := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/%s",
 		systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion, filepath.Base(telProLocation))
 
-	resp, err := http.Get(installString)
+	resp, err := http.Get(downloadURL)
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -293,18 +276,67 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 		return errcat.NoDaemonLogs.Newf("unable to download Telepresence Pro: %w", err)
 	}
 
-	out, err := os.Create(telProLocation)
+	// Disconnect before attempting to create the new file.
+	wasRunning := false
+	err = WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		wasRunning = true
+		_, err := connectorClient.Quit(ctx, &empty.Empty{})
+		return err
+	})
+	if err != nil && err != ErrNoUserDaemon {
+		return err
+	}
+	replaceConnectorConn(ctx, nil)
+
+	if err = downloadProDaemon(downloadURL, resp.Body, telProLocation); err != nil {
+		return err
+	}
+	if wasRunning {
+		// relaunch the connector
+		var conn *grpc.ClientConn
+		if conn, err = launchConnectorDaemon(ctx, telProLocation, true); err != nil {
+			return err
+		}
+		replaceConnectorConn(ctx, conn)
+	}
+	return nil
+}
+
+// downloadProDaemon copies the from stream into a temporary file in the same directory as the
+// designated binary, chmods it to an executable, removes the old binary, and then renames the
+// temporary file as the new binary
+func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string) (err error) {
+	dir := filepath.Dir(telProLocation)
+	name := filepath.Base(telProLocation)
+	var tmp *os.File
+	if tmp, err = os.CreateTemp(dir, name); err != nil {
+		return errcat.NoDaemonLogs.Newf("unable to create temporary file in %q: %w", dir, err)
+	}
+	tmpName := tmp.Name()
+
+	// Remove temp file if it still exists when we exit this function
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	// Perform the actual download
+	fmt.Printf("Downloading %s...", downloadURL)
+	_, err = io.Copy(tmp, from)
+	_ = tmp.Close() // Important to close here. Don't defer this one
 	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to create file %q for Telepresence Pro: %w", telProLocation, err)
+		return errcat.NoDaemonLogs.Newf("unable to download Telepresence Pro: %w", err)
 	}
-	defer out.Close()
-
-	if _, err = io.Copy(out, resp.Body); err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to copy Telepresence Pro to %q: %w", telProLocation, err)
-	}
-
-	if err = os.Chmod(telProLocation, 0755); err != nil {
+	fmt.Println("done")
+	if err = os.Chmod(tmpName, 0755); err != nil {
 		return errcat.NoDaemonLogs.Newf("unable to set permissions of %q to 755: %w", telProLocation, err)
+	}
+	if err = os.Remove(telProLocation); err != nil && !os.IsNotExist(err) {
+		return errcat.NoDaemonLogs.Newf("error removing %q: %w", telProLocation, err)
+	}
+	if err = os.Rename(tmpName, telProLocation); err != nil {
+		return errcat.NoDaemonLogs.Newf("error renaming %q to %q: %w", tmpName, telProLocation, err)
 	}
 	return nil
 }

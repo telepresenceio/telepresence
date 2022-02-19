@@ -134,7 +134,7 @@ func Command(ctx context.Context) *cobra.Command {
 	} else {
 		var err error
 		if groups, err = getRemoteCommands(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
+			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
 	}
