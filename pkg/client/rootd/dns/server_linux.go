@@ -103,7 +103,7 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 			return err
 		}
 		for _, line := range strings.Split(string(dat), "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
+			if s.config.LocalIp == nil && strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
 				ip := net.ParseIP(fields[1])
 				if ip.To4() != nil {
