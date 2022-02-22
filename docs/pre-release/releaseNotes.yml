@@ -38,6 +38,14 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.4.11
+    date: "2022-02-10"
+    notes:
+      - type: change
+        title: Add additional logging to troubleshoot intermittent issues with intercepts
+        body: >-
+          We've noticed some issues with intercepts in v2.4.10, so we are releasing a version
+          with enhanced logging to help debug and fix the issue.
   - version: 2.4.10
     date: "2022-01-13"
     notes:
