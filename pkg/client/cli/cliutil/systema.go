@@ -1,7 +1,6 @@
 package cliutil
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -148,17 +147,6 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 	return licenseData.GetLicense(), licenseData.GetHostDomain(), nil
 }
 
-func askUserOK(question string) (bool, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("%s (y/n) [y]?", question)
-	reply, err := reader.ReadString('\n')
-	if err != nil {
-		return false, errcat.User.Newf("error reading input: %w", err)
-	}
-	reply = strings.TrimSpace(reply)
-	return reply == "" || reply == "y", nil
-}
-
 func telProBinary(ctx context.Context) (string, error) {
 	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
@@ -190,13 +178,10 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 	sc.Start(ctx)
 	defer sc.Close()
 
-	var installRefused bool
 	defer func() {
 		switch {
 		case err != nil:
 			sc.Report(ctx, "pro_connector_upgrade_fail", scout.Entry{Key: "error", Value: err.Error()})
-		case installRefused:
-			sc.Report(ctx, "pro_connector_upgrade_refusal")
 		default:
 			sc.Report(ctx, "pro_connector_upgrade_success")
 		}
@@ -207,34 +192,21 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 		return err
 	}
 
-	var q string
-	var ok bool
 	if _, err := os.Stat(telProLocation); err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
 		sc.SetMetadatum(ctx, "first_install", true)
-		q = "We recommend upgrading to the enhanced free client to take full advantage of Ambassador Cloud. Would you like Telepresence to install it"
 	} else {
 		// If the binary is present, we check its version to ensure it's compatible
 		// with the CLI
-		if ok, err = checkProVersion(ctx, telProLocation); err != nil {
+		ok, err := checkProVersion(ctx, telProLocation)
+		if err != nil {
 			return err
 		}
 		if ok {
 			return nil
 		}
-		q = fmt.Sprintf("The enhanced free client needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it", client.Version())
-	}
-	if ok, err = askUserOK(q); err != nil {
-		return err
-	}
-
-	// If the user doesn't want to install it, then we'll proceed
-	// with launching the daemon normally
-	if !ok {
-		installRefused = true
-		return nil
 	}
 
 	if err = installTelepresencePro(ctx, telProLocation); err != nil {
