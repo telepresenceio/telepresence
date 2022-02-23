@@ -98,7 +98,7 @@ with all your dev tools.
  1. Creating the intercept: Intercept your service from your CLI:
 
     ```shell
-    telepresence intercept SERVICENAME --http-match=all
+    telepresence intercept SERVICENAME --http-header=all
     ```
 
     <Alert severity="info">
@@ -142,13 +142,13 @@ while sharing the rest of the development environment.
  1. Creating the intercept: Intercept your service from your CLI:
 
     ```shell
-    telepresence intercept SERVICENAME --http-match=Personal-Intercept=126a72c7-be8b-4329-af64-768e207a184b
+    telepresence intercept SERVICENAME --http-header=Personal-Intercept=126a72c7-be8b-4329-af64-768e207a184b
     ```
 
     We're using
     `Personal-Intercept=126a72c7-be8b-4329-af64-768e207a184b` as the
     header for the sake of the example, but you can use any
-    `key=value` pair you want, or `--http-match=auto` to have it
+    `key=value` pair you want, or `--http-header=auto` to have it
     choose something automatically.
 
     <Alert severity="info">
@@ -187,8 +187,8 @@ while sharing the rest of the development environment.
 
 It's not uncommon to have one service serving several endpoints. Telepresence is capable of limiting an
 intercept to only affect the endpoints you want to work with by using one of the `--http-path-xxx`
-flags below in addition to using `--http-match` flags. Only one such flag can be used in an intercept
-and, contrary to the `--http-match` flag, it cannot be repeated.
+flags below in addition to using `--http-header` flags. Only one such flag can be used in an intercept
+and, contrary to the `--http-header` flag, it cannot be repeated.
 
 The following flags are available:
 
@@ -197,6 +197,30 @@ The following flags are available:
 | `--http-path-equal <path>`    | Only intercept the endpoint for this exact path                  |
 | `--http-path-prefix <prefix>` | Only intercept endpoints with a matching path prefix             |
 | `--http-path-regex <regex>`   | Only intercept endpoints that match the given regular expression |
+
+#### Examples:
+
+1. A personal intercept using the header "Coder: Bob" limited to all endpoints that start with "/api':
+
+    ```shell
+    telepresence intercept SERVICENAME --http-path-prefix=/api --http-header=Coder=Bob
+    ```
+
+2. A personal intercept using the auto generated header that applies only to the endpoint "/api/version":
+
+    ```shell
+    telepresence intercept SERVICENAME --http-path-equal=/api/version --http-header=auto
+    ```
+   or, since `--http-header=auto` is the implicit when using `--http` options, just:
+    ```shell
+    telepresence intercept SERVICENAME --http-path-equal=/api/version
+    ```
+
+3. A personal intercept using the auto generated header limited to all endpoints matching the regular expression "(staging-)?api/.*":
+
+    ```shell
+    telepresence intercept SERVICENAME --http-path-regex='/(staging-)?api/.*'
+    ```
 
 </TabPanel>
 </TabsContainer>

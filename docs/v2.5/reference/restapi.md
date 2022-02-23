@@ -43,7 +43,7 @@ $ curl -v localhost:9980/healthz
 `http://localhost:<TELEPRESENCE_API_PORT>/consume-here` will respond with "true" (consume the message) or "false" (leave the message on the queue). When running in the cluster, this endpoint will respond with `false` if the headers match an ongoing intercept for the same workload because it's assumed that it's up to the intercept to consume the message. When running locally, the response is inverted. Matching headers means that the message should be consumed.
 
 #### test endpoint using curl
-Assuming that the API-server runs on port 9980, that the intercept was started with `--http-match x=y --http-path-prefix=/api`, we can now check that the "/consume-here" returns "true" for the path "/api" and given headers.
+Assuming that the API-server runs on port 9980, that the intercept was started with `--http-header x=y --http-path-prefix=/api`, we can now check that the "/consume-here" returns "true" for the path "/api" and given headers.
 ```console
 $ curl -v localhost:9980/consume-here?path=/api -H 'x-telepresence-caller-intercept-id: 4392d394-100e-4f15-a89b-426012f10e05:apitest' -H 'x: y'
 *   Trying ::1:9980...
@@ -71,7 +71,7 @@ If you can run curl from the pod, you can try the exact same URL. The result sho
 `http://localhost:<TELEPRESENCE_API_PORT>/intercept-info` is intended to be queried with an optional path query and a set of headers, typically obtained from a Kafka message or similar, and will respond with a JSON structure containing the two booleans `clientSide` and `intercepted`, and a `metadata` map which corresponds to the `--http-meta` key pairs used when the intercept was created. This field is always omitted in case `intercepted` is `false`.
 
 #### test endpoint using curl
-Assuming that the API-server runs on port 9980, that the intercept was started with `--http-match x=y --http-path-prefix=/api --http-meta a=b --http-meta b=c`, we can now check that the "/intercept-info" returns information for the given path and headers.
+Assuming that the API-server runs on port 9980, that the intercept was started with `--http-header x=y --http-path-prefix=/api --http-meta a=b --http-meta b=c`, we can now check that the "/intercept-info" returns information for the given path and headers.
 ```console
 $ curl -v localhost:9980/intercept-info?path=/api -H 'x-telepresence-caller-intercept-id: 4392d394-100e-4f15-a89b-426012f10e05:apitest' -H 'x: y'
 *   Trying ::1:9980...* Connected to localhost (127.0.0.1) port 9980 (#0)

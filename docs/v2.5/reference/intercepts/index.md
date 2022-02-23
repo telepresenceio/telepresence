@@ -15,7 +15,7 @@ that traffic-agent supports, and command-line flags to expose to the
 user to configure that mechanism.  You may tell Telepresence which
 known mechanism to use with the `--mechanism=${mechanism}` flag or by
 setting one of the `--${mechansim}-XXX` flags, which implicitly set
-the mechanism; for example, setting `--http-match=auto` implicitly
+the mechanism; for example, setting `--http-header=auto` implicitly
 sets `--mechanism=http`.
 
 The default open-source traffic-agent only supports the `tcp`
@@ -43,7 +43,7 @@ login`](../client/login/)) changes the Telepresence defaults in two
 ways.
 
 First, being logged in to Ambassador Cloud causes Telepresence to
-default to `--mechanism=http --http-match=auto --http-path-prefix=/` (
+default to `--mechanism=http --http-header=auto --http-path-prefix=/` (
 `--mechanism=http` is redundant. It is implied by other `--http-xxx` flags).
 If you hadn't been logged in it would have defaulted to
 `--mechanism=tcp`.  This tells Telepresence to use the Ambassador
@@ -52,7 +52,7 @@ intercept a subset of HTTP requests, rather than just intercepting the
 entirety of all TCP connections.  This is important for working in a
 shared cluster with teammates, and is important for the preview URL
 functionality below.  See `telepresence intercept --help` for
-information on using the `--http-match` and `--http-path-xxx` flags to
+information on using the `--http-header` and `--http-path-xxx` flags to
 customize which requests that are intercepted.
 
 Secondly, being logged in causes Telepresence to default to
