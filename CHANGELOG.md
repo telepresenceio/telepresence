@@ -2,9 +2,7 @@
 
 ### 2.5.2 (TBD)
 
-- Bugfix: Fixed a bug Telepresence would use the last server in resolv.conf
-
-- Change: Removed the user prompt before downloading the enhanced daemon
+- Bugfix: Fixed a bug where Telepresence would use the last server in resolv.conf
 
 ### 2.5.1 (February 19, 2022)
 
