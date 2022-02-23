@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -149,12 +150,13 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 
 func askUserOK(question string) (bool, error) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("%s (y/n)", question)
+	fmt.Printf("%s (y/n) [y]?", question)
 	reply, err := reader.ReadString('\n')
 	if err != nil {
 		return false, errcat.User.Newf("error reading input: %w", err)
 	}
-	return strings.TrimSpace(reply) == "y", nil
+	reply = strings.TrimSpace(reply)
+	return reply == "" || reply == "y", nil
 }
 
 func telProBinary(ctx context.Context) (string, error) {
@@ -212,7 +214,7 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 			return err
 		}
 		sc.SetMetadatum(ctx, "first_install", true)
-		q = "Telepresence Pro is recommended when using login features, can Telepresence install it?"
+		q = "We recommend upgrading to the enhanced free client to take full advantage of Ambassador Cloud. Would you like Telepresence to install it"
 	} else {
 		// If the binary is present, we check its version to ensure it's compatible
 		// with the CLI
@@ -222,7 +224,7 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 		if ok {
 			return nil
 		}
-		q = fmt.Sprintf("Telepresence Pro needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it?", client.Version())
+		q = fmt.Sprintf("The enhanced free client needs to be upgraded to work with CLI version %s, allow Telepresence to upgrade it", client.Version())
 	}
 	if ok, err = askUserOK(q); err != nil {
 		return err
@@ -236,22 +238,9 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 	}
 
 	if err = installTelepresencePro(ctx, telProLocation); err != nil {
-		return errcat.NoDaemonLogs.Newf("error installing updated Telepresence Pro: %w", err)
+		return errcat.NoDaemonLogs.Newf("error installing updated enhanced free client: %w", err)
 	}
-
-	if client.GetConfig(ctx).Daemons.UserDaemonBinary != telProLocation {
-		// Ask the user if they want to automatically update their config
-		// with the telepresence-pro binary.
-		// This will remove any comments that exist in the config file, but we do
-		// create a backup
-		if ok, err = askUserOK("Update your Telepresence config to use Telepresence Pro?"); err != nil {
-			return err
-		}
-		if ok {
-			return updateConfig(ctx, telProLocation)
-		}
-	}
-	return nil
+	return updateConfig(ctx, telProLocation)
 }
 
 // installTelepresencePro installs the binary. Users should be asked for
@@ -273,7 +262,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 		}
 	}
 	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to download Telepresence Pro: %w", err)
+		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
 
 	// Disconnect before attempting to create the new file.
@@ -288,7 +277,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	}
 	replaceConnectorConn(ctx, nil)
 
-	if err = downloadProDaemon(downloadURL, resp.Body, telProLocation); err != nil {
+	if err = downloadProDaemon("the enhanced free client", resp.Body, telProLocation); err != nil {
 		return err
 	}
 	if wasRunning {
@@ -326,7 +315,7 @@ func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string
 	_, err = io.Copy(tmp, from)
 	_ = tmp.Close() // Important to close here. Don't defer this one
 	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to download Telepresence Pro: %w", err)
+		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
 	fmt.Println("done")
 	if err = os.Chmod(tmpName, 0755); err != nil {
@@ -345,13 +334,22 @@ func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string
 // telProLocation. Users should be asked for permission before this is done.
 func updateConfig(ctx context.Context, telProLocation string) error {
 	cfg := client.GetConfig(ctx)
-	cfg.Daemons.UserDaemonBinary = telProLocation
+	if cfg.Daemons.UserDaemonBinary == telProLocation {
+		return nil
+	}
 
+	cfgFile := client.GetConfigFile(ctx)
+	if cfg.Daemons.UserDaemonBinary == "" {
+		dlog.Infof(ctx, "Updating %s, setting Daemons.UserDaemonBinary to %s", cfgFile, telProLocation)
+	} else {
+		dlog.Infof(ctx, "Updating %s, changing Daemons.UserDaemonBinary from %s to %s", cfgFile, cfg.Daemons.UserDaemonBinary, telProLocation)
+	}
+
+	cfg.Daemons.UserDaemonBinary = telProLocation
 	b, err := yaml.Marshal(cfg)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("error marshaling updating config: %w", err)
 	}
-	cfgFile := client.GetConfigFile(ctx)
 	if s, err := os.Stat(cfgFile); err == nil && s.Size() > 0 {
 		_ = os.Rename(cfgFile, cfgFile+".bak")
 	}
