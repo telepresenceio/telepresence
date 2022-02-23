@@ -20,7 +20,8 @@ func GetCommandsForLocal(err error) cliutil.CommandGroups {
 	for _, cmds := range groups {
 		for _, cmd := range cmds {
 			cmd.RunE = func(_ *cobra.Command, _ []string) error {
-				return fmt.Errorf("unable to run command: no connection to local daemon (%w)", err)
+				// err here will be ErrNoUserDaemon "telepresence user daemon is not running"
+				return fmt.Errorf("unable to run command: %w", err)
 			}
 		}
 	}

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your
@@ -128,12 +128,17 @@ func Command(ctx context.Context) *cobra.Command {
 		})
 	*/
 
-	groups, err := getRemoteCommands(ctx)
-	if err != nil {
-		groups = commands.GetCommandsForLocal(err)
+	var groups cliutil.CommandGroups
+	if len(os.Args) > 1 && os.Args[1] == "quit" {
+		groups = make(cliutil.CommandGroups)
 	} else {
-		userDaemonRunning = true
+		var err error
+		if groups, err = getRemoteCommands(ctx); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 	}
+
 	rootCmd.InitDefaultHelpCmd()
 	static := cliutil.CommandGroups{
 		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},

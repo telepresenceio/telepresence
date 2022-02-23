@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -43,11 +45,56 @@ func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.
 	return withConnector(ctx, false, withNotify, fn)
 }
 
-type connectorConnCtxKey struct{}
+type connectorConnPtrKey struct{}
+
+func getConnectorConn(ctx context.Context) *grpc.ClientConn {
+	if connP, ok := ctx.Value(connectorConnPtrKey{}).(*unsafe.Pointer); ok {
+		return (*grpc.ClientConn)(atomic.LoadPointer(connP))
+	}
+	return nil
+}
+
+func replaceConnectorConn(ctx context.Context, conn *grpc.ClientConn) {
+	if connP, ok := ctx.Value(connectorConnPtrKey{}).(*unsafe.Pointer); ok {
+		atomic.StorePointer(connP, unsafe.Pointer(conn))
+	}
+}
+
+func withConnectorConn(ctx context.Context, conn *grpc.ClientConn) context.Context {
+	var up unsafe.Pointer
+	atomic.StorePointer(&up, unsafe.Pointer(conn))
+	return context.WithValue(ctx, connectorConnPtrKey{}, &up)
+}
+
+func launchConnectorDaemon(ctx context.Context, connectorDaemon string, maybeStart bool) (conn *grpc.ClientConn, err error) {
+	for {
+		conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
+		if err == nil {
+			return conn, nil
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			err = ErrNoUserDaemon
+			if maybeStart {
+				fmt.Println("Launching Telepresence User Daemon")
+				if _, err = ensureAppUserConfigDir(ctx); err != nil {
+					return nil, err
+				}
+				if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
+					return nil, fmt.Errorf("failed to launch the connector service: %w", err)
+				}
+				if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
+					return nil, fmt.Errorf("connector service did not start: %w", err)
+				}
+				maybeStart = false
+				continue
+			}
+		}
+		return nil, err
+	}
+}
 
 func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
-	if untyped := ctx.Value(connectorConnCtxKey{}); untyped != nil {
-		conn := untyped.(*grpc.ClientConn)
+	if conn := getConnectorConn(ctx); conn != nil {
 		connectorClient := connector.NewConnectorClient(conn)
 		return fn(ctx, connectorClient)
 	}
@@ -55,49 +102,31 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 	// If the UserDaemonBinary isn't set, use the same executable as the
 	// CLI binary
 	connectorDaemon := client.GetConfig(ctx).Daemons.UserDaemonBinary
-	if connectorDaemon == "" {
+	configuredDaemon := connectorDaemon != ""
+	if !configuredDaemon {
 		connectorDaemon = client.GetExe()
 	}
-	var conn *grpc.ClientConn
-	started := false
-	for {
-		var err error
-		conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
-		if err == nil {
-			break
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			err = ErrNoUserDaemon
-			if maybeStart {
-				fmt.Println("Launching Telepresence User Daemon")
-				if _, err = ensureAppUserConfigDir(ctx); err != nil {
-					return err
-				}
-				if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
-					return fmt.Errorf("failed to launch the connector service: %w", err)
-				}
-
-				if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-					return fmt.Errorf("connector service did not start: %w", err)
-				}
-
-				maybeStart = false
-				started = true
-				continue
-			}
-		}
+	conn, err := launchConnectorDaemon(ctx, connectorDaemon, maybeStart)
+	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	ctx = context.WithValue(ctx, connectorConnCtxKey{}, conn)
-	connectorClient := connector.NewConnectorClient(conn)
-	if !started {
-		// Ensure that the already running daemon has the correct version
-		if err := versionCheck(ctx, "User", client.GetConfig(ctx).Daemons.UserDaemonBinary, connectorClient); err != nil {
-			return err
+	ctx = withConnectorConn(ctx, conn)
+	defer func() {
+		if conn := getConnectorConn(ctx); conn != nil {
+			conn.Close()
 		}
+	}()
+
+	connectorClient := connector.NewConnectorClient(conn)
+
+	// Ensure that the already running daemon has the correct version
+	if err = versionCheck(ctx, "User", connectorDaemon, configuredDaemon, connectorClient); err != nil {
+		return err
 	}
+	// The connection might have been swapped at this point, due to an upgrade of the user daemon
+	connectorClient = connector.NewConnectorClient(getConnectorConn(ctx))
 	if !withNotify {
+		// No user interaction for this command.
 		return fn(ctx, connectorClient)
 	}
 

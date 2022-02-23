@@ -107,7 +107,7 @@ func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, 
 	daemonClient := daemon.NewDaemonClient(conn)
 	if !started {
 		// Ensure that the already running daemon has the correct version
-		if err := versionCheck(ctx, "Root", "", daemonClient); err != nil {
+		if err := versionCheck(ctx, "Root", "", false, daemonClient); err != nil {
 			return err
 		}
 	}

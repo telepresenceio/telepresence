@@ -12,9 +12,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func versionCheck(ctx context.Context, daemonType string, daemonBinary string, client interface {
+type daemonClient interface {
 	Version(context.Context, *empty.Empty, ...grpc.CallOption) (*common.VersionInfo, error)
-}) error {
+}
+
+func versionCheck(ctx context.Context, daemonType string, daemonBinary string, configuredDaemon bool, daemon daemonClient) error {
 	if ctx.Value(quitting{}) != nil {
 		return nil
 	}
@@ -28,12 +30,17 @@ func versionCheck(ctx context.Context, daemonType string, daemonBinary string, c
 		return fmt.Errorf("unknown daemonType: %s", daemonType)
 	}
 	// Ensure that the already running daemon has the correct version
-	vi, err := client.Version(ctx, &empty.Empty{})
+	vi, err := daemon.Version(ctx, &empty.Empty{})
 	if err != nil {
 		return fmt.Errorf("unable to retrieve version of %s Daemon: %w", daemonType, err)
 	}
 	if version.Version != vi.Version {
-		return errcat.User.Newf("version mismatch. Client %s != %s Daemon %s, please run 'telepresence quit %s' and reconnect", version.Version, daemonType, vi.Version, quitFlag)
+		// OSS Version mismatch. We never allow this
+		if !configuredDaemon {
+			return errcat.User.Newf("version mismatch. Client %s != %s Daemon %s, please run 'telepresence quit %s' and reconnect",
+				version.Version, daemonType, vi.Version, quitFlag)
+		}
+		return GetTelepresencePro(ctx)
 	}
 	if daemonBinary != "" {
 		if vi.Executable != daemonBinary {
