@@ -657,9 +657,7 @@ func addAgentToWorkload(
 	}
 
 	var initContainerAction *addInitContainerAction
-	setGID := false
 	if matchingService.Spec.ClusterIP == "None" {
-		setGID = true
 		initContainerAction = &addInitContainerAction{
 			AppPortProto:  containerPort.Protocol,
 			AppPortNumber: containerPort.Number,
@@ -685,7 +683,6 @@ func addAgentToWorkload(
 		AddTrafficAgent: &addTrafficAgentAction{
 			containerName:           container.Name,
 			trafficManagerNamespace: trafficManagerNamespace,
-			setGID:                  setGID,
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
 			ContainerPortAppProto:   k8sapi.GetAppProto(c, client.GetConfig(c).Intercept.AppProtocolStrategy, servicePort),

@@ -1,4 +1,4 @@
-# Copyright 2020-2021 Datawire. All rights reserved.
+# Copyright 2020-2022 Datawire. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,23 +11,72 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+FROM golang:alpine3.15 as tel2-base
 
-FROM alpine:3.13 as tel2-base
+RUN apk add git gcc make cmake musl-nscd-dev libc-dev
+RUN git clone git://git.samba.org/nss_wrapper.git
 
-RUN addgroup -g 7777 telepresence && \
-    adduser -G telepresence -u 7777 -D telepresence
+WORKDIR nss_wrapper
+
+RUN git checkout nss_wrapper-1.1.11 && \
+	mkdir obj && \
+    cd obj && \
+	cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make && \
+    cd src && \
+    mkdir /nss_wrapper && \
+    tar -f /nss_wrapper/libs.tar.gz -cz lib*
+
+COPY base-image/passwd.template /nss_wrapper
+COPY base-image/startscript.sh /nss_wrapper
+
+FROM tel2-base AS tel2-build
+
+WORKDIR telepresence
+COPY go.mod .
+COPY go.sum .
+COPY rpc/go.mod rpc/
+COPY rpc/go.sum rpc/
+
+# Get dependancies - will also be cached if we won't change mod/sum
+RUN go mod download
+
+COPY cmd/ cmd/
+COPY pkg/ pkg/
+COPY rpc/ rpc/
+COPY build-output/version.txt .
+
+RUN go install -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
+RUN cp $(go env GOPATH)/bin/traffic /usr/local/bin
+
+FROM alpine:3.15 as tel2
+
+RUN apk add --no-cache openssh-sftp-server ca-certificates iptables
+
+COPY --from=tel2-base /nss_wrapper/libs.tar.gz .
+RUN tar -f libs.tar.gz -C /usr/local/lib -xz && rm libs.tar.gz
+
+# the traffic binary
+COPY --from=tel2-base /nss_wrapper/passwd.template .
+COPY --from=tel2-base /nss_wrapper/startscript.sh .
+COPY --from=tel2-build /usr/local/bin/traffic /usr/local/bin
 
 RUN \
-  apk add --no-cache openssh-sftp-server ca-certificates iptables && \
   mkdir /tel_app_mounts && \
-  chown telepresence /tel_app_mounts && \
-  chmod 0770 /tel_app_mounts
+  chgrp -R 0 /tel_app_mounts && \
+  chmod -R g=u /tel_app_mounts && \
+  mkdir -p /home/telepresence && \
+  chmod 0777 /home/telepresence
 
-
-# Make symlinks so we can use these commands directly in k8s.
 RUN \
-  ln -s /ko-app/traffic /usr/local/bin/traffic-manager && \
-  ln -s /ko-app/traffic /usr/local/bin/traffic-agent
+  chgrp -R 0 startscript.sh && \
+  chmod -R g=u startscript.sh && \
+  chmod -R +x startscript.sh
 
-# Clear the default command to avoid passing bogus arguments to traffic
+ENV \
+ USER_NAME=telepresence \
+ NSS_WRAPPER_PASSWD=/tmp/passwd \
+ NSS_WRAPPER_GROUP=/etc/group
+
+ENTRYPOINT ["/startscript.sh", "traffic"]
 CMD []

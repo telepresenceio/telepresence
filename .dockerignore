@@ -1,3 +1,3 @@
 .circleci/
 .git/
-build-output/
+build-output/bin

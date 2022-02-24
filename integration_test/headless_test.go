@@ -42,6 +42,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 		},
 	} {
 		s.Run(test.name, func() {
+			ctx := s.Context()
 			if test.webhook {
 				require.NoError(annotateForWebhook(ctx, "statefulset", "echo-headless", s.AppNamespace(), 8080))
 			}
