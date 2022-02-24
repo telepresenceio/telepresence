@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.2 (TBD)
+### 2.5.2 (February 23, 2022)
 
 - Bugfix: Fixed a bug where Telepresence would use the last server in resolv.conf
 
