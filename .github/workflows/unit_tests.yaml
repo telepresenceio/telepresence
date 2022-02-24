@@ -101,7 +101,11 @@ jobs:
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y socat
-      - run: make build
+      - name: "Test arm64 build"
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: GOARCH=arm64 make build
+      - name: "Test amd64 build"
+        run: make build
         if: steps.get_last_run.outputs.passed != 'success'
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'

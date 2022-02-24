@@ -63,9 +63,23 @@ jobs:
           name: Docker login
           command: |
             docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
-      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
-      - run: |
-          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+      - run:
+          name: Push Images
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images
+      - run:
+          name: "Publish linux (arch amd64)"
+          command: GOARCH=amd64 make push-executable
+      - run:
+          name: "Publish linux (arch arm64)"
+          command: GOARCH=arm64 make push-executable
+      - run:
+          name: "Promote linux (arch amd64)"
+          command: |
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make promote-to-stable
+      - run:
+          name: "Promote linux (arch arm64)"
+          command: |
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make promote-to-stable
 
   "release-macos":
     executor: vm-macos
