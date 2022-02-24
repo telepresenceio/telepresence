@@ -2,7 +2,7 @@
 
 ### 2.5.3 (TBD)
 
-- Feature: Client-side binaries for the amd64 architecture are now available for linux
+- Feature: Client-side binaries for the arm64 architecture are now available for linux
 
 ### 2.5.2 (February 23, 2022)
 
