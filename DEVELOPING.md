@@ -53,38 +53,10 @@ The output of `make help` has a bit more information.
 The easiest thing to do to get going:
 
 ```console
-$ TELEPRESENCE_REGISTRY=docker.io/lukeshu make build # use .\build-aux\winmake.bat build on windows
-[make] TELEPRESENCE_VERSION=v2.3.5-63-ga9c8c660-1626378362
-
-mkdir -p build-output/bin
-CGO_ENABLED=0 go build -trimpath -ldflags=-X=github.com/telepresenceio/telepresence/v2/pkg/version.Version=v2.3.5-63-ga9c8c660-1626378362 -o build-output/bin ./cmd/...
-
-if ! docker pull docker.io/lukeshu/tel2-base:0d118a970c93bb1387fce6bb5638e86eb82d2cbe; then \
-  cd base-image && docker build --pull -t docker.io/lukeshu/tel2-base:0d118a970c93bb1387fce6bb5638e86eb82d2cbe . && \
-  docker push docker.io/lukeshu/tel2-base:0d118a970c93bb1387fce6bb5638e86eb82d2cbe; \
-fi
-0d118a970c93bb1387fce6bb5638e86eb82d2cbe: Pulling from lukeshu/tel2-base
-Digest: sha256:3d557f4abf033990c4c165639e37123bee8c482471b034f53a1cbb407e94d9da
-Status: Image is up to date for lukeshu/tel2-base:0d118a970c93bb1387fce6bb5638e86eb82d2cbe
-docker.io/lukeshu/tel2-base:0d118a970c93bb1387fce6bb5638e86eb82d2cbe
-sed  -e 's|@TELEPRESENCE_REGISTRY@|docker.io/lukeshu|g'  -e 's|@TELEPRESENCE_BASE_VERSION@|0d118a970c93bb1387fce6bb5638e86eb82d2cbe|g' <.ko.yaml.in >.ko.yaml
-localname=$(GOFLAGS="-ldflags=-X=github.com/telepresenceio/telepresence/v2/pkg/version.Version=v2.3.5-63-ga9c8c660-1626378362 -trimpath" ko publish --local ./cmd/traffic) && \
-docker tag "$localname" docker.io/lukeshu/tel2:2.3.5-63-ga9c8c660-1626378362
-2021/07/15 13:46:06 Using base docker.io/lukeshu/tel2-base:0d118a970c93bb1387fce6bb5638e86eb82d2cbe for github.com/telepresenceio/telepresence/v2/cmd/traffic
-2021/07/15 13:46:07 Building github.com/telepresenceio/telepresence/v2/cmd/traffic for linux/amd64
-2021/07/15 13:46:13 Loading ko.local/traffic-583382724d65cac88dce46a7e0490a6c:b182c8fe7541da86bc26c758648badd534973c27017855f2bdd2cee3d0dd615d
-2021/07/15 13:46:15 Loaded ko.local/traffic-583382724d65cac88dce46a7e0490a6c:b182c8fe7541da86bc26c758648badd534973c27017855f2bdd2cee3d0dd615d
-2021/07/15 13:46:15 Adding tag latest
-2021/07/15 13:46:16 Added tag latest
-
-docker push docker.io/lukeshu/tel2:2.3.5-63-ga9c8c660-1626378362
-The push refers to repository [docker.io/lukeshu/tel2]
-07cc3e3258f3: Pushed
-4f76c7cc1547: Layer already exists
-3aae10101f20: Layer already exists
-7f202b5d8654: Layer already exists
-b2d5eeeaba3a: Layer already exists
-2.3.5-63-ga9c8c660-1626378362: digest: sha256:d6e429d53cff2293f5bfc764db33664a6f03f78b65b2798f33354f76c40f46a7 size: 1363
+$ TELEPRESENCE_REGISTRY=docker.io/lukeshu make build push-images # use .\build-aux\winmake.bat build on windows
+[make] TELEPRESENCE_VERSION=v2.5.2-19-g9d0329c0-1645717779
+... # Lots of output
+2.5.2-19-g9d0329c0-1645717779: digest: sha256:3f8ed251437032273d959c175e91e36ddc8d89168d425dc278924246805abab9 size: 4078
 ```
 
 This has 2 primary outputs:
@@ -94,7 +66,7 @@ This has 2 primary outputs:
 It essentially does 3 separate tasks:
  1. `make build` to build the `./build-output/bin/telepresence`
     executable binary
- 2. `make image` to build the `${TELEPRESENCE_REGISTRY}/tel2` Docker
+ 2. `make tel2` to build the `${TELEPRESENCE_REGISTRY}/tel2` Docker
     image.
  3. `make push-image` to push the `${TELEPRESENCE_REGISTRY}/tel2`
     Docker image.
@@ -116,7 +88,7 @@ image.
 You may think that the initial suggestion of running `make build
 push-image` all the time (so that every build gets new matching
 version numbers) would be terribly slow.  However, This is not as slow
-as you might think; both `go` and `ko` are very good about reusing
+as you might think; both `go` and `docker` are very good about reusing
 existing builds and avoiding unnecessary work.
 
 ## Run the tests
@@ -134,7 +106,7 @@ $ sudo id
 [sudo] password for lukeshu:
 uid=0(root) gid=0(root) groups=0(root)
 
-$ make check
+$ make check-unit
 [make] TELEPRESENCE_VERSION=v2.4.9-1-g349d3bbb-1638829681
 GOOS=linux GOARCH=amd64 go run ./build-aux/package_embedded_chart/main.go v2.4.9-1-g349d3bbb-1638829681
 ...

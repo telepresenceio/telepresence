@@ -1,2 +1,0 @@
-baseImageOverrides:
-  github.com/telepresenceio/telepresence/v2/cmd/traffic: ko.local/tel2-base:@TELEPRESENCE_BASE_VERSION@

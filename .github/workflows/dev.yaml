@@ -22,7 +22,7 @@ jobs:
       - name: Build dev image
         run: |
           TAG="2.4.5-gotest.${GITHUB_SHA:0:7}"
-          TELEPRESENCE_VERSION="v${TAG}" make image
+          TELEPRESENCE_VERSION="v${TAG}" make tel2
           mkdir -p /tmp/workspace
           docker save "datawire/tel2:${TAG}" > tel2-image.tar
       - name: Upload image
