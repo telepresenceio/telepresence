@@ -68,10 +68,10 @@ jobs:
           command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images
       - run:
           name: "Publish linux (arch amd64)"
-          command: GOARCH=amd64 make push-executable
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable
       - run:
           name: "Publish linux (arch arm64)"
-          command: GOARCH=arm64 make push-executable
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make push-executable
       - run:
           name: "Promote linux (arch amd64)"
           command: |
