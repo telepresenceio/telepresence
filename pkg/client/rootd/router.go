@@ -183,9 +183,9 @@ func (s *session) tcp(c context.Context, pkt tcp.Packet) {
 		return
 	}
 
-	wf, _, err := s.handlers.GetOrCreateTCP(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
+	wf, _, err := s.handlers.GetOrCreate(c, connID, func(c context.Context, remove func()) (tunnel.Handler, error) {
 		return tcp.NewHandler(s.streamCreator(connID), &s.closing, vifWriter{s.dev}, connID, remove, s.rndSource), nil
-	}, pkt)
+	})
 	if err != nil {
 		dlog.Error(c, err)
 		pkt.Release()
