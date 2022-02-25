@@ -109,7 +109,11 @@ get_workstation_apikey() {
         exit 1
         ;;
     esac
-    apikey=$(jq -r '.[]|.["telepresence:agent-http"]|strings' "$cache_file")
+    endpoint="auth.datawire.io"
+    if [[ "$SYSTEMA_ENV" == 'staging' ]]; then
+        endpoint="beta-auth.datawire.io"
+    fi
+    apikey=$(jq -r ".[\"$endpoint\"]|.[\"telepresence:agent-http\"]|strings" "$cache_file")
     if [[ -z $apikey ]]; then
         echo "No apikey found"
         exit 1
@@ -398,6 +402,8 @@ case "$choice" in
     * ) echo "invalid"; exit 1;;
 esac
 
+$TELEPRESENCE quit -ru
+
 echo "Okay one more thing. Please login to System A in the window that pops up"
 $TELEPRESENCE login >"$output_location"
 
@@ -557,7 +563,7 @@ if [ -f "$config_file" ]; then
     $TELEPRESENCE quit > "$output_location"
 fi
 
-$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-header=all <<<$'verylargejavaservice.default\n8080\nN\n' >"$output_location"
+$TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-header=all --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default >"$output_location"
 sleep 1
 is_prop_traffic_agent true
 
@@ -579,7 +585,7 @@ finish_step
 
 login
 sleep 5 # avoid known agent mechanism-args race
-output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 <<<$'verylargejavaservice.default\n8080\nN\n')
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default)
 sleep 1
 has_preview_url true
 is_prop_traffic_agent true
@@ -631,7 +637,7 @@ finish_step
 ###############################################
 
 sleep 5 # avoid known agent mechanism-args race
-output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-header=all <<<$'verylargejavaservice.default\n8080\nN\n')
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-header=all --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default)
 sleep 1
 get_preview_url
 has_intercept_id false
