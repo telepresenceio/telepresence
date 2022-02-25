@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.3 (TBD)
+### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
 
