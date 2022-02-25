@@ -4,6 +4,8 @@
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
 
+- Bugfix: Fixed bug in the TCP stack causing timeouts after repeated connects to the same address
+
 ### 2.5.2 (February 23, 2022)
 
 - Bugfix: Fixed a bug where Telepresence would use the last server in resolv.conf
