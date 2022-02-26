@@ -386,25 +386,23 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 		m["header"] = ds
 	}
 	if agentVer != nil {
-		if agentVer.LE(semver.MustParse("1.11.9-rc.3")) {
+		if agentVer.LE(semver.MustParse("1.11.8")) {
 			if hs, ok := m["header"]; ok {
 				delete(m, "header")
 				m["match"] = hs
 			}
-			if agentVer.LE(semver.MustParse("1.11.8")) {
-				for ma := range m {
-					switch ma {
-					case "meta", "path-equal", "path-prefix", "path-regex":
-						return nil, errcat.User.New("--http-" + ma)
-					}
+			for ma := range m {
+				switch ma {
+				case "meta", "path-equal", "path-prefix", "path-regex":
+					return nil, errcat.User.New("--http-" + ma)
 				}
-				if agentVer.LE(semver.MustParse("1.11.7")) {
-					if pt, ok := m["plaintext"]; ok {
-						if len(pt) > 0 && pt[0] == "true" {
-							return nil, errcat.User.New("--http-plaintext")
-						}
-						delete(m, "plaintext")
+			}
+			if agentVer.LE(semver.MustParse("1.11.7")) {
+				if pt, ok := m["plaintext"]; ok {
+					if len(pt) > 0 && pt[0] == "true" {
+						return nil, errcat.User.New("--http-plaintext")
 					}
+					delete(m, "plaintext")
 				}
 			}
 		}

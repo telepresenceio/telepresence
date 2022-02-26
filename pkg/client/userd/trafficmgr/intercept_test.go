@@ -60,7 +60,7 @@ func Test_makeFlagsCompatible(t *testing.T) {
 		},
 		{
 			"1.11.9, strip match=auto",
-			semver.MustParse("1.11.9-rc.4"),
+			semver.MustParse("1.11.9"),
 			[]string{"--match=auto", "--header=a=b"},
 			[]string{"--header=a=b"},
 			assert.NoError,
