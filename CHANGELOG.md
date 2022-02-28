@@ -2,6 +2,8 @@
 
 ### 2.5.4 (TBD)
 
+- Change: The status command includes the install id, user id and account id in its result, and can print output as JSON
+
 - Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
 
 ### 2.5.3 (February 25, 2022)
