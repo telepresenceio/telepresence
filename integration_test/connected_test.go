@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/stretchr/testify/suite"
@@ -31,4 +32,13 @@ func (s *connectedSuite) Test_Status() {
 	s.Contains(stdout, "Root Daemon: Running")
 	s.Contains(stdout, "User Daemon: Running")
 	s.Contains(stdout, "Kubernetes context:")
+}
+
+func (s *connectedSuite) Test_StatusWithJSON() {
+	stdout := itest.TelepresenceOk(s.Context(), "status", "--json")
+	var status statusResponse
+	s.NoError(json.Unmarshal([]byte(stdout), &status))
+	s.True(status.RootDaemon.Running)
+	s.True(status.UserDaemon.Running)
+	s.NotEmpty(status.UserDaemon.KubernetesContext)
 }
