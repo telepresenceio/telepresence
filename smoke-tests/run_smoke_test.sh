@@ -404,9 +404,6 @@ esac
 
 $TELEPRESENCE quit -ru
 
-echo "Okay one more thing. Please login to System A in the window that pops up"
-$TELEPRESENCE login >"$output_location"
-
 # For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
 $TELEPRESENCE uninstall --everything >"$output_location"
