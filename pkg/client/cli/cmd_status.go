@@ -136,10 +136,10 @@ func (s *statusInfo) daemonStatus(ctx context.Context) (daemonStatus, error) {
 			ds.DNS.IncludeSuffixes = dns.IncludeSuffixes
 			ds.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
 			for _, subnet := range obc.AlsoProxySubnets {
-				ds.AlsoProxySubnets = append(ds.AlsoProxySubnets, fmt.Sprintf("%v", iputil.IPNetFromRPC(subnet)))
+				ds.AlsoProxySubnets = append(ds.AlsoProxySubnets, iputil.IPNetFromRPC(subnet).String())
 			}
 			for _, subnet := range obc.NeverProxySubnets {
-				ds.NeverProxySubnets = append(ds.NeverProxySubnets, fmt.Sprintf("%v", iputil.IPNetFromRPC(subnet)))
+				ds.NeverProxySubnets = append(ds.NeverProxySubnets, iputil.IPNetFromRPC(subnet).String())
 			}
 		}
 		return nil

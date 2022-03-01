@@ -102,14 +102,16 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	neverProxiedCount := len(ips) + 1
 	s.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "status")
+		s.T().Log("Actual status output: ", stdout)
 		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
 		jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
 		var status statusResponse
-		err := json.Unmarshal([]byte(jsonStdout), &status)
-		return err == nil && len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
+		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
+		s.T().Log("Actual never proxy subnet count: ", len(status.RootDaemon.NeverProxySubnets))
+		return len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {
