@@ -115,12 +115,8 @@ tel2-base tel2:
 push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
-.PHONY: clean
-clean: ## (Build) Remove all build artifacts
-	rm -rf $(BUILDDIR) pkg/install/helm/telepresence-chart.tgz
-
 .PHONY: clobber
-clobber: clean ## (Build) Remove all build artifacts and tools
+clobber: ## (Build) Remove all build artifacts and tools
 	rm -f build-aux/go1*.src.tar.gz
 
 # Release: Push the artifacts places, update pointers ot them
