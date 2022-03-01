@@ -41,4 +41,5 @@ func (s *connectedSuite) Test_StatusWithJSON() {
 	s.True(status.RootDaemon.Running)
 	s.True(status.UserDaemon.Running)
 	s.NotEmpty(status.UserDaemon.KubernetesContext)
+	s.NotEmpty(status.UserDaemon.InstallID)
 }

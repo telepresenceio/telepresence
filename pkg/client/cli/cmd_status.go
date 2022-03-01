@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -164,8 +165,8 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*connectorStatus, err
 		cs.Version = version.Version
 		cs.APIVersion = version.ApiVersion
 		cs.Executable = version.Executable
-		//reporter := scout.NewReporter(ctx, "cli")
-		//cs.InstallID = reporter.InstallID()
+		reporter := scout.NewReporter(ctx, "cli")
+		cs.InstallID = reporter.InstallID()
 
 		if !cliutil.HasLoggedIn(ctx) {
 			cs.AmbassadorCloud.Status = "Logged out"

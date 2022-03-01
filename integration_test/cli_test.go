@@ -68,6 +68,7 @@ type statusResponseRootDaemon struct {
 type statusResponseUserDaemon struct {
 	Running           bool   `json:"running,omitempty"`
 	KubernetesContext string `json:"kubernetes_context,omitempty"`
+	InstallID         string `json:"install_id,omitempty"`
 }
 
 type statusResponse struct {
