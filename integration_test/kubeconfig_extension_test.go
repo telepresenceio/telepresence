@@ -102,19 +102,15 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	neverProxiedCount := len(ips) + 1
 	s.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "status")
-		s.T().Log("Actual status output: ", stdout)
-		expected := fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)
-		s.T().Log("Looking for string: ", expected)
-		return strings.Contains(stdout, expected)
-	}, 10*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
+		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
+	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
 		jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
 		var status statusResponse
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
-		s.T().Log("Actual never proxy subnet count: ", len(status.RootDaemon.NeverProxySubnets))
 		return len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
-	}, 10*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
+	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {
 		return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip) != nil
