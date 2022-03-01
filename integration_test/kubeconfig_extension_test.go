@@ -104,7 +104,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		stdout := itest.TelepresenceOk(ctx, "status")
 		s.T().Log("Actual status output: ", stdout)
 		expected := fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)
-		s.T().Log("Looking for string: %s", expected)
+		s.T().Log("Looking for string: ", expected)
 		return strings.Contains(stdout, expected)
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
