@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.5.4 (TBD)
+
+- Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
+
 ### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
