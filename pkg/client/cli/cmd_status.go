@@ -107,8 +107,8 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (s *statusInfo) daemonStatus(ctx context.Context) (daemonStatus, error) {
-	ds := daemonStatus{}
+func (s *statusInfo) daemonStatus(ctx context.Context) (*daemonStatus, error) {
+	ds := &daemonStatus{}
 	err := cliutil.WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 		ds.Running = true
 		var err error
@@ -154,8 +154,8 @@ func (s *statusInfo) daemonStatus(ctx context.Context) (daemonStatus, error) {
 	return ds, nil
 }
 
-func (s *statusInfo) connectorStatus(ctx context.Context) (connectorStatus, error) {
-	cs := connectorStatus{}
+func (s *statusInfo) connectorStatus(ctx context.Context) (*connectorStatus, error) {
+	cs := &connectorStatus{}
 	err := cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		cs.Running = true
 		version, err := connectorClient.Version(ctx, &empty.Empty{})
@@ -222,10 +222,10 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (connectorStatus, erro
 	return cs, nil
 }
 
-func (s *statusInfo) printJSON(ds daemonStatus, cs connectorStatus) error {
+func (s *statusInfo) printJSON(ds *daemonStatus, cs *connectorStatus) error {
 	output, err := json.Marshal(statusOutput{
-		DaemonStatus: ds,
-		UserDaemon:   cs,
+		DaemonStatus: *ds,
+		UserDaemon:   *cs,
 	})
 	if err != nil {
 		return err
@@ -234,12 +234,12 @@ func (s *statusInfo) printJSON(ds daemonStatus, cs connectorStatus) error {
 	return nil
 }
 
-func (s *statusInfo) printText(ds daemonStatus, cs connectorStatus) {
+func (s *statusInfo) printText(ds *daemonStatus, cs *connectorStatus) {
 	s.printDaemonText(ds)
 	s.printConnectorText(cs)
 }
 
-func (s *statusInfo) printDaemonText(ds daemonStatus) {
+func (s *statusInfo) printDaemonText(ds *daemonStatus) {
 	if ds.Running {
 		s.println("Root Daemon: Running")
 		s.printf("  Version   : %s (api %d)\n", ds.Version, ds.APIVersion)
@@ -266,7 +266,7 @@ func (s *statusInfo) printDaemonText(ds daemonStatus) {
 	}
 }
 
-func (s *statusInfo) printConnectorText(cs connectorStatus) {
+func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 	if cs.Running {
 		s.println("User Daemon: Running")
 		s.printf("  Version         : %s (api %d)\n", cs.Version, cs.APIVersion)
