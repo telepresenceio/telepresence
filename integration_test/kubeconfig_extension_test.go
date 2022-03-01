@@ -70,7 +70,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		copy(rng[:], ip)
 		rng[len(rng)-1] = 0
 		expectedValue := fmt.Sprintf("%s/24", rng)
-		require.Contains(stdout, fmt.Sprintf("- %s", expectedValue), fmt.Sprintf("Expecting to find '- %s/24'", rng))
+		require.Contains(stdout, fmt.Sprintf("- %s", expectedValue), fmt.Sprintf("Expecting to find '- %s'", expectedValue))
 		require.Contains(status.RootDaemon.AlsoProxySubnets, expectedValue)
 	}
 }
@@ -103,7 +103,9 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	s.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "status")
 		s.T().Log("Actual status output: ", stdout)
-		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
+		expected := fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)
+		s.T().Log("Looking for string: %s", expected)
+		return strings.Contains(stdout, expected)
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
