@@ -151,6 +151,11 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 		errs <- err
 		return
 	}
+	defer func() {
+		if err := Run(ctx, "git", "restore", filepath.Join("pkg", "install", "helm", "telepresence-chart.tgz")); err != nil {
+			errs <- err
+		}
+	}()
 
 	exe := "telepresence"
 	if runtime.GOOS == "windows" {
