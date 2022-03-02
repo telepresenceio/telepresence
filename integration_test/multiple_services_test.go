@@ -117,7 +117,7 @@ func (s *multipleServicesSuite) Test_RepeatedConnect() {
 				req.Close = true
 				assert.NoError(err)
 				res, err := cl.Do(req)
-				assert.NoError(err)
+				s.Require().NoError(err)
 				assert.Equal(res.StatusCode, http.StatusOK)
 				_, err = io.Copy(io.Discard, res.Body)
 				assert.NoError(err)

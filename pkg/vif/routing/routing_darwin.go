@@ -65,6 +65,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 					IP:   net.IP(a.IP[:]),
 					Mask: net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3]),
 				},
+				Default: rm.Flags&unix.RTF_IFSCOPE == 0,
 			})
 		case *route.Inet6Addr:
 			localIP, err := interfaceLocalIP(iface, false)
