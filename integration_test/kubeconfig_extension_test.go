@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -57,12 +58,20 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	itest.TelepresenceOk(ctx, "connect")
 	defer itest.TelepresenceQuitOk(ctx) // WithKubeConfigExtension sets env which gets sticky, so quitting is a must here
 	stdout := itest.TelepresenceOk(ctx, "status")
-	require.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", len(ips)))
+	jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
+	var status statusResponse
+	require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
+
+	expectedLen := len(ips)
+	require.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
+	require.Len(status.RootDaemon.AlsoProxySubnets, expectedLen)
 	for _, ip := range ips {
 		rng := make(net.IP, len(ip))
 		copy(rng[:], ip)
 		rng[len(rng)-1] = 0
-		require.Contains(stdout, fmt.Sprintf("- %s/24", rng), fmt.Sprintf("Expecting to find '- %s/24'", rng))
+		expectedValue := fmt.Sprintf("%s/24", rng)
+		require.Contains(stdout, fmt.Sprintf("- %s", expectedValue), fmt.Sprintf("Expecting to find '- %s'", expectedValue))
+		require.Contains(status.RootDaemon.AlsoProxySubnets, expectedValue)
 	}
 }
 
@@ -95,6 +104,13 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		stdout := itest.TelepresenceOk(ctx, "status")
 		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
+
+	s.Eventually(func() bool {
+		jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
+		var status statusResponse
+		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
+		return len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
+	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {
 		return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip) != nil
