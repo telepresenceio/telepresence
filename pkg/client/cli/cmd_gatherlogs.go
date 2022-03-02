@@ -104,7 +104,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		if err != nil {
 			return errcat.User.New(err)
 		}
-		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip", pwd)
+		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip")
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
 		return errcat.User.New("output file must end in .zip")
 	}
