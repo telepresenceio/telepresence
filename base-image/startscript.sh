@@ -1,6 +1,7 @@
-#! /bin/sh
+#!/bin/sh
+set -eu
 USER_ID=$(id -u)
-if [ "$2" = "agent" ] && [ "$USER_ID" -ne "0" ]; then
+if [ "$#" -ge 2 ] && [ "$2" = "agent" ] && [ "$USER_ID" -ne "0" ]; then
   export USER_ID
   export GROUP_ID=$(id -g)
   echo "Initializing nss_wrapper. USER_NAME = $USER_NAME, UID = $USER_ID, GID = $GROUP_ID"
