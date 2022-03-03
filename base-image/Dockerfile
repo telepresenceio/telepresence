@@ -18,7 +18,7 @@ RUN addgroup -g 7777 telepresence && \
     adduser -G telepresence -u 7777 -D telepresence
 
 RUN \
-  apk add --no-cache openssh-sftp-server ca-certificates iptables && \
+  apk add --no-cache ca-certificates iptables && \
   mkdir /tel_app_mounts && \
   chown telepresence /tel_app_mounts && \
   chmod 0770 /tel_app_mounts

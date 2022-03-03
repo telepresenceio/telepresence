@@ -2,19 +2,21 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/pkg/sftp"
 	"github.com/sethvargo/go-envconfig"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -179,11 +181,18 @@ func SftpServer(ctx context.Context, sftpPortCh chan<- int32) error {
 			return nil
 		}
 		go func() {
-			dlog.Debugf(ctx, "Serving sshfs connection from %s", conn.RemoteAddr())
-			err := dpipe.DPipe(ctx, conn, "/usr/lib/ssh/sftp-server")
+			s, err := sftp.NewServer(conn)
 			if err != nil {
 				dlog.Error(ctx, err)
 			}
+			dlog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
+			if err = s.Serve(); err != nil {
+				if !errors.Is(err, io.EOF) {
+					dlog.Errorf(ctx, "sftp server completed with error %v", err)
+					return
+				}
+			}
+			dlog.Errorf(ctx, "sftp server completed because client exited")
 		}()
 	}
 }

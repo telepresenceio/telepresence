@@ -4,6 +4,8 @@
 
 - Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
 
+- Bugfix: Agent container is no longer sensitive to a random UID or an UID imposed by a SecurityContext.
+
 ### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
