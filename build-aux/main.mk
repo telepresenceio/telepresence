@@ -30,14 +30,15 @@ FORCE:
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
-build-aux/go1%.src.tar.gz:
+$(BUILDDIR)/go1%.src.tar.gz:
+	mkdir -p $(BUILDDIR)
 	curl -o $@ --fail -L https://dl.google.com/go/$(@F)
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
 generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
-generate: $(tools/go-mkopensource) build-aux/$(shell go env GOVERSION).src.tar.gz
+generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	$(tools/protoc) \
 	  \
 	  --go_out=./rpc \
@@ -124,7 +125,7 @@ push-image: image ## (Build) Push the manager/agent container image to $(TELEPRE
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
-	rm -f build-aux/go1*.src.tar.gz
+	rm -rf $(BUILDDIR)
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
