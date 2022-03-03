@@ -58,7 +58,7 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external >$(BUILDDIR)/DEPENDENCIES.txt
 	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[1-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
-	echo "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n" > DEPENDENCY_LICENSES.md
+	printf "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n\n" > DEPENDENCY_LICENSES.md
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
 		--output-type=json --application-type=external > $(BUILDDIR)/DEPENDENCIES.json
 	jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' $(BUILDDIR)/DEPENDENCIES.json > $(BUILDDIR)/LICENSES.txt
