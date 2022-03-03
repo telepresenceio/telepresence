@@ -20,7 +20,6 @@ vendor/
 *.iml
 *.swp
 
-/.ko.yaml
 build-output
 /tools/*
 !/tools/src/

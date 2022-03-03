@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "echo-sc"
+spec:
+  type: ClusterIP
+  selector:
+    service: echo-sc
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "echo-sc"
+  labels:
+    service: echo-sc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: echo-sc
+  template:
+    metadata:
+      labels:
+        service: echo-sc
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      containers:
+        - name: echo-sc
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

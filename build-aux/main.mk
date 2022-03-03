@@ -76,24 +76,14 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
 
+pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
+	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run ./build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
+
 PKG_VERSION = $(shell go list ./pkg/version)
 
 # We might be building for arm64 on a mac that doesn't have an M1 chip
 # (which is definitely the case with circle), so GOARCH may be set for that,
 # but we need to ensure it's using the host's architecture so the go command runs successfully.
-pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
-	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run ./build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
-
-TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
-.PHONY: base-image
-base-image: base-image/Dockerfile # Intentionally not in 'make help'
-	if (! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION)) && (! docker image inspect $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) > /dev/null); then \
-	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) .; \
-	fi; \
-    docker tag $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) ko.local/tel2-base:$(TELEPRESENCE_BASE_VERSION)
-
-PKG_VERSION = $(shell go list ./pkg/version)
-
 ifeq ($(GOHOSTOS),darwin)
 	sdkroot=SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path)
 else
@@ -111,16 +101,18 @@ build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a tel
 build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
 	git restore pkg/install/helm/telepresence-chart.tgz
 
-.ko.yaml: .ko.yaml.in base-image
-	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
-.PHONY: image push-image
-image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container image
-	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -trimpath" GOOS=linux ko publish --local ./cmd/traffic) && \
-	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+# TODO remove the following two lines when we're passed the PR build barrier
+.PHONY: image
+image: tel2
+
+.PHONY: tel2-base tel2
+tel2-base tel2:
+	mkdir -p $(BUILDDIR)
+	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
+	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
 
 .PHONY: push-image
-push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
-	docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) && \
+push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: clobber
@@ -231,7 +223,7 @@ format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix lint
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check-all
-check-all: $(tools/ko) ## (QA) Run the test suite
+check-all: ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
@@ -239,14 +231,14 @@ check-all: $(tools/ko) ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-unit
-check-unit: $(tools/ko) ## (QA) Run the test suite
+check-unit: ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-integration
-check-integration: $(tools/ko) ## (QA) Run the test suite
+check-integration: ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.

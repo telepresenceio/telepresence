@@ -203,7 +203,7 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 	wgs.Add(1)
 	go func() {
 		defer wgs.Done()
-		runMake("image")
+		runMake("tel2")
 	}()
 	wgs.Wait()
 
