@@ -1160,7 +1160,7 @@ type InterceptResult struct {
 	ServiceUid string `protobuf:"bytes,5,opt,name=service_uid,json=serviceUid,proto3" json:"service_uid,omitempty"`
 	// The kind of workload in this intercept
 	WorkloadKind string `protobuf:"bytes,6,opt,name=workload_kind,json=workloadKind,proto3" json:"workload_kind,omitempty"`
-	// The port number that service_port_identifer resolved into is
+	// The port number that service_port_identifier resolved into is
 	// used as the default port for the ingress for pro intercepts
 	ServiceProps *userdaemon.IngressInfoRequest `protobuf:"bytes,8,opt,name=service_props,json=serviceProps,proto3" json:"service_props,omitempty"`
 }

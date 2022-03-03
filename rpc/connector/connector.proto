@@ -80,7 +80,7 @@ service Connector {
   // RunCommand executes a CLI command.
   rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
 
-  // ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+  // ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
   // the cloud for default ingress values
   rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest) returns
   (telepresence.userdaemon.IngressInfoResponse);
@@ -300,7 +300,7 @@ message InterceptResult {
   // The kind of workload in this intercept
   string workload_kind = 6;
 
-  // The port number that service_port_identifer resolved into is
+  // The port number that service_port_identifier resolved into is
   // used as the default port for the ingress for pro intercepts
   telepresence.userdaemon.IngressInfoRequest service_props = 8;
 }
@@ -329,7 +329,7 @@ message UserInfoRequest {
 }
 
 message UserInfo {
-  // These field names don't quite follow the usual convenctions
+  // These field names don't quite follow the usual conventions
   // because they need to match the JSON that Ambassador Cloud gives
   // us, because we use the same struct for both.
   //

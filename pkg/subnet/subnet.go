@@ -8,7 +8,7 @@ import (
 )
 
 // CoveringCIDRs returns the ip networks needed to cover the given IPs with as
-// big mask as possible for each subnet. The analyze starts by finding all
+// big mask as possible for each subnet. The analysis starts by finding all
 // subnets using a 16-bit mask for IPv4 and a 64 bit mask for IPv6 addresses.
 // Once the subnets are established, the mask for each one will be increased
 // to the maximum value that still masks all IPs that it was created for.
@@ -31,7 +31,7 @@ func CoveringCIDRs(ips []net.IP) []*net.IPNet {
 	ipv4Subnets := make(map[ipv4SubnetKey]*Bitfield256)
 
 	// IPv6 has 8 byte subnets and seven ByteSets representing all but the last
-	// byte of the subnet relative 64 bit address (last byte is skipped because
+	// byte of the subnet relative 64-bit address (last byte is skipped because
 	// no split into subnets is made using that byte).
 	for _, ip := range ips {
 		if ip4 := ip.To4(); ip4 != nil {

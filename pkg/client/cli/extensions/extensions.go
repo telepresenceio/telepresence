@@ -41,7 +41,7 @@ type ExtensionsState struct {
 
 // LoadExtensions loads any extension YAML files, and adds the appropriate flags to existingFlags.
 //
-// Extension YAML files are loaded from the the "extensions/" subdirectories in
+// Extension YAML files are loaded from the "extensions/" subdirectories in
 // filelocation.AppUserConfigDir and filelocation.AppSystemConfigDirs (eg: on GNU/Linux:
 // "~/.config/telepresence/extensions/" and "/etc/xdg/telepresence/extensions/").  Files are ignored
 // if they begin with "."  or if they don't end with ".yml".  Files with the same name in multiple
@@ -421,7 +421,7 @@ type MechanismInfo struct {
 
 type FlagInfo struct {
 	// Usage is the usage text for the flag to include in `--help` output.  It follows pflag
-	// semantics around the backtick charater being used to identify metavariables.  Strictly
+	// semantics around the backtick character being used to identify meta-variables.  Strictly
 	// speaking, this field is optional, but you should probably include it.
 	Usage string `json:"usage"`
 	// Type identifies the type identifies the datatype to use both for (1) parsing the default
@@ -430,7 +430,7 @@ type FlagInfo struct {
 	// possible values.  This field is required.
 	Type cliutil.TypeEnum `json:"type"`
 	// Default is the default value for this flag.  This field is optional; if it isn't
-	// specitified then the zero value is used.
+	// specified then the zero value is used.
 	Default json.RawMessage `json:"default,omitempty"`
 
 	//nolint:gocritic // this is not a deprecation comment

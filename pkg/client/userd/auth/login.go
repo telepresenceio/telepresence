@@ -285,15 +285,15 @@ func (l *loginExecutor) reportLoginResult(ctx context.Context, err error, method
 	}
 }
 
-// Login tries logging the user by opening a browser window and authenticating against the
+// Login tries logging the user in by opening a browser window and authenticating against the
 // configured (in `l.env`) OAuth2 authorization server using the authorization-code flow.  This
 // relies on the .Worker() HTTP server being already running in the background, as it is needed to
 // serve the redirection endpoint (called the "callback URL" in this code).  Once the callback URL
 // is invoked, this function will receive notification of that on the l.callbacks channel, and will
 // invoke the authorization server's token endpoint to get the user's access & refresh tokens and
 // persist them with the l.SaveTokenFunc (which would usually write to user cache).  If login
-// succeeds, the this function will then try invoking the authorization server's userinfo endpoint
-// and persisting it using l.SaveUserInfoFunc (which would usually write to user cache).
+// succeeds, this function will then try invoking the authorization server's userinfo endpoint
+// and persist the userinfo using l.SaveUserInfoFunc (which would usually write to user cache).
 func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	// We'll be making use of l.auth2config
 	l.oauth2ConfigMu.RLock()

@@ -89,7 +89,7 @@ func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, lice
 }
 
 // Creates the kubernetes secret that can be put in your cluster
-// to access licensed features if the cluster is airgapped and
+// to access licensed features if the cluster is air-gapped and
 // writes it to the given writer
 func createSecretFromLicense(ctx context.Context, writer io.Writer, license, hostDomain string) error {
 	secret := &core.Secret{

@@ -122,7 +122,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
 <!--
-We'll use a sample app that is already installed in your demo cluster.  Let's take a quick look at it's architecture before continuing.
+We'll use a sample app that is already installed in your demo cluster.  Let's take a quick look at its architecture before continuing.
 -->
 
 1. Clone the emojivoto app:

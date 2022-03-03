@@ -19,7 +19,7 @@ func (bq *BroadcastQueue) buffer(ctx context.Context, upstream <-chan string, do
 	var shutdown func()
 	shutdown = func() {
 		shutdown = func() {}
-		// Do this asyncrounously because getting the lock might block a .Push() that's
+		// Do this asynchronously because getting the lock might block a .Push() that's
 		// waiting on us to read from 'upstream'!  We don't need to worry about separately
 		// waiting for this goroutine because we implicitly do that when we drain
 		// 'upstream'.
@@ -102,7 +102,7 @@ func (bq *BroadcastQueue) Write(msg []byte) (int, error) {
 	return len(msg), nil
 }
 
-// Close marks each subscriber queue as "finished", all subscriber queues will be closed an further
+// Close marks each subscriber queue as "finished", all subscriber queues will be closed and further
 // pushes are forbidden.
 //
 // After .Close() is called:

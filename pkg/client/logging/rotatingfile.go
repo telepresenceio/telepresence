@@ -28,7 +28,7 @@ func (rotateNever) RotateNow(_ *RotatingFile, _ int) bool {
 	return false
 }
 
-// A rotateOnce ensures that the file is rotated exactly once if it is of non zero size when the
+// A rotateOnce ensures that the file is rotated exactly once if it is of non-zero size when the
 // first call to Write() arrives.
 type rotateOnce struct {
 	called bool
@@ -48,7 +48,7 @@ func (r *rotateOnce) RotateNow(rf *RotatingFile, _ int) bool {
 
 type rotateDaily int
 
-// The RotateDaily strategy will ensure that the file is rotated if it is of non zero size when a call
+// The RotateDaily strategy will ensure that the file is rotated if it is of non-zero size when a call
 // to Write() arrives on a day different from the day when the current file was created.
 const RotateDaily = rotateDaily(0)
 
@@ -89,7 +89,7 @@ type RotatingFile struct {
 //
 // - dirName:   full path to the directory of the log file and its backups
 //
-// - fileName:   name of the file that should opened (relative to dirName)
+// - fileName:   name of the file that should be opened (relative to dirName)
 //
 // - timeFormat: the format to use for the timestamp that is added to rotated files
 //
@@ -286,7 +286,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 // name as this RotatingFile and then, as long as the number of files exceed the maxFiles given to  the
 // constructor, it will continuously remove the oldest file.
 //
-// This function should typically run in it's own goroutine
+// This function should typically run in its own goroutine
 func (rf *RotatingFile) removeOldFiles() {
 	rf.removeMutex.Lock()
 	defer rf.removeMutex.Unlock()
@@ -307,7 +307,7 @@ func (rf *RotatingFile) removeOldFiles() {
 	for _, file := range files {
 		fn := file.Name()
 
-		// Skip files that doesn't start with the prefix and end with the suffix.
+		// Skip files that don't start with the prefix and end with the suffix.
 		if !(strings.HasPrefix(fn, pfx) && strings.HasSuffix(fn, ext)) {
 			continue
 		}

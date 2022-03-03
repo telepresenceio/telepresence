@@ -59,7 +59,7 @@ type portForward struct {
 // The livePortForward struct provides synchronization for cancellation of port forwards.
 // This is necessary because a volume mount process must terminate before the corresponding
 // file system is removed. The removal cannot take place when the process ends because there
-// may be subsequent processes that use the same volume mount during the life time of an
+// may be subsequent processes that use the same volume mount during the lifetime of an
 // intercept (since an intercept may change pods).
 type livePortForward struct {
 	wg     sync.WaitGroup

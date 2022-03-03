@@ -29,7 +29,7 @@ func LoadUserInfoFromUserCache(ctx context.Context) (*UserInfo, error) {
 }
 
 // DeleteUserInfoFromUserCache removes user info cache if existing or returns an error. An attempt
-// to remove a non existing cache is a no-op and the function returns nil.
+// to remove a non-existing cache is a no-op and the function returns nil.
 func DeleteUserInfoFromUserCache(ctx context.Context) error {
 	return cache.DeleteFromUserCache(ctx, userInfoFile)
 }

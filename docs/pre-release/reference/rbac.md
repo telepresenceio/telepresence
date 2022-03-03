@@ -6,7 +6,7 @@ This documentation covers the full extent of permissions necessary to administra
 
 There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
 
-In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside of the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
+In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
 
 ## Requirements
 

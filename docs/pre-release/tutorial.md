@@ -6,7 +6,7 @@ import Alert from '@material-ui/lab/Alert';
 
 # Telepresence Quick Start
 
-In this guide you will explore some of the key features of Telepresence. First, you will install the Telepresence CLI and set up a test cluster with a demo web app. Then, you will run one of the app's services on your laptop, using Telepresence to intercept requests to the service on the cluster and see your changes live via a preview URL.
+In this guide you will explore some key features of Telepresence. First, you will install the Telepresence CLI and set up a test cluster with a demo web app. Then, you will run one of the app's services on your laptop, using Telepresence to intercept requests to the service on the cluster and see your changes live via a preview URL.
 
 ## Prerequisites
 
@@ -112,7 +112,7 @@ login`](../../reference/client/login/).
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
 <tr style="background:transparent; border: none; padding: 5px">
-    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. Be sure you use <code>http</code>, not <code>https</code>! <br/>You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
+    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. Be sure you use <code>http</code>, not <code>https</code>! <br/>You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-1.png"/></td>
 </tr>
 </table>
@@ -196,7 +196,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
 <tr style="background:transparent; border: none; padding: 5px">
-    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Open the preview URL in your browser to see the intercepted version of the app. The Node server on your laptop replies back to the cluster with the <span style="color:blue" class="bold">blue</span> option enabled; you will see a blue title and blue pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.<br />You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.</li></ol></td>
+    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Open the preview URL in your browser to see the intercepted version of the app. The Node server on your laptop replies to the cluster with the <span style="color:blue" class="bold">blue</span> option enabled; you will see a blue title and blue pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.<br />You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-2.png"/></td>
 </tr>
 </table>
@@ -220,11 +220,11 @@ This diagram demonstrates the flow of requests using the intercept.  The laptop 
   telepresence uninstall --everything
   ```
 
-8. Refresh the dashboard page again and you will see the intercept was removed after running the `leave` command.  Refresh the browser tab with the preview URL and you will see that it has been disabled.
+8. Refresh the dashboard page again, and you will see the intercept was removed after running the `leave` command.  Refresh the browser tab with the preview URL and you will see that it has been disabled.
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-Telepresence and preview URLS open up powerful possibilities for [collaborating](../howtos/preview-urls) with your colleagues and others outside of your organization.
+Telepresence and preview URLS open up powerful possibilities for [collaborating](../howtos/preview-urls) with your colleagues and others outside your organization.
 
 Learn more about how Telepresence handles [outbound sessions](../howtos/outbound), allowing locally running services to interact with cluster services without an intercept.
 

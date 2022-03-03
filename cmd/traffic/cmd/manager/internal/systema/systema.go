@@ -1,4 +1,4 @@
-// Package system implements all of the yucky system-logic details for communicating with System A
+// Package systema implements all the yucky system-logic details for communicating with System A
 // from the Telepresence manager.
 //
 // The business-logic code (or at least the code one layer closer to being business-logic than this
@@ -80,7 +80,7 @@ func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionSe
 
 // ConnectToSystemA initiates a connection to System A.
 //
-// The selfService argument is the ManagerServer implmentation that System A may make RPC calls to.
+// The selfService argument is the ManagerServer implementation that System A may make RPC calls to.
 //
 // Shut down the connection by cancelling the context, then call the returned wait() function to
 // wait for the connection to fully shut down.
@@ -132,7 +132,7 @@ func ConnectToSystemA(ctx context.Context,
 				if ctx.Err() != nil {
 					return nil
 				}
-				// This is the almost the same backoff that net/http.Server uses.
+				// This is almost the same backoff that net/http.Server uses.
 				// I've bumped the max backoff from 1s to 5s, but it may still need
 				// to be tuned for our use-case.
 				if tempDelay == 0 {

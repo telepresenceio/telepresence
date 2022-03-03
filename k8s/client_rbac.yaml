@@ -1,4 +1,4 @@
-# This should be the minium RBAC that is needed for users (not operators) to
+# This should be the minimum RBAC that is needed for users (not operators) to
 # use telepresence.  These objects are used in a portion of our tests to
 # determine if we have changed the minimal rbac profile. If you need to change
 # this file, you must also change it in the docs.

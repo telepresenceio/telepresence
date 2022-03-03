@@ -63,7 +63,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	var retID string
 	allIDs := make(map[string]string)
 
-	if runtime.GOOS != "windows" { // won't find any legacy on windows
+	if runtime.GOOS != "windows" { // won't find any legacy on Windows
 		// We'll use this (and justify overriding GOOS=linux) below.
 		xdgConfigHome, err := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
 		if err == nil {

@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/datawire/dlib/dlog"
+	"github.com/stretchr/testify/assert"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 )
@@ -248,7 +247,7 @@ func TestAgentMap_Subscribe(t *testing.T) {
 		},
 		snapshot)
 
-	// Check that deletes work with LoadAndDlete
+	// Check that deletes work with LoadAndDelete
 	m.LoadAndDelete("b")
 	snapshot, ok = <-ch
 	assert.True(t, ok)

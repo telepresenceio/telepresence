@@ -31,7 +31,7 @@ func init() {
 
 func (s *interceptMountSuite) SetupSuite() {
 	s.Suite.SetupSuite()
-	// TempDir() will not be a valid mount on windows -- it wants a lettered drive.
+	// TempDir() will not be a valid mount on Windows -- it wants a lettered drive.
 	if goRuntime.GOOS == "windows" {
 		s.mountPoint = "T:"
 	} else {

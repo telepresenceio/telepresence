@@ -38,7 +38,7 @@ func shellExec(verb, exe string, args ...string) error {
 }
 
 func isAdmin() bool {
-	// Directly copied from the official windows documentation. The Go API for this is a
+	// Directly copied from the official Windows documentation. The Go API for this is a
 	// direct wrap around the official C++ API.
 	// See https://docs.microsoft.com/en-us/windows/desktop/api/securitybaseapi/nf-securitybaseapi-checktokenmembership
 	var sid *windows.SID

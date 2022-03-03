@@ -14,7 +14,7 @@ import (
 )
 
 // GenerateKeys creates the crt.pem, key.pem, and ca.pem needed when
-// setting up the mutator webhook for agent auto injection
+// setting up the mutator webhook for agent auto-injection
 func GenerateKeys(mgrNamespace string) (crtPem, keyPem, caPem []byte, err error) {
 	caCert := &x509.Certificate{
 		SerialNumber: big.NewInt(0xefecab0),

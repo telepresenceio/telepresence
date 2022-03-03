@@ -85,7 +85,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 
 // OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
 // If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
-// method that registered the waiting stream. Otherwise this method returns nil.
+// method that registered the waiting stream. Otherwise, this method returns nil.
 func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
 	id := stream.ID()
 	ss.Lock()
