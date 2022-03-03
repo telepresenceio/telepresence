@@ -229,7 +229,6 @@ func (i *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 		i.appProto,
 		cfg.TelepresenceAPI.Port,
 		k8sConfig.GetManagerNamespace(),
-		false,
 	)
 
 	return i.writeObjToOutput(&agentContainer)

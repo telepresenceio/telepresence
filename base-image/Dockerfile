@@ -14,15 +14,10 @@
 
 FROM alpine:3.13 as tel2-base
 
-RUN addgroup -g 7777 telepresence && \
-    adduser -G telepresence -u 7777 -D telepresence
-
 RUN \
   apk add --no-cache ca-certificates iptables && \
   mkdir /tel_app_mounts && \
-  chown telepresence /tel_app_mounts && \
-  chmod 0770 /tel_app_mounts
-
+  chmod 0777 /tel_app_mounts
 
 # Make symlinks so we can use these commands directly in k8s.
 RUN \

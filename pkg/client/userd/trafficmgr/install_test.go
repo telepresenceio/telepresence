@@ -3,6 +3,7 @@ package trafficmgr
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -156,7 +157,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 				}
 
 				sanitizeWorkload(actualWrk)
-				assert.Equal(t, expectedWrk, actualWrk)
+				expectedJSON, err := json.Marshal(expectedWrk)
+				assert.NoError(t, err)
+				actualJSON, err := json.Marshal(actualWrk)
+				assert.NoError(t, err)
+				assert.Equal(t, string(expectedJSON), string(actualJSON))
 
 				if actualSvc != nil {
 					actualSvcImpl, _ := k8sapi.ServiceImpl(actualSvc)
