@@ -9,7 +9,6 @@ import (
 
 const EnvPrefix = "_TEL_AGENT_"
 const InitContainerName = "tel-agent-init"
-const AgentUID = int64(7777)
 
 // AgentContainer will return a configured traffic agent
 func AgentContainer(
@@ -21,16 +20,8 @@ func AgentContainer(
 	appProto string,
 	apiPort int,
 	managerNamespace string,
-	setGID bool,
 ) core.Container {
 	var securityContext *core.SecurityContext
-	if setGID {
-		securityContext = &core.SecurityContext{
-			RunAsNonRoot: func() *bool { b := true; return &b }(),
-			RunAsGroup:   func() *int64 { i := AgentUID; return &i }(),
-			RunAsUser:    func() *int64 { i := AgentUID; return &i }(),
-		}
-	}
 	return core.Container{
 		Name:            AgentContainerName,
 		Image:           imageName,

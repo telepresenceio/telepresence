@@ -1,6 +1,8 @@
 package routing
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 )
@@ -10,6 +12,20 @@ type Route struct {
 	RoutedNet *net.IPNet
 	Interface *net.Interface
 	Gateway   net.IP
+	Default   bool
+}
+
+func DefaultRoute(ctx context.Context) (Route, error) {
+	rt, err := GetRoutingTable(ctx)
+	if err != nil {
+		return Route{}, err
+	}
+	for _, r := range rt {
+		if r.Default {
+			return r, nil
+		}
+	}
+	return Route{}, errors.New("unable to find a default route")
 }
 
 func (r *Route) Routes(ip net.IP) bool {
@@ -17,6 +33,9 @@ func (r *Route) Routes(ip net.IP) bool {
 }
 
 func (r Route) String() string {
+	if r.Default {
+		return fmt.Sprintf("default via %s dev %s, gw %s", r.LocalIP, r.Interface.Name, r.Gateway)
+	}
 	return fmt.Sprintf("%s via %s dev %s, gw %s", r.RoutedNet, r.LocalIP, r.Interface.Name, r.Gateway)
 }
 

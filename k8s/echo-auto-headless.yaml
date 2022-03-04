@@ -1,0 +1,44 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-auto-headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    service: echo-auto-headless
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: echo-auto-headless
+  labels:
+    service: echo-auto-headless
+spec:
+  replicas: 1
+  serviceName: echo-auto-headless
+  selector:
+    matchLabels:
+      service: echo-auto-headless
+  template:
+    metadata:
+      labels:
+        service: echo-auto-headless
+      annotations:
+        telepresence.getambassador.io/inject-traffic-agent: enabled
+        telepresence.getambassador.io/inject-service-port: "8080"
+    spec:
+      containers:
+        - name: echo-auto-headless
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+

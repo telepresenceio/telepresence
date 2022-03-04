@@ -39,9 +39,11 @@ func getClusterIPs(cluster *api.Cluster) ([]net.IP, error) {
 }
 
 func (s *notConnectedSuite) Test_APIServerIsProxied() {
-	require := s.Require()
-	var ips []net.IP
 	ctx := s.Context()
+	require := s.Require()
+	defaultGW, err := routing.DefaultRoute(ctx)
+	require.NoError(err)
+	var ips []net.IP
 	itest.TelepresenceQuitOk(ctx)
 
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
@@ -51,6 +53,9 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		require.NoError(err)
 		for _, ip := range ips {
 			apiServers = append(apiServers, fmt.Sprintf(`%s/24`, ip))
+			if defaultGW.Routes(ip) {
+				s.T().Skipf("test can't run on host with route %s and cluster IP %s", defaultGW.String(), ip)
+			}
 		}
 		return map[string]interface{}{"also-proxy": apiServers}
 	})

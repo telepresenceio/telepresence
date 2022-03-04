@@ -49,6 +49,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 				Mask: mask,
 			},
 			Interface: iface,
+			Default:   row.DestinationPrefix.PrefixLength == 0,
 		})
 	}
 	return routes, nil
