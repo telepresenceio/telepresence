@@ -70,7 +70,7 @@ type ConnectorClient interface {
 	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
-	// ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error)
 }
@@ -379,7 +379,7 @@ type ConnectorServer interface {
 	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
-	// ResolveIngressInfo is a temporary rpc intented to allow the cli to ask
+	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error)
 	mustEmbedUnimplementedConnectorServer()

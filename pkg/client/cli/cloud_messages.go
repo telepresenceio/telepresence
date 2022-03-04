@@ -100,7 +100,7 @@ func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed s
 // for raising the message for the command used.
 func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	// Currently we only have messages that should be served when a user
+	// Currently, we only have messages that should be served when a user
 	// isn't logged in, so we check that here
 	if cliutil.HasLoggedIn(cmd.Context()) {
 		if _, err := cliutil.GetCloudUserInfo(ctx, false, true); err == nil {

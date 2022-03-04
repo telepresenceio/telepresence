@@ -42,7 +42,7 @@ func DialFromAmbassadorCloud(ctx context.Context, managerClient manager.ManagerP
 }
 
 // AcceptFromAmbassadorCloud is used by a Telepresence manger to accept a connection to an intercept
-// for a preview URL from a Ambassador Cloud.
+// for a preview URL from Ambassador Cloud.
 //
 // It is the counterpart to DialFromAmbassadorCloud.
 func AcceptFromAmbassadorCloud(systema manager.ManagerProxy_HandleConnectionServer, closeFn func()) (interceptID string, conn Conn, err error) {

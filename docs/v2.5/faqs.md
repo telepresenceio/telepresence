@@ -8,7 +8,7 @@ description: "Learn how Telepresence helps with fast development and debugging i
 
 Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast [inner development loop](../concepts/devloop/) from previous software projects is often a distant memory for cloud developers.
 
-Telepresence enables you to connect your local development machine seamlessly to the cluster via a two way proxying mechanism. This enables you to code locally and run the majority of your services within a remote Kubernetes cluster -- which in the cloud means you have access to effectively unlimited resources.
+Telepresence enables you to connect your local development machine seamlessly to the cluster via a two-way proxying mechanism. This enables you to code locally and run the majority of your services within a remote Kubernetes cluster -- which in the cloud means you have access to effectively unlimited resources.
 
 Ultimately, this empowers you to develop services locally and still test integrations with dependent services or data stores running in the remote cluster.
 
@@ -18,7 +18,7 @@ By using the preview URL functionality you can share access with additional deve
 
 ** What operating systems does Telepresence work on?**
 
-Telepresence currently works natively on macOS (Intel and Apple silicon), Linux, and WSL 2. Starting with v2.4.0, we are also releasing a native Windows version of Telepresence that we are considering a Developer Preview.
+Telepresence currently works natively on macOS (Intel and Apple Silicon), Linux, and WSL 2. Starting with v2.4.0, we are also releasing a native Windows version of Telepresence that we are considering a Developer Preview.
 
 ** What protocols can be intercepted by Telepresence?**
 

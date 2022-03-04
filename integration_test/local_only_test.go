@@ -16,7 +16,7 @@ func (s *singleServiceSuite) Test_LocalOnlyIntercept() {
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 	s.Contains(stdout, "mylocal: local-only intercept", "local intercept is not included in list output")
 
-	// service can be resolve with unqualified name
+	// service can be resolved with unqualified name
 	s.Eventually(func() bool {
 		return itest.Run(ctx, "curl", "--silent", "--max-time", "2", s.ServiceName()) == nil
 	}, 30*time.Second, 3*time.Second, "service is not reachable using unqualified name")

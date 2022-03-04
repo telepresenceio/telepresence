@@ -62,5 +62,5 @@ Copy-Item "telepresence-pro.exe" -Destination "C:\telepresence\telepresence-pro.
 
 # Upgrade Telepresence Pro
 There are two options to upgrade Telepresence Pro. You can run `telepresence-pro upgrade` to get the latest
-version that is compatible with the current Telepresence version you are using or you can remove the binary
+version that is compatible with the current Telepresence version you are using, or you can remove the binary
 and Telepresence will automatically install it next time you `telepresence login`.

@@ -21,7 +21,7 @@ func Test_gatherLogsZipFiles(t *testing.T) {
 	type testcase struct {
 		name string
 		// We use these two slices so it's easier to write tests knowing which
-		// files are exptected to exist and which aren't. These slices are combined
+		// files are expected to exist and which aren't. These slices are combined
 		// prior to calling zipFiles in the tests.
 		realFileNames []string
 		fakeFileNames []string
@@ -426,7 +426,7 @@ func Test_gatherLogsSignificantPodNames(t *testing.T) {
 			},
 		},
 		{
-			name:    "unkownName",
+			name:    "unknownName",
 			podName: "notarealname",
 			results: []string{},
 		},

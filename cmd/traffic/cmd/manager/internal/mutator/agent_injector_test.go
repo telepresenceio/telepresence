@@ -207,7 +207,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 						install.InjectAnnotation: "enabled",
 					},
 					Labels: map[string]string{
-						"serivce": "some-name",
+						"service": "some-name",
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},

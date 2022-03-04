@@ -12,7 +12,7 @@ The `--` separates flags intended for `telepresence intercept` from flags intend
 
 ## Example
 
-Imagine you are working on a new version of a your frontend service.  It is running in your cluster as a Deployment called `frontend-v1`. You use Docker on your laptop to build an improved version of the container called `frontend-v2`.  To test it out, use this command to run the new container on your laptop and start an intercept of the cluster service to your local container.
+Imagine you are working on a new version of your frontend service.  It is running in your cluster as a Deployment called `frontend-v1`. You use Docker on your laptop to build an improved version of the container called `frontend-v2`.  To test it out, use this command to run the new container on your laptop and start an intercept of the cluster service to your local container.
 
 `telepresence intercept frontend-v1 --port 8000 --docker-run -- frontend-v2`
 

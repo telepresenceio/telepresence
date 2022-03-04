@@ -28,7 +28,7 @@ import (
 )
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if
-// login fails.  The result code will indicate if this is a new login or if it resued an existing
+// login fails.  The result code will indicate if this is a new login or if it re-used an existing
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
@@ -129,7 +129,7 @@ func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (st
 	return keyData.GetApiKey(), nil
 }
 
-// GetCloudLicense communicates with system a to get the jwt version of the
+// GetCloudLicense communicates with System A to get the jwt version of the
 // license, puts it in a kubernetes secret, and then writes that secret to the
 // output file for the user to apply to their cluster
 func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string, error) {
@@ -263,8 +263,8 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	return nil
 }
 
-// downloadProDaemon copies the from stream into a temporary file in the same directory as the
-// designated binary, chmods it to an executable, removes the old binary, and then renames the
+// downloadProDaemon copies the 'from' stream into a temporary file in the same directory as the
+// designated binary, chmods it to be executable, removes the old binary, and then renames the
 // temporary file as the new binary
 func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string) (err error) {
 	dir := filepath.Dir(telProLocation)

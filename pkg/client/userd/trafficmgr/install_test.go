@@ -60,7 +60,7 @@ func getTests(t *testing.T) map[string]testcase {
 
 			tc.InputVersion = di.Name()
 			if tc.InputVersion == "cur" {
-				// Must alway be higher than any actually released version, so pack
+				// Must always be higher than any actually released version, so pack
 				// a bunch of 9's in there.
 				tc.InputVersion = fmt.Sprintf("v2.999.999-gotest.%d.%d", os.Getpid(), i)
 				i++

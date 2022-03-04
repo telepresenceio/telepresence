@@ -55,7 +55,7 @@ type DaemonService interface {
 
 type CommandFactory func() cliutil.CommandGroups
 
-// service represents the long running state of the Telepresence User Daemon
+// service represents the long-running state of the Telepresence User Daemon
 type service struct {
 	rpc.UnsafeConnectorServer
 

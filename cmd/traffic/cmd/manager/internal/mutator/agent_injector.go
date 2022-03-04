@@ -164,7 +164,8 @@ func addInitContainer(ctx context.Context, pod *core.Pod, svcPort *core.ServiceP
 				if i == len(pod.Spec.InitContainers)-1 {
 					return patches
 				}
-				// If the container isn't the last one, remove it so it can be appended at the end.
+				// If the container isn't the last one, remove it, so it
+				// can be appended at the end.
 				patches = append(patches, patchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/initContainers/%d", i),

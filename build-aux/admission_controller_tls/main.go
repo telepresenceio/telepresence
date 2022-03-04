@@ -10,7 +10,7 @@ import (
 )
 
 // The program creates the crt.pem, key.pem, and ca.pem needed when
-// setting up the mutator webhook for agent auto injection
+// setting up the mutator webhook for agent auto-injection
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "usage: %s <manager-namespace> <directory>", os.Args[0])

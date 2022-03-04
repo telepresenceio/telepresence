@@ -440,7 +440,7 @@ func KubeConfig(ctx context.Context) string {
 // WithEnv() function
 func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
 	getT(ctx).Helper()
-	// Ensure that command has timestamp and is somewhat readable
+	// Ensure that command has a timestamp and is somewhat readable
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
 	cmd := dexec.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true

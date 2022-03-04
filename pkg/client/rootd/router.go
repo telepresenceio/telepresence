@@ -111,8 +111,8 @@ func (s *session) handlePacket(c context.Context, data *buffer.Data) {
 			return
 		}
 		if ip4 := dst.To4(); ip4 != nil && ip4[2] == 0 && ip4[3] == 0 {
-			// Write to the a subnet's zero address. Not sure why this is happening but there's no point in
-			// passing them on.
+			// Write to the subnet's zero address. Not sure why this is happening but
+			// there's no point in passing them on.
 			reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.HostUnreachable))
 			return
 		}

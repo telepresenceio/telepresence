@@ -159,7 +159,7 @@ func unmarshalString(in string, out completeAction) error {
 }
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
-// symbolic name so that an traffic-agent in a designated Object can reference the symbol
+// symbolic name so that a traffic-agent in a designated Object can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
 type makePortSymbolicAction struct {
 	PortName     string
@@ -350,7 +350,7 @@ type addTrafficAgentAction struct {
 	// The image name of the agent to add
 	ImageName string `json:"image_name"`
 
-	// The name of the app container. Not exported because its not needed for undo.
+	// The name of the app container. Not exported because it's not needed for undo.
 	containerName string
 
 	// The name of the namespace where the traffic manager that "owns" this agent is to be found.

@@ -44,9 +44,9 @@ var (
 	structuredOutput semver.Version
 )
 
-// Structured is a structured semver.Version value, and and is based on Version.
+// Structured is a structured semver.Version value, and is based on Version.
 //
-// The reason that this parsed dynamically instead of once at init()-time is so that some of the
+// The reason that this parsed dynamically instead of once at init()-time is so that some
 // unit tests can adjust string Version and see theat reflected in Structured.
 func Structured() semver.Version {
 	// Cache the result to avoid re-doing work.
