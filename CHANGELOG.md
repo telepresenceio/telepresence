@@ -4,6 +4,8 @@
 
 - Change: The status command includes the install id, user id and account id in its result, and can print output as JSON
 
+- Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
+
 - Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
 
 - Bugfix: Agent container is no longer sensitive to a random UID or an UID imposed by a SecurityContext.

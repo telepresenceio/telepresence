@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -39,16 +40,16 @@ func uninstallCommand() *cobra.Command {
 
 func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 	if u.agent && u.allAgents || u.agent && u.everything || u.allAgents && u.everything {
-		return errcat.User.New("--agent, --all-agents, or --everything are mutually exclusive")
+		return errors.New("--agent, --all-agents, or --everything are mutually exclusive")
 	}
 	if !(u.agent || u.allAgents || u.everything) {
-		return errcat.User.New("please specify --agent, --all-agents, or --everything")
+		return errors.New("please specify --agent, --all-agents, or --everything")
 	}
 	switch {
 	case u.agent && len(args) == 0:
-		return errcat.User.New("at least one argument (the name of an agent) is expected")
+		return errors.New("at least one argument (the name of an agent) is expected")
 	case !u.agent && len(args) != 0:
-		return errcat.User.New("unexpected argument(s)")
+		return errors.New("unexpected argument(s)")
 	}
 	return nil
 }
