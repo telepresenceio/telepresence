@@ -38,12 +38,12 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	err := errcat.User.Newf("invalid subcommand %q", args[0])
+	err := fmt.Errorf("invalid subcommand %q", args[0])
 	if cmd.SuggestionsMinimumDistance <= 0 {
 		cmd.SuggestionsMinimumDistance = 2
 	}
 	if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
-		err = errcat.User.Newf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
+		err = fmt.Errorf("%w\nDid you mean one of these?\n\t%s", err, strings.Join(suggestions, "\n\t"))
 	}
 	return cmd.FlagErrorFunc()(cmd, err)
 }
@@ -105,29 +105,6 @@ func Command(ctx context.Context) *cobra.Command {
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
 
-	// Since we had to DisableFlagParsing so we can parse legacy commands, this
-	// doesn't do anything. Leaving this commented because I don't know if we'll
-	// leave legacy command parsing forever, in which case we'd want to uncomment
-	// this
-	/*
-		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-			if err == nil {
-				return nil
-			}
-
-			// If the error is multiple lines, include an extra blank line before the "See
-			// --help" line.
-			errStr := strings.TrimRight(err.Error(), "\n")
-			if strings.Contains(errStr, "\n") {
-				errStr += "\n"
-			}
-
-			fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\nSee '%s --help'.\n", cmd.CommandPath(), errStr, cmd.CommandPath())
-			os.Exit(2)
-			return nil
-		})
-	*/
-
 	var groups cliutil.CommandGroups
 	if len(os.Args) > 1 && os.Args[1] == "quit" {
 		groups = make(cliutil.CommandGroups)
@@ -157,6 +134,10 @@ func Command(ctx context.Context) *cobra.Command {
 	initGlobalFlagGroups()
 	for _, commands := range groups {
 		for _, command := range commands {
+			if ac := command.Args; ac != nil {
+				// Ensure that args errors don't advice the user to look in log files
+				command.Args = argsCheck(ac)
+			}
 			initDeprecatedPersistentFlags(command)
 		}
 	}
@@ -164,6 +145,17 @@ func Command(ctx context.Context) *cobra.Command {
 		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
 	}
 	return rootCmd
+}
+
+// argsCheck wraps an PositionalArgs checker in a function that wraps a potential error
+// using errcat.User
+func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := f(cmd, args); err != nil {
+			return errcat.User.New(err)
+		}
+		return nil
+	}
 }
 
 func initDeprecatedPersistentFlags(cmd *cobra.Command) {

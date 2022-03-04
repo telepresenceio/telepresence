@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -26,15 +27,15 @@ type logLevelSetter struct {
 
 func logLevelArg(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return errcat.User.New("accepts exactly one argument (the log level)")
+		return errors.New("accepts exactly one argument (the log level)")
 	}
 	lvl, err := logrus.ParseLevel(args[0])
 	if err != nil {
-		return errcat.User.New(err)
+		return err
 	}
 	switch lvl {
 	case logrus.PanicLevel, logrus.FatalLevel:
-		return errcat.User.Newf("unsupported log level: %s", lvl)
+		return fmt.Errorf("unsupported log level: %s", lvl)
 	}
 	return nil
 }
