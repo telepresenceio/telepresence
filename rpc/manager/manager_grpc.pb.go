@@ -98,6 +98,9 @@ type ManagerClient interface {
 	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error)
+	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+	// active, the lookup will be performed from the intercepted pods.
+	LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error)
 	// AgentLookupHostResponse lets an agent respond for lookup requests
 	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
@@ -482,6 +485,15 @@ func (c *managerClient) LookupHost(ctx context.Context, in *LookupHostRequest, o
 	return out, nil
 }
 
+func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error) {
+	out := new(DNSResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/LookupDNS", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/AgentLookupHostResponse", in, out, opts...)
@@ -697,6 +709,9 @@ type ManagerServer interface {
 	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error)
+	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+	// active, the lookup will be performed from the intercepted pods.
+	LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error)
 	// AgentLookupHostResponse lets an agent respond for lookup requests
 	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
@@ -797,6 +812,9 @@ func (UnimplementedManagerServer) AgentTunnel(Manager_AgentTunnelServer) error {
 }
 func (UnimplementedManagerServer) LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
+}
+func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
 }
 func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupHostResponse not implemented")
@@ -1286,6 +1304,24 @@ func _Manager_LookupHost_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DNSRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).LookupDNS(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/LookupDNS",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).LookupDNS(ctx, req.(*DNSRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_AgentLookupHostResponse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LookupHostAgentResponse)
 	if err := dec(in); err != nil {
@@ -1471,6 +1507,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupHost",
 			Handler:    _Manager_LookupHost_Handler,
+		},
+		{
+			MethodName: "LookupDNS",
+			Handler:    _Manager_LookupDNS_Handler,
 		},
 		{
 			MethodName: "AgentLookupHostResponse",

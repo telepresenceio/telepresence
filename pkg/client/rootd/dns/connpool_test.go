@@ -23,7 +23,7 @@ func TestConnPoolConcurrency(t *testing.T) {
 		Net:     "udp",
 		Timeout: TIMEOUT_S * time.Second,
 	}
-	pool, err := NewConnPool("8.8.8.8", 5)
+	pool, err := NewConnPool("udp", "8.8.8.8", 5)
 	if err != nil {
 		t.Log(err)
 		t.FailNow()

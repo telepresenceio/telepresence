@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -243,20 +244,30 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 }
 
 // clusterLookup sends a LookupHost request to the traffic-manager and returns the result
-func (s *session) clusterLookup(ctx context.Context, key string) ([][]byte, error) {
-	dlog.Debugf(ctx, "LookupHost %q", key)
+func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) ([]dns2.RR, error) {
+	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
-	r, err := s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{
+
+	r, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
 		Session: s.session,
-		Host:    key,
+		Name:    q.Name,
+		Type:    uint32(q.Qtype),
 	})
-	if err != nil || len(r.Ips) == 0 {
-		s.dnsFailures++
-	}
 	if err != nil {
+		s.dnsFailures++
 		return nil, err
 	}
-	return r.Ips, nil
+	rrb := r.Rrs
+	var rrs []dns2.RR
+	off := 0
+	for len(rrb) > off {
+		var rr dns2.RR
+		if rr, off, err = dns2.UnpackRR(rrb, off); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unable to unpack DNS response: %v", err)
+		}
+		rrs = append(rrs, rr)
+	}
+	return rrs, nil
 }
 
 func (s *session) getInfo() *rpc.OutboundInfo {

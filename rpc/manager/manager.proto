@@ -445,6 +445,19 @@ message LookupHostAgentResponse {
   LookupHostResponse response = 3;
 }
 
+// LookupHost request sent from a client
+message DNSRequest {
+  // Client session
+  SessionInfo session = 1;
+  string name = 2;
+  uint32 type = 3;
+}
+
+message DNSResponse {
+  // rrs is an array of packed RR records
+  bytes rrs = 1;
+}
+
 // IPNet is a subnet. e.g. 10.43.0.0/16
 message IPNet {
   bytes ip = 1;
@@ -583,6 +596,10 @@ service Manager {
   // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupHost(LookupHostRequest) returns (LookupHostResponse);
+
+  // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  rpc LookupDNS(DNSRequest) returns (DNSResponse);
 
   // AgentLookupHostResponse lets an agent respond for lookup requests
   rpc AgentLookupHostResponse(LookupHostAgentResponse) returns (google.protobuf.Empty);

@@ -19,7 +19,7 @@ type ConnPool struct {
 	remoteAddr string
 }
 
-func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
+func NewConnPool(proto, addr string, poolSize int) (*ConnPool, error) {
 	cCtx, cCancel := context.WithCancel(context.Background())
 	pool := &ConnPool{
 		items:      make(map[*dns.Conn]bool, poolSize),
@@ -30,7 +30,7 @@ func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
 	}
 	heap.Init(&pool.clients)
 	for i := 0; i < poolSize; i++ {
-		conn, err := dns.Dial("udp", net.JoinHostPort(addr, "53"))
+		conn, err := dns.Dial(proto, net.JoinHostPort(addr, "53"))
 		if err != nil {
 			return nil, fmt.Errorf("unable to create DNS conn to %s: %w", addr, err)
 		}
@@ -40,11 +40,11 @@ func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
 	return pool, nil
 }
 
-func (cp *ConnPool) LocalAddrs() []*net.UDPAddr {
-	retval := make([]*net.UDPAddr, len(cp.items))
+func (cp *ConnPool) LocalAddrs() []net.Addr {
+	retval := make([]net.Addr, len(cp.items))
 	i := 0
 	for conn := range cp.items {
-		retval[i] = conn.LocalAddr().(*net.UDPAddr)
+		retval[i] = conn.LocalAddr()
 		i++
 	}
 	return retval
