@@ -25,12 +25,12 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	c, cancelResolveD := context.WithCancel(c)
 	defer cancelResolveD()
 
-	listeners, err := s.dnsListeners(c)
+	listeners, err := dnsListeners(c)
 	if err != nil {
 		return err
 	}
 	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
+	dnsResolverAddr, err := splitToUDPAddr(listeners.udpListener.LocalAddr())
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
 		}
-		return s.Run(c, initDone, listeners, nil, s.resolveInCluster)
+		return s.Run(c, initDone, listeners, nil, nil, s.resolveInCluster)
 	})
 
 	g.Go("SanityCheck", func(c context.Context) error {

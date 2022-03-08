@@ -133,15 +133,17 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
-	listener, err := newLocalUDPListener(c)
+	listeners, err := dnsListeners(c)
 	if err != nil {
 		return err
 	}
-	dnsAddr, err := splitToUDPAddr(listener.LocalAddr())
+	// Create a new local address that the DNS resolver can listen to.
+	dnsResolverAddr, err := splitToUDPAddr(listeners.udpListener.LocalAddr())
 	if err != nil {
 		return err
 	}
-	configureDNS(nil, dnsAddr)
+	dnsIP := net.IP(s.config.RemoteIp)
+	configureDNS(dnsIP, dnsResolverAddr)
 
 	err = os.MkdirAll(resolverDirName, 0755)
 	if err != nil {
@@ -151,9 +153,9 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	kubernetesZone := s.clusterDomain
 	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
-		port:        dnsAddr.Port,
+		port:        dnsResolverAddr.Port,
 		domain:      kubernetesZone,
-		nameservers: []net.IP{dnsAddr.IP},
+		nameservers: []net.IP{dnsResolverAddr.IP},
 		search:      []string{kubernetesZone},
 	}
 	if err = rf.write(resolverFileName); err != nil {
@@ -177,9 +179,9 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	g.Go("Server", func(c context.Context) error {
 		// Server will close the listener, so no need to close it here.
 		s.processSearchPaths(g, func(c context.Context, paths []string, device vif.Device) error {
-			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
+			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsResolverAddr, paths)
 		}, dev)
-		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
+		return s.Run(c, make(chan struct{}), listeners, nil, nil, s.resolveInCluster)
 	})
 	return g.Wait()
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/miekg/dns"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
@@ -878,4 +879,31 @@ const agentSessionTTL = 15 * time.Second
 func (m *Manager) expire(ctx context.Context) {
 	now := m.clock.Now()
 	m.state.ExpireSessions(ctx, now.Add(-clientSessionTTL), now.Add(-agentSessionTTL))
+}
+
+func (m *Manager) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.DNSResponse, error) {
+	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
+	qType := uint16(request.Type)
+	qName := request.Name
+	dlog.Debugf(ctx, "LookupDNS %s %s", dns.TypeToString[qType], qName)
+
+	rrs, err := dnsLookup(ctx, qType, qName)
+	if err != nil {
+		return nil, err
+	}
+	l := 0
+	for _, rr := range rrs {
+		l += dns.Len(rr)
+	}
+	rsp := &rpc.DNSResponse{}
+	rrb := make([]byte, l)
+	off := 0
+	for _, rr := range rrs {
+		if off, err = dns.PackRR(rr, rrb[off:], off, nil, false); err != nil {
+			return nil, status.Errorf(codes.Internal, "unable to pack DNS reply: %v", err)
+		}
+	}
+	rsp.Rrs = rrb
+	dlog.Debugf(ctx, "LookupDNS returns %v", rrs)
+	return rsp, nil
 }

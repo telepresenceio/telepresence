@@ -23,7 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type Resolver func(ctx context.Context, domain string) ([]net.IP, error)
+type Resolver func(context.Context, *dns.Question) ([]dns.RR, error)
 
 // recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
 // is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
@@ -36,7 +36,7 @@ const defaultClusterDomain = "cluster.local."
 type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
 	RemoteAddr() string
-	LocalAddrs() []*net.UDPAddr
+	LocalAddrs() []net.Addr
 }
 
 const (
@@ -46,10 +46,14 @@ const (
 	recursionTestInProgress
 )
 
+type listeners struct {
+	tcpListener net.Listener
+	udpListener net.PacketConn
+}
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
-	fallbackPool FallbackPool
 	resolve      Resolver
 	requestCount int64
 	cache        sync.Map
@@ -73,7 +77,7 @@ type Server struct {
 	clusterDomain string
 
 	// Function that sends a lookup requrest to the traffic-manager
-	clusterLookup func(context.Context, string) ([][]byte, error)
+	clusterLookup Resolver
 }
 
 type cacheEntry struct {
@@ -91,7 +95,7 @@ func (dv *cacheEntry) expired() bool {
 }
 
 // NewServer returns a new dns.Server
-func NewServer(config *rpc.DNSConfig, clusterLookup func(context.Context, string) ([][]byte, error)) *Server {
+func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	if config == nil {
 		config = &rpc.DNSConfig{}
 	}
@@ -134,7 +138,8 @@ const tel2SubDomain = "tel2-search"
 const tel2SubDomainDot = tel2SubDomain + "."
 const wpadDot = "wpad."
 
-var localhostIPs = []net.IP{{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+var localhostIPv4 = net.IP{127, 0, 0, 1}
+var localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	n := strings.Count(query, ".")
@@ -176,9 +181,11 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	return true
 }
 
-func (s *Server) resolveInCluster(c context.Context, query string) (results []net.IP, err error) {
+func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result []dns.RR, err error) {
+	query := q.Name
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
+	q.Name = query
 
 	if query == "localhost." {
 		// BUG(lukeshu): I have no idea why a lookup
@@ -188,7 +195,18 @@ func (s *Server) resolveInCluster(c context.Context, query string) (results []ne
 		// But it does, so I need this in order to be
 		// productive at home.  We should really
 		// root-cause this, because it's weird.
-		return localhostIPs, nil
+		switch q.Qtype {
+		case dns.TypeA:
+			return []dns.RR{&dns.A{
+				Hdr: dns.RR_Header{},
+				A:   localhostIPv4,
+			}}, nil
+		case dns.TypeAAAA:
+			return []dns.RR{&dns.AAAA{
+				Hdr:  dns.RR_Header{},
+				AAAA: localhostIPv6,
+			}}, nil
+		}
 	}
 
 	if !s.shouldDoClusterLookup(query) {
@@ -199,18 +217,19 @@ func (s *Server) resolveInCluster(c context.Context, query string) (results []ne
 	c, cancel := context.WithTimeout(c, s.config.LookupTimeout.AsDuration())
 	defer cancel()
 
-	result, err := s.clusterLookup(c, query[:len(query)-1])
+	result, err = s.clusterLookup(c, q)
 	if err != nil {
 		return nil, client.CheckTimeout(c, err)
 	}
-	if len(result) == 0 {
-		return nil, nil
+	// Keep the TTLs of requests resolved in the cluster low. We
+	// cache them locally anyway, but our cache is flushed when things are
+	// intercepted or the namespaces change.
+	for _, rr := range result {
+		if h := rr.Header(); h != nil {
+			h.Ttl = dnsTTL
+		}
 	}
-	ips := make(iputil.IPs, len(result))
-	for i, ip := range result {
-		ips[i] = ip
-	}
-	return ips, nil
+	return result, nil
 }
 
 func (s *Server) GetConfig() *rpc.DNSConfig {
@@ -244,6 +263,11 @@ func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) 
 	case <-ctx.Done():
 	case s.searchPathCh <- paths:
 	}
+}
+
+func newLocalTCPListener(c context.Context) (net.Listener, error) {
+	lc := &net.ListenConfig{}
+	return lc.Listen(c, "tcp", "127.0.0.1:0")
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -433,7 +457,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
-func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+func (s *Server) serveDNS(w dns.ResponseWriter, r *dns.Msg, fallbackPool FallbackPool) {
 	c := s.ctx
 	defer func() {
 		// Closing the response tells the DNS service to terminate
@@ -490,7 +514,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// The recursion check query, or queries that end with the cluster domain name, are not dispatched to the
 	// fallback DNS-server.
-	if s.fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
+	if fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
 		if err == nil {
 			rc = dns.RcodeNameError
 		} else {
@@ -506,9 +530,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
+	pfx = func() string { return fmt.Sprintf("(%s) ", fallbackPool.RemoteAddr()) }
 	dc := &dns.Client{Net: "udp", Timeout: s.config.LookupTimeout.AsDuration()}
-	msg, _, err = s.fallbackPool.Exchange(c, dc, r)
+	msg, _, err = fallbackPool.Exchange(c, dc, r)
 	if err != nil {
 		msg = new(dns.Msg)
 		rc = dns.RcodeServerFailure
@@ -540,43 +564,12 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, error)
 		close(dv.wait)
 	}()
 
-	var err error
-	switch q.Qtype {
-	case dns.TypeA, dns.TypeAAAA:
-		var ips []net.IP
-		if ips, err = s.resolve(s.ctx, q.Name); err != nil || len(ips) == 0 {
-			break
-		}
-		answer := make([]dns.RR, 0, len(ips))
-		for _, ip := range ips {
-			var rr dns.RR
-			if ip4 := ip.To4(); ip4 != nil {
-				rr = &dns.A{
-					Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: dnsTTL},
-					A:   ip4,
-				}
-			} else {
-				rr = &dns.AAAA{
-					Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: dnsTTL},
-					AAAA: ip,
-				}
-			}
-			answer = append(answer, rr)
-		}
-		dv.answer = answer
-	default:
-		var ips []net.IP
-		if ips, err = s.resolve(s.ctx, q.Name); err != nil {
-			break
-		}
-		if len(ips) > 0 {
-			// a reply exists, but for another type, so our reply here is EMPTY
-			dv.answer = []dns.RR{}
-		}
-	}
-	if err != nil || len(dv.answer) == 0 {
+	rrs, err := s.resolve(s.ctx, q)
+	if err != nil || len(rrs) == 0 {
 		s.cache.Delete(q.Name) // Don't cache unless the entry is found.
+		return nil, err
 	}
+	dv.answer = rrs
 
 	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
 	// also be empty if no RRs were found for the given query type and that is OK.
@@ -584,24 +577,61 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, error)
 	return copyRRs(dv.answer, q.Qtype), err
 }
 
+type handler func(w dns.ResponseWriter, r *dns.Msg)
+
+func (h handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	h(w, r)
+}
+
 // Run starts the DNS server(s) and waits for them to end
-func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool FallbackPool, resolve Resolver) error {
+func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners *listeners, fallbackPoolUDP FallbackPool, fallbackPoolTCP FallbackPool, resolve Resolver) error {
 	s.ctx = c
-	s.fallbackPool = fallbackPool
 	s.resolve = resolve
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	for _, listener := range listeners {
-		srv := &dns.Server{PacketConn: listener, Handler: s, ReadTimeout: time.Second}
-		g.Go(listener.LocalAddr().String(), func(c context.Context) error {
-			go func() {
-				<-c.Done()
-				dlog.Debugf(c, "Shutting down DNS server")
-				_ = srv.ShutdownContext(dcontext.HardContext(c))
-			}()
-			return srv.ActivateAndServe()
-		})
+	udpSrv := &dns.Server{
+		PacketConn: listeners.udpListener,
+		Handler: handler(func(w dns.ResponseWriter, r *dns.Msg) {
+			s.serveDNS(w, r, fallbackPoolUDP)
+		}),
+		ReadTimeout: time.Second,
 	}
+	tcpSrv := &dns.Server{
+		Listener: listeners.tcpListener,
+		Handler: handler(func(w dns.ResponseWriter, r *dns.Msg) {
+			s.serveDNS(w, r, fallbackPoolTCP)
+		}),
+		ReadTimeout: time.Second,
+	}
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go(listeners.udpListener.LocalAddr().String(), func(c context.Context) error {
+		go func() {
+			<-c.Done()
+			dlog.Debugf(c, "Shutting down DNS UDP-server")
+			_ = udpSrv.ShutdownContext(dcontext.HardContext(c))
+		}()
+		return udpSrv.ActivateAndServe()
+	})
+	g.Go(listeners.tcpListener.Addr().String(), func(c context.Context) error {
+		go func() {
+			<-c.Done()
+			dlog.Debugf(c, "Shutting down DNS TCP-server")
+			_ = tcpSrv.ShutdownContext(dcontext.HardContext(c))
+		}()
+		return tcpSrv.ActivateAndServe()
+	})
 	close(initDone)
 	return g.Wait()
+}
+
+func dnsListeners(c context.Context) (*listeners, error) {
+	ls := listeners{}
+	var err error
+	if ls.udpListener, err = newLocalUDPListener(c); err != nil {
+		return nil, err
+	}
+	if ls.tcpListener, err = newLocalTCPListener(c); err != nil {
+		return nil, err
+	}
+	return &ls, nil
 }

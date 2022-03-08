@@ -330,6 +330,14 @@ func (p *mgrProxy) LookupHost(ctx context.Context, arg *managerrpc.LookupHostReq
 	return client.LookupHost(ctx, arg, callOptions...)
 }
 
+func (p *mgrProxy) LookupDNS(ctx context.Context, arg *managerrpc.DNSRequest) (*managerrpc.DNSResponse, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.LookupDNS(ctx, arg, callOptions...)
+}
+
 func (p *mgrProxy) AgentLookupHostResponse(ctx context.Context, arg *managerrpc.LookupHostAgentResponse) (*empty.Empty, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
