@@ -17,7 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
-func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
+func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
 	conn, err := ConnectSessionToSystemA(ctx, s.session)
 	if err != nil {
 		return nil, err

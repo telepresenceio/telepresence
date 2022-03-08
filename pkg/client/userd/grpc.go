@@ -54,20 +54,20 @@ func withReqNumber(ctx context.Context, num int64) context.Context {
 	return context.WithValue(ctx, reqNumberKey{}, num)
 }
 
-func (s *service) callCtx(ctx context.Context, name string) context.Context {
+func (s *Service) callCtx(ctx context.Context, name string) context.Context {
 	num := atomic.AddInt64(&s.ucn, 1)
 	ctx = withReqNumber(ctx, num)
 	return dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s-%d", name, num))
 }
 
-func (s *service) logCall(c context.Context, callName string, f func(context.Context)) {
+func (s *Service) logCall(c context.Context, callName string, f func(context.Context)) {
 	c = s.callCtx(c, callName)
 	dlog.Debug(c, "called")
 	defer dlog.Debug(c, "returned")
 	f(c)
 }
 
-func (s *service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
+func (s *Service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
 	s.logCall(c, callName, func(_ context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
@@ -83,7 +83,7 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 	return
 }
 
-func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
 	executable, err := client.Executable()
 	if err != nil {
 		return &common.VersionInfo{}, err
@@ -95,7 +95,7 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
+func (s *Service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
 	s.logCall(ctx, "Connect", func(c context.Context) {
 		select {
 		case <-ctx.Done():
@@ -113,14 +113,14 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	return result, err
 }
 
-func (s *service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(c, "Disconnect", func(c context.Context) {
 		s.cancelSession()
 	})
 	return &empty.Empty{}, nil
 }
 
-func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectInfo, err error) {
+func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectInfo, err error) {
 	s.logCall(c, "Status", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
@@ -165,7 +165,7 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 	return entries, true
 }
 
-func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
 		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
 		var action string
@@ -193,7 +193,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	return
 }
 
-func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
 		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
 		var action string
@@ -211,7 +211,7 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 	return
 }
 
-func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
+func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	var spec *manager.InterceptSpec
 	defer func() {
 		entries, ok := scoutInterceptEntries(spec, result, err)
@@ -246,7 +246,7 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, err
 }
 
-func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
+func (s *Service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
 		return err
@@ -254,13 +254,13 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	return
 }
 
-func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
+func (s *Service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
 	return s.withSession(server.Context(), "WatchWorkloads", func(c context.Context, session trafficmgr.Session) error {
 		return session.WatchWorkloads(c, wr, server)
 	})
 }
 
-func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
+func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.Uninstall(c, ur)
 		return err
@@ -268,7 +268,7 @@ func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 	return
 }
 
-func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) (err error) {
+func (s *Service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) (err error) {
 	s.logCall(stream.Context(), "UserNotifications", func(c context.Context) {
 		for msg := range s.userNotifications(c) {
 			if err = stream.Send(&rpc.Notification{Message: msg}); err != nil {
@@ -279,7 +279,7 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 	return nil
 }
 
-func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
+func (s *Service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
 	s.logCall(ctx, "Login", func(c context.Context) {
 		defer func() {
 			if err == nil && result.Code == rpc.LoginResult_NEW_LOGIN_SUCCEEDED {
@@ -323,7 +323,7 @@ func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc
 	return result, err
 }
 
-func (s *service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Empty, err error) {
+func (s *Service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Empty, err error) {
 	s.logCall(ctx, "Logout", func(c context.Context) {
 		if err = s.loginExecutor.Logout(ctx); err != nil {
 			if errors.Is(err, auth.ErrNotLoggedIn) {
@@ -336,14 +336,14 @@ func (s *service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Emp
 	return
 }
 
-func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (result *rpc.UserInfo, err error) {
+func (s *Service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (result *rpc.UserInfo, err error) {
 	s.logCall(ctx, "GetCloudUserInfo", func(c context.Context) {
 		result, err = s.loginExecutor.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
 	})
 	return
 }
 
-func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (result *rpc.KeyData, err error) {
+func (s *Service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (result *rpc.KeyData, err error) {
 	s.logCall(ctx, "GetCloudAPIKey", func(c context.Context) {
 		var key string
 		if key, err = s.loginExecutor.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin()); err == nil {
@@ -353,7 +353,7 @@ func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (resu
 	return
 }
 
-func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (result *rpc.LicenseData, err error) {
+func (s *Service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (result *rpc.LicenseData, err error) {
 	s.logCall(ctx, "GetCloudLicense", func(c context.Context) {
 		var license, hostDomain string
 		if license, hostDomain, err = s.loginExecutor.GetLicense(ctx, req.GetId()); err != nil {
@@ -370,7 +370,7 @@ func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 	return
 }
 
-func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
+func (s *Service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
 	err = s.withSession(c, "GetIngressInfos", func(c context.Context, session trafficmgr.Session) error {
 		var iis []*manager.IngressInfo
 		if iis, err = session.IngressInfos(c); err == nil {
@@ -381,7 +381,7 @@ func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rp
 	return
 }
 
-func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
+func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
 		duration := time.Duration(0)
 		if request.Duration != nil {
@@ -396,7 +396,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	return
 }
 
-func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
@@ -405,14 +405,14 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 	return &empty.Empty{}, nil
 }
 
-func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
+func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
 	s.logCall(ctx, "ListCommands", func(ctx context.Context) {
 		groups, err = cliutil.CommandsToRPC(s.getCommands()), nil
 	})
 	return
 }
 
-func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
+func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
 		cmd := &cobra.Command{
 			Use: "fauxmand",
