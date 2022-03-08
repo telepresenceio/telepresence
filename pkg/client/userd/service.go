@@ -233,6 +233,17 @@ func (s *Service) cancelSession() {
 	s.sessionLock.Unlock()
 }
 
+func GetPoddService(sc *scout.Reporter, cfg client.Config, login auth.LoginExecutor) Service {
+	return Service{
+		scout:           sc,
+		connectRequest:  make(chan *rpc.ConnectRequest),
+		connectResponse: make(chan *rpc.ConnectInfo),
+		ManagerProxy:    trafficmgr.NewManagerProxy(),
+		loginExecutor:   login,
+		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+	}
+}
+
 // run is the main function when executing as the connector
 func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) error {
 	cfg, err := client.LoadConfig(c)
