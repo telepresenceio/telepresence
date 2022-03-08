@@ -129,10 +129,10 @@ func (s *Service) configReload(c context.Context) error {
 	})
 }
 
-// manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
+// ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *Service) manageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
+func (s *Service) ManageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
@@ -311,7 +311,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		return s.manageSessions(c, sessionServices)
+		return s.ManageSessions(c, sessionServices)
 	})
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
