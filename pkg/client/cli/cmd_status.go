@@ -64,6 +64,7 @@ type connectorStatusAmbassadorCloud struct {
 	Status    string `json:"status,omitempty"`
 	UserID    string `json:"user_id,omitempty"`
 	AccountID string `json:"account_id,omitempty"`
+	Email     string `json:"email,omitempty"`
 }
 
 type connectStatusIntercept struct {
@@ -178,6 +179,7 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*connectorStatus, err
 				cs.AmbassadorCloud.Status = "Logged in"
 				cs.AmbassadorCloud.UserID = userInfo.Id
 				cs.AmbassadorCloud.AccountID = userInfo.AccountId
+				cs.AmbassadorCloud.Email = userInfo.Email
 			}
 		}
 
@@ -276,6 +278,7 @@ func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 		s.printf("    Status    : %s\n", cs.AmbassadorCloud.Status)
 		s.printf("    User ID   : %s\n", cs.AmbassadorCloud.UserID)
 		s.printf("    Account ID: %s\n", cs.AmbassadorCloud.AccountID)
+		s.printf("    Email     : %s\n", cs.AmbassadorCloud.Email)
 		s.printf("  Status            : %s\n", cs.Status)
 		if cs.Error != "" {
 			s.printf("  Error             : %s\n", cs.Error)
