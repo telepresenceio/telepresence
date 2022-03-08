@@ -57,8 +57,8 @@ type DaemonService interface {
 
 type CommandFactory func() cliutil.CommandGroups
 
-// service represents the long-running state of the Telepresence User Daemon
-type service struct {
+// Service represents the long-running state of the Telepresence User Daemon
+type Service struct {
 	rpc.UnsafeConnectorServer
 
 	svc               *grpc.Server
@@ -87,11 +87,11 @@ type service struct {
 	getCommands CommandFactory
 }
 
-func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
+func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
 	s.managerProxy.SetClient(managerClient, callOptions...)
 }
 
-func (s *service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
+func (s *Service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
 	if s.daemonClient != nil {
 		return s.daemonClient, nil
 	}
@@ -106,7 +106,7 @@ func (s *service) RootDaemonClient(c context.Context) (daemon.DaemonClient, erro
 	return s.daemonClient, nil
 }
 
-func (s *service) LoginExecutor() auth.LoginExecutor {
+func (s *Service) LoginExecutor() auth.LoginExecutor {
 	return s.loginExecutor
 }
 
@@ -125,7 +125,7 @@ func Command(getCommands CommandFactory, daemonServices []DaemonService, session
 	return c
 }
 
-func (s *service) configReload(c context.Context) error {
+func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(c context.Context) error {
 		return logging.ReloadDaemonConfig(c, false)
 	})
@@ -134,7 +134,7 @@ func (s *service) configReload(c context.Context) error {
 // manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *service) manageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
+func (s *Service) manageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
@@ -211,7 +211,7 @@ nextSession:
 	return nil
 }
 
-func (s *service) cancelSessionReadLocked() {
+func (s *Service) cancelSessionReadLocked() {
 	if s.sessionCancel != nil {
 		if err := s.session.ClearIntercepts(s.sessionContext); err != nil {
 			dlog.Errorf(s.sessionContext, "failed to clear intercepts: %v", err)
@@ -220,7 +220,7 @@ func (s *service) cancelSessionReadLocked() {
 	}
 }
 
-func (s *service) cancelSession() {
+func (s *Service) cancelSession() {
 	s.sessionLock.RLock()
 	s.cancelSessionReadLocked()
 	s.sessionLock.RUnlock()
@@ -269,7 +269,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 	sr := scout.NewReporter(c, "connector")
 	cliio := &broadcastqueue.BroadcastQueue{}
 
-	s := &service{
+	s := &Service{
 		scout:             sr,
 		connectRequest:    make(chan *rpc.ConnectRequest),
 		connectResponse:   make(chan *rpc.ConnectInfo),
