@@ -148,6 +148,10 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 }
 
 func telProBinary(ctx context.Context) (string, error) {
+	cfg := client.GetConfig(ctx)
+	if cfg.Daemons.UserDaemonBinary != "" {
+		return cfg.Daemons.UserDaemonBinary, nil
+	}
 	dir, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
 		return "", errcat.NoDaemonLogs.Newf("unable to get path to config files: %w", err)

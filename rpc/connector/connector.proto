@@ -341,6 +341,7 @@ message UserInfo {
   string accountId = 4;
   string accountName = 5;
   string accountAvatarUrl = 6;
+  string email = 7;
 
   // protolint:disable FIELD_NAMES_LOWER_SNAKE_CASE
 }

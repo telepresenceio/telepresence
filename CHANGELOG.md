@@ -2,7 +2,7 @@
 
 ### 2.5.4 (TBD)
 
-- Change: The status command includes the install id, user id and account id in its result, and can print output as JSON
+- Change: The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON
 
 - Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
 
