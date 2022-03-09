@@ -463,29 +463,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.ServiceUid = result.ServiceUid
 	spec.WorkloadKind = result.WorkloadKind
 
-	deleteMount := false
-	if ir.MountPoint != "" {
-		// Ensure that the mount-point is free to use
-		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
-			return interceptError(rpc.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
-		}
-
-		// Assume that the mount-point should to be removed from the busy map. Only a happy path
-		// to successful intercept that actually has remote mounts will set this to false.
-		deleteMount = true
-		defer func() {
-			if deleteMount {
-				tm.mountPoints.Delete(ir.MountPoint)
-			}
-		}()
-	}
-
-	apiKey, err := tm.getCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
-	if err != nil {
-		if !errors.Is(err, auth.ErrNotLoggedIn) {
-			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
-		}
-	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
@@ -502,7 +479,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
-		ApiKey:        apiKey,
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
@@ -525,11 +501,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
 		}
 		result.InterceptInfo = wr.intercept
-		if ir.MountPoint != "" && ii.SftpPort > 0 {
-			result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
-			deleteMount = false // Mount-point is busy until intercept ends
-			ii.Spec.MountPoint = ir.MountPoint
-		}
 		return result, nil
 	}
 }
