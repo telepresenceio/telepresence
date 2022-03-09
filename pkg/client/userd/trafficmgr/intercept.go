@@ -161,7 +161,7 @@ func (tm *TrafficManager) reconcileMountPoints(ctx context.Context, existingInte
 	}
 }
 
-func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error {
+func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error { //nolint:gocognit // bugger off
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
 	//     dgroup's other functionality
@@ -230,12 +230,15 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				}
 				if iceptError == nil {
 					namespaces[intercept.Spec.Namespace] = struct{}{}
+					if tm.isPodDaemon {
+						intercept.SftpPort = 0 // disable mount point logic
+					}
 					portForwards.start(ctx, tm, intercept)
 				}
 			}
 			portForwards.cancelUnwanted(ctx)
 			tm.reconcileMountPoints(ctx, allNames)
-			if ctx.Err() == nil {
+			if ctx.Err() == nil && !tm.isPodDaemon {
 				tm.setInterceptedNamespaces(ctx, namespaces)
 			}
 		}
@@ -482,7 +485,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 }
 
 // AddIntercept adds one intercept
-func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) { //nolint:gocognit // bugger off
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
 	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
@@ -536,21 +539,24 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.WorkloadKind = result.WorkloadKind
 
 	deleteMount := false
-	if ir.MountPoint != "" {
-		// Ensure that the mount-point is free to use
-		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
-			return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
-		}
-
-		// Assume that the mount-point should to be removed from the busy map. Only a happy path
-		// to successful intercept that actually has remote mounts will set this to false.
-		deleteMount = true
-		defer func() {
-			if deleteMount {
-				tm.mountPoints.Delete(ir.MountPoint)
+	if !ir.IsPodDaemon {
+		if ir.MountPoint != "" {
+			// Ensure that the mount-point is free to use
+			if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
+				return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
 			}
-		}()
+
+			// Assume that the mount-point should to be removed from the busy map. Only a happy path
+			// to successful intercept that actually has remote mounts will set this to false.
+			deleteMount = true
+			defer func() {
+				if deleteMount {
+					tm.mountPoints.Delete(ir.MountPoint)
+				}
+			}()
+		}
 	}
+
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
@@ -628,10 +634,12 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
-			mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
-			if mountPoint != "" && ii.SftpPort > 0 {
-				deleteMount = false // Mount-point is busy until intercept ends
-				ii.ClientMountPoint = mountPoint
+			if !ir.IsPodDaemon {
+				mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
+				if mountPoint != "" && ii.SftpPort > 0 {
+					deleteMount = false // Mount-point is busy until intercept ends
+					ii.ClientMountPoint = mountPoint
+				}
 			}
 			success = true
 			return result, nil

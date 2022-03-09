@@ -141,6 +141,7 @@ message ConnectRequest {
   map<string, string> kube_flags = 1;
   repeated string mapped_namespaces = 2;
   reserved 3;
+  bool is_pod_daemon = 4;
 }
 
 message ConnectInfo {
@@ -223,6 +224,7 @@ message CreateInterceptRequest {
   telepresence.manager.InterceptSpec spec = 1;
   string mount_point = 2;
   string agent_image = 3;
+  bool is_pod_daemon = 4;
 }
 
 message ListRequest {
