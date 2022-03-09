@@ -8,8 +8,6 @@
        link: install/upgrade/
      - title: Install Traffic Manager with Helm
        link: install/helm/
-     - title: Telepresence Pro
-       link: install/telepresence-pro/
      - title: Migrate from legacy Telepresence
        link: install/migrate-from-legacy/
  - title: Core concepts
@@ -34,7 +32,7 @@
        link: howtos/outbound
      - title: Send requests to an intercepted service
        link: howtos/request
-     - title: Use Telepresence with a cluster hosted in a VM on the workstation
+     - title: Use Telepresence with a local Kubernetes cluster
        link: howtos/cluster-in-vm
  - title: Technical reference
    items:

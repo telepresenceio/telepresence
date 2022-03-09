@@ -5,7 +5,7 @@ description: "Use Telepresence to intercept services in a cluster running in a h
 # Network considerations for locally hosted clusters
 
 ## The problem
-Telepresence creates a Virtual Network Interface ([VIF](../tun-device)) that maps the clusters subnets to the host machine when it connects. This is not a problem under normal circumstances (when the cluster runs in the cloud), but network problems may arise when the cluster runs in a VM that is hosted on the same machine where Telepresence runs.
+Telepresence creates a Virtual Network Interface ([VIF](../tun-device)) that maps the clusters subnets to the host machine when it connects. If you're running Kubernetes locally (e.g., k3s, Minikube, Docker for Desktop), you may encounter network problems because the devices in the host are also accessible from the cluster's nodes.
 
 ### Example:
 A k3s cluster runs in a headless VirtualBox machine that uses a "host-only" network. This network will allow both host-to-guest and guest-to-host connections. In other words, the cluster will have access to the host's network and, while Telepresence is connected, also to its VIF. This means that from the cluster's perspective, there will now be more than one interface that maps the cluster's subnets; the ones already present in the cluster's nodes, and then the Telepresence VIF, mapping them again.
@@ -14,13 +14,12 @@ Now, if a request arrives to Telepresence that is covered by a subnet mapped by 
 
 ## Solution
 
-### Detect and kill recursion?
-A recursion detection mechanism was introduced in Telepresence 2.4.11 that attempted to prevent the recursion by detecting successive attempts to connect to the same address before a previous attempt had succeeded. It worked well for simple use-cases but performed badly when a large number of connections were established as a consequence of opening a webpage. Since all attempts to the same address were serialized, some of them timed out. The detection mechanism was therefore removed in 2.5.3.
+### Create a bridge network
+A bridge network is a Link Layer (L2) device that forwards traffic between network segments. By creating a bridge network, you can bypass the host's network stack which enable the Kubernetes cluster to connect directly to the same router as your host.
 
-### A better solution
-The network of a VM running on the host can often be configured in different ways. In the example above, the "host-only" network can be replaced by a "bridge" network. A bridge will attach directly to a network interface card on the host and bypass the host's network stack. In essence, it makes the VM connect directly to the same router as the host. The Telepresence VIF is not visible to that router but the router will allow its connected instances to communicate. This solves the problem, because even if a request intended for the cluster may be sent to the router, the router will never send it to the host.
+To create a bridge network, you need to change the network settings of the guest running a cluster's node so that it connects directly to a physical network device on your host. The details on how to configure the bridge depends on what type of virtualization solution you're using.
 
-### Vagrant + k3s example
+### Vagrant + Virtualbox + k3s example
 Here's a sample `Vagrantfile` that will spin up a server node and two agent nodes in three headless instances using a bridged network. It also adds the configuration needed for the cluster to host a docker repository (very handy in case you want to save bandwidth). The Kubernetes registry manifest must be applied using `kubectl -f registry.yaml` once the cluster is up and running.
 
 #### Vagrantfile
