@@ -32,6 +32,8 @@
        link: howtos/outbound
      - title: Send requests to an intercepted service
        link: howtos/request
+     - title: Use Telepresence with a local Kubernetes cluster
+       link: howtos/cluster-in-vm
  - title: Technical reference
    items:
      - title: Architecture
