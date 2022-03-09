@@ -28,21 +28,29 @@ Here's a sample `Vagrantfile` that will spin up a server node and two agent node
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-# default_route should be the IP of the host's default route.
-default_route = '192.168.1.1'
+# bridge is the name of the host's default network device
+$bridge = 'wlp5s0'
 
-# bridge is the name of the default network device
-bridge = 'wlp5s0'
+# default_route should be the IP of the host's default route.
+$default_route = '192.168.1.1'
+
+# nameserver must be the IP of an external DNS, such as 8.8.8.8
+$nameserver = '8.8.8.8'
 
 # server_name should also be added to the host's /etc/hosts file and point to the server_ip
 # for easy access when pushing docker images
 server_name = 'multi'
 
+# static IPs for the server and agents. Those IPs must be on the default router's subnet
 server_ip = '192.168.1.110'
-agents = { 'agent1' => '192.168.1.111',
-           'agent2' => '192.168.1.112'
+agents = {
+  'agent1' => '192.168.1.111',
+  'agent2' => '192.168.1.112',
 }
 
+# Extra parameters in INSTALL_K3S_EXEC variable because of
+# K3s picking up the wrong interface when starting server and agent
+# https://github.com/alexellis/k3sup/issues/306
 server_script = <<-SHELL
     sudo -i
     apk add curl
@@ -50,7 +58,7 @@ server_script = <<-SHELL
     mkdir -p /etc/rancher/k3s
     cat <<-'EOF' > /etc/rancher/k3s/registries.yaml
 mirrors:
-  "#{server_name}:5000":
+  "multi:5000":
     endpoint:
       - "http://#{server_ip}:5000"
 EOF
@@ -60,8 +68,6 @@ EOF
     cp /var/lib/rancher/k3s/server/token /vagrant_shared
     cp /etc/rancher/k3s/k3s.yaml /vagrant_shared
     cp /etc/rancher/k3s/registries.yaml /vagrant_shared
-
-    ip route delete default 2>&1 >/dev/null || true; ip route add default via #{default_route}
     SHELL
 
 agent_script = <<-SHELL
@@ -73,39 +79,46 @@ agent_script = <<-SHELL
     mkdir -p /etc/rancher/k3s
     cat <<-'EOF' > /etc/rancher/k3s/registries.yaml
 mirrors:
-  "#{server_name}:5000":
+  "multi:5000":
     endpoint:
       - "http://#{server_ip}:5000"
 EOF
     curl -sfL https://get.k3s.io | sh -
-
-    ip route delete default 2>&1 >/dev/null || true; ip route add default via #{default_route}
     SHELL
+
+def config_vm(name, ip, script, vm)
+  # The network_script has two objectives:
+  # 1. Ensure that the guest's default route is the bridged network (bypass the network of the host)
+  # 2. Ensure that the DNS points to an external DNS service, as opposed to the DNS of the host that
+  #    the NAT network provides.
+  network_script = <<-SHELL
+    sudo -i
+    ip route delete default 2>&1 >/dev/null || true; ip route add default via #{$default_route}
+    cp /etc/resolv.conf /etc/resolv.conf.orig
+    sed 's/^nameserver.*/nameserver #{$nameserver}/' /etc/resolv.conf.orig > /etc/resolv.conf
+  SHELL
+
+  vm.hostname = name
+  vm.network 'public_network', bridge: $bridge, ip: ip
+  vm.synced_folder './shared', '/vagrant_shared'
+  vm.provider 'virtualbox' do |vb|
+    vb.memory = '4096'
+    vb.cpus = '2'
+  end
+  vm.provision 'shell', inline: script
+  vm.provision 'shell', inline: network_script, run: 'always'
+end
 
 Vagrant.configure('2') do |config|
   config.vm.box = 'generic/alpine314'
 
   config.vm.define 'server', primary: true do |server|
-    server.vm.hostname = server_name
-    server.vm.network 'public_network', ip: server_ip
-    server.vm.synced_folder './shared', '/vagrant_shared'
-    server.vm.provider 'virtualbox' do |vb|
-      vb.memory = '4096'
-      vb.cpus = '2'
-    end
-    server.vm.provision 'shell', inline: server_script
+    config_vm(server_name, server_ip, server_script, server.vm)
   end
 
   agents.each do |agent_name, agent_ip|
     config.vm.define agent_name do |agent|
-      agent.vm.hostname = agent_name
-      agent.vm.network 'public_network', ip: agent_ip
-      agent.vm.synced_folder './shared', '/vagrant_shared'
-      agent.vm.provider 'virtualbox' do |vb|
-        vb.memory = '4096'
-        vb.cpus = '2'
-      end
-      agent.vm.provision 'shell', inline: agent_script
+      config_vm(agent_name, agent_ip, agent_script, agent.vm)
     end
   end
 end
