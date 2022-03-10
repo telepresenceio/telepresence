@@ -1,20 +1,16 @@
 # Community Meeting Schedule
 
-## Meet the Maintainers
+## Weekly Troubleshooting
 
-Every four to six weeks we dedicate one session to meeting the maintainers of Telepresence.  These sessions are a way to connect in person to share updates and listen to feedback from the community. 
+We hold troubleshooting sessions once a week on Tuesdays, at 2:30 pm Eastern.  These sessions are a way to connect in person with project maintainers and get help with any problems you might be encountering while using Telepresence.
 
-For the latest information, [visit the website](https://www.getambassador.io/about-us/events/meet-the-maintainers/).
+**Zoom Meeting Link**: https://us02web.zoom.us/j/81514139559?pwd=M3g3dzV4cytQV0IrMVpuZWFyU2ZDQT09
 
 
-**Zoom Meeting Link**: https://us02web.zoom.us/j/81261393224
-
-**Recordings**: http://bit.ly/AmbassadorOfficeHoursRecordings
-
-## Contributors Meeting
+## Monthly Contributors Meeting
 
 The Telepresence Contributors Meeting is held on the first Wednesday of every month at 11am Eastern.  The focus of this meeting is discussion of technical issues related to development of Telepresence.
 
 New contributors are always welcome! Check out our [contributor's guide](DEVELOPING.md) to learn how you can help make Telepresence better.
 
-**Zoom Meeting Link**: https://us02web.zoom.us/j/83490763112
+**Zoom Meeting Link**: https://us02web.zoom.us/j/6297823847
