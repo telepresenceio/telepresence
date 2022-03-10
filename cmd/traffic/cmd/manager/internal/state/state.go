@@ -158,7 +158,7 @@ func (ss *agentSessionState) Cancel() {
 type State struct {
 	ctx context.Context
 
-	mu sync.Mutex
+	mu sync.RWMutex
 	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
 	// protect against memory corruption and ensure serialization for watches, we need to do our
 	// own locking here to ensure consistency between the various maps:
@@ -362,10 +362,10 @@ func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 // SessionDone returns a channel that is closed when the session with the given ID terminates.  If
 // there is no such currently-live session, then an already-closed channel is returned.
 func (s *State) SessionDone(id string) (<-chan struct{}, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	s.mu.RLock()
 	sess, ok := s.sessions[id]
+	s.mu.RUnlock()
+
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "session %q not found", id)
 	}
@@ -481,8 +481,8 @@ func (s *State) GetAllAgents() map[string]*rpc.AgentInfo {
 }
 
 func (s *State) GetAgentsByName(name, namespace string) map[string]*rpc.AgentInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	ret := make(map[string]*rpc.AgentInfo, len(s.agentsByName[name]))
 	for k, v := range s.agentsByName[name] {
@@ -608,8 +608,8 @@ func (s *State) RemoveIntercept(interceptID string) bool {
 // We use this fuction as a last resort if we need to garbage collect intercepts when
 // there are no active sessions.
 func (s *State) GetInterceptAPIKey() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, key := range s.interceptAPIKeys {
 		if key != "" {
 			return key
@@ -649,9 +649,9 @@ func (s *State) WatchIntercepts(
 
 func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	sessionID := stream.SessionID()
-	s.mu.Lock()
+	s.mu.RLock()
 	ss, ok := s.sessions[sessionID]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if !ok {
 		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
@@ -685,9 +685,9 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return status.Errorf(codes.FailedPrecondition, "unable to read ClientSession from agent %q", sessionID)
 		}
 		peerID := tunnel.GetSession(m)
-		s.mu.Lock()
+		s.mu.RLock()
 		peerSession = s.sessions[peerID]
-		s.mu.Unlock()
+		s.mu.RUnlock()
 	} else {
 		peerSession = s.getRandomAgentSession(sessionID)
 	}
@@ -708,17 +708,17 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 
 func (s *State) getRandomAgentSession(clientSessionID string) (agent SessionState) {
 	if agentIDs := s.getAgentsInterceptedByClient(clientSessionID); len(agentIDs) > 0 {
-		s.mu.Lock()
+		s.mu.RLock()
 		agent = s.sessions[agentIDs[0]]
-		s.mu.Unlock()
+		s.mu.RUnlock()
 	}
 	return
 }
 
 func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
-	s.mu.Lock()
+	s.mu.RLock()
 	ss, ok := s.sessions[sessionID]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if !ok {
 		return nil
 	}
@@ -780,11 +780,11 @@ func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, reques
 func (s *State) PostLookupResponse(response *rpc.LookupHostAgentResponse) {
 	responseID := response.Request.Session.SessionId + ":" + response.Request.Host
 	var rch chan<- *rpc.LookupHostResponse
-	s.mu.Lock()
+	s.mu.RLock()
 	if as, ok := s.sessions[response.Session.SessionId].(*agentSessionState); ok {
 		rch = as.lookupResponses[responseID]
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if rch != nil {
 		rch <- response.Response
 	}
@@ -832,9 +832,9 @@ func (s *State) endHostLookup(agentSessionID string, request *rpc.LookupHostRequ
 }
 
 func (s *State) WatchLookupHost(agentSessionID string) <-chan *rpc.LookupHostRequest {
-	s.mu.Lock()
+	s.mu.RLock()
 	ss, ok := s.sessions[agentSessionID]
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if !ok {
 		return nil
 	}
