@@ -24,6 +24,15 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
+# Build statically on linux platforms so that the binary can be used in
+# alpine containers and the like, where libc is different.
+ifeq ($(GOHOSTOS),linux)
+CGO_ENABLED=0
+else
+CGO_ENABLED=1
+endif
+
+
 .PHONY: FORCE
 FORCE:
 
