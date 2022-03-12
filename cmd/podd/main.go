@@ -109,7 +109,6 @@ func Main(ctx context.Context, args Args) error {
 		// DONT NEED THIS
 		userNotifications: func(cts context.Context) <-chan string { return bq.Subscribe(cts) },
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
-		getCOmmands: getCommands,
 	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
