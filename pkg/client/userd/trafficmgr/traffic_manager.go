@@ -549,7 +549,7 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	tm.WaitForNSSync(ctx)
 	tm.wlWatcher.waitForSync(ctx)
-	nss := make([]string, 0, len(namespaces))
+	nss := make([]string, 0)
 	nsmap := make(map[string]bool)
 	is := tm.getCurrentIntercepts()
 	if allNamespaces {
@@ -557,7 +557,7 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 		for _, intercept := range is {
 			if _, value := nsmap[intercept.Spec.Namespace]; !value {
 				nsmap[intercept.Spec.Namespace] = true
-				nss = append(namespaces, intercept.Spec.Namespace)
+				nss = append(nss, intercept.Spec.Namespace)
 			}
 		}
 	} else {
