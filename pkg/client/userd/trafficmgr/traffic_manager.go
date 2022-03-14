@@ -547,6 +547,10 @@ func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloa
 }
 
 func (tm *TrafficManager) ActiveInterceptSnapshot(ctx context.Context) (*rpc.WorkloadInfoSnapshot, error) {
+	tm.WaitForNSSync(ctx)
+	tm.wlWatcher.waitForSync(ctx)
+
+	// makes map of all current intercepts
 	is := tm.getCurrentIntercepts()
 	iMap := make(map[string]*manager.InterceptInfo, len(is))
 	for _, i := range is {
@@ -563,6 +567,14 @@ func (tm *TrafficManager) ActiveInterceptSnapshot(ctx context.Context) (*rpc.Wor
 		}
 	}
 
+	// makes map of all agents in intercepted namespaces
+	aMap := make(map[string]*manager.AgentInfo)
+	for _, ns := range namespaces {
+		for k, v := range tm.getCurrentAgentsInNamespace(ns) {
+			aMap[k] = v
+		}
+	}
+
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
 	var err error
 	tm.wlWatcher.eachService(ctx, namespaces, func(svc *core.Service) {
@@ -574,8 +586,15 @@ func (tm *TrafficManager) ActiveInterceptSnapshot(ctx context.Context) (*rpc.Wor
 			if _, ok := wiMap[workload.GetUID()]; ok {
 				continue
 			}
+			// if not an intercepted workload, continue
+			name := workload.GetName()
+			if _, ok := iMap[name]; !ok {
+				continue
+			}
 
 			wlInfo := makeWorkloadInfo(ctx, workload, svc)
+			wlInfo.InterceptInfo = iMap[name]
+			wlInfo.AgentInfo = aMap[name]
 			wiMap[workload.GetUID()] = wlInfo
 		}
 	})
@@ -586,6 +605,21 @@ func (tm *TrafficManager) ActiveInterceptSnapshot(ctx context.Context) (*rpc.Wor
 	for _, wi := range wiMap {
 		wiz[i] = wi
 		i++
+	}
+
+	// add local intercepts
+nextLocalNs:
+	for localIntercept, localNs := range tm.localIntercepts {
+		for _, ns := range namespaces {
+			if localNs == ns {
+				wiz = append(wiz, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
+					Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
+					Disposition:       manager.InterceptDispositionType_ACTIVE,
+					MechanismArgsDesc: "as local-only",
+				}})
+				continue nextLocalNs
+			}
+		}
 	}
 
 	// sort array by name
