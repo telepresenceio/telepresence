@@ -50,7 +50,7 @@ type ConnectorClient interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
-	// Returns a list of workloads and their current intercept status.
+	// Returns a list of workloads that are actively intercepted.
 	// Requires having already called Connect.
 	ListActiveIntercepts(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
@@ -371,7 +371,7 @@ type ConnectorServer interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
-	// Returns a list of workloads and their current intercept status.
+	// Returns a list of workloads that are actively intercepted.
 	// Requires having already called Connect.
 	ListActiveIntercepts(context.Context, *emptypb.Empty) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
