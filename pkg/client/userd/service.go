@@ -254,7 +254,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		connectResponse:   make(chan *rpc.ConnectInfo),
 		managerProxy:      trafficmgr.NewManagerProxy(),
 		loginExecutor:     auth.NewStandardLoginExecutor(cliio, sr),
-		userNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
+		userNotifications: cliio.Subscribe,
 		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 		getCommands:       getCommands,
 	}
