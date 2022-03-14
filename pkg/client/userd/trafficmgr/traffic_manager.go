@@ -67,6 +67,7 @@ type Session interface {
 	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WithK8sInterface(context.Context) context.Context
 	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
+	ActiveInterceptSnapshot(context.Context) (*rpc.WorkloadInfoSnapshot, error)
 	ManagerClient() manager.ManagerClient
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
@@ -455,6 +456,30 @@ func (tm *TrafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
+func makeWorkloadInfo(ctx context.Context, workload k8sapi.Workload, svc *core.Service) *rpc.WorkloadInfo {
+	name := workload.GetName()
+	dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
+	ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
+	for _, p := range svc.Spec.Ports {
+		ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
+			Name: p.Name,
+			Port: p.Port,
+		})
+	}
+	return &rpc.WorkloadInfo{
+		Name:                 name,
+		Namespace:            workload.GetNamespace(),
+		WorkloadResourceType: workload.GetKind(),
+		Uid:                  string(workload.GetUID()),
+		Service: &rpc.WorkloadInfo_ServiceReference{
+			Name:      svc.Name,
+			Namespace: svc.Namespace,
+			Uid:       string(svc.UID),
+			Ports:     ports,
+		},
+	}
+}
+
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.
 func (tm *TrafficManager) getInfosForWorkloads(
 	ctx context.Context,
@@ -474,28 +499,9 @@ func (tm *TrafficManager) getInfosForWorkloads(
 			if _, ok := wiMap[workload.GetUID()]; ok {
 				continue
 			}
-			name := workload.GetName()
-			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
-			ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
-			for _, p := range svc.Spec.Ports {
-				ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
-					Name: p.Name,
-					Port: p.Port,
-				})
-			}
-			wlInfo := &rpc.WorkloadInfo{
-				Name:                 name,
-				Namespace:            workload.GetNamespace(),
-				WorkloadResourceType: workload.GetKind(),
-				Uid:                  string(workload.GetUID()),
-				Service: &rpc.WorkloadInfo_ServiceReference{
-					Name:      svc.Name,
-					Namespace: svc.Namespace,
-					Uid:       string(svc.UID),
-					Ports:     ports,
-				},
-			}
+			wlInfo := makeWorkloadInfo(ctx, workload, svc)
 			var ok bool
+			name := workload.GetName()
 			wlInfo.InterceptInfo, ok = iMap[name]
 			if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
@@ -538,6 +544,53 @@ func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloa
 			}
 		}
 	}
+}
+
+func (tm *TrafficManager) ActiveInterceptSnapshot(ctx context.Context) (*rpc.WorkloadInfoSnapshot, error) {
+	is := tm.getCurrentIntercepts()
+	iMap := make(map[string]*manager.InterceptInfo, len(is))
+	for _, i := range is {
+		iMap[i.Spec.Agent] = i
+	}
+
+	// get unique set of namespaces from active intercepts
+	nsmap := make(map[string]bool)
+	namespaces := make([]string, 0)
+	for _, intercept := range is {
+		if _, value := nsmap[intercept.Spec.Namespace]; !value {
+			nsmap[intercept.Spec.Namespace] = true
+			namespaces = append(namespaces, intercept.Spec.Namespace)
+		}
+	}
+
+	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
+	var err error
+	tm.wlWatcher.eachService(ctx, namespaces, func(svc *core.Service) {
+		var wls []k8sapi.Workload
+		if wls, err = tm.wlWatcher.findMatchingWorkloads(ctx, svc); err != nil {
+			return
+		}
+		for _, workload := range wls {
+			if _, ok := wiMap[workload.GetUID()]; ok {
+				continue
+			}
+
+			wlInfo := makeWorkloadInfo(ctx, workload, svc)
+			wiMap[workload.GetUID()] = wlInfo
+		}
+	})
+
+	// map to array
+	wiz := make([]*rpc.WorkloadInfo, len(wiMap))
+	i := 0
+	for _, wi := range wiMap {
+		wiz[i] = wi
+		i++
+	}
+
+	// sort array by name
+	sort.Slice(wiz, func(i, j int) bool { return wiz[i].Name < wiz[j].Name })
+	return &rpc.WorkloadInfoSnapshot{Workloads: wiz}, nil
 }
 
 func (tm *TrafficManager) WorkloadInfoSnapshot(

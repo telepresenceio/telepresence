@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -17,6 +18,7 @@ type listInfo struct {
 	onlyIntercepts    bool
 	onlyAgents        bool
 	onlyInterceptable bool
+	allIntercepts     bool
 	debug             bool
 	namespace         string
 	json              bool
@@ -33,6 +35,7 @@ func listCommand() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.BoolVarP(&s.onlyIntercepts, "intercepts", "i", false, "intercepts only")
+	flags.BoolVarP(&s.allIntercepts, "all-intercepts", "A", false, "gets all live intercepts, overrides all other flags")
 	flags.BoolVarP(&s.onlyAgents, "agents", "a", false, "with installed agents only")
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
@@ -46,6 +49,10 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	var r *connector.WorkloadInfoSnapshot
 	var err error
 	err = withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
+		if s.allIntercepts {
+			r, err = cs.userD.ListActiveIntercepts(ctx, &emptypb.Empty{})
+			return err
+		}
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:
@@ -60,6 +67,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
 		return err
 	})
+
 	if err != nil {
 		return err
 	}

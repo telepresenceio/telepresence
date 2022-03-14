@@ -50,6 +50,9 @@ type ConnectorClient interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
+	// Returns a list of workloads and their current intercept status.
+	// Requires having already called Connect.
+	ListActiveIntercepts(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error)
 	// Returns a stream of messages to display to the user.  Does NOT
@@ -158,6 +161,15 @@ func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, o
 func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error) {
 	out := new(WorkloadInfoSnapshot)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/List", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) ListActiveIntercepts(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error) {
+	out := new(WorkloadInfoSnapshot)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ListActiveIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +371,9 @@ type ConnectorServer interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
+	// Returns a list of workloads and their current intercept status.
+	// Requires having already called Connect.
+	ListActiveIntercepts(context.Context, *emptypb.Empty) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error
 	// Returns a stream of messages to display to the user.  Does NOT
@@ -415,6 +430,9 @@ func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
+}
+func (UnimplementedConnectorServer) ListActiveIntercepts(context.Context, *emptypb.Empty) (*WorkloadInfoSnapshot, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListActiveIntercepts not implemented")
 }
 func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
@@ -626,6 +644,24 @@ func _Connector_List_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).List(ctx, req.(*ListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_ListActiveIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ListActiveIntercepts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/ListActiveIntercepts",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ListActiveIntercepts(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -912,6 +948,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "List",
 			Handler:    _Connector_List_Handler,
+		},
+		{
+			MethodName: "ListActiveIntercepts",
+			Handler:    _Connector_ListActiveIntercepts_Handler,
 		},
 		{
 			MethodName: "Login",
