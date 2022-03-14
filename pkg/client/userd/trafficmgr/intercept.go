@@ -215,7 +215,8 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			portForwards.cancelUnwanted(ctx)
 			tm.reconcileMountPoints(ctx, allNames)
 			if ctx.Err() == nil {
-				tm.setInterceptedNamespaces(ctx, namespaces)
+				// no
+				//tm.setInterceptedNamespaces(ctx, namespaces)
 			}
 		}
 

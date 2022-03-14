@@ -385,9 +385,6 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
 	paths := tm.GetCurrentNamespaces(false)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
-	if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
-		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
-	}
 	dlog.Debug(c, "search paths posted successfully")
 }
 

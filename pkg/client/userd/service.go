@@ -212,13 +212,13 @@ func (s *Service) cancelSession() {
 	s.sessionLock.Unlock()
 }
 
-func GetPoddService(sc *scout.Reporter, cfg client.Config) Service {
+func GetPoddService(sc *scout.Reporter, cfg client.Config, login auth.LoginExecutor) Service {
 	return Service{
 		scout: sc,
 		connectRequest: make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy: trafficmgr.NewManagerProxy(),
-		loginExecutor: auth.NewStandardLoginExecutor(os.Stdout, sc),
+		loginExecutor: login,
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 }
