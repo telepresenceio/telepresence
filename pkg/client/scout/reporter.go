@@ -64,7 +64,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 		if _, isCached := filecache[filename]; !isCached {
 			bs, err := os.ReadFile(filename)
 			filecache[filename] = filecacheEntry{
-				Body: string(bs),
+				Body: strings.TrimSpace(string(bs)),
 				Err:  err,
 			}
 		}
