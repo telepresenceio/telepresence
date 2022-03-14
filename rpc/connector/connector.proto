@@ -48,7 +48,7 @@ service Connector {
   // Requires having already called Connect.
   rpc List(ListRequest) returns (WorkloadInfoSnapshot);
 
-    // Returns a list of workloads and their current intercept status.
+  // Returns a list of workloads that are actively intercepted.
   // Requires having already called Connect.
   rpc ListActiveIntercepts(google.protobuf.Empty) returns (WorkloadInfoSnapshot);
 

@@ -255,7 +255,7 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 }
 
 func (s *service) ListActiveIntercepts(c context.Context, _ *empty.Empty) (result *rpc.WorkloadInfoSnapshot, err error) {
-	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) error {
+	err = s.withSession(c, "ListActiveIntercepts", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.ActiveInterceptSnapshot(c)
 		return err
 	})
