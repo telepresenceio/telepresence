@@ -17,6 +17,7 @@ type listInfo struct {
 	onlyIntercepts    bool
 	onlyAgents        bool
 	onlyInterceptable bool
+	allNamespaces     bool
 	debug             bool
 	namespace         string
 	json              bool
@@ -33,6 +34,7 @@ func listCommand() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.BoolVarP(&s.onlyIntercepts, "intercepts", "i", false, "intercepts only")
+	flags.BoolVarP(&s.allNamespaces, "all-namespaces", "A", false, "searches all namespaces, displays agents and intercepts by default")
 	flags.BoolVarP(&s.onlyAgents, "agents", "a", false, "with installed agents only")
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
@@ -57,7 +59,10 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
+		if s.allNamespaces && filter > connector.ListRequest_INSTALLED_AGENTS {
+			filter = connector.ListRequest_INSTALLED_AGENTS
+		}
+		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace, AllNamespaces: s.allNamespaces})
 		return err
 	})
 	if err != nil {
