@@ -338,7 +338,7 @@ func (s *service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Emp
 
 func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (result *rpc.UserInfo, err error) {
 	s.logCall(ctx, "GetCloudUserInfo", func(c context.Context) {
-		result, err = s.loginExecutor.GetCloudUserInfo(ctx, req.GetRefresh(), req.GetAutoLogin())
+		result, err = auth.GetCloudUserInfo(ctx, s.loginExecutor, req.GetRefresh(), req.GetAutoLogin())
 	})
 	return
 }
@@ -346,7 +346,7 @@ func (s *service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest
 func (s *service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (result *rpc.KeyData, err error) {
 	s.logCall(ctx, "GetCloudAPIKey", func(c context.Context) {
 		var key string
-		if key, err = s.loginExecutor.GetCloudAPIKey(ctx, req.GetDescription(), req.GetAutoLogin()); err == nil {
+		if key, err = auth.GetCloudAPIKey(ctx, s.loginExecutor, req.GetDescription(), req.GetAutoLogin()); err == nil {
 			result = &rpc.KeyData{ApiKey: key}
 		}
 	})
