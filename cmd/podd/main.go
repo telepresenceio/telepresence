@@ -17,7 +17,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
@@ -98,16 +97,13 @@ func Main(ctx context.Context, args Args) error {
 
 	scoutReporter := scout.NewReporter(ctx, processName)
 
-	bq := &broadcastqueue.BroadcastQueue{}
-
 	userdCoreImpl := &userd.Service{
 		scout: scoutReporter,
 		connectRequest: make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy: trafficmgr.NewManagerProxy(),
-		loginExecutor: auth.NewStandardLoginExecutor(bq, scoutReporter),
+		loginExecutor: auth.NewStandardLoginExecutor(os.Stdout, scoutReporter),
 		// DONT NEED THIS
-		userNotifications: func(cts context.Context) <-chan string { return bq.Subscribe(cts) },
 		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 
