@@ -96,7 +96,7 @@ func Main(ctx context.Context, args Args) error {
 	ctx = client.WithConfig(ctx, cfg)
 
 	scoutReporter := scout.NewReporter(ctx, processName)
-	userdCoreImpl := userd.GetPoddService(scoutReporter, cfg)
+	userdCoreImpl := userd.GetPoddService(scoutReporter, *cfg)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
