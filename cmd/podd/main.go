@@ -96,16 +96,7 @@ func Main(ctx context.Context, args Args) error {
 	ctx = client.WithConfig(ctx, cfg)
 
 	scoutReporter := scout.NewReporter(ctx, processName)
-
-	userdCoreImpl := &userd.Service{
-		scout: scoutReporter,
-		connectRequest: make(chan *rpc.ConnectRequest),
-		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy: trafficmgr.NewManagerProxy(),
-		loginExecutor: auth.NewStandardLoginExecutor(os.Stdout, scoutReporter),
-		// DONT NEED THIS
-		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
-	}
+	userdCoreImpl := userd.GetPoddService(scoutReporter, cfg)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
