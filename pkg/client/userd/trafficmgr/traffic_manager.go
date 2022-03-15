@@ -66,7 +66,7 @@ type Session interface {
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
 	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WithK8sInterface(context.Context) context.Context
-	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
+	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool, bool) (*rpc.WorkloadInfoSnapshot, error)
 	ManagerClient() manager.ManagerClient
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
@@ -528,7 +528,7 @@ func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloa
 		case <-c.Done():
 			return nil
 		case <-snapshotAvailable:
-			snapshot, err := tm.WorkloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
+			snapshot, err := tm.WorkloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false, false)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "failed to create WorkloadInfoSnapshot: %v", err)
 			}
@@ -544,24 +544,37 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
+	allNamespaces bool,
 	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	tm.WaitForNSSync(ctx)
 	tm.wlWatcher.waitForSync(ctx)
-
-	nss := make([]string, 0, len(namespaces))
-	for _, ns := range namespaces {
-		ns = tm.ActualNamespace(ns)
-		if ns != "" {
-			nss = append(nss, ns)
+	nss := make([]string, 0)
+	nsmap := make(map[string]bool)
+	is := tm.getCurrentIntercepts()
+	if allNamespaces {
+		// get unique set of namespaces from active intercepts
+		for _, intercept := range is {
+			if _, value := nsmap[intercept.Spec.Namespace]; !value {
+				nsmap[intercept.Spec.Namespace] = true
+				nss = append(nss, intercept.Spec.Namespace)
+			}
+		}
+	} else {
+		// validate user-provided namespaces
+		for _, ns := range namespaces {
+			ns = tm.ActualNamespace(ns)
+			if ns != "" {
+				nss = append(nss, ns)
+			}
+		}
+		if len(nss) == 0 {
+			// none of the namespaces are currently mapped
+			return &rpc.WorkloadInfoSnapshot{}, nil
 		}
 	}
-	if len(nss) == 0 {
-		// none of the namespaces are currently mapped
-		return &rpc.WorkloadInfoSnapshot{}, nil
-	}
 
-	is := tm.getCurrentIntercepts()
+	// array of intercepts to map
 	iMap := make(map[string]*manager.InterceptInfo, len(is))
 nextIs:
 	for _, i := range is {
@@ -572,12 +585,25 @@ nextIs:
 			}
 		}
 	}
+
 	aMap := make(map[string]*manager.AgentInfo)
-	for _, ns := range nss {
-		for k, v := range tm.getCurrentAgentsInNamespace(ns) {
-			aMap[k] = v
+	if allNamespaces && filter >= connector.ListRequest_INSTALLED_AGENTS {
+		// add all agents to agent map and namespaces
+		for _, v := range tm.getCurrentAgents() {
+			aMap[v.Name] = v
+			if _, ok := nsmap[v.Namespace]; !ok {
+				nsmap[v.Namespace] = true
+				nss = append(nss, v.Namespace)
+			}
+		}
+	} else {
+		for _, ns := range nss {
+			for k, v := range tm.getCurrentAgentsInNamespace(ns) {
+				aMap[k] = v
+			}
 		}
 	}
+
 	workloadInfos, err := tm.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
 	if err != nil {
 		return nil, err
