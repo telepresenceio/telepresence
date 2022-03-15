@@ -209,6 +209,7 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				}
 				if iceptError == nil {
 					namespaces[intercept.Spec.Namespace] = struct{}{}
+					intercept.SftpPort = 0 // HACK FOR PodD to disable mount point logic
 					portForwards.start(ctx, tm, intercept)
 				}
 			}
