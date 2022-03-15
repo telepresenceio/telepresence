@@ -280,7 +280,9 @@ func newInterceptState(
 	return is
 }
 
-func interceptMessage(r *connector.InterceptResult) error {
+// InterceptError inspects the .Error and .ErrorText fields in an InterceptResult and returns an
+// appropriate error object, or nil if the InterceptResult doesn't represent an error.
+func InterceptError(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
 	switch r.Error {
@@ -532,7 +534,7 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 		return fmt.Errorf("connector.CanIntercept: %w", err)
 	}
 	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return interceptMessage(r)
+		return InterceptError(r)
 	}
 	if needLogin {
 		// We default to assuming they can connect to Ambassador Cloud
@@ -631,7 +633,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			_ = is.DeactivateState(ctx)
 			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
 		}
-		return false, interceptMessage(r)
+		return false, InterceptError(r)
 	}
 
 	if args.agentName == "" {
@@ -718,7 +720,7 @@ func removeIntercept(ctx context.Context, name string) error {
 			return err
 		}
 		if r.Error != connector.InterceptError_UNSPECIFIED {
-			return interceptMessage(r)
+			return InterceptError(r)
 		}
 		return nil
 	})
