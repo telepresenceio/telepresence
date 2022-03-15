@@ -174,11 +174,10 @@ func Main(ctx context.Context, args Args) error {
 			return err
 		}
 		dlog.Infof(ctx, "Created intercept")
-		dlog.Infof(ctx, "iResp=%#v", iResp)
 
 		dlog.Infof(ctx, "Creating preview URL...")
 		uResp, err := userdCoreImpl.ManagerProxy.UpdateIntercept(ctx, &rpc_manager.UpdateInterceptRequest{
-			Session: nil, // TODO
+			Session: cResp.SessionInfo,
 			Name:    args.WorkloadName,
 			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{
 				AddPreviewDomain: &rpc_manager.PreviewSpec{
@@ -194,8 +193,7 @@ func Main(ctx context.Context, args Args) error {
 		if err != nil {
 			return err
 		}
-		dlog.Infof(ctx, "Created preview URL")
-		dlog.Infof(ctx, "uResp=%#v", uResp)
+		dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
 
 		// now just wait to be signaled to shut down
 		dlog.Infof(ctx, "Maintaining intercept until shutdown...")
