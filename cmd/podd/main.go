@@ -71,7 +71,7 @@ func main() {
 			return Main(cmd.Context(), args)
 		},
 	}
-	cmd.Flags().StringVar(&args.WorkloadKind, "workload-kind", "deployment",
+	cmd.Flags().StringVar(&args.WorkloadKind, "workload-kind", "Deployment",
 		"TODO")
 	cmd.Flags().StringVar(&args.WorkloadName, "workload-name", "",
 		"TODO")
