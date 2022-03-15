@@ -30,6 +30,11 @@ type Args struct {
 
 	Port int32
 
+	IngressHost   string
+	IngressPort   int32
+	IngressTLS    bool
+	IngressL5Host string
+
 	PullRequestURL string
 
 	CloudAPIKey string
@@ -68,6 +73,10 @@ func main() {
 			// env-var.
 			args.CloudAPIKey = os.Getenv("AMBASSADOR_CLOUD_APIKEY")
 
+			if args.IngressL5Host == "" {
+				args.IngressL5Host = args.IngressHost
+			}
+
 			return Main(cmd.Context(), args)
 		},
 	}
@@ -79,6 +88,16 @@ func main() {
 		"TODO")
 	cmd.Flags().Int32Var(&args.Port, "port", 8080,
 		"TODO")
+
+	cmd.Flags().StringVar(&args.IngressHost, "ingress-host", "",
+		"L3 hostname (IP address or DNS name) of the relevant ingress")
+	cmd.Flags().Int32Var(&args.IngressPort, "ingress-port", 443,
+		"L4 TCP port number of the relevant ingress")
+	cmd.Flags().BoolVar(&args.IngressTLS, "ingress-tls", true,
+		"Whether the relevant ingress uses TLS on that port")
+	cmd.Flags().StringVar(&args.IngressL5Host, "ingress-l5host", "",
+		"Hostname to put in requests (TLS-SNI and the HTTP \"Host\" header) (default is to use the L3 hostname)")
+
 	cmd.Flags().StringVar(&args.PullRequestURL, "pull-request", "",
 		"TODO")
 
@@ -155,6 +174,28 @@ func Main(ctx context.Context, args Args) error {
 			return err
 		}
 		dlog.Infof(ctx, "Created intercept")
+		dlog.Infof(ctx, "iResp=%#v", iResp)
+
+		dlog.Infof(ctx, "Creating preview URL...")
+		uResp, err := userdCoreImpl.ManagerProxy.UpdateIntercept(ctx, &rpc_manager.UpdateInterceptRequest{
+			Session: nil, // TODO
+			Name:    args.WorkloadName,
+			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: &rpc_manager.PreviewSpec{
+					Ingress: &rpc_manager.IngressInfo{
+						Host:   args.IngressHost,
+						Port:   args.IngressPort,
+						UseTls: args.IngressTLS,
+						L5Host: args.IngressL5Host,
+					},
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		dlog.Infof(ctx, "Created preview URL")
+		dlog.Infof(ctx, "uResp=%#v", uResp)
 
 		// now just wait to be signaled to shut down
 		dlog.Infof(ctx, "Maintaining intercept until shutdown...")
