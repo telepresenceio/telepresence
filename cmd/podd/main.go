@@ -117,6 +117,7 @@ func Main(ctx context.Context, args Args) error {
 		return userdCoreImpl.ManageSessions(ctx, []trafficmgr.SessionService{})
 	})
 	grp.Go("main", func(ctx context.Context) error {
+		dlog.Infof(ctx, "Connecting to traffic manager...")
 		cResp, err := userdCoreImpl.Connect(ctx, &rpc_userd.ConnectRequest{
 			// I don't think we need to set anything here.
 			KubeFlags:        nil, // nil should be fine since we're in-cluster
@@ -128,7 +129,9 @@ func Main(ctx context.Context, args Args) error {
 		if err := connectError(cResp); err != nil {
 			return err
 		}
+		dlog.Infof(ctx, "Connected to traffic manager")
 
+		dlog.Infof(ctx, "Creating intercept...")
 		iResp, err := userdCoreImpl.CreateIntercept(ctx, &rpc_userd.CreateInterceptRequest{
 			Spec: &rpc_manager.InterceptSpec{
 				Name:          args.WorkloadName,
@@ -151,8 +154,10 @@ func Main(ctx context.Context, args Args) error {
 		if err := cli.InterceptError(iResp); err != nil {
 			return err
 		}
+		dlog.Infof(ctx, "Created intercept")
 
 		// now just wait to be signaled to shut down
+		dlog.Infof(ctx, "Maintaining intercept until shutdown...")
 		<-ctx.Done()
 		return nil
 	})
