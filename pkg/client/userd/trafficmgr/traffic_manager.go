@@ -549,11 +549,30 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 	tm.WaitForNSSync(ctx)
 	tm.wlWatcher.waitForSync(ctx)
 
-	nss := make([]string, 0, len(namespaces))
-	for _, ns := range namespaces {
-		ns = tm.ActualNamespace(ns)
-		if ns != "" {
-			nss = append(nss, ns)
+	is := tm.getCurrentIntercepts()
+
+	var nss []string
+	if filter == rpc.ListRequest_INTERCEPTS {
+		// Special case, we don't care about namespaces. Instead, we use the namespaces of all
+		// intercepts.
+		nsMap := make(map[string]struct{})
+		for _, i := range is {
+			nsMap[i.Spec.Namespace] = struct{}{}
+		}
+		nss = make([]string, len(nsMap))
+		i := 0
+		for ns := range nsMap {
+			nss[i] = ns
+			i++
+		}
+		sort.Strings(nss) // sort them so that the result is predictable
+	} else {
+		nss = make([]string, 0, len(namespaces))
+		for _, ns := range namespaces {
+			ns = tm.ActualNamespace(ns)
+			if ns != "" {
+				nss = append(nss, ns)
+			}
 		}
 	}
 	if len(nss) == 0 {
@@ -561,7 +580,6 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 
-	is := tm.getCurrentIntercepts()
 	iMap := make(map[string]*manager.InterceptInfo, len(is))
 nextIs:
 	for _, i := range is {
