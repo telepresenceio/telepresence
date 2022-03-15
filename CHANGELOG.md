@@ -10,8 +10,6 @@
 
 - Bugfix: Agent container is no longer sensitive to a random UID or an UID imposed by a SecurityContext.
 
-- Change: `--all-namespaces` flag was added to `telepresence list`. It defaults to `--agents` filter level to avoid displaying all workloads.
-
 ### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
