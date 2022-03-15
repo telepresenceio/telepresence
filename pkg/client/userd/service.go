@@ -60,7 +60,7 @@ type Service struct {
 	rpc.UnsafeConnectorServer
 
 	svc               *grpc.Server
-	managerProxy      trafficmgr.ManagerProxy
+	ManagerProxy      trafficmgr.ManagerProxy
 	procName          string
 	timedLogLevel     log.TimedLevel
 	daemonClient      daemon.DaemonClient
@@ -86,7 +86,7 @@ type Service struct {
 }
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
-	s.managerProxy.SetClient(managerClient, callOptions...)
+	s.ManagerProxy.SetClient(managerClient, callOptions...)
 }
 
 func (s *Service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
@@ -214,12 +214,12 @@ func (s *Service) cancelSession() {
 
 func GetPoddService(sc *scout.Reporter, cfg client.Config, login auth.LoginExecutor) Service {
 	return Service{
-		scout: sc,
-		connectRequest: make(chan *rpc.ConnectRequest),
+		scout:           sc,
+		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy: trafficmgr.NewManagerProxy(),
-		loginExecutor: login,
-		timedLogLevel: log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+		ManagerProxy:    trafficmgr.NewManagerProxy(),
+		loginExecutor:   login,
+		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 }
 
@@ -263,7 +263,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		scout:             sr,
 		connectRequest:    make(chan *rpc.ConnectRequest),
 		connectResponse:   make(chan *rpc.ConnectInfo),
-		managerProxy:      trafficmgr.NewManagerProxy(),
+		ManagerProxy:      trafficmgr.NewManagerProxy(),
 		loginExecutor:     auth.NewStandardLoginExecutor(cliio, sr),
 		userNotifications: func(ctx context.Context) <-chan string { return cliio.Subscribe(ctx) },
 		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
@@ -299,7 +299,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		}
 		s.svc = grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(s.svc, s)
-		manager.RegisterManagerServer(s.svc, s.managerProxy)
+		manager.RegisterManagerServer(s.svc, s.ManagerProxy)
 		for _, ds := range daemonServices {
 			dlog.Infof(c, "Starting additional daemon service %s", ds.Name())
 			if err := ds.Start(c, sr, s.svc, s.withSession); err != nil {
