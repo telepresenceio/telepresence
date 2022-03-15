@@ -248,7 +248,7 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) error {
-		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, lr.AllNamespaces, true)
+		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
 		return err
 	})
 	return

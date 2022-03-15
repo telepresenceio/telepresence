@@ -237,7 +237,6 @@ message ListRequest {
 
   // Namespace to list.
   string namespace = 2;
-  bool all_namespaces = 3;
 }
 
 message WatchWorkloadsRequest {
