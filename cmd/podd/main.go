@@ -14,6 +14,7 @@ import (
 	rpc_userd "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc_manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -96,7 +97,7 @@ func Main(ctx context.Context, args Args) error {
 	ctx = client.WithConfig(ctx, cfg)
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load env: %w", err)
 	}
 	ctx = client.WithEnv(ctx, env)
 
@@ -116,7 +117,7 @@ func Main(ctx context.Context, args Args) error {
 		return userdCoreImpl.ManageSessions(ctx, []trafficmgr.SessionService{})
 	})
 	grp.Go("main", func(ctx context.Context) error {
-		_, err := userdCoreImpl.Connect(ctx, &rpc_userd.ConnectRequest{
+		cResp, err := userdCoreImpl.Connect(ctx, &rpc_userd.ConnectRequest{
 			// I don't think we need to set anything here.
 			KubeFlags:        nil, // nil should be fine since we're in-cluster
 			MappedNamespaces: nil, // we're not doing networking things.
@@ -124,8 +125,11 @@ func Main(ctx context.Context, args Args) error {
 		if err != nil {
 			return err
 		}
+		if err := connectError(cResp); err != nil {
+			return err
+		}
 
-		_, err = userdCoreImpl.CreateIntercept(ctx, &rpc_userd.CreateInterceptRequest{
+		iResp, err := userdCoreImpl.CreateIntercept(ctx, &rpc_userd.CreateInterceptRequest{
 			Spec: &rpc_manager.InterceptSpec{
 				Name:          args.WorkloadName,
 				Client:        "", // empty for CreateInterceptRequest
@@ -144,6 +148,9 @@ func Main(ctx context.Context, args Args) error {
 		if err != nil {
 			return err
 		}
+		if err := cli.InterceptError(iResp); err != nil {
+			return err
+		}
 
 		// now just wait to be signaled to shut down
 		<-ctx.Done()
@@ -151,4 +158,20 @@ func Main(ctx context.Context, args Args) error {
 	})
 
 	return grp.Wait()
+}
+
+func connectError(info *rpc_userd.ConnectInfo) error {
+	switch info.Error {
+	case rpc_userd.ConnectInfo_UNSPECIFIED, rpc_userd.ConnectInfo_ALREADY_CONNECTED:
+		return nil
+	case rpc_userd.ConnectInfo_MUST_RESTART:
+		return fmt.Errorf("connected, but kubeconfig has changed")
+	case rpc_userd.ConnectInfo_CLUSTER_FAILED:
+		return fmt.Errorf("error talking to cluster: %s", info.ErrorText)
+	case rpc_userd.ConnectInfo_TRAFFIC_MANAGER_FAILED:
+		return fmt.Errorf("error talking to traffic manager: %s", info.ErrorText)
+	default: // DISCONNECTED, DAEMON_FAILED, or unknown
+		return fmt.Errorf("unexpected error code: code=%v text=%q category=%v",
+			info.Error, info.ErrorText, info.ErrorCategory)
+	}
 }
