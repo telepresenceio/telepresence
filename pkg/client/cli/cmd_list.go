@@ -99,11 +99,16 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		includeNs := false
 		ns := s.namespace
 		for _, dep := range r.Workloads {
-			if ns != "" && dep.Namespace != ns {
+			depNs := dep.Namespace
+			if depNs == "" {
+				// Local-only, so use namespace of intercept
+				depNs = dep.InterceptInfo.Spec.Namespace
+			}
+			if ns != "" && depNs != ns {
 				includeNs = true
 				break
 			}
-			ns = dep.Namespace
+			ns = depNs
 		}
 		nameLen := 0
 		for _, dep := range r.Workloads {

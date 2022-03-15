@@ -559,6 +559,9 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 		for _, i := range is {
 			nsMap[i.Spec.Namespace] = struct{}{}
 		}
+		for _, ns := range tm.localIntercepts {
+			nsMap[ns] = struct{}{}
+		}
 		nss = make([]string, len(nsMap))
 		i := 0
 		for ns := range nsMap {
