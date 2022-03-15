@@ -2,6 +2,8 @@
 
 ### 2.5.4 (TBD)
 
+- Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
+
 - Change: The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON
 
 - Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
