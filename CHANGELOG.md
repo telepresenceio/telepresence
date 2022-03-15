@@ -2,6 +2,8 @@
 
 ### 2.5.4 (TBD)
 
+- Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
+
 - Change: The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON
 
 - Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
@@ -9,8 +11,6 @@
 - Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
 
 - Bugfix: Agent container is no longer sensitive to a random UID or an UID imposed by a SecurityContext.
-
-- Change: `--all-namespaces` flag was added to `telepresence list`. It defaults to `--agents` filter level to avoid displaying all workloads.
 
 ### 2.5.3 (February 25, 2022)
 

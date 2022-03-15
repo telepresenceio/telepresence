@@ -104,11 +104,11 @@ func (s *multipleServicesSuite) Test_ListOnlyMapped() {
 }
 
 func (s *multipleServicesSuite) Test_RepeatedConnect() {
-	ctx := s.Context()
 	for i := 0; i < s.ServiceCount(); i++ {
 		url := fmt.Sprintf("http://%s-%d.%s", s.Name(), i, s.AppNamespace())
 		for v := 0; v < 30; v++ {
 			s.Run(fmt.Sprintf("test-%d", i*30+v), func() {
+				ctx := s.Context()
 				s.T().Parallel()
 				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 				assert := s.Assert()
