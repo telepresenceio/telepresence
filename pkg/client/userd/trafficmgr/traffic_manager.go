@@ -591,7 +591,7 @@ nextIs:
 		// add all agents to agent map and namespaces
 		for _, v := range tm.getCurrentAgents() {
 			aMap[v.Name] = v
-			if _, value := nsmap[v.Namespace]; !value {
+			if _, ok := nsmap[v.Namespace]; !ok {
 				nsmap[v.Namespace] = true
 				nss = append(nss, v.Namespace)
 			}
