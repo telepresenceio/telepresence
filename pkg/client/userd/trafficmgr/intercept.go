@@ -517,6 +517,11 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	case wr := <-waitCh:
 		ii = wr.intercept
 		if wr.err != nil {
+			dlog.Debugf(c, "intercept %s failed to create, will remove...", wr.intercept.Spec.Name)
+			err := tm.RemoveIntercept(c, wr.intercept.Spec.Name)
+			if err != nil {
+				dlog.Warnf(c, "failed to remove failed intercept %s: %v", wr.intercept.Spec.Namespace, err)
+			}
 			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
 		}
 		result.InterceptInfo = wr.intercept
