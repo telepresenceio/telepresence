@@ -82,7 +82,7 @@ func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, rec interf
 			}
 			if err := rec.Send(ll); err != nil {
 				if ctx.Err() == nil {
-					return fmt.Errorf("WatchLogLevel.Send() failed: %w", err)
+					return fmt.Errorf("WatchCusterInfo.Send() failed: %w", err)
 				}
 				return nil
 			}
