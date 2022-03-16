@@ -2,15 +2,11 @@ package cluster
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/blang/semver"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -49,16 +45,14 @@ type subnetRetriever interface {
 
 type info struct {
 	rpc.ClusterInfo
-	accLock sync.Mutex
-	waiter  sync.Cond
+	ciSubs *clusterInfoSubscribers
 
 	// clusterID is the UID of the default namespace
 	clusterID string
 }
 
 func NewInfo(ctx context.Context) Info {
-	oi := info{}
-	oi.waiter.L = &oi.accLock
+	oi := info{ciSubs: newClusterInfoSubscribers()}
 	ki := k8sapi.GetK8sInterface(ctx)
 
 	// Validate that the kubernetes server version is supported
@@ -256,6 +250,7 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 	if allOK {
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
 		oi.PodSubnets = toRPCSubnets(subnets)
+		oi.ciSubs.notify(ctx, oi.clusterInfo())
 	} else {
 		dlog.Errorf(ctx, "unable to parse subnets from POD_CIDRS value %q", pcEnv)
 	}
@@ -265,33 +260,13 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 // Watch will start by sending an initial snapshot of the ClusterInfo on the given stream
 // and then enter a loop where it waits for updates and sends new snapshots.
 func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfoServer) error {
-	// Send initial snapshot
-	dlog.Debugf(ctx, "WatchClusterInfo sending update")
-	oi.accLock.Lock()
-	ci := oi.clusterInfo()
-	oi.accLock.Unlock()
-	if err := oiStream.Send(ci); err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("WatchClusterInfo failed to send initial update, %v", err))
-	}
-
-	for ctx.Err() == nil {
-		oi.accLock.Lock()
-		oi.waiter.Wait()
-		ci = oi.clusterInfo()
-		oi.accLock.Unlock()
-		dlog.Debugf(ctx, "WatchClusterInfo sending update")
-		if err := oiStream.Send(ci); err != nil {
-			return status.Error(codes.Internal, fmt.Sprintf("WatchClusterInfo failed to send update, %v", err))
-		}
-	}
-	return nil
+	return oi.ciSubs.subscriberLoop(ctx, oiStream)
 }
 
 func (oi *info) GetClusterID() string {
 	return oi.clusterID
 }
 
-// clusterInfo must be called with accLock locked
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	ci := &rpc.ClusterInfo{
 		KubeDnsIp:     oi.KubeDnsIp,
@@ -306,7 +281,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 func (oi *info) watchSubnets(ctx context.Context, retriever subnetRetriever) {
 	retriever.changeNotifier(ctx, func(subnets subnet.Set) {
 		oi.PodSubnets = toRPCSubnets(subnets)
-		oi.waiter.Broadcast()
+		oi.ciSubs.notify(ctx, oi.clusterInfo())
 	})
 }
 

@@ -6,6 +6,8 @@
 
 - Change: The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON
 
+- Bugfix: Client and agent sessions no longer leaves dangling waiters in the traffic-manager when they depart.
+
 - Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
 
 - Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
