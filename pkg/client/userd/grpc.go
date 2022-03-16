@@ -282,7 +282,7 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 func (s *service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
 	s.logCall(ctx, "Login", func(c context.Context) {
 		defer func() {
-			if result.Code == rpc.LoginResult_NEW_LOGIN_SUCCEEDED {
+			if err == nil && result.Code == rpc.LoginResult_NEW_LOGIN_SUCCEEDED {
 				s.sessionLock.RLock()
 				defer s.sessionLock.RUnlock()
 				if s.session != nil {
