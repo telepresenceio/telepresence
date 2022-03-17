@@ -92,7 +92,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup func(context.Context, string
 		}
 	}
 	if config.LookupTimeout.AsDuration() <= 0 {
-		config.LookupTimeout = durationpb.New(4 * time.Second)
+		config.LookupTimeout = durationpb.New(8 * time.Second)
 	}
 	s := &Server{
 		config:        config,
@@ -451,7 +451,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallback.RemoteAddr()) }
-	dc := dns.Client{Net: "udp", Timeout: 2 * time.Second}
+	dc := dns.Client{Net: "udp", Timeout: s.config.LookupTimeout.AsDuration()}
 	msg, _, err = dc.ExchangeWithConn(r, s.fallback)
 	if err != nil {
 		msg = new(dns.Msg)
