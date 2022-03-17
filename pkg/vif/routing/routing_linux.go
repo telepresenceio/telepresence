@@ -14,7 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-const findInterfaceRegex = "^[0-9.]+( via (?P<gw>[0-9.]+))? dev (?P<dev>[a-z0-9-]+) src (?P<src>[0-9.]+)"
+const findInterfaceRegex = `^[0-9.]+(\s+via\s+(?P<gw>[0-9.]+))?\s+dev\s+(?P<dev>[a-z0-9-]+)\s+src\s+(?P<src>[0-9.]+)`
 
 var (
 	findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
