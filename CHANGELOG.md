@@ -18,6 +18,8 @@
 
 - Bugfix: Intercepts that fail to create are now consistently removed to prevent non-working dangling intercepts from sticking around.
 
+- Bugfix: The ingress-l5 flag will no longer be forcefully set to equal the --ingress-host flag
+
 ### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
