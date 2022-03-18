@@ -549,6 +549,7 @@ type ConnectRequest struct {
 
 	KubeFlags        map[string]string `protobuf:"bytes,1,rep,name=kube_flags,json=kubeFlags,proto3" json:"kube_flags,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	MappedNamespaces []string          `protobuf:"bytes,2,rep,name=mapped_namespaces,json=mappedNamespaces,proto3" json:"mapped_namespaces,omitempty"`
+	Podd             *bool             `protobuf:"varint,4,opt,name=podd,proto3,oneof" json:"podd,omitempty"`
 }
 
 func (x *ConnectRequest) Reset() {
@@ -595,6 +596,13 @@ func (x *ConnectRequest) GetMappedNamespaces() []string {
 		return x.MappedNamespaces
 	}
 	return nil
+}
+
+func (x *ConnectRequest) GetPodd() bool {
+	if x != nil && x.Podd != nil {
+		return *x.Podd
+	}
+	return false
 }
 
 type ConnectInfo struct {
@@ -3244,6 +3252,9 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 	}
+	
+	file_rpc_connector_connector_proto_msgTypes[3].OneofWrappers = []interface{}{}
+	file_rpc_connector_connector_proto_msgTypes[11].OneofWrappers = []interface{}{}
 	file_rpc_connector_connector_proto_msgTypes[12].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
