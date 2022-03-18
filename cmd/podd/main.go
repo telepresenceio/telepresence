@@ -141,6 +141,7 @@ func Main(ctx context.Context, args Args) error {
 			// I don't think we need to set anything here.
 			KubeFlags:        nil, // nil should be fine since we're in-cluster
 			MappedNamespaces: nil, // we're not doing networking things.
+			Podd:            true,
 		})
 		if err != nil {
 			return err
@@ -151,7 +152,7 @@ func Main(ctx context.Context, args Args) error {
 		dlog.Infof(ctx, "Connected to traffic manager")
 
 		dlog.Infof(ctx, "Creating intercept...")
-		iResp, err := userdCoreImpl.CreateIntercept(ctx, &rpc_userd.CreateInterceptRequest{
+		iResp, err := userdCoreImpl.CreatePoddIntercept(ctx, &rpc_userd.CreateInterceptRequest{
 			Spec: &rpc_manager.InterceptSpec{
 				Name:          args.WorkloadName,
 				Client:        "", // empty for CreateInterceptRequest
@@ -176,7 +177,7 @@ func Main(ctx context.Context, args Args) error {
 		dlog.Infof(ctx, "Created intercept")
 
 		dlog.Infof(ctx, "Creating preview URL...")
-		uResp, err := userdCoreImpl.ManagerProxy.UpdateIntercept(ctx, &rpc_manager.UpdateInterceptRequest{
+		uResp, err := userdCoreImpl.ManagerProxy.UpdatePoddIntercept(ctx, &rpc_manager.UpdateInterceptRequest{
 			Session: cResp.SessionInfo,
 			Name:    args.WorkloadName,
 			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{

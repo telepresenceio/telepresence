@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -158,6 +159,14 @@ type interceptResult struct {
 
 func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (Session, *connector.ConnectInfo) {
 	sr.Report(c, "connect")
+	var rootDaemon daemon.DaemonClient
+	var err error
+	if cr.Podd {
+		rootDaemon, err = svc.RootDaemonClient(c)
+		if err != nil {
+			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
+	}
 
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := connectCluster(c, cr)
@@ -170,11 +179,17 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	// Phone home with the information about the size of the cluster
 	c = cluster.WithK8sInterface(c)
 	sr.SetMetadatum(c, "cluster_id", cluster.GetClusterId(c))
+	if cr.Podd {
+		sr.Report(c, "connecting_traffic_manager", scout.Entry{
+			Key:   "mapped_namespaces",
+			Value: len(cr.MappedNamespaces),
+		})
+	}
 
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(c, cluster, sr.InstallID(), svc)
+	tmgr, err := connectMgr(c, cluster, sr.InstallID(), svc, rootDaemon)
 
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -194,6 +209,40 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		}
 	}
 	svc.SetManagerClient(tmgr.managerClient, opts...)
+
+	// Tell daemon what it needs to know in order to establish outbount traffic to the cluster
+	if cr.Podd {
+		oi := tmgr.getOutboundInfo(c)
+
+		dlog.Debug(c, "Connecting to root daemon")
+		var rootStatus *daemon.DaemonStatus
+		for attempt := 1; ; attempt++ {
+			if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
+				dlog.Errorf(c, "failed to connect to root daemon: %v", err)
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			}
+			oc := rootStatus.OutboundConfig
+			if oc == nil || oc.Session == nil {
+				// This is an internal error. Something is wrong with the root daemon.
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
+			}
+			if oc.Session.SessionId == oi.Session.SessionId {
+				break
+			}
+
+			// Root daemon was running an old session. This indicates that this daemon somehow
+			// crashed without disconnecting. So let's do that now, and then reconnect...
+			if attempt == 2 {
+				// ...or not, since we've already done it.
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
+			}
+			if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
+			}
+		}
+		dlog.Debug(c, "Connected to root daemon")
+		tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
+	}
 
 	// Collect data on how long connection time took
 	dlog.Debug(c, "Finished connecting to traffic manager")
@@ -253,7 +302,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
-func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service) (*TrafficManager, error) {
+func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(c)
 	tos := &clientConfig.Timeouts
 

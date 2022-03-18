@@ -41,6 +41,7 @@ type ConnectorClient interface {
 	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
+	CreatePoddIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
@@ -131,6 +132,15 @@ func (c *connectorClient) CanIntercept(ctx context.Context, in *CreateInterceptR
 func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
 	out := new(InterceptResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/CreateIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) CreatePoddIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
+	out := new(InterceptResult)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/CreatePoddIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +360,7 @@ type ConnectorServer interface {
 	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
+	CreatePoddIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
@@ -406,6 +417,9 @@ func (UnimplementedConnectorServer) CanIntercept(context.Context, *CreateInterce
 }
 func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
+}
+func (UnimplementedConnectorServer) CreatePoddIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreatePoddIntercept not implemented")
 }
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
@@ -572,6 +586,24 @@ func _Connector_CreateIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).CreateIntercept(ctx, req.(*CreateInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_CreatePoddIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).CreatePoddIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/CreatePoddIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).CreatePoddIntercept(ctx, req.(*CreateInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -900,6 +932,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateIntercept",
 			Handler:    _Connector_CreateIntercept_Handler,
+		},
+		{
+			MethodName: "CreatePoddIntercept",
+			Handler:    _Connector_CreatePoddIntercept_Handler,
 		},
 		{
 			MethodName: "RemoveIntercept",
