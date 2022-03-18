@@ -500,7 +500,7 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 			ingress.Port = ingressPort
 			ingress.UseTls = ingressTLS
 
-			if ingress.L5Host == "" { // if L5Host is not present
+			if ingressL5 == "" { // if L5Host is not present
 				ingress.L5Host = ingressHost
 				return ingress, nil
 			} else { // if L5Host is present
