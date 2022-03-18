@@ -22,8 +22,8 @@ func (s *singleServiceSuite) Test_DockerRun() {
 	ctx := s.Context()
 
 	svc := s.ServiceName()
-	tag := "telepresence/hello-test"
-	testDir := "testdata/hello"
+	tag := "telepresence/echo-test"
+	testDir := "testdata/echo-server"
 
 	_, err := itest.Output(ctx, "docker", "build", "-t", tag, testDir)
 	require.NoError(err)
@@ -34,7 +34,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 	// Use a soft context to send a <ctrl>-c to telepresence in order to end it
 	soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
 	cmd := itest.TelepresenceCmd(soft, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc,
-		"--docker-run", "--port", "9070:8000", "--", "--rm", "-v", abs+":/usr/src/app", tag)
+		"--docker-run", "--port", "9070:8080", "--", "--rm", "-v", abs+":/usr/src/app", tag)
 	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -46,7 +46,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 	}, 10*time.Second, 2*time.Second)
 
 	// Response contains env variables TELEPRESENCE_CONTAINER and TELEPRESENCE_INTERCEPT_ID
-	expectedOutput := regexp.MustCompile(`Hello from intercepted echo-server with id [0-9a-f-]+:` + svc)
+	expectedOutput := regexp.MustCompile(`Intercept id [0-9a-f-]+:` + svc)
 	s.Eventually(
 		// condition
 		func() bool {
