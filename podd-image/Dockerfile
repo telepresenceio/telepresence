@@ -61,5 +61,5 @@ RUN \
   chmod 0777 /home/telepresence
 
 
-ENTRYPOINT ["traffic" "&" "&&" "podd"]
+ENTRYPOINT [ "sh", "-c", "traffic", "&", "podd" ]
 CMD []
