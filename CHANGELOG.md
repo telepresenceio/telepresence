@@ -20,6 +20,8 @@
 
 - Bugfix: The ingress-l5 flag will no longer be forcefully set to equal the --ingress-host flag
 
+- Bugfix: The DNS fallback resolver on Linux now correctly handles concurrent requests without timing them out
+
 ### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
