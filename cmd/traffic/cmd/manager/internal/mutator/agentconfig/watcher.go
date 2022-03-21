@@ -30,6 +30,7 @@ type Map interface {
 	GetInto(string, string, interface{}) (bool, error)
 	Run(context.Context) error
 	Store(context.Context, *agent.Config, bool) error
+	DeleteMapsAndRolloutAll(ctx context.Context)
 }
 
 func decode(v string, into interface{}) error {
@@ -139,9 +140,9 @@ func (c *configWatcher) Run(ctx context.Context) error {
 				continue
 			}
 			if ac.Create {
-				if ac, err = Generate(ctx, wl, wl.GetPodTemplate()); err != nil {
+				if ac, err = Generate(ctx, wl); err != nil {
 					dlog.Error(ctx, err)
-				} else if err = c.Store(ctx, ac.Namespace, ac, false); err != nil {
+				} else if err = c.Store(ctx, ac, false); err != nil {
 					dlog.Error(ctx, err)
 				}
 				continue // Calling Store() will generate a new event, so we skip rollout here
@@ -337,4 +338,34 @@ func (c *configWatcher) update(ctx context.Context, ns string, m map[string]stri
 	c.Unlock()
 	go writeToChan(ctx, dels, c.delCh)
 	go writeToChan(ctx, mods, c.modCh)
+}
+
+func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
+	c.cancel() // No more updates from watcher
+	c.RLock()
+	defer c.RUnlock()
+
+	now := meta.NewDeleteOptions(0)
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	for ns, wlm := range c.data {
+		for k, v := range wlm {
+			if k == agent.InjectorKey {
+				continue
+			}
+			e := &entry{name: k, namespace: ns, value: v}
+			ac, wl, err := e.workload(ctx)
+			if err != nil {
+				dlog.Errorf(ctx, "unable to get workload for %s.%s %s: %v", k, ns, v, err)
+				continue
+			}
+			if ac.Create {
+				// Deleted before it was generated, just ignore
+				continue
+			}
+			triggerRollout(ctx, wl)
+		}
+		if err := api.ConfigMaps(ns).Delete(ctx, agent.ConfigMap, *now); err != nil {
+			dlog.Errorf(ctx, "unable to delete ConfigMap %s-%s: %v", agent.ConfigMap, ns, err)
+		}
+	}
 }

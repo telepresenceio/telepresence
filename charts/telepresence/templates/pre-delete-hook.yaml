@@ -1,0 +1,50 @@
+{{- if not .Values.rbac.only }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: uninstall-agents
+  namespace: {{ include "telepresence.namespace" . }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: uninstall-agents
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: uninstall-agents
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "curlimages/curl"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /secret
+          env:
+            - name: CURL_CA_BUNDLE
+              value: /secret/ca.crt
+          args:
+            - '--fail'
+            - '--silent'
+            - '--request'
+            - DELETE
+            - 'https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/uninstall'
+      volumes:
+        - name: secret-volume
+          secret:
+            secretName: {{ .Values.agentInjector.secret.name }}
+{{- end }}

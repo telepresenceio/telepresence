@@ -89,6 +89,18 @@ func ServeMutator(ctx context.Context) error {
 			dlog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
+	mux.HandleFunc("/uninstall", func(w http.ResponseWriter, r *http.Request) {
+		dlog.Debug(ctx, "Received uninstall request...")
+		statusCode, err := serveUninstall(ctx, r, ai.uninstall)
+		if err != nil {
+			dlog.Errorf(ctx, "error handling uninstall request: %v", err)
+			w.WriteHeader(statusCode)
+			_, _ = w.Write([]byte(err.Error()))
+		} else {
+			dlog.Debug(ctx, "Uninstall request handled successfully")
+			w.WriteHeader(http.StatusOK)
+		}
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -127,6 +139,19 @@ func isNamespaceOfInterest(ctx context.Context, ns string) bool {
 		}
 	}
 	return true
+}
+
+func serveUninstall(ctx context.Context, r *http.Request, uf func(ctx context.Context)) (int, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+		}
+	}()
+	if r.Method != http.MethodDelete {
+		return http.StatusMethodNotAllowed, fmt.Errorf("invalid method %s, only DELETE requests are allowed", r.Method)
+	}
+	uf(ctx)
+	return 0, nil
 }
 
 // serveMutatingFunc is a helper function to call a mutatorFunc.

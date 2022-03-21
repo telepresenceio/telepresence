@@ -115,6 +115,13 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	return patches, nil
 }
 
+// uninstall ensures that no more webhook injections is made and that all the workloads of currently injected
+// pods are rolled out.
+func (a *agentInjector) uninstall(ctx context.Context) {
+	atomic.StoreInt64(&a.terminating, 1)
+	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
+}
+
 func needInitContainer(config *agent.Config) bool {
 	for _, cc := range config.Containers {
 		for _, ic := range cc.Intercepts {
