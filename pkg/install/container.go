@@ -32,7 +32,7 @@ func AgentContainer(
 		VolumeMounts:    agentVolumeMounts(appContainer.VolumeMounts),
 		SecurityContext: securityContext,
 		ReadinessProbe: &core.Probe{
-			Handler: core.Handler{
+			ProbeHandler: core.ProbeHandler{
 				Exec: &core.ExecAction{
 					Command: []string{"/bin/stat", "/tmp/agent/ready"},
 				},

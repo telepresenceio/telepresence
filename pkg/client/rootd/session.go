@@ -14,6 +14,7 @@ import (
 
 	"github.com/blang/semver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dcontext"
@@ -435,7 +436,7 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 	ip := net.IP(info.ManagerPodIp).String()
 	tCtx, tCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer tCancel()
-	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
 		return

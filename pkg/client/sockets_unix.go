@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -30,7 +31,7 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 	defer cancel()
 	for firstTry := true; ; firstTry = false {
 		conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
-			grpc.WithInsecure(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true),
@@ -39,6 +40,12 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 			return conn, nil
 		}
 
+		// The google.golang.org/grpc/internal/transport.ConnectionError does not have an
+		// Unwrap method. It does have a Origin method though.
+		// See: https://github.com/grpc/grpc-go/pull/5148
+		if oe, ok := err.(interface{ Origin() error }); ok {
+			err = oe.Origin()
+		}
 		if firstTry && errors.Is(err, unix.ECONNREFUSED) {
 			// Socket exists but doesn't accept connections. This usually means that the process
 			// terminated ungracefully. To remedy this, we make an attempt to remove the socket

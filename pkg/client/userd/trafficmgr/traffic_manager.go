@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -350,7 +351,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	defer tCancel()
 
 	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError()}

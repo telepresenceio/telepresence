@@ -1,4 +1,4 @@
 sigs.k8s.io/json:
   - Apache-2.0
 sigs.k8s.io/json/internal/golang/encoding/json:
-  - Apache-2.0
+  - BSD-3-Clause
