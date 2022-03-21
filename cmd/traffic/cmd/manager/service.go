@@ -320,50 +320,46 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 	dlog.Debug(ctx, "WatchIntercepts called")
 
+	var sessionDone <-chan struct{}
 	var filter func(id string, info *rpc.InterceptInfo) bool
 	if sessionID == "" {
 		// No sessonID; watch everything
 		filter = func(id string, info *rpc.InterceptInfo) bool {
 			return true
 		}
-	} else if agent := m.state.GetAgent(sessionID); agent != nil {
-		// sessionID refers to an agent session
-		filter = func(id string, info *rpc.InterceptInfo) bool {
-			// Don't return intercepts for different agents.
-			if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
-				dlog.Debugf(ctx, "Intercept mismatch: %s.%s != %s.%s", info.Spec.Agent, info.Spec.Namespace, agent.Name, agent.Namespace)
-				return false
-			}
-			// Don't return intercepts that aren't in a "agent-owned" state.
-			switch info.Disposition {
-			case rpc.InterceptDispositionType_WAITING,
-				rpc.InterceptDispositionType_ACTIVE,
-				rpc.InterceptDispositionType_AGENT_ERROR:
-				// agent-owned state: include the intercept
-				dlog.Debugf(ctx, "Intercept %s.%s valid. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
-				return true
-			default:
-				// otherwise: don't return this intercept
-				dlog.Debugf(ctx, "Intercept %s.%s is not in agent-owned state. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
-				return false
-			}
-		}
-	} else {
-		// sessionID refers to a client session
-		filter = func(id string, info *rpc.InterceptInfo) bool {
-			return info.ClientSession.SessionId == sessionID
-		}
-	}
-
-	var sessionDone <-chan struct{}
-	if sessionID == "" {
-		ch := make(chan struct{})
-		defer close(ch)
-		sessionDone = ch
 	} else {
 		var err error
 		if sessionDone, err = m.state.SessionDone(sessionID); err != nil {
 			return err
+		}
+
+		if agent := m.state.GetAgent(sessionID); agent != nil {
+			// sessionID refers to an agent session
+			filter = func(id string, info *rpc.InterceptInfo) bool {
+				// Don't return intercepts for different agents.
+				if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
+					dlog.Debugf(ctx, "Intercept mismatch: %s.%s != %s.%s", info.Spec.Agent, info.Spec.Namespace, agent.Name, agent.Namespace)
+					return false
+				}
+				// Don't return intercepts that aren't in a "agent-owned" state.
+				switch info.Disposition {
+				case rpc.InterceptDispositionType_WAITING,
+					rpc.InterceptDispositionType_ACTIVE,
+					rpc.InterceptDispositionType_AGENT_ERROR:
+					// agent-owned state: include the intercept
+					dlog.Debugf(ctx, "Intercept %s.%s valid. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
+					return true
+				default:
+					// otherwise: don't return this intercept
+					dlog.Debugf(ctx, "Intercept %s.%s is not in agent-owned state. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
+					return false
+				}
+			}
+		} else {
+			// sessionID refers to a client session
+			filter = func(id string, info *rpc.InterceptInfo) bool {
+				return info.ClientSession.SessionId == sessionID
+			}
 		}
 	}
 
@@ -390,6 +386,9 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 				dlog.Debugf(ctx, "WatchIntercepts encountered a write error: %v", err)
 				return err
 			}
+		case <-ctx.Done():
+			dlog.Debugf(ctx, "WatchIntercepts context cancelled")
+			return nil
 		case <-sessionDone:
 			dlog.Debugf(ctx, "WatchIntercepts session cancelled")
 			return nil

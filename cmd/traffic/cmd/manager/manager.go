@@ -26,7 +26,7 @@ import (
 )
 
 // Main starts up the traffic manager and blocks until it ends
-func Main(ctx context.Context, args ...string) error {
+func Main(ctx context.Context, _ ...string) error {
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
 	ctx, err := managerutil.LoadEnv(ctx)
@@ -70,7 +70,7 @@ func (m *Manager) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
-	opts := []grpc.ServerOption{}
+	var opts []grpc.ServerOption
 	if mz, ok := env.MaxReceiveSize.AsInt64(); ok {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
