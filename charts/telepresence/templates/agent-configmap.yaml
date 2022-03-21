@@ -1,0 +1,18 @@
+{{- if not .Values.rbac.only }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telepresence-agents
+  namespace:  {{ include "telepresence.namespace" . }}
+data:
+  agentInjector: |
+{{- if .Values.managerRbac.namespaced }}
+    namespaced: true
+    namespaces:
+{{- range .Values.managerRbac.namespaces }}
+    - {{ . }}
+{{- end }}
+{{- else }}
+    namespaced: false
+{{- end }}
+{{- end }}

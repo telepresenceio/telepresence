@@ -31,6 +31,28 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  verbs:
+  - list
+  - get
+  - watch
+  - update
+  - delete
+  resourceNames:
+  - telepresence-agents
+- apiGroups:
+  - "apps"
+  resources:
+  - deployments
+  - replicasets
+  - statefulsets
+  verbs:
+  - list
+  - get
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - list
