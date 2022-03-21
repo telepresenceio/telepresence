@@ -27,6 +27,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -216,8 +218,7 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			portForwards.cancelUnwanted(ctx)
 			tm.reconcileMountPoints(ctx, allNames)
 			if ctx.Err() == nil {
-				// no
-				//tm.setInterceptedNamespaces(ctx, namespaces)
+				tm.setInterceptedNamespaces(ctx, namespaces)
 			}
 		}
 
@@ -423,8 +424,116 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 	return args, nil
 }
 
+
 // AddIntercept adds one intercept
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	result, wl, svcprops := tm.CanIntercept(c, ir)
+	if result != nil {
+		return result, nil
+	}
+
+	spec := ir.Spec
+	if wl == nil {
+		return tm.AddLocalOnlyIntercept(c, spec)
+	}
+
+	spec.Client = tm.userAndHost
+	if spec.Mechanism == "" {
+		spec.Mechanism = "tcp"
+	}
+
+	cfg := client.GetConfig(c)
+	apiPort := uint16(cfg.TelepresenceAPI.Port)
+	if apiPort == 0 {
+		// Default to the API port declared by the traffic-manager
+		apiInfo, err := tm.managerClient.GetTelepresenceAPI(c, &empty.Empty{})
+		if err != nil {
+			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
+			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
+		} else {
+			apiPort = uint16(apiInfo.Port)
+		}
+	}
+
+	// It's OK to just call addAgent every time; if the agent is already installed then it's a
+	// no-op.
+	result = tm.addAgent(c, wl, svcprops, ir.AgentImage, apiPort)
+	if result.Error != rpc.InterceptError_UNSPECIFIED {
+		return result, nil
+	}
+
+	spec.ServiceUid = result.ServiceUid
+	spec.WorkloadKind = result.WorkloadKind
+
+	deleteMount := false
+	if ir.MountPoint != "" {
+		// Ensure that the mount-point is free to use
+		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
+			return interceptError(rpc.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
+		}
+
+		// Assume that the mount-point should to be removed from the busy map. Only a happy path
+		// to successful intercept that actually has remote mounts will set this to false.
+		deleteMount = true
+		defer func() {
+			if deleteMount {
+				tm.mountPoints.Delete(ir.MountPoint)
+			}
+		}()
+	}
+
+	apiKey, err := tm.getCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
+	if err != nil {
+		if !errors.Is(err, auth.ErrNotLoggedIn) {
+			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+		}
+	}
+	dlog.Debugf(c, "creating intercept %s", spec.Name)
+	tos := &client.GetConfig(c).Timeouts
+	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
+	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
+	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
+	defer cancel()
+
+	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
+	// should become active within a few seconds.
+	waitCh := make(chan interceptResult)
+	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
+	defer tm.activeInterceptsWaiters.Delete(spec.Name)
+
+	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+		Session:       tm.session(),
+		InterceptSpec: spec,
+		ApiKey:        apiKey,
+	})
+	if err != nil {
+		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
+		err = client.CheckTimeout(c, err)
+		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
+	}
+	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
+
+	select {
+	case <-c.Done():
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, c.Err()), nil
+	case wr := <-waitCh:
+		ii = wr.intercept
+		if wr.err != nil {
+			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
+		}
+		result.InterceptInfo = wr.intercept
+		if ir.MountPoint != "" && ii.SftpPort > 0 {
+			result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
+			deleteMount = false // Mount-point is busy until intercept ends
+			ii.Spec.MountPoint = ir.MountPoint
+		}
+		return result, nil
+	}
+}
+
+
+// AddIntercept adds one intercept
+func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	result, wl, svcprops := tm.CanIntercept(c, ir)
 	if result != nil {
 		return result, nil

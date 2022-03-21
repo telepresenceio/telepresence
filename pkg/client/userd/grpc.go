@@ -211,6 +211,24 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 	return
 }
 
+func (s *Service) CreatePoddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	defer func() {
+		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
+		var action string
+		if ok {
+			action = "connector_create_intercept_success"
+		} else {
+			action = "connector_create_intercept_fail"
+		}
+		s.scout.Report(c, action, entries...)
+	}()
+	err = s.withSession(c, "CreatePoddIntercept", func(c context.Context, session trafficmgr.Session) error {
+		result, err = session.AddPoddIntercept(c, ir)
+		return err
+	})
+	return
+}
+
 func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	var spec *manager.InterceptSpec
 	defer func() {

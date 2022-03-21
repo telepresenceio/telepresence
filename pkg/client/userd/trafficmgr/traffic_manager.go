@@ -56,6 +56,7 @@ type WatchWorkloadsStream interface {
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
+	AddPoddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload, *ServiceProps)
 	GetInterceptSpec(string) *manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
@@ -161,7 +162,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	sr.Report(c, "connect")
 	var rootDaemon daemon.DaemonClient
 	var err error
-	if cr.Podd {
+	if cr.Podd != nil && !*(cr.Podd) {
 		rootDaemon, err = svc.RootDaemonClient(c)
 		if err != nil {
 			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -179,7 +180,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	// Phone home with the information about the size of the cluster
 	c = cluster.WithK8sInterface(c)
 	sr.SetMetadatum(c, "cluster_id", cluster.GetClusterId(c))
-	if cr.Podd {
+	if cr.Podd != nil && !*(cr.Podd) {
 		sr.Report(c, "connecting_traffic_manager", scout.Entry{
 			Key:   "mapped_namespaces",
 			Value: len(cr.MappedNamespaces),
@@ -211,7 +212,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	svc.SetManagerClient(tmgr.managerClient, opts...)
 
 	// Tell daemon what it needs to know in order to establish outbount traffic to the cluster
-	if cr.Podd {
+	if cr.Podd != nil && !*(cr.Podd) {
 		oi := tmgr.getOutboundInfo(c)
 
 		dlog.Debug(c, "Connecting to root daemon")
