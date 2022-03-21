@@ -36,8 +36,6 @@ COPY pkg/ pkg/
 COPY rpc/ rpc/
 COPY build-output/version.txt .
 
-RUN go install -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
-RUN cp $(go env GOPATH)/bin/traffic /usr/local/bin
 RUN go install -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/podd/...
 RUN cp $(go env GOPATH)/bin/podd /usr/local/bin
 
@@ -47,8 +45,6 @@ FROM alpine:3.15 as podd
 
 RUN apk add --no-cache ca-certificates iptables
 
-# the traffic binary
-COPY --from=podd-build /usr/local/bin/traffic /usr/local/bin
 COPY --from=podd-build /usr/local/bin/podd    /usr/local/bin
 
 RUN \
@@ -61,5 +57,5 @@ RUN \
   chmod 0777 /home/telepresence
 
 
-ENTRYPOINT [ "sh", "-c", "traffic", "&", "podd" ]
+ENTRYPOINT [ "podd" ]
 CMD []
