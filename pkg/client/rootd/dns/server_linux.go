@@ -138,7 +138,7 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	pool := NewConnPool(net.IP(s.config.LocalIp).String(), 10)
+	pool, err := NewConnPool(net.IP(s.config.LocalIp).String(), 10)
 	if err != nil {
 		return err
 	}

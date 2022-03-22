@@ -10,6 +10,7 @@ import (
 
 type waitingClient struct {
 	returnCh    chan *dns.Conn
+	doneCh      <-chan struct{}
 	arrivalTime time.Time
 	index       int // The index of the item in the heap.
 }

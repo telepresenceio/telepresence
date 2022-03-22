@@ -12,7 +12,7 @@ import (
 
 func TestConnPoolConcurrency(t *testing.T) {
 	const (
-		TOTAL_THREADS       = 3
+		TOTAL_THREADS       = 15
 		REQUESTS_PER_THREAD = 5
 		TIMEOUT_S           = 8
 	)
@@ -21,7 +21,11 @@ func TestConnPoolConcurrency(t *testing.T) {
 		Net:     "udp",
 		Timeout: TIMEOUT_S * time.Second,
 	}
-	pool := NewConnPool("8.8.8.8", 5)
+	pool, err := NewConnPool("8.8.8.8", 5)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
 	defer pool.Close()
 	errors := make(chan error)
 	wg := &sync.WaitGroup{}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"time"
 
 	"github.com/miekg/dns"
@@ -20,7 +19,7 @@ type ConnPool struct {
 	RemoteAddr string
 }
 
-func NewConnPool(addr string, poolSize int) *ConnPool {
+func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
 	cCtx, cCancel := context.WithCancel(context.Background())
 	pool := &ConnPool{
 		items:      make(map[*dns.Conn]bool, poolSize),
@@ -33,13 +32,12 @@ func NewConnPool(addr string, poolSize int) *ConnPool {
 	for i := 0; i < poolSize; i++ {
 		conn, err := dns.Dial("udp", net.JoinHostPort(addr, "53"))
 		if err != nil {
-			fmt.Printf("failed to create conn: %v", err)
-			os.Exit(1)
+			return nil, fmt.Errorf("unable to create DNS conn to %s: %w", addr, err)
 		}
 		pool.items[conn] = false
 	}
 	go pool.coordinate(cCtx)
-	return pool
+	return pool, nil
 }
 
 func (cp *ConnPool) LocalAddrs() []*net.UDPAddr {
@@ -82,7 +80,13 @@ func (cp *ConnPool) coordinate(ctx context.Context) {
 			if !inUse && len(cp.clients) > 0 {
 				cp.items[conn] = true
 				client := heap.Pop(&cp.clients).(*waitingClient)
-				client.returnCh <- conn
+				select {
+				case client.returnCh <- conn:
+				case <-client.doneCh:
+					cp.items[conn] = false
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}
@@ -92,6 +96,7 @@ func (cp *ConnPool) getConnection(ctx context.Context) (*dns.Conn, error) {
 	client := &waitingClient{
 		arrivalTime: time.Now(),
 		returnCh:    make(chan *dns.Conn),
+		doneCh:      ctx.Done(),
 	}
 	select {
 	case cp.newArrival <- client:
