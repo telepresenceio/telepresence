@@ -32,10 +32,16 @@ const recursionCheck = "tel2-recursion-check.kube-system."
 // defaultClusterDomain used unless traffic-manager reports otherwise
 const defaultClusterDomain = "cluster.local."
 
+type FallbackPool interface {
+	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
+	RemoteAddr() string
+	LocalAddrs() []*net.UDPAddr
+}
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
-	fallbackPool *ConnPool
+	fallbackPool FallbackPool
 	resolve      Resolver
 	requestCount int64
 	cache        sync.Map
@@ -450,7 +456,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr) }
+	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
 	dc := &dns.Client{Net: "udp", Timeout: s.config.LookupTimeout.AsDuration()}
 	msg, _, err = s.fallbackPool.Exchange(c, dc, r)
 	if err != nil {
@@ -529,7 +535,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, error)
 }
 
 // Run starts the DNS server(s) and waits for them to end
-func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool *ConnPool, resolve Resolver) error {
+func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool FallbackPool, resolve Resolver) error {
 	s.ctx = c
 	s.fallbackPool = fallbackPool
 	s.resolve = resolve

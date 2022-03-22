@@ -16,7 +16,7 @@ type ConnPool struct {
 	finished   chan *dns.Conn
 	clients    clientQueue
 	cancel     context.CancelFunc
-	RemoteAddr string
+	remoteAddr string
 }
 
 func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
@@ -26,7 +26,7 @@ func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
 		newArrival: make(chan *waitingClient),
 		finished:   make(chan *dns.Conn),
 		cancel:     cCancel,
-		RemoteAddr: addr,
+		remoteAddr: addr,
 	}
 	heap.Init(&pool.clients)
 	for i := 0; i < poolSize; i++ {
@@ -48,6 +48,10 @@ func (cp *ConnPool) LocalAddrs() []*net.UDPAddr {
 		i++
 	}
 	return retval
+}
+
+func (cp *ConnPool) RemoteAddr() string {
+	return cp.remoteAddr
 }
 
 func (cp *ConnPool) Exchange(ctx context.Context, client *dns.Client, msg *dns.Msg) (r *dns.Msg, rtt time.Duration, err error) {
