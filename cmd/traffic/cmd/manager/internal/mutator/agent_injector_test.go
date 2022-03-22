@@ -1,7 +1,6 @@
 package mutator
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -39,23 +38,6 @@ func boolP(b bool) *bool {
 }
 func stringP(s string) *string {
 	return &s
-}
-
-func findOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
-	refs := obj.GetOwnerReferences()
-	for i := range refs {
-		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			wl, err := k8sapi.GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
-			if err != nil {
-				return nil, err
-			}
-			return findOwnerWorkload(ctx, wl)
-		}
-	}
-	if wl, ok := obj.(k8sapi.Workload); ok {
-		return wl, nil
-	}
-	return nil, fmt.Errorf("unable to find workload owner for %s.%s", obj.GetName(), obj.GetNamespace())
 }
 
 func TestTrafficAgentConfigGenerator(t *testing.T) {
@@ -615,14 +597,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		test := test // pin it
 		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		t.Run(test.name, func(t *testing.T) {
-			var actualConfig *agent.Config
-			wl, actualErr := findOwnerWorkload(ctx, k8sapi.Pod(test.request))
-			if actualErr == nil {
-				actualConfig, actualErr = agentconfig.Generate(ctx, wl, &core.PodTemplateSpec{
-					ObjectMeta: test.request.ObjectMeta,
-					Spec:       test.request.Spec,
-				})
-			}
+			actualConfig, actualErr := agentconfig.GenerateForPod(ctx, test.request)
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
 			if actualConfig == nil {
 				actualConfig = &agent.Config{}
@@ -1425,13 +1400,9 @@ func TestTrafficAgentInjector(t *testing.T) {
 			var actualErr error
 			cw := agentconfig.NewWatcher("")
 			if test.generateConfig {
-				var wl k8sapi.Workload
-				wl, actualErr = findOwnerWorkload(ctx, k8sapi.Pod(test.pod))
-				if actualErr == nil {
-					var ac *agent.Config
-					if ac, actualErr = agentconfig.Generate(ctx, wl, &core.PodTemplateSpec{ObjectMeta: test.pod.ObjectMeta, Spec: test.pod.Spec}); actualErr == nil {
-						actualErr = cw.Store(ctx, ac, true)
-					}
+				var ac *agent.Config
+				if ac, actualErr = agentconfig.GenerateForPod(ctx, test.pod); actualErr == nil {
+					actualErr = cw.Store(ctx, ac, true)
 				}
 			}
 			if actualErr == nil {

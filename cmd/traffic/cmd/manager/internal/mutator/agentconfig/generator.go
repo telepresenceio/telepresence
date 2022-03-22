@@ -20,7 +20,15 @@ const (
 	ManagerPortHTTP       = 8081
 )
 
-func Generate(ctx context.Context, wl k8sapi.Workload, pod *core.PodTemplateSpec) (*agent.Config, error) {
+func GenerateForPod(ctx context.Context, pod *core.Pod) (*agent.Config, error) {
+	wl, err := FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+	if err != nil {
+		return nil, err
+	}
+	return Generate(ctx, wl)
+}
+
+func Generate(ctx context.Context, wl k8sapi.Workload) (*agent.Config, error) {
 	env := managerutil.GetEnv(ctx)
 	pod := wl.GetPodTemplate()
 	pod.Namespace = wl.GetNamespace()

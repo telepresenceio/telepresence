@@ -12,6 +12,23 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
+func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
+	refs := obj.GetOwnerReferences()
+	for i := range refs {
+		if or := &refs[i]; or.Controller != nil && *or.Controller {
+			wl, err := k8sapi.GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
+			if err != nil {
+				return nil, err
+			}
+			return FindOwnerWorkload(ctx, wl)
+		}
+	}
+	if wl, ok := obj.(k8sapi.Workload); ok {
+		return wl, nil
+	}
+	return nil, fmt.Errorf("unable to find workload owner for %s.%s", obj.GetName(), obj.GetNamespace())
+}
+
 func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {
 	switch {
 	case svcName != "":

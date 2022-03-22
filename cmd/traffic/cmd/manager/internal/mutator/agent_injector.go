@@ -74,7 +74,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	var config *agent.Config
 	ia := pod.Annotations[agent.InjectAnnotation]
 	switch ia {
-	case "disabled":
+	case "false", "disabled":
 		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agent.InjectAnnotation)
 		return nil, nil
 	case "", "enabled":
@@ -86,10 +86,16 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			}
 			return nil, err
 		}
-		if config == nil {
+		if config == nil && ia == "" {
 			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or %q annotation; skipping`,
 				pod.Name, pod.Namespace, agent.ContainerName, agent.ConfigMap, agent.InjectAnnotation)
 			return nil, nil
+		}
+		if config, err = agentconfig.GenerateForPod(ctx, pod); err != nil {
+			return nil, err
+		}
+		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
+			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agent.InjectAnnotation)
