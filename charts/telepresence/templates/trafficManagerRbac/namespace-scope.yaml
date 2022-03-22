@@ -50,6 +50,7 @@ rules:
   - list
   - get
   - patch
+  - update
 - apiGroups:
   - ""
   resources:

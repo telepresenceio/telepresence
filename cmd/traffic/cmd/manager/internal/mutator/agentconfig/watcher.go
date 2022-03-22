@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -31,6 +32,7 @@ type Map interface {
 	Run(context.Context) error
 	Store(context.Context, *agent.Config, bool) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
+	UninstallV25(ctx context.Context)
 }
 
 func decode(v string, into interface{}) error {
@@ -366,6 +368,29 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 		}
 		if err := api.ConfigMaps(ns).Delete(ctx, agent.ConfigMap, *now); err != nil {
 			dlog.Errorf(ctx, "unable to delete ConfigMap %s-%s: %v", agent.ConfigMap, ns, err)
+		}
+	}
+}
+
+// UninstallV25 will undo changes that telepresence versions prior to 2.6.0 did to workloads and
+// also add an initial entry in the agents ConfigMap for all workloads that had an agent or
+// was annotated to inject an agent.
+func (c *configWatcher) UninstallV25(ctx context.Context) {
+	var affectedWorkloads []k8sapi.Workload
+	if len(c.namespaces) == 0 {
+		affectedWorkloads = v25uninstall.RemoveAgents(ctx, "")
+	} else {
+		for _, ns := range c.namespaces {
+			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
+		}
+	}
+	for _, wl := range affectedWorkloads {
+		ac, err := Generate(ctx, wl)
+		if err == nil {
+			err = c.Store(ctx, ac, false)
+		}
+		if err != nil {
+			dlog.Warn(ctx, err)
 		}
 	}
 }

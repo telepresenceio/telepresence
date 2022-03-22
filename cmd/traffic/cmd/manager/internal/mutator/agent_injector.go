@@ -62,7 +62,12 @@ func getPod(req *admission.AdmissionRequest) (*core.Pod, error) {
 }
 
 func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequest) (patchOps, error) {
-	if atomic.LoadInt64(&a.terminating) > 0 || req.Operation == admission.Delete {
+	if req.Operation == admission.Delete {
+		dlog.Debugf(ctx, "Skipping DELETE webhook for %s.%s", req.Name, req.Namespace)
+		return nil, nil
+	}
+	if atomic.LoadInt64(&a.terminating) > 0 {
+		dlog.Debugf(ctx, "Skipping webhook for %s.%s because the agent-injector is terminating", req.Name, req.Namespace)
 		return nil, nil
 	}
 
@@ -82,6 +87,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if err != nil {
 			if strings.Contains(err.Error(), "unsupported workload kind") {
 				// This isn't something that we want to touch
+				dlog.Debugf(ctx, "Skipping webhook for %s.%s: %s", pod.Name, pod.Namespace, err.Error())
 				err = nil
 			}
 			return nil, err
@@ -126,6 +132,11 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 func (a *agentInjector) uninstall(ctx context.Context) {
 	atomic.StoreInt64(&a.terminating, 1)
 	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
+}
+
+// upgradeLegacy
+func (a *agentInjector) upgradeLegacy(ctx context.Context) {
+	a.agentConfigs.UninstallV25(ctx)
 }
 
 func needInitContainer(config *agent.Config) bool {
