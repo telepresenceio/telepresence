@@ -60,12 +60,12 @@ metadata:
     {{- include "telepresence.labels" . | nindent 4 }}
 data:
 {{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
-  ca.pem: {{ get $secretData "ca.pem" }}
-  crt.pem: {{ get $secretData "crt.pem" }}
-  key.pem: {{ get $secretData "key.pem" }}
+  ca.crt: {{ get $secretData "ca.pem" }}
+  tls.crt: {{ get $secretData "crt.pem" }}
+  tls.key: {{ get $secretData "key.pem" }}
 {{- else }}
-  ca.pem: {{ $genCA.Cert | b64enc }}
-  crt.pem: {{ $genCert.Cert | b64enc }}
-  key.pem: {{ $genCert.Key | b64enc }}
+  ca.crt: {{ $genCA.Cert | b64enc }}
+  tls.crt: {{ $genCert.Cert | b64enc }}
+  tls.key: {{ $genCert.Key | b64enc }}
 {{- end }}
 {{- end }}
