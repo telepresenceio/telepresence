@@ -299,7 +299,7 @@ func (d *service) serveGrpc(c context.Context, l net.Listener) error {
 	defer func() {
 		// Error recovery.
 		if perr := derror.PanicToError(recover()); perr != nil {
-			dlog.Error(c, perr)
+			dlog.Errorf(c, "%+v", perr)
 		}
 	}()
 
