@@ -202,7 +202,7 @@ To solve this issue, you can use Telepresence's Mutating Webhook alternative mec
 workloads will then stay untouched and only the underlying pods will be modified to inject the Traffic
 Agent sidecar container and update the port definitions.
 
-Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` annotation to your
+Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` label to your
 workload template's annotations:
 
 ```diff
@@ -211,7 +211,6 @@ workload template's annotations:
      metadata:
        labels:
          service: your-service
-+      annotations:
 +        telepresence.getambassador.io/inject-traffic-agent: enabled
      spec:
        containers:
@@ -228,8 +227,8 @@ in the service. This is necessary when the service has multiple ports.
      metadata:
        labels:
          service: your-service
-       annotations:
          telepresence.getambassador.io/inject-traffic-agent: enabled
+       annotations:
 +        telepresence.getambassador.io/inject-service-port: https
      spec:
        containers:
@@ -246,8 +245,8 @@ This is necessary when the workload is exposed by multiple services.
      metadata:
        labels:
          service: your-service
-       annotations:
          telepresence.getambassador.io/inject-traffic-agent: enabled
+       annotations:
 +        telepresence.getambassador.io/inject-service-name: my-service
      spec:
        containers:
@@ -299,11 +298,9 @@ spec:
       service: your-service
   template:
     metadata:
-      annotations:
-        telepresence.getambassador.io/inject-traffic-agent: enabled
       labels:
         service: your-service
-    spec:
+        telepresence.getambassador.io/inject-traffic-agent: enabled
       containers:
         - name: your-container
           image: jmalloc/echo-server
