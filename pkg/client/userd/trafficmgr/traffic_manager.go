@@ -283,7 +283,14 @@ func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
 
 // connectCluster returns a configured cluster instance
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
-	config, err := k8s.NewConfig(c, cr.KubeFlags)
+	var config *k8s.Config
+	var err error
+	if cr.Podd != nil && *cr.Podd {
+		config, err = k8s.NewConfigPodd(c, cr.KubeFlags)
+	} else {
+		config, err = k8s.NewConfig(c, cr.KubeFlags)
+	}
+
 	if err != nil {
 		return nil, err
 	}

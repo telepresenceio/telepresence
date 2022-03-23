@@ -141,6 +141,46 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	return k, nil
 }
 
+// This represents an inClusterConfig
+func NewConfigPodd(c context.Context, flagMap map[string]string) (*Config, error) {
+	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
+	// respect to this option.
+	delete(flagMap, "namespace")
+
+	configFlags := genericclioptions.NewConfigFlags(false)
+	flags := pflag.NewFlagSet("", 0)
+	configFlags.AddFlags(flags)
+	for k, v := range flagMap {
+		if err := flags.Set(k, v); err != nil {
+			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+		}
+	}
+
+	configLoader := configFlags.ToRawKubeConfigLoader()
+	restConfig, err := configLoader.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	namespace, ok, err := configLoader.Namespace()
+	if err != nil || !ok {
+		namespace = "default"
+	}
+
+	return &Config{
+		Namespace:   namespace,
+		Server:      restConfig.Host,
+		flagMap:     flagMap,
+		ConfigFlags: configFlags,
+		config:      restConfig,
+		kubeconfigExtension: kubeconfigExtension{
+			Manager: &managerConfig{
+				Namespace: client.GetEnv(c).ManagerNamespace,
+			},
+		},
+	}, nil
+}
+
 // ContextServiceAndFlagsEqual determines if this instance is equal to the given instance with respect to context,
 // server, and flag arguments.
 func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
