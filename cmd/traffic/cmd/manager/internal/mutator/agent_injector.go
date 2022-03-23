@@ -62,12 +62,6 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		return nil, nil
 	}
 
-	if pod.Annotations[install.InjectAnnotation] != "enabled" {
-		dlog.Debugf(ctx, `The %s pod has not enabled %s container injection through %q annotation; skipping`,
-			refPodName, install.AgentContainerName, install.InjectAnnotation)
-		return nil, nil
-	}
-
 	svcName := pod.Annotations[install.ServiceNameAnnotation]
 	svc, err := findMatchingService(ctx, "", svcName, podNamespace, pod.Labels)
 	if err != nil {

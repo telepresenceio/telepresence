@@ -40,6 +40,9 @@ webhooks:
   name: agent-injector.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
+  objectSelector:
+    matchLabels:
+      telepresence.getambassador.io/inject-traffic-agent: enabled
 {{- if .Values.managerRbac.namespaced }}
   namespaceSelector:
     matchExpressions:
