@@ -21,7 +21,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -125,6 +124,9 @@ type session struct {
 	// Telemetry counters for DNS lookups
 	dnsLookups  int
 	dnsFailures int
+
+	// Whether pods and services should be proxied by the TUN-device
+	proxyCluster bool
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible
@@ -197,7 +199,7 @@ func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []routing.
 }
 
 // newSession returns a new properly initialized session object.
-func newSession(c context.Context, scout *scout.Reporter, mi *daemon.OutboundInfo) (*session, error) {
+func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*session, error) {
 	conn, mc, err := connectToManager(c)
 	if mc == nil || err != nil {
 		return nil, err
@@ -220,6 +222,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *daemon.OutboundInf
 		clientConn:        conn,
 		alsoProxySubnets:  convertAlsoProxySubnets(c, mi.AlsoProxySubnets),
 		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
+		proxyCluster:      true,
 	}
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
 	return s, nil
@@ -378,8 +381,8 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				}
 				break
 			}
-			s.onClusterInfo(ctx, mgrInfo)
 			if cfgComplete != nil {
+				s.checkConnectivity(ctx, mgrInfo)
 				remoteIp := net.IP(mgrInfo.KubeDnsIp)
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
@@ -388,6 +391,7 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				close(cfgComplete)
 				cfgComplete = nil
 			}
+			s.onClusterInfo(ctx, mgrInfo)
 		}
 		dtime.SleepWithContext(ctx, backoff)
 		backoff *= 2
@@ -401,22 +405,43 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	dlog.Debugf(ctx, "WatchClusterInfo update")
 
 	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
-	if mgrInfo.ServiceSubnet != nil {
-		cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
-		dlog.Infof(ctx, "Adding service subnet %s", cidr)
-		subnets = append(subnets, cidr)
+	if s.proxyCluster {
+		if mgrInfo.ServiceSubnet != nil {
+			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
+			dlog.Infof(ctx, "Adding service subnet %s", cidr)
+			subnets = append(subnets, cidr)
+		}
 	}
 
-	for _, sn := range mgrInfo.PodSubnets {
-		cidr := iputil.IPNetFromRPC(sn)
-		dlog.Infof(ctx, "Adding pod subnet %s", cidr)
-		subnets = append(subnets, cidr)
+	if s.proxyCluster {
+		for _, sn := range mgrInfo.PodSubnets {
+			cidr := iputil.IPNetFromRPC(sn)
+			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+			subnets = append(subnets, cidr)
+		}
 	}
 
 	s.clusterSubnets = subnets
 	if err := s.refreshSubnets(ctx); err != nil {
 		dlog.Error(ctx, err)
 	}
+}
+
+func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterInfo) {
+	if info.ManagerPodIp == nil {
+		return
+	}
+	ip := net.IP(info.ManagerPodIp).String()
+	tCtx, tCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer tCancel()
+	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
+		return
+	}
+	conn.Close()
+	s.proxyCluster = false
+	dlog.Info(ctx, "Already connected to cluster, will not map cluster subnets")
 }
 
 func (s *session) run(c context.Context) error {

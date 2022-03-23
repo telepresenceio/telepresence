@@ -186,6 +186,12 @@ func NewInfo(ctx context.Context) Info {
 	default:
 		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
 	}
+
+	oi.ManagerPodIp = iputil.Parse(env.PodIP)
+	if oi.ManagerPodIp == nil {
+		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
+	}
+
 	return &oi
 }
 
@@ -273,6 +279,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		ServiceSubnet: oi.ServiceSubnet,
 		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
 		ClusterDomain: oi.ClusterDomain,
+		ManagerPodIp:  oi.ManagerPodIp,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci
