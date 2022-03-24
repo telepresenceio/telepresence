@@ -142,7 +142,7 @@ func Main(ctx context.Context, args Args) error {
 			// I don't think we need to set anything here.
 			KubeFlags:        nil, // nil should be fine since we're in-cluster
 			MappedNamespaces: nil, // we're not doing networking things.
-			Podd:            &podd,
+			Podd:             &podd,
 		})
 		if err != nil {
 			return err
@@ -183,6 +183,7 @@ func Main(ctx context.Context, args Args) error {
 			Name:    args.WorkloadName,
 			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{
 				AddPreviewDomain: &rpc_manager.PreviewSpec{
+					PullRequestUrl: args.PullRequestURL,
 					Ingress: &rpc_manager.IngressInfo{
 						Host:   args.IngressHost,
 						Port:   args.IngressPort,
