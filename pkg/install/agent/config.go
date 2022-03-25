@@ -21,6 +21,9 @@ const (
 	EnvPrefixAgent       = EnvPrefix + "AGENT_"
 	EnvPrefixApp         = EnvPrefix + "APP_"
 
+	// EnvInterceptContainer intercepted container propagated to client during intercept
+	EnvInterceptContainer = "TELEPRESENCE_CONTAINER"
+
 	// EnvInterceptMounts mount points propagated to client during intercept
 	EnvInterceptMounts = "TELEPRESENCE_MOUNTS"
 

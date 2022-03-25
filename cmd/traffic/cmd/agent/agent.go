@@ -54,7 +54,7 @@ func AppEnvironment(ctx context.Context, ag *agent.Container) (map[string]string
 			}
 		}
 	}
-	fullEnv["TELEPRESENCE_CONTAINER"] = ag.Name
+	fullEnv[agent.EnvInterceptContainer] = ag.Name
 	if len(ag.Mounts) > 0 {
 		fullEnv[agent.EnvInterceptMounts] = strings.Join(ag.Mounts, ":")
 	}
