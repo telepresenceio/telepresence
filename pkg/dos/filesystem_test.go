@@ -2,8 +2,10 @@ package dos_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"testing"
@@ -63,9 +65,13 @@ func ExampleWithFS() {
 	}
 
 	if hosts, err = dos.Open(context.Background(), "/etc/example.conf"); err != nil {
-		fmt.Println(err)
+		if errors.Is(err, fs.ErrNotExist) {
+			fmt.Println("file does not exist")
+		} else {
+			fmt.Println(err)
+		}
 	}
 	// Output:
 	// example = conf
-	// open /etc/example.conf: no such file or directory
+	// file does not exist
 }

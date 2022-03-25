@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -80,6 +81,9 @@ func Test_LoadConfig(t *testing.T) {
 }
 
 func Test_AppEnvironment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipped on windows")
+	}
 	ctx := testContext(t, dos.MapEnv{
 		"HOME":                              "/home/tel",                    // skip
 		"PATH":                              "/bin:/usr/bin:/usr/local/bin", // skip
@@ -103,9 +107,10 @@ func Test_AppEnvironment(t *testing.T) {
 	env, err := agent2.AppEnvironment(ctx, cn)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
-		"ALPHA":                  "alpha",
-		"ZULU":                   "zulu",
-		agent.EnvInterceptMounts: "/home/bob:/var/run/secrets/kubernetes.io",
+		"ALPHA":                     "alpha",
+		"ZULU":                      "zulu",
+		agent.EnvInterceptContainer: "test-echo",
+		agent.EnvInterceptMounts:    "/home/bob:/var/run/secrets/kubernetes.io",
 	}, env)
 
 	// Check symlink to container's remote mount point

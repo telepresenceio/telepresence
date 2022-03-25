@@ -1,6 +1,7 @@
 package mutator
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -597,7 +598,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		test := test // pin it
 		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		t.Run(test.name, func(t *testing.T) {
-			actualConfig, actualErr := agentconfig.GenerateForPod(ctx, test.request)
+			actualConfig, actualErr := generateForPod(t, ctx, test.request)
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
 			if actualConfig == nil {
 				actualConfig = &agent.Config{}
@@ -813,7 +814,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Env: []core.EnvVar{
 							{
@@ -890,7 +891,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
@@ -978,7 +979,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 				Spec: core.PodSpec{
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
@@ -1006,7 +1007,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				},
 				Spec: core.PodSpec{
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
@@ -1075,7 +1076,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ObjectMeta: podObjectMeta("numeric-port"),
 				Spec: core.PodSpec{
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
 					},
@@ -1157,7 +1158,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 						Image: "some-init-image",
 					}},
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
 					},
@@ -1250,7 +1251,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 					}},
 					Containers: []core.Container{
 						{
-							Name:  "some-app-name",
+							Name:  "some-container",
 							Image: "some-app-image",
 							Ports: []core.ContainerPort{{ContainerPort: 8888}},
 						},
@@ -1309,7 +1310,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
 					Containers: []core.Container{{
-						Name:  "some-app-name",
+						Name:  "some-container",
 						Image: "some-app-image",
 						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
@@ -1401,7 +1402,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			cw := agentconfig.NewWatcher("")
 			if test.generateConfig {
 				var ac *agent.Config
-				if ac, actualErr = agentconfig.GenerateForPod(ctx, test.pod); actualErr == nil {
+				if ac, actualErr = generateForPod(t, ctx, test.pod); actualErr == nil {
 					actualErr = cw.Store(ctx, ac, true)
 				}
 			}
@@ -1440,4 +1441,29 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) 
 		Object:    runtime.RawExtension{Raw: bytes},
 		Namespace: "default",
 	}
+}
+
+func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agent.Config, error) {
+	wl, err := agentconfig.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+	if err != nil {
+		return nil, err
+	}
+	tpl := core.PodTemplateSpec{
+		ObjectMeta: pod.ObjectMeta,
+		Spec:       pod.Spec,
+	}
+	switch wi := wl.DeepCopyObject().(type) {
+	case *apps.Deployment:
+		wi.Spec.Template = tpl
+		wl = k8sapi.Deployment(wi)
+	case *apps.ReplicaSet:
+		wi.Spec.Template = tpl
+		wl = k8sapi.ReplicaSet(wi)
+	case *apps.StatefulSet:
+		wi.Spec.Template = tpl
+		wl = k8sapi.StatefulSet(wi)
+	default:
+		t.Fatalf("bad workload type %T", wi)
+	}
+	return agentconfig.Generate(ctx, wl)
 }
