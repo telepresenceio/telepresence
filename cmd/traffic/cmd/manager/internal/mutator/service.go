@@ -23,7 +23,7 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
@@ -118,7 +118,7 @@ func ServeMutator(ctx context.Context) error {
 	})
 
 	env := managerutil.GetEnv(ctx)
-	cw, err := agentconfig.Load(ctx, env.ManagerNamespace)
+	cw, err := agentmap.Load(ctx, env.ManagerNamespace)
 	if err != nil {
 		return err
 	}

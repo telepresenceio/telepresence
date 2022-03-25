@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
@@ -1399,7 +1399,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			}
 			var actualPatch patchOps
 			var actualErr error
-			cw := agentconfig.NewWatcher("")
+			cw := agentmap.NewWatcher("")
 			if test.generateConfig {
 				var ac *agent.Config
 				if ac, actualErr = generateForPod(t, ctx, test.pod); actualErr == nil {
@@ -1444,7 +1444,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) 
 }
 
 func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agent.Config, error) {
-	wl, err := agentconfig.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
 	}
@@ -1465,5 +1465,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agent.Co
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return agentconfig.Generate(ctx, wl)
+	return agentmap.Generate(ctx, wl)
 }

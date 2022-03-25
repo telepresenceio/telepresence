@@ -1,4 +1,4 @@
-package agentconfig
+package agentmap
 
 import (
 	"math"

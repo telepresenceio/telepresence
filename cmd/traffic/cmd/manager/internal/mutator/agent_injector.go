@@ -15,7 +15,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
@@ -25,7 +25,7 @@ import (
 var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
 
 type agentInjector struct {
-	agentConfigs agentconfig.Map
+	agentConfigs agentmap.Map
 	terminating  int64
 }
 
@@ -97,7 +97,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 				pod.Name, pod.Namespace, agent.ContainerName, agent.ConfigMap, agent.InjectAnnotation)
 			return nil, nil
 		}
-		if config, err = agentconfig.GenerateForPod(ctx, pod); err != nil {
+		if config, err = agentmap.GenerateForPod(ctx, pod); err != nil {
 			return nil, err
 		}
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
@@ -477,7 +477,7 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 	var refs []meta.OwnerReference
 	if wl != nil {
 		ag := agent.Config{}
-		ok, err := a.agentConfigs.GetInto(agentconfig.AgentName(wl), pod.GetNamespace(), &ag)
+		ok, err := a.agentConfigs.GetInto(agentmap.AgentName(wl), pod.GetNamespace(), &ag)
 		if err != nil {
 			return nil, err
 		}
