@@ -159,15 +159,16 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
-  reserved 5;
-  reserved 6;
 
-  telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
-  reserved 9;
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+
+  reserved 5;
+  reserved 6;
+  reserved 7;
+  reserved 9;
 }
 
 message IngressInfos {
