@@ -24,8 +24,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -346,7 +346,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	tests := []struct {
 		name           string
 		request        *core.Pod
-		expectedConfig *agent.Config
+		expectedConfig *agentconfig.Sidecar
 		expectedError  string
 	}{
 		{
@@ -381,7 +381,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		{
 			"Named port",
 			&podNamedPort,
-			&agent.Config{
+			&agentconfig.Sidecar{
 				AgentName:    "named-port",
 				AgentImage:   "docker.io/datawire/tel2:2.3.1",
 				Namespace:    "some-ns",
@@ -389,10 +389,10 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				WorkloadKind: "Deployment",
 				ManagerHost:  "traffic-manager.default",
 				ManagerPort:  8081,
-				Containers: []*agent.Container{
+				Containers: []*agentconfig.Container{
 					{
 						Name: "some-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "http",
 								ServiceName:       "named-port",
@@ -415,7 +415,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		{
 			"Numeric port",
 			&podNumericPort,
-			&agent.Config{
+			&agentconfig.Sidecar{
 				AgentName:    "numeric-port",
 				AgentImage:   "docker.io/datawire/tel2:2.3.1",
 				Namespace:    "some-ns",
@@ -423,10 +423,10 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				WorkloadKind: "Deployment",
 				ManagerHost:  "traffic-manager.default",
 				ManagerPort:  8081,
-				Containers: []*agent.Container{
+				Containers: []*agentconfig.Container{
 					{
 						Name: "some-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "",
 								ServiceName:       "numeric-port",
@@ -448,7 +448,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		{
 			"Named and numeric port containers",
 			&podNamedAndNumericPort,
-			&agent.Config{
+			&agentconfig.Sidecar{
 				AgentName:    "named-and-numeric",
 				AgentImage:   "docker.io/datawire/tel2:2.3.1",
 				Namespace:    "some-ns",
@@ -456,10 +456,10 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				WorkloadKind: "Deployment",
 				ManagerHost:  "traffic-manager.default",
 				ManagerPort:  8081,
-				Containers: []*agent.Container{
+				Containers: []*agentconfig.Container{
 					{
 						Name: "named-port-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "http",
 								ServiceName:       "named-port",
@@ -477,7 +477,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					},
 					{
 						Name: "numeric-port-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "",
 								ServiceName:       "numeric-port",
@@ -499,7 +499,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		{
 			"Multi-port container and service",
 			&podMultiPort,
-			&agent.Config{
+			&agentconfig.Sidecar{
 				AgentName:    "multi-port",
 				AgentImage:   "docker.io/datawire/tel2:2.3.1",
 				Namespace:    "some-ns",
@@ -507,10 +507,10 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				WorkloadKind: "Deployment",
 				ManagerHost:  "traffic-manager.default",
 				ManagerPort:  8081,
-				Containers: []*agent.Container{
+				Containers: []*agentconfig.Container{
 					{
 						Name: "multi-port-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "http",
 								ServiceName:       "multi-port",
@@ -544,7 +544,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		{
 			"Two containers and multi-port service",
 			&podMultiSplitPort,
-			&agent.Config{
+			&agentconfig.Sidecar{
 				AgentName:    "multi-container",
 				AgentImage:   "docker.io/datawire/tel2:2.3.1",
 				Namespace:    "some-ns",
@@ -552,10 +552,10 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				WorkloadKind: "Deployment",
 				ManagerHost:  "traffic-manager.default",
 				ManagerPort:  8081,
-				Containers: []*agent.Container{
+				Containers: []*agentconfig.Container{
 					{
 						Name: "http-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "http",
 								ServiceName:       "multi-port",
@@ -573,7 +573,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					},
 					{
 						Name: "grpc-container",
-						Intercepts: []*agent.Intercept{
+						Intercepts: []*agentconfig.Intercept{
 							{
 								ContainerPortName: "grpc",
 								ServiceName:       "multi-port",
@@ -601,11 +601,11 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			actualConfig, actualErr := generateForPod(t, ctx, test.request)
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
 			if actualConfig == nil {
-				actualConfig = &agent.Config{}
+				actualConfig = &agentconfig.Sidecar{}
 			}
 			expectedConfig := test.expectedConfig
 			if expectedConfig == nil {
-				expectedConfig = &agent.Config{}
+				expectedConfig = &agentconfig.Sidecar{}
 			}
 			assert.Equal(t, expectedConfig, actualConfig, "configs differ")
 		})
@@ -1236,12 +1236,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ObjectMeta: podObjectMeta("numeric-port"),
 				Spec: core.PodSpec{
 					InitContainers: []core.Container{{
-						Name:  agent.InitContainerName,
+						Name:  agentconfig.InitContainerName,
 						Image: env.AgentRegistry + "/" + env.AgentImage,
 						Args:  []string{"agent-init"},
 						VolumeMounts: []core.VolumeMount{{
-							Name:      agent.ConfigVolumeName,
-							MountPath: agent.ConfigMountPoint,
+							Name:      agentconfig.ConfigVolumeName,
+							MountPath: agentconfig.ConfigMountPoint,
 						}},
 						SecurityContext: &core.SecurityContext{
 							Capabilities: &core.Capabilities{
@@ -1401,7 +1401,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			var actualErr error
 			cw := agentmap.NewWatcher("")
 			if test.generateConfig {
-				var ac *agent.Config
+				var ac *agentconfig.Sidecar
 				if ac, actualErr = generateForPod(t, ctx, test.pod); actualErr == nil {
 					actualErr = cw.Store(ctx, ac, true)
 				}
@@ -1443,7 +1443,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) 
 	}
 }
 
-func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agent.Config, error) {
+func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agentconfig.Sidecar, error) {
 	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err

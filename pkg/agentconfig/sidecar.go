@@ -1,4 +1,4 @@
-package agent
+package agentconfig
 
 import "k8s.io/apimachinery/pkg/types"
 
@@ -82,8 +82,8 @@ type Container struct {
 	Mounts []string
 }
 
-// The Config configures the traffic-agent
-type Config struct {
+// The Sidecar configures the traffic-agent sidecar
+type Sidecar struct {
 	// If Create is true, then this Config has not yet been filled in.
 	Create bool `json:"create,omitempty" yaml:"create,omitempty"`
 

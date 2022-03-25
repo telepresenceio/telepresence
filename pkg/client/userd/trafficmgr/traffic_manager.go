@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -40,7 +41,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -895,7 +895,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
-		cm, err := api.ConfigMaps(ns).Get(ctx, agent.ConfigMap, meta.GetOptions{})
+		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 		if err != nil {
 			if errors2.IsNotFound(err) {
 				// there are no agents to remove
@@ -958,10 +958,10 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 		if cm == nil {
 			return nil
 		}
-		if aiConfig, ok := cm.Data[agent.InjectorKey]; ok {
+		if aiConfig, ok := cm.Data[agentconfig.InjectorKey]; ok {
 			if len(cm.Data) > 1 {
 				cm.Data = nil
-				cm.Data = map[string]string{agent.InjectorKey: aiConfig}
+				cm.Data = map[string]string{agentconfig.InjectorKey: aiConfig}
 				return updateAgentConfigMap(ns, cm)
 			}
 		} else if len(cm.Data) > 0 {

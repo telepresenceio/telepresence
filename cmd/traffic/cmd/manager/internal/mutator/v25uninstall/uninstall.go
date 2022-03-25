@@ -12,14 +12,14 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const annTelepresenceActions = agent.DomainPrefix + "actions"
+const annTelepresenceActions = agentconfig.DomainPrefix + "actions"
 
 type listWorkloads func(c context.Context, namespace string, labelSelector labels.Set) ([]k8sapi.Workload, error)
 
@@ -49,7 +49,7 @@ func RemoveAgents(ctx context.Context, namespace string) []k8sapi.Workload {
 				if _, ok := ann[annTelepresenceActions]; ok {
 					withModifications = append(withModifications, wl)
 					withAgent = append(withAgent, wl)
-				} else if ann[agent.InjectAnnotation] == "enabled" {
+				} else if ann[agentconfig.InjectAnnotation] == "enabled" {
 					withAgent = append(withAgent, wl)
 				}
 			}

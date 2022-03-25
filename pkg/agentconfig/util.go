@@ -1,4 +1,4 @@
-package agent
+package agentconfig
 
 import (
 	"strconv"

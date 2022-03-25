@@ -17,8 +17,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -76,11 +76,11 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, err
 	}
 
-	var config *agent.Config
-	ia := pod.Annotations[agent.InjectAnnotation]
+	var config *agentconfig.Sidecar
+	ia := pod.Annotations[agentconfig.InjectAnnotation]
 	switch ia {
 	case "false", "disabled":
-		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agent.InjectAnnotation)
+		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agentconfig.InjectAnnotation)
 		return nil, nil
 	case "", "enabled":
 		config, err = a.findConfigMapValue(ctx, pod, nil)
@@ -94,7 +94,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 		if config == nil && ia == "" {
 			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or %q annotation; skipping`,
-				pod.Name, pod.Namespace, agent.ContainerName, agent.ConfigMap, agent.InjectAnnotation)
+				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
 		}
 		if config, err = agentmap.GenerateForPod(ctx, pod); err != nil {
@@ -104,11 +104,11 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agent.InjectAnnotation)
+		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
 
 	// Create patch operations to add the traffic-agent sidecar
-	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agent.ContainerName, pod.Name, pod.Namespace)
+	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
 
 	var patches patchOps
 	patches = addInitContainer(ctx, pod, config, patches)
@@ -139,7 +139,7 @@ func (a *agentInjector) upgradeLegacy(ctx context.Context) {
 	a.agentConfigs.UninstallV25(ctx)
 }
 
-func needInitContainer(config *agent.Config) bool {
+func needInitContainer(config *agentconfig.Sidecar) bool {
 	for _, cc := range config.Containers {
 		for _, ic := range cc.Intercepts {
 			if ic.Headless || ic.ContainerPortName == "" {
@@ -150,10 +150,10 @@ func needInitContainer(config *agent.Config) bool {
 	return false
 }
 
-func addInitContainer(ctx context.Context, pod *core.Pod, config *agent.Config, patches patchOps) patchOps {
+func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
 	if !needInitContainer(config) {
 		for i, oc := range pod.Spec.InitContainers {
-			if agent.InitContainerName == oc.Name {
+			if agentconfig.InitContainerName == oc.Name {
 				return append(patches, patchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/initContainers/%d", i),
@@ -165,12 +165,12 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agent.Config, 
 
 	env := managerutil.GetEnv(ctx)
 	ic := core.Container{
-		Name:  agent.InitContainerName,
+		Name:  agentconfig.InitContainerName,
 		Image: env.AgentRegistry + "/" + env.AgentImage,
 		Args:  []string{"agent-init"},
 		VolumeMounts: []core.VolumeMount{{
-			Name:      agent.ConfigVolumeName,
-			MountPath: agent.ConfigMountPoint,
+			Name:      agentconfig.ConfigVolumeName,
+			MountPath: agentconfig.ConfigMountPoint,
 		}},
 		SecurityContext: &core.SecurityContext{
 			Capabilities: &core.Capabilities{
@@ -207,9 +207,9 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agent.Config, 
 	})
 }
 
-func addAgentVolume(pod *core.Pod, ag *agent.Config, patches patchOps) patchOps {
+func addAgentVolume(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) patchOps {
 	for _, vol := range pod.Spec.Volumes {
-		if vol.Name == agent.AnnotationVolumeName {
+		if vol.Name == agentconfig.AnnotationVolumeName {
 			return patches
 		}
 	}
@@ -218,7 +218,7 @@ func addAgentVolume(pod *core.Pod, ag *agent.Config, patches patchOps) patchOps 
 			Op:   "add",
 			Path: "/spec/volumes/-",
 			Value: core.Volume{
-				Name: agent.AnnotationVolumeName,
+				Name: agentconfig.AnnotationVolumeName,
 				VolumeSource: core.VolumeSource{
 					DownwardAPI: &core.DownwardAPIVolumeSource{
 						Items: []core.DownwardAPIVolumeFile{
@@ -238,13 +238,13 @@ func addAgentVolume(pod *core.Pod, ag *agent.Config, patches patchOps) patchOps 
 			Op:   "add",
 			Path: "/spec/volumes/-",
 			Value: core.Volume{
-				Name: agent.ConfigVolumeName,
+				Name: agentconfig.ConfigVolumeName,
 				VolumeSource: core.VolumeSource{
 					ConfigMap: &core.ConfigMapVolumeSource{
-						LocalObjectReference: core.LocalObjectReference{Name: agent.ConfigMap},
+						LocalObjectReference: core.LocalObjectReference{Name: agentconfig.ConfigMap},
 						Items: []core.KeyToPath{{
 							Key:  ag.AgentName,
-							Path: agent.ConfigFile,
+							Path: agentconfig.ConfigFile,
 						}},
 					},
 				},
@@ -294,7 +294,7 @@ func containerEqual(a, b *core.Container) bool {
 func addAgentContainer(
 	ctx context.Context,
 	pod *core.Pod,
-	config *agent.Config,
+	config *agentconfig.Sidecar,
 	patches patchOps,
 ) patchOps {
 	acn := agentContainer(pod, config)
@@ -305,12 +305,12 @@ func addAgentContainer(
 	refPodName := pod.Name + "." + pod.Namespace
 	for i := range pod.Spec.Containers {
 		pcn := &pod.Spec.Containers[i]
-		if pcn.Name == agent.ContainerName {
+		if pcn.Name == agentconfig.ContainerName {
 			if containerEqual(pcn, acn) {
 				dlog.Infof(ctx, "Pod %s already has container %s and it isn't modified", refPodName, agentconfig.ContainerName)
 				return patches
 			}
-			dlog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agent.ContainerName)
+			dlog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agentconfig.ContainerName)
 			return append(patches, patchOperation{
 				Op:    "replace",
 				Path:  "/spec/containers/" + strconv.Itoa(i),
@@ -325,8 +325,8 @@ func addAgentContainer(
 }
 
 // addTPEnv adds telepresence specific environment variables to all interceptable app containers
-func addTPEnv(pod *core.Pod, config *agent.Config, env map[string]string, patches patchOps) patchOps {
-	eachContainer(pod, config, func(app *core.Container, cc *agent.Container) {
+func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string, patches patchOps) patchOps {
+	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		patches = addContainerTPEnv(pod, app, env, patches)
 	})
 	return patches
@@ -382,8 +382,8 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 
 // hidePorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container
-func hidePorts(pod *core.Pod, config *agent.Config, patches patchOps) patchOps {
-	eachContainer(pod, config, func(app *core.Container, cc *agent.Container) {
+func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		for _, ic := range cc.Intercepts {
 			if ic.Headless || ic.ContainerPortName == "" {
 				// Rely on iptables mapping instead of port renames
@@ -455,9 +455,9 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 		am = cm
 	}
 
-	if _, ok := pod.Annotations[agent.InjectAnnotation]; !ok {
+	if _, ok := pod.Annotations[agentconfig.InjectAnnotation]; !ok {
 		changed = true
-		am[agent.InjectAnnotation] = "enabled"
+		am[agentconfig.InjectAnnotation] = "enabled"
 	}
 
 	if changed {
@@ -470,13 +470,13 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 	return patches
 }
 
-func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) (*agent.Config, error) {
+func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
 	if a.agentConfigs == nil {
 		return nil, nil
 	}
 	var refs []meta.OwnerReference
 	if wl != nil {
-		ag := agent.Config{}
+		ag := agentconfig.Sidecar{}
 		ok, err := a.agentConfigs.GetInto(agentmap.AgentName(wl), pod.GetNamespace(), &ag)
 		if err != nil {
 			return nil, err
@@ -503,7 +503,7 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 // agentContainer will return a configured traffic-agent
 func agentContainer(
 	pod *core.Pod,
-	config *agent.Config,
+	config *agentconfig.Sidecar,
 ) *core.Container {
 	ports := make([]core.ContainerPort, 0, 5)
 	for _, cc := range config.Containers {
@@ -521,13 +521,13 @@ func agentContainer(
 
 	evs := make([]core.EnvVar, 0, len(config.Containers)*5)
 	efs := make([]core.EnvFromSource, 0, len(config.Containers)*3)
-	eachContainer(pod, config, func(app *core.Container, cc *agent.Container) {
+	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		evs = appendAppContainerEnv(app, cc, evs)
 		efs = appendAppContainerEnvFrom(app, cc, efs)
 	})
 	evs = append(evs,
 		core.EnvVar{
-			Name: agent.EnvPrefixAgent + "POD_IP",
+			Name: agentconfig.EnvPrefixAgent + "POD_IP",
 			ValueFrom: &core.EnvVarSource{
 				FieldRef: &core.ObjectFieldSelector{
 					APIVersion: "v1",
@@ -537,24 +537,24 @@ func agentContainer(
 		})
 
 	mounts := make([]core.VolumeMount, 0, len(config.Containers)*3)
-	eachContainer(pod, config, func(app *core.Container, cc *agent.Container) {
+	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		mounts = appendAppContainerVolumeMounts(app, cc, mounts)
 	})
 
 	mounts = append(mounts, core.VolumeMount{
-		Name:      agent.AnnotationVolumeName,
-		MountPath: agent.AnnotationMountPoint,
+		Name:      agentconfig.AnnotationVolumeName,
+		MountPath: agentconfig.AnnotationMountPoint,
 	})
 	mounts = append(mounts, core.VolumeMount{
-		Name:      agent.ConfigVolumeName,
-		MountPath: agent.ConfigMountPoint,
+		Name:      agentconfig.ConfigVolumeName,
+		MountPath: agentconfig.ConfigMountPoint,
 	})
 
 	if len(efs) == 0 {
 		efs = nil
 	}
 	return &core.Container{
-		Name:         agent.ContainerName,
+		Name:         agentconfig.ContainerName,
 		Image:        config.AgentImage,
 		Args:         []string{"agent"},
 		Ports:        ports,
@@ -573,7 +573,7 @@ func agentContainer(
 
 // eachContainer will find each container in the given config and match it against a container
 // in the pod using its name. The given function is called once for each match.
-func eachContainer(pod *core.Pod, config *agent.Config, f func(*core.Container, *agent.Container)) {
+func eachContainer(pod *core.Pod, config *agentconfig.Sidecar, f func(*core.Container, *agentconfig.Container)) {
 	cns := pod.Spec.Containers
 	for _, cc := range config.Containers {
 		for i := range pod.Spec.Containers {
@@ -585,7 +585,7 @@ func eachContainer(pod *core.Pod, config *agent.Config, f func(*core.Container, 
 	}
 }
 
-func appendAppContainerVolumeMounts(app *core.Container, cc *agent.Container, mounts []core.VolumeMount) []core.VolumeMount {
+func appendAppContainerVolumeMounts(app *core.Container, cc *agentconfig.Container, mounts []core.VolumeMount) []core.VolumeMount {
 	for _, m := range app.VolumeMounts {
 		if strings.HasPrefix(m.MountPath, "/var/run/secrets/") {
 			// Trust that those are injected into the agent container
@@ -597,17 +597,17 @@ func appendAppContainerVolumeMounts(app *core.Container, cc *agent.Container, mo
 	return mounts
 }
 
-func appendAppContainerEnv(app *core.Container, cc *agent.Container, es []core.EnvVar) []core.EnvVar {
+func appendAppContainerEnv(app *core.Container, cc *agentconfig.Container, es []core.EnvVar) []core.EnvVar {
 	for _, e := range app.Env {
-		e.Name = agent.EnvPrefixApp + cc.EnvPrefix + e.Name
+		e.Name = agentconfig.EnvPrefixApp + cc.EnvPrefix + e.Name
 		es = append(es, e)
 	}
 	return es
 }
 
-func appendAppContainerEnvFrom(app *core.Container, cc *agent.Container, es []core.EnvFromSource) []core.EnvFromSource {
+func appendAppContainerEnvFrom(app *core.Container, cc *agentconfig.Container, es []core.EnvFromSource) []core.EnvFromSource {
 	for _, e := range app.EnvFrom {
-		e.Prefix = agent.EnvPrefixApp + cc.EnvPrefix + e.Prefix
+		e.Prefix = agentconfig.EnvPrefixApp + cc.EnvPrefix + e.Prefix
 		es = append(es, e)
 	}
 	return es

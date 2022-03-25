@@ -15,26 +15,26 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"gopkg.in/yaml.v3"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 )
 
 const nat = "nat"
 const inboundChain = "TEL_INBOUND"
 
 type config struct {
-	agent.Config
+	agentconfig.Sidecar
 }
 
 func loadConfig(ctx context.Context) (*config, error) {
-	cf, err := dos.Open(ctx, filepath.Join(agent.ConfigMountPoint, agent.ConfigFile))
+	cf, err := dos.Open(ctx, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile))
 	if err != nil {
 		return nil, fmt.Errorf("unable to open agent ConfigMap: %w", err)
 	}
 	defer cf.Close()
 
 	c := config{}
-	if err = yaml.NewDecoder(cf).Decode(&c.Config); err != nil {
+	if err = yaml.NewDecoder(cf).Decode(&c.Sidecar); err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
 	return &c, nil

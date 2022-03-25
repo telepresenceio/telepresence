@@ -8,19 +8,19 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const (
-	ServicePortAnnotation = agent.DomainPrefix + "inject-service-port"
-	ServiceNameAnnotation = agent.DomainPrefix + "inject-service-name"
+	ServicePortAnnotation = agentconfig.DomainPrefix + "inject-service-port"
+	ServiceNameAnnotation = agentconfig.DomainPrefix + "inject-service-name"
 	ManagerAppName        = "traffic-manager"
 	ManagerPortHTTP       = 8081
 )
 
-func GenerateForPod(ctx context.Context, pod *core.Pod) (*agent.Config, error) {
+func GenerateForPod(ctx context.Context, pod *core.Pod) (*agentconfig.Sidecar, error) {
 	wl, err := FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
@@ -28,14 +28,14 @@ func GenerateForPod(ctx context.Context, pod *core.Pod) (*agent.Config, error) {
 	return Generate(ctx, wl)
 }
 
-func Generate(ctx context.Context, wl k8sapi.Workload) (*agent.Config, error) {
+func Generate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
 	env := managerutil.GetEnv(ctx)
 	pod := wl.GetPodTemplate()
 	pod.Namespace = wl.GetNamespace()
 	cns := pod.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == agent.ContainerName {
+		if cn.Name == agentconfig.ContainerName {
 			continue
 		}
 		ports := cn.Ports
@@ -43,7 +43,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agent.Config, error) {
 			if ports[pi].ContainerPort == env.AgentPort {
 				return nil, fmt.Errorf(
 					"the %s.%s pod container %s is exposing the same port (%d) as the %s sidecar",
-					pod.Name, pod.Namespace, cn.Name, env.AgentPort, agent.ContainerName)
+					pod.Name, pod.Namespace, cn.Name, env.AgentPort, agentconfig.ContainerName)
 			}
 		}
 	}
@@ -53,7 +53,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agent.Config, error) {
 		return nil, err
 	}
 
-	var ccs []*agent.Container
+	var ccs []*agentconfig.Container
 	agentPort := uint16(env.AgentPort)
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
@@ -65,7 +65,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agent.Config, error) {
 		return nil, fmt.Errorf("found no service with a port that matches a container in pod %s.%s", pod.Name, pod.Namespace)
 	}
 
-	ag := &agent.Config{
+	ag := &agentconfig.Sidecar{
 		AgentImage:   env.AgentRegistry + "/" + env.AgentImage,
 		AgentName:    AgentName(wl),
 		Namespace:    wl.GetNamespace(),
@@ -79,7 +79,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agent.Config, error) {
 	return ag, nil
 }
 
-func appendAgentContainerConfigs(svc *core.Service, pod *core.PodTemplateSpec, portNumber *uint16, ccs []*agent.Container) ([]*agent.Container, error) {
+func appendAgentContainerConfigs(svc *core.Service, pod *core.PodTemplateSpec, portNumber *uint16, ccs []*agentconfig.Container) ([]*agentconfig.Container, error) {
 	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
 	ports, err := install.FilterServicePorts(svc, portNameOrNumber)
 	if err != nil {
@@ -88,7 +88,7 @@ func appendAgentContainerConfigs(svc *core.Service, pod *core.PodTemplateSpec, p
 nextSvcPort:
 	for _, port := range ports {
 		cn, i := findContainerMatchingPort(&port, pod.Spec.Containers)
-		if cn == nil || cn.Name == agent.ContainerName {
+		if cn == nil || cn.Name == agentconfig.ContainerName {
 			continue
 		}
 		var appPort core.ContainerPort
@@ -106,7 +106,7 @@ nextSvcPort:
 			appProto = *port.AppProtocol
 		}
 
-		ic := &agent.Intercept{
+		ic := &agentconfig.Intercept{
 			ServiceName:       svc.Name,
 			ServiceUID:        svc.UID,
 			ServicePortName:   port.Name,
@@ -133,12 +133,12 @@ nextSvcPort:
 				mounts[i] = vm.MountPath
 			}
 		}
-		ccs = append(ccs, &agent.Container{
+		ccs = append(ccs, &agentconfig.Container{
 			Name:       cn.Name,
 			EnvPrefix:  CapsBase26(uint64(len(ccs))) + "_",
-			MountPoint: agent.MountPrefixApp + "/" + cn.Name,
+			MountPoint: agentconfig.MountPrefixApp + "/" + cn.Name,
 			Mounts:     mounts,
-			Intercepts: []*agent.Intercept{ic},
+			Intercepts: []*agentconfig.Intercept{ic},
 		})
 	}
 	return ccs, nil

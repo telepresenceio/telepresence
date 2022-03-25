@@ -6,7 +6,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
 const EnvPrefix = "_TEL_AGENT_"
@@ -138,7 +138,7 @@ func agentEnvironment(
 			mounts[i] = appContainer.VolumeMounts[i].MountPath
 		}
 		env = append(env, core.EnvVar{
-			Name:  agent.EnvInterceptMounts,
+			Name:  agentconfig.EnvInterceptMounts,
 			Value: strings.Join(mounts, ":"),
 		})
 	}
@@ -178,7 +178,7 @@ func appEnvironment(appContainer *core.Container, apiPort int) []core.EnvVar {
 		})
 	}
 	envCopy = append(envCopy, core.EnvVar{
-		Name:  agent.EnvInterceptContainer,
+		Name:  agentconfig.EnvInterceptContainer,
 		Value: appContainer.Name,
 	})
 	return envCopy

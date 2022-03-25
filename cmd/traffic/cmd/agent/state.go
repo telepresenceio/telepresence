@@ -8,7 +8,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -30,7 +30,7 @@ type State interface {
 // An InterceptState implements what's needed to intercept one port.
 type InterceptState interface {
 	State
-	InterceptConfig() *agent.Intercept
+	InterceptConfig() *agentconfig.Intercept
 	InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error)
 	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
 }
@@ -92,7 +92,7 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 		ms := make([]*manager.InterceptInfo, 0, len(iis))
 		ic := ist.InterceptConfig()
 		for _, ii := range iis {
-			if agent.SpecMatchesIntercept(ii.Spec, ic) {
+			if agentconfig.SpecMatchesIntercept(ii.Spec, ic) {
 				dlog.Debugf(ctx, "intercept id %s svc=%q, svcPort=%q matches config svc=%q, svcPort=%d",
 					ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort)
 				ms = append(ms, ii)

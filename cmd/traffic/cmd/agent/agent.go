@@ -15,9 +15,9 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -27,15 +27,15 @@ import (
 // AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
-func AppEnvironment(ctx context.Context, ag *agent.Container) (map[string]string, error) {
+func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]string, error) {
 	osEnv := dos.Environ(ctx)
-	prefix := agent.EnvPrefixApp + ag.EnvPrefix
+	prefix := agentconfig.EnvPrefixApp + ag.EnvPrefix
 	fullEnv := make(map[string]string, len(osEnv))
 
 	// Add prefixed variables separately last, so that we can
 	// ensure that they have higher precedence.
 	for _, env := range osEnv {
-		if !strings.HasPrefix(env, agent.EnvPrefix) {
+		if !strings.HasPrefix(env, agentconfig.EnvPrefix) {
 			pair := strings.SplitN(env, "=", 2)
 			if len(pair) == 2 {
 				k := pair[0]
@@ -54,9 +54,9 @@ func AppEnvironment(ctx context.Context, ag *agent.Container) (map[string]string
 			}
 		}
 	}
-	fullEnv[agent.EnvInterceptContainer] = ag.Name
+	fullEnv[agentconfig.EnvInterceptContainer] = ag.Name
 	if len(ag.Mounts) > 0 {
-		fullEnv[agent.EnvInterceptMounts] = strings.Join(ag.Mounts, ":")
+		fullEnv[agentconfig.EnvInterceptMounts] = strings.Join(ag.Mounts, ":")
 	}
 	return fullEnv, nil
 }

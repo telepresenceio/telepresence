@@ -17,9 +17,9 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -102,12 +102,12 @@ func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload) 
 }
 
 func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (*core.ConfigMap, error) {
-	cm, err := cmAPI.Get(ctx, agent.ConfigMap, meta.GetOptions{})
+	cm, err := cmAPI.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err == nil {
 		return cm, nil
 	}
 	if !errors2.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to get ConfigMap %s.%s: %w", agent.ConfigMap, namespace, err)
+		return nil, fmt.Errorf("failed to get ConfigMap %s.%s: %w", agentconfig.ConfigMap, namespace, err)
 	}
 	cm, err = cmAPI.Create(ctx, &core.ConfigMap{
 		TypeMeta: meta.TypeMeta{
@@ -115,22 +115,22 @@ func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespac
 			APIVersion: "v1",
 		},
 		ObjectMeta: meta.ObjectMeta{
-			Name:      agent.ConfigMap,
+			Name:      agentconfig.ConfigMap,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":       agent.ConfigMap,
+				"app.kubernetes.io/name":       agentconfig.ConfigMap,
 				"app.kubernetes.io/created-by": "traffic-manager",
 				"app.kubernetes.io/version":    strings.TrimPrefix(version.Version, "v"),
 			},
 		},
 	}, meta.CreateOptions{})
 	if err != nil {
-		err = fmt.Errorf("failed to create ConfigMap %s.%s: %w", agent.ConfigMap, namespace, err)
+		err = fmt.Errorf("failed to create ConfigMap %s.%s: %w", agentconfig.ConfigMap, namespace, err)
 	}
 	return cm, err
 }
 
-func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *core.ConfigMap, wl k8sapi.Workload) (*agent.Config, error) {
+func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *core.ConfigMap, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
 	manuallyManaged, enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
-	var ac *agent.Config
+	var ac *agentconfig.Sidecar
 	if y, ok := cm.Data[wl.GetName()]; ok {
 		if ac, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
@@ -154,7 +154,7 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		if manuallyManaged {
 			return nil, errcat.User.Newf(
 				"annotation %s.%s/%s=true but workload has no corresponding entry in the %s ConfigMap",
-				wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation, agent.ConfigMap)
+				wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation, agentconfig.ConfigMap)
 		}
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
@@ -162,7 +162,7 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		cm.Data[wl.GetName()] = fmt.Sprintf("create: true\nworkloadKind: %s\nworkloadName: %s\nnamespace: %s",
 			wl.GetKind(), wl.GetName(), wl.GetNamespace())
 		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
-			return nil, fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agent.ConfigMap, wl.GetNamespace(), err)
+			return nil, fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
 		}
 		if ac, err = waitForConfigMapUpdate(ctx, cmAPI, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
@@ -205,7 +205,7 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, bool, error) {
 	var an *core.Container
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == agent.ContainerName {
+		if cn.Name == agentconfig.ContainerName {
 			an = cn
 			break
 		}
@@ -220,13 +220,13 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, bool, error) {
 
 // Wait for the cluster's mutating webhook injector to do its magic. It will update the
 // configMap once it's done.
-func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface, agentName, namespace string) (*agent.Config, error) {
+func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface, agentName, namespace string) (*agentconfig.Sidecar, error) {
 	wi, err := cmAPI.Watch(ctx, meta.SingleObject(meta.ObjectMeta{
-		Name:      agent.ConfigMap,
+		Name:      agentconfig.ConfigMap,
 		Namespace: namespace,
 	}))
 	if err != nil {
-		return nil, fmt.Errorf("Watch of ConfigMap  %s failed: %w", agent.ConfigMap, ctx.Err())
+		return nil, fmt.Errorf("Watch of ConfigMap  %s failed: %w", agentconfig.ConfigMap, ctx.Err())
 	}
 	defer wi.Stop()
 
@@ -239,10 +239,10 @@ func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface,
 				v = "timed out"
 				c = codes.DeadlineExceeded
 			}
-			return nil, status.Error(c, fmt.Sprintf("watch of ConfigMap %s[%s]: request %s", agent.ConfigMap, agentName, v))
+			return nil, status.Error(c, fmt.Sprintf("watch of ConfigMap %s[%s]: request %s", agentconfig.ConfigMap, agentName, v))
 		case ev, ok := <-wi.ResultChan():
 			if !ok {
-				return nil, status.Error(codes.Canceled, fmt.Sprintf("watch of ConfigMap  %s[%s]: channel closed", agent.ConfigMap, agentName))
+				return nil, status.Error(codes.Canceled, fmt.Sprintf("watch of ConfigMap  %s[%s]: channel closed", agentconfig.ConfigMap, agentName))
 			}
 			if !(ev.Type == watch.Added || ev.Type == watch.Modified) {
 				continue
@@ -288,23 +288,23 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string) error 
 	}
 }
 
-func unmarshalConfigMapEntry(y string, name, namespace string) (*agent.Config, error) {
-	conf := agent.Config{}
+func unmarshalConfigMapEntry(y string, name, namespace string) (*agentconfig.Sidecar, error) {
+	conf := agentconfig.Sidecar{}
 	if err := yaml.Unmarshal([]byte(y), &conf); err != nil {
-		return nil, fmt.Errorf("failed to parse entry for %s in ConfigMap %s.%s: %w", name, agent.ConfigMap, namespace, err)
+		return nil, fmt.Errorf("failed to parse entry for %s in ConfigMap %s.%s: %w", name, agentconfig.ConfigMap, namespace, err)
 	}
 	return &conf, nil
 }
 
 // findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port
-func findIntercept(ac *agent.Config, spec *manager.InterceptSpec) (foundCN *agent.Container, foundIC *agent.Intercept, err error) {
+func findIntercept(ac *agentconfig.Sidecar, spec *manager.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
 	spi := spec.ServicePortIdentifier
 	for _, cn := range ac.Containers {
 		for _, ic := range cn.Intercepts {
 			if !(spec.ServiceName == "" || spec.ServiceName == ic.ServiceName) {
 				continue
 			}
-			if !(spi == "" || agent.IsInterceptFor(spi, ic)) {
+			if !(spi == "" || agentconfig.IsInterceptFor(spi, ic)) {
 				continue
 			}
 			if foundIC == nil {

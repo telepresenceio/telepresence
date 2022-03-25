@@ -9,18 +9,18 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/agent"
 )
 
 type Config interface {
-	AgentConfig() *agent.Config
+	AgentConfig() *agentconfig.Sidecar
 	HasMounts(ctx context.Context) bool
 	PodIP() string
 }
 
 type config struct {
-	agent.Config
+	agentconfig.Sidecar
 	podIP string
 }
 
@@ -32,14 +32,14 @@ var skipKeys = map[string]bool{
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
-	cf, err := dos.Open(ctx, filepath.Join(agent.ConfigMountPoint, agent.ConfigFile))
+	cf, err := dos.Open(ctx, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile))
 	if err != nil {
 		return nil, fmt.Errorf("unable to open agent ConfigMap: %w", err)
 	}
 	defer cf.Close()
 
 	c := config{}
-	if err = yaml.NewDecoder(cf).Decode(&c.Config); err != nil {
+	if err = yaml.NewDecoder(cf).Decode(&c.Sidecar); err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")
@@ -51,8 +51,8 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	return &c, nil
 }
 
-func (c *config) AgentConfig() *agent.Config {
-	return &c.Config
+func (c *config) AgentConfig() *agentconfig.Sidecar {
+	return &c.Sidecar
 }
 
 func (c *config) HasMounts(ctx context.Context) bool {
@@ -71,7 +71,7 @@ func (c *config) PodIP() string {
 // addSecretsMounts adds any token-rotating system secrets directories if they exist
 // e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
 // to the TELEPRESENCE_MOUNTS environment variable
-func addSecretsMounts(ctx context.Context, ag *agent.Container) error {
+func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
 	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
 	secretsDir, err := dos.Open(ctx, "/var/run/secrets")
 	if err != nil {
