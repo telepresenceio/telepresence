@@ -494,7 +494,7 @@ func (tm *TrafficManager) session() *manager.SessionInfo {
 func (tm *TrafficManager) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
-	iMap map[string]*manager.InterceptInfo,
+	iMap map[string][]*manager.InterceptInfo,
 	aMap map[string]*manager.AgentInfo,
 	filter rpc.ListRequest_Filter,
 ) ([]*rpc.WorkloadInfo, error) {
@@ -531,12 +531,10 @@ func (tm *TrafficManager) getInfosForWorkloads(
 				},
 			}
 			var ok bool
-			wlInfo.InterceptInfo, ok = iMap[name]
-			if !ok && filter <= rpc.ListRequest_INTERCEPTS {
+			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
 			}
-			wlInfo.AgentInfo, ok = aMap[name]
-			if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			if wlInfo.AgentInfo, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
 			wiMap[workload.GetUID()] = wlInfo
@@ -673,12 +671,12 @@ func (tm *TrafficManager) workloadInfoSnapshot(
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 
-	iMap := make(map[string]*manager.InterceptInfo, len(is))
+	iMap := make(map[string][]*manager.InterceptInfo, len(is))
 nextIs:
 	for _, i := range is {
 		for _, ns := range nss {
 			if i.Spec.Namespace == ns {
-				iMap[i.Spec.Agent] = i
+				iMap[i.Spec.Agent] = append(iMap[i.Spec.Agent], i)
 				continue nextIs
 			}
 		}
@@ -699,11 +697,11 @@ nextIs:
 		for localIntercept, localNs := range tm.localIntercepts {
 			for _, ns := range nss {
 				if localNs == ns {
-					workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
+					workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
 						Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
 						Disposition:       manager.InterceptDispositionType_ACTIVE,
 						MechanismArgsDesc: "as local-only",
-					}})
+					}}})
 					continue nextLocalNs
 				}
 			}

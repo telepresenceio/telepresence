@@ -74,8 +74,8 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	}
 
 	state := func(workload *connector.WorkloadInfo) string {
-		if ii := workload.InterceptInfo; ii != nil {
-			return DescribeIntercept(ii, nil, s.debug)
+		if iis := workload.InterceptInfos; len(iis) > 0 {
+			return DescribeIntercepts(iis, nil, s.debug)
 		}
 		ai := workload.AgentInfo
 		if ai != nil {
@@ -101,8 +101,8 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		for _, dep := range r.Workloads {
 			depNs := dep.Namespace
 			if depNs == "" {
-				// Local-only, so use namespace of intercept
-				depNs = dep.InterceptInfo.Spec.Namespace
+				// Local-only, so use namespace of first intercept
+				depNs = dep.InterceptInfos[0].Spec.Namespace
 			}
 			if ns != "" && depNs != ns {
 				includeNs = true
@@ -114,8 +114,8 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		for _, dep := range r.Workloads {
 			n := dep.Name
 			if n == "" {
-				// Local-only, so use name of intercept
-				n = dep.InterceptInfo.Spec.Name
+				// Local-only, so use name of first intercept
+				n = dep.InterceptInfos[0].Spec.Name
 			}
 			nl := len(n)
 			if includeNs {
@@ -127,8 +127,8 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 		for _, workload := range r.Workloads {
 			if workload.Name == "" {
-				// Local-only, so use name of intercept
-				n := workload.InterceptInfo.Spec.Name
+				// Local-only, so use name of first intercept
+				n := workload.InterceptInfos[0].Spec.Name
 				if includeNs {
 					n += "." + workload.Namespace
 				}
@@ -145,9 +145,19 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
-	msg := "intercepted"
+func DescribeIntercepts(iis []*manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
+	sb := strings.Builder{}
+	sb.WriteString("intercepted")
+	for i, ii := range iis {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		describeIntercept(ii, volumeMountsPrevented, debug, &sb)
+	}
+	return sb.String()
+}
 
+func describeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, debug bool, sb *strings.Builder) {
 	type kv struct {
 		Key   string
 		Value string
@@ -222,10 +232,10 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	}
 	for _, kv := range fields {
 		vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
-		msg += fmt.Sprintf("\n    %-*s: %s", klen, kv.Key, vlines[0])
+		fmt.Fprintf(sb, "\n    %-*s: %s", klen, kv.Key, vlines[0])
 		for _, vline := range vlines[1:] {
-			msg += "\n      " + vline
+			sb.WriteString("\n      ")
+			sb.WriteString(vline)
 		}
 	}
-	return msg
 }

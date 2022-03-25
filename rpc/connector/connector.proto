@@ -264,8 +264,8 @@ message WorkloadInfo {
   // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
   telepresence.manager.AgentInfo agent_info = 3;
 
-  // InterceptInfo reported from the traffic manager in case the workload is currently intercepted
-  telepresence.manager.InterceptInfo intercept_info = 4;
+  // InterceptInfos reported from the traffic manager in case the workload is currently intercepted
+  repeated telepresence.manager.InterceptInfo intercept_infos = 9;
 
   // Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
   string workload_resource_type = 5;
@@ -284,6 +284,8 @@ message WorkloadInfo {
   optional ServiceReference service = 7;
 
   string uid = 8;
+
+  reserved 4;
 }
 
 message WorkloadInfoSnapshot {

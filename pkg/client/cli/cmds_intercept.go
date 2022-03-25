@@ -707,7 +707,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	if doMount || err != nil {
 		volumeMountProblem = checkMountCapability(ctx)
 	}
-	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
+	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 

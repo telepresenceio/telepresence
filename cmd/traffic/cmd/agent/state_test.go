@@ -39,7 +39,7 @@ func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.Stat
 	require.NoError(t, err)
 	s := agent.NewSimpleState(c)
 	cn := c.AgentConfig().Containers[0]
-	s.AddInterceptState(agent.NewForwarderState(s, f, cn.Intercepts[0], cn.MountPoint, map[string]string{}))
+	s.AddInterceptState(agent.NewInterceptState(s, f, cn.Intercepts[0], cn.MountPoint, map[string]string{}))
 
 	return f, s
 }
