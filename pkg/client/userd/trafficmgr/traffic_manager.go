@@ -678,11 +678,18 @@ func (tm *TrafficManager) remain(c context.Context) error {
 }
 
 func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	config, err := k8s.NewConfig(c, cr.KubeFlags)
+	var config *k8s.Config
+	var err error
+	if cr.Podd != nil && *cr.Podd {
+		config, err = k8s.NewConfigPodd(c, cr.KubeFlags)
+	} else {
+		config, err = k8s.NewConfig(c, cr.KubeFlags)
+	}
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
-	if !tm.Config.ContextServiceAndFlagsEqual(config) {
+
+	if (cr.Podd == nil || !*cr.Podd) && !tm.Config.ContextServiceAndFlagsEqual(config) {
 		return &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
 			ClusterContext: tm.Config.Context,
