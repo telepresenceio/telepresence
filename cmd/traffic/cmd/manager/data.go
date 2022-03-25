@@ -2,6 +2,9 @@ package manager
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/blang/semver"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -17,7 +20,13 @@ func validateClient(client *rpc.ClientInfo) string {
 	case client.Version == "":
 		return "version must not be empty"
 	}
-
+	sv, err := semver.Parse(strings.TrimPrefix(client.Version, "v"))
+	if err != nil {
+		return err.Error()
+	}
+	if sv.Major < 2 || sv.Major == 2 && sv.Minor < 6 {
+		return "client version must be at least 2.6.0"
+	}
 	return ""
 }
 
