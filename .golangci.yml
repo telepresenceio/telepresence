@@ -80,7 +80,7 @@ linters:
     - errcheck
     - exportloopref
     - forbidigo
-    - gci
+    - goimports
     - gocognit
     - gocritic
     - gocyclo
@@ -105,11 +105,11 @@ linters:
   # don't enable:
   # - dupl
   # - funlen
+  # - gci
   # - gochecknoglobals
   # - gochecknoinits
   # - goconst
   # - godox
-  # - goimports # use gci instead
   # - golint
   # - gosec
   # - interfacer
