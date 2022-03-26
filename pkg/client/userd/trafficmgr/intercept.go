@@ -853,23 +853,16 @@ func (tm *TrafficManager) clearIntercepts(c context.Context) error {
 func (tm *TrafficManager) reconcileAPIServers(ctx context.Context) {
 	wantedPorts := make(map[int]struct{})
 	wantedMatchers := make(map[string]*manager.InterceptInfo)
-	agents := tm.getCurrentAgents()
 
 	agentAPIPort := func(ii *manager.InterceptInfo) int {
 		is := ii.Spec
-		for _, a := range agents {
-			if a.Name == is.Agent && a.Namespace == is.Namespace {
-				if ps, ok := ii.Environment["TELEPRESENCE_API_PORT"]; ok {
-					port, err := strconv.ParseUint(ps, 10, 16)
-					if err == nil {
-						return int(port)
-					}
-					dlog.Errorf(ctx, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, a.Name, a.Namespace, err)
-				}
-				return 0
+		if ps, ok := ii.Environment["TELEPRESENCE_API_PORT"]; ok {
+			port, err := strconv.ParseUint(ps, 10, 16)
+			if err == nil {
+				return int(port)
 			}
+			dlog.Errorf(ctx, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)
 		}
-		dlog.Errorf(ctx, "no agent found for intercept %s", is.Name)
 		return 0
 	}
 

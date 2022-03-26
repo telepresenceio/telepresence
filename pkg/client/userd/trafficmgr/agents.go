@@ -20,6 +20,7 @@ import (
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot
+// Deprecated
 func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
@@ -33,6 +34,7 @@ func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
+// Deprecated
 func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
