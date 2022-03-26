@@ -38,9 +38,21 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 		if err != nil {
 			return nil, err
 		}
-		ip, mask := make(net.IP, len(dst.IP)), make(net.IPMask, len(dst.Mask))
+		if localIP == nil {
+			continue
+		}
+		ip, gwc, mask := make(net.IP, len(dst.IP)), make(net.IP, len(gw)), make(net.IPMask, len(dst.Mask))
+		copy(gwc, gw)
 		copy(ip, dst.IP)
 		copy(mask, dst.Mask)
+		gw = gwc
+		var dflt bool
+		if gw4 := gw.To4(); gw4 != nil {
+			gw = gw4
+			dflt = !gw.Equal(net.IP{0, 0, 0, 0})
+		} else {
+			dflt = !gw.Equal(net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+		}
 		routes = append(routes, Route{
 			LocalIP: localIP,
 			Gateway: gw,
@@ -49,7 +61,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 				Mask: mask,
 			},
 			Interface: iface,
-			Default:   row.DestinationPrefix.PrefixLength == 0,
+			Default:   dflt,
 		})
 	}
 	return routes, nil

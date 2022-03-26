@@ -49,14 +49,15 @@ func interfaceLocalIP(iface *net.Interface, ipv4 bool) (net.IP, error) {
 		if err != nil {
 			return net.IP{}, fmt.Errorf("unable to parse address %s: %v", addr.String(), err)
 		}
-		if ip.To4() != nil {
-			if ipv4 {
-				return ip.To4(), nil
+		if ip4 := ip.To4(); ip4 != nil {
+			if !ipv4 {
+				continue
 			}
+			return ip4, nil
 		} else if ipv4 {
 			continue
 		}
 		return ip, nil
 	}
-	return net.IP{}, fmt.Errorf("interface %s has no addresses", iface.Name)
+	return nil, nil
 }
