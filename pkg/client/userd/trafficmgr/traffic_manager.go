@@ -196,7 +196,14 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 
 	// Must call SetManagerClient before calling daemon.Connect which tells the
 	// daemon to use the proxy.
-	svc.SetManagerClient(tmgr.managerClient)
+	var opts []grpc.CallOption
+	cfg := client.GetConfig(c)
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
+		}
+	}
+	svc.SetManagerClient(tmgr.managerClient, opts...)
 
 	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	oi := tmgr.getOutboundInfo(c)

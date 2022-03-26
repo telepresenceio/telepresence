@@ -10,7 +10,7 @@
 
 - Change: The TUN device will no longer route pod or service subnets if it is running in a machine that's already connected to the cluster
 
-- Bugfix: The client's agent watcher will now respect the configured grpc.maxReceiveSize
+- Bugfix: The client's gather logs command and agent watcher will now respect the configured grpc.maxReceiveSize
 
 - Bugfix: Client and agent sessions no longer leaves dangling waiters in the traffic-manager when they depart.
 

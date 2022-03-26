@@ -13,8 +13,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -83,7 +85,7 @@ type anonymizer struct {
 }
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
-func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error {
+func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error { //nolint:gocognit
 	scout := scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 	defer scout.Close()
@@ -190,7 +192,14 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		}
 		err = withConnector(cmd, false, nil, func(_ context.Context, _ *connectorState) error {
 			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				lr, err := managerClient.GetLogs(ctx, rq)
+				var opts []grpc.CallOption
+				cfg := client.GetConfig(ctx)
+				if !cfg.Grpc.MaxReceiveSize.IsZero() {
+					if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+						opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
+					}
+				}
+				lr, err := managerClient.GetLogs(ctx, rq, opts...)
 				if err != nil {
 					return err
 				}
