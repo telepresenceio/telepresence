@@ -28,6 +28,19 @@ func (a wrapFs) Create(name string) (dos.File, error) {
 	return wrapFile(a.Fs.Create(name))
 }
 
+func (a wrapFs) ReadDir(name string) ([]fs.DirEntry, error) {
+	dir, err := a.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	return dir.ReadDir(0)
+}
+
+func (a wrapFs) ReadFile(name string) ([]byte, error) {
+	return afero.ReadFile(a.Fs, name)
+}
+
 func (a wrapFs) Open(name string) (dos.File, error) {
 	return wrapFile(a.Fs.Open(name))
 }
@@ -41,6 +54,10 @@ func (a wrapFs) Symlink(oldName, newName string) error {
 		return lfs.SymlinkIfPossible(oldName, newName)
 	}
 	return &os.LinkError{Op: "symlink", Old: oldName, New: newName, Err: afero.ErrNoSymlink}
+}
+
+func (a wrapFs) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return afero.WriteFile(a.Fs, name, data, perm)
 }
 
 // The afero.File lacks ReadDir. Instances implement fs.ReadDirFile though

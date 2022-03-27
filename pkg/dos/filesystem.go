@@ -29,11 +29,16 @@ type File interface {
 // FileSystem is an interface that implements functions in the os package
 type FileSystem interface {
 	Create(name string) (File, error)
-	MkdirAll(path string, perm fs.FileMode) error
+	Mkdir(name string, perm fs.FileMode) error
+	MkdirAll(name string, perm fs.FileMode) error
 	Open(name string) (File, error)
 	OpenFile(name string, flag int, perm fs.FileMode) (File, error)
+	ReadDir(name string) ([]fs.DirEntry, error)
+	ReadFile(name string) ([]byte, error)
+	Remove(name string) error
 	Stat(name string) (fs.FileInfo, error)
 	Symlink(oldName, newName string) error
+	WriteFile(name string, data []byte, perm fs.FileMode) error
 }
 
 type osFs struct{}
@@ -42,8 +47,12 @@ func (osFs) Create(name string) (File, error) {
 	return os.Create(name)
 }
 
-func (osFs) MkdirAll(path string, perm fs.FileMode) error {
-	return os.MkdirAll(path, perm)
+func (osFs) Mkdir(name string, perm fs.FileMode) error {
+	return os.Mkdir(name, perm)
+}
+
+func (osFs) MkdirAll(name string, perm fs.FileMode) error {
+	return os.MkdirAll(name, perm)
 }
 
 func (osFs) Open(name string) (File, error) {
@@ -54,12 +63,28 @@ func (osFs) OpenFile(name string, flag int, perm fs.FileMode) (File, error) {
 	return os.OpenFile(name, flag, perm)
 }
 
+func (osFs) ReadDir(name string) ([]fs.DirEntry, error) {
+	return os.ReadDir(name)
+}
+
+func (osFs) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
+
+func (osFs) Remove(name string) error {
+	return os.Remove(name)
+}
+
 func (osFs) Stat(name string) (fs.FileInfo, error) {
 	return os.Stat(name)
 }
 
 func (osFs) Symlink(oldName, newName string) error {
 	return os.Symlink(oldName, newName)
+}
+
+func (osFs) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return os.WriteFile(name, data, perm)
 }
 
 type fsKey struct{}
@@ -81,9 +106,14 @@ func Create(ctx context.Context, name string) (File, error) {
 	return getFS(ctx).Create(name)
 }
 
+// Mkdir is like os.Mkdir but delegates to the context's FS
+func Mkdir(ctx context.Context, name string, perm fs.FileMode) error {
+	return getFS(ctx).Mkdir(name, perm)
+}
+
 // MkdirAll is like os.MkdirAll but delegates to the context's FS
-func MkdirAll(ctx context.Context, path string, perm fs.FileMode) error {
-	return getFS(ctx).MkdirAll(path, perm)
+func MkdirAll(ctx context.Context, name string, perm fs.FileMode) error {
+	return getFS(ctx).MkdirAll(name, perm)
 }
 
 // Open is like os.Open but delegates to the context's FS
@@ -96,6 +126,25 @@ func OpenFile(ctx context.Context, name string, flag int, perm fs.FileMode) (Fil
 	return getFS(ctx).OpenFile(name, flag, perm)
 }
 
+// ReadDir is like os.ReadDir but delegates to the context's FS
+func ReadDir(ctx context.Context, name string) ([]fs.DirEntry, error) {
+	return getFS(ctx).ReadDir(name)
+}
+
+// ReadFile is like os.ReadFile but delegates to the context's FS
+func ReadFile(ctx context.Context, name string) ([]byte, error) { // MODIFIED
+	return getFS(ctx).ReadFile(name)
+}
+
+// Remove is like os.ReadDir but delegates to the context's FS
+func Remove(ctx context.Context, name string) error {
+	return getFS(ctx).Remove(name)
+}
+
+func WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
+	return getFS(ctx).WriteFile(name, data, perm)
+}
+
 // Stat is like os.Stat but delegates to the context's FS
 func Stat(ctx context.Context, name string) (fs.FileInfo, error) {
 	return getFS(ctx).Stat(name)
@@ -104,49 +153,4 @@ func Stat(ctx context.Context, name string) (fs.FileInfo, error) {
 // Symlink is like os.Symlink but delegates to the context's FS
 func Symlink(ctx context.Context, oldName, newName string) error {
 	return getFS(ctx).Symlink(oldName, newName)
-}
-
-// ReadFile is like os.ReadFile but delegates to the context's FS
-// This function is a verbatim copy of Golang 1.17.6 os.ReadFile in src/os/file.go,
-// except for lines marked "MODIFIED".
-func ReadFile(ctx context.Context, name string) ([]byte, error) { // MODIFIED
-	f, err := Open(ctx, name) // MODIFIED
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var size int
-	if info, err := f.Stat(); err == nil {
-		size64 := info.Size()
-		if int64(int(size64)) == size64 {
-			size = int(size64)
-		}
-	}
-	size++ // one byte for final read at EOF
-
-	// If a file claims a small size, read at least 512 bytes.
-	// In particular, files in Linux's /proc claim size 0 but
-	// then do not work right if read in small pieces,
-	// so an initial read of 1 byte would not work correctly.
-	if size < 512 {
-		size = 512
-	}
-
-	data := make([]byte, 0, size)
-	for {
-		if len(data) >= cap(data) {
-			d := data[:cap(data)] // MODIFIED split in two lines to satisfy gocritic lint complaint
-			d = append(d, 0)      // MODIFIED
-			data = d[:len(data)]
-		}
-		n, err := f.Read(data[len(data):cap(data)])
-		data = data[:len(data)+n]
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return data, err
-		}
-	}
 }
