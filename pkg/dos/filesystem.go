@@ -28,7 +28,9 @@ type File interface {
 
 // FileSystem is an interface that implements functions in the os package
 type FileSystem interface {
+	Chdir(name string) error
 	Create(name string) (File, error)
+	Getwd() (string, error)
 	Mkdir(name string, perm fs.FileMode) error
 	MkdirAll(name string, perm fs.FileMode) error
 	Open(name string) (File, error)
@@ -43,8 +45,16 @@ type FileSystem interface {
 
 type osFs struct{}
 
+func (osFs) Chdir(path string) error {
+	return os.Chdir(path)
+}
+
 func (osFs) Create(name string) (File, error) {
 	return os.Create(name)
+}
+
+func (osFs) Getwd() (string, error) {
+	return os.Getwd()
 }
 
 func (osFs) Mkdir(name string, perm fs.FileMode) error {
@@ -101,9 +111,19 @@ func getFS(ctx context.Context) FileSystem {
 	return osFs{}
 }
 
+// Chdir is like os.Chdir but delegates to the context's FS
+func Chdir(ctx context.Context, path string) error {
+	return getFS(ctx).Chdir(path)
+}
+
 // Create is like os.Create but delegates to the context's FS
 func Create(ctx context.Context, name string) (File, error) {
 	return getFS(ctx).Create(name)
+}
+
+// Getwd is like os.Getwd but delegates to the context's FS
+func Getwd(ctx context.Context) (string, error) {
+	return getFS(ctx).Getwd()
 }
 
 // Mkdir is like os.Mkdir but delegates to the context's FS

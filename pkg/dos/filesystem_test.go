@@ -26,12 +26,14 @@ func TestWithFS(t *testing.T) {
 	require.NoError(t, afero.WriteFile(appFS, "/a/b/c.txt", cData, 0644))
 	require.NoError(t, afero.WriteFile(appFS, "/a/d.txt", dData, 0644))
 
-	ctx := dos.WithFS(dlog.NewTestContext(t, false), aferofs.Wrap(appFS))
+	ctx := dos.WithFS(dlog.NewTestContext(t, false), dos.WorkingDirWrapper(aferofs.Wrap(appFS)))
 
-	data, err := dos.ReadFile(ctx, "/a/b/c.txt")
+	require.NoError(t, dos.Chdir(ctx, "/a/b"))
+	data, err := dos.ReadFile(ctx, "c.txt")
 	require.NoError(t, err)
 	require.Equal(t, cData, data)
 
+	require.NoError(t, dos.Chdir(ctx, "../.."))
 	f, err := dos.Open(ctx, "/a/d.txt")
 	require.NoError(t, err)
 	data, err = io.ReadAll(f)

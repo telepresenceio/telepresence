@@ -1,6 +1,7 @@
 package aferofs
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 
@@ -24,8 +25,16 @@ func wrapFile(f afero.File, err error) (dos.File, error) {
 	return file{f}, err
 }
 
+func (a wrapFs) Chdir(path string) error {
+	return errors.New("afero.Fs does not implement Chdir")
+}
+
 func (a wrapFs) Create(name string) (dos.File, error) {
 	return wrapFile(a.Fs.Create(name))
+}
+
+func (a wrapFs) Getwd() (string, error) {
+	return "", errors.New("afero.Fs does not implement Getwd")
 }
 
 func (a wrapFs) ReadDir(name string) ([]fs.DirEntry, error) {
