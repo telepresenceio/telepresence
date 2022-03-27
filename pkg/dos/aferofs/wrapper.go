@@ -25,6 +25,10 @@ func wrapFile(f afero.File, err error) (dos.File, error) {
 	return file{f}, err
 }
 
+func (a wrapFs) Abs(name string) (string, error) {
+	return "", errors.New("afero.Fs does not implement Abs")
+}
+
 func (a wrapFs) Chdir(path string) error {
 	return errors.New("afero.Fs does not implement Chdir")
 }
@@ -48,6 +52,13 @@ func (a wrapFs) ReadDir(name string) ([]fs.DirEntry, error) {
 
 func (a wrapFs) ReadFile(name string) ([]byte, error) {
 	return afero.ReadFile(a.Fs, name)
+}
+
+func (a wrapFs) RealPath(name string) (string, error) {
+	if rp, ok := a.Fs.(interface{ RealPath(string) (string, error) }); ok {
+		return rp.RealPath(name)
+	}
+	return "", errors.New("RealPath is not implemented")
 }
 
 func (a wrapFs) Open(name string) (dos.File, error) {

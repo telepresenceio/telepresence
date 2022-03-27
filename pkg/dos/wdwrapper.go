@@ -22,6 +22,10 @@ func (w *wdWrapper) basePath(path string) string {
 	return filepath.Clean(filepath.Join(w.wd, path))
 }
 
+func (w *wdWrapper) Abs(name string) (string, error) {
+	return w.basePath(name), nil
+}
+
 func (w *wdWrapper) Chdir(path string) error {
 	path = w.basePath(path)
 	if s, err := w.base.Stat(path); err != nil {
@@ -63,6 +67,10 @@ func (w *wdWrapper) ReadDir(name string) ([]fs.DirEntry, error) {
 
 func (w *wdWrapper) ReadFile(name string) ([]byte, error) {
 	return w.base.ReadFile(w.basePath(name))
+}
+
+func (w *wdWrapper) RealPath(name string) (string, error) {
+	return w.base.RealPath(w.basePath(name))
 }
 
 func (w *wdWrapper) Remove(name string) error {

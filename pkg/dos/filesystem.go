@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 )
 
 // File represents a file in the filesystem. The os.File struct implements this interface
@@ -28,6 +29,7 @@ type File interface {
 
 // FileSystem is an interface that implements functions in the os package
 type FileSystem interface {
+	Abs(name string) (string, error)
 	Chdir(name string) error
 	Create(name string) (File, error)
 	Getwd() (string, error)
@@ -37,6 +39,7 @@ type FileSystem interface {
 	OpenFile(name string, flag int, perm fs.FileMode) (File, error)
 	ReadDir(name string) ([]fs.DirEntry, error)
 	ReadFile(name string) ([]byte, error)
+	RealPath(name string) (string, error)
 	Remove(name string) error
 	Stat(name string) (fs.FileInfo, error)
 	Symlink(oldName, newName string) error
@@ -45,8 +48,12 @@ type FileSystem interface {
 
 type osFs struct{}
 
-func (osFs) Chdir(path string) error {
-	return os.Chdir(path)
+func (osFs) Abs(name string) (string, error) {
+	return filepath.Abs(name)
+}
+
+func (osFs) Chdir(name string) error {
+	return os.Chdir(name)
 }
 
 func (osFs) Create(name string) (File, error) {
@@ -81,6 +88,10 @@ func (osFs) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
 
+func (osFs) RealPath(name string) (string, error) {
+	return filepath.Abs(name)
+}
+
 func (osFs) Remove(name string) error {
 	return os.Remove(name)
 }
@@ -109,6 +120,11 @@ func getFS(ctx context.Context) FileSystem {
 		return fs
 	}
 	return osFs{}
+}
+
+// Abs is like filepath.Abs but delegates to the context's FS
+func Abs(ctx context.Context, name string) (string, error) {
+	return getFS(ctx).Abs(name)
 }
 
 // Chdir is like os.Chdir but delegates to the context's FS
@@ -154,6 +170,12 @@ func ReadDir(ctx context.Context, name string) ([]fs.DirEntry, error) {
 // ReadFile is like os.ReadFile but delegates to the context's FS
 func ReadFile(ctx context.Context, name string) ([]byte, error) { // MODIFIED
 	return getFS(ctx).ReadFile(name)
+}
+
+// RealPath returns the real path in the underlying os filesystem or
+// an error if there's no os filesystem.
+func RealPath(ctx context.Context, name string) (string, error) {
+	return getFS(ctx).RealPath(name)
 }
 
 // Remove is like os.ReadDir but delegates to the context's FS

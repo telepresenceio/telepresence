@@ -18,6 +18,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -77,12 +78,12 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	// We use this to place a file which conveys 'readiness'
 	// The presence of this file is used in the readiness check.
 	dir := "/tmp/agent"
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.Mkdir("/tmp/agent", 0777); err != nil {
+	if _, err := dos.Stat(ctx, dir); os.IsNotExist(err) {
+		if err := dos.Mkdir(ctx, "/tmp/agent", 0777); err != nil {
 			return err
 		}
 	}
-	file, err := os.OpenFile("/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := dos.OpenFile(ctx, "/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		return err
 	}
@@ -221,16 +222,16 @@ func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *r
 }
 
 // GetLogLevel will return the log level that this agent should use
-func GetLogLevel() string {
-	level, ok := os.LookupEnv(install.EnvPrefix + "LOG_LEVEL")
+func GetLogLevel(ctx context.Context) string {
+	level, ok := dos.LookupEnv(ctx, install.EnvPrefix+"LOG_LEVEL")
 	if !ok {
-		level = os.Getenv("LOG_LEVEL")
+		level = dos.Getenv(ctx, "LOG_LEVEL")
 	}
 	return level
 }
 
 func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
-	level := GetLogLevel()
+	level := GetLogLevel(ctx)
 	timedLevel := log.NewTimedLevel(level, log.SetLevel)
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
