@@ -401,7 +401,8 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		}
 		dlog.Debugf(c, "Using %s flags %v", ir.Spec.Mechanism, ir.Spec.MechanismArgs)
 	}
-	return &serviceProps{preparedIntercept: pi, apiKey: apiKey}, nil
+	svcProps := &serviceProps{preparedIntercept: pi, apiKey: apiKey}
+	return svcProps, svcProps.interceptResult()
 }
 
 // legacyImage ensures that the installer never modifies a workload to
@@ -473,7 +474,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 		return nil, interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, err)
 	}
 	svcProps.apiKey = apiKey
-	return svcProps, nil
+	return svcProps, svcProps.interceptResult()
 }
 
 func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, error) {
@@ -545,7 +546,7 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
-	if result != nil {
+	if result != nil && result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}
 
@@ -584,7 +585,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		// Make spec port identifier unambiguous.
 		spec.ServiceName = svcProps.preparedIntercept.ServiceName
 		spec.ServicePortIdentifier = svcProps.preparedIntercept.ServicePortName
-		result = svcProps.interceptResult()
 	}
 
 	spec.ServiceUid = result.ServiceUid

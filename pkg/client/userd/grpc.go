@@ -179,10 +179,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
 		_, result = session.CanIntercept(c, ir)
 		if result == nil {
-			result = &rpc.InterceptResult{
-				Error:        rpc.InterceptError_UNSPECIFIED,
-				WorkloadKind: "local",
-			}
+			result = &rpc.InterceptResult{Error: rpc.InterceptError_UNSPECIFIED}
 		}
 		return err
 	})
