@@ -199,12 +199,12 @@ func Test_request_String(t *testing.T) {
 		{
 			name:    "headers",
 			request: request{headers: headers(map[string]Value{"A": NewEqual("b")})},
-			want:    "requests with headers\n  A == b",
+			want:    "requests with headers\n  'A: b'",
 		},
 		{
 			name:    "path and headers",
 			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
-			want:    "requests with\n  path =~ .*/path\n  headers\n    A == b",
+			want:    "requests with\n  path =~ .*/path\n  headers\n    'A: b'",
 		},
 	}
 	for _, tt := range tests {

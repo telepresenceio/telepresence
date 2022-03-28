@@ -128,14 +128,14 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[1].Disposition)
 	a.Equal("Conflicts with the currently-waiting-to-be-served intercept \"intercept-01\"", reviews[1].Message)
 
-	// Handle updates forwarding
+	// Handle conflicts
 
 	cepts[0].Disposition = rpc.InterceptDispositionType_ACTIVE
 	cepts[1].Disposition = rpc.InterceptDispositionType_WAITING
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 1)
-	a.True(f.Intercepting())
+	a.Equal(cepts[1].Id, reviews[0].Id)
 
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[0].Disposition)
 	a.Equal("Conflicts with the currently-served intercept \"intercept-01\"", reviews[0].Message)
