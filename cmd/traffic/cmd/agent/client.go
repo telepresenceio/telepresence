@@ -43,6 +43,23 @@ func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc
 	return cloudConnectInfo, nil
 }
 
+type interceptsStringer []*rpc.InterceptInfo
+
+func (is interceptsStringer) String() string {
+	sb := strings.Builder{}
+	sb.WriteByte('[')
+	for i, ii := range is {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(ii.Id)
+		sb.WriteByte(' ')
+		sb.WriteString(ii.Disposition.String())
+	}
+	sb.WriteByte(']')
+	return sb.String()
+}
+
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -145,6 +162,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		case <-ctx.Done():
 			return nil
 		case snapshot := <-snapshots:
+			dlog.Debugf(ctx, "HandleIntercepts %s", interceptsStringer(snapshot.Intercepts))
 			reviews := state.HandleIntercepts(ctx, snapshot.Intercepts)
 			for _, review := range reviews {
 				review.Session = session
