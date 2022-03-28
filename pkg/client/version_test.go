@@ -69,7 +69,7 @@ func TestGetInstallMechanism(t *testing.T) {
 			errFile:                  false,
 		}
 	} else {
-		// we *only* support brew for macos so we should report website in
+		// we *only* support brew for macOS so we should report website in
 		// this case.
 		testcases["brew-install"] = testcase{
 			binaryPath:               "Cellar/telepresence",
@@ -103,7 +103,7 @@ func TestGetInstallMechanism(t *testing.T) {
 		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
 			// Create the fake binary for our test
-			// We include the tcName in the filePath so we don't have to worry about
+			// We include the tcName in the filePath, so we don't have to worry about
 			// named collisions or cleaning up after each test
 			filePath := fmt.Sprintf("%s/%s/%s", fakeExecDir, tcName, tcData.binaryPath)
 			assert.NoError(t, createFile(filePath))

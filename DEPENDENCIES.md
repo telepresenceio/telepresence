@@ -77,6 +77,7 @@ following Free and Open Source software:
     github.com/inconshreveable/mousetrap                                v1.0.0                                     Apache License 2.0
     github.com/jmoiron/sqlx                                             v1.3.1                                     MIT license
     github.com/json-iterator/go                                         v1.1.10                                    MIT license
+    github.com/kr/fs                                                    v0.1.0                                     3-clause BSD license
     github.com/lann/builder                                             v0.0.0-20180802200727-47ae307949d0         MIT license
     github.com/lann/ps                                                  v0.0.0-20150810152359-62de8c46ede0         MIT license
     github.com/lib/pq                                                   v1.10.0                                    MIT license
@@ -101,6 +102,7 @@ following Free and Open Source software:
     github.com/peterbourgon/diskv                                       v2.0.1+incompatible                        MIT license
     github.com/pkg/browser                                              v0.0.0-20180916011732-0a3d74bf9ce4         2-clause BSD license
     github.com/pkg/errors                                               v0.9.1                                     2-clause BSD license
+    github.com/pkg/sftp                                                 v1.13.4                                    2-clause BSD license
     github.com/pmezard/go-difflib                                       v1.0.0                                     3-clause BSD license
     github.com/prometheus/client_golang                                 v1.7.1                                     Apache License 2.0
     github.com/prometheus/client_model                                  v0.2.0                                     Apache License 2.0
@@ -122,7 +124,7 @@ following Free and Open Source software:
     github.com/xlab/treeprint                                           v0.0.0-20181112141820-a009c3971eca         MIT license
     go.opencensus.io                                                    v0.22.3                                    Apache License 2.0
     go.starlark.net                                                     v0.0.0-20200306205701-8dd3e2ee1dd5         3-clause BSD license
-    golang.org/x/crypto                                                 v0.0.0-20210322153248-0c34fe9e7dc2         3-clause BSD license
+    golang.org/x/crypto                                                 v0.0.0-20210421170649-83a5a9bb288b         3-clause BSD license
     golang.org/x/mod                                                    v0.4.2                                     3-clause BSD license
     golang.org/x/net                                                    v0.0.0-20210805182204-aaa1db679c0d         3-clause BSD license
     golang.org/x/oauth2                                                 v0.0.0-20200107190931-bf48bf16ab8d         3-clause BSD license

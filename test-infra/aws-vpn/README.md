@@ -22,7 +22,7 @@ The certs and keys for the VPN will be placed in a `certs` folder
 
 ### 2. Configuration
 
-Next, you need to configure this terraform stack to generate a VPC/VPN/Cluster with the parameters you need.
+Next, you need to configure this Terraform stack to generate a VPC/VPN/Cluster with the parameters you need.
 The easiest way to do this is to create a `terraform.tfvars` file inside the `aws-vpn` directory and place the configuration's variables there.
 The format of this file should be:
 

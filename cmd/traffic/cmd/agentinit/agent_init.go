@@ -7,12 +7,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/sethvargo/go-envconfig"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 const nat = "nat"
@@ -30,7 +29,7 @@ func configureIptables(ctx context.Context, iptables *iptables.IPTables, loopbac
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic will flow request -> mesh -> agent -> app
 	appPort := strconv.Itoa(cfg.AppPort)
 	agentPort := strconv.Itoa(cfg.AgentPort)
-	agentUID := strconv.FormatInt(install.AgentUID, 10)
+	agentUID := strconv.Itoa(os.Getuid())
 	// Clearing the inbound chain will create it if it doesn't exist, or clear it out if it does.
 	err := iptables.ClearChain(nat, inboundChain)
 	if err != nil {

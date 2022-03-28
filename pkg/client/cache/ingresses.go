@@ -33,7 +33,7 @@ func LoadIngressesFromUserCache(ctx context.Context) (map[string]*manager.Ingres
 }
 
 // DeleteIngressesFromUserCache removes the ingresses cache if exists or returns an error. An attempt
-// to remove a non existing cache is a no-op and the function returns nil.
+// to remove a non-existing cache is a no-op and the function returns nil.
 func DeleteIngressesFromUserCache(ctx context.Context) error {
 	return DeleteFromUserCache(ctx, ingressesFile)
 }

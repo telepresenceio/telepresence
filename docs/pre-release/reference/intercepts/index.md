@@ -87,7 +87,7 @@ outside of the service as expected.
 
 Use the `--http-plaintext` flag when doing an intercept when the service in the
 cluster is using TLS in case you want to use plaintext for the communication with the
-process on your local workstation. 
+process on your local workstation.
 
 ## Supported workloads
 
@@ -192,12 +192,12 @@ Finally, run `telepresence leave <name of intercept>` to stop the intercept.
 
 You can skip the ingress dialogue by setting the relevant parameters using flags. If any of the following flags are set, the dialogue will be skipped and the flag values will be used instead. If any of the required flags are missing, an error will be thrown.
 
-| Flag           | Description | Required |
-| -------------- | ------------------------------ | --- |
-| `--ingress-host` | The ip address for the ingress | yes |
-| `--ingress-port` | The port for the ingress       | yes |
-| `--ingress-tls`  | Whether tls should be used     | no  |
-| `--ingress-l5`   | Whether a different ip address should be used in request headers | no |
+| Flag             | Description                                                      | Required |
+|------------------|------------------------------------------------------------------|----------|
+| `--ingress-host` | The ip address for the ingress                                   | yes      |
+| `--ingress-port` | The port for the ingress                                         | yes      |
+| `--ingress-tls`  | Whether tls should be used                                       | no       |
+| `--ingress-l5`   | Whether a different ip address should be used in request headers | no       |
 
 ## Creating an intercept when a service has multiple ports
 

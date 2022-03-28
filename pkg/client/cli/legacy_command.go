@@ -42,10 +42,10 @@ type legacyCommand struct {
 // Unfortunately we have to do our own flag parsing if we see legacy telepresence
 // flags because the run command might include something that cobra might detect
 // as a flag e.g. --run python3 -m http.server. In python this was handled by
-// using argparse.REMAINDER and there is not similar functionality with cobra.
+// using argparse.REMAINDER and there is no similar functionality within cobra.
 // There is an open ticket to pass unknown flags to the command:
 // https://github.com/spf13/cobra/issues/739
-// but until that is addressed, we'll do the flag parsing ourself (which isn't
+// but until that is addressed, we'll do the flag parsing ourselves (which isn't
 // the worst because it's a legacy command so the flags won't be growing).
 func parseLegacyCommand(args []string) *legacyCommand {
 	lc := &legacyCommand{}

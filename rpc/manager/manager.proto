@@ -407,7 +407,11 @@ message ClusterInfo {
 
   // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
   string cluster_domain = 4;
+
+  // manager_pod_ip is the ip address of the traffic manager
+  bytes manager_pod_ip = 5;
 }
+
 
 service Manager {
   // Version returns the version information of the Manager.

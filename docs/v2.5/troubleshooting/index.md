@@ -26,13 +26,18 @@ If your ingress is set to redirect HTTP requests to HTTPS and your web app uses 
 
 There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](../reference/vpn) on Telepresence and VPNs to learn more on how to fix these.
 
+## Connecting to a cluster hosted in a VM on the workstation doesn't work
+
+The cluster probably has access to the host's network and gets confused when it is mapped by Telepresence.
+Please check the [cluster in hosted vm](../howtos/cluster-in-vm) for more details.
+
 ## Your GitHub organization isn't listed
 
 Ambassador Cloud needs access granted to your GitHub organization as a
 third-party OAuth app.  If an organization isn't listed during login
 then the correct access has not been granted.
 
-The quickest way to resolve this is to go to the **Github menu** →
+The quickest way to resolve this is to go to the **GitHub menu** →
 **Settings** → **Applications** → **Authorized OAuth Apps** →
 **Ambassador Labs**.  An organization owner will have a **Grant**
 button, anyone not an owner will have **Request** which sends an email

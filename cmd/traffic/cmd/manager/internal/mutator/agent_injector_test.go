@@ -207,7 +207,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 						install.InjectAnnotation: "enabled",
 					},
 					Labels: map[string]string{
-						"serivce": "some-name",
+						"service": "some-name",
 					},
 					Namespace: "some-ns",
 					Name:      "some-name"},
@@ -491,8 +491,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`],` +
 				`"resources":{},` +
 				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
-				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}},` +
-				`"securityContext":{"runAsUser":7777,"runAsGroup":7777,"runAsNonRoot":true}` +
+				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}}` +
 				`}},` +
 				`{"op":"add","path":"/spec/volumes/-","value":{` +
 				`"name":"traffic-annotations",` +
@@ -557,8 +556,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				`],` +
 				`"resources":{},` +
 				`"volumeMounts":[{"name":"traffic-annotations","mountPath":"/tel_pod_info"}],` +
-				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}},` +
-				`"securityContext":{"runAsUser":7777,"runAsGroup":7777,"runAsNonRoot":true}` +
+				`"readinessProbe":{"exec":{"command":["/bin/stat","/tmp/agent/ready"]}}` +
 				`}},` +
 				`{"op":"add","path":"/spec/volumes/-","value":{` +
 				`"name":"traffic-annotations",` +

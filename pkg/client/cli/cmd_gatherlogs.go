@@ -53,7 +53,7 @@ telepresence gather-logs --traffic-agents=None --traffic-manager=False
 telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy
 
 # Get all logs for a specific pod
-telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy-6848967857-tw4jw     
+telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy-6848967857-tw4jw
 
 # Get logs from everything except the daemons
 telepresence gather-logs --daemons=None
@@ -104,7 +104,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		if err != nil {
 			return errcat.User.New(err)
 		}
-		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip", pwd)
+		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip")
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
 		return errcat.User.New("output file must end in .zip")
 	}
@@ -308,7 +308,7 @@ func copyFiles(dstFile, srcFile string) error {
 }
 
 // zipFiles creates a zip file with the contents of all the files passed in.
-// If some of the files do not exist, it will include that in the error message
+// If some files do not exist, it will include that in the error message,
 // but it will still create a zip file with as many files as it can.
 func zipFiles(files []string, zipFileName string) error {
 	zipFile, err := os.Create(zipFileName)

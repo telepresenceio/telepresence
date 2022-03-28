@@ -159,8 +159,8 @@ func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.C
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
 	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
-		// The manager can sometimes send the different subnets in different Sends, but after 5 seconds of listening to it
-		// we should expect to have everything
+		// The manager can sometimes send the different subnets in different Sends,
+		// but after 5 seconds of listening to it, we should expect to have everything
 		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer tCancel()
 		infoStream, err := session.managerClient.WatchClusterInfo(tCtx, session.session)

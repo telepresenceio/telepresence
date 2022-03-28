@@ -39,6 +39,13 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
+  - version: 2.5.4
+    date: "TBD"
+    notes:
+      - type: change
+        title: Update status command output
+        body: >-
+          The status command includes the install id, user id and account id in its result, and can print output as JSON.
   - version: 2.5.1
     date: "2022-02-19"
     notes:

@@ -14,7 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-const findInterfaceRegex = "^[0-9.]+( via (?P<gw>[0-9.]+))? dev (?P<dev>[a-z0-9-]+) src (?P<src>[0-9.]+)"
+const findInterfaceRegex = `^[0-9.]+(\s+via\s+(?P<gw>[0-9.]+))?\s+dev\s+(?P<dev>[a-z0-9-]+)\s+src\s+(?P<src>[0-9.]+)`
 
 var (
 	findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
@@ -61,6 +61,7 @@ msgLoop:
 				dstNet   *net.IPNet
 				ifaceIdx int = -1
 				ipv4     bool
+				dfltGw   bool
 			)
 			switch rt.Family {
 			case syscall.AF_INET:
@@ -89,6 +90,7 @@ msgLoop:
 			}
 			// Default route -- just make the dstNet 0.0.0.0
 			if gw != nil && dstNet == nil {
+				dfltGw = true
 				if ipv4 {
 					dstNet = &net.IPNet{
 						IP:   net.IP{0, 0, 0, 0},
@@ -115,6 +117,7 @@ msgLoop:
 					RoutedNet: dstNet,
 					Interface: iface,
 					Gateway:   gw,
+					Default:   dfltGw,
 				})
 			}
 		}

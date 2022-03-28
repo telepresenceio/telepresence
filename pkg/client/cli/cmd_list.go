@@ -73,18 +73,6 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	nameLen := 0
-	for _, dep := range r.Workloads {
-		n := dep.Name
-		if n == "" {
-			// Local-only, so use name of intercept
-			n = dep.InterceptInfo.Spec.Name
-		}
-		if nl := len(n); nl > nameLen {
-			nameLen = nl
-		}
-	}
-
 	state := func(workload *connector.WorkloadInfo) string {
 		if ii := workload.InterceptInfo; ii != nil {
 			return DescribeIntercept(ii, nil, s.debug)
@@ -108,12 +96,49 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			fmt.Fprintf(stdout, "%s", msg)
 		}
 	} else {
+		includeNs := false
+		ns := s.namespace
+		for _, dep := range r.Workloads {
+			depNs := dep.Namespace
+			if depNs == "" {
+				// Local-only, so use namespace of intercept
+				depNs = dep.InterceptInfo.Spec.Namespace
+			}
+			if ns != "" && depNs != ns {
+				includeNs = true
+				break
+			}
+			ns = depNs
+		}
+		nameLen := 0
+		for _, dep := range r.Workloads {
+			n := dep.Name
+			if n == "" {
+				// Local-only, so use name of intercept
+				n = dep.InterceptInfo.Spec.Name
+			}
+			nl := len(n)
+			if includeNs {
+				nl += len(dep.Namespace) + 1
+			}
+			if nl > nameLen {
+				nameLen = nl
+			}
+		}
 		for _, workload := range r.Workloads {
 			if workload.Name == "" {
 				// Local-only, so use name of intercept
-				fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, workload.InterceptInfo.Spec.Name)
+				n := workload.InterceptInfo.Spec.Name
+				if includeNs {
+					n += "." + workload.Namespace
+				}
+				fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, n)
 			} else {
-				fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, workload.Name, state(workload))
+				n := workload.Name
+				if includeNs {
+					n += "." + workload.Namespace
+				}
+				fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, n, state(workload))
 			}
 		}
 	}

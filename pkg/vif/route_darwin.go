@@ -25,7 +25,7 @@ func withRouteSocket(f func(routeSocket int) error) error {
 	return f(routeSocket)
 }
 
-// toRouteAddr converts an net.IP to its corresponding addrMessage.Addr
+// toRouteAddr converts a net.IP to its corresponding addrMessage.Addr
 func toRouteAddr(ip net.IP) (addr route.Addr) {
 	if ip4 := ip.To4(); ip4 != nil {
 		dst := route.Inet4Addr{}

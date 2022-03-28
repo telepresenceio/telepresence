@@ -85,7 +85,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 
 // OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
 // If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
-// method that registered the waiting stream. Otherwise this method returns nil.
+// method that registered the waiting stream. Otherwise, this method returns nil.
 func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
 	id := stream.ID()
 	ss.Lock()
@@ -180,17 +180,18 @@ type State struct {
 	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
-	logLevelCond     sync.Cond
+	llSubs           *loglevelSubscribers
 }
 
 func NewState(ctx context.Context) *State {
+	loglevel := os.Getenv("LOG_LEVEL")
 	return &State{
 		ctx:              ctx,
 		sessions:         make(map[string]SessionState),
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
-		timedLogLevel:    log.NewTimedLevel(os.Getenv("LOG_LEVEL"), log.SetLevel),
-		logLevelCond:     sync.Cond{L: &sync.Mutex{}},
+		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
+		llSubs:           newLoglevelSubscribers(),
 	}
 }
 
@@ -839,7 +840,7 @@ func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLev
 		duration = gd.AsDuration()
 	}
 	s.timedLogLevel.Set(ctx, logLevelRequest.LogLevel, duration)
-	s.logLevelCond.Broadcast()
+	s.llSubs.notify(ctx, logLevelRequest)
 }
 
 // InitialTempLogLevel returns the temporary log-level if it exists, along with the remaining
@@ -858,9 +859,6 @@ func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
 
 // WaitForTempLogLevel waits for a new temporary log-level request. It returns the values
 // of the last request that was made.
-func (s *State) WaitForTempLogLevel() *rpc.LogLevelRequest {
-	s.logLevelCond.L.Lock()
-	defer s.logLevelCond.L.Unlock()
-	s.logLevelCond.Wait()
-	return s.InitialTempLogLevel()
+func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
+	return s.llSubs.subscriberLoop(stream.Context(), stream)
 }

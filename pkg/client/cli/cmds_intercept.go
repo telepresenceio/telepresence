@@ -356,7 +356,7 @@ func checkMountCapability(ctx context.Context) error {
 		return errors.New("sshfs is not installed on your local machine")
 	}
 
-	// OSXFUSE changed to macFUSE and we've noticed that older versions of OSXFUSE
+	// OSXFUSE changed to macFUSE, and we've noticed that older versions of OSXFUSE
 	// can cause browsers to hang + kernel crashes, so we add an error to prevent
 	// our users from running into this problem.
 	// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
@@ -500,7 +500,7 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 			ingress.Port = ingressPort
 			ingress.UseTls = ingressTLS
 
-			if ingress.L5Host == "" { // if L5Host is not present
+			if ingressL5 == "" { // if L5Host is not present
 				ingress.L5Host = ingressHost
 				return ingress, nil
 			} else { // if L5Host is present
@@ -830,7 +830,7 @@ func (is *interceptState) writeEnvJSON() error {
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
 
 const (
-	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter 
+	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter
 	your cluster.  Please %s the ingress to use.`
 	ingressQ1 = `1/4: What's your ingress' IP address?
      You may use an IP address or a DNS name (this is usually a

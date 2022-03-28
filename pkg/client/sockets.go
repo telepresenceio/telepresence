@@ -19,7 +19,7 @@ func ListenSocket(ctx context.Context, processName, socketName string) (net.List
 	return listenSocket(ctx, processName, socketName)
 }
 
-// RemoveSocket removes any representation of the the socket from the filesystem.
+// RemoveSocket removes any representation of the socket from the filesystem.
 func RemoveSocket(listener net.Listener) error {
 	return removeSocket(listener)
 }

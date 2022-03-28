@@ -40,9 +40,21 @@ type Entry struct {
 	Value interface{}
 }
 
+type InstallType string
+
+const (
+	CLI    InstallType = "cli"
+	Docker InstallType = "docker"
+)
+
+var idFiles = map[InstallType]string{
+	CLI:    "id",
+	Docker: "docker_id",
+}
+
 // getInstallIDFromFilesystem returns the telepresence install ID, and also sets the reporter base
 // metadata to include any conflicting install IDs written by old versions of the product.
-func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter) (string, error) {
+func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter, installType InstallType) (string, error) {
 	type filecacheEntry struct {
 		Body string
 		Err  error
@@ -52,7 +64,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 		if _, isCached := filecache[filename]; !isCached {
 			bs, err := os.ReadFile(filename)
 			filecache[filename] = filecacheEntry{
-				Body: string(bs),
+				Body: strings.TrimSpace(string(bs)),
 				Err:  err,
 			}
 		}
@@ -63,7 +75,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	var retID string
 	allIDs := make(map[string]string)
 
-	if runtime.GOOS != "windows" { // won't find any legacy on windows
+	if runtime.GOOS != "windows" { // won't find any legacy on Windows
 		// We'll use this (and justify overriding GOOS=linux) below.
 		xdgConfigHome, err := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
 		if err == nil {
@@ -99,7 +111,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	if err != nil {
 		return "", err
 	}
-	idFilename := filepath.Join(telConfigDir, "id")
+	idFilename := filepath.Join(telConfigDir, idFiles[installType])
 	if id, err := readFile(idFilename); err != nil {
 		if !os.IsNotExist(err) {
 			return "", err
@@ -125,6 +137,24 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	}
 
 	reporter.BaseMetadata["new_install"] = len(allIDs) == 0
+
+	// We don't want to add the extra ids until we've decided if it's a new install or not
+	// this is because we'd like a new install of type A to be reported even if there's already
+	// an existing install of type B
+	for otherType, fileName := range idFiles {
+		if otherType == installType {
+			continue
+		}
+		idFilename := filepath.Join(telConfigDir, fileName)
+		if id, err := readFile(idFilename); err != nil {
+			if !os.IsNotExist(err) {
+				return "", err
+			}
+		} else {
+			allIDs["telepresence-2-"+string(otherType)] = id
+		}
+	}
+
 	for product, id := range allIDs {
 		if id != retID {
 			reporter.BaseMetadata["install_id_"+product] = id
@@ -137,15 +167,13 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 // before entries are discarded.
 const bufferSize = 40
 
-// NewReporter creates a new initialized Reporter instance that can be used to
-// send telepresence reports to Metriton
-func NewReporter(ctx context.Context, mode string) *Reporter {
+func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType) *Reporter {
 	r := &Reporter{
 		reporter: &metriton.Reporter{
 			Application: "telepresence2",
 			Version:     client.Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
-				id, err := getInstallIDFromFilesystem(ctx, r)
+				id, err := getInstallIDFromFilesystem(ctx, r, installType)
 				if err != nil {
 					id = "00000000-0000-0000-0000-000000000000"
 					r.BaseMetadata["new_install"] = true
@@ -157,6 +185,12 @@ func NewReporter(ctx context.Context, mode string) *Reporter {
 	}
 	r.initialize(ctx, mode, runtime.GOOS, runtime.GOARCH)
 	return r
+}
+
+// NewReporter creates a new initialized Reporter instance that can be used to
+// send telepresence reports to Metriton
+func NewReporter(ctx context.Context, mode string) *Reporter {
+	return NewReporterForInstallType(ctx, mode, CLI)
 }
 
 // initialization broken out or constructor for the benefit of testing

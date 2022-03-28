@@ -1,7 +1,7 @@
 # This output yaml should be the same as deployment-mp-tc-1.output.yaml
 # since both inputs are the same except for the interceptPort being the
 # name in tc-1 and the port in tc-2, but their output should be exactly
-# the same since both are targetting the same service port
+# the same since both are targeting the same service port
 deployment:
   apiVersion: apps/v1
   kind: Deployment

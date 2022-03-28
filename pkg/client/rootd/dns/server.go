@@ -32,10 +32,16 @@ const recursionCheck = "tel2-recursion-check.kube-system."
 // defaultClusterDomain used unless traffic-manager reports otherwise
 const defaultClusterDomain = "cluster.local."
 
+type FallbackPool interface {
+	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
+	RemoteAddr() string
+	LocalAddrs() []*net.UDPAddr
+}
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
-	fallback     *dns.Conn
+	fallbackPool FallbackPool
 	resolve      Resolver
 	requestCount int64
 	cache        sync.Map
@@ -92,7 +98,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup func(context.Context, string
 		}
 	}
 	if config.LookupTimeout.AsDuration() <= 0 {
-		config.LookupTimeout = durationpb.New(4 * time.Second)
+		config.LookupTimeout = durationpb.New(8 * time.Second)
 	}
 	s := &Server{
 		config:        config,
@@ -434,7 +440,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// The recursion check query, or queries that end with the cluster domain name, are not dispatched to the
 	// fallback DNS-server.
-	if s.fallback == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
+	if s.fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
 		if err == nil {
 			rc = dns.RcodeNameError
 		} else {
@@ -450,9 +456,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallback.RemoteAddr()) }
-	dc := dns.Client{Net: "udp", Timeout: 2 * time.Second}
-	msg, _, err = dc.ExchangeWithConn(r, s.fallback)
+	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
+	dc := &dns.Client{Net: "udp", Timeout: s.config.LookupTimeout.AsDuration()}
+	msg, _, err = s.fallbackPool.Exchange(c, dc, r)
 	if err != nil {
 		msg = new(dns.Msg)
 		rc = dns.RcodeServerFailure
@@ -529,9 +535,9 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, error)
 }
 
 // Run starts the DNS server(s) and waits for them to end
-func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallback *dns.Conn, resolve Resolver) error {
+func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool FallbackPool, resolve Resolver) error {
 	s.ctx = c
-	s.fallback = fallback
+	s.fallbackPool = fallbackPool
 	s.resolve = resolve
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})

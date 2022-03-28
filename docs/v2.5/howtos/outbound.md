@@ -62,7 +62,7 @@ If you terminate the client with `telepresence quit` and try to access the servi
   ```
     $ telepresence quit
     Telepresence Daemon quitting...done
-  ```  
+  ```
 
 <Alert severity="info">When using Telepresence in this way, you need to access services with the namespace qualified DNS name (<code>&lt;service name&gt;.&lt;namespace&gt;</code>) before you start an intercept. After you start an intercept, only  <code>&lt;service name&gt;</code> is required. Read more about these differences in the  <a href="../../quick-start/demo-node/">DNS resolution reference guide</a>.</Alert>
 
@@ -81,9 +81,9 @@ To control outbound connectivity to specific namespaces, add the `--local-only` 
   ```
     $ telepresence intercept <deployment name> --namespace <namespace> --local-only
   ```
-The resources in the given namespace can now be accessed using unqualified names as long as the intercept is active. 
+The resources in the given namespace can now be accessed using unqualified names as long as the intercept is active.
 You can deactivate the intercept with `telepresence leave <deployment name>`. This removes unqualified name access.
 
 ### Proxy outcound connectivity for laptops
 
-To specify additional hosts or subnets that should be resolved inside of the cluster, see [AlsoProxy](../../reference/config/#alsoproxy) for more details.
+To specify additional hosts or subnets that should be resolved inside the cluster, see [AlsoProxy](../../reference/config/#alsoproxy) for more details.

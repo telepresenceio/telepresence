@@ -59,7 +59,7 @@ type portForward struct {
 // The livePortForward struct provides synchronization for cancellation of port forwards.
 // This is necessary because a volume mount process must terminate before the corresponding
 // file system is removed. The removal cannot take place when the process ends because there
-// may be subsequent processes that use the same volume mount during the life time of an
+// may be subsequent processes that use the same volume mount during the lifetime of an
 // intercept (since an intercept may change pods).
 type livePortForward struct {
 	wg     sync.WaitGroup
@@ -363,19 +363,16 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 	// been set or not, so we start splitting them into flag and value and skipping
 	// those that aren't set.
 	m := make(map[string][]string, len(args))
-	ks := make([]string, 0, len(args))
 	for _, ma := range args {
 		if eqi := strings.IndexByte(ma, '='); eqi > 2 && eqi+1 < len(ma) {
 			k := ma[2:eqi]
-			ks = append(ks, k)
 			m[k] = append(m[k], ma[eqi+1:])
 		}
 	}
-	// Concat all --header flags (renamed to --match) with --match flags
-	// All agent versions can handle --match.
-	if hs, ok := m["header"]; ok {
-		delete(m, "header")
-		hs = append(hs, m["match"]...)
+	// Concat all --match flags (renamed to --header) with --header flags
+	if hs, ok := m["match"]; ok {
+		delete(m, "match")
+		hs = append(hs, m["header"]...)
 		ds := make([]string, 0, len(hs))
 		for _, h := range hs {
 			if h != "auto" {
@@ -386,10 +383,14 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 			// restore the default
 			ds = append(ds, "auto")
 		}
-		m["match"] = ds
+		m["header"] = ds
 	}
 	if agentVer != nil {
 		if agentVer.LE(semver.MustParse("1.11.8")) {
+			if hs, ok := m["header"]; ok {
+				delete(m, "header")
+				m["match"] = hs
+			}
 			for ma := range m {
 				switch ma {
 				case "meta", "path-equal", "path-prefix", "path-regex":
@@ -407,6 +408,12 @@ func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, err
 		}
 	}
 	args = make([]string, 0, len(args))
+	ks := make([]string, len(m))
+	i := 0
+	for k := range m {
+		ks[i] = k
+		i++
+	}
 	sort.Strings(ks)
 	for _, k := range ks {
 		for _, v := range m[k] {
@@ -510,6 +517,11 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	case wr := <-waitCh:
 		ii = wr.intercept
 		if wr.err != nil {
+			dlog.Debugf(c, "intercept %s failed to create, will remove...", wr.intercept.Spec.Name)
+			err := tm.RemoveIntercept(c, wr.intercept.Spec.Name)
+			if err != nil {
+				dlog.Warnf(c, "failed to remove failed intercept %s: %v", wr.intercept.Spec.Namespace, err)
+			}
 			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
 		}
 		result.InterceptInfo = wr.intercept

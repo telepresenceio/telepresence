@@ -83,7 +83,7 @@ func NewPrefix(v string) Value {
 	return prefixValue(v)
 }
 
-// NewEqual returns a Value that is a equal matcher.
+// NewEqual returns a Value that is an equal matcher.
 func NewEqual(v string) Value {
 	return textValue(v)
 }

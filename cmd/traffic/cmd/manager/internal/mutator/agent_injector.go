@@ -118,10 +118,8 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 	dlog.Infof(ctx, "Injecting %s into pod %s", install.AgentContainerName, refPodName)
 
 	var patches []patchOperation
-	setGID := false
 	if servicePort.TargetPort.Type == intstr.Int || svc.Spec.ClusterIP == "None" {
 		patches = addInitContainer(ctx, &pod, servicePort, &appPort, patches)
-		setGID = true
 	} else {
 		patches = hidePorts(&pod, appContainer, servicePort.TargetPort.StrVal, patches)
 	}
@@ -130,7 +128,7 @@ func agentInjector(ctx context.Context, req *admission.AdmissionRequest) ([]patc
 		tpEnv["TELEPRESENCE_API_PORT"] = strconv.Itoa(int(env.APIPort))
 	}
 	patches = addTPEnv(&pod, appContainer, tpEnv, patches)
-	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, setGID, podName, podNamespace, patches)
+	patches, err = addAgentContainer(ctx, svc, &pod, servicePort, appContainer, &appPort, podName, podNamespace, patches)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +164,8 @@ func addInitContainer(ctx context.Context, pod *core.Pod, svcPort *core.ServiceP
 				if i == len(pod.Spec.InitContainers)-1 {
 					return patches
 				}
-				// If the container isn't the last one, remove it so it can be appended at the end.
+				// If the container isn't the last one, remove it, so it
+				// can be appended at the end.
 				patches = append(patches, patchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/initContainers/%d", i),
@@ -203,7 +202,6 @@ func addAgentContainer(
 	svcPort *core.ServicePort,
 	appContainer *core.Container,
 	appPort *core.ContainerPort,
-	setGID bool,
 	podName, namespace string,
 	patches []patchOperation,
 ) ([]patchOperation, error) {
@@ -276,7 +274,6 @@ func addAgentContainer(
 			k8sapi.GetAppProto(ctx, env.AppProtocolStrategy, svcPort),
 			int(env.APIPort),
 			env.ManagerNamespace,
-			setGID,
 		)})
 
 	return patches, nil

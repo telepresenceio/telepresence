@@ -137,7 +137,7 @@ that the VPN routes:
                 * If this is not possible, consider shrinking the mask of the 10.0.0.0/16 CIDR (e.g. from /16 to /8), or disabling split-tunneling
 ```
 
-Typically this means that pods within `10.0.0.0/8` are not accessible while the VPN is
+Typically, this means that pods within `10.0.0.0/8` are not accessible while the VPN is
 connected.
 
 As with the first case, the ideal resolution is to move the pods away, but this may not always

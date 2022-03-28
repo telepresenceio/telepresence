@@ -1,3 +1,15 @@
 .circleci/
+.idea/
 .git/
+base-image/
+build-aux/
 build-output/
+!build-output/version.txt
+charts/
+docs/
+integration_test/
+k8s/
+packaging/
+smoke-tests/
+test-infra/
+tools/

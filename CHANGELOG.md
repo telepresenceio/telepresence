@@ -1,5 +1,29 @@
 # Changelog
 
+### 2.5.4 (TBD)
+
+- Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
+
+- Change: The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON
+
+- Change: The lookup-timeout config flag used to set timeouts for DNS queries resolved by a cluster now also configures the timeout for fallback queries (i.e. queries not resolved by the cluster) when connected to the cluster.
+
+- Change: The TUN device will no longer route pod or service subnets if it is running in a machine that's already connected to the cluster
+
+- Bugfix: Client and agent sessions no longer leaves dangling waiters in the traffic-manager when they depart.
+
+- Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
+
+- Bugfix: Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
+
+- Bugfix: Agent container is no longer sensitive to a random UID or an UID imposed by a SecurityContext.
+
+- Bugfix: Intercepts that fail to create are now consistently removed to prevent non-working dangling intercepts from sticking around.
+
+- Bugfix: The ingress-l5 flag will no longer be forcefully set to equal the --ingress-host flag
+
+- Bugfix: The DNS fallback resolver on Linux now correctly handles concurrent requests without timing them out
+
 ### 2.5.3 (February 25, 2022)
 
 - Feature: Client-side binaries for the arm64 architecture are now available for linux
@@ -38,7 +62,7 @@
 - Change: The global networking flags are no longer global. Using them will render a deprecation warning unless they are supported by the command.
   The subcommands that support networking flags are `connect`, `current-cluster-id`, and `genyaml`.
 
-- Change: Telepresence now includes GOARCH of the binary in the metadata reprted.
+- Change: Telepresence now includes GOARCH of the binary in the metadata reported.
 
 - Bugfix: The also-proxy and never-proxy subnets are now displayed correctly when using the `telepresence status` command
 
@@ -73,7 +97,7 @@
 - Feature: The strategy when selecting the application protocol for personal intercepts can now be configured using
   the `intercept.appProtocolStrategy` in the `config.yml` file.
 
-- Change: Telepresence CI now runs in Github Actions instead of Circle CI.
+- Change: Telepresence CI now runs in GitHub Actions instead of Circle CI.
 
 - Bugfix: Telepresence will no longer log invalid: "unhandled connection control message: code DIAL_OK" errors.
 
@@ -87,7 +111,7 @@
 
 ### 2.4.9 (December 9, 2021)
 
-- Bugfix: Fixed an error where access tokens were not refreshed if you login
+- Bugfix: Fixed an error where access tokens were not refreshed if you log in
   while the daemons are already running.
 
 - Bugfix: A helm upgrade using the --reuse-values flag no longer fails on a "nil pointer" error caused by a nil `telpresenceAPI` value.
@@ -138,10 +162,10 @@
 
 ### 2.4.6 (November 2, 2021)
 
-- Feature: Telepresence CLI is now built and published for Apple silicon Macs.
+- Feature: Telepresence CLI is now built and published for Apple Silicon Macs.
 
 - Feature: Telepresence now supports manually injecting the traffic-agent YAML into workload manifests.
-  Use the `genyaml` command to create the sidecar YAML, then add the `telepresence.getambassador.io/manually-injected: "true"` annotation to to your pods to allow Telepresence to intercept them.
+  Use the `genyaml` command to create the sidecar YAML, then add the `telepresence.getambassador.io/manually-injected: "true"` annotation to your pods to allow Telepresence to intercept them.
 
 - Feature: Added a json flag for the "telepresence list" command. This will aid automation.
 
@@ -155,7 +179,7 @@
 
 - Feature: Preview url questions have more context and provide "best guess" defaults.
 
-- Feature: The `gather-logs` command added two new flags. One for anonymizing pod names + namespaces and the other for getting the pod yaml of the `traffic-manager` and any pod that contains a `traffic-agent`.
+- Feature: The `gather-logs` command added two new flags. One to anonymize pod names + namespaces and the other for getting the pod yaml of the `traffic-manager` and any pod that contains a `traffic-agent`.
 
 - Change: Use one tunnel per connection instead of multiplexing into one tunnel. This client will still be backwards compatible with older `traffic-manager`s that only support multiplexing.
 
@@ -168,7 +192,7 @@
 - Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
 
 - Feature: Add the command `telepresence gather-logs`, which bundles the logs for all components
-  into one zip file that can then be shared in a github issue, in slack, etc. Use
+  into one zip file that can then be shared in a GitHub issue, in slack, etc. Use
   `telepresence gather-logs --help` to see additional options for running the command.
 
 - Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
@@ -245,7 +269,7 @@
 - Bugfix: Some slight fixes to the `homebrew-package.sh` script which will enable us to run
   it manually if we ever need to make homebrew point at an older version.
 
-- Feature: Helm chart has now feature to on demand regenerate certificate used for mutating webhook by setting value.
+- Feature: Helm chart has now a feature to on demand regenerate certificate used for mutating webhook by setting value.
   `agentInjector.certificate.regenerate`
 
 - Change: The traffic-manager now requires `get` namespace permissions to get the cluster ID instead of that value being
@@ -280,7 +304,7 @@
 ### 2.4.0 (August 4, 2021)
 
 - Feature: There is now a native Windows client for Telepresence.
-  All the same features supported by the MacOS and Linux client are available on Windows.
+  All the same features supported by the macOS and Linux client are available on Windows.
 
 - Feature: Telepresence can now receive messages from the cloud and raise
   them to the user when they perform certain commands.
@@ -300,7 +324,7 @@
   no config.yml file is found.
 
 - Bugfix: A panic is no longer raised when passing an argument to the
-  `telepresence intercept` option `--http-match` that does't contain an
+  `telepresence intercept` option `--http-match` that doesn't contain an
   equal sign.
 
 - Bugfix: The `traffic-manager` will only send subnet updates to a
@@ -477,7 +501,7 @@
 - Bugfix: When shutting down the user-daemon or root-daemon on the
   laptop, `telepresence quit` and related commands no longer return
   early before everything is fully shut down. Now it can be counted
-  on that by the time the command has returned that all of the
+  on that by the time the command has returned that all the
   side-effects on the laptop have been cleaned up.
 
 ### 2.3.1 (June 14, 2021)

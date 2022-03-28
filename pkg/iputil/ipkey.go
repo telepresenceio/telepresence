@@ -13,7 +13,7 @@ func (k IPKey) IP() net.IP {
 	return net.IP(k)
 }
 
-// String returns the human readable string form of the IP (as opposed to the binary junk displayed when using it directly).
+// String returns the human-readable string form of the IP (as opposed to the binary junk displayed when using it directly).
 func (k IPKey) String() string {
 	return net.IP(k).String()
 }

@@ -163,15 +163,15 @@ You have created an intercept to tell Telepresence where to send traffic. The `v
 
 ## 5. Telepresence intercept with a preview URL
 
-Preview URLs allows you to safely share your development environment. With this approach, you can try and test your local service more accurately because you have a total control about which traffic is handled through your service, all of this thank to the preview URL. 
+Preview URLs allows you to safely share your development environment. With this approach, you can try and test your local service more accurately because you have a total control about which traffic is handled through your service, all of this thanks to the preview URL.
 
-1. First leave the current intercept: 
+1. First leave the current intercept:
 
   ```
   $ telepresence leave voting
   ```
 
-2. Then login to telepresence: 
+2. Then login to telepresence:
 
   <LoginCommand />
 

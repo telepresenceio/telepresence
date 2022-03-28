@@ -63,7 +63,7 @@ type unbufferedConn interface {
 // This at first appears more complex than it needs to be: Why have buffers and pump goroutines,
 // instead of simply synchronously calling .Send and .Recv on the underlying stream?  stdlib
 // net.TCPConn gets away with that for synchronously reading and writing the underlying file
-// descriptor, so why can't we we get away this the same simplicity?  Because the OS kernel is doing
+// descriptor, so why can't we get away this the same simplicity?  Because the OS kernel is doing
 // that same buffering and pumping for TCP; Go stdlib doesn't have to do it because it's happening
 // in kernel space.  But since we don't have a raw FD that the kernel can do things with, we have to
 // do that those things in userspace.

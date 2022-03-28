@@ -86,7 +86,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 		t.Fatal("Expected timeToCheck() to return false")
 	}
 
-	// An day later it should be time to check
+	// A day later it should be time to check
 	ft.Step(checkDuration)
 	uc, err = NewUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
@@ -112,7 +112,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 	currentVer = lastestVer
 	lastestVer = semver.MustParse("1.2.4")
 
-	// An day later it should be time to check again
+	// A day later and one second it should be time to check again
 	ft.Step(checkDuration + 1)
 	uc, err = NewUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {

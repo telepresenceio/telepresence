@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	dns2 "github.com/miekg/dns"
-
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -137,15 +135,15 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 	}
 	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port)
 
-	// Create the connection later used for fallback. We need to create this before the firewall
+	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	conn, err := dns2.Dial("udp", net.JoinHostPort(net.IP(s.config.LocalIp).String(), "53"))
+	pool, err := NewConnPool(net.IP(s.config.LocalIp).String(), 10)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = conn.Close()
+		pool.Close()
 	}()
 
 	serverStarted := make(chan struct{})
@@ -171,7 +169,7 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 			s.flushDNS()
 			return nil
 		}, dev)
-		return s.Run(c, serverStarted, listeners, conn, s.resolveInSearch)
+		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch)
 	})
 
 	g.Go("NAT-redirect", func(c context.Context) error {
@@ -181,7 +179,7 @@ func (s *Server) runOverridingServer(c context.Context, dev *vif.Device) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr, conn.LocalAddr().(*net.UDPAddr))
+			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
 				return err
 			}
@@ -297,7 +295,7 @@ const tpDNSChain = "TELEPRESENCE_DNS"
 // that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
-func routeDNS(c context.Context, dnsIP net.IP, toAddr *net.UDPAddr, localDNS *net.UDPAddr) (err error) {
+func routeDNS(c context.Context, dnsIP net.IP, toAddr *net.UDPAddr, localDNSs []*net.UDPAddr) (err error) {
 	// create the chain
 	unrouteDNS(c)
 
@@ -308,15 +306,16 @@ func routeDNS(c context.Context, dnsIP net.IP, toAddr *net.UDPAddr, localDNS *ne
 
 	// This rule prevents that any rules in this table applies to the localDNS address when
 	// used as a source. I.e. we let the local DNS server reach the original DNS server
-	if err = runNatTableCmd(c, "-A", tpDNSChain,
-		"-p", "udp",
-		"--source", localDNS.IP.String(),
-		"--sport", strconv.Itoa(localDNS.Port),
-		"-j", "RETURN",
-	); err != nil {
-		return err
+	for _, localDNS := range localDNSs {
+		if err = runNatTableCmd(c, "-A", tpDNSChain,
+			"-p", "udp",
+			"--source", localDNS.IP.String(),
+			"--sport", strconv.Itoa(localDNS.Port),
+			"-j", "RETURN",
+		); err != nil {
+			return err
+		}
 	}
-
 	// This rule redirects all packets intended for the DNS service to our local DNS service
 	if err = runNatTableCmd(c, "-A", tpDNSChain,
 		"-p", "udp",

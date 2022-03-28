@@ -47,7 +47,7 @@ func init() {
 		}
 
 		// If stdout is a terminal but we were unable to get its size (I'm not sure how that can
-		// happen), then fall back to assuming 80.  If stdou tisn't a terminal, then we leave cols
+		// happen), then fall back to assuming 80.  If stdout isn't a terminal, then we leave cols
 		// as 0, meaning "don't wrap it".  (Docker wraps it even if stdout isn't a terminal.)
 		if term.IsTerminal(1) {
 			cols = 80

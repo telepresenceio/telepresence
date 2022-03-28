@@ -242,8 +242,8 @@ func (ki *installer) ensureInjectedAgent(
 	// Check pod for agent. If missing and webhookInjected, roll pod
 	roll := true
 	podImpl, _ := k8sapi.PodImpl(pod)
-	for _, containter := range podImpl.Spec.Containers {
-		if containter.Name == install.AgentContainerName {
+	for _, container := range podImpl.Spec.Containers {
+		if container.Name == install.AgentContainerName {
 			roll = false
 			break
 		}
@@ -280,7 +280,7 @@ type ServiceProps struct {
 	ContainerPortIndex int
 }
 
-// exploreSvc finds the matching service, its comtainters, and their ports
+// exploreSvc finds the matching service, its containers, and their ports
 func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*ServiceProps, error) {
 	podTemplate := obj.GetPodTemplate()
 	cns := podTemplate.Spec.Containers
@@ -657,9 +657,7 @@ func addAgentToWorkload(
 	}
 
 	var initContainerAction *addInitContainerAction
-	setGID := false
 	if matchingService.Spec.ClusterIP == "None" {
-		setGID = true
 		initContainerAction = &addInitContainerAction{
 			AppPortProto:  containerPort.Protocol,
 			AppPortNumber: containerPort.Number,
@@ -685,7 +683,6 @@ func addAgentToWorkload(
 		AddTrafficAgent: &addTrafficAgentAction{
 			containerName:           container.Name,
 			trafficManagerNamespace: trafficManagerNamespace,
-			setGID:                  setGID,
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
 			ContainerPortAppProto:   k8sapi.GetAppProto(c, client.GetConfig(c).Intercept.AppProtocolStrategy, servicePort),

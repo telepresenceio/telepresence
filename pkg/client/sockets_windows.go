@@ -39,7 +39,7 @@ func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (
 	return conn, err
 }
 
-// allowEveryone is a security descriptor that allows everyone to perform the an action.
+// allowEveryone is a security descriptor that allows everyone to perform the action.
 // For more info about the syntax, sse:
 // https://docs.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 const allowEveryone = "S:(ML;;NW;;;LW)D:(A;;0x12019f;;;WD)"
@@ -71,7 +71,7 @@ func socketExists(name string) (bool, error) {
 	h, err := windows.CreateFile(uPath, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
 	switch err {
 	case windows.ERROR_PIPE_BUSY:
-		// ERROR_PIPE_BUSY is an error that is issued somewhat sporadically but it's a safe
+		// ERROR_PIPE_BUSY is an error that is issued somewhat sporadically, but it's a safe
 		// indication that the pipe exists.
 		return true, nil
 	case windows.ERROR_FILE_NOT_FOUND:

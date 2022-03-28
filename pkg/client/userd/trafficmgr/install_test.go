@@ -3,6 +3,7 @@ package trafficmgr
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,7 +60,7 @@ func getTests(t *testing.T) map[string]testcase {
 
 			tc.InputVersion = di.Name()
 			if tc.InputVersion == "cur" {
-				// Must alway be higher than any actually released version, so pack
+				// Must always be higher than any actually released version, so pack
 				// a bunch of 9's in there.
 				tc.InputVersion = fmt.Sprintf("v2.999.999-gotest.%d.%d", os.Getpid(), i)
 				i++
@@ -156,7 +157,11 @@ func TestAddAgentToWorkload(t *testing.T) {
 				}
 
 				sanitizeWorkload(actualWrk)
-				assert.Equal(t, expectedWrk, actualWrk)
+				expectedJSON, err := json.Marshal(expectedWrk)
+				assert.NoError(t, err)
+				actualJSON, err := json.Marshal(actualWrk)
+				assert.NoError(t, err)
+				assert.Equal(t, string(expectedJSON), string(actualJSON))
 
 				if actualSvc != nil {
 					actualSvcImpl, _ := k8sapi.ServiceImpl(actualSvc)
