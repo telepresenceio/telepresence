@@ -112,6 +112,9 @@ msgLoop:
 				if err != nil {
 					return nil, err
 				}
+				if srcIP == nil {
+					continue
+				}
 				routes = append(routes, Route{
 					LocalIP:   srcIP,
 					RoutedNet: dstNet,

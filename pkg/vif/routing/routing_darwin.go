@@ -49,6 +49,9 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 			if err != nil {
 				return nil, err
 			}
+			if localIP == nil {
+				continue
+			}
 			mask, ok := mask.(*route.Inet4Addr)
 			if !ok {
 				continue
@@ -71,6 +74,9 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 			localIP, err := interfaceLocalIP(iface, false)
 			if err != nil {
 				return nil, err
+			}
+			if localIP == nil {
+				continue
 			}
 			mask, ok := mask.(*route.Inet6Addr)
 			if !ok {
