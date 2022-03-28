@@ -131,8 +131,8 @@ clobber: ## (Build) Remove all build artifacts and tools
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
 
-.PHONY: prepare-release
-prepare-release: generate ## (Release) Update necessary files and tag the release (does not push)
+.PHONY: update-charts
+update-charts:
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
@@ -143,8 +143,9 @@ prepare-release: generate ## (Release) Update necessary files and tag the releas
 	rm -f charts/telepresence/Chart.yaml.bak
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
-	# copy of pkg/install/helm/telepresence-chart.tgz target
-	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run ./build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
+
+.PHONY: prepare-release
+prepare-release: generate update-charts pkg/install/helm/telepresence-chart.tgz
 	git add pkg/install/helm/telepresence-chart.tgz
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/cur pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
