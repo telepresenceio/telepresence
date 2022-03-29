@@ -9,12 +9,63 @@ import "google/protobuf/empty.proto";
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/userdaemon";
 
 service SystemA {
+  // ReportAvailableServices sends a list of services that the daemon has access to.
+  //
+  // This RPC is only used by the proprietary user-daemon and not the OSS one.
+  rpc ReportAvailableServices(stream AvailableServicesRequest) returns (google.protobuf.Empty);
+
+  // GetNamespacesToWatch returns a list of namespaces that the user daemon should watch for workloads that can be
+  // intercepted based on a list of namespaces that the user has access to.
+  //
+  // This RPC is only used by the proprietary user-daemon and not the OSS one.
+  rpc GetNamespacesToWatch(NamespacesToWatchRequest) returns (NamespacesToWatchResponse);
+
   // ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
   // associated with an intercept
   rpc ResolveIngressInfo(IngressInfoRequest) returns (IngressInfoResponse);
 
   // ReportAvailableNamespaces
   rpc ReportAvailableNamespaces(stream AvailableNamespacesRequest) returns (google.protobuf.Empty);
+}
+
+// AvailableServicesRequest contains a list of services that can be intercepted by the daemon
+message AvailableServicesRequest {
+  DaemonInfo daemon_info = 1;
+  repeated Service available_services = 2;
+}
+
+// Service represents a Kubernetes service
+message Service {
+  // uid corresponds to the Kubernetes service's metadata.uid
+  string uid = 1;
+  string name = 2;
+  string namespace = 3;
+  repeated Port ports = 4;
+  // Most of the time, we'll get only 1 workload, but since we want to be able to eventually inform the user about the
+  // edge case of having multiple workloads behind a service without needing to update the pro daemon version, the
+  // information should be provided as a list and the UI will display the error when it's ready to do so
+  repeated Workload workloads = 5;
+}
+
+// Workload represents a Kubernetes workload (deployment, stateful set, replica set, ...)
+message Workload {
+  string uid = 1;
+  string kind = 2;
+  string name = 3;
+}
+
+message Port {
+  string name = 1;
+  int32 port = 2;
+}
+
+message NamespacesToWatchRequest {
+  DaemonInfo daemon_info = 1;
+  repeated Namespace namespaces = 2;
+}
+
+message NamespacesToWatchResponse {
+  repeated Namespace namespaces = 1;
 }
 
 // IngressInfoRequest represents the intercept properties required to resolve ingress info

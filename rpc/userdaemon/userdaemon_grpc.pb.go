@@ -19,6 +19,15 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SystemAClient interface {
+	// ReportAvailableServices sends a list of services that the daemon has access to.
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
+	ReportAvailableServices(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableServicesClient, error)
+	// GetNamespacesToWatch returns a list of namespaces that the user daemon should watch for workloads that can be
+	// intercepted based on a list of namespaces that the user has access to.
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
+	GetNamespacesToWatch(ctx context.Context, in *NamespacesToWatchRequest, opts ...grpc.CallOption) (*NamespacesToWatchResponse, error)
 	// ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
 	// associated with an intercept
 	ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error)
@@ -34,6 +43,49 @@ func NewSystemAClient(cc grpc.ClientConnInterface) SystemAClient {
 	return &systemAClient{cc}
 }
 
+func (c *systemAClient) ReportAvailableServices(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableServicesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &SystemA_ServiceDesc.Streams[0], "/telepresence.userdaemon.SystemA/ReportAvailableServices", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &systemAReportAvailableServicesClient{stream}
+	return x, nil
+}
+
+type SystemA_ReportAvailableServicesClient interface {
+	Send(*AvailableServicesRequest) error
+	CloseAndRecv() (*emptypb.Empty, error)
+	grpc.ClientStream
+}
+
+type systemAReportAvailableServicesClient struct {
+	grpc.ClientStream
+}
+
+func (x *systemAReportAvailableServicesClient) Send(m *AvailableServicesRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *systemAReportAvailableServicesClient) CloseAndRecv() (*emptypb.Empty, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(emptypb.Empty)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *systemAClient) GetNamespacesToWatch(ctx context.Context, in *NamespacesToWatchRequest, opts ...grpc.CallOption) (*NamespacesToWatchResponse, error) {
+	out := new(NamespacesToWatchResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.userdaemon.SystemA/GetNamespacesToWatch", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *systemAClient) ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error) {
 	out := new(IngressInfoResponse)
 	err := c.cc.Invoke(ctx, "/telepresence.userdaemon.SystemA/ResolveIngressInfo", in, out, opts...)
@@ -44,7 +96,7 @@ func (c *systemAClient) ResolveIngressInfo(ctx context.Context, in *IngressInfoR
 }
 
 func (c *systemAClient) ReportAvailableNamespaces(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableNamespacesClient, error) {
-	stream, err := c.cc.NewStream(ctx, &SystemA_ServiceDesc.Streams[0], "/telepresence.userdaemon.SystemA/ReportAvailableNamespaces", opts...)
+	stream, err := c.cc.NewStream(ctx, &SystemA_ServiceDesc.Streams[1], "/telepresence.userdaemon.SystemA/ReportAvailableNamespaces", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +133,15 @@ func (x *systemAReportAvailableNamespacesClient) CloseAndRecv() (*emptypb.Empty,
 // All implementations must embed UnimplementedSystemAServer
 // for forward compatibility
 type SystemAServer interface {
+	// ReportAvailableServices sends a list of services that the daemon has access to.
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
+	ReportAvailableServices(SystemA_ReportAvailableServicesServer) error
+	// GetNamespacesToWatch returns a list of namespaces that the user daemon should watch for workloads that can be
+	// intercepted based on a list of namespaces that the user has access to.
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
+	GetNamespacesToWatch(context.Context, *NamespacesToWatchRequest) (*NamespacesToWatchResponse, error)
 	// ResolveInterceptIngressInfo gets the ingress information that the daemon should use to create the preview url
 	// associated with an intercept
 	ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error)
@@ -93,6 +154,12 @@ type SystemAServer interface {
 type UnimplementedSystemAServer struct {
 }
 
+func (UnimplementedSystemAServer) ReportAvailableServices(SystemA_ReportAvailableServicesServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReportAvailableServices not implemented")
+}
+func (UnimplementedSystemAServer) GetNamespacesToWatch(context.Context, *NamespacesToWatchRequest) (*NamespacesToWatchResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNamespacesToWatch not implemented")
+}
 func (UnimplementedSystemAServer) ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
 }
@@ -110,6 +177,50 @@ type UnsafeSystemAServer interface {
 
 func RegisterSystemAServer(s grpc.ServiceRegistrar, srv SystemAServer) {
 	s.RegisterService(&SystemA_ServiceDesc, srv)
+}
+
+func _SystemA_ReportAvailableServices_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SystemAServer).ReportAvailableServices(&systemAReportAvailableServicesServer{stream})
+}
+
+type SystemA_ReportAvailableServicesServer interface {
+	SendAndClose(*emptypb.Empty) error
+	Recv() (*AvailableServicesRequest, error)
+	grpc.ServerStream
+}
+
+type systemAReportAvailableServicesServer struct {
+	grpc.ServerStream
+}
+
+func (x *systemAReportAvailableServicesServer) SendAndClose(m *emptypb.Empty) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *systemAReportAvailableServicesServer) Recv() (*AvailableServicesRequest, error) {
+	m := new(AvailableServicesRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _SystemA_GetNamespacesToWatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NamespacesToWatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemAServer).GetNamespacesToWatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.userdaemon.SystemA/GetNamespacesToWatch",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemAServer).GetNamespacesToWatch(ctx, req.(*NamespacesToWatchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SystemA_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -164,11 +275,20 @@ var SystemA_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SystemAServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "GetNamespacesToWatch",
+			Handler:    _SystemA_GetNamespacesToWatch_Handler,
+		},
+		{
 			MethodName: "ResolveIngressInfo",
 			Handler:    _SystemA_ResolveIngressInfo_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ReportAvailableServices",
+			Handler:       _SystemA_ReportAvailableServices_Handler,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "ReportAvailableNamespaces",
 			Handler:       _SystemA_ReportAvailableNamespaces_Handler,
