@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.4 (TBD)
+### 2.5.4 (March 29, 2022)
 
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
 
