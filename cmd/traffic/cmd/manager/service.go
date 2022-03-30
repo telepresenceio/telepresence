@@ -601,6 +601,7 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 				DisplayBanner:     action.AddPreviewDomain.DisplayBanner,
 				InterceptSpec:     intercept.Spec,
 				Host:              action.AddPreviewDomain.Ingress.L5Host,
+				PullRequestUrl:    action.AddPreviewDomain.PullRequestUrl,
 				AddRequestHeaders: action.AddPreviewDomain.AddRequestHeaders,
 			})
 			if err != nil {
