@@ -2,7 +2,7 @@
 
 ### 2.5.4 (TBD)
 
-- Feature: The flag `--preview-url-add-headers` can be used to inject key value pair headers in every preview page request
+- Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers in every preview page request
 
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
 

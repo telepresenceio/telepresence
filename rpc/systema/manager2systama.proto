@@ -63,7 +63,7 @@ message CreateDomainRequest {
   bool display_banner = 2;
   manager.InterceptSpec intercept_spec = 3;
   string host = 4;
-  map<string,string> inject_headers = 5;
+  map<string,string> add_request_headers = 5;
 }
 
 message CreateDomainResponse {
