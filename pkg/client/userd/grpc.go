@@ -30,11 +30,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-func callRecovery(r interface{}, err error) error {
+func callRecovery(c context.Context, r interface{}, err error) error {
 	if perr := derror.PanicToError(r); perr != nil {
+		dlog.Errorf(c, "%+v", perr)
 		err = perr
 	}
 	return err
@@ -75,7 +75,7 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 			err = status.Error(codes.Unavailable, "no active session")
 			return
 		}
-		defer func() { err = callRecovery(recover(), err) }()
+		defer func() { err = callRecovery(c, recover(), err) }()
 		num := getReqNumber(c)
 		ctx := dgroup.WithGoroutineName(s.sessionContext, fmt.Sprintf("/%s-%d", callName, num))
 		err = f(ctx, s.session)
@@ -147,10 +147,10 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 	}
 	var msg string
 	if result != nil {
-		entries = append(entries,
-			scout.Entry{Key: "service_uid", Value: result.ServiceUid},
-			scout.Entry{Key: "workload_kind", Value: result.WorkloadKind},
-		)
+		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
+		if result.ServiceProps != nil {
+			entries = append(entries, scout.Entry{Key: "service_uid", Value: result.ServiceProps.ServiceUid})
+		}
 		if result.Error != rpc.InterceptError_UNSPECIFIED {
 			msg = result.Error.String()
 		}
@@ -167,7 +167,7 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
+		entries, ok := scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_can_intercept_success"
@@ -177,25 +177,21 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		s.scout.Report(c, action, entries...)
 	}()
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
-		var wl k8sapi.Workload
-		if result, wl, _ = session.CanIntercept(c, ir); result == nil {
-			var kind string
-			if wl != nil {
-				kind = wl.GetKind()
-			}
+		_, result = session.CanIntercept(c, ir)
+		if result == nil {
 			result = &rpc.InterceptResult{
 				Error:        rpc.InterceptError_UNSPECIFIED,
-				WorkloadKind: kind,
+				WorkloadKind: "local",
 			}
 		}
-		return nil
+		return err
 	})
 	return
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
+		entries, ok := scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_create_intercept_success"

@@ -27,7 +27,7 @@ type Forwarder struct {
 	tCtx       context.Context
 	tCancel    context.CancelFunc
 	targetHost string
-	targetPort int32
+	targetPort uint16
 
 	manager     manager.ManagerClient
 	sessionInfo *manager.SessionInfo
@@ -36,7 +36,7 @@ type Forwarder struct {
 	mgrVersion semver.Version
 }
 
-func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort int32) *Forwarder {
+func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort uint16) *Forwarder {
 	return &Forwarder{
 		listenAddr: listen,
 		targetHost: targetHost,
@@ -114,7 +114,7 @@ func (f *Forwarder) Close() error {
 	return nil
 }
 
-func (f *Forwarder) Target() (string, int32) {
+func (f *Forwarder) Target() (string, uint16) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

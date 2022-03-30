@@ -180,8 +180,11 @@ func (p *mgrProxy) WatchIntercepts(arg *managerrpc.SessionInfo, srv managerrpc.M
 	}
 }
 
-func (p *mgrProxy) CreateIntercept(context.Context, *managerrpc.CreateInterceptRequest) (*managerrpc.InterceptInfo, error) {
-	return nil, status.Error(codes.Unimplemented, "must call connector.CreateIntercept instead of manager.CreateIntercept")
+func (p *mgrProxy) PrepareIntercept(_ context.Context, _ *managerrpc.CreateInterceptRequest) (*managerrpc.PreparedIntercept, error) {
+	return nil, errors.New("must call connector.CanIntercept instead of manager.CreateIntercept")
+}
+func (p *mgrProxy) CreateIntercept(_ context.Context, _ *managerrpc.CreateInterceptRequest) (*managerrpc.InterceptInfo, error) {
+	return nil, errors.New("must call connector.CreateIntercept instead of manager.CreateIntercept")
 }
 func (p *mgrProxy) RemoveIntercept(context.Context, *managerrpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "must call connector.RemoveIntercept instead of manager.RemoveIntercept")

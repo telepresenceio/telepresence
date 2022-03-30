@@ -88,7 +88,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.4.5-gotest.z" + s.suffix
+		s.testVersion = "v2.6.0-gotest.z" + s.suffix
 	}
 	version.Version = s.testVersion
 

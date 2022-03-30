@@ -52,7 +52,11 @@ message AgentInfo {
   // it supports.
   repeated Mechanism mechanisms = 5;
 
-  reserved 6;
+  // The environment of the app
+  // Deprecated: Only older agents will set this. Newer ones will instead
+  // use the InterceptInfo.environment because the environment differs depending
+  // on what container it is that gets intercepted
+  map<string, string> environment = 6;
 }
 
 // InterceptSpec contains static information about an intercept. It is shared by
@@ -88,9 +92,13 @@ message InterceptSpec {
   repeated string mechanism_args = 9;
 
   string target_host = 6;
+
+  // The port on the workstation that the intercept is redirected to
+  // Deprecated but still in use if the manager version is < 2.6.0
   int32 target_port = 7;
 
   // Identifier for the service port: either the name or port number
+  // Deprecated but still in use if the manager version is < 2.6.0
   string service_port_identifier = 10;
 
   // .uid.metadata of service associated with intercept
@@ -99,7 +107,8 @@ message InterceptSpec {
   // name of the aforementioned service
   string service_name = 14;
 
-  // extra ports that will be forwarded to the intercepting client
+  // Extra ports that will be forwarded from the intercepting client's localhost
+  // to the intercepted pod.
   repeated int32 extra_ports = 15;
 
   // The delay imposed by a call roundtrip between the traffic-agent and
@@ -110,7 +119,9 @@ message InterceptSpec {
   // The dial timeout to use when a dial is made on the intercepting workstation.
   int64 dial_timeout = 17;
 
-  reserved 11;
+  // Used to be mount_point and only utilized when passing the spec between
+  // the user daemon and the CLI. It's now moved to InterceptInfo
+  string reserved = 11;
 }
 
 enum InterceptDispositionType {
@@ -245,6 +256,19 @@ message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
   string api_key = 3;
+}
+
+message PreparedIntercept {
+  string error = 1;
+  int32 error_category = 2;
+
+  string namespace = 3;
+  string service_uid = 4;
+  string service_name = 5;
+  string service_port_name = 6;
+  int32 service_port = 7;
+  string workload_kind = 8;
+  string agent_image = 9;
 }
 
 message UpdateInterceptRequest {
@@ -502,6 +526,10 @@ service Manager {
   rpc WatchClusterInfo(SessionInfo) returns (stream ClusterInfo);
 
   // CRUD
+
+  // Request that the traffic-manager makes the preparations necessary to
+  // create the given intercept.
+  rpc PrepareIntercept(CreateInterceptRequest) returns (PreparedIntercept);
 
   // CreateIntercept lets a client create an intercept.  It will be
   // created in the "WATING" disposition, and it will remain in that

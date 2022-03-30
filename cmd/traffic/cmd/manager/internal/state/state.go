@@ -173,6 +173,7 @@ type State struct {
 	//     `agent.Name == intercept.Spec.Agent`)
 	//  7. `interceptAPIKeys` need to be created and updated in-sync with `intercepts` (but not deleted
 	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
+	//  8. `cfgMapLocks` access must be concurrency protected
 	intercepts       watchable.InterceptMap
 	agents           watchable.AgentMap                   // info for agent sessions
 	clients          watchable.ClientMap                  // info for client sessions
@@ -181,6 +182,7 @@ type State struct {
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	timedLogLevel    log.TimedLevel
 	llSubs           *loglevelSubscribers
+	cfgMapLocks      map[string]*sync.Mutex
 }
 
 func NewState(ctx context.Context) *State {
@@ -190,6 +192,7 @@ func NewState(ctx context.Context) *State {
 		sessions:         make(map[string]SessionState),
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
+		cfgMapLocks:      make(map[string]*sync.Mutex),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}

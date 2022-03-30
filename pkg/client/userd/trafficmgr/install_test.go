@@ -139,13 +139,13 @@ func TestAddAgentToWorkload(t *testing.T) {
 					return
 				}
 
-				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(
+				actualWrk, _, actualErr := addAgentToWorkload(
 					ctx,
-					&ServiceProps{
-						Service:            svc,
-						ServicePort:        servicePort,
-						Container:          container,
-						ContainerPortIndex: containerPortIndex,
+					&serviceProps{
+						service:            svc,
+						servicePort:        servicePort,
+						container:          container,
+						containerPortIndex: containerPortIndex,
 					},
 					agent_image_name, // ignore extensions
 					env.ManagerNamespace,
@@ -163,10 +163,9 @@ func TestAddAgentToWorkload(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, string(expectedJSON), string(actualJSON))
 
-				if actualSvc != nil {
-					actualSvcImpl, _ := k8sapi.ServiceImpl(actualSvc)
-					sanitizeService(actualSvcImpl)
-					assert.Equal(t, expectedSvc, actualSvcImpl)
+				if svc != nil {
+					sanitizeService(svc)
+					assert.Equal(t, expectedSvc, svc)
 				}
 
 				if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
@@ -174,7 +173,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 					goldBytes, err := yaml.Marshal(map[string]interface{}{
 						strings.ToLower(workloadKind): actualWrk,
-						"service":                     actualSvc,
+						"service":                     svc,
 					})
 					if !assert.NoError(t, err) {
 						return

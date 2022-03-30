@@ -396,6 +396,12 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
+func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
+	ctx = managerutil.WithSessionInfo(ctx, request.Session)
+	dlog.Debugf(ctx, "PrepareIntercept called")
+	return m.state.PrepareIntercept(ctx, request)
+}
+
 // CreateIntercept lets a client create an intercept.
 func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())

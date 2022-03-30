@@ -197,18 +197,34 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 }
 
 // DeleteTrafficManager deletes the traffic manager
-func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
+func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
 	}
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
-		dlog.Errorf(ctx, "Unable to look for existing helm release: %v. Assuming it's already gone...", err)
+		err := fmt.Errorf("unable to look for existing helm release in namespace %s: %w", namespace, err)
+		if errOnFail {
+			return err
+		}
+		dlog.Infof(ctx, "%s. Assuming it's already gone...", err.Error())
 		return nil
 	}
-	if existing == nil || !shouldManageRelease(ctx, existing) {
-		dlog.Infof(ctx, "Traffic Manager in namespace %s already deleted or not owned by cli, will not uninstall", namespace)
+	if existing == nil {
+		err := fmt.Errorf("traffic Manager in namespace %s already deleted", namespace)
+		if errOnFail {
+			return err
+		}
+		dlog.Info(ctx, err.Error())
+		return nil
+	}
+	if !shouldManageRelease(ctx, existing) {
+		err := fmt.Errorf("traffic Manager in namespace %s is not owned by cli, will not uninstall", namespace)
+		if errOnFail {
+			return err
+		}
+		dlog.Info(ctx, err.Error())
 		return nil
 	}
 	return uninstallExisting(ctx, helmConfig, namespace)

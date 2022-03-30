@@ -65,6 +65,9 @@ type ManagerClient interface {
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error)
+	// Request that the traffic-manager makes the preparations necessary to
+	// create the given intercept.
+	PrepareIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*PreparedIntercept, error)
 	// CreateIntercept lets a client create an intercept.  It will be
 	// created in the "WATING" disposition, and it will remain in that
 	// state until the Agent (the app-sidecar) calls ReviewIntercept()
@@ -348,6 +351,15 @@ func (x *managerWatchClusterInfoClient) Recv() (*ClusterInfo, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+func (c *managerClient) PrepareIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*PreparedIntercept, error) {
+	out := new(PreparedIntercept)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/PrepareIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *managerClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
@@ -652,6 +664,9 @@ type ManagerServer interface {
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error
+	// Request that the traffic-manager makes the preparations necessary to
+	// create the given intercept.
+	PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error)
 	// CreateIntercept lets a client create an intercept.  It will be
 	// created in the "WATING" disposition, and it will remain in that
 	// state until the Agent (the app-sidecar) calls ReviewIntercept()
@@ -751,6 +766,9 @@ func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, Manager_WatchInt
 }
 func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
+}
+func (UnimplementedManagerServer) PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PrepareIntercept not implemented")
 }
 func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
@@ -1086,6 +1104,24 @@ func (x *managerWatchClusterInfoServer) Send(m *ClusterInfo) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Manager_PrepareIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).PrepareIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/PrepareIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).PrepareIntercept(ctx, req.(*CreateInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_CreateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateInterceptRequest)
 	if err := dec(in); err != nil {
@@ -1403,6 +1439,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLogs",
 			Handler:    _Manager_GetLogs_Handler,
+		},
+		{
+			MethodName: "PrepareIntercept",
+			Handler:    _Manager_PrepareIntercept_Handler,
 		},
 		{
 			MethodName: "CreateIntercept",
