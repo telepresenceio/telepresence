@@ -16,7 +16,8 @@ import (
 // fields in the given 'spec'.  If 'prefix' is given, long-flag names are prefixed with it.
 func addPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewSpec) {
 	flags.BoolVarP(&spec.DisplayBanner, prefix+"banner", "b", true, "Display banner on preview page")
-	flags.StringToStringVarP(&spec.InjectHeaders, prefix+"add-headers", "", map[string]string{}, "Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
+	flags.StringToStringVarP(&spec.InjectHeaders, prefix+"add-headers", "", map[string]string{},
+	"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
 }
 
 func previewCommand() *cobra.Command {
