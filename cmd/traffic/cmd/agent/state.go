@@ -137,15 +137,15 @@ func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.Man
 	s.mgrVer = version
 }
 
-func (c *state) SftpPort() uint16 {
-	return c.sftpPort
+func (s *state) SftpPort() uint16 {
+	return s.sftpPort
 }
 
-func (c *state) WaitForSftpPort(ctx context.Context, ch <-chan uint16) error {
+func (s *state) WaitForSftpPort(ctx context.Context, ch <-chan uint16) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case c.sftpPort = <-ch:
+	case s.sftpPort = <-ch:
 		return nil
 	}
 }

@@ -283,17 +283,18 @@ func (h *dialer) resetIdle() bool {
 // DialWaitLoop reads from the given dialStream. A new goroutine that creates a Tunnel to the manager and then
 // attaches a dialer Endpoint to that tunnel is spawned for each request that arrives. The method blocks until
 // the dialStream is closed.
-func DialWaitLoop(ctx context.Context, manager rpc.ManagerClient, dialStream rpc.Manager_WatchDialClient, sessionID string) {
+func DialWaitLoop(ctx context.Context, manager rpc.ManagerClient, dialStream rpc.Manager_WatchDialClient, sessionID string) error {
 	for ctx.Err() == nil {
 		dr, err := dialStream.Recv()
 		if err != nil {
 			if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
-				dlog.Errorf(ctx, "dial request stream recv: %+v", err) // May be io.EOF
+				return fmt.Errorf("dial request stream recv: %w", err) // May be io.EOF
 			}
-			return
+			return nil
 		}
 		go dialRespond(ctx, manager, dr, sessionID)
 	}
+	return nil
 }
 
 func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialRequest, sessionID string) {
