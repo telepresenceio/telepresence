@@ -38,12 +38,12 @@ func TestNewRequest(t *testing.T) {
 		{
 			name: "path-regex and headers",
 			args: map[string]string{":path-regex:": ".*/path", "A": "b"},
-			want: &request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
+			want: &request{path: rxValue{regexp.MustCompile(".*/path")}, headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewRequest(tt.args)
+			got, err := NewRequestFromMap(tt.args)
 			if !assert.NoError(t, err, fmt.Sprintf("NewRequest(%v)", tt.args)) {
 				return
 			}
@@ -80,7 +80,7 @@ func Test_request_Map(t *testing.T) {
 		},
 		{
 			"path-regex and headers",
-			request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
+			request{path: rxValue{regexp.MustCompile(".*/path")}, headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 			map[string]string{":path-regex:": ".*/path", "A": "b"},
 		},
 	}
@@ -108,21 +108,21 @@ func Test_request_Matches(t *testing.T) {
 		},
 		{
 			name:    "path and headers",
-			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
+			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 			path:    "/some/path",
 			headers: http.Header(map[string][]string{"A": {"b"}}),
 			want:    true,
 		},
 		{
 			name:    "path and headers mismatch on just path",
-			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
+			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 			path:    "/some/path",
 			headers: nil,
 			want:    false,
 		},
 		{
 			name:    "path and headers mismatch on just headers",
-			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
+			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 			path:    "",
 			headers: http.Header(map[string][]string{"A": {"b"}}),
 			want:    false,
@@ -198,12 +198,12 @@ func Test_request_String(t *testing.T) {
 		},
 		{
 			name:    "headers",
-			request: request{headers: headers(map[string]Value{"A": NewEqual("b")})},
+			request: request{headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 			want:    "requests with headers\n  'A: b'",
 		},
 		{
 			name:    "path and headers",
-			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: headers(map[string]Value{"A": NewEqual("b")})},
+			request: request{path: rxValue{regexp.MustCompile(".*/path")}, headers: HeaderMap(map[string]Value{"A": NewEqual("b")})},
 			want:    "requests with\n  path =~ .*/path\n  headers\n    'A: b'",
 		},
 	}

@@ -914,7 +914,7 @@ func (tm *TrafficManager) newAPIServerForPort(ctx context.Context, port int) {
 }
 
 func (tm *TrafficManager) newMatcher(ctx context.Context, ic *manager.InterceptInfo) {
-	m, err := matcher.NewRequest(ic.Headers)
+	m, err := matcher.NewRequestFromMap(ic.Headers)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
