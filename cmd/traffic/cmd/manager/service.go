@@ -377,10 +377,11 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 				defer cancel()
 				var resp *systema.CreateDomainResponse
 				resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
-					InterceptId:   intercept.Id,
-					DisplayBanner: action.AddPreviewDomain.DisplayBanner,
-					InterceptSpec: intercept.Spec,
-					Host:          action.AddPreviewDomain.Ingress.L5Host,
+					InterceptId:    intercept.Id,
+					DisplayBanner:  action.AddPreviewDomain.DisplayBanner,
+					InterceptSpec:  intercept.Spec,
+					Host:           action.AddPreviewDomain.Ingress.L5Host,
+					PullRequestUrl: action.AddPreviewDomain.PullRequestUrl,
 				})
 				if err != nil {
 					err = errors.Wrap(err, "systema: create domain")

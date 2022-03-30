@@ -63,6 +63,7 @@ message CreateDomainRequest {
   bool display_banner = 2;
   manager.InterceptSpec intercept_spec = 3;
   string host = 4;
+  string pull_request_url = 5;
 }
 
 message CreateDomainResponse {
