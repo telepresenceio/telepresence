@@ -2,6 +2,8 @@
 
 ### 2.5.4 (TBD)
 
+- Feature: The flag `--preview-url-add-headers` can be used to inject key value pair headers in every preview page request
+
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
 
 - Change: The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON

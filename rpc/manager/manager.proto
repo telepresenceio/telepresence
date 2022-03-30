@@ -170,6 +170,7 @@ message IngressInfo {
 message PreviewSpec {
   IngressInfo ingress = 1;
   bool display_banner = 2;
+  map<string,string> inject_headers = 3;
 }
 
 message InterceptInfo {
