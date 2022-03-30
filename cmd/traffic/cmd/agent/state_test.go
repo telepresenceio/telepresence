@@ -7,20 +7,19 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
 const (
-	appHost       = "appHost"
-	appPort int32 = 5000
-	mgrHost       = "managerHost"
+	appHost        = "appHost"
+	appPort uint16 = 5000
 )
 
-func makeFS(t *testing.T) (*forwarder.Forwarder, agent.State) {
+func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
@@ -36,20 +35,23 @@ func makeFS(t *testing.T) (*forwarder.Forwarder, agent.State) {
 		return port == appPort
 	}, 1*time.Second, 10*time.Millisecond)
 
-	s := agent.NewState(mgrHost, "default", "xyz", 0)
-	s.AddIntercept(f, "/tmp", nil)
+	c, err := agent.LoadConfig(ctx)
+	require.NoError(t, err)
+	s := agent.NewSimpleState(c)
+	cn := c.AgentConfig().Containers[0]
+	s.AddInterceptState(agent.NewForwarderState(s, f, cn.Intercepts[0], cn.MountPoint, map[string]string{}))
 
 	return f, s
 }
 
 func TestState_HandleIntercepts(t *testing.T) {
-	ctx := dlog.NewTestContext(t, false)
+	ctx := testContext(t, nil)
 	a := assert.New(t)
-	f, s := makeFS(t)
+	f, s := makeFS(t, ctx)
 
 	var (
 		host    string
-		port    int32
+		port    uint16
 		cepts   []*rpc.InterceptInfo
 		reviews []*rpc.ReviewInterceptRequest
 	)
@@ -71,21 +73,27 @@ func TestState_HandleIntercepts(t *testing.T) {
 	cepts = []*rpc.InterceptInfo{
 		{
 			Spec: &rpc.InterceptSpec{
-				Name:      "cept1Name",
-				Client:    "user@host1",
-				Agent:     "agentName",
-				Mechanism: "tcp",
-				Namespace: "default",
+				Name:                  "cept1Name",
+				Client:                "user@host1",
+				Agent:                 "agentName",
+				Mechanism:             "tcp",
+				Namespace:             namespace,
+				ServiceName:           serviceName,
+				ServicePortIdentifier: "http",
+				TargetPort:            8080,
 			},
 			Id: "intercept-01",
 		},
 		{
 			Spec: &rpc.InterceptSpec{
-				Name:      "cept2Name",
-				Client:    "user@host2",
-				Agent:     "agentName",
-				Mechanism: "tcp",
-				Namespace: "default",
+				Name:                  "cept2Name",
+				Client:                "user@host2",
+				Agent:                 "agentName",
+				Mechanism:             "tcp",
+				Namespace:             namespace,
+				ServiceName:           serviceName,
+				ServicePortIdentifier: "http",
+				TargetPort:            8080,
 			},
 			Id: "intercept-02",
 		},
