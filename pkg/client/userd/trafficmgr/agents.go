@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
@@ -55,9 +56,17 @@ func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
 }
 
 func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
+	var opts []grpc.CallOption
+	cfg := client.GetConfig(ctx)
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
+		}
+	}
+
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
-		stream, err := tm.managerClient.WatchAgents(ctx, tm.session())
+		stream, err := tm.managerClient.WatchAgents(ctx, tm.session(), opts...)
 		if err != nil {
 			err = fmt.Errorf("manager.WatchAgents dial: %w", err)
 		}

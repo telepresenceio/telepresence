@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,4 +22,5 @@ func TestGetRoutingTable_defaultRoute(t *testing.T) {
 		}
 	}
 	assert.NotNil(t, dflt)
+	assert.False(t, dflt.Gateway.Equal(net.IP{0, 0, 0, 0}))
 }

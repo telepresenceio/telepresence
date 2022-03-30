@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.4 (TBD)
+### 2.5.4 (March 29, 2022)
 
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
 
@@ -9,6 +9,8 @@
 - Change: The lookup-timeout config flag used to set timeouts for DNS queries resolved by a cluster now also configures the timeout for fallback queries (i.e. queries not resolved by the cluster) when connected to the cluster.
 
 - Change: The TUN device will no longer route pod or service subnets if it is running in a machine that's already connected to the cluster
+
+- Bugfix: The client's gather logs command and agent watcher will now respect the configured grpc.maxReceiveSize
 
 - Bugfix: Client and agent sessions no longer leaves dangling waiters in the traffic-manager when they depart.
 
