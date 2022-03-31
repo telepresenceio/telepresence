@@ -132,11 +132,13 @@ func (f *Forwarder) InterceptInfo() *restapi.InterceptInfo {
 	return ii
 }
 
-func (f *Forwarder) Intercepting() bool {
+func (f *Forwarder) InterceptId() (id string) {
 	f.mu.Lock()
-	intercepting := f.intercept != nil
+	if f.intercept != nil {
+		id = f.intercept.Id
+	}
 	f.mu.Unlock()
-	return intercepting
+	return id
 }
 
 func (f *Forwarder) SetIntercepting(intercept *manager.InterceptInfo) {
