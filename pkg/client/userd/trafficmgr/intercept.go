@@ -615,7 +615,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
-	waitCh := make(chan interceptResult)
+	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel
 	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
 	defer func() {
 		if wc, loaded := tm.activeInterceptsWaiters.LoadAndDelete(spec.Name); loaded {
@@ -675,6 +675,9 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err)), nil
 			}
 			ii = wr.intercept
+			if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
+				continue
+			}
 			// Older traffic-managers pass env in the agent info
 			if agentEnv != nil {
 				ii.Environment = agentEnv

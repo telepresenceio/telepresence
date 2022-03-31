@@ -111,6 +111,7 @@ func (s *simpleState) HandleIntercepts(ctx context.Context, iis []*manager.Inter
 			if chosenID == is.Id {
 				found = true
 				s.chosenIntercept = is
+				break
 			}
 		}
 		if !found {

@@ -66,7 +66,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 
 	// Prepare some intercepts..
 
@@ -106,7 +106,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 
 	// Handle reviews waiting intercepts
 
@@ -115,7 +115,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 2)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 
 	// Reviews are in the correct order
 
@@ -144,5 +144,5 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, nil)
 	a.Len(reviews, 0)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 }
