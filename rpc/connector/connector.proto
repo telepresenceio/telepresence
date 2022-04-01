@@ -82,8 +82,12 @@ service Connector {
 
   // ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
   // the cloud for default ingress values
-  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest) returns
-  (telepresence.userdaemon.IngressInfoResponse);
+  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest)
+      returns(telepresence.userdaemon.IngressInfoResponse);
+
+  // GatherLogs will acquire logs for the various Telepresence components in kubernetes
+  // (pending the request) and return them to the caller
+  rpc GatherLogs(LogsRequest) returns (LogsResponse);
 }
 
 message CommandGroups {
@@ -362,4 +366,31 @@ message LicenseRequest {
 message LicenseData {
   string license = 1;
   string host_domain = 2;
+}
+
+message LogsRequest {
+  // Whether or not logs from the traffic-manager are desired.
+  bool traffic_manager = 1;
+
+  // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
+  // or substring to filter based on pod names.
+  string agents = 2;
+
+  // Whether or not to get the pod yaml deployed to the cluster.
+  bool get_pod_yaml = 3;
+}
+
+message LogsResponse {
+
+  // The map contains assocations between <podName.namespace> and the logs
+  // from that pod.
+  map<string, string> pod_logs = 1;
+
+  // Errors encountered when getting logs from the traffic-manager
+  // and/or traffic-agents.
+  string err_msg = 2;
+
+  // The map contains assocations between <podName.namespace> and the pod's
+  // yaml.
+  map<string, string> pod_yaml = 3;
 }
