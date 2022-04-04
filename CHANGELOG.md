@@ -175,6 +175,9 @@
 
 - Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
   explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
+### 2.5.5 (TBD)
+
+- Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers in every preview page request
 
 ### 2.5.4 (March 29, 2022)
 

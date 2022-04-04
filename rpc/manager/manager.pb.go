@@ -587,9 +587,10 @@ type PreviewSpec struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Ingress        *IngressInfo `protobuf:"bytes,1,opt,name=ingress,proto3" json:"ingress,omitempty"`
-	DisplayBanner  bool         `protobuf:"varint,2,opt,name=display_banner,json=displayBanner,proto3" json:"display_banner,omitempty"`
-	PullRequestUrl string       `protobuf:"bytes,3,opt,name=pull_request_url,json=pullRequestUrl,proto3" json:"pull_request_url,omitempty"`
+	Ingress           *IngressInfo      `protobuf:"bytes,1,opt,name=ingress,proto3" json:"ingress,omitempty"`
+	DisplayBanner     bool              `protobuf:"varint,2,opt,name=display_banner,json=displayBanner,proto3" json:"display_banner,omitempty"`
+	PullRequestUrl    string            `protobuf:"bytes,3,opt,name=pull_request_url,json=pullRequestUrl,proto3" json:"pull_request_url,omitempty"`
+	AddRequestHeaders map[string]string `protobuf:"bytes,4,rep,name=add_request_headers,json=addRequestHeaders,proto3" json:"add_request_headers,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (x *PreviewSpec) Reset() {
