@@ -1,5 +1,12 @@
 # Changelog
 
+### 2.7.0 (TBD)
+
+- Feature: `telepresence intercept` has gained a
+  `--preview-url-add-request-headers` flag (and `telepresence preview
+  create` a `--add-request-headers` flag) that can be used to inject
+  request headers in to every request made through the preview URL.
+
 ### 2.6.9 (TBD)
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.

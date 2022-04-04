@@ -186,6 +186,7 @@ message IngressInfo {
 message PreviewSpec {
   IngressInfo ingress = 1;
   bool display_banner = 2;
+  map<string,string> add_request_headers = 4;
 }
 
 // InterceptInfo contains information about a live intercept in an agent

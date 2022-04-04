@@ -597,10 +597,11 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 			defer cancel()
 			var resp *systema.CreateDomainResponse
 			resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
-				InterceptId:   intercept.Id,
-				DisplayBanner: action.AddPreviewDomain.DisplayBanner,
-				InterceptSpec: intercept.Spec,
-				Host:          action.AddPreviewDomain.Ingress.L5Host,
+				InterceptId:       intercept.Id,
+				DisplayBanner:     action.AddPreviewDomain.DisplayBanner,
+				InterceptSpec:     intercept.Spec,
+				Host:              action.AddPreviewDomain.Ingress.L5Host,
+				AddRequestHeaders: action.AddPreviewDomain.AddRequestHeaders,
 			})
 			if err != nil {
 				err = errors.Wrap(err, "systema: create domain")
