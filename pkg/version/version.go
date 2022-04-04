@@ -23,9 +23,9 @@ func init() {
 			Version = "(unknown version)"
 		}
 		if _, err := semver.ParseTolerant(Version); err != nil {
-			if Version != "(devel)" && Version != "(unknown version)" {
+			if Version != "" && Version != "(devel)" && Version != "(unknown version)" {
 				// If this isn't a parsable semver (enforced by Makefile), isn't
-				// "(devel)" (a special value from runtime/debug), and isn't our own
+				// empty, "(devel)" (a special value from runtime/debug), or our own
 				// special "(unknown version)", then something about the toolchain
 				// has clearly changed and invalidated our assumptions.  That's
 				// worthy of a panic; if this is built using an unsupported
