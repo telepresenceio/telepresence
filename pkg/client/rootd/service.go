@@ -58,9 +58,10 @@ type service struct {
 	quit           context.CancelFunc
 	connectCh      chan *rpc.OutboundInfo
 	connectReplyCh chan sessionReply
-	sessionLock    sync.Mutex
+	sessionLock    sync.RWMutex
 	sessionContext context.Context
 	session        *session
+	cancelCh       chan struct{}
 	timedLogLevel  log.TimedLevel
 
 	scout *scout.Reporter
@@ -88,8 +89,8 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 }
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
-	d.sessionLock.Lock()
-	defer d.sessionLock.Unlock()
+	d.sessionLock.RLock()
+	defer d.sessionLock.RUnlock()
 	r := &rpc.DaemonStatus{}
 	if d.session != nil {
 		r.OutboundConfig = d.session.getInfo()
@@ -138,17 +139,20 @@ func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty,
 func (d *service) cancelSession() {
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
-	if d.session != nil {
-		defer func() {
-			d.session = nil
-		}()
-		d.session.cancel()
+	if d.cancelCh != nil || d.session == nil {
+		// avoid repeated cancellations
+		return
 	}
+	defer func() {
+		d.session = nil
+	}()
+	d.cancelCh = make(chan struct{})
+	d.session.cancel()
 }
 
 func (d *service) withSession(c context.Context, f func(context.Context, *session) error) error {
-	d.sessionLock.Lock()
-	defer d.sessionLock.Unlock()
+	d.sessionLock.RLock()
+	defer d.sessionLock.RUnlock()
 	if d.session == nil {
 		return status.Error(codes.Unavailable, "no active session")
 	}
@@ -222,9 +226,27 @@ nextSession:
 		var session *session
 		reply := sessionReply{}
 
+		d.sessionLock.Lock()
+		// If a cancelCh exists, we must wait for it to close and
+		// then check for it again. This ensures that the session
+		// cannot be accessed during shutdown and that a new connect
+		// must wait for an old to complete.
+		for {
+			if cancelCh := d.cancelCh; cancelCh != nil {
+				d.sessionLock.Unlock()
+				select {
+				case <-c.Done():
+					break nextSession
+				case <-cancelCh:
+					d.sessionLock.Lock()
+				}
+			} else {
+				break
+			}
+		}
+
 		// Respond by setting the session and returning the error (or nil
 		// if everything is ok)
-		d.sessionLock.Lock()
 		if d.session != nil {
 			reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
 		} else {
@@ -255,7 +277,15 @@ nextSession:
 		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer func() {
+				d.sessionLock.Lock()
+				if d.cancelCh != nil {
+					close(d.cancelCh)
+					d.cancelCh = nil
+				}
+				d.sessionLock.Unlock()
+				wg.Done()
+			}()
 			if err := d.session.run(d.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}
