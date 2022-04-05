@@ -32,6 +32,10 @@ else
 CGO_ENABLED=1
 endif
 
+# DOCKER_BUILDKIT is _required_ by our Dockerfile, since we use
+# Dockerfile extensions for the Go build cache.  See
+# https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
+export DOCKER_BUILDKIT := 1
 
 .PHONY: FORCE
 FORCE:

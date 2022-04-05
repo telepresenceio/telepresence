@@ -1,3 +1,5 @@
+# syntax = docker/dockerfile:1.3
+
 # Copyright 2020-2022 Datawire. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +38,10 @@ COPY pkg/ pkg/
 COPY rpc/ rpc/
 COPY build-output/version.txt .
 
-RUN go install -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
+RUN \
+    --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go install -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
 RUN cp $(go env GOPATH)/bin/traffic /usr/local/bin
 
 # The tel2 targer is the one that gets published. It aims to be a small as possible.
