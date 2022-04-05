@@ -37,6 +37,8 @@ type Args struct {
 
 	PullRequestURL string
 
+	AddRequestHeaders map[string]string
+
 	CloudAPIKey string
 }
 
@@ -100,6 +102,8 @@ func main() {
 
 	cmd.Flags().StringVar(&args.PullRequestURL, "pull-request", "",
 		"TODO")
+	cmd.Flags().StringToStringVarP(&args.AddRequestHeaders, "preview-url-add-request-headers", "", map[string]string{},
+		"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
 
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		dlog.Errorf(ctx, "quit: %v", err)
@@ -183,7 +187,9 @@ func Main(ctx context.Context, args Args) error {
 			Name:    args.WorkloadName,
 			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{
 				AddPreviewDomain: &rpc_manager.PreviewSpec{
-					PullRequestUrl: args.PullRequestURL,
+					PullRequestUrl:    args.PullRequestURL,
+					AddRequestHeaders: args.AddRequestHeaders,
+					DisplayBanner:     true,
 					Ingress: &rpc_manager.IngressInfo{
 						Host:   args.IngressHost,
 						Port:   args.IngressPort,
