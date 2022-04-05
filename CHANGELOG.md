@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.5.5 (TBD)
+
+- Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers in every preview page request
+
 ### 2.5.4 (March 29, 2022)
 
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces

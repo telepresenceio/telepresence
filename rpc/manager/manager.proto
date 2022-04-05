@@ -171,6 +171,7 @@ message PreviewSpec {
   IngressInfo ingress = 1;
   bool display_banner = 2;
   string pull_request_url = 3;
+  map<string,string> add_request_headers = 4;
 }
 
 message InterceptInfo {

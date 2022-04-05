@@ -64,6 +64,7 @@ message CreateDomainRequest {
   manager.InterceptSpec intercept_spec = 3;
   string host = 4;
   string pull_request_url = 5;
+  map<string,string> add_request_headers = 6;
 }
 
 message CreateDomainResponse {
