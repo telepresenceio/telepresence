@@ -11,7 +11,43 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
+
+func xlistCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:  "xlist",
+		Args: cobra.NoArgs,
+
+		Short: "List all intercepts known to the Traffic Manager",
+		Long: "" +
+			"Unlike `telepresence list`, this also returns intercepts owned by " +
+			"different users, rather than just your own intercepts.  You must have " +
+			"called `telepresence connect` before calling this.",
+
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cliutil.WithManager(cmd.Context(), func(ctx context.Context, managerClient manager.ManagerClient) error {
+				watchClient, err := managerClient.WatchIntercepts(ctx, &manager.SessionInfo{})
+				if err != nil {
+					return err
+				}
+				snapshot, err := watchClient.Recv()
+				if err != nil {
+					return err
+				}
+				if err := watchClient.CloseSend(); err != nil {
+					return err
+				}
+
+				for _, intercept := range snapshot.Intercepts {
+					fmt.Println(DescribeIntercept(intercept, nil, true))
+				}
+
+				return nil
+			})
+		},
+	}
+}
 
 type listInfo struct {
 	onlyIntercepts    bool
