@@ -4,6 +4,8 @@
 
 - Change: The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
 
+- Bugfix: The `telepresence list` command will produce a correct listing even when not preceded by a `telepresence connect`.
+
 - Bugfix: The root daemon will no longer get into a bad state when a disconnect is rapidly followed by a new connect.
 
 - Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces  explicitly mapped 
