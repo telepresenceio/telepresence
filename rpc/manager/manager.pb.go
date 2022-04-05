@@ -1414,6 +1414,7 @@ func (x *LogLevelRequest) GetDuration() *durationpb.Duration {
 	return nil
 }
 
+// Deprecated.
 type GetLogsRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1481,6 +1482,7 @@ func (x *GetLogsRequest) GetGetPodYaml() bool {
 	return false
 }
 
+// Deprecated.
 type LogsResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

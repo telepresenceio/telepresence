@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.5.5 (TBD)
+
+- Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
+  explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
+
 ### 2.5.4 (March 29, 2022)
 
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces

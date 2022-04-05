@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
             #- uses: azure/setup-kubectl@v1
             #if: steps.get_last_run.outputs.passed != 'success'
             #with:
@@ -56,7 +56,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - run: |
           choco install make
         if: steps.get_last_run.outputs.passed != 'success'
@@ -96,7 +96,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
@@ -130,7 +130,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update

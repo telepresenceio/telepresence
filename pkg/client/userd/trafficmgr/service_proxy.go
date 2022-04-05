@@ -48,8 +48,7 @@ func (p *mgrProxy) get() (managerrpc.ManagerClient, []grpc.CallOption, error) {
 	p.RLock()
 	defer p.RUnlock()
 	if p.clientX == nil {
-		return nil, nil, status.Error(codes.Unavailable,
-			"telepresence: the userd is not connected to the manager")
+		return nil, nil, status.Error(codes.Unavailable, "telepresence: the userd is not connected to the manager")
 	}
 	return p.clientX, p.callOptionsX, nil
 }
@@ -176,11 +175,11 @@ func (p *mgrProxy) WatchIntercepts(arg *managerrpc.SessionInfo, srv managerrpc.M
 	}
 }
 
-func (p *mgrProxy) CreateIntercept(_ context.Context, _ *managerrpc.CreateInterceptRequest) (*managerrpc.InterceptInfo, error) {
-	return nil, errors.New("must call connector.CreateIntercept instead of manager.CreateIntercept")
+func (p *mgrProxy) CreateIntercept(context.Context, *managerrpc.CreateInterceptRequest) (*managerrpc.InterceptInfo, error) {
+	return nil, status.Error(codes.Unimplemented, "must call connector.CreateIntercept instead of manager.CreateIntercept")
 }
-func (p *mgrProxy) RemoveIntercept(_ context.Context, _ *managerrpc.RemoveInterceptRequest2) (*empty.Empty, error) {
-	return nil, errors.New("must call connector.RemoveIntercept instead of manager.RemoveIntercept")
+func (p *mgrProxy) RemoveIntercept(context.Context, *managerrpc.RemoveInterceptRequest2) (*empty.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "must call connector.RemoveIntercept instead of manager.RemoveIntercept")
 }
 func (p *mgrProxy) UpdateIntercept(ctx context.Context, arg *managerrpc.UpdateInterceptRequest) (*managerrpc.InterceptInfo, error) {
 	client, callOptions, err := p.get()
@@ -197,11 +196,11 @@ func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewIn
 	return client.ReviewIntercept(ctx, arg, callOptions...)
 }
 
-func (p *mgrProxy) ClientTunnel(_ managerrpc.Manager_ClientTunnelServer) error {
+func (p *mgrProxy) ClientTunnel(managerrpc.Manager_ClientTunnelServer) error {
 	return status.Error(codes.Unimplemented, "ClientTunnel was deprecated in 2.4.5 and has since been removed")
 }
 
-func (p *mgrProxy) AgentTunnel(_ managerrpc.Manager_AgentTunnelServer) error {
+func (p *mgrProxy) AgentTunnel(managerrpc.Manager_AgentTunnelServer) error {
 	return status.Error(codes.Unimplemented, "AgentTunnel was deprecated in 2.4.5 and has since been removed")
 }
 
@@ -330,8 +329,8 @@ func (p *mgrProxy) AgentLookupHostResponse(ctx context.Context, arg *managerrpc.
 	return client.AgentLookupHostResponse(ctx, arg, callOptions...)
 }
 
-func (p *mgrProxy) WatchLookupHost(_ *managerrpc.SessionInfo, _ managerrpc.Manager_WatchLookupHostServer) error {
-	return errors.New("must call manager.WatchLookupHost from an agent (intercepted Pod), not from a client (workstation)")
+func (p *mgrProxy) WatchLookupHost(*managerrpc.SessionInfo, managerrpc.Manager_WatchLookupHostServer) error {
+	return status.Error(codes.Unimplemented, "must call manager.WatchLookupHost from an agent (intercepted Pod), not from a client (workstation)")
 }
 
 func (p *mgrProxy) WatchClusterInfo(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchClusterInfoServer) error {
@@ -365,14 +364,10 @@ func (p *mgrProxy) SetLogLevel(ctx context.Context, request *managerrpc.LogLevel
 	return client.SetLogLevel(ctx, request, callOptions...)
 }
 
-func (p *mgrProxy) GetLogs(ctx context.Context, request *managerrpc.GetLogsRequest) (*managerrpc.LogsResponse, error) {
-	client, callOptions, err := p.get()
-	if err != nil {
-		return nil, err
-	}
-	return client.GetLogs(ctx, request, callOptions...)
+func (p *mgrProxy) GetLogs(context.Context, *managerrpc.GetLogsRequest) (*managerrpc.LogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, " \"must call connector.GatherLogs instead of manager.GetLogs\"")
 }
 
-func (p *mgrProxy) WatchLogLevel(_ *empty.Empty, _ managerrpc.Manager_WatchLogLevelServer) error {
-	return errors.New("must call manager.WatchLogLevel from an agent (intercepted Pod), not from a client (workstation)")
+func (p *mgrProxy) WatchLogLevel(*empty.Empty, managerrpc.Manager_WatchLogLevelServer) error {
+	return status.Error(codes.Unimplemented, "must call manager.WatchLogLevel from an agent (intercepted Pod), not from a client (workstation)")
 }

@@ -287,6 +287,7 @@ message LogLevelRequest {
   google.protobuf.Duration duration = 2;
 }
 
+// Deprecated.
 message GetLogsRequest {
   // Whether or not logs from the traffic-manager are desired.
   bool traffic_manager = 1;
@@ -299,6 +300,7 @@ message GetLogsRequest {
   bool get_pod_yaml = 3;
 }
 
+// Deprecated.
 message LogsResponse {
 
   // The map contains assocations between <podName.namespace> and the logs
@@ -453,6 +455,7 @@ service Manager {
 
   // GetLogs will acquire logs for the various Telepresence components in kubernetes
   // (pending the request) and return them to the caller
+  // Deprecated: Will return an empty response
   rpc GetLogs(GetLogsRequest) returns (LogsResponse);
 
   // Watches

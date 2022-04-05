@@ -46,6 +46,7 @@ type ManagerClient interface {
 	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
+	// Deprecated: Will return an empty response
 	GetLogs(ctx context.Context, in *GetLogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
@@ -598,6 +599,7 @@ type ManagerServer interface {
 	SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error)
 	// GetLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
+	// Deprecated: Will return an empty response
 	GetLogs(context.Context, *GetLogsRequest) (*LogsResponse, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//

@@ -72,6 +72,7 @@ type Session interface {
 	ActualNamespace(string) string
 	RemainWithToken(context.Context) error
 	AddNamespaceListener(k8s.NamespaceListener)
+	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 }
 
 type Service interface {
