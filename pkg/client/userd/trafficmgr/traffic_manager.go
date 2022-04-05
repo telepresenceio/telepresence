@@ -662,6 +662,10 @@ func (tm *TrafficManager) remain(c context.Context) error {
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)
+				if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.NotFound {
+					// Session has expired. We need to cancel the owner session and reconnect
+					return errors.New("session expired")
+				}
 			}
 		}
 	}
