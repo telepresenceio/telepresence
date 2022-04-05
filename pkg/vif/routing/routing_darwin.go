@@ -13,7 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-const findInterfaceRegex = "gateway:\\s+([0-9.]+)\\s+.*interface:\\s+([a-z0-9]+)"
+const findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
 
 var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
 
@@ -126,10 +126,12 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
 	if err != nil {
 		return Route{}, fmt.Errorf("unable to get interface object for interface %s: %w", ifaceName, err)
 	}
-	gateway := match[1]
-	gatewayIp := iputil.Parse(gateway)
-	if gatewayIp == nil {
-		return Route{}, fmt.Errorf("unable to parse gateway %s", gateway)
+	var gatewayIp net.IP
+	if gateway := match[1]; gateway != "" {
+		gatewayIp = iputil.Parse(gateway)
+		if gatewayIp == nil {
+			return Route{}, fmt.Errorf("unable to parse gateway %s", gateway)
+		}
 	}
 	localIP, err := interfaceLocalIP(iface, ip.To4() != nil)
 	if err != nil {
