@@ -131,11 +131,15 @@ func (p *mgrProxy) Depart(ctx context.Context, arg *managerrpc.SessionInfo) (*em
 }
 
 func (p *mgrProxy) WatchAgents(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchAgentsServer) error {
+	return status.Error(codes.Unimplemented, "WatchAgents was deprecated in 2.5.5")
+}
+
+func (p *mgrProxy) WatchAgentsNS(arg *managerrpc.AgentsRequest, srv managerrpc.Manager_WatchAgentsNSServer) error {
 	client, callOptions, err := p.get()
 	if err != nil {
 		return err
 	}
-	cli, err := client.WatchAgents(srv.Context(), arg, callOptions...)
+	cli, err := client.WatchAgentsNS(srv.Context(), arg, callOptions...)
 	if err != nil {
 		return err
 	}
@@ -152,6 +156,7 @@ func (p *mgrProxy) WatchAgents(arg *managerrpc.SessionInfo, srv managerrpc.Manag
 		}
 	}
 }
+
 func (p *mgrProxy) WatchIntercepts(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchInterceptsServer) error {
 	client, callOptions, err := p.get()
 	if err != nil {

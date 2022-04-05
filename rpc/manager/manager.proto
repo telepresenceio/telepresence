@@ -219,6 +219,11 @@ message SessionInfo {
   string session_id = 1;
 }
 
+message AgentsRequest {
+  SessionInfo session = 1;
+  repeated string namespaces = 2;
+}
+
 message AgentInfoSnapshot {
   repeated AgentInfo agents = 1;
 }
@@ -465,6 +470,9 @@ service Manager {
   // A session ID is required; if no session ID is given then the call
   // returns immediately, having not delivered any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
+
+  // WatchAgentsNS is like WatchAgents but limited to a set of namespaces
+  rpc WatchAgentsNS(AgentsRequest) returns (stream AgentInfoSnapshot);
 
   // WatchIntercepts notifies a client or agent of the set of intercepts
   // relevant to that client or agent.

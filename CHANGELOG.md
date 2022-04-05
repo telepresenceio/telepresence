@@ -2,6 +2,9 @@
 
 ### 2.5.5 (TBD)
 
+- Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces  explicitly mapped 
+  using the `connect` command's `--mapped-namespaces` flag.
+
 - Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
   explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
 

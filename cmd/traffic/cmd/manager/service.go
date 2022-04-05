@@ -212,6 +212,103 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	}
 }
 
+func infosEqual(a, b *rpc.AgentInfo) bool {
+	ams := a.Mechanisms
+	bms := b.Mechanisms
+	if len(ams) != len(bms) {
+		return false
+	}
+	ae := a.Environment
+	be := b.Environment
+	if len(ae) != len(be) {
+		return false
+	}
+	if a.Name != b.Name || a.Namespace != b.Namespace || a.Product != b.Product || a.Version != b.Version {
+		return false
+	}
+	for i, am := range ams {
+		bm := bms[i]
+		if am.Name != bm.Name || am.Product != bm.Product || am.Version != bm.Version {
+			return false
+		}
+	}
+	for k, av := range ae {
+		if bv, ok := be[k]; !(ok && av == bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// WatchAgentsNS notifies a client of the set of known Agents.
+func (m *Manager) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_WatchAgentsNSServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), request.Session)
+
+	dlog.Debug(ctx, "WatchAgentsNS called")
+
+	snapshotCh := m.state.WatchAgents(ctx, nil)
+	sessionDone, err := m.state.SessionDone(request.Session.GetSessionId())
+	if err != nil {
+		return err
+	}
+
+	var lastSnap map[string]*rpc.AgentInfo
+	snapEqual := func(snap []*rpc.AgentInfo) bool {
+		if len(snap) != len(lastSnap) {
+			return false
+		}
+		for _, a := range snap {
+			if b, ok := lastSnap[a.PodIp]; !ok || !infosEqual(a, b) {
+				return false
+			}
+		}
+		return true
+	}
+
+	includeAgent := func(a *rpc.AgentInfo) bool {
+		for _, ns := range request.Namespaces {
+			if ns == a.Namespace {
+				return true
+			}
+		}
+		return false
+	}
+
+	for {
+		select {
+		case snapshot, ok := <-snapshotCh:
+			if !ok {
+				// The request has been canceled.
+				dlog.Debug(ctx, "WatchAgentsNS request cancelled")
+				return nil
+			}
+			var agents []*rpc.AgentInfo
+			for _, agent := range snapshot.State {
+				if includeAgent(agent) {
+					agents = append(agents, agent)
+				}
+			}
+			if snapEqual(agents) {
+				continue
+			}
+			lastSnap = make(map[string]*rpc.AgentInfo, len(agents))
+			for _, a := range agents {
+				lastSnap[a.PodIp] = a
+			}
+			resp := &rpc.AgentInfoSnapshot{
+				Agents: agents,
+			}
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+		case <-sessionDone:
+			// Manager believes this session has ended.
+			dlog.Debug(ctx, "WatchAgents session cancelled")
+			return nil
+		}
+	}
+}
+
 // WatchIntercepts notifies a client or agent of the set of intercepts
 // relevant to that client or agent.
 func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
