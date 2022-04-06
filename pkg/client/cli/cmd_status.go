@@ -289,6 +289,8 @@ func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 		for _, intercept := range cs.Intercepts {
 			s.printf("    %s: %s\n", intercept.Name, intercept.Client)
 		}
+	} else {
+		s.println("User Daemon: Not running")
 	}
 }
 
