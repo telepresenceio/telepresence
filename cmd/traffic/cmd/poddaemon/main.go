@@ -2,6 +2,7 @@ package poddaemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -169,7 +170,8 @@ func main(ctx context.Context, args Args) error {
 		if err := connectError(cResp); err != nil {
 			return err
 		}
-		dlog.Infof(ctx, "Connected to traffic manager")
+		session := cResp.SessionInfo
+		dlog.Infof(ctx, "Connected to traffic manager: session=%v", session)
 
 		dlog.Infof(ctx, "Creating intercept...")
 		iResp, err := userdCoreImpl.CreatePoddIntercept(ctx, &rpc_userd.CreateInterceptRequest{
@@ -198,7 +200,7 @@ func main(ctx context.Context, args Args) error {
 
 		dlog.Infof(ctx, "Creating preview URL...")
 		uResp, err := userdCoreImpl.ManagerProxy.UpdateIntercept(ctx, &rpc_manager.UpdateInterceptRequest{
-			Session: cResp.SessionInfo,
+			Session: session,
 			Name:    args.WorkloadName,
 			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{
 				AddPreviewDomain: &rpc_manager.PreviewSpec{
@@ -221,10 +223,29 @@ func main(ctx context.Context, args Args) error {
 			dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
 		}
 
-		// now just wait to be signaled to shut down
-		dlog.Infof(ctx, "Maintaining intercept until shutdown...")
-		<-ctx.Done()
-		return nil
+		// Watch the intercept so that we can report errors.
+		var prevSummary string
+		return userdCoreImpl.ManagerProxy.WatchIntercepts(session, &interceptWatcher{
+			ctx: ctx,
+			handler: func(snapshot *rpc_manager.InterceptInfoSnapshot) error {
+				switch len(snapshot.Intercepts) {
+				case 0:
+					return fmt.Errorf("intercept vanished; restarting")
+				case 1:
+					nextSummary, ok := summarizeIntercept(snapshot.Intercepts[0])
+					if nextSummary != prevSummary {
+						dlog.Infoln(ctx, nextSummary)
+					}
+					if !ok {
+						return errors.New(nextSummary)
+					}
+					prevSummary = nextSummary
+					return nil
+				default:
+					return fmt.Errorf("this %v has multiple intercepts associated with it... that doesn't make sense", processName)
+				}
+			},
+		})
 	})
 
 	return grp.Wait()
@@ -244,4 +265,32 @@ func connectError(info *rpc_userd.ConnectInfo) error {
 		return fmt.Errorf("unexpected error code: code=%v text=%q category=%v",
 			info.Error, info.ErrorText, info.ErrorCategory)
 	}
+}
+
+func summarizeIntercept(icept *rpc_manager.InterceptInfo) (summary string, iceptIsOK bool) {
+	iceptIsOK = true
+	summary = fmt.Sprintf("intercept name=%q (id=%q) state: ", icept.Spec.Name, icept.Id)
+	if icept.Disposition > rpc_manager.InterceptDispositionType_WAITING {
+		summary += "error: "
+		iceptIsOK = false
+	}
+	summary += icept.Disposition.String()
+	if icept.Message != "" {
+		summary += ": " + icept.Message
+	}
+	return
+}
+
+type interceptWatcher struct {
+	ctx     context.Context
+	handler func(*rpc_manager.InterceptInfoSnapshot) error
+	shamServerStream
+}
+
+func (iw *interceptWatcher) Context() context.Context {
+	return iw.ctx
+}
+
+func (iw *interceptWatcher) Send(arg *rpc_manager.InterceptInfoSnapshot) error {
+	return iw.handler(arg)
 }
