@@ -251,7 +251,7 @@ check-unit: ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-integration
-check-integration: ## (QA) Run the test suite
+check-integration: tools/bin/helm ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.

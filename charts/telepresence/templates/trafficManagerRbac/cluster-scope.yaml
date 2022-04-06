@@ -28,7 +28,6 @@ rules:
   verbs:
   - get
   - list
-{{- if (not .Values.managerRbac.namespaced) }}
 - apiGroups:
   - ""
   resources:
@@ -37,6 +36,7 @@ rules:
   - list
   - get
   - watch
+{{- if (not .Values.managerRbac.namespaced) }}
 # Needed for the `gather-logs` command to work on components in the kubernetes
 # cluster (traffic-manager + traffic-agents)
 - apiGroups:
