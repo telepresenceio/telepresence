@@ -3,7 +3,6 @@ package agentmap
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	core "k8s.io/api/core/v1"
 
@@ -67,7 +66,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, er
 
 	ag := &agentconfig.Sidecar{
 		AgentImage:   env.AgentRegistry + "/" + env.AgentImage,
-		AgentName:    AgentName(wl),
+		AgentName:    wl.GetName(),
 		Namespace:    wl.GetNamespace(),
 		WorkloadName: wl.GetName(),
 		WorkloadKind: wl.GetKind(),
@@ -142,16 +141,4 @@ nextSvcPort:
 		})
 	}
 	return ccs, nil
-}
-
-func AgentName(wl k8sapi.Workload) string {
-	switch wl.GetKind() {
-	case "ReplicaSet":
-		// If it's owned by a replicaset, then it's the same as the deployment e.g. "my-echo-697464c6c5" -> "my-echo"
-		tokens := strings.Split(wl.GetName(), "-")
-		return strings.Join(tokens[:len(tokens)-1], "-")
-	default:
-		// If the pod is owned by a statefulset, or a deployment, the agent's name is the same as the workload's
-		return wl.GetName()
-	}
 }

@@ -477,7 +477,7 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 	var refs []meta.OwnerReference
 	if wl != nil {
 		ag := agentconfig.Sidecar{}
-		ok, err := a.agentConfigs.GetInto(agentmap.AgentName(wl), pod.GetNamespace(), &ag)
+		ok, err := a.agentConfigs.GetInto(wl.GetName(), wl.GetNamespace(), &ag)
 		if err != nil {
 			return nil, err
 		}
