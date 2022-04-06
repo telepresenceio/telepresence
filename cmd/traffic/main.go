@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
@@ -13,40 +14,41 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-func doMain(fn func(ctx context.Context, args ...string) error, logLevel string, args ...string) {
-	ctx := log.MakeBaseLogger(context.Background(), logLevel)
-
-	if err := fn(ctx, args...); err != nil {
-		dlog.Errorf(ctx, "quit: %v", err)
-		os.Exit(1)
-	}
-}
-
 func main() {
-	level := os.Getenv("LOG_LEVEL")
-	if len(os.Args) > 1 {
-		switch name := os.Args[1]; name {
-		case "agent":
-			doMain(agent.Main, agent.GetLogLevel(), os.Args[2:]...)
-		case "manager":
-			doMain(manager.Main, level, os.Args[2:]...)
-		case "agent-init":
-			doMain(agentinit.Main, level, os.Args[2:]...)
-		default:
-			fmt.Println("traffic: unknown command:", name)
-			os.Exit(127)
-		}
-		return
+	cmds := map[string]func(ctx context.Context, args ...string) error{
+		"agent":      agent.Main,
+		"agent-init": agentinit.Main,
+		"manager":    manager.Main,
 	}
 
-	switch name := filepath.Base(os.Args[0]); name {
-	case "traffic-agent":
-		doMain(agent.Main, agent.GetLogLevel(), os.Args[1:]...)
-	case "traffic-agent-init":
-		doMain(agentinit.Main, level, os.Args[1:]...)
-	case "traffic-manager":
-		fallthrough
-	default:
-		doMain(manager.Main, level, os.Args[1:]...)
+	var name string
+	var args []string
+	if len(os.Args) > 1 {
+		name = os.Args[1]
+		args = os.Args[2:]
+	} else {
+		argv0 := filepath.Base(os.Args[0])
+		name = strings.TrimPrefix(argv0, "traffic-")
+		args = os.Args[1:]
+		if _, ok := cmds[name]; !ok || !strings.HasPrefix(argv0, "traffic-") {
+			name = "manager"
+		}
+	}
+
+	if cmd, cmdOK := cmds[name]; cmdOK {
+		logLevel := os.Getenv("LOG_LEVEL")
+		if name == "agent" {
+			logLevel = agent.GetLogLevel()
+		}
+
+		ctx := log.MakeBaseLogger(context.Background(), logLevel)
+
+		if err := cmd(ctx, args...); err != nil {
+			dlog.Errorf(ctx, "quit: %v", err)
+			os.Exit(1)
+		}
+	} else {
+		fmt.Println("traffic: unknown command:", name)
+		os.Exit(127)
 	}
 }
