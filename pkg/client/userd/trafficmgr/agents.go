@@ -1,6 +1,7 @@
 package trafficmgr
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -51,9 +52,27 @@ func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*man
 	return agents
 }
 
-func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
+type agentsStringer []*manager.AgentInfo
+
+func (as agentsStringer) String() string {
+	sb := bytes.Buffer{}
+	sb.WriteByte('[')
+	for i, a := range as {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(a.Name)
+		sb.WriteByte('.')
+		sb.WriteString(a.Namespace)
+	}
+	sb.WriteByte(']')
+	return sb.String()
+}
+
+func (tm *TrafficManager) setCurrentAgents(ctx context.Context, agents []*manager.AgentInfo) {
 	tm.currentAgentsLock.Lock()
 	tm.currentAgents = agents
+	dlog.Debugf(ctx, "setCurrentAgents %s", agentsStringer(agents))
 	tm.currentAgentsLock.Unlock()
 }
 
@@ -119,7 +138,7 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 		} else {
 			err = nil
 		}
-		tm.setCurrentAgents(nil)
+		tm.setCurrentAgents(ctx, nil)
 		return err
 	}
 
@@ -136,10 +155,10 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 			} else {
 				err = nil
 			}
-			tm.setCurrentAgents(nil)
+			tm.setCurrentAgents(ctx, nil)
 			return err
 		}
-		tm.setCurrentAgents(snapshot.Agents)
+		tm.setCurrentAgents(ctx, snapshot.Agents)
 		tm.notifyAgentWatchers(ctx, snapshot.Agents)
 	}
 	return nil
@@ -156,7 +175,7 @@ func (tm *TrafficManager) watchAgents(ctx context.Context, opts []grpc.CallOptio
 		if err != nil {
 			return err
 		}
-		tm.setCurrentAgents(snapshot.Agents)
+		tm.setCurrentAgents(ctx, snapshot.Agents)
 		tm.notifyAgentWatchers(ctx, snapshot.Agents)
 	}
 	return nil
