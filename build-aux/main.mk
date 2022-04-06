@@ -120,19 +120,9 @@ tel2-base tel2:
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
 
-.PHONY: podd-base podd
-podd-base podd:
-	mkdir -p $(BUILDDIR)
-	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt
-	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f podd-image/Dockerfile .
-
 .PHONY: push-image
 push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
-
-.PHONY: push-podd
-push-podd: podd
-	docker push $(TELEPRESENCE_REGISTRY/podd:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools

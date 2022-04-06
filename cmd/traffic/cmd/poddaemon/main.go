@@ -1,4 +1,4 @@
-package main
+package poddaemon
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 const processName = "pod-daemon"
@@ -61,14 +60,12 @@ func PodNamespace() string {
 	return "default"
 }
 
-func main() {
-	ctx := context.Background()
-	ctx = log.MakeBaseLogger(ctx, os.Getenv("LOG_LEVEL"))
+func Main(ctx context.Context, argStrs ...string) error {
 	ctx = dgroup.WithGoroutineName(ctx, "/"+processName)
 
 	var args Args
 	cmd := &cobra.Command{
-		Use:  "podd",
+		Use:  "pod-daemon",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Passing secrets as CLI arguments is an anti-pattern, so take it from an
@@ -79,7 +76,7 @@ func main() {
 				args.IngressL5Host = args.IngressHost
 			}
 
-			return Main(cmd.Context(), args)
+			return main(cmd.Context(), args)
 		},
 	}
 	cmd.Flags().StringVar(&args.WorkloadKind, "workload-kind", "Deployment",
@@ -105,14 +102,12 @@ func main() {
 	cmd.Flags().StringToStringVarP(&args.AddRequestHeaders, "preview-url-add-request-headers", "", map[string]string{},
 		"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
 
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		dlog.Errorf(ctx, "quit: %v", err)
-		os.Exit(1)
-	}
+	cmd.SetArgs(argStrs)
+	return cmd.ExecuteContext(ctx)
 }
 
-// Main in mostly mimics pkg/client/userd.run(), but is trimmed down for running in a Pod.
-func Main(ctx context.Context, args Args) error {
+// main in mostly mimics pkg/client/userd.run(), but is trimmed down for running in a Pod.
+func main(ctx context.Context, args Args) error {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
