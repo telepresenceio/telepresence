@@ -16,12 +16,13 @@ metadata:
 rules:
 - apiGroups:
   - ""
-  resources: ["pods", "pods/log"]
-  verbs: ["get", "list", "create", "delete"]
+  resources: ["services", "pods", "pods/log"]
+  verbs: ["get", "list", "watch"]
 - apiGroups:
-  - ""
-  resources: ["services"]
-  verbs: ["watch", "get", "list", "update"]
+    - ""
+  resources: ["configmaps"]
+  verbs: ["get", "update"]
+  resourceNames: ["telepresence-agents"]
 - apiGroups:
   - ""
   resources: ["pods/portforward"]
@@ -29,7 +30,7 @@ rules:
 - apiGroups:
   - "apps"
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["watch", "get", "list", "update", "patch"]
+  verbs: ["get", "list", "watch"]
 - apiGroups:
   - "getambassador.io"
   resources: ["hosts", "mappings"]

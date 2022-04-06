@@ -416,6 +416,8 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 		"-n", managerNamespace, helmChart,
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
+		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
@@ -433,7 +435,6 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 }
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
-	TelepresenceOk(ctx, "quit")
 	t := getT(ctx)
 	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
 
