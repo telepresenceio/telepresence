@@ -215,9 +215,11 @@ func main(ctx context.Context, args Args) error {
 			},
 		})
 		if err != nil {
-			return err
+			dlog.Errorf(ctx, "creating preview URL: %v", err)
+			//return err
+		} else {
+			dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
 		}
-		dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
 
 		// now just wait to be signaled to shut down
 		dlog.Infof(ctx, "Maintaining intercept until shutdown...")

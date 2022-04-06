@@ -57,7 +57,7 @@ func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
 	cliVersion := client.Semver()
 	if chartVersion.GT(cliVersion) {
 		dlog.Warnf(ctx, "You are using Telepresence %s, but Traffic Manager %s is installed on the cluster.", cliVersion, ver)
-		return false
+		return true
 	}
 	// At this point we could also do chartVersion != cliVersion, since chartVersion <= cliVersion
 	// But this makes it really clear that we're only doing the upgrade if chartVersion < cliVersion
