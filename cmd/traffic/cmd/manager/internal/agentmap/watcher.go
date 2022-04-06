@@ -76,6 +76,26 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 }
 
 func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
+	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
+		// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
+		// set must be scaled down and then up again.
+		replicas := 1
+		if rp := rs.Spec.Replicas; rp != nil {
+			replicas = int(*rp)
+		}
+		if replicas > 0 {
+			patch := `{"spec": {"replicas": 0}}`
+			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
+				dlog.Errorf(ctx, "unable to scale ReplicaSet %s.%s to zero: %v", wl.GetName(), wl.GetNamespace(), err)
+				return
+			}
+			patch = fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
+			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
+				dlog.Errorf(ctx, "unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
+			}
+		}
+		return
+	}
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
 		install.DomainPrefix,
