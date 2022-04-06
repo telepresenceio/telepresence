@@ -11,6 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agentinit"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/poddaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
@@ -19,6 +20,7 @@ func main() {
 		"agent":      agent.Main,
 		"agent-init": agentinit.Main,
 		"manager":    manager.Main,
+		"pod-daemon": poddaemon.Main,
 	}
 
 	var name string
