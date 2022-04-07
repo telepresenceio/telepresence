@@ -111,7 +111,7 @@ get_workstation_apikey() {
     esac
     endpoint="auth.datawire.io"
     if [[ "$SYSTEMA_ENV" == 'staging' ]]; then
-        endpoint="beta-auth.datawire.io"
+        endpoint="staging-auth.datawire.io"
     fi
     apikey=$(jq -r ".[\"$endpoint\"]|.[\"telepresence:agent-http\"]|strings" "$cache_file")
     if [[ -z $apikey ]]; then
