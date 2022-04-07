@@ -203,8 +203,8 @@ clientRbac:
   # managed in your cluster.
   # This MUST be set.
   #
-  # Default: {}
-  subjects: {}
+  # Default: []
+  subjects: []
     # - kind: User
     #   name: jane
     #   apiGroup: rbac.authorization.k8s.io
