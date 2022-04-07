@@ -285,6 +285,10 @@ func describeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	} else if volumeMountsPrevented != nil {
 		fields = append(fields, kv{"Volume Mount Error", volumeMountsPrevented.Error()})
 	}
+	if debug {
+		fields = append(fields, kv{"Volume Mount Pod IP (for SFTP)", ii.PodIp})
+		fields = append(fields, kv{"Volume Mount Pod port (for SFTP)", fmt.Sprintf("%d", ii.SftpPort)})
+	}
 
 	fields = append(fields, kv{"Intercepting", func() string {
 		if ii.MechanismArgsDesc == "" {
