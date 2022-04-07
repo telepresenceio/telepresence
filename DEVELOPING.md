@@ -5,9 +5,8 @@
 ### Development environment
 
  - `TELEPRESENCE_REGISTRY` (required) is the Docker registry that
-   `make push-image` pushes the `tel2` image to, and that the
-   `tel2-base` image is fetch-from/pushed-to as needed.  For most
-   developers the easiest thing is to set it to `docker.io/USERNAME`.
+   `make push-image` pushes the `tel2` image to.  For most developers
+   the easiest thing is to set it to `docker.io/USERNAME`.
 
  - `TELEPRESENCE_VERSION` (optional) is the "vSEMVER" string to
    compile-in to the binary and Docker image, if set.  Otherwise,
@@ -24,9 +23,9 @@
  - `DTEST_REGISTRY` (optional) is the Docker registry that images are
    pushed to by the tests, if set.  Otherwise, the tests will
    automatically use a registry running locally in Docker
-   ("localhost:5000").  The tests will push images named `tel2` and
-   `tel2-base` with various version tags.  It is not necessary to set
-   this unless you have set `DTEST_KUBECONFIG`.
+   ("localhost:5000").  The tests will push images named `tel2` with
+   various version tags.  It is not necessary to set this unless you
+   have set `DTEST_KUBECONFIG`.
 
 The output of `make help` has a bit more information.
 

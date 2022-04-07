@@ -106,7 +106,7 @@ endif
 .PHONY: build-version build
 build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
 	mkdir -p $(BINDIR)
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence/... || \
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence || \
 		(git restore pkg/install/helm/telepresence-chart.tgz; exit 1) # in case the build fails
 
 # Build: artifacts that don't get checked in to Git
@@ -118,8 +118,8 @@ build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all th
 .PHONY: image
 image: tel2
 
-.PHONY: tel2-base tel2
-tel2-base tel2:
+.PHONY: tel2
+tel2:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
