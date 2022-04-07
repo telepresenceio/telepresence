@@ -249,7 +249,6 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		ClusterServer:  cluster.Config.Server,
 		ClusterId:      cluster.GetClusterId(c),
 		SessionInfo:    tmgr.session(),
-		Agents:         &manager.AgentInfoSnapshot{Agents: tmgr.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
 	}
 	return tmgr, ret
@@ -697,7 +696,6 @@ func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterServer:  cfg.Server,
 		ClusterId:      tm.GetClusterId(c),
 		SessionInfo:    tm.session(),
-		Agents:         &manager.AgentInfoSnapshot{Agents: tm.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()},
 	}
 	return ret
