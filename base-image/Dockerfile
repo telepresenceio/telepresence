@@ -23,6 +23,7 @@ COPY go.mod go.sum .
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 COPY rpc/ rpc/
+COPY charts/ charts/
 COPY build-output/version.txt .
 
 RUN \
