@@ -22,9 +22,9 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	agentmap2 "github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -1444,7 +1444,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) 
 }
 
 func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agentconfig.Sidecar, error) {
-	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+	wl, err := agentmap2.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
 	}
@@ -1465,5 +1465,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agentcon
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return agentmap.Generate(ctx, wl)
+	return agentmap2.Generate(ctx, wl)
 }

@@ -15,9 +15,9 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )

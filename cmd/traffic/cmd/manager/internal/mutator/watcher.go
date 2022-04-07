@@ -16,9 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
