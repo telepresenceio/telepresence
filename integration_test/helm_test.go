@@ -85,7 +85,7 @@ func (s *helmSuite) Test_HelmWebhookDoesntInjectInUnmanagedNamespace() {
 func (s *helmSuite) Test_HelmMultipleInstalls() {
 	ctx := s.Context()
 	svc := s.ServiceName()
-	itest.TelepresenceDisconnectOk(ctx)
+	itest.TelepresenceQuitOk(ctx)
 
 	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 	s.Run("Installs Successfully", func() {
@@ -111,6 +111,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 
 	s.Run("Uninstalls Successfully", func() {
 		s.UninstallTrafficManager(ctx, s.mgrSpace2)
+		itest.TelepresenceQuitOk(ctx)
 	})
 }
 

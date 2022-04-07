@@ -2,6 +2,8 @@
 
 ### 2.5.5 (TBD)
 
+- Change: The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
+
 - Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces  explicitly mapped 
   using the `connect` command's `--mapped-namespaces` flag.
 
