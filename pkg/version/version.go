@@ -16,9 +16,9 @@ var Version string
 func init() {
 	// Prefer version number inserted at build using --ldflags, but if it's not set...
 	if Version == "" {
-		if i, ok := debug.ReadBuildInfo(); ok {
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
 			// Fall back to version info from "go get"
-			Version = i.Main.Version
+			Version = info.Main.Version
 		} else {
 			Version = "(unknown version)"
 		}

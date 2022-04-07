@@ -34,6 +34,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/dtest"
+	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -163,15 +164,6 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 	if s.executable != "" {
 		return
 	}
-	if err := Run(ctx, "go", "run", filepath.Join("build-aux", "package_embedded_chart", "main.go"), s.testVersion); err != nil {
-		errs <- err
-		return
-	}
-	defer func() {
-		if err := Run(ctx, "git", "restore", filepath.Join("pkg", "install", "helm", "telepresence-chart.tgz")); err != nil {
-			errs <- err
-		}
-	}()
 
 	exe := "telepresence"
 	if runtime.GOOS == "windows" {
@@ -432,9 +424,26 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 }
 
 func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+	chartFilename, err := func() (string, error) {
+		filename := filepath.Join(getT(ctx).TempDir(), "telepresence-chart.tgz")
+		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return "", err
+		}
+		if err := telcharts.WriteChart(fh, s.TelepresenceVersion()[1:]); err != nil {
+			_ = fh.Close()
+			return "", err
+		}
+		if err := fh.Close(); err != nil {
+			return "", err
+		}
+		return filename, nil
+	}()
+	if err != nil {
+		return err
+	}
 	settings := []string{
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
-		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
 		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
@@ -451,9 +460,9 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
-	args = append(args, "traffic-manager", filepath.Join("charts", "telepresence"))
+	args = append(args, "traffic-manager", chartFilename)
 
-	err := Run(WithModuleRoot(ctx), "helm", args...)
+	err = Run(WithModuleRoot(ctx), "helm", args...)
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {

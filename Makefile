@@ -25,6 +25,7 @@ endif
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
   $(info [make] TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
   $(error TELEPRESENCE_VERSION variable is invalid: It must be a v2.* string, but is '$(TELEPRESENCE_VERSION)'))
+export TELEPRESENCE_VERSION
 
 .DEFAULT_GOAL = help
 
