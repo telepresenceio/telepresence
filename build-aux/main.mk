@@ -110,10 +110,6 @@ build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a tel
 build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
 	git restore pkg/install/helm/telepresence-chart.tgz
 
-# TODO remove the following two lines when we're passed the PR build barrier
-.PHONY: image
-image: tel2
-
 .PHONY: tel2-base tel2
 tel2-base tel2:
 	mkdir -p $(BUILDDIR)
@@ -123,6 +119,9 @@ tel2-base tel2:
 .PHONY: push-image
 push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+
+tel2-image: tel2
+	docker save $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
