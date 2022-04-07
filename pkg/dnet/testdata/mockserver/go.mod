@@ -1,6 +1,6 @@
 module github.com/telepresenceio/telepresence/v2/pkg/dnet/testdata/mockserver
 
-go 1.17
+go 1.18
 
 require (
 	github.com/datawire/dlib v1.2.4

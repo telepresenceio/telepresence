@@ -30,7 +30,7 @@ commands:
     parameters:
       version:
         type: string
-        default: "1.17"
+        default: "1.18"
     steps:
       - run:
           name: "Install Go << parameters.version >>"
