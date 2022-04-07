@@ -121,7 +121,7 @@ push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRES
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 tel2-image: tel2
-	docker save $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
+	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
