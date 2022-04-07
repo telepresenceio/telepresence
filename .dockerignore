@@ -5,7 +5,6 @@ base-image/
 build-aux/
 build-output/
 !build-output/version.txt
-charts/
 docs/
 integration_test/
 k8s/
