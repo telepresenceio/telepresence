@@ -105,6 +105,30 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 	}
 }
 
+func dbg(ctx context.Context, namespace string, existing *release.Release, err error) {
+	if err != nil {
+		dlog.Infof(ctx, "dbg: 0: err=%v", err)
+		return
+	}
+
+	owner, _ := existing.Config["createdBy"]
+	dlog.Infof(ctx, "dbg: 0: version=%q, owner=%q, state.status=%q, state.desc=%q",
+		releaseVer(existing), owner, existing.Info.Status, existing.Info.Description)
+
+	helmConfig, err := getHelmConfig(ctx, dbgFlags, namespace)
+	if err != nil {
+		panic(err)
+	}
+
+	existing, err = getHelmRelease(ctx, helmConfig)
+	if err != nil {
+		panic(err)
+	}
+	owner, _ = existing.Config["createdBy"]
+	dlog.Infof(ctx, "dbg: 1: version=%q, owner=%q, state.status=%q, state.desc=%q",
+		releaseVer(existing), owner, existing.Info.Status, existing.Info.Description)
+}
+
 func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
 	dlog.Infof(ctx, "No existing Traffic Manager found in namespace %s, installing %s...", namespace, client.Version())
 	install := action.NewInstall(helmConfig)
@@ -114,7 +138,8 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 	install.CreateNamespace = true
 	return timedRun(ctx, func(timeout time.Duration) error {
 		install.Timeout = timeout
-		_, err := install.Run(chrt, getValues(ctx))
+		x, err := install.Run(chrt, getValues(ctx))
+		dbg(ctx, namespace, x, err)
 		return err
 	})
 }
@@ -126,7 +151,8 @@ func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart,
 	upgrade.Namespace = namespace
 	return timedRun(ctx, func(timeout time.Duration) error {
 		upgrade.Timeout = timeout
-		_, err := upgrade.Run(releaseName, chrt, getValues(ctx))
+		x, err := upgrade.Run(releaseName, chrt, getValues(ctx))
+		dbg(ctx, namespace, x, err)
 		return err
 	})
 }
@@ -141,8 +167,11 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 	})
 }
 
+var dbgFlags *genericclioptions.ConfigFlags
+
 // EnsureTrafficManager ensures the traffic manager is installed
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
+	dbgFlags = configFlags
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
