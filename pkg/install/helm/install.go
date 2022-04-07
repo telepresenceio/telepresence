@@ -8,6 +8,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
@@ -23,7 +24,7 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 	helmConfig := &action.Configuration{}
 	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...interface{}) {
 		ctx := dlog.WithField(ctx, "source", "helm")
-		dlog.Debugf(ctx, format, args...)
+		dlog.Infof(ctx, format, args...)
 	})
 	if err != nil {
 		return nil, err
@@ -145,6 +146,12 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
 	}
+
+	chrt, err := loadChart()
+	if err != nil {
+		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	}
+
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
 		// If we weren't able to get the helm release at all, there's no hope for installing it
@@ -152,47 +159,64 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		// kind of issue communicating with kubernetes. Let's hope it's the former and let's hope the traffic manager
 		// is already set up. If it's the latter case (or the traffic manager isn't there), we'll be alerted by
 		// a subsequent error anyway.
-		dlog.Errorf(ctx, "Unable to look for existing helm release: %v. Assuming it's there and continuing...", err)
+		dlog.Errorf(ctx, "EnsureTrafficManager(namespace=%q): unable to look for existing helm release: %v. Assuming it's there and continuing...",
+			namespace, err)
 		return nil
 	}
-
-	chrt, err := loadChart()
-	if err != nil {
-		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	if existing == nil {
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install: none", namespace)
+	} else {
+		owner, _ := existing.Config["createdBy"]
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
+			namespace, releaseVer(existing), owner, existing.Info.Status, existing.Info.Description)
 	}
+
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, an uninstall should clean everything up and leave us ready to install again
-	if existing != nil && shouldManageRelease(ctx, existing) && releaseNeedsCleanup(ctx, existing) {
+	if existing != nil && shouldManageRelease(ctx, existing) && (existing.Info.Status != release.StatusDeployed) {
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt; removing it...",
+			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
 		err := uninstallExisting(ctx, helmConfig, namespace)
 		if err != nil {
 			return fmt.Errorf("failed to clean up leftover release history: %w", err)
 		}
 		existing = nil
 	}
-	if existing == nil {
-		err := importLegacy(ctx, namespace)
-		if err != nil {
+
+	// OK, now install things.
+	if existing == nil { // fresh install
+		if err := importLegacy(ctx, namespace); err != nil {
 			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
 			// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
-			dlog.Errorf(ctx, "Unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...", err)
+			dlog.Errorf(ctx, "EnsureTrafficManager(namespace=%q): unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...",
+				namespace, err)
 			return nil
 		}
 
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, chrt, helmConfig, namespace)
 		if err != nil {
 			return err
 		}
-		return nil
-	}
-	ver := releaseVer(existing)
-	if shouldManageRelease(ctx, existing) && shouldUpgradeRelease(ctx, existing) {
-		err = upgradeExisting(ctx, ver, chrt, helmConfig, namespace)
-		if err != nil {
+	} else { // upgrade existing install
+		if !shouldManageRelease(ctx, existing) {
+			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): existing Traffic Manager not owned by cli, will not modify",
+				namespace)
+			return nil
+		}
+		if !shouldUpgradeRelease(ctx, existing) {
+			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): existing Traffic Manager (version=%q) is sufficiently new (>= %q), will not modify",
+				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+			return nil
+		}
+
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): upgrading Traffic Manager from %q to %q...",
+			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+		if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace); err != nil {
 			return err
 		}
-		return nil
 	}
-	dlog.Infof(ctx, "Existing Traffic Manager %s not owned by cli or does not need upgrade, will not modify", ver)
+
 	return nil
 }
 
