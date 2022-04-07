@@ -29,7 +29,7 @@ func WithHelmAndService(h SingleService, f func(HelmAndService)) {
 
 func (h *helmAndService) setup(ctx context.Context) bool {
 	t := getT(ctx)
-	TelepresenceOk(ctx, "quit")
+	TelepresenceQuitOk(ctx)
 
 	// Destroy the telepresence-clusterrolebinding so that we actually test the RBAC set up in the helm chart
 	require.NoError(t, Kubectl(ctx, "", "delete", "clusterrolebinding", "telepresence-clusterrolebinding"))

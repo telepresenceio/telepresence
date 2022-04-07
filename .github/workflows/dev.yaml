@@ -18,7 +18,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - name: Build dev image
         run: |
           TAG="2.4.5-gotest.${GITHUB_SHA:0:7}"
@@ -45,7 +45,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - uses: azure/setup-kubectl@v1
         if: steps.get_last_run.outputs.passed != 'success'
         with:
@@ -109,7 +109,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - uses: azure/setup-kubectl@v1
         if: steps.get_last_run.outputs.passed != 'success'
         with:
@@ -195,7 +195,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.x'
+          go-version: '1.17'
       - uses: azure/setup-kubectl@v1
         if: steps.get_last_run.outputs.passed != 'success'
         with:

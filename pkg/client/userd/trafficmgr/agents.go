@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
@@ -55,7 +57,40 @@ func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
 	tm.currentAgentsLock.Unlock()
 }
 
-func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
+func (tm *TrafficManager) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
+	// Notify waiters for agents
+	for _, agent := range agents {
+		fullName := agent.Name + "." + agent.Namespace
+		if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
+			if ch, ok := chUt.(chan *manager.AgentInfo); ok {
+				dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
+				ch <- agent
+				close(ch)
+			}
+		}
+	}
+}
+
+func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
+	// Cancel this watcher whenever the set of namespaces change
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	tm.AddNamespaceListener(func(context.Context) {
+		cancel()
+	})
+
+	nss := tm.GetCurrentNamespaces(true)
+	if len(nss) == 0 {
+		// Not much point in watching for nothing, so just wait until
+		// the set of namespaces change. Returning nil here means that
+		// we want a restart unless the caller too is cancelled
+		<-ctx.Done()
+		return nil
+	}
+
+	dlog.Debugf(ctx, "start watchAgentNS %v", nss)
+	defer dlog.Debugf(ctx, "end watchAgentNS %v", nss)
+
 	var opts []grpc.CallOption
 	cfg := client.GetConfig(ctx)
 	if !cfg.Grpc.MaxReceiveSize.IsZero() {
@@ -64,40 +99,71 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 		}
 	}
 
+	wm := "WatchAgentsNS"
+	stream, err := tm.managerClient.WatchAgentsNS(ctx, &manager.AgentsRequest{
+		Session:    tm.session(),
+		Namespaces: nss,
+	}, opts...)
+
+	if err != nil {
+		if ctx.Err() == nil {
+			err = fmt.Errorf("manager.WatchAgentsNS dial: %w", err)
+		} else {
+			err = nil
+		}
+		tm.setCurrentAgents(nil)
+		return err
+	}
+
+	for ctx.Err() == nil {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.Unimplemented {
+				// Fall back to old method of watching all namespaces
+				wm = "WatchAgents"
+				err = tm.watchAgents(ctx, opts)
+			}
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				dlog.Errorf(ctx, "manager.%s recv: %v", wm, err)
+			} else {
+				err = nil
+			}
+			tm.setCurrentAgents(nil)
+			return err
+		}
+		tm.setCurrentAgents(snapshot.Agents)
+		tm.notifyAgentWatchers(ctx, snapshot.Agents)
+	}
+	return nil
+}
+
+func (tm *TrafficManager) watchAgents(ctx context.Context, opts []grpc.CallOption) error {
+	stream, err := tm.managerClient.WatchAgents(ctx, tm.session(), opts...)
+	if err != nil {
+		return err
+	}
+
+	for ctx.Err() == nil {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		tm.setCurrentAgents(snapshot.Agents)
+		tm.notifyAgentWatchers(ctx, snapshot.Agents)
+	}
+	return nil
+}
+
+func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
-		stream, err := tm.managerClient.WatchAgents(ctx, tm.session(), opts...)
-		if err != nil {
-			err = fmt.Errorf("manager.WatchAgents dial: %w", err)
-		}
-		for err == nil && ctx.Err() == nil {
-			snapshot, err := stream.Recv()
-			if err != nil {
-				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-					dlog.Errorf(ctx, "manager.WatchAgents recv: %v", err)
-				}
-				tm.setCurrentAgents(nil)
-				break
+		if err := tm.watchAgentsNS(ctx); err != nil {
+			dlog.Error(ctx, err)
+			dtime.SleepWithContext(ctx, backoff)
+			backoff *= 2
+			if backoff > 3*time.Second {
+				backoff = 3 * time.Second
 			}
-			tm.setCurrentAgents(snapshot.Agents)
-
-			// Notify waiters for agents
-			for _, agent := range snapshot.Agents {
-				fullName := agent.Name + "." + agent.Namespace
-				if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
-					if ch, ok := chUt.(chan *manager.AgentInfo); ok {
-						dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
-						ch <- agent
-						close(ch)
-					}
-				}
-			}
-		}
-
-		dtime.SleepWithContext(ctx, backoff)
-		backoff *= 2
-		if backoff > 3*time.Second {
-			backoff = 3 * time.Second
 		}
 	}
 	return nil

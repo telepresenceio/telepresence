@@ -399,6 +399,14 @@ func (s *Service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rp
 	return
 }
 
+func (s *Service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
+	err = s.withSession(ctx, "GatherLogs", func(c context.Context, session trafficmgr.Session) error {
+		result, err = session.GatherLogs(c, request)
+		return err
+	})
+	return
+}
+
 func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
 		duration := time.Duration(0)

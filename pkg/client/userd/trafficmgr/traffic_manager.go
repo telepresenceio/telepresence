@@ -73,6 +73,7 @@ type Session interface {
 	ActualNamespace(string) string
 	RemainWithToken(context.Context) error
 	AddNamespaceListener(k8s.NamespaceListener)
+	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 }
 
 type Service interface {
@@ -256,7 +257,6 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		ClusterServer:  cluster.Config.Server,
 		ClusterId:      cluster.GetClusterId(c),
 		SessionInfo:    tmgr.session(),
-		Agents:         &manager.AgentInfoSnapshot{Agents: tmgr.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
 	}
 	return tmgr, ret
@@ -535,7 +535,14 @@ func (tm *TrafficManager) getInfosForWorkloads(
 	return wiz, nil
 }
 
+func (tm *TrafficManager) waitForSync(ctx context.Context) {
+	tm.WaitForNSSync(ctx)
+	tm.wlWatcher.setNamespacesToWatch(ctx, tm.GetCurrentNamespaces(true))
+	tm.wlWatcher.waitForSync(ctx)
+}
+
 func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
+	tm.waitForSync(c)
 	sCtx, sCancel := context.WithCancel(c)
 	// We need to make sure the subscription ends when we leave this method, since this is the one consuming the snapshotAvailable channel.
 	// Otherwise, the goroutine that writes to the channel will leak.
@@ -546,7 +553,7 @@ func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloa
 		case <-c.Done():
 			return nil
 		case <-snapshotAvailable:
-			snapshot, err := tm.WorkloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
+			snapshot, err := tm.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "failed to create WorkloadInfoSnapshot: %v", err)
 			}
@@ -564,9 +571,16 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 	filter rpc.ListRequest_Filter,
 	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
-	tm.WaitForNSSync(ctx)
-	tm.wlWatcher.waitForSync(ctx)
+	tm.waitForSync(ctx)
+	return tm.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
+}
 
+func (tm *TrafficManager) workloadInfoSnapshot(
+	ctx context.Context,
+	namespaces []string,
+	filter rpc.ListRequest_Filter,
+	includeLocalIntercepts bool,
+) (*rpc.WorkloadInfoSnapshot, error) {
 	is := tm.getCurrentIntercepts()
 
 	var nss []string
@@ -714,7 +728,6 @@ func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterServer:  cfg.Server,
 		ClusterId:      tm.GetClusterId(c),
 		SessionInfo:    tm.session(),
-		Agents:         &manager.AgentInfoSnapshot{Agents: tm.getCurrentAgents()},
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()},
 	}
 	return ret

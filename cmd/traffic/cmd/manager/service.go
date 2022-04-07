@@ -1,14 +1,11 @@
 package manager
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,8 +13,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -26,7 +21,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -203,6 +197,103 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
 			for _, agent := range snapshot.State {
 				agents = append(agents, agent)
+			}
+			resp := &rpc.AgentInfoSnapshot{
+				Agents: agents,
+			}
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+		case <-sessionDone:
+			// Manager believes this session has ended.
+			dlog.Debug(ctx, "WatchAgents session cancelled")
+			return nil
+		}
+	}
+}
+
+func infosEqual(a, b *rpc.AgentInfo) bool {
+	ams := a.Mechanisms
+	bms := b.Mechanisms
+	if len(ams) != len(bms) {
+		return false
+	}
+	ae := a.Environment
+	be := b.Environment
+	if len(ae) != len(be) {
+		return false
+	}
+	if a.Name != b.Name || a.Namespace != b.Namespace || a.Product != b.Product || a.Version != b.Version {
+		return false
+	}
+	for i, am := range ams {
+		bm := bms[i]
+		if am.Name != bm.Name || am.Product != bm.Product || am.Version != bm.Version {
+			return false
+		}
+	}
+	for k, av := range ae {
+		if bv, ok := be[k]; !(ok && av == bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// WatchAgentsNS notifies a client of the set of known Agents.
+func (m *Manager) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_WatchAgentsNSServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), request.Session)
+
+	dlog.Debug(ctx, "WatchAgentsNS called")
+
+	snapshotCh := m.state.WatchAgents(ctx, nil)
+	sessionDone, err := m.state.SessionDone(request.Session.GetSessionId())
+	if err != nil {
+		return err
+	}
+
+	var lastSnap map[string]*rpc.AgentInfo
+	snapEqual := func(snap []*rpc.AgentInfo) bool {
+		if len(snap) != len(lastSnap) {
+			return false
+		}
+		for _, a := range snap {
+			if b, ok := lastSnap[a.PodIp]; !ok || !infosEqual(a, b) {
+				return false
+			}
+		}
+		return true
+	}
+
+	includeAgent := func(a *rpc.AgentInfo) bool {
+		for _, ns := range request.Namespaces {
+			if ns == a.Namespace {
+				return true
+			}
+		}
+		return false
+	}
+
+	for {
+		select {
+		case snapshot, ok := <-snapshotCh:
+			if !ok {
+				// The request has been canceled.
+				dlog.Debug(ctx, "WatchAgentsNS request cancelled")
+				return nil
+			}
+			var agents []*rpc.AgentInfo
+			for _, agent := range snapshot.State {
+				if includeAgent(agent) {
+					agents = append(agents, agent)
+				}
+			}
+			if snapEqual(agents) {
+				continue
+			}
+			lastSnap = make(map[string]*rpc.AgentInfo, len(agents))
+			for _, a := range agents {
+				lastSnap[a.PodIp] = a
 			}
 			resp := &rpc.AgentInfoSnapshot{
 				Agents: agents,
@@ -621,97 +712,13 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 
 // GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // GetLogsRequest and returns them to the caller
-func (m *Manager) GetLogs(ctx context.Context, request *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
-	resp := &rpc.LogsResponse{
+// Deprecated: Clients should use the user daemon's GatherLogs method
+func (m *Manager) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
+	return &rpc.LogsResponse{
 		PodLogs: make(map[string]string),
 		PodYaml: make(map[string]string),
-	}
-	var errMsg string
-	ki := k8sapi.GetK8sInterface(ctx)
-
-	// getPodLogs is a helper function for getting the logs from the container
-	// of a given pod. If we are unable to get a log for a given pod, we will
-	// instead return the error in the map, instead of the log, so that:
-	// - one failure doesn't prevent us from getting logs from other pods
-	// - it is easy to figure out why gettings logs for a given pod failed
-	getPodLogs := func(pods []*corev1.Pod, container string) {
-		wg := sync.WaitGroup{}
-		logWriteMutex := &sync.Mutex{}
-		wg.Add(len(pods))
-		for _, pod := range pods {
-			go func(pod *corev1.Pod) {
-				defer wg.Done()
-				plo := &corev1.PodLogOptions{
-					Container: container,
-				}
-				// Since the same named workload could exist in multiple namespaces
-				// we add the namespace into the name so that it's easier to make
-				// sense of the logs
-				podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
-				req := ki.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, plo)
-				podLogs, err := req.Stream(ctx)
-				if err != nil {
-					logWriteMutex.Lock()
-					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed to get logs: %s", err)
-					logWriteMutex.Unlock()
-					return
-				}
-				defer podLogs.Close()
-				buf := new(bytes.Buffer)
-				_, err = io.Copy(buf, podLogs)
-				if err != nil {
-					logWriteMutex.Lock()
-					resp.PodLogs[podAndNs] = fmt.Sprintf("Failed writing log to buffer: %s", err)
-					logWriteMutex.Unlock()
-					return
-				}
-				logWriteMutex.Lock()
-				resp.PodLogs[podAndNs] = buf.String()
-				logWriteMutex.Unlock()
-
-				// Get the pod yaml if the user asked for it
-				if request.GetPodYaml {
-					podYaml, err := yaml.Marshal(pod)
-					if err != nil {
-						logWriteMutex.Lock()
-						resp.PodYaml[podAndNs] = fmt.Sprintf("Failed marshaling pod yaml: %s", err)
-						logWriteMutex.Unlock()
-						return
-					}
-					logWriteMutex.Lock()
-					resp.PodYaml[podAndNs] = string(podYaml)
-					logWriteMutex.Unlock()
-				}
-			}(pod)
-		}
-		wg.Wait()
-	}
-	// Get the pods that have traffic-agents
-	agentPods, err := m.clusterInfo.GetTrafficAgentPods(ctx, request.Agents)
-	if err != nil {
-		errMsg += fmt.Sprintf("error getting traffic-agent pods: %s\n", err)
-	} else {
-		getPodLogs(agentPods, "traffic-agent")
-	}
-
-	// We want to get the traffic-manager logs *last* so that if we generate
-	// any errors in the traffic-manager getting the traffic-agent pods, we
-	// want those logs to appear in what we export
-	if request.TrafficManager {
-		managerPods, err := m.clusterInfo.GetTrafficManagerPods(ctx)
-		if err != nil {
-			errMsg += fmt.Sprintf("error getting traffic-manager pods: %s\n", err)
-		} else {
-			getPodLogs(managerPods, "traffic-manager")
-		}
-	}
-
-	// If we were unable to get logs from the traffic-manager and/or traffic-agents
-	// we put that information in the errMsg.
-	if errMsg != "" {
-		resp.ErrMsg = errMsg
-	}
-	return resp, nil
+		ErrMsg:  "traffic-manager.GetLogs is deprecated. Please upgrade your telepresence client",
+	}, nil
 }
 
 func (m *Manager) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {

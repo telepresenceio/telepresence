@@ -74,6 +74,9 @@ type ConnectorClient interface {
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error)
+	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
+	// (pending the request) and return them to the caller
+	GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
 }
 
 type connectorClient struct {
@@ -337,6 +340,15 @@ func (c *connectorClient) ResolveIngressInfo(ctx context.Context, in *userdaemon
 	return out, nil
 }
 
+func (c *connectorClient) GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error) {
+	out := new(LogsResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GatherLogs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -393,6 +405,9 @@ type ConnectorServer interface {
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error)
+	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
+	// (pending the request) and return them to the caller
+	GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -468,6 +483,9 @@ func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandReque
 }
 func (UnimplementedConnectorServer) ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
+}
+func (UnimplementedConnectorServer) GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GatherLogs not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -902,6 +920,24 @@ func _Connector_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_GatherLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GatherLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GatherLogs",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GatherLogs(ctx, req.(*LogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -992,6 +1028,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolveIngressInfo",
 			Handler:    _Connector_ResolveIngressInfo_Handler,
+		},
+		{
+			MethodName: "GatherLogs",
+			Handler:    _Connector_GatherLogs_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

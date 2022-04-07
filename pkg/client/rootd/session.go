@@ -383,6 +383,9 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 			}
 			if cfgComplete != nil {
 				s.checkConnectivity(ctx, mgrInfo)
+				if ctx.Err() != nil {
+					return
+				}
 				remoteIp := net.IP(mgrInfo.KubeDnsIp)
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
@@ -411,9 +414,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			dlog.Infof(ctx, "Adding service subnet %s", cidr)
 			subnets = append(subnets, cidr)
 		}
-	}
 
-	if s.proxyCluster {
 		for _, sn := range mgrInfo.PodSubnets {
 			cidr := iputil.IPNetFromRPC(sn)
 			dlog.Infof(ctx, "Adding pod subnet %s", cidr)

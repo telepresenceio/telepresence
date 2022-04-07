@@ -221,6 +221,11 @@ message SessionInfo {
   string session_id = 1;
 }
 
+message AgentsRequest {
+  SessionInfo session = 1;
+  repeated string namespaces = 2;
+}
+
 message AgentInfoSnapshot {
   repeated AgentInfo agents = 1;
 }
@@ -289,6 +294,7 @@ message LogLevelRequest {
   google.protobuf.Duration duration = 2;
 }
 
+// Deprecated.
 message GetLogsRequest {
   // Whether or not logs from the traffic-manager are desired.
   bool traffic_manager = 1;
@@ -301,6 +307,7 @@ message GetLogsRequest {
   bool get_pod_yaml = 3;
 }
 
+// Deprecated.
 message LogsResponse {
 
   // The map contains assocations between <podName.namespace> and the logs
@@ -455,6 +462,7 @@ service Manager {
 
   // GetLogs will acquire logs for the various Telepresence components in kubernetes
   // (pending the request) and return them to the caller
+  // Deprecated: Will return an empty response
   rpc GetLogs(GetLogsRequest) returns (LogsResponse);
 
   // Watches
@@ -464,6 +472,9 @@ service Manager {
   // A session ID is required; if no session ID is given then the call
   // returns immediately, having not delivered any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
+
+  // WatchAgentsNS is like WatchAgents but limited to a set of namespaces
+  rpc WatchAgentsNS(AgentsRequest) returns (stream AgentInfoSnapshot);
 
   // WatchIntercepts notifies a client or agent of the set of intercepts
   // relevant to that client or agent.
