@@ -78,7 +78,27 @@ func Main(ctx context.Context, argStrs ...string) error {
 
 			return main(cmd.Context(), args)
 		},
+		SilenceErrors: true, // main() will handle it after we return from .ExecuteContext()
+		SilenceUsage:  true, // our FlagErrorFunc will handle it
 	}
+	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		// Taken from telepresence history: see commit fa528109ce246e77bb187f4f46a110562fad3d72
+		if err == nil {
+			return nil
+		}
+
+		// If the error is multiple lines, include an extra blank line before the "See
+		// --help" line.
+		errStr := strings.TrimRight(err.Error(), "\n")
+		if strings.Contains(errStr, "\n") {
+			errStr += "\n"
+		}
+
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\nSee '%s --help'.\n", cmd.CommandPath(), errStr, cmd.CommandPath())
+		os.Exit(2)
+		return nil
+	})
+
 	cmd.Flags().StringVar(&args.WorkloadKind, "workload-kind", "Deployment",
 		"TODO")
 	cmd.Flags().StringVar(&args.WorkloadName, "workload-name", "",
