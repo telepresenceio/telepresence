@@ -1,4 +1,4 @@
-package agentmap
+package mutator
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/agentmap"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -162,7 +163,7 @@ func (c *configWatcher) Run(ctx context.Context) error {
 				continue
 			}
 			if ac.Create {
-				if ac, err = Generate(ctx, wl); err != nil {
+				if ac, err = agentmap.Generate(ctx, wl); err != nil {
 					dlog.Error(ctx, err)
 				} else if err = c.Store(ctx, ac, false); err != nil {
 					dlog.Error(ctx, err)
@@ -405,7 +406,7 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 		}
 	}
 	for _, wl := range affectedWorkloads {
-		ac, err := Generate(ctx, wl)
+		ac, err := agentmap.Generate(ctx, wl)
 		if err == nil {
 			err = c.Store(ctx, ac, false)
 		}

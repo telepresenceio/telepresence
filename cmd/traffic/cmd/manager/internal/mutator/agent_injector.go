@@ -25,7 +25,7 @@ import (
 var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
 
 type agentInjector struct {
-	agentConfigs agentmap.Map
+	agentConfigs Map
 	terminating  int64
 }
 

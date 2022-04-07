@@ -1399,7 +1399,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			}
 			var actualPatch patchOps
 			var actualErr error
-			cw := agentmap.NewWatcher("")
+			cw := NewWatcher("")
 			if test.generateConfig {
 				var ac *agentconfig.Sidecar
 				if ac, actualErr = generateForPod(t, ctx, test.pod); actualErr == nil {
