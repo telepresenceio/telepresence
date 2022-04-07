@@ -217,11 +217,9 @@ func main(ctx context.Context, args Args) error {
 			},
 		})
 		if err != nil {
-			dlog.Errorf(ctx, "creating preview URL: %v", err)
-			//return err
-		} else {
-			dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
+			return err
 		}
+		dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
 
 		// Watch the intercept so that we can report errors.
 		var prevSummary string
