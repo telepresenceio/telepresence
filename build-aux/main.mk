@@ -124,9 +124,12 @@ endif
 # =================================================
 
 .PHONY: build
-build: ## (Build) Producte a `telepresence` binary for GOOS/GOARCH
-	mkdir -p $(BINDIR)
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence
+build: $(BINDIR)/telepresence ## (Build) Producte a `telepresence` binary for GOOS/GOARCH
+
+$(BINDIR)/telepresence: FORCE
+	mkdir -p $(@D)
+	rm -f $@ # sometimes Go 1.18.0 spits out an invalid binary if I don't do this
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 
 .PHONY: tel2-base tel2
 tel2-base tel2:
