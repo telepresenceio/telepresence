@@ -12,6 +12,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -152,6 +153,8 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		return fmt.Errorf("unable to load built-in helm chart: %w", err)
 	}
 
+	transitionStart := time.Now()
+restart:
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
 		// If we weren't able to get the helm release at all, there's no hope for installing it
@@ -169,12 +172,24 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		owner, _ := existing.Config["createdBy"]
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
 			namespace, releaseVer(existing), owner, existing.Info.Status, existing.Info.Description)
+		if existing.Info.Status.IsPending() {
+			timeout := client.GetConfig(ctx).Timeouts.Get(client.TimeoutHelm)
+			if time.Since(transitionStart) > timeout {
+				dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); assuming it's stuck",
+					namespace, timeout)
+			} else {
+				dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install is in a pending state, waiting for it to transition...",
+					namespace)
+				dtime.SleepWithContext(ctx, 1*time.Second)
+				goto restart
+			}
+		}
 	}
 
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, an uninstall should clean everything up and leave us ready to install again
 	if existing != nil && shouldManageRelease(ctx, existing) && (existing.Info.Status != release.StatusDeployed) {
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt; removing it...",
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
 		err := uninstallExisting(ctx, helmConfig, namespace)
 		if err != nil {
