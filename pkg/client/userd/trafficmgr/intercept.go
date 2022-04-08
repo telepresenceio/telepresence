@@ -478,7 +478,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	svcProps, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, wl)
 	if err != nil {
 		// Intercept is not established here, so I am not sure this is still the right error type
-		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("AAA: %w", err)), nil, nil
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, err), nil, nil
 	}
 	svcProps.apiKey = apiKey
 	return svcProps, svcProps.interceptResult()
@@ -589,11 +589,11 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	select {
 	case <-c.Done():
-		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("BBB: %w", c.Err())), nil
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, c.Err()), nil
 	case wr := <-waitCh:
 		ii = wr.intercept
 		if wr.err != nil {
-			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("CCC: %w", wr.err)), nil
+			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
 		}
 		result.InterceptInfo = wr.intercept
 		if ir.MountPoint != "" && ii.SftpPort > 0 {
@@ -668,7 +668,6 @@ func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInte
 		}
 	}()
 
-	dlog.Infof(c, "telling manager to create intercept with apikey=%q", apiKey)
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
@@ -690,7 +689,7 @@ func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInte
 
 	select {
 	case <-c.Done():
-		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("DDD: %w", c.Err())), nil
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, c.Err()), nil
 	case wr := <-waitCh:
 		ii = wr.intercept
 		if wr.err != nil {
@@ -699,7 +698,7 @@ func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInte
 			if err != nil {
 				dlog.Warnf(c, "failed to remove failed intercept %s: %v", wr.intercept.Spec.Namespace, err)
 			}
-			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("EEE: %w", wr.err)), nil
+			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
 		}
 	}
 
