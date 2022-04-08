@@ -477,7 +477,8 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 
 	svcProps, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, wl)
 	if err != nil {
-		return nil, interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, err)
+		// Intercept is not established here, so I am not sure this is still the right error type
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("AAA: %w", err)), nil, nil
 	}
 	svcProps.apiKey = apiKey
 	return svcProps, svcProps.interceptResult()
@@ -588,11 +589,11 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	select {
 	case <-c.Done():
-		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, c.Err()), nil
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("BBB: %w", c.Err())), nil
 	case wr := <-waitCh:
 		ii = wr.intercept
 		if wr.err != nil {
-			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, wr.err), nil
+			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("CCC: %w", wr.err)), nil
 		}
 		result.InterceptInfo = wr.intercept
 		if ir.MountPoint != "" && ii.SftpPort > 0 {
@@ -667,8 +668,8 @@ func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInte
 		}
 	}()
 
-	var ii *manager.InterceptInfo
-	ii, err = tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+	dlog.Infof(c, "telling manager to create intercept with apikey=%q", apiKey)
+	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
 		ApiKey:        apiKey,
@@ -687,20 +688,20 @@ func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInte
 
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
-	success := false
-	defer func() {
-		if !success {
-			dlog.Debugf(c, "intercept %s failed to create, will remove...", ii.Spec.Name)
-
-			// Make an attempt to remove the created intercept using a time limited Context. Our
-			// context is already done.
-			rc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 5*time.Second)
-			defer cancel()
-			if removeErr := tm.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
-				dlog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)
+	select {
+	case <-c.Done():
+		return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("DDD: %w", c.Err())), nil
+	case wr := <-waitCh:
+		ii = wr.intercept
+		if wr.err != nil {
+			dlog.Debugf(c, "intercept %s failed to create, will remove...", wr.intercept.Spec.Name)
+			err := tm.RemoveIntercept(c, wr.intercept.Spec.Name)
+			if err != nil {
+				dlog.Warnf(c, "failed to remove failed intercept %s: %v", wr.intercept.Spec.Namespace, err)
 			}
+			return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, fmt.Errorf("EEE: %w", wr.err)), nil
 		}
-	}()
+	}
 
 	// Wait for the intercept to transition from WAITING or NO_AGENT to ACTIVE. This
 	// might result in more than one event.
