@@ -176,16 +176,15 @@ func main(ctx context.Context, args Args) error {
 		dlog.Infof(ctx, "Creating intercept...")
 		iResp, err := userdCoreImpl.CreatePoddIntercept(ctx, &rpc_userd.CreateInterceptRequest{
 			Spec: &rpc_manager.InterceptSpec{
-				Name:          args.WorkloadName,
-				Client:        "", // empty for CreateInterceptRequest
-				Agent:         args.WorkloadName,
-				WorkloadKind:  args.WorkloadKind,
-				Namespace:     args.WorkloadNamespace,
-				Mechanism:     "http",
-				MechanismArgs: []string{"TODO"},
-				TargetHost:    "127.0.0.1",
-				TargetPort:    args.Port,
-				ServiceName:   args.WorkloadName,
+				Name:         args.WorkloadName,
+				Client:       "", // empty for CreateInterceptRequest
+				Agent:        args.WorkloadName,
+				WorkloadKind: args.WorkloadKind,
+				Namespace:    args.WorkloadNamespace,
+				Mechanism:    "http",
+				TargetHost:   "127.0.0.1",
+				TargetPort:   args.Port,
+				ServiceName:  args.WorkloadName,
 			},
 			MountPoint: "", // we're not mounting things
 			AgentImage: "docker.io/datawire/ambassador-telepresence-agent:1.11.10",
