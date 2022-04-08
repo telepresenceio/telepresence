@@ -21,11 +21,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-type ExtensionsState struct {
-	// Data that is static after initialization
+type LoadedExtensions struct {
+	// This is all static after initialization
 	ext2file map[string]string        // initialized in step 1
 	exts     map[string]ExtensionInfo // initialized in step 2
 	mech2ext map[string]string        // initialized in step 3
+}
+
+type CLIFlagState struct {
+	// Data that is static after initialization
+	extInfos *LoadedExtensions
 
 	// Stateful data
 	flags           *pflag.FlagSet // initialized in step 4
@@ -39,7 +44,7 @@ type ExtensionsState struct {
 	}
 }
 
-// LoadExtensions loads any extension YAML files, and adds the appropriate flags to existingFlags.
+// LoadExtensions loads any extension YAML files.
 //
 // Extension YAML files are loaded from the "extensions/" subdirectories in
 // filelocation.AppUserConfigDir and filelocation.AppSystemConfigDirs (eg: on GNU/Linux:
@@ -51,18 +56,19 @@ type ExtensionsState struct {
 // The basename of the extension YAML filename (i.e. the non-directory part, with the ".yml" suffix
 // removed) identifies the name of the extension.  The content of the extension YAML file must be an
 // ExtensionInfo object serialized as YAML.  See the docs for ExtensionInfo for more information.
-func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *ExtensionsState, err error) {
+//
+// The list of existingFlags is used to detect when a mechanism's flags clash with a built-in flag.
+func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *LoadedExtensions, err error) {
 	defer func() {
 		// Consider all errors issued here to belong to the Config category.
 		if err != nil {
 			err = errcat.Config.New(err)
 		}
 	}()
-	es = &ExtensionsState{
+	es = &LoadedExtensions{
 		ext2file: make(map[string]string),
 		exts:     make(map[string]ExtensionInfo),
 		mech2ext: make(map[string]string),
-		flags:    existingFlags,
 	}
 
 	// 0. (1-2) Pre-load builtin extensions ////////////////////////////////
@@ -162,9 +168,11 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *Exte
 	illegalPrefixes := []string{
 		"mechanism",
 	}
-	existingFlags.VisitAll(func(flag *pflag.Flag) {
-		illegalPrefixes = append(illegalPrefixes, strings.SplitN(flag.Name, "-", 2)[0])
-	})
+	if existingFlags != nil {
+		existingFlags.VisitAll(func(flag *pflag.Flag) {
+			illegalPrefixes = append(illegalPrefixes, strings.SplitN(flag.Name, "-", 2)[0])
+		})
+	}
 	sort.Strings(illegalPrefixes)
 	for _, a := range mechnames {
 		for _, b := range mechnames {
@@ -188,41 +196,65 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (es *Exte
 		}
 	}
 
-	// 4. Initialize the CLI flags (es.flags) //////////////////////////////
+	return es, nil
+}
+
+// AddToFlagSet adds all of the mechanism-related flags from LoadedExtensions to a FlagSet, and
+// returns an object used to get extension/mechanism information out of the FlagSet.
+func (ls *LoadedExtensions) AddToFlagSet(ctx context.Context, flagset *pflag.FlagSet) (es *CLIFlagState, err error) {
+	es = &CLIFlagState{
+		extInfos: ls,
+		flags:    flagset,
+	}
+
 	es.flags.String("mechanism", es.defaultMechanism(ctx), "Which extension `mechanism` to use")
-	// Likewise, do this in a deterministic order, but this time so that the `--help` text is in
-	// a consistent order.
+
+	// Like steps 2 and 3 in LoadExtensions(), do this in a deterministic order, but this time
+	// so that the `--help` text is in a consistent order.
+	mechnames := make([]string, 0, len(ls.mech2ext))
+	for mechname := range ls.mech2ext {
+		mechnames = append(mechnames, mechname)
+	}
+	sort.Strings(mechnames)
 	for _, mechname := range mechnames {
-		mechdata := es.exts[es.mech2ext[mechname]].Mechanisms[mechname]
-		for flagname, flagdata := range mechdata.Flags {
-			val, err := flagdata.Type.NewFlagValueFromJson(flagdata.Default)
-			if err != nil {
-				return nil, fmt.Errorf("extension mechanism %q (%q): flag %q: invalid default for type: %w",
-					mechname, es.ext2file[es.mech2ext[mechname]],
-					flagname,
-					err)
-			}
-			usage := ""
-			if flagdata.Usage != "" {
-				usage = fmt.Sprintf(`%s (implies "--mechanism=%s")`, flagdata.Usage, mechname)
-			}
-			flag := es.flags.VarPF(val, mechname+"-"+flagname, "", usage)
-			flag.Hidden = usage == ""
-			flag.Deprecated = flagdata.Deprecated
+		if err := ls.addMechanismToFlagSet(mechname, mechname+"-", flagset); err != nil {
+			return nil, err
 		}
 	}
 
 	return es, nil
 }
 
-func (es *ExtensionsState) defaultMechanism(ctx context.Context) string {
+func (es *LoadedExtensions) addMechanismToFlagSet(mechname, prefix string, flagset *pflag.FlagSet) error {
+	mechdata := es.exts[es.mech2ext[mechname]].Mechanisms[mechname]
+	for flagname, flagdata := range mechdata.Flags {
+		val, err := flagdata.Type.NewFlagValueFromJson(flagdata.Default)
+		if err != nil {
+			return fmt.Errorf("extension mechanism %q (%q): flag %q: invalid default for type: %w",
+				mechname, es.ext2file[es.mech2ext[mechname]],
+				flagname,
+				err)
+		}
+		usage := ""
+		if flagdata.Usage != "" {
+			usage = fmt.Sprintf(`%s (implies "--mechanism=%s")`, flagdata.Usage, mechname)
+		}
+		flag := flagset.VarPF(val, prefix+flagname, "", usage)
+		flag.Hidden = usage == ""
+		flag.Deprecated = flagdata.Deprecated
+	}
+
+	return nil
+}
+
+func (es *CLIFlagState) defaultMechanism(ctx context.Context) string {
 	type prefData struct {
 		preference int
 		name       string
 	}
 	canAPIKey := cliutil.HasLoggedIn(ctx)
 	var preferences []prefData
-	for _, extdata := range es.exts {
+	for _, extdata := range es.extInfos.exts {
 		if extdata.RequiresAPIKeyOrLicense && !canAPIKey {
 			continue
 		}
@@ -246,7 +278,7 @@ func (es *ExtensionsState) defaultMechanism(ctx context.Context) string {
 	return preferences[len(preferences)-1].name
 }
 
-func (es *ExtensionsState) Mechanism() (string, error) {
+func (es *CLIFlagState) Mechanism() (string, error) {
 	if es.cachedMechanism.Mech != "" || es.cachedMechanism.Err != nil {
 		return es.cachedMechanism.Mech, es.cachedMechanism.Err
 	}
@@ -254,7 +286,7 @@ func (es *ExtensionsState) Mechanism() (string, error) {
 	if flag := es.flags.Lookup("mechanism"); flag.Changed {
 		mechanisms[flag.Value.String()] = "--mechanism"
 	}
-	for _, extdata := range es.exts {
+	for _, extdata := range es.extInfos.exts {
 		for mechname, mechdata := range extdata.Mechanisms {
 			for flagname := range mechdata.Flags {
 				flag := es.flags.Lookup(mechname + "-" + flagname)
@@ -289,12 +321,12 @@ func (es *ExtensionsState) Mechanism() (string, error) {
 	return es.cachedMechanism.Mech, es.cachedMechanism.Err
 }
 
-func (es *ExtensionsState) RequiresAPIKeyOrLicense() (bool, error) {
+func (es *CLIFlagState) RequiresAPIKeyOrLicense() (bool, error) {
 	mechname, err := es.Mechanism()
 	if err != nil {
 		return false, err
 	}
-	return es.exts[es.mech2ext[mechname]].RequiresAPIKeyOrLicense, nil
+	return es.extInfos.exts[es.extInfos.mech2ext[mechname]].RequiresAPIKeyOrLicense, nil
 }
 
 func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
@@ -312,7 +344,7 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 
 // AgentImage returns the repository/name combination that will be assigned to the container
 // image attribute.
-func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
+func (es *CLIFlagState) AgentImage(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if ai := cfg.Images.AgentImage(ctx); ai != "" {
 		return fmt.Sprintf("%s/%s", cfg.Images.Registry(ctx), ai), nil
@@ -324,7 +356,7 @@ func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	image := os.Expand(es.exts[es.mech2ext[mechname]].Image, client.GetEnv(ctx).Get)
+	image := os.Expand(es.extInfos.exts[es.extInfos.mech2ext[mechname]].Image, client.GetEnv(ctx).Get)
 	if cfg.Cloud.SkipLogin {
 		msg := fmt.Sprintf(
 			`images.agentImage must be set with cloud.skipLogin in
@@ -367,20 +399,76 @@ func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	return image, nil
 }
 
-func (es *ExtensionsState) MechanismArgs() ([]string, error) {
+func (es *CLIFlagState) MechanismArgs() ([]string, error) {
 	mechname, err := es.Mechanism()
 	if err != nil {
 		return nil, err
 	}
-	mechdata := es.exts[es.mech2ext[mechname]].Mechanisms[mechname]
+	mechdata := es.extInfos.exts[es.extInfos.mech2ext[mechname]].Mechanisms[mechname]
+
+	return mechanismFlagSetToArgs(mechdata, es.flags, mechname+"-"), nil
+}
+
+func mechanismFlagSetToArgs(mechdata MechanismInfo, flagset *pflag.FlagSet, prefix string) []string {
+	var flagnames []string
+	for flagname := range mechdata.Flags {
+		flagnames = append(flagnames, flagname)
+	}
+	sort.Strings(flagnames)
 
 	var args []string
-	for flagname := range mechdata.Flags {
-		flag := es.flags.Lookup(mechname + "-" + flagname)
-		args = append(args, flag.Value.(cliutil.Value).AsArgs(flagname)...)
+	for _, flagname := range flagnames {
+		flag := flagset.Lookup(prefix + flagname)
+		if flag != nil {
+			args = append(args, flag.Value.(cliutil.Value).AsArgs(flagname)...)
+		}
+	}
+	if args == nil {
+		var flags []pflag.Flag
+		flagset.VisitAll(func(flag *pflag.Flag) {
+			flags = append(flags, *flag)
+		})
+		panic(fmt.Sprintf("%#v", flags))
 	}
 
-	return args, nil
+	return args
+}
+
+func MakeArgsCompatible(ctx context.Context, mech, image string, args []string) ([]string, error) {
+	// Load the extension data.
+	ls, err := LoadExtensions(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	ext, ok := ls.mech2ext[mech]
+	if !ok {
+		return nil, fmt.Errorf("unknown mechanism: %q", mech)
+	}
+	mechdata := ls.exts[ext].Mechanisms[mech]
+
+	// Parse 'args' in to a pflag.FlagSet.
+	flagset := pflag.NewFlagSet("mechanism-"+mech, pflag.ContinueOnError)
+	if err := ls.addMechanismToFlagSet(mech, "", flagset); err != nil {
+		return nil, err
+	}
+	if err := flagset.Parse(args); err != nil {
+		return nil, err
+	}
+	if narg := flagset.NArg(); narg > 0 {
+		return nil, fmt.Errorf("unexpected positional arguments: %d: %q",
+			narg, args)
+	}
+
+	// Give the callback an opportunity to mutate the flagset.
+	if cb := mechdata.MakeArgsCompatible; cb != nil {
+		flagset, err = cb(flagset, image)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Turn the flagset back in to a list of strings to return.
+	return mechanismFlagSetToArgs(mechdata, flagset, ""), nil
 }
 
 // ExtensionInfo is the type that the data in an extension YAML file must be.
@@ -417,6 +505,19 @@ type MechanismInfo struct {
 	// The flag will be exposed to the user as `--{{mechname}}-{{mapkey}}`, and will be passed
 	// to the agent sidecar gRPC responses as `--{{mapkey}}`.
 	Flags map[string]FlagInfo `json:"flags"`
+
+	// MakeArgsCompatible is an optional callback function that may mutate the mechanism
+	// arguments (`args`) to be compatible with a particular agent image (`image`).
+	//
+	// While the Mechanism belongs to an Extension with a known agent `ExtensionInfo.Image`, if
+	// the agent is not managed by the auto-install, then the *version* of the agent that is
+	// actually installed might not match ExtensionInfo.Image.  This callback allows handling
+	// flag compatibility concerns between different versions of the agent.
+	//
+	// It is permissible to mutate the input `args` and return that.
+	//
+	// FIXME(lukeshu): MakeArgsCompatible isn't expressable in an external YAML file.
+	MakeArgsCompatible func(args *pflag.FlagSet, image string) (*pflag.FlagSet, error) `json:"-"`
 }
 
 type FlagInfo struct {

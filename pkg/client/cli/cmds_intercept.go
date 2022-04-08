@@ -52,8 +52,8 @@ type interceptArgs struct {
 	dockerRun   bool   // --docker-run
 	dockerMount string // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 
-	extState         *extensions.ExtensionsState // extension flags
-	extRequiresLogin bool                        // pre-extracted from extState
+	extState         *extensions.CLIFlagState // extension flags
+	extRequiresLogin bool                     // pre-extracted from extState
 
 	cmdline []string // Args[1:]
 
@@ -166,7 +166,10 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
 
 	var extErr error
-	args.extState, extErr = extensions.LoadExtensions(ctx, flags)
+	exts, extErr := extensions.LoadExtensions(ctx, flags)
+	if extErr == nil {
+		args.extState, extErr = exts.AddToFlagSet(ctx, flags)
+	}
 
 	cmd.RunE = func(cmd *cobra.Command, positional []string) error {
 		if extErr != nil {

@@ -8,14 +8,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"runtime"
-	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/blang/semver"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -27,12 +25,13 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -326,27 +325,22 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
-	if spec.Mechanism == "http" {
-		var agentVer *semver.Version
-		for i := range podTpl.Spec.Containers {
-			if ct := &podTpl.Spec.Containers[i]; ct.Name == install.AgentContainerName {
-				image := ct.Image
-				if autoInstall {
-					// Image will be updated to the specified image unless they are equal
-					image = ir.AgentImage
-				}
-				if cp := strings.LastIndexByte(image, ':'); cp > 0 {
-					if v, err := semver.Parse(image[cp+1:]); err == nil {
-						agentVer = &v
-					}
-				}
+	var image string
+	if autoInstall {
+		image = ir.AgentImage
+	} else {
+		for _, container := range podTpl.Spec.Containers {
+			if container.Name == install.AgentContainerName {
+				image = container.Image
 				break
 			}
 		}
-		if ir.Spec.MechanismArgs, err = makeFlagsCompatible(agentVer, ir.Spec.MechanismArgs); err != nil {
-			return interceptError(rpc.InterceptError_UNKNOWN_FLAG, err), nil, nil
-		}
-		dlog.Debugf(c, "Using %s flags %v", ir.Spec.Mechanism, ir.Spec.MechanismArgs)
+	}
+	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, image, spec.MechanismArgs); err != nil {
+		return interceptError(rpc.InterceptError_UNKNOWN_FLAG, err), nil, nil
+	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
+		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
+		ir.Spec.MechanismArgs = newMechanismArgs
 	}
 
 	svcprops, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, obj)
@@ -357,72 +351,6 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	return nil, obj, svcprops
 }
-
-func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, error) {
-	// We get a normalized representation of all flags here, regardless of if they've
-	// been set or not, so we start splitting them into flag and value and skipping
-	// those that aren't set.
-	m := make(map[string][]string, len(args))
-	for _, ma := range args {
-		if eqi := strings.IndexByte(ma, '='); eqi > 2 && eqi+1 < len(ma) {
-			k := ma[2:eqi]
-			m[k] = append(m[k], ma[eqi+1:])
-		}
-	}
-	// Concat all --match flags (renamed to --header) with --header flags
-	if hs, ok := m["match"]; ok {
-		delete(m, "match")
-		hs = append(hs, m["header"]...)
-		ds := make([]string, 0, len(hs))
-		for _, h := range hs {
-			if h != "auto" {
-				ds = append(ds, h)
-			}
-		}
-		if len(ds) == 0 {
-			// restore the default
-			ds = append(ds, "auto")
-		}
-		m["header"] = ds
-	}
-	if agentVer != nil {
-		if agentVer.LE(semver.MustParse("1.11.8")) {
-			if hs, ok := m["header"]; ok {
-				delete(m, "header")
-				m["match"] = hs
-			}
-			for ma := range m {
-				switch ma {
-				case "meta", "path-equal", "path-prefix", "path-regex":
-					return nil, errcat.User.New("--http-" + ma)
-				}
-			}
-			if agentVer.LE(semver.MustParse("1.11.7")) {
-				if pt, ok := m["plaintext"]; ok {
-					if len(pt) > 0 && pt[0] == "true" {
-						return nil, errcat.User.New("--http-plaintext")
-					}
-					delete(m, "plaintext")
-				}
-			}
-		}
-	}
-	args = make([]string, 0, len(args))
-	ks := make([]string, len(m))
-	i := 0
-	for k := range m {
-		ks[i] = k
-		i++
-	}
-	sort.Strings(ks)
-	for _, k := range ks {
-		for _, v := range m[k] {
-			args = append(args, "--"+k+"="+v)
-		}
-	}
-	return args, nil
-}
-
 
 // AddIntercept adds one intercept
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
@@ -529,7 +457,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		return result, nil
 	}
 }
-
 
 // AddIntercept adds one intercept
 func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
