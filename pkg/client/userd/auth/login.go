@@ -73,10 +73,8 @@ type LoginExecutor interface {
 	LoginAPIKey(ctx context.Context, key string) (bool, error)
 	Logout(ctx context.Context) error
 	GetAPIKey(ctx context.Context, description string) (string, error)
-	GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error)
 	GetLicense(ctx context.Context, id string) (string, string, error)
 	GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error)
-	GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error)
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -428,7 +426,7 @@ func (l *loginExecutor) Logout(ctx context.Context) (err error) {
 	return err
 }
 
-func (l *loginExecutor) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {
+func GetCloudUserInfo(ctx context.Context, l LoginExecutor, refresh, autoLogin bool) (*authdata.UserInfo, error) {
 	info, err := l.GetUserInfo(ctx, refresh)
 	if autoLogin && err != nil {
 		// Opportunistically log in; if it fails, don't sweat it and discard the error.
@@ -442,7 +440,7 @@ func (l *loginExecutor) GetCloudUserInfo(ctx context.Context, refresh, autoLogin
 	return info, nil
 }
 
-func (l *loginExecutor) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
+func GetCloudAPIKey(ctx context.Context, l LoginExecutor, desc string, autoLogin bool) (string, error) {
 	key, err := l.GetAPIKey(ctx, desc)
 	if autoLogin && err != nil {
 		// Opportunistically log in; if it fails, don't sweat it and discard the error.
