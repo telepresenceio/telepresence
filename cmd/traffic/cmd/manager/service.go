@@ -403,6 +403,8 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 			dlog.Debugf(ctx, "WatchIntercepts sending update")
 			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot.State))
 			for _, intercept := range snapshot.State {
+				dlog.Infof(ctx, "WatchIntercepts: sending intercept %q to agent %q with apikey=%q",
+					intercept.Id, session.SessionId, intercept.ApiKey)
 				intercepts = append(intercepts, intercept)
 			}
 			resp := &rpc.InterceptInfoSnapshot{
@@ -438,6 +440,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	spec := ciReq.InterceptSpec
 	apiKey := ciReq.GetApiKey()
 	dlog.Debug(ctx, "CreateIntercept called")
+	dlog.Infof(ctx, "CreateIntercept: apikey=%q", apiKey)
 
 	client := m.state.GetClient(sessionID)
 
