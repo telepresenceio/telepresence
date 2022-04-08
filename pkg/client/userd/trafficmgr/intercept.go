@@ -24,7 +24,6 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -40,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -134,7 +134,7 @@ func (tm *TrafficManager) reconcileMountPoints(ctx context.Context, existingInte
 				if runtime.GOOS == "darwin" {
 					//  macFUSE will sometimes not unmount in a timely manner so we do this to avoid "resource busy" and
 					//  "Device not configured" errors.
-					_ = dexec.CommandContext(ctx, "umount", mountPoint).Run()
+					_ = proc.CommandContext(ctx, "umount", mountPoint).Run()
 				}
 				err := os.Remove(mountPoint)
 				switch {
@@ -805,7 +805,7 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		// sshfs sometimes leave the mount point in a bad state. This will clean it up
 		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		_ = dexec.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
+		_ = proc.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
 		return err
 	}, 3*time.Second, 6*time.Second)
 

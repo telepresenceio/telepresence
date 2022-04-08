@@ -346,9 +346,9 @@ func checkMountCapability(ctx context.Context) error {
 	// need to upgrade to a newer version of macFUSE or not
 	var cmd *dexec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = dexec.CommandContext(ctx, "sshfs-win", "cmd", "-V")
+		cmd = proc.CommandContext(ctx, "sshfs-win", "cmd", "-V")
 	} else {
-		cmd = dexec.CommandContext(ctx, "sshfs", "-V")
+		cmd = proc.CommandContext(ctx, "sshfs", "-V")
 	}
 	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()

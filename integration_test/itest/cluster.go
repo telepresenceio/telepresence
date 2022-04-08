@@ -35,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -456,7 +457,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
-	cmd := dexec.CommandContext(ctx, executable, args...)
+	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
 	for k, v := range getEnv(ctx) {
