@@ -140,8 +140,6 @@ func main(ctx context.Context, args Args) error {
 	}
 	ctx = client.WithEnv(ctx, env)
 
-	dlog.Infof(ctx, "apikey=%q", args.CloudAPIKey)
-
 	loginExecutor := PoddLoginExecutor{key: args.CloudAPIKey}
 
 	scoutReporter := scout.NewReporter(ctx, processName)
