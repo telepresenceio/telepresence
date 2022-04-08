@@ -30,18 +30,10 @@ func (p PoddLoginExecutor) GetAPIKey(ctx context.Context, description string) (s
 	return p.key, nil
 }
 
-func (p PoddLoginExecutor) GetCloudAPIKey(_ context.Context, _ string, _ bool) (string, error) {
-	return p.key, nil
-}
-
 func (PoddLoginExecutor) GetLicense(ctx context.Context, id string) (string, string, error) {
 	panic("unimplemented: getlicense")
 }
 
 func (PoddLoginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error) {
 	panic("unimplemented: getuserinfo")
-}
-
-func (PoddLoginExecutor) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {
-	panic("unimplemented: getclouduserinfo")
 }
