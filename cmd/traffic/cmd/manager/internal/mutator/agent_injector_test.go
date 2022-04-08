@@ -1346,6 +1346,9 @@ func TestTrafficAgentInjector(t *testing.T) {
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: some-token
+      readOnly: true
     - mountPath: /tel_pod_info
       name: traffic-annotations
     - mountPath: /etc/traffic-agent

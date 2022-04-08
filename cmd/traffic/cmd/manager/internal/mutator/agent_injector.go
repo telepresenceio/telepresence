@@ -587,11 +587,9 @@ func eachContainer(pod *core.Pod, config *agentconfig.Sidecar, f func(*core.Cont
 
 func appendAppContainerVolumeMounts(app *core.Container, cc *agentconfig.Container, mounts []core.VolumeMount) []core.VolumeMount {
 	for _, m := range app.VolumeMounts {
-		if strings.HasPrefix(m.MountPath, "/var/run/secrets/") {
-			// Trust that those are injected into the agent container
-			continue
+		if !strings.HasPrefix(m.MountPath, "/var/run/secrets/") {
+			m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
 		}
-		m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
 		mounts = append(mounts, m)
 	}
 	return mounts
