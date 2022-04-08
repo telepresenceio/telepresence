@@ -3,6 +3,7 @@ package poddaemon
 import (
 	"context"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 )
 
@@ -18,7 +19,7 @@ func (PoddLoginExecutor) Login(ctx context.Context) error {
 	panic("unimplemented: login")
 }
 
-func (PoddLoginExecutor) LoginAPIKey(ctx context.Context, key string) (bool, error){
+func (PoddLoginExecutor) LoginAPIKey(ctx context.Context, key string) (bool, error) {
 	panic("unimplmented: loginapikey")
 }
 
@@ -27,6 +28,7 @@ func (PoddLoginExecutor) Logout(ctx context.Context) error {
 }
 
 func (p PoddLoginExecutor) GetAPIKey(ctx context.Context, description string) (string, error) {
+	dlog.Infof(ctx, "GetAPIKey => apikey=%q", p.key)
 	return p.key, nil
 }
 
