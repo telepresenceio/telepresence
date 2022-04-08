@@ -428,6 +428,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
 	defer tm.activeInterceptsWaiters.Delete(spec.Name)
 
+	dlog.Infof(c, "telling manager to create intercept with apikey=%q", apiKey)
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
