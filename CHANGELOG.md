@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.5 (TBD)
+### 2.5.5 (April 8, 2022)
 
 - Change: The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
 
