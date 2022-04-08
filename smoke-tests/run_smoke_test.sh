@@ -87,7 +87,7 @@ has_intercept_id() {
 
 # Puts preview url in a variable
 get_preview_url() {
-    preview_url=$(echo "$output" | grep -Eo 'https://[^ >]+')
+    preview_url=$(echo "$output" | grep -Eo 'https://[^ >]+.preview.edgestack.me')
     if [[ -z $preview_url ]]; then
         echo "No Preview URL found"
         exit 1
