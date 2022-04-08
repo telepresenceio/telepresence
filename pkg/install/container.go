@@ -88,7 +88,7 @@ func agentEnvironment(
 	env = append(env,
 		core.EnvVar{
 			Name:  EnvPrefix + "LOG_LEVEL",
-			Value: "info",
+			Value: "debug",
 		},
 		core.EnvVar{
 			Name:  EnvPrefix + "NAME",
