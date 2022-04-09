@@ -280,16 +280,6 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		ShutdownOnNonError:   true,
 	})
 
-	quitOnce := sync.Once{}
-	s.quit = func() {
-		quitOnce.Do(func() {
-			g.Go("quit", func(_ context.Context) error {
-				cliio.Close()
-				return nil
-			})
-		})
-	}
-
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		opts := []grpc.ServerOption{}
 		cfg := client.GetConfig(c)
@@ -323,7 +313,9 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		return s.manageSessions(c, sessionServices)
+		err := s.manageSessions(c, sessionServices)
+		cliio.Close()
+		return err
 	})
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the
