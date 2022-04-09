@@ -6,11 +6,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/blang/semver"
+	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -59,7 +62,18 @@ func (kc *Cluster) check(c context.Context) error {
 	errCh := make(chan error)
 	go func() {
 		defer close(errCh)
-		info, err := k8sapi.GetK8sInterface(c).Discovery().ServerVersion()
+		var info *version.Info
+		var err error
+		for attempts := 0; attempts < 4; attempts++ {
+			if info, err = k8sapi.GetK8sInterface(c).Discovery().ServerVersion(); err != nil {
+				if strings.Contains(err.Error(), "connection refused") {
+					dlog.Warnf(c, "Connection to connect failed, retry %d", attempts+1)
+					dtime.SleepWithContext(c, 400*time.Millisecond)
+					continue
+				}
+			}
+			break
+		}
 		if err != nil {
 			errCh <- err
 			return
