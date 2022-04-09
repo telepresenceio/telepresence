@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -150,28 +151,32 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}
 }
 
-// Terminating is not a state, so you may want to wrap calls to this function in an eventually
-// to give any pods that are terminating the chance to complete.
-// https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-func (s *interceptMountSuite) runningPods(ctx context.Context) (pods []string) {
-	out, err := s.KubectlOut(ctx, "get", "pods", "--no-headers",
-		"--field-selector", "status.phase=Running",
-		"-l", "app="+s.ServiceName())
-	s.NoError(err)
-	if strings.HasPrefix(out, "No resources found") {
-		return nil
-	}
-	sc := bufio.NewScanner(strings.NewReader(out))
-	for sc.Scan() {
-		txt := sc.Text()
-		// Terminating is not a state: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-		if strings.Contains(txt, "Terminating") {
-			continue
+// Return the number of running pods with app=<service name>. Check reiterates
+// if terminating pods are found using a 2 seconds delay.
+func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
+tryAgain:
+	for {
+		out, err := s.KubectlOut(ctx, "get", "pods", "--no-headers",
+			"--field-selector", "status.phase=Running",
+			"-l", "app="+s.ServiceName())
+		s.NoError(err)
+		if strings.HasPrefix(out, "No resources found") {
+			return nil
 		}
-		txt = strings.TrimSpace(txt)
-		if spi := strings.IndexByte(txt, ' '); spi > 0 {
-			pods = append(pods, txt[:spi])
+		var pods []string
+		sc := bufio.NewScanner(strings.NewReader(out))
+		for sc.Scan() {
+			txt := sc.Text()
+			// Terminating is not a state: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+			if strings.Contains(txt, "Terminating") {
+				dtime.SleepWithContext(ctx, 2*time.Second)
+				continue tryAgain
+			}
+			txt = strings.TrimSpace(txt)
+			if spi := strings.IndexByte(txt, ' '); spi > 0 {
+				pods = append(pods, txt[:spi])
+			}
 		}
+		return pods
 	}
-	return pods
 }
