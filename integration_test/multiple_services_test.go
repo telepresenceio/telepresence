@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -104,6 +105,7 @@ func (s *multipleServicesSuite) Test_ListOnlyMapped() {
 }
 
 func (s *multipleServicesSuite) Test_RepeatedConnect() {
+	totalErrCount := int64(0)
 	for i := 0; i < s.ServiceCount(); i++ {
 		url := fmt.Sprintf("http://%s-%d.%s", s.Name(), i, s.AppNamespace())
 		for v := 0; v < 30; v++ {
@@ -117,7 +119,12 @@ func (s *multipleServicesSuite) Test_RepeatedConnect() {
 				req.Close = true
 				assert.NoError(err)
 				res, err := cl.Do(req)
-				s.Require().NoError(err)
+				if err != nil {
+					if atomic.AddInt64(&totalErrCount, 1) > 2 {
+						s.Failf("failed more than 2 times: %v", err.Error())
+					}
+					return
+				}
 				assert.Equal(res.StatusCode, http.StatusOK)
 				_, err = io.Copy(io.Discard, res.Body)
 				assert.NoError(err)
