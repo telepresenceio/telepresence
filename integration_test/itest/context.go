@@ -13,12 +13,43 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
+type profileKey struct{}
+
+type Profile string
+
+const (
+	DefaultProfile      Profile = "default"
+	GkeAutopilotProfile Profile = "gke-autopilot"
+)
+
+func withProfile(ctx context.Context) context.Context {
+	profile, ok := os.LookupEnv("TELEPRESENCE_TEST_PROFILE")
+	if !ok {
+		return context.WithValue(ctx, profileKey{}, DefaultProfile)
+	}
+	switch profile {
+	case string(DefaultProfile):
+	case string(GkeAutopilotProfile):
+	default:
+		panic("Invalid profile " + profile)
+	}
+	return context.WithValue(ctx, profileKey{}, Profile(profile))
+}
+
+func GetProfile(ctx context.Context) Profile {
+	if profile, ok := ctx.Value(profileKey{}).(Profile); ok {
+		return profile
+	}
+	return DefaultProfile
+}
+
 type tContextKey struct{}
 
 func TestContext(t *testing.T) context.Context {
 	ctx := context.Background()
 	ctx = dlog.WithLogger(ctx, log.NewTestLogger(t, dlog.LogLevelDebug))
 	ctx = client.WithEnv(ctx, &client.Env{})
+	ctx = withProfile(ctx)
 	return withT(ctx, t)
 }
 

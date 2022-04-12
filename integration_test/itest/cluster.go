@@ -230,21 +230,34 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	require.NoError(t, err, "failed to create %s service account", TestUser)
 }
 
+// PodCreateTimeout will return a timeout suitable for operations that create pods.
+// This is longer when running against clusters that scale up nodes on demand for new pods.
+func PodCreateTimeout(c context.Context) time.Duration {
+	switch GetProfile(c) {
+	case GkeAutopilotProfile:
+		return 5 * time.Minute
+	case DefaultProfile:
+		fallthrough
+	default: // this really shouldn't be happening but hey
+		return 180 * time.Second
+	}
+}
+
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
 	config := client.GetDefaultConfig()
 	config.LogLevels.UserDaemon = logrus.DebugLevel
 	config.LogLevels.RootDaemon = logrus.DebugLevel
 
 	to := &config.Timeouts
-	to.PrivateAgentInstall = 180 * time.Second
-	to.PrivateApply = 120 * time.Second
+	to.PrivateAgentInstall = PodCreateTimeout(c)
+	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
 	to.PrivateEndpointDial = 10 * time.Second
-	to.PrivateHelm = 230 * time.Second
+	to.PrivateHelm = PodCreateTimeout(c)
 	to.PrivateIntercept = 30 * time.Second
 	to.PrivateProxyDial = 30 * time.Second
 	to.PrivateRoundtripLatency = 5 * time.Second
-	to.PrivateTrafficManagerAPI = 60 * time.Second
+	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	registry := s.Registry()
@@ -646,7 +659,7 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 }
 
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, PodCreateTimeout(ctx))
 	defer cancel()
 	switch {
 	case strings.HasPrefix(workload, "pod/"):
