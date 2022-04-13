@@ -295,10 +295,6 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 }
 
 func Test_gatherLogsGetPodName(t *testing.T) {
-	type testcase struct {
-		name string
-		anon bool
-	}
 	podNames := []string{
 		"echo-auto-inject-64323-3454.default",
 		"echo-easy-141245-23432.ambassador",

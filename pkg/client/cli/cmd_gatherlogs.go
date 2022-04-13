@@ -155,39 +155,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command) er
 	// We gather those logs before we gather the connector.log so that problems that
 	// may occur during that process will be included in the connector.log
 	if gl.trafficManager || gl.trafficAgents != "None" {
-		// To get logs from the components in the kubernetes cluster, we ask the
-		// traffic-manager.
-		rq := &connector.LogsRequest{
-			TrafficManager: gl.trafficManager,
-			Agents:         gl.trafficAgents,
-			GetPodYaml:     gl.podYaml,
-			ExportDir:      exportDir,
-		}
-		err = withConnector(cmd, false, nil, func(_ context.Context, cs *connectorState) error {
-			var opts []grpc.CallOption
-			cfg := client.GetConfig(ctx)
-			if !cfg.Grpc.MaxReceiveSize.IsZero() {
-				if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-					opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-				}
-			}
-			lr, err := cs.userD.GatherLogs(ctx, rq, opts...)
-			if err != nil {
-				return err
-			}
-			if az != nil {
-				if err := az.anonymizeFileNames(lr, exportDir); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		// We let the user know we were unable to get logs from the kubernetes components,
-		// and why, but this shouldn't block the command returning successful with the logs
-		// it was able to get.
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "error getting logs from kubernetes components: %s\n", err)
-		}
+		gl.gatherClusterLogs(ctx, cmd, exportDir, az)
 	}
 
 	// Get all logs from the logDir that match the daemons the user cares about.
@@ -251,6 +219,42 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command) er
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Logs have been exported to %s\n", gl.outputFile)
 	return nil
+}
+
+func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Command, exportDir string, az *anonymizer) {
+	// To get logs from the components in the kubernetes cluster, we ask the
+	// traffic-manager.
+	rq := &connector.LogsRequest{
+		TrafficManager: gl.trafficManager,
+		Agents:         gl.trafficAgents,
+		GetPodYaml:     gl.podYaml,
+		ExportDir:      exportDir,
+	}
+	err := withConnector(cmd, false, nil, func(_ context.Context, cs *connectorState) error {
+		var opts []grpc.CallOption
+		cfg := client.GetConfig(ctx)
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+				opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
+			}
+		}
+		lr, err := cs.userD.GatherLogs(ctx, rq, opts...)
+		if err != nil {
+			return err
+		}
+		if az != nil {
+			if err := az.anonymizeFileNames(lr, exportDir); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	// We let the user know we were unable to get logs from the kubernetes components,
+	// and why, but this shouldn't block the command returning successful with the logs
+	// it was able to get.
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "error getting logs from kubernetes components: %s\n", err)
+	}
 }
 
 func isEmpty(file string) (bool, error) {
