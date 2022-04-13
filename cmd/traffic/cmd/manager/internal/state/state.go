@@ -233,15 +233,17 @@ func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 
 	agentSet := s.agentsByName[intercept.Spec.Agent]
 
-	if len(agentSet) == 0 {
+	agentList := make([]*rpc.AgentInfo, 0)
+	for _, agent := range agentSet {
+		if agent.Namespace == intercept.Spec.Namespace {
+			agentList = append(agentList, agent)
+		}
+	}
+
+	if len(agentList) == 0 {
 		errCode = rpc.InterceptDispositionType_NO_AGENT
 		errMsg = fmt.Sprintf("No agent found for %q", intercept.Spec.Agent)
 		return
-	}
-
-	agentList := make([]*rpc.AgentInfo, 0, len(agentSet))
-	for _, agent := range agentSet {
-		agentList = append(agentList, agent)
 	}
 
 	if !managerutil.AgentsAreCompatible(agentList) {
