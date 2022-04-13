@@ -530,6 +530,15 @@ func (tm *TrafficManager) waitForSync(ctx context.Context) {
 	tm.wlWatcher.waitForSync(ctx)
 }
 
+func (tm *TrafficManager) getActiveNamespaces(ctx context.Context) []string {
+	tm.waitForSync(ctx)
+	return tm.wlWatcher.getActiveNamespaces()
+}
+
+func (tm *TrafficManager) addActiveNamespaceListener(l func()) {
+	tm.wlWatcher.addActiveNamespaceListener(l)
+}
+
 func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
 	tm.waitForSync(c)
 	sCtx, sCancel := context.WithCancel(c)

@@ -22,8 +22,9 @@ import (
 
 type workloadsAndServicesWatcher struct {
 	sync.Mutex
-	nsWatchers map[string]*namespacedWASWatcher
-	cond       sync.Cond
+	nsWatchers  map[string]*namespacedWASWatcher
+	nsListeners []func()
+	cond        sync.Cond
 }
 
 const deployments = 0
@@ -264,7 +265,51 @@ func (w *workloadsAndServicesWatcher) setNamespacesToWatch(c context.Context, ns
 		}
 	}
 	for _, ns := range adds {
-		w.nsWatchers[ns] = newNamespaceWatcher(c, ns, &w.cond)
+		w.addNSLocked(c, ns)
+	}
+	w.Unlock()
+}
+
+func (w *workloadsAndServicesWatcher) addNSLocked(c context.Context, ns string) *namespacedWASWatcher {
+	nw := newNamespaceWatcher(c, ns, &w.cond)
+	w.nsWatchers[ns] = nw
+	for _, l := range w.nsListeners {
+		nw.svcWatcher.AddStateListener(l)
+	}
+	return nw
+}
+
+func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string) {
+	w.Lock()
+	defer w.Unlock()
+	nw, ok := w.nsWatchers[ns]
+	if !ok {
+		nw = w.addNSLocked(c, ns)
+	}
+	// Starting the svcWatcher will set it to active and also trigger its state listener
+	// which means a) that the set of active namespaces will change, and b) that the
+	// WatchAgentsNS will restart with that namespace included.
+	nw.svcWatcher.EnsureStarted(c)
+}
+
+func (w *workloadsAndServicesWatcher) getActiveNamespaces() []string {
+	w.Lock()
+	nss := make([]string, 0, len(w.nsWatchers))
+	for ns, w := range w.nsWatchers {
+		if w.svcWatcher.Active() {
+			nss = append(nss, ns)
+		}
+	}
+	w.Unlock()
+	sort.Strings(nss)
+	return nss
+}
+
+func (w *workloadsAndServicesWatcher) addActiveNamespaceListener(l func()) {
+	w.Lock()
+	w.nsListeners = append(w.nsListeners, l)
+	for _, nw := range w.nsWatchers {
+		nw.svcWatcher.AddStateListener(l)
 	}
 	w.Unlock()
 }
