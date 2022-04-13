@@ -1,10 +1,11 @@
 package trafficmgr
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -19,51 +20,64 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-// getPodLogs is a helper function for getting the logs from the container
-// of a given pod. If we are unable to get a log for a given pod, we will
-// instead return the error instead of the log, so that:
-// - one failure doesn't prevent us from getting logs from other pods
-// - it is easy to figure out why getting logs for a given pod failed
-func getPodLog(ctx context.Context, podsAPI typed.PodInterface, pod *core.Pod, container string, podYAML bool) (string, string) {
+// getPodLog obtains the log and optionally the YAML for a given pod and stores it in
+// a file named <POD NAME>.<POD NAMESPACE>.log (and .yaml, if applicable) under the
+// given exportDir directory. An entry with the relative filename as a key is created
+// in the result map. The entry will either contain the string "ok" or an error when
+// the log or yaml for some reason could not be written to the file.
+func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI typed.PodInterface, pod *core.Pod, container string, podYAML bool) {
+	podLog := pod.Name + "." + pod.Namespace + ".log"
 	req := podsAPI.GetLogs(pod.Name, &core.PodLogOptions{Container: container})
-	podLogs, err := req.Stream(ctx)
+	logStream, err := req.Stream(ctx)
 	if err != nil {
-		msg := fmt.Sprintf("Failed to get log for %s.%s: %v", pod.Name, pod.Namespace, err)
-		dlog.Error(ctx, msg)
-		return msg, ""
+		err = fmt.Errorf("failed to get log for %s.%s: %w", pod.Name, pod.Namespace, err)
+		dlog.Error(ctx, err)
+		result.Store(podLog, err.Error())
+		return
 	}
-	defer podLogs.Close()
+	defer logStream.Close()
 
-	buf := new(bytes.Buffer)
-	if _, err = io.Copy(buf, podLogs); err != nil {
-		msg := fmt.Sprintf("Failed writing log to buffer: %v", err)
-		dlog.Error(ctx, msg)
-		return msg, ""
+	f, err := os.Create(filepath.Join(exportDir, podLog))
+	if err != nil {
+		dlog.Error(ctx, err)
+		result.Store(podLog, err.Error())
+		return
 	}
-	podLog := buf.String()
+	defer f.Close()
+
+	if _, err = io.Copy(f, logStream); err != nil {
+		err = fmt.Errorf("failed writing log to buffer: %w", err)
+		dlog.Error(ctx, err)
+		result.Store(podLog, err.Error())
+		return
+	}
+	result.Store(podLog, "ok")
 
 	// Get the pod yaml if the user asked for it
 	if podYAML {
 		var b []byte
+		podYaml := pod.Name + "." + pod.Namespace + ".yaml"
 		if b, err = yaml.Marshal(pod); err != nil {
-			msg := fmt.Sprintf("Failed marshaling pod yaml: %v", err)
-			dlog.Error(ctx, msg)
-			return msg, ""
+			err = fmt.Errorf("failed marshaling pod yaml: %w", err)
+			dlog.Error(ctx, err)
+			result.Store(podYaml, err.Error())
+			return
 		}
-		return podLog, string(b)
+		if err = os.WriteFile(filepath.Join(exportDir, podYaml), b, 0666); err != nil {
+			result.Store(podYaml, err.Error())
+			return
+		}
+		result.Store(podYaml, "ok")
 	}
-	return podLog, ""
 }
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // connector.LogsRequest and returns them to the caller
 func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
-	logWriteMutex := &sync.Mutex{}
+	exportDir := request.ExportDir
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
-	resp := &connector.LogsResponse{
-		PodLogs: make(map[string]string),
-		PodYaml: make(map[string]string),
-	}
+	resp := &connector.LogsResponse{}
+	result := sync.Map{}
 	container := "traffic-agent"
 	hasContainer := func(pod *core.Pod) bool {
 		if strings.EqualFold(request.Agents, "all") || strings.Contains(pod.Name, request.Agents) {
@@ -82,8 +96,7 @@ func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.Log
 			podsAPI := coreAPI.Pods(ns)
 			podList, err := podsAPI.List(ctx, meta.ListOptions{})
 			if err != nil {
-				resp.ErrMsg = err.Error()
-				dlog.Error(ctx, resp.ErrMsg)
+				resp.Error = err.Error()
 				return resp, nil
 			}
 			pods := podList.Items
@@ -104,13 +117,7 @@ func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.Log
 					// sense of the logs
 					podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
 					dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
-					logs, yml := getPodLog(ctx, podsAPI, pod, container, request.GetPodYaml)
-					logWriteMutex.Lock()
-					resp.PodLogs[podAndNs] = logs
-					if request.GetPodYaml {
-						resp.PodYaml[podAndNs] = yml
-					}
-					logWriteMutex.Unlock()
+					getPodLog(ctx, exportDir, &result, podsAPI, pod, container, request.GetPodYaml)
 				}(pod)
 			}
 			wg.Wait()
@@ -122,7 +129,6 @@ func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.Log
 	// want those logs to appear in what we export
 	if request.TrafficManager {
 		ns := tm.GetManagerNamespace()
-		podAndNs := fmt.Sprintf("traffic-manager.%s", ns)
 		podsAPI := coreAPI.Pods(ns)
 		selector := labels.SelectorFromSet(labels.Set{
 			"app":          "traffic-manager",
@@ -131,26 +137,29 @@ func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.Log
 		podList, err := podsAPI.List(ctx, meta.ListOptions{LabelSelector: selector.String()})
 		switch {
 		case err != nil:
-			dlog.Errorf(ctx, "failed to gather logs for %s: %v", podAndNs, err)
-			resp.PodLogs[podAndNs] = err.Error()
+			err = fmt.Errorf("failed to gather logs for traffic manager in namespace %s: %w", ns, err)
+			dlog.Error(ctx, err)
+			resp.Error = err.Error()
 		case len(podList.Items) == 1:
 			pod := &podList.Items[0]
-			podAndNs = fmt.Sprintf("%s.%s", pod.Name, ns)
+			podAndNs := fmt.Sprintf("%s.%s", pod.Name, ns)
 			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
-			logs, yml := getPodLog(ctx, podsAPI, pod, "traffic-manager", request.GetPodYaml)
-			resp.PodLogs[podAndNs] = logs
-			if request.GetPodYaml {
-				resp.PodYaml[podAndNs] = yml
-			}
+			getPodLog(ctx, exportDir, &result, podsAPI, pod, "traffic-manager", request.GetPodYaml)
 		case len(podList.Items) > 1:
-			msg := fmt.Sprintf("multiple traffic managers found in namespace %s using selector %s", ns, selector.String())
-			dlog.Error(ctx, msg)
-			resp.PodLogs[podAndNs] = msg
+			err = fmt.Errorf("multiple traffic managers found in namespace %s using selector %s", ns, selector.String())
+			dlog.Error(ctx, err)
+			resp.Error = err.Error()
 		default:
-			msg := fmt.Sprintf("no traffic manager found in namespace %s using selector %s", ns, selector.String())
-			dlog.Error(ctx, msg)
-			resp.PodLogs[podAndNs] = msg
+			err := fmt.Errorf("no traffic manager found in namespace %s using selector %s", ns, selector.String())
+			dlog.Error(ctx, err)
+			resp.Error = err.Error()
 		}
 	}
+	pi := make(map[string]string)
+	result.Range(func(k, v interface{}) bool {
+		pi[k.(string)] = v.(string)
+		return true
+	})
+	resp.PodInfo = pi
 	return resp, nil
 }
