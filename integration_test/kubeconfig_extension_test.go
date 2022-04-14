@@ -123,15 +123,15 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 }
 
 func (s *notConnectedSuite) Test_ConflictingProxies() {
-	topCtx := s.Context()
-	itest.TelepresenceQuitOk(topCtx)
+	ctx := s.Context()
+	itest.TelepresenceQuitOk(ctx)
 
 	testIP := &net.IPNet{
 		IP:   net.ParseIP("10.128.0.32"),
 		Mask: net.CIDRMask(32, 32),
 	}
 	// We don't really care if we can't route this with TP disconnected provided the result is the same once we connect
-	originalRoute, _ := routing.GetRoute(topCtx, testIP)
+	originalRoute, _ := routing.GetRoute(ctx, testIP)
 	for name, t := range map[string]struct {
 		alsoProxy  []string
 		neverProxy []string
@@ -150,7 +150,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	} {
 		s.Run(name, func() {
 			require := s.Require()
-			ctx := itest.WithKubeConfigExtension(topCtx, func(cluster *api.Cluster) map[string]interface{} {
+			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
 				return map[string]interface{}{
 					"never-proxy": t.neverProxy,
 					"also-proxy":  t.alsoProxy,
