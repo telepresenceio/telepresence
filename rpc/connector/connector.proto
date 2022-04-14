@@ -373,25 +373,23 @@ message LogsRequest {
   // Whether or not logs from the traffic-manager are desired.
   bool traffic_manager = 1;
 
+  // Whether or not to get the pod yaml deployed to the cluster.
+  bool get_pod_yaml = 2;
+
   // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
   // or substring to filter based on pod names.
-  string agents = 2;
+  string agents = 3;
 
-  // Whether or not to get the pod yaml deployed to the cluster.
-  bool get_pod_yaml = 3;
+  // Directory that the logs will be exported to
+  string export_dir = 4;
 }
 
 message LogsResponse {
+  // General error that isn't associated with a pod such as failing to list the pods.
+  string error = 1;
 
-  // The map contains assocations between <podName.namespace> and the logs
-  // from that pod.
-  map<string, string> pod_logs = 1;
-
-  // Errors encountered when getting logs from the traffic-manager
-  // and/or traffic-agents.
-  string err_msg = 2;
-
-  // The map contains assocations between <podName.namespace> and the pod's
-  // yaml.
-  map<string, string> pod_yaml = 3;
+  // pod_info contains one entry per created file name name. The value is either the string
+  // "ok" indicating that the file exists, or an error string with info why it could not
+  // be created.
+  map<string, string> pod_info = 2;
 }
