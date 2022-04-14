@@ -24,8 +24,8 @@ import (
 
 const (
 	tlsDir          = `/var/run/secrets/tls`
-	tlsCertFile     = `tls.crt`
-	tlsKeyFile      = `tls.key`
+	tlsCertFile     = `crt.pem`
+	tlsKeyFile      = `key.pem`
 	jsonContentType = `application/json`
 )
 
