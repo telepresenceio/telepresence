@@ -58,6 +58,14 @@ func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
 }
 
 func (tm *TrafficManager) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
+	tm.currentAgentsLock.Lock()
+	aiws := tm.agentInitWaiters
+	tm.agentInitWaiters = nil
+	tm.currentAgentsLock.Unlock()
+	for _, aiw := range aiws {
+		close(aiw)
+	}
+
 	// Notify waiters for agents
 	for _, agent := range agents {
 		fullName := agent.Name + "." + agent.Namespace
@@ -221,8 +229,8 @@ func (tm *TrafficManager) addAgent(
 func (tm *TrafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)
-	tm.wlWatcher.ensureStarted(ctx, namespace)
 	tm.agentWaiters.Store(fullName, waitCh)
+	tm.wlWatcher.ensureStarted(ctx, namespace, nil)
 	defer tm.agentWaiters.Delete(fullName)
 
 	// Agent may already exist.

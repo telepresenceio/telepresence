@@ -274,12 +274,12 @@ func (w *workloadsAndServicesWatcher) addNSLocked(c context.Context, ns string) 
 	nw := newNamespaceWatcher(c, ns, &w.cond)
 	w.nsWatchers[ns] = nw
 	for _, l := range w.nsListeners {
-		nw.svcWatcher.AddStateListener(l)
+		nw.svcWatcher.AddStateListener(&k8s.StateListener{Cb: l})
 	}
 	return nw
 }
 
-func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string) {
+func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string, cb func(bool)) {
 	w.Lock()
 	defer w.Unlock()
 	nw, ok := w.nsWatchers[ns]
@@ -289,7 +289,7 @@ func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string
 	// Starting the svcWatcher will set it to active and also trigger its state listener
 	// which means a) that the set of active namespaces will change, and b) that the
 	// WatchAgentsNS will restart with that namespace included.
-	nw.svcWatcher.EnsureStarted(c)
+	nw.svcWatcher.EnsureStarted(c, cb)
 }
 
 func (w *workloadsAndServicesWatcher) getActiveNamespaces() []string {
@@ -309,7 +309,7 @@ func (w *workloadsAndServicesWatcher) addActiveNamespaceListener(l func()) {
 	w.Lock()
 	w.nsListeners = append(w.nsListeners, l)
 	for _, nw := range w.nsWatchers {
-		nw.svcWatcher.AddStateListener(l)
+		nw.svcWatcher.AddStateListener(&k8s.StateListener{Cb: l})
 	}
 	w.Unlock()
 }

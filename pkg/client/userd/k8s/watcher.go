@@ -37,7 +37,11 @@ type Watcher struct {
 	controller     cache.Controller
 	store          cache.Store
 	equals         func(runtime.Object, runtime.Object) bool
-	stateListeners []func()
+	stateListeners []*StateListener
+}
+
+type StateListener struct {
+	Cb func()
 }
 
 func newListerWatcher(c context.Context, getter cache.Getter, resource, namespace string) cache.ListerWatcher {
@@ -74,21 +78,46 @@ func NewWatcher(resource, namespace string, getter cache.Getter, objType runtime
 
 // AddStateListener adds a listener function that will be called when the watcher
 // changes its state (starts or is cancelled)
-func (w *Watcher) AddStateListener(l func()) {
+func (w *Watcher) AddStateListener(l *StateListener) {
 	w.Lock()
 	w.stateListeners = append(w.stateListeners, l)
 	w.Unlock()
 }
 
+// RemoveStateListener removes a listener function
+func (w *Watcher) RemoveStateListener(rl *StateListener) {
+	w.Lock()
+	sls := w.stateListeners
+	last := len(sls) - 1
+	for i, sl := range sls {
+		if rl == sl {
+			if i < last {
+				sls[i] = sls[last]
+			}
+			w.stateListeners = sls[:last]
+			break
+		}
+	}
+	w.Unlock()
+}
+
 func (w *Watcher) Cancel() {
 	w.Lock()
-	defer w.Unlock()
 	if w.cancel != nil {
 		w.cancel()
 		w.cancel = nil
-		for _, l := range w.stateListeners {
-			l()
-		}
+	}
+	w.callStateListeners()
+	w.Unlock()
+}
+
+func (w *Watcher) callStateListeners() {
+	sl := make([]*StateListener, len(w.stateListeners))
+	copy(sl, w.stateListeners)
+	w.Unlock()
+	defer w.Lock()
+	for _, l := range sl {
+		l.Cb()
 	}
 }
 
@@ -111,11 +140,21 @@ func (w *Watcher) Get(c context.Context, obj interface{}) (interface{}, bool, er
 	return w.store.Get(obj)
 }
 
-func (w *Watcher) EnsureStarted(c context.Context) {
+func (w *Watcher) EnsureStarted(c context.Context, cb func(bool)) {
 	w.Lock()
 	defer w.Unlock()
 	if w.store == nil {
+		if cb != nil {
+			var rl *StateListener
+			rl = &StateListener{Cb: func() {
+				cb(true)
+				w.RemoveStateListener(rl)
+			}}
+			w.stateListeners = append(w.stateListeners, rl)
+		}
 		w.startOnDemand(c)
+	} else if cb != nil {
+		cb(false)
 	}
 }
 
@@ -152,9 +191,7 @@ func (w *Watcher) startOnDemand(c context.Context) {
 	rdy.Wait()
 	go w.run(c)
 	cache.WaitForCacheSync(c.Done(), w.controller.HasSynced)
-	for _, l := range w.stateListeners {
-		l()
-	}
+	w.callStateListeners()
 }
 
 func (w *Watcher) startLocked(c context.Context, ready *sync.WaitGroup) {

@@ -148,6 +148,10 @@ type TrafficManager struct {
 	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
 	agentWaiters sync.Map
 
+	// agentInitWaiters  is protected by the currentAgentsLock. The contained channels are closed
+	// and the slice is cleared when an agent snapshot arrives.
+	agentInitWaiters []chan<- struct{}
+
 	sessionServices []SessionService
 	sr              *scout.Reporter
 }
@@ -580,6 +584,38 @@ func (tm *TrafficManager) workloadInfoSnapshot(
 	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	is := tm.getCurrentIntercepts()
+
+	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
+	waitCh := make(chan struct{}, 1)
+	tm.currentAgentsLock.Lock()
+	tm.agentInitWaiters = append(tm.agentInitWaiters, waitCh)
+	tm.currentAgentsLock.Unlock()
+	needWait := false
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(namespaces))
+	for _, ns := range namespaces {
+		if ns == "" {
+			// Don't use tm.ActualNamespace here because the accessibility of the namespace
+			// is actually determined once the watcher starts
+			ns = tm.Namespace
+		}
+		tm.wlWatcher.ensureStarted(ctx, ns, func(started bool) {
+			if started {
+				needWait = true
+			}
+			wg.Done()
+		})
+	}
+	wg.Wait()
+	wc, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutRoundtripLatency)
+	defer cancel()
+	if needWait {
+		select {
+		case <-wc.Done():
+		case <-waitCh:
+		}
+	}
 
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
