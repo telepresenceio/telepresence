@@ -16,7 +16,7 @@ webhooks:
 {{- end }}
   clientConfig:
 {{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
-    caBundle: {{ get $secretData "ca.pem" }}
+    caBundle: {{ get $secretData "ca.crt" }}
 {{- else }}
     caBundle: {{ $genCA.Cert | b64enc }}
 {{- end }}
@@ -60,9 +60,9 @@ metadata:
     {{- include "telepresence.labels" . | nindent 4 }}
 data:
 {{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
-  ca.crt: {{ get $secretData "ca.pem" }}
-  tls.crt: {{ get $secretData "crt.pem" }}
-  tls.key: {{ get $secretData "key.pem" }}
+  ca.crt: {{ get $secretData "ca.crt" }}
+  tls.crt: {{ get $secretData "tls.crt" }}
+  tls.key: {{ get $secretData "tls.key" }}
 {{- else }}
   ca.crt: {{ $genCA.Cert | b64enc }}
   tls.crt: {{ $genCert.Cert | b64enc }}
