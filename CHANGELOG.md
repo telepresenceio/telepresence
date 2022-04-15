@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.6 (TBD)
+### 2.5.6 (April 15, 2022)
 
 - Bugfix: The `gather-logs` command will no longer send any logs through `gRPC`.
 
