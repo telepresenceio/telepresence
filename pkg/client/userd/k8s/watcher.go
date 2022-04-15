@@ -28,15 +28,20 @@ const resyncPeriod = 2 * time.Minute
 // Watcher watches some resource and can be cancelled
 type Watcher struct {
 	sync.Mutex
-	cancel     context.CancelFunc
-	resource   string
-	namespace  string
-	getter     cache.Getter
-	objType    runtime.Object
-	cond       *sync.Cond
-	controller cache.Controller
-	store      cache.Store
-	equals     func(runtime.Object, runtime.Object) bool
+	cancel         context.CancelFunc
+	resource       string
+	namespace      string
+	getter         cache.Getter
+	objType        runtime.Object
+	cond           *sync.Cond
+	controller     cache.Controller
+	store          cache.Store
+	equals         func(runtime.Object, runtime.Object) bool
+	stateListeners []*StateListener
+}
+
+type StateListener struct {
+	Cb func()
 }
 
 func newListerWatcher(c context.Context, getter cache.Getter, resource, namespace string) cache.ListerWatcher {
@@ -71,11 +76,48 @@ func NewWatcher(resource, namespace string, getter cache.Getter, objType runtime
 	}
 }
 
+// AddStateListener adds a listener function that will be called when the watcher
+// changes its state (starts or is cancelled)
+func (w *Watcher) AddStateListener(l *StateListener) {
+	w.Lock()
+	w.stateListeners = append(w.stateListeners, l)
+	w.Unlock()
+}
+
+// RemoveStateListener removes a listener function
+func (w *Watcher) RemoveStateListener(rl *StateListener) {
+	w.Lock()
+	sls := w.stateListeners
+	last := len(sls) - 1
+	for i, sl := range sls {
+		if rl == sl {
+			if i < last {
+				sls[i] = sls[last]
+			}
+			w.stateListeners = sls[:last]
+			break
+		}
+	}
+	w.Unlock()
+}
+
 func (w *Watcher) Cancel() {
 	w.Lock()
-	defer w.Unlock()
 	if w.cancel != nil {
 		w.cancel()
+		w.cancel = nil
+	}
+	w.callStateListeners()
+	w.Unlock()
+}
+
+func (w *Watcher) callStateListeners() {
+	sl := make([]*StateListener, len(w.stateListeners))
+	copy(sl, w.stateListeners)
+	w.Unlock()
+	defer w.Lock()
+	for _, l := range sl {
+		l.Cb()
 	}
 }
 
@@ -98,6 +140,24 @@ func (w *Watcher) Get(c context.Context, obj interface{}) (interface{}, bool, er
 	return w.store.Get(obj)
 }
 
+func (w *Watcher) EnsureStarted(c context.Context, cb func(bool)) {
+	w.Lock()
+	defer w.Unlock()
+	if w.store == nil {
+		if cb != nil {
+			var rl *StateListener
+			rl = &StateListener{Cb: func() {
+				cb(true)
+				w.RemoveStateListener(rl)
+			}}
+			w.stateListeners = append(w.stateListeners, rl)
+		}
+		w.startOnDemand(c)
+	} else if cb != nil {
+		cb(false)
+	}
+}
+
 func (w *Watcher) List(c context.Context) []interface{} {
 	w.Lock()
 	defer w.Unlock()
@@ -105,6 +165,14 @@ func (w *Watcher) List(c context.Context) []interface{} {
 		w.startOnDemand(c)
 	}
 	return w.store.List()
+}
+
+// Active returns true if the watcher has been started and not yet cancelled
+func (w *Watcher) Active() bool {
+	w.Lock()
+	active := w.cancel != nil
+	w.Unlock()
+	return active
 }
 
 func (w *Watcher) Watch(c context.Context, ready *sync.WaitGroup) {
@@ -123,6 +191,7 @@ func (w *Watcher) startOnDemand(c context.Context) {
 	rdy.Wait()
 	go w.run(c)
 	cache.WaitForCacheSync(c.Done(), w.controller.HasSynced)
+	w.callStateListeners()
 }
 
 func (w *Watcher) startLocked(c context.Context, ready *sync.WaitGroup) {

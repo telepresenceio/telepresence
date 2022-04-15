@@ -252,7 +252,10 @@ func (m *Manager) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_W
 		return err
 	}
 
-	var lastSnap map[string]*rpc.AgentInfo
+	// Ensure that initial snapshot is not equal to lastSnap even if it is empty so
+	// that an initial snapshot is sent even when it's empty.
+	lastSnap := make(map[string]*rpc.AgentInfo)
+	lastSnap[""] = nil
 	snapEqual := func(snap []*rpc.AgentInfo) bool {
 		if len(snap) != len(lastSnap) {
 			return false

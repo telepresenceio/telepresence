@@ -58,6 +58,14 @@ func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
 }
 
 func (tm *TrafficManager) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
+	tm.currentAgentsLock.Lock()
+	aiws := tm.agentInitWaiters
+	tm.agentInitWaiters = nil
+	tm.currentAgentsLock.Unlock()
+	for _, aiw := range aiws {
+		close(aiw)
+	}
+
 	// Notify waiters for agents
 	for _, agent := range agents {
 		fullName := agent.Name + "." + agent.Namespace
@@ -72,14 +80,14 @@ func (tm *TrafficManager) notifyAgentWatchers(ctx context.Context, agents []*man
 }
 
 func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
-	// Cancel this watcher whenever the set of namespaces change
+	// Cancel this watcher whenever the set of active namespaces change
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	tm.AddNamespaceListener(func(context.Context) {
+	tm.addActiveNamespaceListener(func() {
 		cancel()
 	})
 
-	nss := tm.GetCurrentNamespaces(true)
+	nss := tm.getActiveNamespaces(ctx)
 	if len(nss) == 0 {
 		// Not much point in watching for nothing, so just wait until
 		// the set of namespaces change. Returning nil here means that
@@ -222,6 +230,7 @@ func (tm *TrafficManager) waitForAgent(ctx context.Context, name, namespace stri
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)
 	tm.agentWaiters.Store(fullName, waitCh)
+	tm.wlWatcher.ensureStarted(ctx, namespace, nil)
 	defer tm.agentWaiters.Delete(fullName)
 
 	// Agent may already exist.
