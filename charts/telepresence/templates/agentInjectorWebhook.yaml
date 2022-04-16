@@ -1,8 +1,8 @@
 {{- if not .Values.rbac.only }}
-{{- $altNames := list ( printf "agent-injector.%s" (include "telepresence.namespace" .)) ( printf "agent-injector.%s.svc" (include "telepresence.namespace" .)) -}}
+{{- $altNames := list ( printf "agent-injector.%s" .Release.Namespace ) ( printf "agent-injector.%s.svc" .Release.Namespace ) -}}
 {{- $genCA := genCA "agent-injector-ca" 365 -}}
 {{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
-{{- $secretData := (lookup "v1" "Secret" (include "telepresence.namespace" .) .Values.agentInjector.secret.name).data -}}
+{{- $secretData := (lookup "v1" "Secret" .Release.Namespace .Values.agentInjector.secret.name).data -}}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -16,7 +16,7 @@ webhooks:
 {{- end }}
   clientConfig:
 {{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
-    caBundle: {{ get $secretData "ca.crt" }}
+    caBundle: {{ or (get $secretData "ca.crt") (get $secretData "ca.pem") }}
 {{- else }}
     caBundle: {{ $genCA.Cert | b64enc }}
 {{- end }}
@@ -59,10 +59,10 @@ metadata:
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 data:
-{{- if and ($secretData) (get $secretData "ca.crt") (not .Values.agentInjector.certificate.regenerate) }}
-  ca.crt: {{ get $secretData "ca.crt" }}
-  tls.crt: {{ get $secretData "tls.crt" }}
-  tls.key: {{ get $secretData "tls.key" }}
+{{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
+  ca.crt: {{ or (get $secretData "ca.crt") (get $secretData "ca.pem") }}
+  tls.crt: {{ or (get $secretData "tls.crt") (get $secretData "crt.pem") }}
+  tls.key: {{ or (get $secretData "tls.key") (get $secretData "key.pem") }}
 {{- else }}
   ca.crt: {{ $genCA.Cert | b64enc }}
   tls.crt: {{ $genCert.Cert | b64enc }}
