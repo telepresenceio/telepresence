@@ -2,6 +2,7 @@ package userd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -186,12 +187,23 @@ nextSession:
 		// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
 		// the session is running. The s.sessionCancel is called from Disconnect
 		wg.Add(1)
-		go func() {
+		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
 			if err := s.session.Run(s.sessionContext); err != nil {
+				if errors.Is(err, trafficmgr.SessionExpiredErr) {
+					// Session has expired. We need to cancel the owner session and reconnect
+					dlog.Info(c, "refreshing session")
+					s.cancelSession()
+					select {
+					case <-c.Done():
+					case s.connectRequest <- cr:
+					}
+					return
+				}
+
 				dlog.Error(c, err)
 			}
-		}()
+		}(cr)
 	}
 	wg.Wait()
 	return nil
