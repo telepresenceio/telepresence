@@ -201,7 +201,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 		host := fmt.Sprintf("zwslkjsdf-%d.org", retryCount)
 		short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		defer cancel()
-		_ = itest.Run(short, "curl", "--silent", "--connect-timeout", "0.5", host)
+		_, _ = net.DefaultResolver.LookupIPAddr(short, host)
 
 		// Give query time to reach telepresence and produce a log entry
 		dtime.SleepWithContext(ctx, 100*time.Millisecond)
