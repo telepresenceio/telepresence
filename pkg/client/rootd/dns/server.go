@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -45,7 +46,7 @@ type Server struct {
 	resolve      Resolver
 	requestCount int64
 	cache        sync.Map
-	recursive    int32 // 0 = never tested, 1 = not recursive, 2 = recursive
+	recursive    int32 // 0 = never tested, 1 = not recursive, 2 = recursive, 99 = test in progress
 	cacheResolve func(*dns.Question) ([]dns.RR, error)
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
@@ -259,7 +260,9 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 					if atomic.LoadInt32(&s.recursive) == 0 {
 						for _, p := range prevPaths {
 							if p == "kube-system" {
-								s.performRecursionCheck(c)
+								if atomic.CompareAndSwapInt32(&s.recursive, 0, 99) {
+									go s.performRecursionCheck(c)
+								}
 								break
 							}
 						}
@@ -336,7 +339,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 			if q.Name == recursionCheck {
 				atomic.StoreInt32(&s.recursive, 2)
 			}
-			if atomic.LoadInt32(&s.recursive) != 1 {
+			if atomic.LoadInt32(&s.recursive) == 2 {
 				return nil, nil
 			}
 		}
@@ -370,15 +373,37 @@ func (d dfs) String() string {
 }
 
 func (s *Server) performRecursionCheck(c context.Context) {
+	const maxRetry = 10
+	defer dlog.Debug(c, "Recursion check finished")
 	rc := strings.TrimSuffix(recursionCheck, ".")
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
-	if _, err := net.DefaultResolver.LookupHost(c, rc); err != nil {
-		if err, ok := err.(*net.DNSError); ok {
-			if err.IsNotFound {
-				return
+	i := 0
+	for ; i < maxRetry; i++ {
+		_, err := net.DefaultResolver.LookupIP(c, "ip4", rc)
+		if err != nil {
+			if derr, ok := err.(*net.DNSError); ok && derr.IsNotFound {
+				err = nil
 			}
 		}
-		dlog.Errorf(c, "recursion check ended with %v", err)
+		if err != nil {
+			dlog.Errorf(c, "recursion check ended with %v", err)
+		}
+		if atomic.LoadInt32(&s.recursive) != 99 {
+			return
+		}
+		// Check didn't hit our resolver. Try again after a second
+		dtime.SleepWithContext(c, time.Second)
+
+		// Check that the resolver didn't get hit during our wait. We don't want
+		// to retry if it did, because that will give the false impression that
+		// the resolver is recursive.
+		if atomic.LoadInt32(&s.recursive) != 99 {
+			return
+		}
+		dlog.Debug(c, "retrying recursion check")
+	}
+	if i == maxRetry {
+		dlog.Errorf(c, "recursion check failed. The DNS isn't working properly")
 	}
 }
 
