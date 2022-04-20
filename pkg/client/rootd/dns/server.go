@@ -39,6 +39,13 @@ type FallbackPool interface {
 	LocalAddrs() []*net.UDPAddr
 }
 
+const (
+	recursionUnknown = int32(iota)
+	recursionNotDetected
+	recursionDetected
+	recursionTestInProgress
+)
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
@@ -46,7 +53,7 @@ type Server struct {
 	resolve      Resolver
 	requestCount int64
 	cache        sync.Map
-	recursive    int32 // 0 = never tested, 1 = not recursive, 2 = recursive, 99 = test in progress
+	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 	cacheResolve func(*dns.Question) ([]dns.RR, error)
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
@@ -257,10 +264,10 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 					if err := processor(c, paths, dev); err != nil {
 						return err
 					}
-					if atomic.LoadInt32(&s.recursive) == 0 {
+					if atomic.LoadInt32(&s.recursive) == recursionUnknown {
 						for _, p := range prevPaths {
 							if p == "kube-system" {
-								if atomic.CompareAndSwapInt32(&s.recursive, 0, 99) {
+								if atomic.CompareAndSwapInt32(&s.recursive, recursionUnknown, recursionTestInProgress) {
 									go s.performRecursionCheck(c)
 								}
 								break
@@ -315,7 +322,7 @@ func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
 		oldDv := v.(*cacheEntry)
-		if atomic.LoadInt32(&s.recursive) == 2 && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
+		if atomic.LoadInt32(&s.recursive) == recursionDetected && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
 			return nil, nil
 		}
@@ -337,9 +344,9 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			if q.Name == recursionCheck {
-				atomic.StoreInt32(&s.recursive, 2)
+				atomic.StoreInt32(&s.recursive, recursionDetected)
 			}
-			if atomic.LoadInt32(&s.recursive) == 2 {
+			if atomic.LoadInt32(&s.recursive) == recursionDetected {
 				return nil, nil
 			}
 		}
@@ -352,10 +359,10 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 
 	answer, err := s.resolveQuery(q, newDv)
 	if q.Name == recursionCheck {
-		if atomic.LoadInt32(&s.recursive) == 2 {
+		if atomic.LoadInt32(&s.recursive) == recursionDetected {
 			dlog.Debug(s.ctx, "DNS resolver is recursive")
 		} else {
-			atomic.StoreInt32(&s.recursive, 1)
+			atomic.StoreInt32(&s.recursive, recursionNotDetected)
 			dlog.Debug(s.ctx, "DNS resolver is not recursive")
 		}
 		s.cacheResolve = s.resolveThruCache
@@ -388,7 +395,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		if err != nil {
 			dlog.Errorf(c, "recursion check ended with %v", err)
 		}
-		if atomic.LoadInt32(&s.recursive) != 99 {
+		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
 			return
 		}
 		// Check didn't hit our resolver. Try again after a second
@@ -397,7 +404,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		// Check that the resolver didn't get hit during our wait. We don't want
 		// to retry if it did, because that will give the false impression that
 		// the resolver is recursive.
-		if atomic.LoadInt32(&s.recursive) != 99 {
+		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
 			return
 		}
 		dlog.Debug(c, "retrying recursion check")
