@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.5.7 (TBD)
+
+- Bugfix: The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names
+  that were resolved correctly at other times.
+
 ### 2.5.6 (April 15, 2022)
 
 - Bugfix: The `gather-logs` command will no longer send any logs through `gRPC`.
