@@ -83,16 +83,16 @@ func (s *helmSuite) Test_HelmWebhookDoesntInjectInUnmanagedNamespace() {
 }
 
 func (s *helmSuite) Test_HelmMultipleInstalls() {
-	ctx := s.Context()
 	svc := s.ServiceName()
-	itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceQuitOk(s.Context())
 
-	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 	s.Run("Installs Successfully", func() {
+		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 		s.NoError(s.InstallTrafficManager(ctx, s.mgrSpace2, s.appSpace2))
 	})
 
 	s.Run("Can be connected to", func() {
+		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 		stdout := itest.TelepresenceOk(ctx, "connect")
 		s.Contains(stdout, "Connected to context")
 		s.Eventually(func() bool {
@@ -101,6 +101,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	})
 
 	s.Run("Can intercept", func() {
+		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 		defer itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", svc, s.appSpace2))
 
 		stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", svc, "--port", "9090")
@@ -110,6 +111,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	})
 
 	s.Run("Uninstalls Successfully", func() {
+		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
 		s.UninstallTrafficManager(ctx, s.mgrSpace2)
 		itest.TelepresenceQuitOk(ctx)
 	})
