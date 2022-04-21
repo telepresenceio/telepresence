@@ -92,6 +92,7 @@ func NewInfo(ctx context.Context) Info {
 	nsForID := "default"
 	ns, err := client.Namespaces().Get(ctx, nsForID, metav1.GetOptions{})
 	if err != nil {
+		dlog.Infof(ctx, "unable to get namespace %q, will try %q instead: %v", nsForID, env.ManagerNamespace, err)
 		nsForID = env.ManagerNamespace
 		ns, err = client.Namespaces().Get(ctx, nsForID, metav1.GetOptions{})
 	}
@@ -99,8 +100,8 @@ func NewInfo(ctx context.Context) Info {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = "00000000-0000-0000-0000-000000000000"
-		dlog.Errorf(ctx, "unable to get `%s` namespace: %s, using default clusterID: %s",
-			nsForID, err, oi.clusterID)
+		dlog.Warnf(ctx, "unable to get namespace %q, will use default clusterID: %s: %v",
+			nsForID, oi.clusterID, err)
 	} else {
 		oi.clusterID = string(ns.GetUID())
 	}
