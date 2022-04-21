@@ -2,6 +2,8 @@
 
 ### 2.5.7 (TBD)
 
+- Change: A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
+
 - Bugfix: The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names
   that were resolved correctly at other times.
 
