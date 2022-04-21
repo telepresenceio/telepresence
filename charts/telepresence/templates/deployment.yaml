@@ -75,6 +75,12 @@ spec:
               fieldRef:
                 apiVersion : v1
                 fieldPath: status.podIP
+          {{- if .Values.managerRbac.namespaced }}
+          {{- with .Values.managerRbac.namespaces }}
+          - name: MANAGED_NAMESPACES
+            value: "{{ join " " . }}"
+          {{- end }}
+          {{- end }}
           ports:
           - name: api
             containerPort: 8081

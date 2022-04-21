@@ -19,6 +19,7 @@ type Env struct {
 	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
 
 	ManagerNamespace    string                     `env:"MANAGER_NAMESPACE,default="`
+	ManagedNamespaces   string                     `env:"MANAGED_NAMESPACES,default="`
 	AgentRegistry       string                     `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
 	AgentImage          string                     `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
