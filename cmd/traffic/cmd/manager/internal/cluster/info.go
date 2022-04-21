@@ -5,11 +5,13 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/blang/semver"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -52,6 +54,14 @@ type info struct {
 }
 
 func NewInfo(ctx context.Context) Info {
+	env := managerutil.GetEnv(ctx)
+	var managedNamespaces []string
+	namespaced := false
+	if mns := env.ManagedNamespaces; mns != "" {
+		managedNamespaces = strings.Split(mns, " ")
+		namespaced = true
+	}
+
 	oi := info{ciSubs: newClusterInfoSubscribers()}
 	ki := k8sapi.GetK8sInterface(ctx)
 
@@ -77,14 +87,20 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	// Get the clusterID from the default namespaces
-	// We use a default clusterID because we don't want to fail if
-	// the traffic-manager doesn't have the ability to get the namespace
-	ns, err := client.Namespaces().Get(ctx, "default", metav1.GetOptions{})
+	// Get the clusterID from the default namespace, or from the manager's namespace if
+	// the traffic-manager doesn't have access to the default namespace.
+	nsForID := "default"
+	ns, err := client.Namespaces().Get(ctx, nsForID, metav1.GetOptions{})
 	if err != nil {
+		nsForID = env.ManagerNamespace
+		ns, err = client.Namespaces().Get(ctx, nsForID, metav1.GetOptions{})
+	}
+	if err != nil {
+		// We use a default clusterID because we don't want to fail if
+		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = "00000000-0000-0000-0000-000000000000"
-		dlog.Errorf(ctx, "unable to get `default` namespace: %s, using default clusterID: %s",
-			err, oi.clusterID)
+		dlog.Errorf(ctx, "unable to get `%s` namespace: %s, using default clusterID: %s",
+			nsForID, err, oi.clusterID)
 	} else {
 		oi.clusterID = string(ns.GetUID())
 	}
@@ -104,10 +120,10 @@ func NewInfo(ctx context.Context) Info {
 			Namespace: "openshift-dns",
 		},
 	}
-	for _, dnsService := range dnsServices {
-		if svc, err := client.Services(dnsService.Namespace).Get(ctx, dnsService.Name, metav1.GetOptions{}); err == nil {
+	for _, svc := range dnsServices {
+		if ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc.Name+"."+svc.Namespace); err == nil && len(ips) > 0 {
 			dlog.Infof(ctx, "Using DNS IP from %s.%s", svc.Name, svc.Namespace)
-			oi.KubeDnsIp = iputil.Parse(svc.Spec.ClusterIP)
+			oi.KubeDnsIp = ips[0]
 			break
 		}
 	}
@@ -126,7 +142,6 @@ func NewInfo(ctx context.Context) Info {
 	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
 	// This requires an additional permission to create a service, which the traffic-manager
 	// should have.
-	env := managerutil.GetEnv(ctx)
 	svc := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
@@ -173,14 +188,18 @@ func NewInfo(ctx context.Context) Info {
 	switch {
 	case strings.EqualFold("auto", podCIDRStrategy):
 		go func() {
-			if !oi.watchNodeSubnets(ctx) {
-				oi.watchPodSubnets(ctx)
+			if namespaced || !oi.watchNodeSubnets(ctx) {
+				oi.watchPodSubnets(ctx, managedNamespaces)
 			}
 		}()
 	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
-		go oi.watchNodeSubnets(ctx)
+		if namespaced {
+			dlog.Errorf(ctx, "cannot use POD_CIDR_STRATEGY %q with a namespaced traffic-manager", podCIDRStrategy)
+		} else {
+			go oi.watchNodeSubnets(ctx)
+		}
 	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
-		go oi.watchPodSubnets(ctx)
+		go oi.watchPodSubnets(ctx, managedNamespaces)
 	case strings.EqualFold("environment", podCIDRStrategy):
 		oi.setSubnetsFromEnv(ctx)
 	default:
@@ -216,18 +235,38 @@ func (oi *info) watchNodeSubnets(ctx context.Context) bool {
 	return true
 }
 
-func (oi *info) watchPodSubnets(ctx context.Context) bool {
+func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) bool {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	informerFactory := informers.NewSharedInformerFactory(k8sapi.GetK8sInterface(ctx), 0)
-	podController := informerFactory.Core().V1().Pods()
-	podLister := podController.Lister()
-	podInformer := podController.Informer()
 
-	informerFactory.Start(ctx.Done())
-	informerFactory.WaitForCacheSync(ctx.Done())
+	nsc := len(namespaces)
+	if nsc == 0 {
+		// Create one of lister and one informer that have cluster wide scope
+		namespaces = []string{""}
+		nsc = 1
+	}
+	podListers := make([]PodLister, nsc)
+	podInformers := make([]cache.SharedIndexInformer, nsc)
+	wg := sync.WaitGroup{}
+	wg.Add(nsc)
+	for i, ns := range namespaces {
+		var opts []informers.SharedInformerOption
+		if ns != "" {
+			opts = []informers.SharedInformerOption{informers.WithNamespace(ns)}
+		}
+		informerFactory := informers.NewSharedInformerFactoryWithOptions(k8sapi.GetK8sInterface(ctx), 0, opts...)
+		podController := informerFactory.Core().V1().Pods()
+		podListers[i] = podController.Lister()
+		podInformers[i] = podController.Informer()
+		go func() {
+			defer wg.Done()
+			informerFactory.Start(ctx.Done())
+			informerFactory.WaitForCacheSync(ctx.Done())
+		}()
+	}
+	wg.Wait()
 
-	retriever := newPodWatcher(ctx, podLister, podInformer)
+	retriever := newPodWatcher(ctx, podListers, podInformers)
 	if !retriever.viable(ctx) {
 		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
 		return false

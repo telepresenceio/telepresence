@@ -1,4 +1,6 @@
 {{- if .Values.managerRbac.create }}
+{{- if (not .Values.managerRbac.namespaced) }}
+
 # This file contains all cluster-scoped permissions that the traffic manager needs.
 # This will be larger if namespaced: false, or smaller if it is true
 # This will also likely expand over time as we move more things from the clients
@@ -52,4 +54,4 @@ subjects:
   name: traffic-manager
   namespace: {{ include "telepresence.namespace" . }}
 {{- end }}
-
+{{- end }}

@@ -28,7 +28,25 @@ rules:
   - list
   - get
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - list
 {{- if eq . (include "telepresence.namespace" $) }}
+# Must be able to get the manager namespace in order to get the cluster-id
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  resourceNames:
+  - {{ . }}
+  verbs:
+  - get
+
+# Must be able to make an unsuccessful attempt to create a dummy service in order to receive
+# the error message containing correct service CIDR
 - apiGroups:
   - ""
   resources:
