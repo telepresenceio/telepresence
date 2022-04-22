@@ -198,23 +198,22 @@ func main(ctx context.Context, args Args) error {
 		dlog.Infof(ctx, "Created intercept")
 
 		dlog.Infof(ctx, "Creating preview URL...")
-		uResp, err := userdCoreImpl.ManagerProxy.UpdateIntercept(ctx, &rpc_manager.UpdateInterceptRequest{
-			Session: session,
-			Name:    args.WorkloadName,
-			PreviewDomainAction: &rpc_manager.UpdateInterceptRequest_AddPreviewDomain{
-				AddPreviewDomain: &rpc_manager.PreviewSpec{
-					PullRequestUrl:    args.PullRequestURL,
-					AddRequestHeaders: args.AddRequestHeaders,
-					DisplayBanner:     true,
-					Ingress: &rpc_manager.IngressInfo{
-						Host:   args.IngressHost,
-						Port:   args.IngressPort,
-						UseTls: args.IngressTLS,
-						L5Host: args.IngressL5Host,
-					},
+		uResp, err := cli.AddPreviewDomain(ctx, scoutReporter,
+			userdCoreImpl.ManagerProxy.UpdateIntercept,
+			session,
+			args.WorkloadName, // intercept name
+			&rpc_manager.PreviewSpec{
+				PullRequestUrl:    args.PullRequestURL,
+				AddRequestHeaders: args.AddRequestHeaders,
+				DisplayBanner:     true,
+				Ingress: &rpc_manager.IngressInfo{
+					Host:   args.IngressHost,
+					Port:   args.IngressPort,
+					UseTls: args.IngressTLS,
+					L5Host: args.IngressL5Host,
 				},
 			},
-		})
+		)
 		if err != nil {
 			return err
 		}

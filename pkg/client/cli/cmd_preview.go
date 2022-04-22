@@ -6,10 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
 // addPreviewFlags mutates 'flags', adding flags to it such that the flags set the appropriate
@@ -18,6 +20,32 @@ func addPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewS
 	flags.BoolVarP(&spec.DisplayBanner, prefix+"banner", "b", true, "Display banner on preview page")
 	flags.StringToStringVarP(&spec.AddRequestHeaders, prefix+"add-request-headers", "", map[string]string{},
 		"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
+}
+
+type UpdateInterceptFn func(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error)
+
+func clientUpdateInterceptFn(client manager.ManagerClient, opts ...grpc.CallOption) UpdateInterceptFn {
+	return func(ctx context.Context, req *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
+		return client.UpdateIntercept(ctx, req, opts...)
+	}
+}
+
+func AddPreviewDomain(ctx context.Context, reporter *scout.Reporter, updateInterceptFn UpdateInterceptFn, sess *manager.SessionInfo, iceptName string, previewSpec *manager.PreviewSpec) (*manager.InterceptInfo, error) {
+	intercept, err := updateInterceptFn(ctx, &manager.UpdateInterceptRequest{
+		Session: sess,
+		Name:    iceptName,
+		PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+			AddPreviewDomain: previewSpec,
+		},
+	})
+	if err != nil {
+		reporter.Report(ctx, "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
+		err = fmt.Errorf("creating preview domain: %w", err)
+		return nil, err
+	}
+	reporter.SetMetadatum(ctx, "preview_url", intercept.PreviewDomain)
+	reporter.Report(ctx, "preview_domain_create_success")
+	return intercept, nil
 }
 
 func previewCommand() *cobra.Command {
@@ -40,6 +68,8 @@ func previewCommand() *cobra.Command {
 				if _, err := cliutil.ClientEnsureLoggedIn(cmd.Context(), "", cs.userD); err != nil {
 					return err
 				}
+				reporter := scout.NewReporter(ctx, "cli")
+				reporter.Start(ctx)
 				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 					if createSpec.Ingress == nil {
 						request := manager.GetInterceptRequest{Session: cs.SessionInfo, Name: args[0]}
@@ -58,13 +88,11 @@ func previewCommand() *cobra.Command {
 						}
 						createSpec.Ingress = ingress
 					}
-					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-						Session: cs.SessionInfo,
-						Name:    args[0],
-						PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-							AddPreviewDomain: &createSpec,
-						},
-					})
+					intercept, err := AddPreviewDomain(ctx, reporter,
+						clientUpdateInterceptFn(managerClient),
+						cs.SessionInfo,
+						args[0], // intercept name
+						&createSpec)
 					if err != nil {
 						return err
 					}
