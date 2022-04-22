@@ -9,9 +9,9 @@
 
 # The Telepresence client will try to ensure that the Traffic Manager image is
 # up to date and from the right registry. If you are changing the value below,
-# ensure that the tag is the same as the client version and that the 
+# ensure that the tag is the same as the client version and that the
 # TELEPRESENCE_REGISTRY environment variable is equal to image.repository.
-# 
+#
 # The client will default to docker.io/datawire/tel2:{{CLIENT_VERSION}}
 
 image:
@@ -46,6 +46,11 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+## @param priorityClassName Name of the existing priority class to be used
+## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
+##
+priorityClassName: ""
 
 ################################################################################
 ## Traffic Manager Service Configuration
@@ -97,7 +102,7 @@ systemaPort: "443"
 
 # Telepresence requires a license key for creating selective intercepts. In
 # normal clusters with access to the public internet, this license is managed
-# automatically by the Ambassador Cloud. In air-gapped environments however, 
+# automatically by the Ambassador Cloud. In air-gapped environments however,
 # you need to get a license and add it to your cluster manually.
 # https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/#air-gapped-cluster
 #
@@ -105,7 +110,7 @@ systemaPort: "443"
 licenseKey:
 
   # Creates the Volume and VolumeMounts for reading and managing the license key.
-  # 
+  #
   # Default: false
   create: false
 
@@ -113,9 +118,9 @@ licenseKey:
   #
   # Default: ""
   value: ""
-  
-  # Configure the Helm Chart to manage the Secret the Traffic Manager will use 
-  # to read the license key. 
+
+  # Configure the Helm Chart to manage the Secret the Traffic Manager will use
+  # to read the license key.
   secret:
 
     # Create the Secret with the Helm release create
@@ -184,15 +189,15 @@ telepresenceAPI:
 ## User Configuration
 ################################################################################
 
-# Telepresence requires admin permissions for installation. Creating intercepts 
-# requires lower permissions. Use the following configurations to create roles 
+# Telepresence requires admin permissions for installation. Creating intercepts
+# requires lower permissions. Use the following configurations to create roles
 # so non-admin users can create intercepts.
 #
 # You do not need to create any extra RBAC if your users are cluster admins.
 # For more on how telepresence uses rbac, check out:
 # https://www.getambassador.io/docs/telepresence/latest/reference/rbac/
 clientRbac:
-  
+
   # Create the extra RBAC for non-admin users.
   #
   # Default: false
@@ -209,7 +214,7 @@ clientRbac:
     #   name: jane
     #   apiGroup: rbac.authorization.k8s.io
 
-  # Create namespaced RoleBindings so that users only have access to create 
+  # Create namespaced RoleBindings so that users only have access to create
   # intercepts in certain namespaces.
   #
   # Default: false

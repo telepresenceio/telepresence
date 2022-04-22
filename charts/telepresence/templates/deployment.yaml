@@ -113,10 +113,13 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       volumes:
       {{- if .Values.licenseKey.create }}
       - name: license
-        secret: 
+        secret:
           defaultMode: 420
           secretName: {{ .Values.licenseKey.secret.name }}
       {{- end }}
