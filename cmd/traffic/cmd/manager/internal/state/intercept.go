@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -17,7 +18,9 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -159,13 +162,17 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
-		cm.Data[wl.GetName()] = fmt.Sprintf("create: true\nworkloadKind: %s\nworkloadName: %s\nnamespace: %s",
-			wl.GetKind(), wl.GetName(), wl.GetNamespace())
+		ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig())
+		if err != nil {
+			return nil, err
+		}
+		bf := bytes.Buffer{}
+		if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+			return nil, err
+		}
+		cm.Data[wl.GetName()] = bf.String()
 		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
 			return nil, fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
-		}
-		if ac, err = waitForConfigMapUpdate(ctx, cmAPI, wl.GetName(), wl.GetNamespace()); err != nil {
-			return nil, err
 		}
 	}
 	return ac, nil
