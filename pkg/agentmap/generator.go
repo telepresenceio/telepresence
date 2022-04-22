@@ -6,7 +6,6 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -19,16 +18,23 @@ const (
 	ManagerPortHTTP       = 8081
 )
 
-func GenerateForPod(ctx context.Context, pod *core.Pod) (*agentconfig.Sidecar, error) {
+type GeneratorConfig struct {
+	AgentPort        uint16
+	APIPort          uint16
+	AgentRegistry    string
+	AgentImage       string
+	ManagerNamespace string
+}
+
+func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
 	wl, err := FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
 	}
-	return Generate(ctx, wl)
+	return Generate(ctx, wl, env)
 }
 
-func Generate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
-	env := managerutil.GetEnv(ctx)
+func Generate(ctx context.Context, wl k8sapi.Workload, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
 	pod := wl.GetPodTemplate()
 	pod.Namespace = wl.GetNamespace()
 	cns := pod.Spec.Containers
@@ -39,7 +45,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, er
 		}
 		ports := cn.Ports
 		for pi := range ports {
-			if ports[pi].ContainerPort == env.AgentPort {
+			if ports[pi].ContainerPort == int32(env.AgentPort) {
 				return nil, fmt.Errorf(
 					"the %s.%s pod container %s is exposing the same port (%d) as the %s sidecar",
 					pod.Name, pod.Namespace, cn.Name, env.AgentPort, agentconfig.ContainerName)
@@ -53,7 +59,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, er
 	}
 
 	var ccs []*agentconfig.Container
-	agentPort := uint16(env.AgentPort)
+	agentPort := env.AgentPort
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
 		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, &agentPort, ccs); err != nil {
@@ -72,7 +78,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, er
 		WorkloadKind: wl.GetKind(),
 		ManagerHost:  ManagerAppName + "." + env.ManagerNamespace,
 		ManagerPort:  ManagerPortHTTP,
-		APIPort:      uint16(env.APIPort),
+		APIPort:      env.APIPort,
 		Containers:   ccs,
 	}
 	return ag, nil

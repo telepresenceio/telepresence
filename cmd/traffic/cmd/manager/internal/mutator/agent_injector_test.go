@@ -24,7 +24,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	agentmap2 "github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -598,7 +598,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		test := test // pin it
 		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		t.Run(test.name, func(t *testing.T) {
-			actualConfig, actualErr := generateForPod(t, ctx, test.request)
+			actualConfig, actualErr := generateForPod(t, ctx, test.request, env.GeneratorConfig())
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
 			if actualConfig == nil {
 				actualConfig = &agentconfig.Sidecar{}
@@ -1405,7 +1405,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			cw := NewWatcher("")
 			if test.generateConfig {
 				var ac *agentconfig.Sidecar
-				if ac, actualErr = generateForPod(t, ctx, test.pod); actualErr == nil {
+				if ac, actualErr = generateForPod(t, ctx, test.pod, env.GeneratorConfig()); actualErr == nil {
 					actualErr = cw.Store(ctx, ac, true)
 				}
 			}
@@ -1446,8 +1446,8 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) 
 	}
 }
 
-func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agentconfig.Sidecar, error) {
-	wl, err := agentmap2.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc *agentmap.GeneratorConfig) (*agentconfig.Sidecar, error) {
+	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
 	}
@@ -1468,5 +1468,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod) (*agentcon
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return agentmap2.Generate(ctx, wl)
+	return agentmap.Generate(ctx, wl, gc)
 }

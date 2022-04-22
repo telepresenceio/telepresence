@@ -97,7 +97,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
 		}
-		if config, err = agentmap.GenerateForPod(ctx, pod); err != nil {
+		if config, err = agentmap.GenerateForPod(ctx, pod, managerutil.GetEnv(ctx).GeneratorConfig()); err != nil {
 			return nil, err
 		}
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
@@ -297,7 +297,7 @@ func addAgentContainer(
 	config *agentconfig.Sidecar,
 	patches patchOps,
 ) patchOps {
-	acn := agentContainer(pod, config)
+	acn := agentconfig.AgentContainer(pod, config)
 	if acn == nil {
 		return patches
 	}
@@ -326,7 +326,7 @@ func addAgentContainer(
 
 // addTPEnv adds telepresence specific environment variables to all interceptable app containers
 func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string, patches patchOps) patchOps {
-	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
+	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		patches = addContainerTPEnv(pod, app, env, patches)
 	})
 	return patches
@@ -383,7 +383,7 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 // hidePorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container
 func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
-	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
+	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		for _, ic := range cc.Intercepts {
 			if ic.Headless || ic.ContainerPortName == "" {
 				// Rely on iptables mapping instead of port renames
@@ -498,115 +498,4 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 		}
 	}
 	return nil, nil
-}
-
-// agentContainer will return a configured traffic-agent
-func agentContainer(
-	pod *core.Pod,
-	config *agentconfig.Sidecar,
-) *core.Container {
-	ports := make([]core.ContainerPort, 0, 5)
-	for _, cc := range config.Containers {
-		for _, ic := range cc.Intercepts {
-			ports = append(ports, core.ContainerPort{
-				Name:          ic.ContainerPortName,
-				ContainerPort: int32(ic.AgentPort),
-				Protocol:      core.Protocol(ic.Protocol),
-			})
-		}
-	}
-	if len(ports) == 0 {
-		return nil
-	}
-
-	evs := make([]core.EnvVar, 0, len(config.Containers)*5)
-	efs := make([]core.EnvFromSource, 0, len(config.Containers)*3)
-	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
-		evs = appendAppContainerEnv(app, cc, evs)
-		efs = appendAppContainerEnvFrom(app, cc, efs)
-	})
-	evs = append(evs,
-		core.EnvVar{
-			Name: agentconfig.EnvPrefixAgent + "POD_IP",
-			ValueFrom: &core.EnvVarSource{
-				FieldRef: &core.ObjectFieldSelector{
-					APIVersion: "v1",
-					FieldPath:  "status.podIP",
-				},
-			},
-		})
-
-	mounts := make([]core.VolumeMount, 0, len(config.Containers)*3)
-	eachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
-		mounts = appendAppContainerVolumeMounts(app, cc, mounts)
-	})
-
-	mounts = append(mounts, core.VolumeMount{
-		Name:      agentconfig.AnnotationVolumeName,
-		MountPath: agentconfig.AnnotationMountPoint,
-	})
-	mounts = append(mounts, core.VolumeMount{
-		Name:      agentconfig.ConfigVolumeName,
-		MountPath: agentconfig.ConfigMountPoint,
-	})
-
-	if len(efs) == 0 {
-		efs = nil
-	}
-	return &core.Container{
-		Name:         agentconfig.ContainerName,
-		Image:        config.AgentImage,
-		Args:         []string{"agent"},
-		Ports:        ports,
-		Env:          evs,
-		EnvFrom:      efs,
-		VolumeMounts: mounts,
-		ReadinessProbe: &core.Probe{
-			ProbeHandler: core.ProbeHandler{
-				Exec: &core.ExecAction{
-					Command: []string{"/bin/stat", "/tmp/agent/ready"},
-				},
-			},
-		},
-	}
-}
-
-// eachContainer will find each container in the given config and match it against a container
-// in the pod using its name. The given function is called once for each match.
-func eachContainer(pod *core.Pod, config *agentconfig.Sidecar, f func(*core.Container, *agentconfig.Container)) {
-	cns := pod.Spec.Containers
-	for _, cc := range config.Containers {
-		for i := range pod.Spec.Containers {
-			if app := &cns[i]; app.Name == cc.Name {
-				f(app, cc)
-				break
-			}
-		}
-	}
-}
-
-func appendAppContainerVolumeMounts(app *core.Container, cc *agentconfig.Container, mounts []core.VolumeMount) []core.VolumeMount {
-	for _, m := range app.VolumeMounts {
-		if !strings.HasPrefix(m.MountPath, "/var/run/secrets/") {
-			m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
-		}
-		mounts = append(mounts, m)
-	}
-	return mounts
-}
-
-func appendAppContainerEnv(app *core.Container, cc *agentconfig.Container, es []core.EnvVar) []core.EnvVar {
-	for _, e := range app.Env {
-		e.Name = agentconfig.EnvPrefixApp + cc.EnvPrefix + e.Name
-		es = append(es, e)
-	}
-	return es
-}
-
-func appendAppContainerEnvFrom(app *core.Container, cc *agentconfig.Container, es []core.EnvFromSource) []core.EnvFromSource {
-	for _, e := range app.EnvFrom {
-		e.Prefix = agentconfig.EnvPrefixApp + cc.EnvPrefix + e.Prefix
-		es = append(es, e)
-	}
-	return es
 }

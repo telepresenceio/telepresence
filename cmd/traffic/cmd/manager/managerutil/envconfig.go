@@ -7,6 +7,7 @@ import (
 	"github.com/sethvargo/go-envconfig"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -33,6 +34,16 @@ type Env struct {
 }
 
 type envKey struct{}
+
+func (e *Env) GeneratorConfig() *agentmap.GeneratorConfig {
+	return &agentmap.GeneratorConfig{
+		AgentPort:        uint16(e.AgentPort),
+		APIPort:          uint16(e.APIPort),
+		AgentRegistry:    e.AgentRegistry,
+		AgentImage:       e.AgentImage,
+		ManagerNamespace: e.ManagerNamespace,
+	}
+}
 
 func LoadEnv(ctx context.Context) (context.Context, error) {
 	var env Env
