@@ -181,22 +181,24 @@ func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamesp
 				yamlCount++
 				continue
 			}
-			foundManager = true
 			fileContent := readZip(require, f)
 			// We can be fairly certain we actually got a traffic-manager log
 			// if we see the following
-			require.Regexp(tmHdrMatch, string(fileContent))
+			if tmHdrMatch.Match(fileContent) {
+				foundManager = true
+			}
 		}
 		if helloMatch.MatchString(f.Name) {
 			if strings.HasSuffix(f.Name, ".yaml") {
 				yamlCount++
 				continue
 			}
-			foundAgents++
 			fileContent := readZip(require, f)
-			// We can be fairly certain we actually got a traffic-manager log
+			// We can be fairly certain we actually got a traffic-agent log
 			// if we see the following
-			require.Regexp(agHdrMatch, string(fileContent))
+			if agHdrMatch.Match(fileContent) {
+				foundAgents++
+			}
 		}
 	}
 	return foundManager, foundAgents, yamlCount, fileNames
