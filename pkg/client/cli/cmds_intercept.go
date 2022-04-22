@@ -131,7 +131,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
 	args.previewSpec = &manager.PreviewSpec{}
-	addPreviewFlags("preview-url-", flags, args.previewSpec)
+	AddPreviewFlags("preview-url-", flags, args.previewSpec)
 
 	flags.StringVarP(&args.envFile, "env-file", "e", "", ``+
 		`Also emit the remote environment to an env file in Docker Compose format. `+

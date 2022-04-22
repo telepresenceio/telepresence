@@ -114,9 +114,7 @@ func Main(ctx context.Context, argStrs ...string) error {
 
 	cmd.Flags().StringVar(&args.PreviewSpec.PullRequestUrl, "pull-request", "",
 		"TODO")
-	cmd.Flags().StringToStringVarP(&args.PreviewSpec.AddRequestHeaders, "preview-url-add-request-headers", "", map[string]string{},
-		"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
-	args.PreviewSpec.DisplayBanner = true
+	cli.AddPreviewFlags("preview-url-", cmd.Flags(), &args.PreviewSpec)
 
 	cmd.SetArgs(argStrs)
 	return cmd.ExecuteContext(ctx)

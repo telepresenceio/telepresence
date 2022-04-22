@@ -14,9 +14,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
-// addPreviewFlags mutates 'flags', adding flags to it such that the flags set the appropriate
+// AddPreviewFlags mutates 'flags', adding flags to it such that the flags set the appropriate
 // fields in the given 'spec'.  If 'prefix' is given, long-flag names are prefixed with it.
-func addPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewSpec) {
+func AddPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewSpec) {
 	flags.BoolVarP(&spec.DisplayBanner, prefix+"banner", "b", true, "Display banner on preview page")
 	flags.StringToStringVarP(&spec.AddRequestHeaders, prefix+"add-request-headers", "", map[string]string{},
 		"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
@@ -102,7 +102,7 @@ func previewCommand() *cobra.Command {
 			})
 		},
 	}
-	addPreviewFlags("", createCmd.Flags(), &createSpec)
+	AddPreviewFlags("", createCmd.Flags(), &createSpec)
 
 	removeCmd := &cobra.Command{
 		Use:  "remove <intercept_name>",
