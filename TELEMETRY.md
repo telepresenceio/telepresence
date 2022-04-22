@@ -10,7 +10,8 @@ The following metrics are collected:
 | `intercept_fail`                      | An attempt to create an intercept has failed. Includes an `error` trait detailing the error.                                                         |
 | `intercept_validation_fail`           | There has been an attempt to creat an invalid intercept. Includes an `error` trait detailing the error.                                              |
 | `intercept_success`                   | An attempt to create an intercept has succeeded.                                                                                                     |
-| `preview_domain_create_fail`          | An attempt to create an intercept with a preview URL has failed. Includes an `error` trait                                                           |
+| `preview_domain_create_success`       | An attempt to add a preview URL to an intercept has succeeded.                                                                                       |
+| `preview_domain_create_fail`          | An attempt to add a preview URL to an intercept has failed. Includes an `error` trait.                                                               |
 | `Used legacy syntax`                  | A [legacy command](https://www.telepresence.io/docs/latest/install/migrate-from-legacy/#using-legacy-telepresence-commands) has been used            |
 | `incluster_dns_queries`               | Number of queries made by Telepresence to resolve a name to a cluster service (e.g. `kubernetes.default`). Inclues a `total` and a `failures` trait. |
 | `connect`                             | Telepresence has attempted to connect to the cluster.                                                                                                |

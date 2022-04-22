@@ -670,19 +670,14 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			}
 		}
 
-		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-			Session: is.connInfo.SessionInfo,
-			Name:    args.name,
-			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-				AddPreviewDomain: args.previewSpec,
-			},
-		})
+		intercept, err = AddPreviewDomain(ctx, is.scout,
+			clientUpdateInterceptFn(is.managerClient),
+			is.connInfo.SessionInfo,
+			args.name, // intercept name
+			args.previewSpec)
 		if err != nil {
-			is.scout.Report(ctx, "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
-			err = fmt.Errorf("creating preview domain: %w", err)
 			return true, err
 		}
-		is.scout.SetMetadatum(ctx, "preview_url", intercept.PreviewDomain)
 	} else {
 		intercept = r.InterceptInfo
 	}
