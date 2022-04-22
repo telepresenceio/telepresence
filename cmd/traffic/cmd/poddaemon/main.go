@@ -140,7 +140,7 @@ func main(ctx context.Context, args Args) error {
 	}
 	ctx = client.WithEnv(ctx, env)
 
-	loginExecutor := PoddLoginExecutor{key: args.CloudAPIKey}
+	loginExecutor := loginExecutor{key: args.CloudAPIKey}
 
 	scoutReporter := scout.NewReporter(ctx, processName)
 	userdCoreImpl := userd.GetPoddService(scoutReporter, *cfg, loginExecutor)
