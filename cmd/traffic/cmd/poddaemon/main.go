@@ -30,14 +30,7 @@ type Args struct {
 
 	Port int32
 
-	IngressHost   string
-	IngressPort   int32
-	IngressTLS    bool
-	IngressL5Host string
-
-	PullRequestURL string
-
-	AddRequestHeaders map[string]string
+	PreviewSpec rpc_manager.PreviewSpec
 
 	CloudAPIKey string
 }
@@ -73,8 +66,8 @@ func Main(ctx context.Context, argStrs ...string) error {
 			// env-var.
 			args.CloudAPIKey = os.Getenv("AMBASSADOR_CLOUD_APIKEY")
 
-			if args.IngressL5Host == "" {
-				args.IngressL5Host = args.IngressHost
+			if args.PreviewSpec.Ingress.L5Host == "" {
+				args.PreviewSpec.Ingress.L5Host = args.PreviewSpec.Ingress.Host
 			}
 
 			return main(cmd.Context(), args)
@@ -109,19 +102,21 @@ func Main(ctx context.Context, argStrs ...string) error {
 	cmd.Flags().Int32Var(&args.Port, "port", 8080,
 		"TODO")
 
-	cmd.Flags().StringVar(&args.IngressHost, "ingress-host", "",
+	args.PreviewSpec.Ingress = &rpc_manager.IngressInfo{}
+	cmd.Flags().StringVar(&args.PreviewSpec.Ingress.Host, "ingress-host", "",
 		"L3 hostname (IP address or DNS name) of the relevant ingress")
-	cmd.Flags().Int32Var(&args.IngressPort, "ingress-port", 443,
+	cmd.Flags().Int32Var(&args.PreviewSpec.Ingress.Port, "ingress-port", 443,
 		"L4 TCP port number of the relevant ingress")
-	cmd.Flags().BoolVar(&args.IngressTLS, "ingress-tls", true,
+	cmd.Flags().BoolVar(&args.PreviewSpec.Ingress.UseTls, "ingress-tls", true,
 		"Whether the relevant ingress uses TLS on that port")
-	cmd.Flags().StringVar(&args.IngressL5Host, "ingress-l5host", "",
+	cmd.Flags().StringVar(&args.PreviewSpec.Ingress.L5Host, "ingress-l5host", "",
 		"Hostname to put in requests (TLS-SNI and the HTTP \"Host\" header) (default is to use the L3 hostname)")
 
-	cmd.Flags().StringVar(&args.PullRequestURL, "pull-request", "",
+	cmd.Flags().StringVar(&args.PreviewSpec.PullRequestUrl, "pull-request", "",
 		"TODO")
-	cmd.Flags().StringToStringVarP(&args.AddRequestHeaders, "preview-url-add-request-headers", "", map[string]string{},
+	cmd.Flags().StringToStringVarP(&args.PreviewSpec.AddRequestHeaders, "preview-url-add-request-headers", "", map[string]string{},
 		"Additional headers in key1=value1,key2=value2 pairs injected in every preview page request")
+	args.PreviewSpec.DisplayBanner = true
 
 	cmd.SetArgs(argStrs)
 	return cmd.ExecuteContext(ctx)
@@ -202,18 +197,7 @@ func main(ctx context.Context, args Args) error {
 			userdCoreImpl.ManagerProxy.UpdateIntercept,
 			session,
 			args.WorkloadName, // intercept name
-			&rpc_manager.PreviewSpec{
-				PullRequestUrl:    args.PullRequestURL,
-				AddRequestHeaders: args.AddRequestHeaders,
-				DisplayBanner:     true,
-				Ingress: &rpc_manager.IngressInfo{
-					Host:   args.IngressHost,
-					Port:   args.IngressPort,
-					UseTls: args.IngressTLS,
-					L5Host: args.IngressL5Host,
-				},
-			},
-		)
+			&args.PreviewSpec)
 		if err != nil {
 			return err
 		}
