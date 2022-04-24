@@ -47,7 +47,6 @@ spec:
             - '20'
             - '--retry-all-errors'
             - '--fail'
-            - '--silent'
             - '--request'
             - POST
             - 'https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/upgrade-legacy'

@@ -39,7 +39,6 @@ spec:
               value: /secret/ca.crt
           args:
             - '--fail'
-            - '--silent'
             - '--request'
             - DELETE
             - 'https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/uninstall'

@@ -574,6 +574,8 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	var agentEnv map[string]string
+	// svcProps.preparedIntercept == nil means that we're using an older traffic-manager, incapable
+	// of using PrepareIntercept.
 	if svcProps.preparedIntercept == nil {
 		// It's OK to just call addAgent every time; if the agent is already installed then it's a
 		// no-op.

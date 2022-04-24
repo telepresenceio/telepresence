@@ -52,11 +52,12 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 	outputInsertCount := 0
 	for _, proto := range []string{"tcp", "udp"} {
 		hasRule := false
+	nextCn:
 		for _, cn := range c.Containers {
 			for _, ic := range cn.Intercepts {
 				if strings.EqualFold(proto, ic.Protocol) {
 					hasRule = true
-					break
+					break nextCn
 				}
 			}
 		}

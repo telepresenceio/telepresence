@@ -304,9 +304,9 @@ func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface,
 			}
 			if m, ok := ev.Object.(*core.ConfigMap); ok {
 				if y, ok := m.Data[agentName]; ok {
-					conf, ir := unmarshalConfigMapEntry(y, agentName, namespace)
-					if ir != nil {
-						return nil, ir
+					conf, err := unmarshalConfigMapEntry(y, agentName, namespace)
+					if err != nil {
+						return nil, err
 					}
 					if !conf.Create {
 						return conf, nil
