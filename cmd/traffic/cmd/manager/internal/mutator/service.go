@@ -72,6 +72,24 @@ func ServeMutator(ctx context.Context) error {
 		return nil
 	}
 
+	var agentImage string
+	env := managerutil.GetEnv(ctx)
+
+	// The AgentImage in the container's environment have the highest priority. If it isn't provided,
+	// then we as SystemA for the preferred image. This means that air-gapped environment can declare
+	// their preferred image using the environment variable and refrain from an attempt to contact
+	// SystemA.
+	if env.AgentImage == "" {
+		var err error
+		if agentImage, err = managerutil.AgentImageFromSystemA(ctx); err != nil {
+			dlog.Errorf(ctx, "unable to get Ambassador Cloud preferred agent image: %v", err)
+		}
+	}
+	if agentImage == "" {
+		agentImage = env.QualifiedAgentImage()
+	}
+	dlog.Infof(ctx, "using agent image %s", agentImage)
+
 	var ai *agentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +120,9 @@ func ServeMutator(ctx context.Context) error {
 	})
 	mux.HandleFunc("/upgrade-legacy", func(w http.ResponseWriter, r *http.Request) {
 		dlog.Debug(ctx, "Received upgrade-legacy request...")
-		statusCode, err := serveRequest(ctx, r, http.MethodPost, ai.upgradeLegacy)
+		statusCode, err := serveRequest(ctx, r, http.MethodPost, func(ctx context.Context) {
+			ai.upgradeLegacy(ctx, agentImage)
+		})
 		if err != nil {
 			dlog.Errorf(ctx, "error handling upgrade-legacy request: %v", err)
 			w.WriteHeader(statusCode)
@@ -116,15 +136,14 @@ func ServeMutator(ctx context.Context) error {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	env := managerutil.GetEnv(ctx)
 	cw, err := Load(ctx, env.ManagerNamespace)
 	if err != nil {
 		return err
 	}
-	ai = &agentInjector{agentConfigs: cw}
+	ai = &agentInjector{agentConfigs: cw, agentImage: agentImage}
 	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
 		dtime.SleepWithContext(ctx, time.Second) // Give the server some time to start
-		return cw.Run(ctx)
+		return cw.Run(ctx, agentImage)
 	})
 
 	server := &dhttp.ServerConfig{Handler: mux}

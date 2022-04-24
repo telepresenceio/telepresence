@@ -61,7 +61,7 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *manager.CreateIntercep
 		return interceptError(err)
 	}
 
-	ac, err := s.getOrCreateAgentConfig(ctx, wl)
+	ac, err := s.getOrCreateAgentConfig(ctx, wl, spec.Mechanism != "tcp")
 	if err != nil {
 		return interceptError(err)
 	}
@@ -83,7 +83,29 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *manager.CreateIntercep
 	}, nil
 }
 
-func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+func (s *State) qualifiedAgentImage(ctx context.Context, extended bool) (img string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cachedAgentImage != "" {
+		return s.cachedAgentImage, nil
+	}
+	env := managerutil.GetEnv(ctx)
+	if env.AgentImage == "" {
+		img, err = managerutil.AgentImageFromSystemA(ctx)
+		if err != nil && extended {
+			return "", fmt.Errorf("unable to get Ambassador Cloud preferred agent image: %w", err)
+		}
+	}
+	if img == "" {
+		img = env.QualifiedAgentImage()
+	}
+	if extended {
+		s.cachedAgentImage = img
+	}
+	return img, nil
+}
+
+func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (*agentconfig.Sidecar, error) {
 	ns := wl.GetNamespace()
 	s.mu.Lock()
 	cl, ok := s.cfgMapLocks[ns]
@@ -101,7 +123,7 @@ func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload) 
 	if err != nil {
 		return nil, err
 	}
-	return loadAgentConfig(ctx, cmAPI, cm, wl)
+	return s.loadAgentConfig(ctx, cmAPI, cm, wl, extended)
 }
 
 func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (*core.ConfigMap, error) {
@@ -133,7 +155,13 @@ func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespac
 	return cm, err
 }
 
-func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *core.ConfigMap, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+func (s *State) loadAgentConfig(
+	ctx context.Context,
+	cmAPI typed.ConfigMapInterface,
+	cm *core.ConfigMap,
+	wl k8sapi.Workload,
+	extended bool,
+) (*agentconfig.Sidecar, error) {
 	manuallyManaged, enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
@@ -142,7 +170,25 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
+	agentImage, err := s.qualifiedAgentImage(ctx, extended)
+	if err != nil {
+		return nil, err
+	}
+
 	var ac *agentconfig.Sidecar
+
+	update := func() error {
+		bf := bytes.Buffer{}
+		if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+			return err
+		}
+		cm.Data[wl.GetName()] = bf.String()
+		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
+			return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
+		}
+		return err
+	}
+
 	if y, ok := cm.Data[wl.GetName()]; ok {
 		if ac, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
@@ -150,6 +196,13 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		if ac.Create {
 			// This may happen if someone else is doing the initial intercept at the exact (well, more or less) same time
 			if ac, err = waitForConfigMapUpdate(ctx, cmAPI, wl.GetName(), wl.GetNamespace()); err != nil {
+				return nil, err
+			}
+		}
+		// If the agentImage has changed, and the extended image is requested, then update
+		if ac.AgentImage != agentImage && extended {
+			ac.AgentImage = agentImage
+			if err = update(); err != nil {
 				return nil, err
 			}
 		}
@@ -162,17 +215,12 @@ func loadAgentConfig(ctx context.Context, cmAPI typed.ConfigMapInterface, cm *co
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
-		ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig())
+		ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage))
 		if err != nil {
 			return nil, err
 		}
-		bf := bytes.Buffer{}
-		if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+		if err = update(); err != nil {
 			return nil, err
-		}
-		cm.Data[wl.GetName()] = bf.String()
-		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
-			return nil, fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
 		}
 	}
 	return ac, nil

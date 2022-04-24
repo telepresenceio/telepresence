@@ -174,6 +174,7 @@ type State struct {
 	//  7. `interceptAPIKeys` need to be created and updated in-sync with `intercepts` (but not deleted
 	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
 	//  8. `cfgMapLocks` access must be concurrency protected
+	//  9. `cachedAgentImage` access must be concurrency protected
 	intercepts       watchable.InterceptMap
 	agents           watchable.AgentMap                   // info for agent sessions
 	clients          watchable.ClientMap                  // info for client sessions
@@ -183,6 +184,7 @@ type State struct {
 	timedLogLevel    log.TimedLevel
 	llSubs           *loglevelSubscribers
 	cfgMapLocks      map[string]*sync.Mutex
+	cachedAgentImage string
 }
 
 func NewState(ctx context.Context) *State {

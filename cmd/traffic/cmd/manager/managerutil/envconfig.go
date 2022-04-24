@@ -35,11 +35,11 @@ type Env struct {
 
 type envKey struct{}
 
-func (e *Env) GeneratorConfig() *agentmap.GeneratorConfig {
+func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorConfig {
 	return &agentmap.GeneratorConfig{
 		AgentPort:           uint16(e.AgentPort),
 		APIPort:             uint16(e.APIPort),
-		QualifiedAgentImage: e.QualifiedAgentImage(),
+		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
 	}
 }

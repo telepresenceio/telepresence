@@ -26,6 +26,7 @@ var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: 
 
 type agentInjector struct {
 	agentConfigs Map
+	agentImage   string
 	terminating  int64
 }
 
@@ -75,6 +76,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	if err != nil {
 		return nil, err
 	}
+	env := managerutil.GetEnv(ctx)
 
 	var config *agentconfig.Sidecar
 	ia := pod.Annotations[agentconfig.InjectAnnotation]
@@ -97,7 +99,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
 		}
-		if config, err = agentmap.GenerateForPod(ctx, pod, managerutil.GetEnv(ctx).GeneratorConfig()); err != nil {
+		if config, err = agentmap.GenerateForPod(ctx, pod, env.GeneratorConfig(a.agentImage)); err != nil {
 			return nil, err
 		}
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
@@ -117,7 +119,6 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
 
-	env := managerutil.GetEnv(ctx)
 	if env.APIPort != 0 {
 		tpEnv := make(map[string]string)
 		tpEnv["TELEPRESENCE_API_PORT"] = strconv.Itoa(int(env.APIPort))
@@ -135,8 +136,8 @@ func (a *agentInjector) uninstall(ctx context.Context) {
 }
 
 // upgradeLegacy
-func (a *agentInjector) upgradeLegacy(ctx context.Context) {
-	a.agentConfigs.UninstallV25(ctx)
+func (a *agentInjector) upgradeLegacy(ctx context.Context, extendedAgentImage string) {
+	a.agentConfigs.UninstallV25(ctx, extendedAgentImage)
 }
 
 func needInitContainer(config *agentconfig.Sidecar) bool {
