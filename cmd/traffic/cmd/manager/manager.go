@@ -43,11 +43,11 @@ func Main(ctx context.Context, _ ...string) error {
 		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
+	mgr, ctx := NewManager(ctx)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 	})
-	mgr := NewManager(ctx)
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
@@ -117,7 +117,8 @@ func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 			// presence of the ApiKey in the interceptInfo to determine all
 			// intercepts that we need to inform System A of their deletion
 			if update.Delete && update.Value.ApiKey != "" {
-				if sa, err := m.systema.Get(); err != nil {
+				systema := managerutil.GetSystemAPool(ctx)
+				if sa, err := systema.Get(); err != nil {
 					dlog.Errorln(ctx, "systema: acquire connection:", err)
 				} else {
 					// First we remove the PreviewDomain if it exists
@@ -135,7 +136,7 @@ func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 					}
 
 					// Release the connection we got to delete the domain + intercept
-					if err := m.systema.Done(); err != nil {
+					if err := systema.Done(); err != nil {
 						dlog.Errorln(ctx, "systema: release management connection:", err)
 					}
 				}

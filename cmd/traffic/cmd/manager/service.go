@@ -35,7 +35,6 @@ type Manager struct {
 	clock       Clock
 	ID          string
 	state       *state.State
-	systema     *systemaPool
 	clusterInfo cluster.Info
 
 	rpc.UnsafeManagerServer
@@ -49,16 +48,16 @@ func (wall) Now() time.Time {
 	return time.Now()
 }
 
-func NewManager(ctx context.Context) *Manager {
+func NewManager(ctx context.Context) (*Manager, context.Context) {
 	ret := &Manager{
-		ctx:         ctx,
 		clock:       wall{},
 		ID:          uuid.New().String(),
 		state:       state.NewState(ctx),
 		clusterInfo: cluster.NewInfo(ctx),
 	}
-	ret.systema = NewSystemAPool(ret)
-	return ret
+	ctx = managerutil.WithSystemAPool(ctx, &systemaPool{mgr: ret})
+	ret.ctx = ctx
+	return ret, ctx
 }
 
 // Version returns the version information of the Manager.
@@ -450,6 +449,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
 
+	systemaPool := managerutil.GetSystemAPool(ctx)
 	switch action := req.PreviewDomainAction.(type) {
 	case *rpc.UpdateInterceptRequest_AddPreviewDomain:
 		var domain string
@@ -463,7 +463,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 			// Connect to SystemA.
 			if sa == nil {
-				sa, err = m.systema.Get()
+				sa, err = systemaPool.Get()
 				if err != nil {
 					err = errors.Wrap(err, "systema: acquire connection")
 					return
@@ -505,7 +505,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 						dlog.Errorln(ctx, "systema: remove domain:", err)
 					}
 				}
-				if err := m.systema.Done(); err != nil {
+				if err := systemaPool.Done(); err != nil {
 					dlog.Errorln(ctx, "systema: release connection:", err)
 				}
 			}
@@ -527,7 +527,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 			intercept.PreviewDomain = ""
 		})
 		if domain != "" {
-			if sa, err := m.systema.Get(); err != nil {
+			if sa, err := systemaPool.Get(); err != nil {
 				dlog.Errorln(ctx, "systema: acquire connection:", err)
 			} else {
 				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
@@ -538,7 +538,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 				if err != nil {
 					dlog.Errorln(ctx, "systema: remove domain:", err)
 				}
-				if err := m.systema.Done(); err != nil {
+				if err := systemaPool.Done(); err != nil {
 					dlog.Errorln(ctx, "systema: release connection:", err)
 				}
 			}

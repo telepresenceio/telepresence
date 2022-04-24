@@ -318,7 +318,8 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 	}
 
 	s := grpc.NewServer()
-	rpc.RegisterManagerServer(s, manager.NewManager(ctx))
+	mgr, ctx := manager.NewManager(ctx)
+	rpc.RegisterManagerServer(s, mgr)
 
 	errCh := make(chan error)
 	go func() {
