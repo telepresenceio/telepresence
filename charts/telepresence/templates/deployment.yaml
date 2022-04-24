@@ -60,8 +60,10 @@ spec:
           {{- end }}
           {{- end }}
           {{- if .Values.agentInjector.create }}
+          {{ if .Values.agentInjector.agentImage.name }}
           - name: TELEPRESENCE_AGENT_IMAGE
             value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
+          {{- end }}
           - name: TELEPRESENCE_APP_PROTO_STRATEGY
             value: {{ .Values.agentInjector.appProtocolStrategy }}
           {{- end }}

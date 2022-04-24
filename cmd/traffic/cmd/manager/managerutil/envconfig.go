@@ -37,21 +37,25 @@ type envKey struct{}
 
 func (e *Env) GeneratorConfig() *agentmap.GeneratorConfig {
 	return &agentmap.GeneratorConfig{
-		AgentPort:        uint16(e.AgentPort),
-		APIPort:          uint16(e.APIPort),
-		AgentRegistry:    e.AgentRegistry,
-		AgentImage:       e.AgentImage,
-		ManagerNamespace: e.ManagerNamespace,
+		AgentPort:           uint16(e.AgentPort),
+		APIPort:             uint16(e.APIPort),
+		QualifiedAgentImage: e.QualifiedAgentImage(),
+		ManagerNamespace:    e.ManagerNamespace,
 	}
+}
+
+func (e *Env) QualifiedAgentImage() string {
+	img := e.AgentImage
+	if img == "" {
+		img = "tel2:" + strings.TrimPrefix(version.Version, "v")
+	}
+	return e.AgentRegistry + "/" + img
 }
 
 func LoadEnv(ctx context.Context) (context.Context, error) {
 	var env Env
 	if err := envconfig.Process(ctx, &env); err != nil {
 		return ctx, err
-	}
-	if env.AgentImage == "" {
-		env.AgentImage = "tel2:" + strings.TrimPrefix(version.Version, "v")
 	}
 	return WithEnv(ctx, &env), nil
 }

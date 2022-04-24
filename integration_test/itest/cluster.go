@@ -418,6 +418,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", "tel2"), // Prevent attempts to retrieve image from SystemA
 		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),

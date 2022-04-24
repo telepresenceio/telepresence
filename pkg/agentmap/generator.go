@@ -19,11 +19,10 @@ const (
 )
 
 type GeneratorConfig struct {
-	AgentPort        uint16
-	APIPort          uint16
-	AgentRegistry    string
-	AgentImage       string
-	ManagerNamespace string
+	AgentPort           uint16
+	APIPort             uint16
+	QualifiedAgentImage string
+	ManagerNamespace    string
 }
 
 func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
@@ -34,7 +33,7 @@ func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*
 	return Generate(ctx, wl, env)
 }
 
-func Generate(ctx context.Context, wl k8sapi.Workload, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
+func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*agentconfig.Sidecar, error) {
 	pod := wl.GetPodTemplate()
 	pod.Namespace = wl.GetNamespace()
 	cns := pod.Spec.Containers
@@ -45,10 +44,10 @@ func Generate(ctx context.Context, wl k8sapi.Workload, env *GeneratorConfig) (*a
 		}
 		ports := cn.Ports
 		for pi := range ports {
-			if ports[pi].ContainerPort == int32(env.AgentPort) {
+			if ports[pi].ContainerPort == int32(cfg.AgentPort) {
 				return nil, fmt.Errorf(
 					"the %s.%s pod container %s is exposing the same port (%d) as the %s sidecar",
-					pod.Name, pod.Namespace, cn.Name, env.AgentPort, agentconfig.ContainerName)
+					pod.Name, pod.Namespace, cn.Name, cfg.AgentPort, agentconfig.ContainerName)
 			}
 		}
 	}
@@ -59,7 +58,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, env *GeneratorConfig) (*a
 	}
 
 	var ccs []*agentconfig.Container
-	agentPort := env.AgentPort
+	agentPort := cfg.AgentPort
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
 		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, &agentPort, ccs); err != nil {
@@ -71,14 +70,14 @@ func Generate(ctx context.Context, wl k8sapi.Workload, env *GeneratorConfig) (*a
 	}
 
 	ag := &agentconfig.Sidecar{
-		AgentImage:   env.AgentRegistry + "/" + env.AgentImage,
+		AgentImage:   cfg.QualifiedAgentImage,
 		AgentName:    wl.GetName(),
 		Namespace:    wl.GetNamespace(),
 		WorkloadName: wl.GetName(),
 		WorkloadKind: wl.GetKind(),
-		ManagerHost:  ManagerAppName + "." + env.ManagerNamespace,
+		ManagerHost:  ManagerAppName + "." + cfg.ManagerNamespace,
 		ManagerPort:  ManagerPortHTTP,
-		APIPort:      env.APIPort,
+		APIPort:      cfg.APIPort,
 		Containers:   ccs,
 	}
 	return ag, nil

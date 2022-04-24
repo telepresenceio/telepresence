@@ -2,6 +2,7 @@ package managerutil_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -35,7 +36,7 @@ func TestEnvconfig(t *testing.T) {
 		SystemAHost:     "app.getambassador.io",
 		SystemAPort:     "443",
 		AgentRegistry:   "docker.io/datawire",
-		AgentImage:      "tel2:" + strings.TrimPrefix(version.Version, "v"),
+		AgentImage:      "",
 		AgentPort:       9900,
 		MaxReceiveSize:  resource.MustParse("4Mi"),
 		PodCIDRStrategy: "auto",
@@ -79,6 +80,8 @@ func TestEnvconfig(t *testing.T) {
 			assert.Nil(err)
 			actual := managerutil.GetEnv(ctx)
 			assert.Equal(&expected, actual)
+			assert.Equal(fmt.Sprintf("%s/tel2:%s", actual.AgentRegistry, strings.TrimPrefix(version.Version, "v")),
+				actual.QualifiedAgentImage())
 		})
 	}
 }

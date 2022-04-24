@@ -166,7 +166,7 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 	env := managerutil.GetEnv(ctx)
 	ic := core.Container{
 		Name:  agentconfig.InitContainerName,
-		Image: env.AgentRegistry + "/" + env.AgentImage,
+		Image: env.QualifiedAgentImage(),
 		Args:  []string{"agent-init"},
 		VolumeMounts: []core.VolumeMount{{
 			Name:      agentconfig.ConfigVolumeName,
