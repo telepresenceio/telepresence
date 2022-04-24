@@ -40,12 +40,6 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 			return conn, nil
 		}
 
-		// The google.golang.org/grpc/internal/transport.ConnectionError does not have an
-		// Unwrap method. It does have a Origin method though.
-		// See: https://github.com/grpc/grpc-go/pull/5148
-		if oe, ok := err.(interface{ Origin() error }); ok {
-			err = oe.Origin()
-		}
 		if firstTry && errors.Is(err, unix.ECONNREFUSED) {
 			// Socket exists but doesn't accept connections. This usually means that the process
 			// terminated ungracefully. To remedy this, we make an attempt to remove the socket
