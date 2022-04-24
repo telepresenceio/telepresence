@@ -24,11 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-type agentInjectorConfig struct {
-	Namespaced bool     `json:"namespaced"`
-	Namespaces []string `json:"namespaces,omitempty"`
-}
-
 type Map interface {
 	GetInto(string, string, interface{}) (bool, error)
 	Run(context.Context, string) error
@@ -49,20 +44,10 @@ func Load(ctx context.Context, namespace string) (m Map, err error) {
 		}
 	}()
 
-	ac := agentInjectorConfig{}
-	cm, err := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
-	if err == nil {
-		if v, ok := cm.Data[agentconfig.InjectorKey]; ok {
-			err = decode(v, &ac)
-			if err != nil {
-				return nil, err
-			}
-			dlog.Infof(ctx, "using %q entry from ConfigMap %s", agentconfig.InjectorKey, agentconfig.ConfigMap)
-		}
-	}
-
-	dlog.Infof(ctx, "Loading ConfigMaps from %v", ac.Namespaces)
-	return NewWatcher(agentconfig.ConfigMap, ac.Namespaces...), nil
+	env := managerutil.GetEnv(ctx)
+	ns := env.GetManagedNamespaces()
+	dlog.Infof(ctx, "Loading ConfigMaps from %v", ns)
+	return NewWatcher(agentconfig.ConfigMap, ns...), nil
 }
 
 func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Workload, error) {
@@ -327,9 +312,6 @@ func (c *configWatcher) eventHandler(ctx context.Context, evCh <-chan watch.Even
 
 func writeToChan(ctx context.Context, es []entry, ch chan<- entry) {
 	for _, e := range es {
-		if e.name == agentconfig.InjectorKey {
-			continue
-		}
 		select {
 		case <-ctx.Done():
 			return
@@ -373,9 +355,6 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	for ns, wlm := range c.data {
 		for k, v := range wlm {
-			if k == agentconfig.InjectorKey {
-				continue
-			}
 			e := &entry{name: k, namespace: ns, value: v}
 			ac, wl, err := e.workload(ctx)
 			if err != nil {

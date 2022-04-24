@@ -52,6 +52,13 @@ func (e *Env) QualifiedAgentImage() string {
 	return e.AgentRegistry + "/" + img
 }
 
+func (e *Env) GetManagedNamespaces() []string {
+	if mns := e.ManagedNamespaces; mns != "" {
+		return strings.Split(mns, " ")
+	}
+	return nil
+}
+
 func LoadEnv(ctx context.Context) (context.Context, error) {
 	var env Env
 	if err := envconfig.Process(ctx, &env); err != nil {

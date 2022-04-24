@@ -3,9 +3,6 @@ package agentconfig
 import "k8s.io/apimachinery/pkg/types"
 
 const (
-	// InjectorKey is the key of the AgentInjector configuration in the agents ConfigMap
-	InjectorKey = "agentInjector"
-
 	// ConfigMap is the name of the ConfigMap that contains the agent configs
 	ConfigMap = "telepresence-agents"
 

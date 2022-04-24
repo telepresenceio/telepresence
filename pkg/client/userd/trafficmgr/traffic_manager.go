@@ -956,13 +956,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 		if cm == nil {
 			return nil
 		}
-		if aiConfig, ok := cm.Data[agentconfig.InjectorKey]; ok {
-			if len(cm.Data) > 1 {
-				cm.Data = nil
-				cm.Data = map[string]string{agentconfig.InjectorKey: aiConfig}
-				return updateAgentConfigMap(ns, cm)
-			}
-		} else if len(cm.Data) > 0 {
+		if len(cm.Data) > 0 {
 			cm.Data = nil
 			return updateAgentConfigMap(ns, cm)
 		}

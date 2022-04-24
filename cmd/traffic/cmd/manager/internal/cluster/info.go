@@ -55,13 +55,8 @@ type info struct {
 
 func NewInfo(ctx context.Context) Info {
 	env := managerutil.GetEnv(ctx)
-	var managedNamespaces []string
-	namespaced := false
-	if mns := env.ManagedNamespaces; mns != "" {
-		managedNamespaces = strings.Split(mns, " ")
-		namespaced = true
-	}
-
+	managedNamespaces := env.GetManagedNamespaces()
+	namespaced := len(managedNamespaces) > 0
 	oi := info{ciSubs: newClusterInfoSubscribers()}
 	ki := k8sapi.GetK8sInterface(ctx)
 
