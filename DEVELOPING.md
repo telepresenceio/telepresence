@@ -48,6 +48,15 @@ The output of `make help` has a bit more information.
    point to a different file) file in order to connect to a cluster;
    same as any other Kubernetes tool.
 
+### Tools
+
+  - docker
+    - The user running the integration tests needs to be in the docker group.
+  - sshfs
+    - On linux, `user_allow_other` must be enabled in `/etc/fuse.conf`.
+  - yq
+    - Write access to `$USER/.config/telepresence/config.yml` is required; linux users are recommended to avoid installing yq as a snap package.
+
 ## Build the binary, push the image
 
 The easiest thing to do to get going:
