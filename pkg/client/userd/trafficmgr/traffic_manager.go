@@ -688,6 +688,8 @@ nextIs:
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
+var SessionExpiredErr = errors.New("session expired")
+
 func (tm *TrafficManager) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer func() {
@@ -720,6 +722,10 @@ func (tm *TrafficManager) remain(c context.Context) error {
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)
+				if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.NotFound {
+					// Session has expired. We need to cancel the owner session and reconnect
+					return SessionExpiredErr
+				}
 			}
 		}
 	}

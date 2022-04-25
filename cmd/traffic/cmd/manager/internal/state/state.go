@@ -305,11 +305,12 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 			if len(s.agentsByName[agent.Name]) == 0 {
 				delete(s.agentsByName, agent.Name)
 			}
+			// remove the session
+			s.agents.Delete(sessionID)
+		} else {
+			s.clients.Delete(sessionID)
 		}
 
-		// remove the session
-		s.agents.Delete(sessionID)
-		s.clients.Delete(sessionID)
 		delete(s.sessions, sessionID)
 
 		// GC any intercepts that relied on this session; prune any intercepts that
@@ -337,16 +338,23 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 	}
 }
 
-// ExpireSessions prunes any sessions that haven't had a MarkSession heartbeat since the given
-// 'moment'.
-func (s *State) ExpireSessions(ctx context.Context, moment time.Time) {
+// ExpireSessions prunes any sessions that haven't had a MarkSession heartbeat since
+// respective given 'moment'.
+func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for id, sess := range s.sessions {
-		if sess.LastMarked().Before(moment) {
-			dlog.Debugf(ctx, "Session %s removed. It has expired", id)
-			s.unlockedRemoveSession(id)
+		if _, ok := sess.(*clientSessionState); ok {
+			if sess.LastMarked().Before(clientMoment) {
+				dlog.Debugf(ctx, "Client Session %s removed. It has expired", id)
+				s.unlockedRemoveSession(id)
+			}
+		} else {
+			if sess.LastMarked().Before(agentMoment) {
+				dlog.Debugf(ctx, "Agent Session %s removed. It has expired", id)
+				s.unlockedRemoveSession(id)
+			}
 		}
 	}
 }
