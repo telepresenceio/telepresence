@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.7 (TBD)
+### 2.5.7 (April 25, 2022)
 
 - Change: A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
 
