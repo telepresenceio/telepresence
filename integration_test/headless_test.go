@@ -16,6 +16,9 @@ import (
 )
 
 func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
+	if itest.GetProfile(s.Context()) == itest.GkeAutopilotProfile {
+		s.T().Skip("GKE Autopilot does not support NET_ADMIN containers which means headless services can't be intercepted")
+	}
 	ctx, cancel := context.WithCancel(dcontext.WithSoftness(s.Context()))
 	defer cancel()
 	const svc = "echo-headless"

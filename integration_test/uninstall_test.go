@@ -49,7 +49,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 		}
 		match, err := regexp.MatchString(jobname+`-[a-z0-9]+-[a-z0-9]+\s+1/1\s+Running`, stdout)
 		return err == nil && match
-	}, 10*time.Second, 2*time.Second)
+	}, itest.PodCreateTimeout(ctx), 2*time.Second)
 
 	require.Eventually(
 		func() bool {
