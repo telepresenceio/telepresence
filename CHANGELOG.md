@@ -7,6 +7,8 @@
 - Bugfix: The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names
   that were resolved correctly at other times.
 
+- Bugfix: A telepresence session will now last for 24 hours after the user's last connectivity. If a session expires, the connector will automatically try to reconnect.
+
 ### 2.5.6 (April 15, 2022)
 
 - Bugfix: The `gather-logs` command will no longer send any logs through `gRPC`.
@@ -23,7 +25,7 @@
 
 - Bugfix: The root daemon will no longer get into a bad state when a disconnect is rapidly followed by a new connect.
 
-- Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces  explicitly mapped 
+- Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces explicitly mapped
   using the `connect` command's `--mapped-namespaces` flag.
 
 - Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
