@@ -1,5 +1,28 @@
 # Changelog
 
+### 2.6.0 (TBD)
+
+- Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
+
+- Change: All pod-injection is performed by the mutating webhook. Client will no longer modify workloads.
+
+- Change: Traffic-agent is configured using a ConfigMap entry. In prior versions, the configuration was passed in the container environment.
+
+- Change: The helm-chart no longer has a default set for the agentInjector.image.name, and unless its set, the traffic-manager will ask
+  SystemA for the preferred image.
+
+- Change: Client no longer needs RBAC permissions to update deployments, replicasets, and statefulsets.
+
+- Change: Telepresence now uses Helm version 3.8.1 when installing the traffic-manager
+
+- Change: The traffic-manager will not accept connections from clients older than 2.6.0. It can't, because they still use the old way of
+  injecting the agent by modifying the workload.
+
+- Change: When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically. The mutating webhook will
+  then ensure that their pods will receive an updated traffic-agent.
+
+- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group. 
+
 ### 2.5.8 (April 27, 2022)
 
 - Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.
