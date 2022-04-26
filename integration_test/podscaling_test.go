@@ -1,8 +1,8 @@
 package integration_test
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,8 +13,9 @@ import (
 	"strings"
 	"time"
 
+	core "k8s.io/api/core/v1"
+
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -29,8 +30,8 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Scale down to zero pods
 	require.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "0"))
 
-	// Wait until the pods have terminated.
-	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 30*time.Second, 2*time.Second)
+	// Wait until the pods have terminated. This might take a long time (several minutes).
+	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 3*time.Minute, 6*time.Second)
 
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
@@ -51,7 +52,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
-	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 30*time.Second, 2*time.Second)
+	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 60*time.Second, 6*time.Second)
 
 	// Verify that intercept becomes active
 	require.Eventually(func() bool {
@@ -97,7 +98,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}()
 
 	// Wait for second pod to arrive
-	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, itest.PodCreateTimeout(ctx), 2*time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, itest.PodCreateTimeout(ctx), 6*time.Second)
 	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Delete the currently intercepted pod
@@ -151,32 +152,34 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}
 }
 
-// Return the number of running pods with app=<service name>. Check reiterates
-// if terminating pods are found using a 2 seconds delay.
+// Return the names of running pods with app=<service name>.
 func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
-tryAgain:
-	for {
-		out, err := s.KubectlOut(ctx, "get", "pods", "--no-headers",
-			"--field-selector", "status.phase=Running",
-			"-l", "app="+s.ServiceName())
-		s.NoError(err)
-		if strings.HasPrefix(out, "No resources found") {
-			return nil
-		}
-		var pods []string
-		sc := bufio.NewScanner(strings.NewReader(out))
-		for sc.Scan() {
-			txt := sc.Text()
-			// Terminating is not a state: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-			if strings.Contains(txt, "Terminating") {
-				dtime.SleepWithContext(ctx, 2*time.Second)
-				continue tryAgain
-			}
-			txt = strings.TrimSpace(txt)
-			if spi := strings.IndexByte(txt, ' '); spi > 0 {
-				pods = append(pods, txt[:spi])
-			}
-		}
-		return pods
+	out, err := s.KubectlOut(ctx, "get", "pods", "-o", "json",
+		"--field-selector", "status.phase==Running",
+		"-l", "app="+s.ServiceName())
+	if err != nil {
+		s.Fail(err.Error())
+		return nil
 	}
+	var pm core.PodList
+	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+		s.Fail(err.Error())
+		return nil
+	}
+	pods := make([]string, 0, len(pm.Items))
+nextPod:
+	for _, pod := range pm.Items {
+		if pod.DeletionTimestamp != nil {
+			// Pod is in terminating state
+			continue
+		}
+		for _, cn := range pod.Status.ContainerStatuses {
+			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+				pods = append(pods, pod.Name)
+				continue nextPod
+			}
+		}
+	}
+	dlog.Infof(ctx, "Running pods %v", pods)
+	return pods
 }
