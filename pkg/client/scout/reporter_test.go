@@ -256,9 +256,12 @@ func TestInstallID(t *testing.T) {
 			},
 		}
 	}
+
 	origEnv := os.Environ()
-	version.Version = "testing"
-	defer func() { version.Version = "" }()
+
+	ov := version.Version
+	version.Version = "v0.0.0"
+	defer func() { version.Version = ov }()
 
 	for tcName, tcData := range testcases {
 		tcData := tcData
