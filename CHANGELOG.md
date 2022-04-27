@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.5.8 (TBD)
+
+- Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.
+
 ### 2.5.7 (April 25, 2022)
 
 - Change: A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
