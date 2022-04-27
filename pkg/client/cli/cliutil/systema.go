@@ -272,6 +272,10 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 // temporary file as the new binary
 func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string) (err error) {
 	dir := filepath.Dir(telProLocation)
+	if err = os.MkdirAll(dir, 0777); err != nil {
+		return errcat.NoDaemonLogs.Newf("error creating directory %q: %w", dir, err)
+	}
+
 	name := filepath.Base(telProLocation)
 	var tmp *os.File
 	if tmp, err = os.CreateTemp(dir, name); err != nil {
