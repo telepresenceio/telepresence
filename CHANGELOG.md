@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.5.8 (TBD)
+### 2.5.8 (April 27, 2022)
 
 - Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.
 
