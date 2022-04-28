@@ -76,7 +76,7 @@ following Free and Open Source software:
     github.com/imdario/mergo                                            v0.3.11                                    3-clause BSD license
     github.com/inconshreveable/mousetrap                                v1.0.0                                     Apache License 2.0
     github.com/jmoiron/sqlx                                             v1.3.1                                     MIT license
-    github.com/json-iterator/go                                         v1.1.10                                    MIT license
+    github.com/json-iterator/go                                         v1.1.12                                    MIT license
     github.com/kr/fs                                                    v0.1.0                                     3-clause BSD license
     github.com/lann/builder                                             v0.0.0-20180802200727-47ae307949d0         MIT license
     github.com/lann/ps                                                  v0.0.0-20150810152359-62de8c46ede0         MIT license
@@ -94,7 +94,7 @@ following Free and Open Source software:
     github.com/moby/spdystream                                          v0.2.0                                     Apache License 2.0
     github.com/moby/term                                                v0.0.0-20201216013528-df9cb8a40635         Apache License 2.0
     github.com/modern-go/concurrent                                     v0.0.0-20180306012644-bacd9c7ef1dd         Apache License 2.0
-    github.com/modern-go/reflect2                                       v1.0.1                                     Apache License 2.0
+    github.com/modern-go/reflect2                                       v1.0.2                                     Apache License 2.0
     github.com/monochromegane/go-gitignore                              v0.0.0-20200626010858-205db1a8cc00         MIT license
     github.com/morikuni/aec                                             v1.0.0                                     MIT license
     github.com/opencontainers/go-digest                                 v1.0.0                                     Apache License 2.0

@@ -21,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func TestInstallID(t *testing.T) {
@@ -255,10 +256,21 @@ func TestInstallID(t *testing.T) {
 			},
 		}
 	}
+
 	origEnv := os.Environ()
+
+	ov := version.Version
+	version.Version = "v0.0.0"
+	defer func() { version.Version = ov }()
+
 	for tcName, tcData := range testcases {
 		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
+			if tcData.InputGOOS != runtime.GOOS {
+				t.Skip()
+				return
+			}
+
 			ctx := dlog.NewTestContext(t, true)
 			homedir := t.TempDir()
 			defer func() {
