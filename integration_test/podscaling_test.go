@@ -35,8 +35,9 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
-	require.Eventually(func() bool {
+	assert.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
+		dlog.Debugf(ctx, "list output = %s", stdout)
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "`+s.ServiceName()+`"`)
 		}
@@ -52,10 +53,10 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
-	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 60*time.Second, 6*time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 60*time.Second, 6*time.Second)
 
 	// Verify that intercept becomes active
-	require.Eventually(func() bool {
+	assert.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"
