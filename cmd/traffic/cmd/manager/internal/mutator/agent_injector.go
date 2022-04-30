@@ -13,6 +13,7 @@ import (
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -109,9 +110,6 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
 
-	// Create patch operations to add the traffic-agent sidecar
-	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
-
 	var patches patchOps
 	patches = addInitContainer(ctx, pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
@@ -124,7 +122,12 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		tpEnv["TELEPRESENCE_API_PORT"] = strconv.Itoa(int(env.APIPort))
 		patches = addTPEnv(pod, config, tpEnv, patches)
 	}
-	dlog.Infof(ctx, "Patches = %s", patches)
+
+	// Create patch operations to add the traffic-agent sidecar
+	if len(patches) > 0 {
+		dlog.Infof(ctx, "Injecting %d patches into pod %s.%s", len(patches), pod.Name, pod.Namespace)
+		dlog.Debugf(ctx, "Patches = %s", patches)
+	}
 	return patches, nil
 }
 
@@ -180,7 +183,7 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 		},
 	}
 
-	if pod.Spec.InitContainers == nil {
+	if len(pod.Spec.InitContainers) == 0 {
 		return append(patches, patchOperation{
 			Op:    "replace",
 			Path:  "/spec/initContainers",
@@ -190,7 +193,10 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 
 	for i, oc := range pod.Spec.InitContainers {
 		if ic.Name == oc.Name {
-			if containerEqual(&ic, &oc) {
+			if ic.Image == oc.Image &&
+				slices.Equal(ic.Args, oc.Args) &&
+				compareVolumeMounts(ic.VolumeMounts, oc.VolumeMounts) &&
+				compareCapabilities(ic.SecurityContext, oc.SecurityContext) {
 				return patches
 			}
 			return append(patches, patchOperation{
@@ -266,6 +272,29 @@ func compareProbes(a, b *core.Probe) bool {
 	}
 	eq := cmp.Equal(ae.Command, be.Command)
 	return eq
+}
+
+func compareCapabilities(a *core.SecurityContext, b *core.SecurityContext) bool {
+	ac := a.Capabilities
+	bc := b.Capabilities
+	if ac == bc {
+		return true
+	}
+	if ac == nil || bc == nil {
+		return false
+	}
+	compareCaps := func(acs []core.Capability, bcs []core.Capability) bool {
+		if len(acs) != len(bcs) {
+			return false
+		}
+		for i := range acs {
+			if acs[i] != bcs[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return compareCaps(ac.Add, bc.Add) && compareCaps(ac.Drop, bc.Drop)
 }
 
 // compareVolumeMounts compares two VolumeMount slices but will not include volume mounts using "kube-api-access-" prefix
