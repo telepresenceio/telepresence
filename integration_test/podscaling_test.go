@@ -31,18 +31,17 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	require.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "0"))
 
 	// Wait until the pods have terminated. This might take a long time (several minutes).
-	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 3*time.Minute, 6*time.Second)
+	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 2*time.Minute, 6*time.Second)
 
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
 	assert.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
-		dlog.Debugf(ctx, "list output = %s", stdout)
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "`+s.ServiceName()+`"`)
 		}
 		return false
-	}, 15*time.Second, time.Second)
+	}, 30*time.Second, 3*time.Second)
 
 	if runtime.GOOS != "darwin" {
 		// Verify that volume mount is broken
@@ -53,7 +52,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
-	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 60*time.Second, 6*time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, itest.PodCreateTimeout(ctx), 6*time.Second)
 
 	// Verify that intercept becomes active
 	assert.Eventually(func() bool {
@@ -62,7 +61,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 15*time.Second, time.Second)
+	}, 30*time.Second, 3*time.Second)
 
 	if runtime.GOOS != "darwin" {
 		// Verify that volume mount is restored
@@ -153,7 +152,9 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}
 }
 
-// Return the names of running pods with app=<service name>.
+// Return the names of running pods with app=<service name>. Running here means
+// that at least one container is still running. I.e. the pod might well be terminating
+// but still considered running.
 func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
 	out, err := s.KubectlOut(ctx, "get", "pods", "-o", "json",
 		"--field-selector", "status.phase==Running",
@@ -170,12 +171,9 @@ func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
 	pods := make([]string, 0, len(pm.Items))
 nextPod:
 	for _, pod := range pm.Items {
-		if pod.DeletionTimestamp != nil {
-			// Pod is in terminating state
-			continue
-		}
 		for _, cn := range pod.Status.ContainerStatuses {
 			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+				// At least one container is still running.
 				pods = append(pods, pod.Name)
 				continue nextPod
 			}
