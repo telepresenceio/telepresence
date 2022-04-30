@@ -38,8 +38,8 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 		func() bool {
 			return !strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents"), svc)
 		},
-		30*time.Second, // waitFor
-		2*time.Second,  // polling interval
+		120*time.Second, // waitFor
+		6*time.Second,   // polling interval
 	)
 }
 
