@@ -18,6 +18,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
+var CommandContext = dexec.CommandContext
+
 var signalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM}
 
 func isAdmin() bool {

@@ -1,0 +1,57 @@
+{{- if not .Values.rbac.only }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: upgrade-legacy
+  namespace: {{ include "telepresence.namespace" . }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      name: upgrade-legacy
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: upgrade-legacy
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "curlimages/curl"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /secret
+          env:
+            - name: CURL_CA_BUNDLE
+              value: /secret/ca.crt
+          # Helm considers applying a deployment a success. It doesn't wait for readinessProbes
+          # unless explicitly told to do so by passing --wait and there's no guarantee that's
+          # been done. Therefore, a retry is needed here to ensure proper upgrade.
+          args:
+            - '--retry'
+            - '5'
+            - '--retry-delay'
+            - '0'
+            - '--retry-max-time'
+            - '20'
+            - '--retry-all-errors'
+            - '--fail'
+            - '--request'
+            - POST
+            - 'https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/upgrade-legacy'
+      volumes:
+        - name: secret-volume
+          secret:
+            secretName: {{ .Values.agentInjector.secret.name }}
+{{- end }}

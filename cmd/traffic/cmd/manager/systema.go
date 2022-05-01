@@ -99,12 +99,6 @@ type systemaPool struct {
 	wait   func() error
 }
 
-func NewSystemAPool(mgr *Manager) *systemaPool {
-	return &systemaPool{
-		mgr: mgr,
-	}
-}
-
 func (p *systemaPool) Get() (systemarpc.SystemACRUDClient, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

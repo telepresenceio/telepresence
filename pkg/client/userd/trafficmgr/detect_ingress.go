@@ -83,7 +83,7 @@ func (tm *TrafficManager) findAllSvcByType(c context.Context, svcType core.Servi
 	// to retrieve ingress info and that task could be moved to the traffic-manager instead.
 	var typedSvcs []*core.Service
 	findTyped := func(ns string) error {
-		ss, err := k8sapi.Services(c, ns)
+		ss, err := k8sapi.Services(c, ns, nil)
 		if err != nil {
 			return err
 		}

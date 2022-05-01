@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // nsWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
@@ -24,7 +25,7 @@ import (
 func (kc *Cluster) startNamespaceWatcher(c context.Context) {
 	cond := sync.Cond{}
 	cond.L = &kc.nsLock
-	kc.nsWatcher = NewWatcher("namespaces", "", kc.ki.CoreV1().RESTClient(), &core.Namespace{}, &cond, func(a, b runtime.Object) bool {
+	kc.nsWatcher = k8sapi.NewWatcher("namespaces", "", kc.ki.CoreV1().RESTClient(), &core.Namespace{}, &cond, func(a, b runtime.Object) bool {
 		return a.(*core.Namespace).Name == b.(*core.Namespace).Name
 	})
 

@@ -7,11 +7,11 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -29,8 +29,6 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 	s.ApplyApp(ctx, "echo-headless", "statefulset/echo-headless")
 	defer s.DeleteSvcAndWorkload(ctx, "statefulset", "echo-headless")
 
-	require := s.Require()
-
 	for _, test := range []struct {
 		webhook bool
 		name    string
@@ -45,9 +43,18 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 		},
 	} {
 		s.Run(test.name, func() {
+			require := s.Require()
 			ctx := s.Context()
 			if test.webhook {
 				require.NoError(annotateForWebhook(ctx, "statefulset", "echo-headless", s.AppNamespace(), 8080))
+				require.Eventually(
+					func() bool {
+						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+						return strings.Contains(stdout, "echo-headless: ready to intercept")
+					},
+					30*time.Second, // waitFor
+					3*time.Second,  // polling interval
+					`never gets install agent`)
 			}
 			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", strconv.Itoa(svcPort))
 			require.Contains(stdout, "Using StatefulSet echo-headless")
@@ -57,11 +64,16 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 				itest.TelepresenceOk(ctx, "leave", "echo-headless-"+s.AppNamespace())
 				if test.webhook {
 					require.NoError(dropWebhookAnnotation(ctx, "statefulset", "echo-headless", s.AppNamespace()))
-					// Give the annotation drop some time to take effect, or the next run will often fail with a "the object has been modified" error
-					dtime.SleepWithContext(ctx, 2*time.Second)
-				} else {
-					itest.TelepresenceOk(ctx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
 				}
+				itest.TelepresenceOk(ctx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
+				require.Eventually(
+					func() bool {
+						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+						return !strings.Contains(stdout, "echo-headless")
+					},
+					30*time.Second, // waitFor
+					3*time.Second,  // polling interval
+					`agent is never removed`)
 			}()
 
 			stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
@@ -69,20 +81,21 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 			require.NotContains(stdout, "Volume Mount Point")
 
 			expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-			s.Require().Eventually(
+			resolver := &net.Resolver{}
+			require.Eventually(
 				// condition
 				func() bool {
-					ip, err := net.DefaultResolver.LookupHost(ctx, svc)
+					ips, err := resolver.LookupIP(ctx, "ip4", svc)
 					if err != nil {
 						dlog.Infof(ctx, "%v", err)
 						return false
 					}
-					if 1 != len(ip) {
-						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
+					if 1 != len(ips) {
+						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
 						return false
 					}
 
-					url := fmt.Sprintf("http://%s:8080", svc)
+					url := fmt.Sprintf("http://%s:8080", ips[0])
 
 					dlog.Infof(ctx, "trying %q...", url)
 					hc := http.Client{Timeout: 2 * time.Second}

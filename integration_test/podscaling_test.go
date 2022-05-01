@@ -1,8 +1,8 @@
 package integration_test
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -28,18 +30,18 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Scale down to zero pods
 	require.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "0"))
 
-	// Wait until the pods have terminated.
-	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 30*time.Second, 2*time.Second)
+	// Wait until the pods have terminated. This might take a long time (several minutes).
+	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 2*time.Minute, 6*time.Second)
 
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
-	require.Eventually(func() bool {
+	assert.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "`+s.ServiceName()+`"`)
 		}
 		return false
-	}, 15*time.Second, time.Second)
+	}, 30*time.Second, 3*time.Second)
 
 	if runtime.GOOS != "darwin" {
 		// Verify that volume mount is broken
@@ -50,16 +52,16 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
-	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, 30*time.Second, 2*time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, itest.PodCreateTimeout(ctx), 6*time.Second)
 
 	// Verify that intercept becomes active
-	require.Eventually(func() bool {
+	assert.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"
 		}
 		return false
-	}, 15*time.Second, time.Second)
+	}, 30*time.Second, 3*time.Second)
 
 	if runtime.GOOS != "darwin" {
 		// Verify that volume mount is restored
@@ -96,7 +98,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}()
 
 	// Wait for second pod to arrive
-	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, itest.PodCreateTimeout(ctx), 2*time.Second)
+	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, itest.PodCreateTimeout(ctx), 6*time.Second)
 	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 
 	// Delete the currently intercepted pod
@@ -150,28 +152,33 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}
 }
 
-// Terminating is not a state, so you may want to wrap calls to this function in an eventually
-// to give any pods that are terminating the chance to complete.
-// https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-func (s *interceptMountSuite) runningPods(ctx context.Context) (pods []string) {
-	out, err := s.KubectlOut(ctx, "get", "pods", "--no-headers",
-		"--field-selector", "status.phase=Running",
+// Return the names of running pods with app=<service name>. Running here means
+// that at least one container is still running. I.e. the pod might well be terminating
+// but still considered running.
+func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
+	out, err := s.KubectlOut(ctx, "get", "pods", "-o", "json",
+		"--field-selector", "status.phase==Running",
 		"-l", "app="+s.ServiceName())
-	s.NoError(err)
-	if strings.HasPrefix(out, "No resources found") {
+	if err != nil {
+		s.Fail(err.Error())
 		return nil
 	}
-	sc := bufio.NewScanner(strings.NewReader(out))
-	for sc.Scan() {
-		txt := sc.Text()
-		// Terminating is not a state: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
-		if strings.Contains(txt, "Terminating") {
-			continue
-		}
-		txt = strings.TrimSpace(txt)
-		if spi := strings.IndexByte(txt, ' '); spi > 0 {
-			pods = append(pods, txt[:spi])
+	var pm core.PodList
+	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+		s.Fail(err.Error())
+		return nil
+	}
+	pods := make([]string, 0, len(pm.Items))
+nextPod:
+	for _, pod := range pm.Items {
+		for _, cn := range pod.Status.ContainerStatuses {
+			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+				// At least one container is still running.
+				pods = append(pods, pod.Name)
+				continue nextPod
+			}
 		}
 	}
+	dlog.Infof(ctx, "Running pods %v", pods)
 	return pods
 }

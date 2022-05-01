@@ -8,6 +8,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -27,7 +28,7 @@ const (
 // dialSocket dials the given named pipe and returns the resulting connection
 func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	conn, err := grpc.DialContext(c, socketName, append([]grpc.DialOption{
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.FailOnNonTempDialError(true),
@@ -36,6 +37,12 @@ func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (
 			return conn, err
 		}),
 	}, opts...)...)
+	// The google.golang.org/grpc/internal/transport.ConnectionError does not have an
+	// Unwrap method. It does have a Origin method though.
+	// See: https://github.com/grpc/grpc-go/pull/5148
+	if oe, ok := err.(interface{ Origin() error }); ok {
+		err = oe.Origin()
+	}
 	return conn, err
 }
 

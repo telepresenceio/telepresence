@@ -14,7 +14,7 @@
 
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
 ifdef GITHUB_SHA
-  TELEPRESENCE_VERSION ?= v2.4.5-gotest.z$(shell bash -c 'echo $${GITHUB_SHA:0:7}')
+  TELEPRESENCE_VERSION ?= v2.6.0-gotest.z$(shell bash -c 'echo $${GITHUB_SHA:0:7}')
 else
   TELEPRESENCE_VERSION ?= $(shell unset GOOS GOARCH; go run ./build-aux/genversion)
 endif

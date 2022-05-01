@@ -1,6 +1,7 @@
 package trafficmgr
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,12 +17,11 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot
+// Deprecated
 func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
@@ -35,6 +35,7 @@ func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
+// Deprecated
 func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
@@ -51,9 +52,27 @@ func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*man
 	return agents
 }
 
-func (tm *TrafficManager) setCurrentAgents(agents []*manager.AgentInfo) {
+type agentsStringer []*manager.AgentInfo
+
+func (as agentsStringer) String() string {
+	sb := bytes.Buffer{}
+	sb.WriteByte('[')
+	for i, a := range as {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(a.Name)
+		sb.WriteByte('.')
+		sb.WriteString(a.Namespace)
+	}
+	sb.WriteByte(']')
+	return sb.String()
+}
+
+func (tm *TrafficManager) setCurrentAgents(ctx context.Context, agents []*manager.AgentInfo) {
 	tm.currentAgentsLock.Lock()
 	tm.currentAgents = agents
+	dlog.Debugf(ctx, "setCurrentAgents %s", agentsStringer(agents))
 	tm.currentAgentsLock.Unlock()
 }
 
@@ -119,7 +138,7 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 		} else {
 			err = nil
 		}
-		tm.setCurrentAgents(nil)
+		tm.setCurrentAgents(ctx, nil)
 		return err
 	}
 
@@ -136,10 +155,10 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 			} else {
 				err = nil
 			}
-			tm.setCurrentAgents(nil)
+			tm.setCurrentAgents(ctx, nil)
 			return err
 		}
-		tm.setCurrentAgents(snapshot.Agents)
+		tm.setCurrentAgents(ctx, snapshot.Agents)
 		tm.notifyAgentWatchers(ctx, snapshot.Agents)
 	}
 	return nil
@@ -156,7 +175,7 @@ func (tm *TrafficManager) watchAgents(ctx context.Context, opts []grpc.CallOptio
 		if err != nil {
 			return err
 		}
-		tm.setCurrentAgents(snapshot.Agents)
+		tm.setCurrentAgents(ctx, snapshot.Agents)
 		tm.notifyAgentWatchers(ctx, snapshot.Agents)
 	}
 	return nil
@@ -177,55 +196,46 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
+// Deprecated
 func (tm *TrafficManager) addAgent(
 	c context.Context,
-	workload k8sapi.Workload,
-	svcprops *ServiceProps,
+	svcProps *serviceProps,
 	agentImageName string,
 	telepresenceAPIPort uint16,
-) *rpc.InterceptResult {
+) (map[string]string, *rpc.InterceptResult) {
+	workload := svcProps.workload
 	agentName := workload.GetName()
 	namespace := workload.GetNamespace()
-	svcUID, kind, err := tm.EnsureAgent(c, workload, svcprops, agentImageName, telepresenceAPIPort)
+	_, kind, err := tm.EnsureAgent(c, workload, svcProps, agentImageName, telepresenceAPIPort)
 	if err != nil {
 		if err == agentNotFound {
-			return &rpc.InterceptResult{
+			return nil, &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
 				ErrorText: agentName,
 			}
 		}
 		dlog.Error(c, err)
-		return &rpc.InterceptResult{
+		return nil, &rpc.InterceptResult{
 			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
 			ErrorText: err.Error(),
 		}
 	}
 
 	dlog.Infof(c, "Waiting for agent for %s %s.%s", kind, agentName, namespace)
-	agent, err := tm.waitForAgent(c, agentName, namespace)
+	ai, err := tm.waitForAgent(c, agentName, namespace)
 	if err != nil {
 		dlog.Error(c, err)
-		return &rpc.InterceptResult{
+		return nil, &rpc.InterceptResult{
 			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
 			ErrorText: err.Error(),
 		}
 	}
 	dlog.Infof(c, "Agent found or created for %s %s.%s", kind, agentName, namespace)
-	return &rpc.InterceptResult{
-		Error:        rpc.InterceptError_UNSPECIFIED,
-		Environment:  agent.Environment,
-		ServiceUid:   svcUID,
-		WorkloadKind: kind,
-		ServiceProps: &userdaemon.IngressInfoRequest{
-			ServiceUid:            svcUID,
-			ServiceName:           svcprops.Service.Name,
-			ServicePortIdentifier: string(svcprops.ServicePort.Port),
-			ServicePort:           svcprops.ServicePort.Port,
-			Namespace:             namespace,
-		},
-	}
+	result := svcProps.interceptResult()
+	return ai.Environment, result
 }
 
+// Deprecated
 func (tm *TrafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)

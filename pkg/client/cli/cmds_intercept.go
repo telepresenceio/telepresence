@@ -346,9 +346,9 @@ func checkMountCapability(ctx context.Context) error {
 	// need to upgrade to a newer version of macFUSE or not
 	var cmd *dexec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = dexec.CommandContext(ctx, "sshfs-win", "cmd", "-V")
+		cmd = proc.CommandContext(ctx, "sshfs-win", "cmd", "-V")
 	} else {
-		cmd = dexec.CommandContext(ctx, "sshfs", "-V")
+		cmd = proc.CommandContext(ctx, "sshfs", "-V")
 	}
 	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
@@ -365,6 +365,55 @@ func checkMountCapability(ctx context.Context) error {
 		return errors.New(`macFUSE 4.0.5 or higher is required on your local machine`)
 	}
 	return nil
+}
+
+func parseNumericPort(portStr string) (uint16, error) {
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return 0, errcat.User.Newf("port numbers must be a valid, positive int, you gave: %q", portStr)
+	}
+	return uint16(port), nil
+}
+
+// parsePort parses portSpec based on how it's formatted
+func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, svcPortId string, err error) {
+	portMapping := strings.Split(portSpec, ":")
+	portError := func() (uint16, uint16, string, error) {
+		if dockerRun {
+			return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>:<container-port>[:<svcPortIdentifier>]")
+		}
+		return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>[:<svcPortIdentifier>]")
+	}
+
+	if local, err = parseNumericPort(portMapping[0]); err != nil {
+		return portError()
+	}
+
+	switch len(portMapping) {
+	case 1:
+	case 2:
+		if dockerRun {
+			if docker, err = parseNumericPort(portMapping[1]); err != nil {
+				return portError()
+			}
+		} else {
+			svcPortId = portMapping[1]
+		}
+	case 3:
+		if !dockerRun {
+			return portError()
+		}
+		if docker, err = parseNumericPort(portMapping[1]); err != nil {
+			return portError()
+		}
+		svcPortId = portMapping[2]
+	default:
+		return portError()
+	}
+	if dockerRun && docker == 0 {
+		docker = local
+	}
+	return local, docker, svcPortId, nil
 }
 
 func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
@@ -387,57 +436,15 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	spec.TargetHost = "127.0.0.1"
 
 	// Parse port into spec based on how it's formatted
-	portMapping := strings.Split(is.args.port, ":")
-	portError := func() error {
-		if is.args.dockerRun {
-			return errcat.User.New("ports must be of the format --ports <local-port>:<container-port>[:<svcPortIdentifier>]")
-		}
-		return errcat.User.New("ports must be of the format --ports <local-port>[:<svcPortIdentifier>]")
-	}
-
-	parsePort := func(portStr string) (uint16, error) {
-		port, err := strconv.ParseUint(portStr, 10, 16)
-		if err != nil {
-			return 0, errcat.User.Newf("port numbers must be a valid, positive int, you gave: %q", is.args.port)
-		}
-		return uint16(port), nil
-	}
-
-	port, err := parsePort(portMapping[0])
+	var err error
+	is.localPort, is.dockerPort, spec.ServicePortIdentifier, err = parsePort(is.args.port, is.args.dockerRun)
 	if err != nil {
 		return nil, err
 	}
-	is.localPort = port
-	spec.TargetPort = int32(port)
-
-	switch len(portMapping) {
-	case 1:
-	case 2:
-		if port, err = parsePort(portMapping[1]); err == nil && is.args.dockerRun {
-			is.dockerPort = port
-		} else {
-			spec.ServicePortIdentifier = portMapping[1]
-		}
-	case 3:
-		if !is.args.dockerRun {
-			return nil, portError()
-		}
-		if port, err = parsePort(portMapping[1]); err != nil {
-			return nil, err
-		}
-		is.dockerPort = port
-		spec.ServicePortIdentifier = portMapping[2]
-	default:
-		return nil, portError()
-	}
-
-	if is.args.dockerRun && is.dockerPort == 0 {
-		is.dockerPort = is.localPort
-	}
+	spec.TargetPort = int32(is.localPort)
 
 	doMount := false
-	err = checkMountCapability(ctx)
-	if err == nil {
+	if err = checkMountCapability(ctx); err == nil {
 		if ir.MountPoint, doMount, err = is.getMountPoint(); err != nil {
 			return nil, err
 		}
@@ -451,8 +458,8 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	}
 
 	for _, toPod := range is.args.toPod {
-		port, err := parsePort(toPod)
-		if err != nil {
+		var port uint16
+		if port, err = parseNumericPort(toPod); err != nil {
 			return nil, errcat.User.Newf("Unable to parse port %s: %w", toPod, err)
 		}
 		spec.ExtraPorts = append(spec.ExtraPorts, int32(port))
@@ -467,12 +474,10 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 		}
 	}
 
-	spec.Mechanism, err = is.args.extState.Mechanism()
-	if err != nil {
+	if spec.Mechanism, err = is.args.extState.Mechanism(); err != nil {
 		return nil, err
 	}
-	spec.MechanismArgs, err = is.args.extState.MechanismArgs()
-	if err != nil {
+	if spec.MechanismArgs, err = is.args.extState.MechanismArgs(); err != nil {
 		return nil, err
 	}
 	return ir, nil
@@ -683,8 +688,9 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	}
 	is.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
 
-	is.env = r.Environment
+	is.env = intercept.Environment
 	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
+	is.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
 	if args.envFile != "" {
 		if err = is.writeEnvFile(); err != nil {
 			return true, err
@@ -701,7 +707,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	if doMount || err != nil {
 		volumeMountProblem = checkMountCapability(ctx)
 	}
-	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
+	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 

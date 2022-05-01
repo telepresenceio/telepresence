@@ -2,16 +2,18 @@ package k8s
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/blang/semver"
+	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -31,7 +33,7 @@ type Cluster struct {
 	// Current Namespace snapshot, get set by namespace Watcher.
 	// The boolean value indicates if this client is allowed to
 	// watch services and retrieve workloads in the namespace
-	nsWatcher *Watcher
+	nsWatcher *k8sapi.Watcher
 
 	// nsLock protects currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex
@@ -60,7 +62,18 @@ func (kc *Cluster) check(c context.Context) error {
 	errCh := make(chan error)
 	go func() {
 		defer close(errCh)
-		info, err := k8sapi.GetK8sInterface(c).Discovery().ServerVersion()
+		var info *version.Info
+		var err error
+		for attempts := 0; attempts < 4; attempts++ {
+			if info, err = k8sapi.GetK8sInterface(c).Discovery().ServerVersion(); err != nil {
+				if strings.Contains(err.Error(), "connection refused") {
+					dlog.Warnf(c, "Connection to connect failed, retry %d", attempts+1)
+					dtime.SleepWithContext(c, 400*time.Millisecond)
+					continue
+				}
+			}
+			break
+		}
 		if err != nil {
 			errCh <- err
 			return
@@ -93,31 +106,6 @@ func (kc *Cluster) check(c context.Context) error {
 		}
 	}
 	return c.Err()
-}
-
-// FindPodFromSelector returns a pod with the given name-hex-hex
-func (kc *Cluster) FindPodFromSelector(c context.Context, namespace string, selector map[string]string) (k8sapi.Object, error) {
-	pods, err := k8sapi.Pods(c, namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range pods {
-		podLabels := pods[i].GetLabels()
-		match := true
-		// check if selector is in labels
-		for key, val := range selector {
-			if podLabels[key] != val {
-				match = false
-				break
-			}
-		}
-		if match {
-			return pods[i], nil
-		}
-	}
-
-	return nil, errors.New("pod not found")
 }
 
 // namespaceAccessible answers the question if the namespace is present and accessible

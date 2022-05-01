@@ -5,6 +5,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	typedCore "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -17,6 +18,7 @@ type Object interface {
 	GetKind() string
 	Delete(context.Context) error
 	Refresh(context.Context) error
+	Selector() (labels.Selector, error)
 	Update(context.Context) error
 	Patch(context.Context, types.PatchType, []byte, ...string) error
 }
@@ -30,8 +32,8 @@ func GetService(c context.Context, name, namespace string) (Object, error) {
 }
 
 // Services returns all services found in the given Namespace
-func Services(c context.Context, namespace string) ([]Object, error) {
-	ls, err := services(c, namespace).List(c, meta.ListOptions{})
+func Services(c context.Context, namespace string, labelSelector labels.Set) ([]Object, error) {
+	ls, err := services(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +67,8 @@ func GetPod(c context.Context, name, namespace string) (Object, error) {
 }
 
 // Pods returns all pods found in the given Namespace
-func Pods(c context.Context, namespace string) ([]Object, error) {
-	ls, err := pods(c, namespace).List(c, meta.ListOptions{})
+func Pods(c context.Context, namespace string, labelSelector labels.Set) ([]Object, error) {
+	ls, err := pods(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +129,13 @@ func (o *service) Refresh(c context.Context) error {
 	return err
 }
 
+func (o *service) Selector() (labels.Selector, error) {
+	if len(o.Spec.Selector) == 0 {
+		return nil, nil
+	}
+	return labels.SelectorFromSet(o.Spec.Selector), nil
+}
+
 func (o *service) Update(c context.Context) error {
 	d, err := o.ki(c).Update(c, o.Service, meta.UpdateOptions{})
 	if err == nil {
@@ -169,6 +178,10 @@ func (o *pod) Refresh(c context.Context) error {
 		o.Pod = d
 	}
 	return err
+}
+
+func (o *pod) Selector() (labels.Selector, error) {
+	return nil, nil
 }
 
 func (o *pod) Update(c context.Context) error {

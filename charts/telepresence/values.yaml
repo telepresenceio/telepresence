@@ -155,7 +155,7 @@ agentInjector:
   name: agent-injector
   agentImage:
     registry: docker.io/datawire
-    name: tel2
+    name: ""
     tag: ""
   service:
     type: ClusterIP

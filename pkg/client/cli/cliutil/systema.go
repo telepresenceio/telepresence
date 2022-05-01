@@ -17,7 +17,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v2"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -25,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if
@@ -165,7 +165,7 @@ func telProBinary(ctx context.Context) (string, error) {
 }
 
 func checkProVersion(ctx context.Context, telProLocation string) (bool, error) {
-	proCmd := dexec.CommandContext(ctx, telProLocation, "pro-version")
+	proCmd := proc.CommandContext(ctx, telProLocation, "pro-version")
 	proCmd.DisableLogging = true
 	output, err := proCmd.CombinedOutput()
 	if err != nil {

@@ -12,11 +12,14 @@ import (
 
 	"github.com/blang/semver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -27,7 +30,7 @@ func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		return &rpc.AmbassadorCloudConnection{}, err
 	}
@@ -41,11 +44,28 @@ func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc
 	return cloudConnectInfo, nil
 }
 
+type interceptsStringer []*rpc.InterceptInfo
+
+func (is interceptsStringer) String() string {
+	sb := strings.Builder{}
+	sb.WriteByte('[')
+	for i, ii := range is {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(ii.Id)
+		sb.WriteByte(' ')
+		sb.WriteString(ii.Disposition.String())
+	}
+	sb.WriteByte(']')
+	return sb.String()
+}
+
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		return err
 	}
@@ -76,17 +96,11 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	// We use this to place a file which conveys 'readiness'
 	// The presence of this file is used in the readiness check.
 	dir := "/tmp/agent"
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.Mkdir("/tmp/agent", 0777); err != nil {
+	if _, err := dos.Stat(ctx, dir); os.IsNotExist(err) {
+		if err := dos.Mkdir(ctx, "/tmp/agent", 0777); err != nil {
 			return err
 		}
 	}
-	file, err := os.OpenFile("/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
 	defer func() {
 		// The ctx might well be cancelled at this point but is used as parent during
 		// the timed clean-up to keep logging intact.
@@ -109,25 +123,29 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	if err != nil {
 		return err
 	}
-	go lookupHostWaitLoop(ctx, manager, session, lrStream)
+
+	wg := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	wg.Go("lookupHostWait", func(ctx context.Context) error {
+		return lookupHostWaitLoop(ctx, manager, session, lrStream)
+	})
 
 	// Deal with dial requests from the manager
 	dialerStream, err := manager.WatchDial(ctx, session)
 	if err != nil {
 		return err
 	}
-	go tunnel.DialWaitLoop(ctx, manager, dialerStream, session.SessionId)
+	wg.Go("dialWait", func(ctx context.Context) error {
+		return tunnel.DialWaitLoop(ctx, manager, dialerStream, session.SessionId)
+	})
 
 	// Deal with log-level changes
 	logLevelStream, err := manager.WatchLogLevel(ctx, &empty.Empty{})
 	if err != nil {
 		return err
 	}
-	go logLevelWaitLoop(ctx, logLevelStream)
-
-	// Loop calling Remain
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	wg.Go("logLevelWait", func(ctx context.Context) error {
+		return logLevelWaitLoop(ctx, logLevelStream)
+	})
 
 	snapshots := make(chan *rpc.InterceptInfoSnapshot)
 
@@ -136,20 +154,32 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	if err != nil {
 		return err
 	}
-	go interceptWaitLoop(ctx, cancel, snapshots, stream)
+	wg.Go("interceptWait", func(ctx context.Context) error {
+		return interceptWaitLoop(ctx, cancel, snapshots, stream)
+	})
+	wg.Go("handleIntercept", func(ctx context.Context) error {
+		return handleInterceptLoop(ctx, snapshots, state, manager, session)
+	})
+	wg.Go("remain", func(ctx context.Context) error {
+		return remainLoop(ctx, manager, session)
+	})
 
+	file, err := dos.OpenFile(ctx, "/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	_ = file.Close()
+	return wg.Wait()
+}
+
+func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo) error {
+	// Loop calling Remain
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case snapshot := <-snapshots:
-			reviews := state.HandleIntercepts(ctx, snapshot.Intercepts)
-			for _, review := range reviews {
-				review.Session = session
-				if _, err := manager.ReviewIntercept(ctx, review); err != nil {
-					return err
-				}
-			}
 		case <-ticker.C:
 		}
 
@@ -159,31 +189,50 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	}
 }
 
-func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots chan<- *rpc.InterceptInfoSnapshot, stream rpc.Manager_WatchInterceptsClient) {
+func handleInterceptLoop(ctx context.Context, snapshots <-chan *rpc.InterceptInfoSnapshot, state State, manager rpc.ManagerClient, session *rpc.SessionInfo) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case snapshot := <-snapshots:
+			dlog.Debugf(ctx, "HandleIntercepts %s", interceptsStringer(snapshot.Intercepts))
+			reviews := state.HandleIntercepts(ctx, snapshot.Intercepts)
+			for _, review := range reviews {
+				review.Session = session
+				if _, err := manager.ReviewIntercept(ctx, review); err != nil {
+					return err
+				}
+			}
+		}
+	}
+}
+
+func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots chan<- *rpc.InterceptInfoSnapshot, stream rpc.Manager_WatchInterceptsClient) error {
 	defer cancel() // Drop the gRPC connection if we leave this function
 	for {
 		snapshot, err := stream.Recv()
 		if err != nil {
 			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-				dlog.Errorf(ctx, "stream Recv: %+v", err)
+				return fmt.Errorf("stream Recv: %w", err)
 			}
-			return
+			return nil
 		}
 		snapshots <- snapshot
 	}
 }
 
-func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lookupHostStream rpc.Manager_WatchLookupHostClient) {
+func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lookupHostStream rpc.Manager_WatchLookupHostClient) error {
 	for ctx.Err() == nil {
 		lr, err := lookupHostStream.Recv()
 		if err != nil {
 			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-				dlog.Debugf(ctx, "lookup request stream recv: %+v", err)
+				return fmt.Errorf("lookup request stream recv: %w", err)
 			}
-			return
+			return nil
 		}
 		go lookupAndRespond(ctx, manager, session, lr)
 	}
+	return nil
 }
 
 func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
@@ -220,24 +269,24 @@ func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *r
 }
 
 // GetLogLevel will return the log level that this agent should use
-func GetLogLevel() string {
-	level, ok := os.LookupEnv(install.EnvPrefix + "LOG_LEVEL")
+func GetLogLevel(ctx context.Context) string {
+	level, ok := dos.LookupEnv(ctx, install.EnvPrefix+"LOG_LEVEL")
 	if !ok {
-		level = os.Getenv("LOG_LEVEL")
+		level = dos.Getenv(ctx, "LOG_LEVEL")
 	}
 	return level
 }
 
-func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) {
-	level := GetLogLevel()
+func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) error {
+	level := GetLogLevel(ctx)
 	timedLevel := log.NewTimedLevel(level, log.SetLevel)
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
 		if err != nil {
 			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-				dlog.Debugf(ctx, "log-level stream recv: %+v", err)
+				return fmt.Errorf("log-level stream recv: %w", err)
 			}
-			return
+			return nil
 		}
 		duration := time.Duration(0)
 		if ll.Duration != nil {
@@ -245,4 +294,5 @@ func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLe
 		}
 		timedLevel.Set(ctx, ll.LogLevel, duration)
 	}
+	return nil
 }

@@ -8,16 +8,21 @@ import (
 	"os"
 	"os/user"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dcontext"
@@ -28,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -35,6 +41,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
@@ -56,7 +63,7 @@ type WatchWorkloadsStream interface {
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, k8sapi.Workload, *ServiceProps)
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
 	GetInterceptSpec(string) *manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
@@ -107,6 +114,9 @@ type TrafficManager struct {
 
 	// manager client connection
 	managerConn *grpc.ClientConn
+
+	// version reported by the manager
+	managerVersion semver.Version
 
 	// search paths are propagated to the rootDaemon
 	rootDaemon daemon.DaemonClient
@@ -161,6 +171,10 @@ type interceptResult struct {
 	intercept *manager.InterceptInfo
 	err       error
 }
+
+// firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
+// TODO: Change to released version
+var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
 
 func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (Session, *connector.ConnectInfo) {
 	sr.Report(c, "connect")
@@ -350,7 +364,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	defer tCancel()
 
 	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError()}
@@ -367,6 +381,15 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 	mClient := manager.NewManagerClient(conn)
+
+	vi, err := mClient.Version(tc, &empty.Empty{})
+	if err != nil {
+		return nil, client.CheckTimeout(tc, fmt.Errorf("manager.Version: %w", err))
+	}
+	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
+	if err != nil {
+		return nil, client.CheckTimeout(tc, fmt.Errorf("unable to parse manager.Version: %w", err))
+	}
 
 	dlog.Debugf(c, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
 	si, err := mClient.ArriveAsClient(tc, &manager.ClientInfo{
@@ -387,6 +410,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
 		managerClient:   mClient,
 		managerConn:     conn,
+		managerVersion:  managerVersion,
 		sessionInfo:     si,
 		rootDaemon:      rootDaemon,
 		localIntercepts: map[string]string{},
@@ -470,7 +494,7 @@ func (tm *TrafficManager) session() *manager.SessionInfo {
 func (tm *TrafficManager) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
-	iMap map[string]*manager.InterceptInfo,
+	iMap map[string][]*manager.InterceptInfo,
 	aMap map[string]*manager.AgentInfo,
 	filter rpc.ListRequest_Filter,
 ) ([]*rpc.WorkloadInfo, error) {
@@ -507,12 +531,10 @@ func (tm *TrafficManager) getInfosForWorkloads(
 				},
 			}
 			var ok bool
-			wlInfo.InterceptInfo, ok = iMap[name]
-			if !ok && filter <= rpc.ListRequest_INTERCEPTS {
+			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
 			}
-			wlInfo.AgentInfo, ok = aMap[name]
-			if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			if wlInfo.AgentInfo, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
 			wiMap[workload.GetUID()] = wlInfo
@@ -649,12 +671,12 @@ func (tm *TrafficManager) workloadInfoSnapshot(
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 
-	iMap := make(map[string]*manager.InterceptInfo, len(is))
+	iMap := make(map[string][]*manager.InterceptInfo, len(is))
 nextIs:
 	for _, i := range is {
 		for _, ns := range nss {
 			if i.Spec.Namespace == ns {
-				iMap[i.Spec.Agent] = i
+				iMap[i.Spec.Agent] = append(iMap[i.Spec.Agent], i)
 				continue nextIs
 			}
 		}
@@ -675,11 +697,11 @@ nextIs:
 		for localIntercept, localNs := range tm.localIntercepts {
 			for _, ns := range nss {
 				if localNs == ns {
-					workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
+					workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
 						Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
 						Disposition:       manager.InterceptDispositionType_ACTIVE,
 						MechanismArgsDesc: "as local-only",
-					}})
+					}}})
 					continue nextLocalNs
 				}
 			}
@@ -768,6 +790,7 @@ func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 
 // Given a slice of AgentInfo, this returns another slice of agents with one
 // agent per namespace, name pair.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
 	type workload struct {
 		name, namespace string
@@ -784,7 +807,8 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 	return representativeAgents
 }
 
-func (tm *TrafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+// Deprecated: not used with traffic-manager versions >= 2.6.0
+func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
 	agents := tm.getCurrentAgents()
 
@@ -834,6 +858,128 @@ func (tm *TrafficManager) Uninstall(c context.Context, ur *rpc.UninstallRequest)
 		}
 	}
 	return result, nil
+}
+
+// Uninstall parts or all of Telepresence from the cluster if the client has sufficient credentials to do so.
+//
+// Uninstalling everything requires that the client owns the helm chart installation and has permissions to run
+// a `helm uninstall traffic-manager`.
+//
+// Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
+func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+	if tm.managerVersion.LT(firstAgentConfigMapVersion) {
+		// fall back traffic-manager behaviour prior to 2.6
+		return tm.legacyUninstall(ctx, ur)
+	}
+
+	result := func(err error) (*rpc.UninstallResult, error) {
+		r := &rpc.UninstallResult{}
+		if err != nil {
+			r.ErrorText = err.Error()
+			r.ErrorCategory = int32(errcat.GetCategory(err))
+		}
+		return r, nil
+	}
+
+	if ur.UninstallType == rpc.UninstallRequest_EVERYTHING {
+		_ = tm.clearIntercepts(ctx)
+		// Uninstalling using helm chart will roll out all affected pods and remove their respective traffic-agent. This
+		// of course, given that the client has permissions to do that, and the chart is owned by the client.
+		if err := helm.DeleteTrafficManager(ctx, tm.ConfigFlags, tm.GetManagerNamespace(), true); err != nil {
+			return result(errcat.User.New(err))
+		}
+		return result(nil)
+	}
+
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
+		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
+		if err != nil {
+			if errors2.IsNotFound(err) {
+				// there are no agents to remove
+				return nil, nil
+			}
+			// TODO: find out if this is due to lack of access credentials and if so, report using errcat.User with more meaningful message
+			return nil, err
+		}
+		return cm, nil
+	}
+
+	updateAgentConfigMap := func(ns string, cm *core.ConfigMap) error {
+		_, err := api.ConfigMaps(ns).Update(ctx, cm, meta.UpdateOptions{})
+		return err
+	}
+
+	// Removal of agents requested. We need the agents ConfigMap in order to do that.
+	// This removal is deliberately done in the client instead of the traffic-manager so that RBAC can be configured
+	// to prevent the clients from doing it.
+	if ur.UninstallType == rpc.UninstallRequest_NAMED_AGENTS {
+		// must have a valid namespace in order to uninstall named agents
+		namespace := tm.ActualNamespace(ur.Namespace)
+		if namespace == "" {
+			// namespace is not mapped
+			return result(errcat.User.Newf("namespace %s is not mapped", ur.Namespace))
+		}
+		cm, err := loadAgentConfigMap(namespace)
+		if err != nil || cm == nil {
+			return result(err)
+		}
+		changed := false
+		ics := tm.getCurrentIntercepts()
+		for _, an := range ur.Agents {
+			for _, ic := range ics {
+				if ic.Spec.Namespace == namespace && ic.Spec.Agent == an {
+					_ = tm.RemoveIntercept(ctx, ic.Id)
+					break
+				}
+			}
+			if _, ok := cm.Data[an]; ok {
+				delete(cm.Data, an)
+				changed = true
+			}
+		}
+		if changed {
+			return result(updateAgentConfigMap(namespace, cm))
+		}
+		return result(nil)
+	}
+	if ur.UninstallType != rpc.UninstallRequest_ALL_AGENTS {
+		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
+	}
+
+	_ = tm.clearIntercepts(ctx)
+	clearAgentsConfigMap := func(ns string) error {
+		cm, err := loadAgentConfigMap(ns)
+		if err != nil {
+			return err
+		}
+		if cm == nil {
+			return nil
+		}
+		if len(cm.Data) > 0 {
+			cm.Data = nil
+			return updateAgentConfigMap(ns, cm)
+		}
+		return nil
+	}
+
+	if ur.Namespace != "" {
+		namespace := tm.ActualNamespace(ur.Namespace)
+		if namespace == "" {
+			// namespace is not mapped
+			return result(errcat.User.Newf("namespace %s is not mapped", ur.Namespace))
+		}
+		return result(clearAgentsConfigMap(namespace))
+	} else {
+		// Load all effected configmaps
+		for _, ns := range tm.GetCurrentNamespaces(true) {
+			err := clearAgentsConfigMap(ns)
+			if err != nil {
+				return result(err)
+			}
+		}
+	}
+	return result(nil)
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster

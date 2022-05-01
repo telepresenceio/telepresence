@@ -10,8 +10,8 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 func GetRoutingTable(ctx context.Context) ([]Route, error) {
@@ -79,7 +79,7 @@ $obj.IPAddress
 $obj.NextHop
 $obj.InterfaceIndex[0]
 `, ip)
-	cmd := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
+	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {

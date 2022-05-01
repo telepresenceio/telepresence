@@ -7,20 +7,19 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
 const (
-	appHost       = "appHost"
-	appPort int32 = 5000
-	mgrHost       = "managerHost"
+	appHost        = "appHost"
+	appPort uint16 = 5000
 )
 
-func makeFS(t *testing.T) (*forwarder.Forwarder, agent.State) {
+func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
@@ -36,19 +35,23 @@ func makeFS(t *testing.T) (*forwarder.Forwarder, agent.State) {
 		return port == appPort
 	}, 1*time.Second, 10*time.Millisecond)
 
-	s := agent.NewState(f, mgrHost, "default", "xyz", 0)
+	c, err := agent.LoadConfig(ctx)
+	require.NoError(t, err)
+	s := agent.NewSimpleState(c)
+	cn := c.AgentConfig().Containers[0]
+	s.AddInterceptState(agent.NewInterceptState(s, f, cn.Intercepts[0], cn.MountPoint, map[string]string{}))
 
 	return f, s
 }
 
 func TestState_HandleIntercepts(t *testing.T) {
-	ctx := dlog.NewTestContext(t, false)
+	ctx := testContext(t, nil)
 	a := assert.New(t)
-	f, s := makeFS(t)
+	f, s := makeFS(t, ctx)
 
 	var (
 		host    string
-		port    int32
+		port    uint16
 		cepts   []*rpc.InterceptInfo
 		reviews []*rpc.ReviewInterceptRequest
 	)
@@ -63,28 +66,34 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 
 	// Prepare some intercepts..
 
 	cepts = []*rpc.InterceptInfo{
 		{
 			Spec: &rpc.InterceptSpec{
-				Name:      "cept1Name",
-				Client:    "user@host1",
-				Agent:     "agentName",
-				Mechanism: "tcp",
-				Namespace: "default",
+				Name:                  "cept1Name",
+				Client:                "user@host1",
+				Agent:                 "agentName",
+				Mechanism:             "tcp",
+				Namespace:             namespace,
+				ServiceName:           serviceName,
+				ServicePortIdentifier: "http",
+				TargetPort:            8080,
 			},
 			Id: "intercept-01",
 		},
 		{
 			Spec: &rpc.InterceptSpec{
-				Name:      "cept2Name",
-				Client:    "user@host2",
-				Agent:     "agentName",
-				Mechanism: "tcp",
-				Namespace: "default",
+				Name:                  "cept2Name",
+				Client:                "user@host2",
+				Agent:                 "agentName",
+				Mechanism:             "tcp",
+				Namespace:             namespace,
+				ServiceName:           serviceName,
+				ServicePortIdentifier: "http",
+				TargetPort:            8080,
 			},
 			Id: "intercept-02",
 		},
@@ -97,7 +106,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 
 	// Handle reviews waiting intercepts
 
@@ -106,7 +115,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 2)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 
 	// Reviews are in the correct order
 
@@ -119,14 +128,14 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[1].Disposition)
 	a.Equal("Conflicts with the currently-waiting-to-be-served intercept \"intercept-01\"", reviews[1].Message)
 
-	// Handle updates forwarding
+	// Handle conflicts
 
 	cepts[0].Disposition = rpc.InterceptDispositionType_ACTIVE
 	cepts[1].Disposition = rpc.InterceptDispositionType_WAITING
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 1)
-	a.True(f.Intercepting())
+	a.Equal(cepts[1].Id, reviews[0].Id)
 
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[0].Disposition)
 	a.Equal("Conflicts with the currently-served intercept \"intercept-01\"", reviews[0].Message)
@@ -135,5 +144,5 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, nil)
 	a.Len(reviews, 0)
-	a.False(f.Intercepting())
+	a.Equal("", f.InterceptId())
 }

@@ -11,6 +11,9 @@ import (
 type Request interface {
 	fmt.Stringer
 
+	// Headers returns Headers of this instance.
+	Headers() Headers
+
 	// Map returns the map correspondence of this instance. The returned value can be
 	// used as an argument to NewRequest to create an identical Request.
 	Map() map[string]string
@@ -18,23 +21,26 @@ type Request interface {
 	// Matches returns true if both the path Value matcher and the Headers matcher in this instance are
 	// matched by the given http.Request.
 	Matches(path string, headers http.Header) bool
+
+	// Path returns the path
+	Path() Value
 }
 
 type request struct {
 	path    Value
-	headers headers
+	headers HeaderMap
 }
 
-// NewRequest creates a new Request based on the values of the given map. Aside from http headers,
+// NewRequestFromMap creates a new Request based on the values of the given map. Aside from http headers,
 // the map may contain one of three special keys.
 //
 //   :path-equal: path will match if equal to the value
 //   :path-prefix: path will match prefixed by the value
 //   :path-regex: path will match it matches the regexp value
 //
-func NewRequest(m map[string]string) (Request, error) {
+func NewRequestFromMap(m map[string]string) (Request, error) {
 	var pm Value
-	hm := make(headers, len(m))
+	hm := make(HeaderMap, len(m))
 
 	var err error
 	for k, v := range m {
@@ -55,10 +61,14 @@ func NewRequest(m map[string]string) (Request, error) {
 			hm[textproto.CanonicalMIMEHeaderKey(k)] = vm
 		}
 	}
+	return NewRequest(pm, hm), nil
+}
+
+func NewRequest(path Value, hm HeaderMap) Request {
 	if len(hm) == 0 {
 		hm = nil
 	}
-	return &request{path: pm, headers: hm}, nil
+	return &request{path: path, headers: hm}
 }
 
 // Map returns the map correspondence of this instance. The returned value can be
@@ -86,10 +96,20 @@ func (r *request) Map() map[string]string {
 	return m
 }
 
+// Headers returns Headers of this instance.
+func (r *request) Headers() Headers {
+	return r.headers
+}
+
 // Matches returns true if both the path Value matcher and the Headers matcher in this instance are
 // matched by the given http.Request.
 func (r *request) Matches(path string, headers http.Header) bool {
 	return r == nil || (r.path == nil || r.path.Matches(path)) && (r.headers == nil || r.headers.Matches(headers))
+}
+
+// Path returns the path
+func (r *request) Path() Value {
+	return r.path
 }
 
 func (r *request) String() string {

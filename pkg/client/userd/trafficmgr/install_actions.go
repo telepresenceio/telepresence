@@ -24,6 +24,7 @@ import (
 
 // A partialAction is a single change that can be applied to an object.  A partialAction may not be
 // applied by itself; it may only be applied as part of a larger completeAction.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type partialAction interface {
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
@@ -38,6 +39,7 @@ type partialAction interface {
 }
 
 // A completeAction is a set of smaller partialActions that may be applied to an object.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type completeAction interface {
 	// These five methods are the same as partialAction, except 'Undo' is different.
 	Do(obj k8sapi.Object) error
@@ -58,11 +60,13 @@ type completeAction interface {
 	TelVersion() (semver.Version, error)
 }
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func nameAndNamespace(obj k8sapi.Object) string {
 	mObj := obj.(meta.ObjectMetaAccessor).GetObjectMeta()
 	return mObj.GetName() + "." + mObj.GetNamespace()
 }
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func explainDo(c context.Context, a completeAction, obj k8sapi.Object) {
 	var buf strings.Builder
 	a.ExplainDo(obj, &buf)
@@ -74,6 +78,7 @@ func explainDo(c context.Context, a completeAction, obj k8sapi.Object) {
 	}
 }
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func explainUndo(c context.Context, a completeAction, obj k8sapi.Object) {
 	var buf strings.Builder
 	a.ExplainUndo(obj, &buf)
@@ -89,6 +94,7 @@ func explainUndo(c context.Context, a completeAction, obj k8sapi.Object) {
 
 // A multiAction combines zero-or-more partialActions together in to a single action.  This is
 // useful as an internal implementation detail for implementing completeActions.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type multiAction []partialAction
 
 func (ma multiAction) explain(
@@ -146,6 +152,7 @@ func (ma multiAction) Undo(ver semver.Version, obj k8sapi.Object) error {
 
 // Internal convenience functions //////////////////////////////////////////////
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func marshalString(data completeAction) (string, error) {
 	js, err := json.Marshal(data)
 	if err != nil {
@@ -154,6 +161,7 @@ func marshalString(data completeAction) (string, error) {
 	return string(js), nil
 }
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func unmarshalString(in string, out completeAction) error {
 	return json.Unmarshal([]byte(in), out)
 }
@@ -161,6 +169,7 @@ func unmarshalString(in string, out completeAction) error {
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
 // symbolic name so that a traffic-agent in a designated Object can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type makePortSymbolicAction struct {
 	PortName     string
 	TargetPort   uint16
@@ -230,6 +239,7 @@ func (m *makePortSymbolicAction) Undo(ver semver.Version, svc k8sapi.Object) err
 // An addSymbolicPortAction is like makeSymbolicPortAction but instead of replacing a TargetPort, it adds one.
 // This is for the case where the service doesn't declare a TargetPort but instead relies on that
 // it defaults to the Port.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type addSymbolicPortAction struct {
 	makePortSymbolicAction
 }
@@ -281,6 +291,7 @@ func (m *addSymbolicPortAction) Undo(ver semver.Version, svc k8sapi.Object) erro
 
 // svcActions //////////////////////////////////////////////////////////////////
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type svcActions struct {
 	Version          string                  `json:"version"`
 	MakePortSymbolic *makePortSymbolicAction `json:"make_port_symbolic,omitempty"`
@@ -339,6 +350,7 @@ func (s *svcActions) TelVersion() (semver.Version, error) {
 
 // addTrafficAgentAction is a partialAction that adds a traffic-agent to the set of containers in a
 // pod template spec.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type addTrafficAgentAction struct {
 	// The information of the pre-existing container port that the agent will take over.
 	ContainerPortName     string        `json:"container_port_name"`
@@ -469,6 +481,7 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj k8sapi.Object) er
 
 // addInitContainerAction is a partialAction that adds a traffic-agent to the set of containers in a
 // pod template spec.
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type addInitContainerAction struct {
 	// The information of the pre-existing container port that the agent will take over.
 	AppPortProto  core.Protocol `json:"container_port_proto"`
@@ -541,6 +554,7 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj k8sapi.Object) e
 }
 
 // addTPEnvironmentAction  /////////////////////////////////////////////////////
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type addTPEnvironmentAction struct {
 	ContainerName string `json:"container_name"`
 	Env           map[string]string
@@ -621,6 +635,7 @@ func (ae *addTPEnvironmentAction) getContainer(obj k8sapi.Object) (*core.Contain
 // A hideContainerPortAction will replace the symbolic name of a container port
 // with a generated name. It will perform the same replacement on all references
 // to that port from the probes of the container
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type hideContainerPortAction struct {
 	ContainerName string `json:"container_name"`
 	PortName      string `json:"port_name"`
@@ -652,6 +667,7 @@ func (hcp *hideContainerPortAction) getPort(obj k8sapi.Object, name string) (*co
 	return nil, nil, k8sapi.ObjErrorf(obj, "unable to locate container %q", hcp.ContainerName)
 }
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 func swapPortName(cn *core.Container, p *core.ContainerPort, from, to string) {
 	for _, probe := range []*core.Probe{cn.LivenessProbe, cn.ReadinessProbe, cn.StartupProbe} {
 		if probe == nil {
@@ -713,6 +729,7 @@ func (hcp *hideContainerPortAction) undo(obj k8sapi.Object) error {
 
 // workloadActions ///////////////////////////////////////////////////////////
 
+// Deprecated: not used with traffic-manager versions >= 2.6.0
 type workloadActions struct {
 	Version                   string `json:"version"`
 	ReferencedService         string

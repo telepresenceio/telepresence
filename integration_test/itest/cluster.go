@@ -35,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -88,7 +89,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.4.5-gotest.z" + s.suffix
+		s.testVersion = "v2.6.0-gotest.z" + s.suffix
 	}
 	version.Version = s.testVersion
 
@@ -383,7 +384,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", pod, dtime.Now().Format("20060102T150405"))))
+		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -416,6 +417,9 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 		"-n", managerNamespace, helmChart,
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
+		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", "tel2"), // Prevent attempts to retrieve image from SystemA
+		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
@@ -433,7 +437,6 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 }
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
-	TelepresenceOk(ctx, "quit")
 	t := getT(ctx)
 	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
 
@@ -455,7 +458,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
-	cmd := dexec.CommandContext(ctx, executable, args...)
+	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
 	for k, v := range getEnv(ctx) {

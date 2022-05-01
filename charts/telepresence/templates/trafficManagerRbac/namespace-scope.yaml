@@ -34,6 +34,36 @@ rules:
   - services
   verbs:
   - list
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - list
+  - get
+  - watch
+  - update
+  - delete
+  resourceNames:
+  - telepresence-agents
+- apiGroups:
+  - "apps"
+  resources:
+  - deployments
+  - replicasets
+  - statefulsets
+  verbs:
+  - list
+  - get
+  - patch
+  - update
 {{- if eq . (include "telepresence.namespace" $) }}
 # Must be able to get the manager namespace in order to get the cluster-id
 - apiGroups:
