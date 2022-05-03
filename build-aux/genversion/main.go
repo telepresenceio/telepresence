@@ -17,12 +17,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	//nolint:depguard // This short script has no logging and no Contexts.
 	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/blang/semver"
 )
@@ -39,7 +39,11 @@ func Main() error {
 	if err != nil {
 		return fmt.Errorf("unable to parse semver %s: %w", gitDescStr, err)
 	}
-	gitDescVer.Patch++
+
+	// Bump to next patch version only if we found a release, i.e. no pre-version and no build suffix.
+	if len(gitDescVer.Pre) == 0 && len(gitDescVer.Build) == 0 {
+		gitDescVer.Patch++
+	}
 
 	// If an additional arg has been used, we include it in the tag
 	if len(os.Args) >= 2 {
