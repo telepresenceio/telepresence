@@ -112,7 +112,8 @@ func (p *systemaPool) Get() (systemarpc.SystemACRUDClient, error) {
 		client, wait, err := systema.ConnectToSystemA(
 			ctx, p.mgr, net.JoinHostPort(host, port),
 			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: host})),
-			grpc.WithPerRPCCredentials(&systemaCredentials{p.mgr}))
+			grpc.WithPerRPCCredentials(&systemaCredentials{p.mgr}),
+		)
 		if err != nil {
 			cancel()
 			return nil, err
