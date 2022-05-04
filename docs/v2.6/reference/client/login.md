@@ -29,24 +29,13 @@ box via SSH, or are using Telepresence in CI), then you may instead
 have Ambassador Cloud issue an API key that you pass to `telepresence
 login` with the `--apikey` flag.
 
-## Telepresence Pro
+## Telepresence
 
-When you run `telepresence login`, the CLI will recommend you install
-a Telepresence Pro binary.  The Telepresence Pro version of the [User
+When you run `telepresence login`, the CLI installs
+a Telepresence binary.  The Telepresence enhanced free client of the [User
 Daemon](../../architecture) communicates with the Ambassador Cloud to
 provide fremium features including the ability to create intercepts from
 Ambassador Cloud.
-
-(show a screenshot of what the login flow looks like... but for now
-I'll do a code snippet)
-```
-telepresence login
-Telepresence wants to install the Telepresence Pro User Daemon to enable Cloud features(y|n): y
-Telepresence Pro installed!
-Launching Telepresence Pro User Daemon
-Launching browser authentication flow...
-Login successful.
-```
 
 ## Acquiring an API key
 
