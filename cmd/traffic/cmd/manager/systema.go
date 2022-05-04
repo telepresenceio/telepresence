@@ -6,36 +6,41 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	systemarpc "github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
-type systemaCredentials struct {
+type ReverseConnProvider struct {
 	mgr *Manager
 }
 
-// GetRequestMetadata implements credentials.PerRPCCredentials.
-func (c *systemaCredentials) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
-	sessionID := managerutil.GetSessionID(ctx)
+type ReverseConnClient struct {
+	systemarpc.SystemACRUDClient
+	wait func() error
+}
 
+func (p *ReverseConnProvider) GetSystemaAddress(ctx context.Context) (string, error) {
+	env := managerutil.GetEnv(p.mgr.ctx)
+	return net.JoinHostPort(env.SystemAHost, env.SystemAPort), nil
+}
+
+func (p *ReverseConnProvider) GetAPIKey(ctx context.Context) (string, error) {
+	sessionID := managerutil.GetSessionID(ctx)
 	var apikey string
 	if sessionID != "" {
-		client := c.mgr.state.GetClient(sessionID)
+		client := p.mgr.state.GetClient(sessionID)
 		apikey = client.GetApiKey()
 	} else {
 		// Uhh... pick one arbitrarily.  This case should be limited to the
 		// ReverseConnection call, since that call doesn't belong to any one user action.
 		// This can also happen if RemoveIntercept + RemoveDomain is called when a user
 		// quits a session and the manager reaps intercepts + the domain itself.
-		for _, client := range c.mgr.state.GetAllClients() {
+		for _, client := range p.mgr.state.GetAllClients() {
 			if client.ApiKey != "" {
 				apikey = client.ApiKey
 				break
@@ -45,23 +50,35 @@ func (c *systemaCredentials) GetRequestMetadata(ctx context.Context, _ ...string
 		// If there were no other clients using telepresence, we try to find an APIKey
 		// used for creating an intercept.
 		if apikey == "" {
-			apikey = c.mgr.state.GetInterceptAPIKey()
+			apikey = p.mgr.state.GetInterceptAPIKey()
 		}
 	}
 	if apikey == "" {
-		return nil, errors.New("no apikey has been provided by a client")
+		return "", errors.New("no apikey has been provided by a client")
 	}
-
-	md := map[string]string{
-		"X-Telepresence-ManagerID": c.mgr.ID,
-		"X-Ambassador-Api-Key":     apikey,
-	}
-	return md, nil
+	return apikey, nil
 }
 
-// RequireTransportSecurity implements credentials.PerRPCCredentials.
-func (c *systemaCredentials) RequireTransportSecurity() bool {
-	return true
+func (p *ReverseConnProvider) GetInstallID(ctx context.Context) (string, error) {
+	return "", nil
+}
+
+func (p *ReverseConnProvider) GetExtraHeaders(ctx context.Context) (map[string]string, error) {
+	return map[string]string{
+		"X-Telepresence-ManagerID": p.mgr.ID,
+	}, nil
+}
+
+func (p *ReverseConnProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (*ReverseConnClient, error) {
+	client, wait, err := systema.ConnectToSystemA(ctx, p.mgr, conn)
+	if err != nil {
+		return nil, err
+	}
+	return &ReverseConnClient{client, wait}, nil
+}
+
+func (c *ReverseConnClient) Close(ctx context.Context) error {
+	return c.wait()
 }
 
 func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
@@ -86,55 +103,4 @@ func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Co
 	dialer := net.Dialer{}
 	dlog.Debugf(ctx, "HandleConnection: dialing intercept %s using clear text on %s", interceptID, dialAddr)
 	return dialer.DialContext(ctx, "tcp", dialAddr)
-}
-
-type systemaPool struct {
-	mgr *Manager
-
-	mu     sync.Mutex
-	count  int64
-	ctx    context.Context
-	cancel context.CancelFunc
-	client systemarpc.SystemACRUDClient
-	wait   func() error
-}
-
-func (p *systemaPool) Get() (systemarpc.SystemACRUDClient, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.ctx == nil {
-		env := managerutil.GetEnv(p.mgr.ctx)
-		host := env.SystemAHost
-		port := env.SystemAPort
-
-		ctx, cancel := context.WithCancel(dgroup.WithGoroutineName(p.mgr.ctx, "/systema"))
-		client, wait, err := systema.ConnectToSystemA(
-			ctx, p.mgr, net.JoinHostPort(host, port),
-			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: host})),
-			grpc.WithPerRPCCredentials(&systemaCredentials{p.mgr}),
-		)
-		if err != nil {
-			cancel()
-			return nil, err
-		}
-		p.ctx, p.cancel, p.client, p.wait = ctx, cancel, client, wait
-	}
-
-	p.count++
-	return p.client, nil
-}
-
-func (p *systemaPool) Done() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.count--
-	var err error
-	if p.count == 0 {
-		p.cancel()
-		err = p.wait()
-		p.ctx, p.cancel, p.client, p.wait = nil, nil, nil, nil
-	}
-	return err
 }

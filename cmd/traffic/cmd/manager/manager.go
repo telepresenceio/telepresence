@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -117,8 +118,8 @@ func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 			// presence of the ApiKey in the interceptInfo to determine all
 			// intercepts that we need to inform System A of their deletion
 			if update.Delete && update.Value.ApiKey != "" {
-				systema := managerutil.GetSystemAPool(ctx)
-				if sa, err := systema.Get(); err != nil {
+				systema := a8rcloud.GetSystemAPool[*ReverseConnClient](ctx, a8rcloud.TrafficManagerConnName)
+				if sa, err := systema.Get(ctx); err != nil {
 					dlog.Errorln(ctx, "systema: acquire connection:", err)
 				} else {
 					// First we remove the PreviewDomain if it exists
@@ -136,8 +137,12 @@ func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 					}
 
 					// Release the connection we got to delete the domain + intercept
-					if err := systema.Done(); err != nil {
+					if err := systema.Done(ctx); err != nil {
 						dlog.Errorln(ctx, "systema: release management connection:", err)
+					}
+					// Double free needed to decrease refcount of connection acquired, but not released, in UpdateIntercept
+					if err := systema.Done(ctx); err != nil {
+						dlog.Errorln(ctx, "systema: release reverse connection:", err)
 					}
 				}
 			}

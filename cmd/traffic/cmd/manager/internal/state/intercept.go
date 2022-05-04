@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -41,15 +41,15 @@ import (
 //
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
-func (s *State) PrepareIntercept(ctx context.Context, cr *manager.CreateInterceptRequest) (*manager.PreparedIntercept, error) {
+func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (*managerrpc.PreparedIntercept, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	interceptError := func(err error) (*manager.PreparedIntercept, error) {
+	interceptError := func(err error) (*managerrpc.PreparedIntercept, error) {
 		if _, ok := status.FromError(err); ok {
 			return nil, err
 		}
-		return &manager.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
+		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
 	spec := cr.InterceptSpec
@@ -72,7 +72,7 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *manager.CreateIntercep
 	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace); err != nil {
 		return interceptError(err)
 	}
-	return &manager.PreparedIntercept{
+	return &managerrpc.PreparedIntercept{
 		Namespace:       spec.Namespace,
 		ServiceUid:      string(ic.ServiceUID),
 		ServiceName:     ic.ServiceName,
@@ -352,7 +352,7 @@ func unmarshalConfigMapEntry(y string, name, namespace string) (*agentconfig.Sid
 }
 
 // findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port
-func findIntercept(ac *agentconfig.Sidecar, spec *manager.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
+func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
 	spi := spec.ServicePortIdentifier
 	for _, cn := range ac.Containers {
 		for _, ic := range cn.Intercepts {
