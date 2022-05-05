@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -19,6 +20,7 @@ type SessionClientProvider struct {
 
 type SessionClient struct {
 	userdaemon.SystemAClient
+	systema.UserDaemonSystemAProxyClient
 }
 
 func (c *SessionClient) Close(ctx context.Context) error {
@@ -47,6 +49,7 @@ func (p *SessionClientProvider) GetExtraHeaders(ctx context.Context) (map[string
 }
 
 func (p *SessionClientProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (*SessionClient, error) {
-	client := userdaemon.NewSystemAClient(conn)
-	return &SessionClient{client}, nil
+	userdCli := userdaemon.NewSystemAClient(conn)
+	userdProxyCli := systema.NewUserDaemonSystemAProxyClient(conn)
+	return &SessionClient{SystemAClient: userdCli, UserDaemonSystemAProxyClient: userdProxyCli}, nil
 }
