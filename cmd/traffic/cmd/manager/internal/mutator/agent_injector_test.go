@@ -859,6 +859,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-annotations
     - mountPath: /etc/traffic-agent
       name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
 - op: add
   path: /spec/volumes/-
   value:
@@ -878,6 +880,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -928,6 +935,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-annotations
     - mountPath: /etc/traffic-agent
       name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
 - op: add
   path: /spec/volumes/-
   value:
@@ -947,6 +956,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1044,6 +1058,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-annotations
     - mountPath: /etc/traffic-agent
       name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
 - op: add
   path: /spec/volumes/-
   value:
@@ -1063,6 +1079,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1125,6 +1146,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-annotations
     - mountPath: /etc/traffic-agent
       name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
 - op: add
   path: /spec/volumes/-
   value:
@@ -1144,6 +1167,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
 `,
 			"",
 			nil,
@@ -1207,6 +1235,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-annotations
     - mountPath: /etc/traffic-agent
       name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
 - op: add
   path: /spec/volumes/-
   value:
@@ -1226,6 +1256,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
 `,
 			"",
 			nil,
@@ -1285,6 +1320,10 @@ func TestTrafficAgentInjector(t *testing.T) {
 								{
 									Name:      "traffic-config",
 									MountPath: "/etc/traffic-agent",
+								},
+								{
+									Name:      "export-volume",
+									MountPath: "/tel_app_exports",
 								},
 							},
 							ReadinessProbe: &core.Probe{
@@ -1353,6 +1392,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-annotations
     - mountPath: /etc/traffic-agent
       name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
 - op: add
   path: /spec/volumes/-
   value:
@@ -1372,6 +1413,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http

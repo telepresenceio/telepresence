@@ -44,6 +44,9 @@ spec:
       labels:
         service: hello
     spec:
+      securityContext:
+        runAsGroup: 11000
+        runAsUser: 11000
       volumes:
         - name: hello-cm-volume
           configMap:

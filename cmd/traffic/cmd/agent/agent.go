@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -182,7 +183,8 @@ func Main(ctx context.Context, args ...string) error {
 				g.Go(fmt.Sprintf("forward-%s:%d", cn.Name, ic.ContainerPort), func(ctx context.Context) error {
 					return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()))
 				})
-				state.AddInterceptState(NewInterceptState(state, fwd, ic, cn.MountPoint, env))
+				cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
+				state.AddInterceptState(NewInterceptState(state, fwd, ic, cnMountPoint, env))
 			}
 		}
 
