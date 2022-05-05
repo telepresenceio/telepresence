@@ -48,7 +48,7 @@ func WithSystemAPool[T Closeable](ctx context.Context, poolName string, provider
 }
 
 func GetSystemAPool[T Closeable](ctx context.Context, poolName string) SystemAPool[T] {
-	if p, ok := ctx.Value(systemaPoolKey(poolName)).(SystemAPool[T]); ok {
+	if p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T]); ok {
 		return p
 	}
 	return nil

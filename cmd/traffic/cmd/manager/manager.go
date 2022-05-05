@@ -119,12 +119,12 @@ func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 				// presence of the ApiKey in the interceptInfo to determine all
 				// intercepts that we need to inform System A of their deletion
 				if update.Delete && update.Value.ApiKey != "" {
-					systema := a8rcloud.GetSystemAPool[*ReverseConnClient](ctx, a8rcloud.TrafficManagerConnName)
+					systema := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 					if update.Value.PreviewDomain != "" {
 						// If we get here, it'll be because an earlier call to UpdateIntercept succeeded in creating a preview domain
 						// In this case, the intercept has an associated systema connection open to allow serving the preview domain, which now needs to be cleaned up
 						// This is deferred because if we drop the last connection it'll have to be reacquired by the Get() below
-						defer func(systema a8rcloud.SystemAPool[*ReverseConnClient]) {
+						defer func(systema a8rcloud.SystemAPool[managerutil.SystemaCRUDClient]) {
 							if err := systema.Done(ctx); err != nil {
 								dlog.Errorln(ctx, "systema: release reverse connection:", err)
 							}

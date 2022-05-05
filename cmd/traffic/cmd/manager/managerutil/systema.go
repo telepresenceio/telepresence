@@ -9,11 +9,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
+type SystemaCRUDClient interface {
+	systemarpc.SystemACRUDClient
+	a8rcloud.Closeable
+}
+
 func AgentImageFromSystemA(ctx context.Context) (string, error) {
-	systemaPool := a8rcloud.GetSystemAPool[interface {
-		a8rcloud.Closeable
-		systemarpc.SystemACRUDClient
-	}](ctx, a8rcloud.TrafficManagerConnName)
+	systemaPool := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
 		return "", err

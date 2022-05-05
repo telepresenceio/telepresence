@@ -56,7 +56,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context) {
 		state:       state.NewState(ctx),
 		clusterInfo: cluster.NewInfo(ctx),
 	}
-	ctx = a8rcloud.WithSystemAPool[*ReverseConnClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
+	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	ret.ctx = ctx
 	return ret, ctx
 }
@@ -450,7 +450,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
 
-	systemaPool := a8rcloud.GetSystemAPool[*ReverseConnClient](ctx, a8rcloud.TrafficManagerConnName)
+	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 	switch action := req.PreviewDomainAction.(type) {
 	case *rpc.UpdateInterceptRequest_AddPreviewDomain:
 		var domain string

@@ -19,7 +19,7 @@ type ReverseConnProvider struct {
 	mgr *Manager
 }
 
-type ReverseConnClient struct {
+type reverseConnClient struct {
 	systemarpc.SystemACRUDClient
 	wait func() error
 }
@@ -69,15 +69,15 @@ func (p *ReverseConnProvider) GetExtraHeaders(ctx context.Context) (map[string]s
 	}, nil
 }
 
-func (p *ReverseConnProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (*ReverseConnClient, error) {
+func (p *ReverseConnProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (managerutil.SystemaCRUDClient, error) {
 	client, wait, err := systema.ConnectToSystemA(ctx, p.mgr, conn)
 	if err != nil {
 		return nil, err
 	}
-	return &ReverseConnClient{client, wait}, nil
+	return &reverseConnClient{client, wait}, nil
 }
 
-func (c *ReverseConnClient) Close(ctx context.Context) error {
+func (c *reverseConnClient) Close(ctx context.Context) error {
 	return c.wait()
 }
 
