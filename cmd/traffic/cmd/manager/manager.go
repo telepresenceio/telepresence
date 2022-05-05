@@ -113,40 +113,48 @@ func (m *Manager) runInterceptGCLoop(ctx context.Context) error {
 
 func (m *Manager) runSystemAGCLoop(ctx context.Context) error {
 	for snapshot := range m.state.WatchIntercepts(ctx, nil) {
-		for _, update := range snapshot.Updates {
-			// Since all intercepts with a domain require a login, we can use
-			// presence of the ApiKey in the interceptInfo to determine all
-			// intercepts that we need to inform System A of their deletion
-			if update.Delete && update.Value.ApiKey != "" {
-				systema := a8rcloud.GetSystemAPool[*ReverseConnClient](ctx, a8rcloud.TrafficManagerConnName)
-				if sa, err := systema.Get(ctx); err != nil {
-					dlog.Errorln(ctx, "systema: acquire connection:", err)
-				} else {
-					// First we remove the PreviewDomain if it exists
+		func() {
+			for _, update := range snapshot.Updates {
+				// Since all intercepts with a domain require a login, we can use
+				// presence of the ApiKey in the interceptInfo to determine all
+				// intercepts that we need to inform System A of their deletion
+				if update.Delete && update.Value.ApiKey != "" {
+					systema := a8rcloud.GetSystemAPool[*ReverseConnClient](ctx, a8rcloud.TrafficManagerConnName)
 					if update.Value.PreviewDomain != "" {
-						err = m.reapDomain(ctx, sa, update)
-						if err != nil {
-							dlog.Errorln(ctx, "systema: remove domain:", err)
+						// If we get here, it'll be because an earlier call to UpdateIntercept succeeded in creating a preview domain
+						// In this case, the intercept has an associated systema connection open to allow serving the preview domain, which now needs to be cleaned up
+						// This is deferred because if we drop the last connection it'll have to be reacquired by the Get() below
+						defer func(systema a8rcloud.SystemAPool[*ReverseConnClient]) {
+							if err := systema.Done(ctx); err != nil {
+								dlog.Errorln(ctx, "systema: release reverse connection:", err)
+							}
+						}(systema)
+					}
+					if sa, err := systema.Get(ctx); err != nil {
+						dlog.Errorln(ctx, "systema: acquire connection:", err)
+					} else {
+						// First we remove the PreviewDomain if it exists
+						if update.Value.PreviewDomain != "" {
+							err = m.reapDomain(ctx, sa, update)
+							if err != nil {
+								dlog.Errorln(ctx, "systema: remove domain:", err)
+							}
 						}
-					}
-					// Now we inform SystemA of the intercepts removal
-					dlog.Debugf(ctx, "systema: remove intercept: %q", update.Value.Id)
-					err = m.reapIntercept(ctx, sa, update)
-					if err != nil {
-						dlog.Errorln(ctx, "systema: remove intercept:", err)
-					}
+						// Now we inform SystemA of the intercepts removal
+						dlog.Debugf(ctx, "systema: remove intercept: %q", update.Value.Id)
+						err = m.reapIntercept(ctx, sa, update)
+						if err != nil {
+							dlog.Errorln(ctx, "systema: remove intercept:", err)
+						}
 
-					// Release the connection we got to delete the domain + intercept
-					if err := systema.Done(ctx); err != nil {
-						dlog.Errorln(ctx, "systema: release management connection:", err)
-					}
-					// Double free needed to decrease refcount of connection acquired, but not released, in UpdateIntercept
-					if err := systema.Done(ctx); err != nil {
-						dlog.Errorln(ctx, "systema: release reverse connection:", err)
+						// Release the connection we got to delete the domain + intercept
+						if err := systema.Done(ctx); err != nil {
+							dlog.Errorln(ctx, "systema: release management connection:", err)
+						}
 					}
 				}
 			}
-		}
+		}()
 	}
 	return nil
 }
