@@ -105,6 +105,15 @@ func Command(ctx context.Context) *cobra.Command {
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
 
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if cmd.RunE == nil {
+			return
+		}
+
+		var output Output
+		cmd.RunE = output.RunE(cmd.RunE)
+	}
+
 	var groups cliutil.CommandGroups
 	if len(os.Args) > 1 && os.Args[1] == "quit" {
 		groups = make(cliutil.CommandGroups)
@@ -199,6 +208,10 @@ func initGlobalFlagGroups() {
 			flags.Bool(
 				"no-report", false,
 				"turn off anonymous crash reports and log submission on failure",
+			)
+			flags.String(
+				"output", "default",
+				"set the output format",
 			)
 			return flags
 		}(),
