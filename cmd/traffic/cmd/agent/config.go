@@ -48,6 +48,10 @@ func LoadConfig(ctx context.Context) (Config, error) {
 			return nil, err
 		}
 	}
+	if c.LogLevel != "" {
+		// Override default from environment
+		log.SetLevel(ctx, c.LogLevel)
+	}
 	return &c, nil
 }
 
