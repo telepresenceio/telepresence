@@ -44,7 +44,7 @@ type ClientProvider[T Closeable] interface {
 type systemaPoolKey string
 
 func WithSystemAPool[T Closeable](ctx context.Context, poolName string, provider ClientProvider[T]) context.Context {
-	return context.WithValue(ctx, systemaPoolKey(poolName), &systemAPool[T]{Provider: provider, Name: poolName})
+	return context.WithValue(ctx, systemaPoolKey(poolName), &systemAPool[T]{Provider: provider, Name: poolName, parentCtx: ctx})
 }
 
 func GetSystemAPool[T Closeable](ctx context.Context, poolName string) SystemAPool[T] {
@@ -64,9 +64,11 @@ type systemAPool[T Closeable] struct {
 	Name     string
 	mu       sync.Mutex
 	count    int64
-	ctx      context.Context
-	cancel   context.CancelFunc
-	client   T
+	// The parentCtx is the context that owns the pool; connections are scoped to it
+	parentCtx context.Context
+	ctx       context.Context
+	cancel    context.CancelFunc
+	client    T
 }
 
 func (p *systemAPool[T]) Get(ctx context.Context) (T, error) {
@@ -74,15 +76,16 @@ func (p *systemAPool[T]) Get(ctx context.Context) (T, error) {
 	defer p.mu.Unlock()
 
 	if p.ctx == nil {
-		ctx, cancel := context.WithCancel(dgroup.WithGoroutineName(ctx, "/systema"))
 		// Ya can't return generic nil, but this'll do it
 		var client T
 
 		sysaAddr, err := p.Provider.GetSystemaAddress(ctx)
 		if err != nil {
-			cancel()
 			return client, err
 		}
+
+		// This needs to be from p.parentCtx or the connection will be dropped as soon as the goroutine requesting it finishes its context
+		ctx, cancel := context.WithCancel(dgroup.WithGoroutineName(p.parentCtx, "/systema"))
 		host, _, err := net.SplitHostPort(sysaAddr)
 		if err != nil {
 			cancel()
