@@ -126,6 +126,7 @@ func (s *singleServiceSuite) TestGatherLogs_OnlyMappedLogs() {
 	}()
 
 	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), s.ServiceName())
+	itest.TelepresenceOk(ctx, "list") // To ensure that the mapped namespaces are active
 	itest.TelepresenceOk(ctx, "gather-logs", "--output-file", outputFile, "--traffic-manager=False")
 	_, foundAgents, _, fileNames = getZipData(require, outputFile, bothNsRx, s.ManagerNamespace(), s.ServiceName())
 	require.Equal(1, foundAgents, fileNames)
