@@ -444,7 +444,10 @@ func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.Ingres
 		if err != nil {
 			return err
 		}
-		defer pool.Done(ctx)
+		defer func() {
+			err := pool.Done(ctx)
+			dlog.Warnf(ctx, "Unexpected error tearing down systema connection: %v", err)
+		}()
 		resp, err = systemacli.ResolveIngressInfo(ctx, req)
 		return err
 	})

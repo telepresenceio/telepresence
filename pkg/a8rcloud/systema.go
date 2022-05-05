@@ -7,10 +7,11 @@ import (
 	"net"
 	"sync"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 )
 
 const (
@@ -129,7 +130,6 @@ func (p *systemAPool[T]) Done(ctx context.Context) error {
 		return err
 	}
 	return nil
-
 }
 
 type systemACredentials struct {
