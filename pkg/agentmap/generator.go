@@ -23,6 +23,7 @@ type GeneratorConfig struct {
 	APIPort             uint16
 	QualifiedAgentImage string
 	ManagerNamespace    string
+	LogLevel            string
 }
 
 func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
@@ -72,6 +73,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*a
 	ag := &agentconfig.Sidecar{
 		AgentImage:   cfg.QualifiedAgentImage,
 		AgentName:    wl.GetName(),
+		LogLevel:     cfg.LogLevel,
 		Namespace:    wl.GetNamespace(),
 		WorkloadName: wl.GetName(),
 		WorkloadKind: wl.GetKind(),
