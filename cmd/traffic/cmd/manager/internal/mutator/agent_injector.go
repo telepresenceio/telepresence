@@ -113,7 +113,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	var patches patchOps
 	patches = addInitContainer(ctx, pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
-	patches = addAgentVolume(pod, config, patches)
+	patches = addAgentVolumes(pod, config, patches)
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
 
@@ -214,7 +214,7 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 	})
 }
 
-func addAgentVolume(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) patchOps {
+func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) patchOps {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == agentconfig.AnnotationVolumeName {
 			return patches
@@ -254,6 +254,16 @@ func addAgentVolume(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) pa
 							Path: agentconfig.ConfigFile,
 						}},
 					},
+				},
+			},
+		},
+		patchOperation{
+			Op:   "add",
+			Path: "/spec/volumes/-",
+			Value: core.Volume{
+				Name: agentconfig.ExportsVolumeName,
+				VolumeSource: core.VolumeSource{
+					EmptyDir: &core.EmptyDirVolumeSource{},
 				},
 			},
 		},

@@ -47,14 +47,20 @@ func AgentContainer(
 		mounts = appendAppContainerVolumeMounts(app, cc, mounts)
 	})
 
-	mounts = append(mounts, v1.VolumeMount{
-		Name:      AnnotationVolumeName,
-		MountPath: AnnotationMountPoint,
-	})
-	mounts = append(mounts, v1.VolumeMount{
-		Name:      ConfigVolumeName,
-		MountPath: ConfigMountPoint,
-	})
+	mounts = append(mounts,
+		v1.VolumeMount{
+			Name:      AnnotationVolumeName,
+			MountPath: AnnotationMountPoint,
+		},
+		v1.VolumeMount{
+			Name:      ConfigVolumeName,
+			MountPath: ConfigMountPoint,
+		},
+		v1.VolumeMount{
+			Name:      ExportsVolumeName,
+			MountPath: ExportsMountPoint,
+		},
+	)
 
 	if len(efs) == 0 {
 		efs = nil

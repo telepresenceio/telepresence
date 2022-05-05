@@ -21,6 +21,8 @@
 - Change: When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically. The mutating webhook will
   then ensure that their pods will receive an updated traffic-agent.
 
+- Bugfix: Remote mounts will no function correctly with custom `securityContext`.
+
 - Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group. 
 
 ### 2.5.8 (April 27, 2022)
