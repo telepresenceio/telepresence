@@ -239,6 +239,18 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, err
 }
 
+func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, "AddInterceptor", func(_ context.Context, session trafficmgr.Session) error {
+		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
+	})
+}
+
+func (s *service) RemoveInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, "RemoveInterceptor", func(_ context.Context, session trafficmgr.Session) error {
+		return session.RemoveInterceptor(interceptor.InterceptId)
+	})
+}
+
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
@@ -401,6 +413,7 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
+		s.cancelSessionReadLocked()
 		s.quit()
 	})
 	return &empty.Empty{}, nil

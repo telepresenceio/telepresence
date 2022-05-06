@@ -23,7 +23,10 @@
 
 - Bugfix: Remote mounts will no function correctly with custom `securityContext`.
 
-- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group. 
+- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group.
+
+- Bugfix: Using `telepresence leave` or `telepresence quit` on an intercept that spawned a command using `--` on the command line
+  will now terminate that command since it's considered parented by the intercept that is removed.
 
 ### 2.5.8 (April 27, 2022)
 
