@@ -8,5 +8,3 @@ spec:
     service: manual-inject
   ports:
     - port: 80
-      # This port is not defined in k8s/echo-manual-inject-deploy.yaml because it will be the port used by the manually added traffic-agent
-      targetPort: 9900

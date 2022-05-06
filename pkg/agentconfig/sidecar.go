@@ -86,6 +86,9 @@ type Sidecar struct {
 	// If Create is true, then this Config has not yet been filled in.
 	Create bool `json:"create,omitempty" yaml:"create,omitempty"`
 
+	// If Manual is true, then this Config is created manually
+	Manual bool `json:"manual,omitempty" yaml:"manual,omitempty"`
+
 	// The fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.5.4"
 	AgentImage string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
 

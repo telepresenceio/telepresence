@@ -130,22 +130,26 @@ func (c *configWatcher) Run(ctx context.Context, extendedAgentImage string) erro
 		case <-ctx.Done():
 			return nil
 		case e := <-delCh:
-			dlog.Infof(ctx, "del %s.%s: %s", e.name, e.namespace, e.value)
+			dlog.Infof(ctx, "del %s.%s", e.name, e.namespace)
 			ac, wl, err := e.workload(ctx)
 			if err != nil {
 				dlog.Error(ctx, err)
 				continue
 			}
-			if ac.Create {
-				// Deleted before it was generated, just ignore
+			if ac.Create || ac.Manual {
+				// Deleted before it was generated or manually added, just ignore
 				continue
 			}
 			triggerRollout(ctx, wl)
 		case e := <-addCh:
-			dlog.Infof(ctx, "add %s.%s: %s", e.name, e.namespace, e.value)
+			dlog.Infof(ctx, "add %s.%s", e.name, e.namespace)
 			ac, wl, err := e.workload(ctx)
 			if err != nil {
 				dlog.Error(ctx, err)
+				continue
+			}
+			if ac.Manual {
+				// Manually added, just ignore
 				continue
 			}
 			if ac.Create {
@@ -358,11 +362,13 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 			e := &entry{name: k, namespace: ns, value: v}
 			ac, wl, err := e.workload(ctx)
 			if err != nil {
-				dlog.Errorf(ctx, "unable to get workload for %s.%s %s: %v", k, ns, v, err)
+				if !errors.IsNotFound(err) {
+					dlog.Errorf(ctx, "unable to get workload for %s.%s %s: %v", k, ns, v, err)
+				}
 				continue
 			}
-			if ac.Create {
-				// Deleted before it was generated, just ignore
+			if ac.Create || ac.Manual {
+				// Deleted before it was generated or manually added, just ignore
 				continue
 			}
 			triggerRollout(ctx, wl)
