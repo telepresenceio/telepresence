@@ -21,6 +21,7 @@ import (
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -249,11 +250,53 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 			defer is.scout.Close()
-			return client.WithEnsuredState(ctx, is, false, func() error {
+			return client.WithEnsuredState(ctx, is, false, func() (err error) {
+				ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
+				defer cancel()
+				var cmd *dexec.Cmd
 				if args.dockerRun {
-					return is.runInDocker(ctx, is.cmd, args.cmdline)
+					envFile := is.args.envFile
+					if envFile == "" {
+						file, err := os.CreateTemp("", "tel-*.env")
+						if err != nil {
+							return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
+						}
+						defer os.Remove(file.Name())
+
+						if err = is.writeEnvToFileAndClose(file); err != nil {
+							return err
+						}
+						envFile = file.Name()
+					}
+					cmd, err = is.startInDocker(ctx, envFile, args.cmdline)
+				} else {
+					cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
 				}
-				return proc.Run(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
+				if err == nil {
+					// Send info about the pid and intercept id to the traffic-manager so that it kills
+					// the process if it receives a leave of quit call.
+					cc := is.connectorClient
+					ior := &connector.Interceptor{
+						InterceptId: is.env["TELEPRESENCE_INTERCEPT_ID"],
+						Pid:         int32(os.Getpid()),
+					}
+					if _, err = cc.AddInterceptor(ctx, ior); err != nil {
+						_ = cmd.Process.Kill()
+						return err
+					}
+					defer func() {
+						if _, err := cc.RemoveInterceptor(ctx, ior); err != nil {
+							dlog.Error(ctx, err)
+						}
+					}()
+					err = proc.Wait(ctx, cancel, cmd)
+				}
+				// The external command will not output anything to the logs. An error here
+				// is likely caused by the user hitting <ctrl>-C to terminate the process.
+				if err != nil {
+					err = errcat.NoDaemonLogs.New(err)
+				}
+				return err
 			})
 		})
 	})
@@ -739,21 +782,7 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
-	envFile := is.args.envFile
-	if envFile == "" {
-		file, err := os.CreateTemp("", "tel-*.env")
-		if err != nil {
-			return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
-		}
-		defer os.Remove(file.Name())
-
-		if err = is.writeEnvToFileAndClose(file); err != nil {
-			return err
-		}
-		envFile = file.Name()
-	}
-
+func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
 		"--dns-search", "tel2-search",
@@ -784,7 +813,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return proc.Run(ctx, nil, "docker", append(ourArgs, args...)...)
+	return proc.Start(ctx, nil, "docker", append(ourArgs, args...)...)
 }
 
 func (is *interceptState) writeEnvFile() error {

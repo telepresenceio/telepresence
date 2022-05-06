@@ -211,11 +211,18 @@ nextSession:
 	return nil
 }
 
-func (s *service) cancelSession() {
-	s.sessionLock.RLock()
+func (s *service) cancelSessionReadLocked() {
 	if s.sessionCancel != nil {
+		if err := s.session.ClearIntercepts(s.sessionContext); err != nil {
+			dlog.Errorf(s.sessionContext, "failed to clear intercepts: %v", err)
+		}
 		s.sessionCancel()
 	}
+}
+
+func (s *service) cancelSession() {
+	s.sessionLock.RLock()
+	s.cancelSessionReadLocked()
 	s.sessionLock.RUnlock()
 
 	// We have to cancel the session before we can acquire this write-lock, because we need any long-running RPCs

@@ -2,6 +2,7 @@ package trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -13,7 +14,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	"github.com/pkg/errors"
+	stacktrace "github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -21,7 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -64,9 +65,12 @@ type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
+	AddInterceptor(string, int) error
+	RemoveInterceptor(string) error
 	GetInterceptSpec(string) *manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
+	ClearIntercepts(context.Context) error
 	RemoveIntercept(context.Context, string) error
 	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
@@ -147,6 +151,11 @@ type TrafficManager struct {
 	currentInterceptsLock sync.Mutex
 	currentMatchers       map[string]*apiMatcher
 	currentAPIServers     map[int]*apiServer
+
+	// Pid of interceptor owned by an intercept. This entry will only be present when
+	// the telepresence intercept command spawns a new command. The int value reflects
+	// the pid of that new command.
+	currentInterceptors map[string]int
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo
@@ -322,11 +331,11 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 
 	userinfo, err := user.Current()
 	if err != nil {
-		return nil, errors.Wrap(err, "user.Current()")
+		return nil, stacktrace.Wrap(err, "user.Current()")
 	}
 	host, err := os.Hostname()
 	if err != nil {
-		return nil, errors.Wrap(err, "os.Hostname()")
+		return nil, stacktrace.Wrap(err, "os.Hostname()")
 	}
 
 	apiKey, err := svc.LoginExecutor().GetAPIKey(c, a8rcloud.KeyDescTrafficManager)
@@ -337,7 +346,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	// Ensure that we have a traffic-manager to talk to.
 	ti, err := NewTrafficManagerInstaller(cluster)
 	if err != nil {
-		return nil, errors.Wrap(err, "new installer")
+		return nil, stacktrace.Wrap(err, "new installer")
 	}
 
 	dlog.Debug(c, "ensure that traffic-manager exists")
@@ -349,7 +358,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	dlog.Debug(c, "traffic-manager started, creating port-forward")
 	restConfig, err := cluster.ConfigFlags.ToRESTConfig()
 	if err != nil {
-		return nil, errors.Wrap(err, "ToRESTConfig")
+		return nil, stacktrace.Wrap(err, "ToRESTConfig")
 	}
 	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, restConfig, k8sapi.GetK8sInterface(c))
 	if err != nil {
@@ -404,17 +413,18 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:       ti.(*installer),
-		installID:       installID,
-		userAndHost:     userAndHost,
-		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
-		managerClient:   mClient,
-		managerConn:     conn,
-		managerVersion:  managerVersion,
-		sessionInfo:     si,
-		rootDaemon:      rootDaemon,
-		localIntercepts: map[string]string{},
-		wlWatcher:       newWASWatcher(),
+		installer:           ti.(*installer),
+		installID:           installID,
+		userAndHost:         userAndHost,
+		getCloudAPIKey:      svc.LoginExecutor().GetCloudAPIKey,
+		managerClient:       mClient,
+		managerConn:         conn,
+		managerVersion:      managerVersion,
+		sessionInfo:         si,
+		rootDaemon:          rootDaemon,
+		localIntercepts:     map[string]string{},
+		currentInterceptors: map[string]int{},
+		wlWatcher:           newWASWatcher(),
 	}, nil
 }
 
@@ -719,9 +729,6 @@ func (tm *TrafficManager) remain(c context.Context) error {
 		c = dcontext.WithoutCancel(c)
 		c, cancel := context.WithTimeout(c, 3*time.Second)
 		defer cancel()
-		if err := tm.clearIntercepts(c); err != nil {
-			dlog.Errorf(c, "failed to clear intercepts: %v", err)
-		}
 		if _, err := tm.managerClient.Depart(c, tm.session()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		}
@@ -818,7 +825,7 @@ func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRe
 	// workload n times for n replicas, which could cause race conditions
 	agents = getRepresentativeAgents(c, agents)
 
-	_ = tm.clearIntercepts(c)
+	_ = tm.ClearIntercepts(c)
 	switch ur.UninstallType {
 	case rpc.UninstallRequest_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
@@ -882,7 +889,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 	}
 
 	if ur.UninstallType == rpc.UninstallRequest_EVERYTHING {
-		_ = tm.clearIntercepts(ctx)
+		_ = tm.ClearIntercepts(ctx)
 		// Uninstalling using helm chart will roll out all affected pods and remove their respective traffic-agent. This
 		// of course, given that the client has permissions to do that, and the chart is owned by the client.
 		if err := helm.DeleteTrafficManager(ctx, tm.ConfigFlags, tm.GetManagerNamespace(), true); err != nil {
@@ -895,7 +902,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
 		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 		if err != nil {
-			if errors2.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				// there are no agents to remove
 				return nil, nil
 			}
@@ -947,7 +954,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
 	}
 
-	_ = tm.clearIntercepts(ctx)
+	_ = tm.ClearIntercepts(ctx)
 	clearAgentsConfigMap := func(ns string) error {
 		cm, err := loadAgentConfigMap(ns)
 		if err != nil {

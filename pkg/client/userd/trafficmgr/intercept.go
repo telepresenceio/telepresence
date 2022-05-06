@@ -818,15 +818,71 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 // RemoveIntercept removes one intercept by name
 func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error {
+	dlog.Debugf(c, "Removing intercept %s", name)
+
 	if ns, ok := tm.localIntercepts[name]; ok {
 		return tm.RemoveLocalOnlyIntercept(c, name, ns)
 	}
+
+	var ii *manager.InterceptInfo
+	for _, cept := range tm.getCurrentIntercepts() {
+		if cept.Spec.Name == name {
+			ii = cept
+			break
+		}
+	}
+
+	if ii == nil {
+		dlog.Debugf(c, "Intercept %s was already removed", name)
+		return nil
+	}
+	return tm.removeIntercept(c, ii)
+}
+
+func (tm *TrafficManager) removeIntercept(c context.Context, ii *manager.InterceptInfo) error {
+	tm.currentInterceptsLock.Lock()
+	pid, ok := tm.currentInterceptors[ii.Id]
+	if ok {
+		delete(tm.currentInterceptors, ii.Id)
+	}
+	tm.currentInterceptsLock.Unlock()
+	name := ii.Spec.Name
+	if ok {
+		p, err := os.FindProcess(pid)
+		if err != nil {
+			dlog.Error(c, "unable to find interceptor for intercept %s with pid %d", name, pid)
+		} else {
+			dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, pid)
+			if runtime.GOOS == "windows" {
+				_ = p.Kill()
+			} else {
+				_ = p.Signal(os.Interrupt)
+			}
+		}
+	}
+
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,
 	})
 	return err
+}
+
+// AddInterceptor associates the given interceptId with a pid of a running process. This ensures that
+// the running process will be signalled when the intercept is removed
+func (tm *TrafficManager) AddInterceptor(s string, i int) error {
+	tm.currentInterceptsLock.Lock()
+	tm.currentInterceptors[s] = i
+	tm.currentInterceptsLock.Unlock()
+	return nil
+}
+
+func (tm *TrafficManager) RemoveInterceptor(s string) error {
+	tm.currentInterceptsLock.Lock()
+	delete(tm.currentInterceptors, s)
+	tm.currentInterceptsLock.Unlock()
+	return nil
 }
 
 // GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists
@@ -842,10 +898,11 @@ func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
 	return nil
 }
 
-// clearIntercepts removes all intercepts
-func (tm *TrafficManager) clearIntercepts(c context.Context) error {
+// ClearIntercepts removes all intercepts
+func (tm *TrafficManager) ClearIntercepts(c context.Context) error {
 	for _, cept := range tm.getCurrentIntercepts() {
-		err := tm.RemoveIntercept(c, cept.Spec.Name)
+		dlog.Debugf(c, "Clearing intercept %s", cept.Spec.Name)
+		err := tm.removeIntercept(c, cept)
 		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {
 			return err
 		}

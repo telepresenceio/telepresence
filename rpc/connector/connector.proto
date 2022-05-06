@@ -88,6 +88,13 @@ service Connector {
   // GatherLogs will acquire logs for the various Telepresence components in kubernetes
   // (pending the request) and return them to the caller
   rpc GatherLogs(LogsRequest) returns (LogsResponse);
+
+  // AddInterceptor tells the connector that a given process is serving a specific
+  // intercept. The connector must kill this process when the intercept ends
+  rpc AddInterceptor(Interceptor) returns  (google.protobuf.Empty);
+
+  // RemoveInterceptor removes a previously added interceptor
+  rpc RemoveInterceptor(Interceptor)  returns  (google.protobuf.Empty);
 }
 
 message CommandGroups {
@@ -113,6 +120,14 @@ message CommandGroups {
 
 message RunCommandRequest {
   repeated string os_args = 1;
+}
+
+message Interceptor {
+  // The ID of the intercept that is served by this interceptor process
+  string intercept_id = 1;
+
+  // The pid of the interceptor process
+  int32  pid = 2;
 }
 
 message RunCommandResponse {
