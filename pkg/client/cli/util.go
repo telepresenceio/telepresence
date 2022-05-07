@@ -2,11 +2,9 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -106,73 +104,4 @@ func connect(ctx context.Context, connectorClient connector.ConnectorClient, std
 		}
 	}
 	return false, nil, cat.Newf("connector.Connect: %s", msg)
-}
-
-type Output struct {
-	cmd    string
-	stdout strings.Builder
-	err    error
-
-	nativeJSON bool
-}
-
-func (o *Output) Write(p []byte) (int, error) {
-	return o.stdout.Write(p)
-}
-
-func (o *Output) RunE(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		switch cmd.Flag("output").Value.String() {
-		case "json":
-			nativeJSON, err := cmd.LocalFlags().GetBool("json")
-			if err == nil {
-				o.nativeJSON = nativeJSON
-			}
-			stdout := cmd.OutOrStdout()
-			cmd.SetOut(o)
-			o.cmd = cmd.Name()
-			o.err = f(cmd, args)
-
-			o.writeStructured(stdout)
-		default:
-			return f(cmd, args)
-		}
-
-		return nil
-	}
-}
-
-func (o *Output) writeStructured(w io.Writer) {
-	switch o.nativeJSON {
-	case true:
-		x := struct {
-			Cmd    string          `json:"cmd"`
-			Err    string          `json:"err,omitempty"`
-			Stdout json.RawMessage `json:"stdout,omitempty"`
-		}{
-			Cmd:    o.cmd,
-			Stdout: json.RawMessage(o.stdout.String()),
-		}
-
-		if o.err != nil {
-			x.Err = o.err.Error()
-		}
-
-		json.NewEncoder(w).Encode(x)
-	case false:
-		x := struct {
-			Cmd    string `json:"cmd"`
-			Err    string `json:"err,omitempty"`
-			Stdout string `json:"stdout,omitempty"`
-		}{
-			Cmd:    o.cmd,
-			Stdout: o.stdout.String(),
-		}
-
-		if o.err != nil {
-			x.Err = o.err.Error()
-		}
-
-		json.NewEncoder(w).Encode(x)
-	}
 }
