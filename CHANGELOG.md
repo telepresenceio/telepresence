@@ -23,6 +23,8 @@
 
 - Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group. 
 
+- Change: Add support for structured output as JSON by setting the global --output=json flag.
+
 ### 2.5.8 (April 27, 2022)
 
 - Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.
