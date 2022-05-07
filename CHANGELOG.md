@@ -30,6 +30,8 @@
 - Bugfix: Using `telepresence leave` or `telepresence quit` on an intercept that spawned a command using `--` on the command line
   will now terminate that command since it's considered parented by the intercept that is removed.
 
+- Change: Add support for structured output as JSON by setting the global --output=json flag.
+
 ### 2.5.8 (April 27, 2022)
 
 - Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.

@@ -202,7 +202,7 @@ func initGlobalFlagGroups() {
 			)
 			flags.String(
 				"output", "default",
-				"set the output format",
+				"set the output format, supported values are 'json' and 'default'",
 			)
 			return flags
 		}(),
