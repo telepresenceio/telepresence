@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -114,7 +113,7 @@ func SftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 }
 
 func Main(ctx context.Context, args ...string) error {
-	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
+	dlog.Infof(ctx, "Traffic Agent %s", version.Version)
 
 	// Handle configuration
 	config, err := LoadConfig(ctx)
