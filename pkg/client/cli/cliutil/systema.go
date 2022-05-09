@@ -272,7 +272,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 // designated binary, chmods it to be executable, removes the old binary, and then renames the
 // temporary file as the new binary
 func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, telProLocation string) (err error) {
-	stdout, _ := output.Outputs(ctx)
+	stdout, _ := output.Structured(ctx)
 	dir := filepath.Dir(telProLocation)
 	if err = os.MkdirAll(dir, 0777); err != nil {
 		return errcat.NoDaemonLogs.Newf("error creating directory %q: %w", dir, err)
