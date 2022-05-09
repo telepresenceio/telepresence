@@ -42,7 +42,7 @@ func TestWithOutput(t *testing.T) {
 
 	t.Run("non-json output", func(t *testing.T) {
 		cmd, outBuf, errBuf := newCmdWithBufs()
-		ctx := WithOutput(context.Background(), cmd)
+		ctx := WithStructure(context.Background(), cmd)
 
 		err := cmd.ExecuteContext(ctx)
 		if err != nil {
@@ -64,7 +64,7 @@ func TestWithOutput(t *testing.T) {
 
 	t.Run("json output no error", func(t *testing.T) {
 		cmd, outBuf, errBuf := newCmdWithBufs()
-		ctx := WithOutput(context.Background(), cmd)
+		ctx := WithStructure(context.Background(), cmd)
 
 		cmd.SetArgs([]string{"--output=json"})
 
@@ -103,7 +103,7 @@ func TestWithOutput(t *testing.T) {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			return errors.New(expectedErr)
 		}
-		ctx := WithOutput(context.Background(), cmd)
+		ctx := WithStructure(context.Background(), cmd)
 
 		cmd.SetArgs([]string{"--output=json"})
 
@@ -129,13 +129,13 @@ func TestWithOutput(t *testing.T) {
 		}
 		cmd, outBuf, errBuf := newCmdWithBufs()
 		cmd.LocalFlags().Bool("json", false, "")
-		cmd.LocalFlags().Set("json", "true")
+		_ = cmd.LocalFlags().Set("json", "true")
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			stdout := cmd.OutOrStdout()
 			_ = json.NewEncoder(stdout).Encode(expectedNativeJSONMap)
 			return nil
 		}
-		ctx := WithOutput(context.Background(), cmd)
+		ctx := WithStructure(context.Background(), cmd)
 
 		cmd.SetArgs([]string{"--output=json"})
 
@@ -145,7 +145,6 @@ func TestWithOutput(t *testing.T) {
 		}
 
 		stdout := outBuf.String()
-		fmt.Printf("stdout: %+v\n", stdout)
 		m := map[string]interface{}{}
 		if err := json.Unmarshal([]byte(stdout), &m); err != nil {
 			t.Errorf("did not get json as stdout, got: %s", stdout)
@@ -173,7 +172,7 @@ func TestWithOutput(t *testing.T) {
 		cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 			pprRan = true
 		}
-		ctx := WithOutput(context.Background(), cmd)
+		ctx := WithStructure(context.Background(), cmd)
 
 		err := cmd.ExecuteContext(ctx)
 		if err != nil {
@@ -189,9 +188,9 @@ func TestWithOutput(t *testing.T) {
 		cmd, outBuf, errBuf := newCmdWithBufs()
 		cmd.RunE = nil
 		cmd.Run = func(cmd *cobra.Command, args []string) {
-			re(cmd, args)
+			_ = re(cmd, args)
 		}
-		ctx := WithOutput(context.Background(), cmd)
+		ctx := WithStructure(context.Background(), cmd)
 
 		cmd.SetArgs([]string{"--output=json"})
 
@@ -215,7 +214,7 @@ func TestWithOutput(t *testing.T) {
 func TestOutputs(t *testing.T) {
 	t.Run("no output in context", func(t *testing.T) {
 		ctx := context.Background()
-		stdout, stderr := Outputs(ctx)
+		stdout, stderr := Structured(ctx)
 
 		if stdout != os.Stdout {
 			t.Errorf("expected stdout to be os.Stdout")
@@ -234,7 +233,7 @@ func TestOutputs(t *testing.T) {
 		}
 
 		ctx = context.WithValue(ctx, key{}, &o)
-		stdout, stderr := Outputs(ctx)
+		stdout, stderr := Structured(ctx)
 
 		if stdout != &o.stdoutBuf {
 			t.Errorf("got unexpected stdout")

@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func WithOutput(ctx context.Context, cmd *cobra.Command) context.Context {
+func WithStructure(ctx context.Context, cmd *cobra.Command) context.Context {
 	next := cmd.PersistentPreRun
 	o := output{
 		stdout: cmd.OutOrStdout(),
@@ -35,7 +35,7 @@ func WithOutput(ctx context.Context, cmd *cobra.Command) context.Context {
 	return context.WithValue(ctx, key{}, &o)
 }
 
-func Outputs(ctx context.Context) (stdout, stderr io.Writer) {
+func Structured(ctx context.Context) (stdout, stderr io.Writer) {
 	o, ok := ctx.Value(key{}).(*output)
 	if !ok {
 		return os.Stdout, os.Stderr

@@ -71,7 +71,7 @@ func main() {
 		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 			return errcat.User.New(err)
 		})
-		ctx = output.WithOutput(ctx, cmd)
+		ctx = output.WithStructure(ctx, cmd)
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			if errcat.GetCategory(err) > errcat.NoDaemonLogs {

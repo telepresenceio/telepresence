@@ -76,7 +76,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, maybeSta
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoUserDaemon
 			if maybeStart {
-				stdout, _ := output.Outputs(ctx)
+				stdout, _ := output.Structured(ctx)
 				fmt.Fprintln(stdout, "Launching Telepresence User Daemon")
 				if _, err = ensureAppUserConfigDir(ctx); err != nil {
 					return nil, err
@@ -138,7 +138,7 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 	})
 
 	grp.Go("stdio", func(ctx context.Context) error {
-		stdout, _ := output.Outputs(ctx)
+		stdout, _ := output.Structured(ctx)
 		stream, err := connectorClient.UserNotifications(ctx, &empty.Empty{})
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 }
 
 func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
-	stdout, _ := output.Outputs(ctx)
+	stdout, _ := output.Structured(ctx)
 	fmt.Fprint(stdout, "Telepresence Traffic Manager ")
 	err := WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
 		defer func() {

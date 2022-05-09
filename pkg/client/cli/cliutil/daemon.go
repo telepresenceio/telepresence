@@ -24,7 +24,7 @@ import (
 var ErrNoNetwork = errors.New("telepresence network is not established")
 
 func launchDaemon(ctx context.Context) error {
-	stdout, _ := output.Outputs(ctx)
+	stdout, _ := output.Structured(ctx)
 	fmt.Fprintln(stdout, "Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
@@ -121,7 +121,7 @@ type quitting struct{}
 
 // Disconnect shuts down a session in the root daemon. When it shuts down, it will tell the connector to shut down.
 func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err error) {
-	stdout, stderr := output.Outputs(ctx)
+	stdout, stderr := output.Structured(ctx)
 	ctx = context.WithValue(ctx, quitting{}, true)
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
