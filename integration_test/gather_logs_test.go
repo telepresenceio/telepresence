@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -103,8 +104,24 @@ func (s *singleServiceSuite) TestGatherLogs_OnlyMappedLogs() {
 	itest.CreateNamespaces(ctx, otherNS)
 	itest.ApplyEchoService(ctx, s.ServiceName(), otherNS, 8083)
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherNS, "--mount", "false", s.ServiceName())
+	s.Eventually(
+		func() bool {
+			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", otherNS, "--intercepts")
+			return strings.Contains(stdout, s.ServiceName()+": intercepted")
+		},
+		10*time.Second,
+		2*time.Second,
+	)
 	itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+otherNS)
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", s.ServiceName())
+	s.Eventually(
+		func() bool {
+			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return strings.Contains(stdout, s.ServiceName()+": intercepted")
+		},
+		10*time.Second,
+		2*time.Second,
+	)
 	itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+s.AppNamespace())
 
 	bothNsRx := fmt.Sprintf("(?:%s|%s)", s.AppNamespace(), otherNS)

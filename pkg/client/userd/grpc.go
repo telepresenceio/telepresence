@@ -22,6 +22,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -431,6 +433,23 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Stdout: outW.Bytes(),
 			Stderr: errW.Bytes(),
 		}
+	})
+	return
+}
+
+func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
+	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
+		pool := a8rcloud.GetSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName)
+		systemacli, err := pool.Get(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			err := pool.Done(ctx)
+			dlog.Warnf(ctx, "Unexpected error tearing down systema connection: %v", err)
+		}()
+		resp, err = systemacli.ResolveIngressInfo(ctx, req)
+		return err
 	})
 	return
 }

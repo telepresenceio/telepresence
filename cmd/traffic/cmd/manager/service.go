@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -55,7 +56,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context) {
 		state:       state.NewState(ctx),
 		clusterInfo: cluster.NewInfo(ctx),
 	}
-	ctx = managerutil.WithSystemAPool(ctx, &systemaPool{mgr: ret})
+	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	ret.ctx = ctx
 	return ret, ctx
 }
@@ -449,7 +450,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
 
-	systemaPool := managerutil.GetSystemAPool(ctx)
+	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 	switch action := req.PreviewDomainAction.(type) {
 	case *rpc.UpdateInterceptRequest_AddPreviewDomain:
 		var domain string
@@ -463,7 +464,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 			// Connect to SystemA.
 			if sa == nil {
-				sa, err = systemaPool.Get()
+				sa, err = systemaPool.Get(ctx)
 				if err != nil {
 					err = errors.Wrap(err, "systema: acquire connection")
 					return
@@ -505,7 +506,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 						dlog.Errorln(ctx, "systema: remove domain:", err)
 					}
 				}
-				if err := systemaPool.Done(); err != nil {
+				if err := systemaPool.Done(ctx); err != nil {
 					dlog.Errorln(ctx, "systema: release connection:", err)
 				}
 			}
@@ -527,7 +528,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 			intercept.PreviewDomain = ""
 		})
 		if domain != "" {
-			if sa, err := systemaPool.Get(); err != nil {
+			if sa, err := systemaPool.Get(ctx); err != nil {
 				dlog.Errorln(ctx, "systema: acquire connection:", err)
 			} else {
 				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
@@ -538,7 +539,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 				if err != nil {
 					dlog.Errorln(ctx, "systema: remove domain:", err)
 				}
-				if err := systemaPool.Done(); err != nil {
+				if err := systemaPool.Done(ctx); err != nil {
 					dlog.Errorln(ctx, "systema: release connection:", err)
 				}
 			}
