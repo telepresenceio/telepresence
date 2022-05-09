@@ -13,6 +13,7 @@ import (
 )
 
 type Env struct {
+	LogLevel    string `env:"LOG_LEVEL,default=info"`
 	User        string `env:"USER,default="`
 	ServerHost  string `env:"SERVER_HOST,default="`
 	ServerPort  string `env:"SERVER_PORT,default=8081"`
@@ -41,6 +42,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorCon
 		APIPort:             uint16(e.APIPort),
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
+		LogLevel:            e.LogLevel,
 	}
 }
 
