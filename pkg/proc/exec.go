@@ -5,19 +5,17 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 
-	//nolint:depguard // TODO: Switch Run() over to dexec.
-	"os/exec"
-
+	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-// Run will run the given executable with given args and env, wait for it to terminate, and return
-// the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
+// Start will start the given executable with given args and env,, and return the command. The signals are
+// dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
-func Run(ctx context.Context, env map[string]string, exe string, args ...string) error {
-	cmd := exec.CommandContext(ctx, exe, args...)
+func Start(ctx context.Context, env map[string]string, exe string, args ...string) (*dexec.Cmd, error) {
+	cmd := CommandContext(ctx, exe, args...)
+	cmd.DisableLogging = true
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -26,12 +24,19 @@ func Run(ctx context.Context, env map[string]string, exe string, args ...string)
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
-	var err error
-	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
 	}
+	return cmd, nil
+}
 
-	// Ensure that signals are propagated to the child process
+// Wait will wait for the Process of the command to finish
+func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error {
+	p := cmd.Process
+	if p == nil {
+		return nil
+	}
+	// Ensure that appropriate signals terminates the context.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, signalsToForward...)
 	defer func() {
@@ -39,22 +44,38 @@ func Run(ctx context.Context, env map[string]string, exe string, args ...string)
 		close(sigCh)
 	}()
 	go func() {
-		sig := <-sigCh
-		if sig == nil {
-			return
+		select {
+		case <-ctx.Done():
+		case sig := <-sigCh:
+			if sig == nil {
+				return
+			}
+			cancel()
 		}
-		_ = cmd.Process.Signal(sig)
 	}()
-	s, err := cmd.Process.Wait()
+	s, err := p.Wait()
 	if err != nil {
-		return fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", shellquote.ShellString(cmd.Path, cmd.Args), err)
 	}
 
 	exitCode := s.ExitCode()
 	if exitCode != 0 {
-		return fmt.Errorf("%s %s: exited with %d", exe, strings.Join(args, " "), exitCode)
+		return fmt.Errorf("%s: exited with %d", shellquote.ShellString(cmd.Path, cmd.Args), exitCode)
 	}
 	return nil
+}
+
+// Run will run the given executable with given args and env, wait for it to terminate, and return
+// the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
+// and os.Interrupt on Windows).
+func Run(ctx context.Context, env map[string]string, exe string, args ...string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd, err := Start(ctx, env, exe, args...)
+	if err != nil {
+		return err
+	}
+	return Wait(ctx, cancel, cmd)
 }
 
 func StartInBackground(args ...string) error {
