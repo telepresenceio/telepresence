@@ -41,6 +41,10 @@ func Structured(ctx context.Context) (stdout, stderr io.Writer) {
 		return os.Stdout, os.Stderr
 	}
 
+	if !o.outputJSON {
+		return os.Stdout, os.Stderr
+	}
+
 	return &o.stdoutBuf, &o.stderrBuf
 }
 
@@ -53,6 +57,7 @@ type output struct {
 	err       error
 
 	nativeJSON bool
+	outputJSON bool
 	stdout     io.Writer
 	stderr     io.Writer
 }
@@ -60,8 +65,8 @@ type output struct {
 func (o *output) runE(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		flagValue, _ := cmd.Flags().GetString("output")
-		flagValue = strings.ToLower(flagValue)
-		if flagValue != "json" {
+		o.outputJSON = strings.ToLower(flagValue) == "json"
+		if !o.outputJSON {
 			return f(cmd, args)
 		}
 
@@ -74,7 +79,6 @@ func (o *output) runE(f func(cmd *cobra.Command, args []string) error) func(cmd 
 		cmd.SetErr(&o.stderrBuf)
 		o.cmd = cmd.Name()
 		o.err = f(cmd, args)
-
 		o.writeStructured(stdout)
 
 		return nil
