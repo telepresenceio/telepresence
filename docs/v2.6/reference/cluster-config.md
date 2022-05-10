@@ -192,18 +192,14 @@ air-gapped environment.
 
 ## Mutating Webhook
 
-By default, Telepresence updates the intercepted workload (Deployment, StatefulSet, ReplicaSet)
-template to add the [Traffic Agent](../architecture/#traffic-agent) sidecar container and update the
-port definitions. If you use GitOps workflows (with tools like ArgoCD) to automatically update your
-cluster so that it reflects the desired state from an external Git repository, this behavior can make
-your workload out of sync with that external desired state.
+Telepresence uses a Mutating Webhook to inject the [Traffic Agent](../architecture/#traffic-agent) sidecar container and update the
+port definitions. This means that an intercepted workload (Deployment, StatefulSet, ReplicaSet) will remain untouched
+and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
-To solve this issue, you can use Telepresence's Mutating Webhook alternative mechanism. Intercepted
-workloads will then stay untouched and only the underlying pods will be modified to inject the Traffic
-Agent sidecar container and update the port definitions.
+The injection will happen on demand the first time an attempt is made to intercept the workload.
 
-Simply add the `telepresence.getambassador.io/inject-traffic-agent: enabled` annotation to your
-workload template's annotations:
+If you want to prevent that the injection ever happens, simply add the `telepresence.getambassador.io/inject-traffic-agent: disabled`
+annotation to your workload template's annotations:
 
 ```diff
  spec:
@@ -212,15 +208,15 @@ workload template's annotations:
        labels:
          service: your-service
 +      annotations:
-+        telepresence.getambassador.io/inject-traffic-agent: enabled
++        telepresence.getambassador.io/inject-traffic-agent: disabled
      spec:
        containers:
 ```
 
-### Service Port Annotation
+### Service Name and Port Annotations
 
-A service port annotation can be added to the workload to make the Mutating Webhook select a specific port
-in the service. This is necessary when the service has multiple ports.
+Telepresence will automatically find all services and all ports that will connect to a workload and make them available
+for an intercept, but you can explicitly define that only one service and/or port can be intercepted.
 
 ```diff
  spec:
@@ -229,26 +225,8 @@ in the service. This is necessary when the service has multiple ports.
        labels:
          service: your-service
        annotations:
-         telepresence.getambassador.io/inject-traffic-agent: enabled
-+        telepresence.getambassador.io/inject-service-port: https
-     spec:
-       containers:
-```
-
-### Service Name Annotation
-
-A service name annotation can be added to the workload to make the Mutating Webhook select a specific Kubernetes service.
-This is necessary when the workload is exposed by multiple services.
-
-```diff
- spec:
-   template:
-     metadata:
-       labels:
-         service: your-service
-       annotations:
-         telepresence.getambassador.io/inject-traffic-agent: enabled
 +        telepresence.getambassador.io/inject-service-name: my-service
++        telepresence.getambassador.io/inject-service-port: https
      spec:
        containers:
 ```
@@ -262,12 +240,6 @@ reconfigure the pod's firewall rules to redirect traffic to the Traffic Agent.
 <Alert severity="info">
 Note that this <code>initContainer</code> requires `NET_ADMIN` capabilities.
 If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
-</Alert>
-
-<Alert severity="info">
-This requires the Traffic Agent to run as GID <code>7777</code>. By default, this is disabled on openshift clusters.
-To enable running as GID <code>7777</code> on a specific openshift namespace, run:
-<code>oc adm policy add-scc-to-group anyuid system:serviceaccounts:$NAMESPACE</code>
 </Alert>
 
 If you need to use numeric ports without the aforementioned capabilities, you can [manually install the agent](../intercepts/manual-agent)
