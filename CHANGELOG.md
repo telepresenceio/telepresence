@@ -4,6 +4,8 @@
 
 - Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
 
+- Feature: Telepresence client now require less RBAC permissions in order to intercept.
+
 - Change: All pod-injection is performed by the mutating webhook. Client will no longer modify workloads.
 
 - Change: Traffic-agent is configured using a ConfigMap entry. In prior versions, the configuration was passed in the container environment.

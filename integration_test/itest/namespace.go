@@ -3,8 +3,11 @@ package itest
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type NamespacePair interface {
@@ -45,6 +48,8 @@ const purposeLabel = "tp-cli-testing"
 
 func (s *nsPair) setup(ctx context.Context) bool {
 	CreateNamespaces(ctx, s.namespace, s.managerNamespace)
+	err := Run(WithModuleRoot(ctx), "kubectl", "apply", "-n", s.managerNamespace, "-f", filepath.Join("k8s", "client_connect_rbac.yaml"))
+	require.NoError(getT(ctx), err, "failed to create connect Role/RoleBinding", TestUser)
 	return true
 }
 

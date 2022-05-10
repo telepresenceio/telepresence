@@ -60,10 +60,8 @@ rules:
   - replicasets
   - statefulsets
   verbs:
-  - list
   - get
   - patch
-  - update
 {{- if eq . (include "telepresence.namespace" $) }}
 # Must be able to get the manager namespace in order to get the cluster-id
 - apiGroups:

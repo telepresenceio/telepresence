@@ -33,7 +33,13 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 	require.NotContains(stdout, svc+": intercepted")
 
-	itest.TelepresenceOk(ctx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
+	itest.TelepresenceQuitOk(ctx)
+
+	dfltCtx := itest.WithUser(ctx, "default")
+	itest.TelepresenceOk(dfltCtx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
+	itest.TelepresenceQuitOk(dfltCtx)
+	itest.TelepresenceOk(ctx, "connect")
+
 	require.Eventually(
 		func() bool {
 			return !strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents"), svc)
