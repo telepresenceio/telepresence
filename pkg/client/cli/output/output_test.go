@@ -228,8 +228,9 @@ func TestOutputs(t *testing.T) {
 	t.Run("with output in context", func(t *testing.T) {
 		ctx := context.Background()
 		o := output{
-			stdoutBuf: strings.Builder{},
-			stderrBuf: strings.Builder{},
+			stdoutBuf:  strings.Builder{},
+			stderrBuf:  strings.Builder{},
+			outputJSON: true,
 		}
 
 		ctx = context.WithValue(ctx, key{}, &o)
@@ -240,6 +241,25 @@ func TestOutputs(t *testing.T) {
 		}
 
 		if stderr != &o.stderrBuf {
+			t.Errorf("got unexpected stderr")
+		}
+	})
+
+	t.Run("with output in context no json", func(t *testing.T) {
+		ctx := context.Background()
+		o := output{
+			stdoutBuf: strings.Builder{},
+			stderrBuf: strings.Builder{},
+		}
+
+		ctx = context.WithValue(ctx, key{}, &o)
+		stdout, stderr := Structured(ctx)
+
+		if stdout != os.Stdout {
+			t.Errorf("got unexpected stdout")
+		}
+
+		if stderr != os.Stderr {
 			t.Errorf("got unexpected stderr")
 		}
 	})
