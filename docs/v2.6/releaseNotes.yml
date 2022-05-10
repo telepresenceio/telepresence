@@ -39,52 +39,6 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
-  - version: 2.6.0
-    date: (TBD)
-    notes:
-      - type: feature
-        title: Intercept multiple containers in a pod, and multiple ports per container
-        body: >-
-          Telepresence can now intercept multiple services and/or service-ports that connects to the same pod.
-        docs: ../new-in-2.6#intercept-multiple-containers-and-ports
-      - type: feature
-        title: The Traffic Agent sidecar is always injectied by the Traffic Manager's mutating webhook.
-        body: >-
-          The client will no longer modify <code>deployments</code>, <code>replicasets</code>, or <code>statefulsets</code> in order to
-          inject a Traffic Agent into an intercepted pod. Instead, all injection is now performed by a mutating webhook. As a result,
-          the client now needs less permissions in the cluster.
-        docs: ../new-in-2.6#no-more-workload-modifications
-      - type: change
-        title: Autmatic upgrade of Traffic Agents
-        body: >-
-          When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically.
-          The mutating webhook will then ensure that their pods will receive an updated Traffic Agent.
-        docs: ../new-in-2.6no-more-workload-modifications
-      - type: change
-        title: No default image in the Helm chart
-        body: >-
-          The helm-chart no longer has a default set for the <code>agentInjector.image.name</code>, and unless its set, the
-          traffic-manager will ask Ambassador Could for the preferred image.
-        docs: ../new-in-2.6#smarter-agent
-      - type: change
-        title: Upgrade to Helm version 3.8.1.
-        body: The telepresence client now uses Helm version 3.8.1 when auto-installing the Traffic Manager.
-      - type: bugfix
-        title: Remote mounts will now function correctly with custom securityContext
-        body: >-
-          The bug causing permission problems when the Traffic Agent in a Pod with a custom <code>securityContext</code> has been fixed.
-      - type: bugfix
-        title: Improved presentation of flags in CLI help
-        body: The help for commands that accept kubernetes flags will now display those flags in a separate group.
-      - type: bugfix
-        title: Improved presentation of flags in CLI help
-        body: The help for commands that accept kubernetes flags will now display those flags in a separate group.
-      - type: bugfix
-        title: Better termination of process parented by intercept
-        body: >-
-          Using <code>telepresence leave</code> or <code>telepresence quit</code> when an intercept that spawned a command using
-          <code>--</code> on the command line is still active (perhaps started in another console), will now terminate that command
-          because it's considered to be parented by the intercept that being removed.
   - version: 2.5.8
     date: "2022-04-27"
     notes:
@@ -232,12 +186,6 @@ items:
           The flag <code>--http-meta</code> can be used to declare metadata key value pairs that will be returned by the Telepresence rest
           API endpoint <code>/intercept-info</code>
         docs: reference/restapi#intercept-info
-      - type: change
-        title: --http-match renamed to --http-header
-        body: >-
-          The `telepresence intercept` command line flag <code>--http-match</code> was renamed to <code>--http-header</code>. The old flag
-          still works, but it is deprecated and doesn't show up in the help.
-        docs: concepts/intercepts#creating-and-using-personal-intercepts
       - type: change
         title: Client RBAC watch
         body: >-
