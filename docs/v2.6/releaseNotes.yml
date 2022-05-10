@@ -187,6 +187,12 @@ items:
           API endpoint <code>/intercept-info</code>
         docs: reference/restapi#intercept-info
       - type: change
+        title: --http-match renamed to --http-header
+        body: >-
+          The `telepresence intercept` command line flag <code>--http-match</code> was renamed to <code>--http-header</code>. The old flag
+          still works, but it is deprecated and doesn't show up in the help.
+        docs: concepts/intercepts#creating-and-using-personal-intercepts
+      - type: change
         title: Client RBAC watch
         body: >-
           The verb "watch" was added to the set of required verbs when accessing services and workloads for the client RBAC

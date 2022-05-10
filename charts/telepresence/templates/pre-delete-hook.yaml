@@ -16,6 +16,7 @@ metadata:
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
+  backoffLimit: 1
   template:
     metadata:
       name: uninstall-agents
@@ -29,7 +30,7 @@ spec:
         - name: uninstall-agents
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "curlimages/curl"
+          image: curlimages/curl
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
             - name: secret-volume
@@ -37,11 +38,11 @@ spec:
           env:
             - name: CURL_CA_BUNDLE
               value: /secret/ca.crt
+          command:
+            - sh
+            - -c
           args:
-            - '--fail'
-            - '--request'
-            - DELETE
-            - 'https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/uninstall'
+            - 'curl --fail --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/uninstall || exit 0'
       volumes:
         - name: secret-volume
           secret:

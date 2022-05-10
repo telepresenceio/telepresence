@@ -22,6 +22,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -239,6 +241,18 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, err
 }
 
+func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, "AddInterceptor", func(_ context.Context, session trafficmgr.Session) error {
+		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
+	})
+}
+
+func (s *service) RemoveInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, "RemoveInterceptor", func(_ context.Context, session trafficmgr.Session) error {
+		return session.RemoveInterceptor(interceptor.InterceptId)
+	})
+}
+
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	err = s.withSession(c, "List", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
@@ -401,6 +415,7 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
+		s.cancelSessionReadLocked()
 		s.quit()
 	})
 	return &empty.Empty{}, nil
@@ -431,6 +446,23 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Stdout: outW.Bytes(),
 			Stderr: errW.Bytes(),
 		}
+	})
+	return
+}
+
+func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
+	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
+		pool := a8rcloud.GetSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName)
+		systemacli, err := pool.Get(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			err := pool.Done(ctx)
+			dlog.Warnf(ctx, "Unexpected error tearing down systema connection: %v", err)
+		}()
+		resp, err = systemacli.ResolveIngressInfo(ctx, req)
+		return err
 	})
 	return
 }

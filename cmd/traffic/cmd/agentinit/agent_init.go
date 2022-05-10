@@ -15,8 +15,11 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"gopkg.in/yaml.v3"
 
+	"github.com/datawire/dlib/derror"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 const nat = "nat"
@@ -158,18 +161,31 @@ func findLoopback(ctx context.Context) (string, error) {
 
 // Main is the main function for the agent init container
 func Main(ctx context.Context, args ...string) error {
+	dlog.Infof(ctx, "Traffic Agent Init %s", version.Version)
+	defer func() {
+		if r := recover(); r != nil {
+			dlog.Error(ctx, derror.PanicToError(r))
+		}
+	}()
 	cfg, err := loadConfig(ctx)
 	if err != nil {
+		dlog.Error(ctx, err)
 		return err
 	}
 
 	lo, err := findLoopback(ctx)
 	if err != nil {
+		dlog.Error(ctx, err)
 		return err
 	}
 	it, err := iptables.New()
 	if err != nil {
-		return fmt.Errorf("unable to create iptables instance: %w", err)
+		err = fmt.Errorf("unable to create iptables instance: %w", err)
+		dlog.Error(ctx, err)
+		return err
 	}
-	return cfg.configureIptables(ctx, it, lo)
+	if err = cfg.configureIptables(ctx, it, lo); err != nil {
+		dlog.Error(ctx, err)
+	}
+	return err
 }

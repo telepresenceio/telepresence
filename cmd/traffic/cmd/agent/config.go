@@ -11,6 +11,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type Config interface {
@@ -44,9 +45,16 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	}
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")
 	for _, cn := range c.Containers {
+		if err := addAppMounts(ctx, cn); err != nil {
+			return nil, err
+		}
 		if err := addSecretsMounts(ctx, cn); err != nil {
 			return nil, err
 		}
+	}
+	if c.LogLevel != "" {
+		// Override default from environment
+		log.SetLevel(ctx, c.LogLevel)
 	}
 	return &c, nil
 }
@@ -68,10 +76,39 @@ func (c *config) PodIP() string {
 	return c.podIP
 }
 
+// addAppMounts adds each of the mounts present under the containers MountPoint as a
+// symlink under the agentconfig.ExportsMountPoint/<container mount>/
+func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
+	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
+	if err := dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
+		return err
+	}
+	appMountsDir, err := dos.Open(ctx, ag.MountPoint)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil // Nothing is mounted from this app container. That's ok
+		}
+		return err
+	}
+	defer appMountsDir.Close()
+	mounts, err := appMountsDir.ReadDir(-1)
+	if err != nil {
+		return err
+	}
+	for _, mount := range mounts {
+		if err = dos.Symlink(ctx, filepath.Join(ag.MountPoint, mount.Name()), filepath.Join(cnMountPoint, mount.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // addSecretsMounts adds any token-rotating system secrets directories if they exist
 // e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
 // to the TELEPRESENCE_MOUNTS environment variable
 func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
+	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
+
 	// This will attempt to handle all the secrets dirs, but will return the first error we encountered.
 	secretsDir, err := dos.Open(ctx, "/var/run/secrets")
 	if err != nil {
@@ -81,10 +118,10 @@ func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
 		return err
 	}
 	fileInfo, err := secretsDir.ReadDir(-1)
+	secretsDir.Close()
 	if err != nil {
 		return err
 	}
-	secretsDir.Close()
 
 	mm := make(map[string]struct{})
 	for _, m := range ag.Mounts {
@@ -109,7 +146,7 @@ func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
 			continue
 		}
 
-		appMountsPath := filepath.Join(ag.MountPoint, dirPath)
+		appMountsPath := filepath.Join(cnMountPoint, dirPath)
 		dlog.Debugf(ctx, "checking appmounts directory: %s", dirPath)
 		// Make sure the path doesn't already exist
 		_, err = dos.Stat(ctx, appMountsPath)

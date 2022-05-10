@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -113,7 +113,7 @@ func SftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 }
 
 func Main(ctx context.Context, args ...string) error {
-	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
+	dlog.Infof(ctx, "Traffic Agent %s", version.Version)
 
 	// Handle configuration
 	config, err := LoadConfig(ctx)
@@ -182,7 +182,8 @@ func Main(ctx context.Context, args ...string) error {
 				g.Go(fmt.Sprintf("forward-%s:%d", cn.Name, ic.ContainerPort), func(ctx context.Context) error {
 					return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()))
 				})
-				state.AddInterceptState(NewInterceptState(state, fwd, ic, cn.MountPoint, env))
+				cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
+				state.AddInterceptState(NewInterceptState(state, fwd, ic, cnMountPoint, env))
 			}
 		}
 

@@ -40,6 +40,7 @@ func TestEnvconfig(t *testing.T) {
 		AgentPort:       9900,
 		MaxReceiveSize:  resource.MustParse("4Mi"),
 		PodCIDRStrategy: "auto",
+		LogLevel:        "info",
 	}
 
 	testcases := map[string]struct {

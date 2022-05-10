@@ -499,7 +499,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			switch {
 			case err.Timeout():
 				txt = func() string { return "timeout" }
-			case err.Temporary():
+			case err.Temporary(): //nolint:staticcheck // err.Temporary is deprecated
 				rc = dns.RcodeRefused
 			default:
 			}

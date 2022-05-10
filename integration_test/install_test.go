@@ -1,8 +1,16 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +62,13 @@ func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
 	f, err := os.ReadFile("testdata/legacyManifests/manifests.yml")
 	require.NoError(err)
 	manifest := string(f)
+	ca, crt, key, err := certsetup(is.ManagerNamespace())
+	require.NoError(err)
 	manifest = strings.ReplaceAll(manifest, "{{.ManagerNamespace}}", is.ManagerNamespace())
+	manifest = strings.ReplaceAll(manifest, "{{.CA}}", base64.StdEncoding.EncodeToString(ca))
+	manifest = strings.ReplaceAll(manifest, "{{.CRT}}", base64.StdEncoding.EncodeToString(crt))
+	manifest = strings.ReplaceAll(manifest, "{{.KEY}}", base64.StdEncoding.EncodeToString(key))
+
 	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(manifest)
 	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
@@ -91,7 +105,100 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	require.Eventually(func() bool {
 		err = ti.EnsureManager(ctx)
 		return err == nil
-	}, 20*time.Second, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
+	}, 3*time.Minute, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
+}
+
+func certsetup(namespace string) ([]byte, []byte, []byte, error) {
+	// Most of this is adapted from https://gist.github.com/shaneutt/5e1995295cff6721c89a71d13a71c251
+	// set up our CA certificate
+	ca := &x509.Certificate{
+		SerialNumber: big.NewInt(2019),
+		Subject: pkix.Name{
+			Organization: []string{"getambassador.io"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+
+	// create our private and public key
+	caPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// create the CA
+	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// pem encode
+	caPEM := new(bytes.Buffer)
+	err = pem.Encode(caPEM, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: caBytes,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	caPrivKeyPEM := new(bytes.Buffer)
+	err = pem.Encode(caPrivKeyPEM, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// set up our server certificate
+	host := fmt.Sprintf("agent-injector.%s", namespace)
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(2019),
+		Subject: pkix.Name{
+			Organization: []string{"getambassador.io"},
+			CommonName:   host,
+		},
+		DNSNames:    []string{host},
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().AddDate(10, 0, 0),
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+	}
+
+	certPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &certPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	certPEM := new(bytes.Buffer)
+	err = pem.Encode(certPEM, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certBytes,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	certPrivKeyPEM := new(bytes.Buffer)
+	err = pem.Encode(certPrivKeyPEM, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return caPEM.Bytes(), certPEM.Bytes(), certPrivKeyPEM.Bytes(), nil
 }
 
 func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {

@@ -86,12 +86,8 @@ func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionSe
 // wait for the connection to fully shut down.
 func ConnectToSystemA(ctx context.Context,
 	self ManagerServer,
-	systemaAddr string, systemaDialOpts ...grpc.DialOption,
+	conn *grpc.ClientConn,
 ) (client systema.SystemACRUDClient, wait func() error, err error) {
-	conn, err := grpc.DialContext(ctx, systemaAddr, systemaDialOpts...)
-	if err != nil {
-		return nil, nil, err
-	}
 	systemaCRUD := systema.NewSystemACRUDClient(conn)
 
 	listener, addConn := dnet.NewLoopbackListener()

@@ -4,6 +4,8 @@
 
 - Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
 
+- Feature: Telepresence client now require less RBAC permissions in order to intercept.
+
 - Change: All pod-injection is performed by the mutating webhook. Client will no longer modify workloads.
 
 - Change: Traffic-agent is configured using a ConfigMap entry. In prior versions, the configuration was passed in the container environment.
@@ -21,7 +23,12 @@
 - Change: When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically. The mutating webhook will
   then ensure that their pods will receive an updated traffic-agent.
 
-- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group. 
+- Bugfix: Remote mounts will now function correctly with custom `securityContext`.
+
+- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group.
+
+- Bugfix: Using `telepresence leave` or `telepresence quit` on an intercept that spawned a command using `--` on the command line
+  will now terminate that command since it's considered parented by the intercept that is removed.
 
 - Change: Add support for structured output as JSON by setting the global --output=json flag.
 

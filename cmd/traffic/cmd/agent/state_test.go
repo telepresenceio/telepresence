@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
@@ -39,7 +41,8 @@ func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.Stat
 	require.NoError(t, err)
 	s := agent.NewSimpleState(c)
 	cn := c.AgentConfig().Containers[0]
-	s.AddInterceptState(agent.NewInterceptState(s, f, cn.Intercepts[0], cn.MountPoint, map[string]string{}))
+	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
+	s.AddInterceptState(agent.NewInterceptState(s, f, cn.Intercepts[0], cnMountPoint, map[string]string{}))
 
 	return f, s
 }

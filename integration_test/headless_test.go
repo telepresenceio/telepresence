@@ -65,7 +65,14 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 				if test.webhook {
 					require.NoError(dropWebhookAnnotation(ctx, "statefulset", "echo-headless", s.AppNamespace()))
 				}
-				itest.TelepresenceOk(ctx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
+
+				// Switch to default user and uninstall the agent
+				itest.TelepresenceQuitOk(ctx)
+				dfltCtx := itest.WithUser(ctx, "default")
+				itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
+				itest.TelepresenceQuitOk(dfltCtx)
+				itest.TelepresenceOk(ctx, "connect")
+
 				require.Eventually(
 					func() bool {
 						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")

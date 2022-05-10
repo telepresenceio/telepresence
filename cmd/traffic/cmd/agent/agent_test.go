@@ -63,6 +63,7 @@ func testContext(t *testing.T, env dos.MapEnv) context.Context {
 	require.NoError(t, err)
 
 	require.NoError(t, fs.MkdirAll(agentconfig.ConfigMountPoint, 0700))
+	require.NoError(t, fs.MkdirAll(agentconfig.ExportsMountPoint, 0700))
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile), y, 0600))
 
 	env[agentconfig.EnvPrefixAgent+"POD_IP"] = podIP
@@ -114,7 +115,8 @@ func Test_AppEnvironment(t *testing.T) {
 	}, env)
 
 	// Check symlink to container's remote mount point
-	f, err = dos.Open(ctx, filepath.Join(cn.MountPoint, ksDir, "namespace"))
+	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
+	f, err = dos.Open(ctx, filepath.Join(cnMountPoint, ksDir, "namespace"))
 	require.NoError(t, err, "not symlinked")
 	data, err := io.ReadAll(f)
 	require.NoError(t, err)

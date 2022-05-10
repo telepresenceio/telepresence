@@ -100,6 +100,10 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
 		}
+		if config != nil && config.Manual {
+			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
+			return nil, nil
+		}
 		if config, err = agentmap.GenerateForPod(ctx, pod, env.GeneratorConfig(a.agentImage)); err != nil {
 			return nil, err
 		}
@@ -110,10 +114,13 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
 
+	// Create patch operations to add the traffic-agent sidecar
+	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
+
 	var patches patchOps
 	patches = addInitContainer(ctx, pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
-	patches = addAgentVolume(pod, config, patches)
+	patches = addAgentVolumes(pod, config, patches)
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
 
@@ -167,27 +174,12 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 		return patches
 	}
 
-	env := managerutil.GetEnv(ctx)
-	ic := core.Container{
-		Name:  agentconfig.InitContainerName,
-		Image: env.QualifiedAgentImage(),
-		Args:  []string{"agent-init"},
-		VolumeMounts: []core.VolumeMount{{
-			Name:      agentconfig.ConfigVolumeName,
-			MountPath: agentconfig.ConfigMountPoint,
-		}},
-		SecurityContext: &core.SecurityContext{
-			Capabilities: &core.Capabilities{
-				Add: []core.Capability{"NET_ADMIN"},
-			},
-		},
-	}
-
+	ic := agentconfig.InitContainer(config.AgentImage)
 	if len(pod.Spec.InitContainers) == 0 {
 		return append(patches, patchOperation{
 			Op:    "replace",
 			Path:  "/spec/initContainers",
-			Value: []core.Container{ic},
+			Value: []core.Container{*ic},
 		})
 	}
 
@@ -214,50 +206,21 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 	})
 }
 
-func addAgentVolume(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) patchOps {
+func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) patchOps {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == agentconfig.AnnotationVolumeName {
 			return patches
 		}
 	}
-	return append(patches,
-		patchOperation{
-			Op:   "add",
-			Path: "/spec/volumes/-",
-			Value: core.Volume{
-				Name: agentconfig.AnnotationVolumeName,
-				VolumeSource: core.VolumeSource{
-					DownwardAPI: &core.DownwardAPIVolumeSource{
-						Items: []core.DownwardAPIVolumeFile{
-							{
-								FieldRef: &core.ObjectFieldSelector{
-									APIVersion: "v1",
-									FieldPath:  "metadata.annotations",
-								},
-								Path: "annotations",
-							},
-						},
-					},
-				},
-			},
-		},
-		patchOperation{
-			Op:   "add",
-			Path: "/spec/volumes/-",
-			Value: core.Volume{
-				Name: agentconfig.ConfigVolumeName,
-				VolumeSource: core.VolumeSource{
-					ConfigMap: &core.ConfigMapVolumeSource{
-						LocalObjectReference: core.LocalObjectReference{Name: agentconfig.ConfigMap},
-						Items: []core.KeyToPath{{
-							Key:  ag.AgentName,
-							Path: agentconfig.ConfigFile,
-						}},
-					},
-				},
-			},
-		},
-	)
+	for _, av := range agentconfig.AgentVolumes(ag.AgentName) {
+		patches = append(patches,
+			patchOperation{
+				Op:    "add",
+				Path:  "/spec/volumes/-",
+				Value: av,
+			})
+	}
+	return patches
 }
 
 // compareProbes compares two Probes but will only consider their Handler.Exec.Command in the comparison
