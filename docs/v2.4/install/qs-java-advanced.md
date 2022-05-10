@@ -1,6 +1,6 @@
 ---
 description: "Create your complete Kubernetes development environment and use Telepresence to intercept services running in your Kubernetes cluster, speeding up local development and debugging."
---- 
+---
 
 # Creating a local Kubernetes development environment
 
@@ -19,7 +19,7 @@ To begin, you need a set of services that you can deploy to a Kubernetes cluster
 	- For helm users, the [`helm create` command](https://helm.sh/docs/helm/helm_create/) can be used to create the directory and file scaffolding for your chart.
 * Follow cloud native application architecture best practices.
 	- Design services using the [Twelve-Factor Application](https://12factor.net/) approach.
-	- Ensure that your services and ingress gateway include HTTP [header propagation](https://www.getambassador.io/learn/kubernetes-glossary/header-propagation/) for good observability and diagnostics. Many modern language-specific web frameworks support this out-of-the-box, and the [OpenTelemetry documentation](https://opentelemetry.lightstep.com/core-concepts/context-propagation/) also contains good guidance. 
+	- Ensure that your services and ingress gateway include HTTP [header propagation](https://www.getambassador.io/learn/kubernetes-glossary/header-propagation/) for good observability and diagnostics. Many modern language-specific web frameworks support this out-of-the-box, and the [OpenTelemetry documentation](https://opentelemetry.lightstep.com/core-concepts/context-propagation/) also contains good guidance.
 
 ## Deploy your application to a remote Kubernetes cluster
 
@@ -42,9 +42,9 @@ After you finish your deployment, you need to configure a copy of a single servi
  To follow the previous example, enter: `cd gs-spring-boot/complete`
 3. Ensure that your development environment is configured to support the automatic reloading of the service when your source code changes.
  In the example Spring Boot app this is as simple as [adding the spring-boot-devtools dependency to the pom.xml file](https://docs.spring.io/spring-boot/docs/1.5.16.RELEASE/reference/html/using-boot-devtools.html).
-4. Add a Dockerfile for your development. 
+4. Add a Dockerfile for your development.
  To distinguish this from your production Dockerfile, give the development Dockerfile a separate name, like “Dev.Dockerfile”.
- The following is an example for Java: 
+ The following is an example for Java:
 	```Java
 	FROM openjdk:16-alpine3.13
 
@@ -58,7 +58,7 @@ After you finish your deployment, you need to configure a copy of a single servi
 
 	CMD ["./mvnw", "spring-boot:run"]
 	```
-5. Next, test that the container is working properly. In the root directory of your source rep, enter: 
+5. Next, test that the container is working properly. In the root directory of your source rep, enter:
 `docker build -t example-dev-container:0.1 -f Dev.Dockerfile .`
 6. Run the development container and mount the current directory as a volume. This way, any code changes you make locally are synchronized into the container. Enter:
  `docker run -v $(pwd):/app example-dev-container:0.1`
@@ -72,13 +72,13 @@ Once you have the development container running, you can integrate your local de
 
 1. First, download the latest [Telepresence binary](../../install) for your operating system and run `telepresence connect`.
  Your local service is now able to interact with services and dependencies in your remote cluster.
- For example, you can run `curl remote-service-name.namespace:port/path` and get an instant response locally in the same way you would in a remote cluster.  
+ For example, you can run `curl remote-service-name.namespace:port/path` and get an instant response locally in the same way you would in a remote cluster.
 2. Run `telepresence intercept your-service-name` to reroute traffic for the service you’re working on.
 3. Make a small change in your local code that will cause a visible change that you will be able to see when accessing your app. Build your service to trigger a reload within the container.
-4. Now visit your ${INGRESS_IP} and view the change. 
+4. Now visit your ${INGRESS_IP} and view the change.
  Notice the instant feedback of a local change combined with being able to access the remote dependencies!
-5. Make another small change in your local code and build the application again. 
-Refresh your view of the app at ${INGRESS_IP}. 
+5. Make another small change in your local code and build the application again.
+Refresh your view of the app at ${INGRESS_IP}.
  Notice that you didn’t need to re-deploy the container in the remote cluster to view your changes. Any request you make against the remote application that accesses your service will be routed to your local machine allowing you to instantly see the effects of changes you make to the code.
 6. Now, put all these commands in a simple shell script, setup-dev-env.sh, which can auto-install Telepresence and configure your local development environment in one command. You can commit this script into your application’s source code repository and your colleagues can easily take advantage of this fast development loop you have created. An example script is included below:
 	```
@@ -96,8 +96,8 @@ Refresh your view of the app at ${INGRESS_IP}.
 	# the logs can be viewed by the `docker logs -f <CONTAINER ID>` and the container id can found via `docker container ls`
 	docker run -d -v $(pwd):/app example-dev-container:0.1
 
-	# download Telepresence and install (instructions for non Mac users: https://www.getambassador.io/docs/telepresence/latest/install/)
-	sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence -o /usr/local/bin/telepresence
+	# download Telepresence and install (instructions for non Mac users: https://www.getambassador.io/docs/telepresence/v2.4/install/)
+	sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/2.4.11/telepresence -o /usr/local/bin/telepresence
 	sudo chmod a+x /usr/local/bin/telepresence
 
 	# connect your local dev env to the remote cluster
@@ -124,4 +124,4 @@ Once you have your local development environment configured for fast feedback, y
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-Now that you've created a complete Kubernetes development environment, learn more about how to [manage your environment in Ambassador Cloud](https://www.getambassador.io/docs/cloud/latest/service-catalog/howtos/cells) or how to [create Preview URLs in Telepresence](https://www.getambassador.io/docs/telepresence/latest/howtos/preview-urls/).
+Now that you've created a complete Kubernetes development environment, learn more about how to [manage your environment in Ambassador Cloud](https://www.getambassador.io/docs/cloud/latest/service-catalog/howtos/cells) or how to [create Preview URLs in Telepresence](https://www.getambassador.io/docs/telepresence/v2.4/howtos/preview-urls/).
