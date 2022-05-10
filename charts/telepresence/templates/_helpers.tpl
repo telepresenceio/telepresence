@@ -72,28 +72,13 @@ Client RBAC name suffix
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
-- apiGroups:
-  - ""
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+- apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get", "list", "create", "watch", "delete"]
-- apiGroups:
-  - ""
-  resources: ["services"]
-  verbs: ["update"]
-- apiGroups:
-  - ""
-  resources: ["pods/portforward"]
-  verbs: ["create"]
-- apiGroups:
-  - "apps"
+  verbs: ["list"]
+- apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "watch", "list", "update", "patch"]
-- apiGroups:
-  - "getambassador.io"
-  resources: ["hosts", "mappings"]
-  verbs: ["*"]
-- apiGroups:
-  - ""
-  resources: ["endpoints"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "watch", "list"]
 {{- end }}

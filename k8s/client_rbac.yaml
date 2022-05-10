@@ -14,38 +14,19 @@ kind: ClusterRole
 metadata:
   name: telepresence-role
 rules:
-- apiGroups:
-  - ""
-  resources: ["services", "pods", "pods/log"]
-  verbs: ["get", "list", "watch"]
-- apiGroups:
-    - ""
-  resources: ["configmaps"]
-  verbs: ["get", "update"]
-  resourceNames: ["telepresence-agents"]
-- apiGroups:
-  - ""
-  resources: ["pods/portforward"]
-  verbs: ["create"]
-- apiGroups:
-  - "apps"
+# For gather-logs command
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+# Needed in order to maintain a list of workloads
+- apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch"]
-- apiGroups:
-  - "getambassador.io"
-  resources: ["hosts", "mappings"]
-  verbs: ["*"]
-- apiGroups:
-  - ""
-  resources: ["endpoints"]
-  verbs: ["get", "list"]
-- apiGroups:
-  - "rbac.authorization.k8s.io"
-  resources: ["clusterroles", "clusterrolebindings"]
-  verbs: ["get", "list", "watch"]
-- apiGroups:
-  - ""
-  resources: ["namespaces"]
+- apiGroups: [""]
+  resources: ["namespaces", "services"]
   verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

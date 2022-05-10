@@ -922,6 +922,8 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 	// to prevent the clients from doing it.
 	if ur.UninstallType == rpc.UninstallRequest_NAMED_AGENTS {
 		// must have a valid namespace in order to uninstall named agents
+		tm.waitForSync(ctx)
+		tm.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
 		namespace := tm.ActualNamespace(ur.Namespace)
 		if namespace == "" {
 			// namespace is not mapped
@@ -971,6 +973,8 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 	}
 
 	if ur.Namespace != "" {
+		tm.waitForSync(ctx)
+		tm.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
 		namespace := tm.ActualNamespace(ur.Namespace)
 		if namespace == "" {
 			// namespace is not mapped
