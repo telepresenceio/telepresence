@@ -170,7 +170,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 ## 3. Install a sample Node.js application
 
-Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
+Your local workstation may not have the compute or memory resources necessary to run all the services in a multiservice application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
 <Alert severity="info">
     While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>,<a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.
