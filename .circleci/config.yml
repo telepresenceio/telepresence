@@ -37,9 +37,7 @@ commands:
           command: |
             set -x
             if [[ $OS == Windows_NT ]]; then
-              curl https://dl.google.com/go/go<< parameters.version >>.windows-amd64.zip -o /tmp/go.zip
-              mv /c/go /c/go-112
-              unzip -q /tmp/go.zip -d /c/
+              choco install golang --version << parameters.version >>
             else
               curl https://dl.google.com/go/go<< parameters.version >>.$(uname -s | tr A-Z a-z)-amd64.tar.gz -o /tmp/go.tar.gz
               tar -C /tmp -xzf /tmp/go.tar.gz
@@ -124,10 +122,10 @@ jobs:
       name: win/default
       shell: bash.exe
     steps:
+      - run: choco upgrade chocolatey
       - checkout
       - install-go
       - run: pip install awscli
-      - run: choco upgrade chocolatey
       - run: choco install make zip
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
