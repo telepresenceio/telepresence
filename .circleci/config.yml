@@ -127,7 +127,7 @@ jobs:
       - checkout
       - install-go
       - run: pip install awscli
-      - run: choco upgrade all
+      - run: choco upgrade chocolatey
       - run: choco install make zip
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
       - run: |
