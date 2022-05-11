@@ -26,10 +26,10 @@ import (
 
 type Map interface {
 	GetInto(string, string, interface{}) (bool, error)
-	Run(context.Context, string) error
+	Run(context.Context) error
 	Store(context.Context, *agentconfig.Sidecar, bool) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
-	UninstallV25(ctx context.Context, extendedAgentImage string)
+	UninstallV25(ctx context.Context)
 }
 
 func decode(v string, into interface{}) error {
@@ -119,12 +119,13 @@ type entry struct {
 	value     string
 }
 
-func (c *configWatcher) Run(ctx context.Context, extendedAgentImage string) error {
+func (c *configWatcher) Run(ctx context.Context) error {
 	ctx, c.cancel = context.WithCancel(ctx)
 	addCh, delCh, err := c.Start(ctx)
 	if err != nil {
 		return err
 	}
+	var agentImage string
 	for {
 		select {
 		case <-ctx.Done():
@@ -153,7 +154,10 @@ func (c *configWatcher) Run(ctx context.Context, extendedAgentImage string) erro
 				continue
 			}
 			if ac.Create {
-				if ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(extendedAgentImage)); err != nil {
+				if agentImage == "" {
+					agentImage = managerutil.GetAgentImage(ctx)
+				}
+				if ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage)); err != nil {
 					dlog.Error(ctx, err)
 				} else if err = c.Store(ctx, ac, false); err != nil {
 					dlog.Error(ctx, err)
@@ -382,7 +386,7 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 // UninstallV25 will undo changes that telepresence versions prior to 2.6.0 did to workloads and
 // also add an initial entry in the agents ConfigMap for all workloads that had an agent or
 // was annotated to inject an agent.
-func (c *configWatcher) UninstallV25(ctx context.Context, extendedAgentImage string) {
+func (c *configWatcher) UninstallV25(ctx context.Context) {
 	var affectedWorkloads []k8sapi.Workload
 	if len(c.namespaces) == 0 {
 		affectedWorkloads = v25uninstall.RemoveAgents(ctx, "")
@@ -391,7 +395,7 @@ func (c *configWatcher) UninstallV25(ctx context.Context, extendedAgentImage str
 			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
 		}
 	}
-	gc := managerutil.GetEnv(ctx).GeneratorConfig(extendedAgentImage)
+	gc := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
 	for _, wl := range affectedWorkloads {
 		ac, err := agentmap.Generate(ctx, wl, gc)
 		if err == nil {
