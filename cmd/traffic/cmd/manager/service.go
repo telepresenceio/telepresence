@@ -129,6 +129,15 @@ func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
 
+	li, err := getLicenseClaims(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+
+	if val, err := li.isValidForCluster(m.clusterInfo); !val {
+		return nil, status.Errorf(codes.Unauthenticated, err.Error())
+	}
+
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}

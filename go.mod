@@ -154,6 +154,7 @@ require (
 	google.golang.org/genproto v0.0.0-20220222213610-43724f9ea8cf // indirect
 	gopkg.in/gorp.v1 v1.7.2 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	gopkg.in/square/go-jose.v2 v2.6.0
 	k8s.io/apiextensions-apiserver v0.23.4 // indirect
 	k8s.io/apiserver v0.23.4 // indirect
 	k8s.io/component-base v0.23.4 // indirect
