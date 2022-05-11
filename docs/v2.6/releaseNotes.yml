@@ -77,9 +77,6 @@ items:
         title: Improved presentation of flags in CLI help
         body: The help for commands that accept kubernetes flags will now display those flags in a separate group.
       - type: bugfix
-        title: Improved presentation of flags in CLI help
-        body: The help for commands that accept kubernetes flags will now display those flags in a separate group.
-      - type: bugfix
         title: Better termination of process parented by intercept
         body: >-
           Using <code>telepresence leave</code> or <code>telepresence quit</code> when an intercept that spawned a command using
