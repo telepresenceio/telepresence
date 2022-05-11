@@ -725,6 +725,8 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			err = fmt.Errorf("creating preview domain: %w", err)
 			return true, err
 		}
+		// MountPoint is not returned by the traffic-manager (of course, it has no idea).
+		intercept.ClientMountPoint = r.InterceptInfo.ClientMountPoint
 		is.scout.SetMetadatum(ctx, "preview_url", intercept.PreviewDomain)
 	} else {
 		intercept = r.InterceptInfo

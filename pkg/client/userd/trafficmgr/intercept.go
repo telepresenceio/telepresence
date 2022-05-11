@@ -254,14 +254,7 @@ func (tm *TrafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
 
 	// Amend with local info
 	for _, ii := range intercepts {
-		ii := ii // Pin it
-		tm.mountPoints.Range(func(k, v interface{}) bool {
-			if v.(string) == ii.Spec.Name {
-				ii.ClientMountPoint = k.(string)
-				return false
-			}
-			return true
-		})
+		ii.ClientMountPoint = tm.mountPointForIntercept(ii.Spec.Name)
 	}
 	return intercepts
 }
@@ -685,9 +678,10 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
-			if ir.MountPoint != "" && ii.SftpPort > 0 {
+			mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
+			if mountPoint != "" && ii.SftpPort > 0 {
 				deleteMount = false // Mount-point is busy until intercept ends
-				ii.ClientMountPoint = ir.MountPoint
+				ii.ClientMountPoint = mountPoint
 			}
 			success = true
 			return result, nil
@@ -734,19 +728,24 @@ func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	}
 }
 
-func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	var mountPoint string
+func (tm *TrafficManager) mountPointForIntercept(name string) (mountPoint string) {
 	tm.mountPoints.Range(func(key, value interface{}) bool {
-		if mf.Name == value.(string) {
+		if name == value.(string) {
 			mountPoint = key.(string)
 			return false
 		}
 		return true
 	})
+	return
+}
+
+func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	mountPoint := tm.mountPointForIntercept(mf.Name)
 	if mountPoint == "" {
-		dlog.Errorf(ctx, "No mount point found for intercept %q", mf.Name)
+		// User has explicitly specified that no mount should take place
+		dlog.Infof(ctx, "No mount point found for intercept %q", mf.Name)
 		return
 	}
 
