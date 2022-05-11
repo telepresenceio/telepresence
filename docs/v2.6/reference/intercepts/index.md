@@ -245,6 +245,41 @@ intercepted
     Intercepting      : all TCP connections
 ```
 
+## Intercepting multiple ports
+
+It is possible to intercept more than one service and/or service port that are using the same workload. You do this
+by creating more than one intercept that identify the same workload using the `--workload` flag.
+
+Let's assume that we have a service `multi-echo` with the two ports `http` and `grpc`. They are both
+targeting the same `multi-echo` deployment.
+
+```console
+$ telepresence intercept multi-echo-http --workload multi-echo --port 8080:http --mechanism tcp 
+Using Deployment multi-echo
+intercepted
+    Intercept name         : multi-echo-http
+    State                  : ACTIVE
+    Workload kind          : Deployment
+    Destination            : 127.0.0.1:8080
+    Service Port Identifier: http
+    Volume Mount Point     : /tmp/telfs-893700837
+    Intercepting           : all TCP requests
+    Preview URL            : https://sleepy-bassi-1140.preview.edgestack.me
+    Layer 5 Hostname       : multi-echo.default.svc.cluster.local
+$ telepresence intercept multi-echo-grpc --workload multi-echo --port 8443:grpc --mechanism tcp
+Using Deployment multi-echo
+intercepted
+    Intercept name         : multi-echo-grpc
+    State                  : ACTIVE
+    Workload kind          : Deployment
+    Destination            : 127.0.0.1:8443
+    Service Port Identifier: extra
+    Volume Mount Point     : /tmp/telfs-1277723591
+    Intercepting           : all TCP requests
+    Preview URL            : https://upbeat-thompson-6613.preview.edgestack.me
+    Layer 5 Hostname       : multi-echo.default.svc.cluster.local
+```
+
 ## Port-forwarding an intercepted container's sidecars
 
 Sidecars are containers that sit in the same pod as an application
