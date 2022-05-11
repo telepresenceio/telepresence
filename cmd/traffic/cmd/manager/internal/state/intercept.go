@@ -89,16 +89,7 @@ func (s *State) qualifiedAgentImage(ctx context.Context, extended bool) (img str
 	if s.cachedAgentImage != "" {
 		return s.cachedAgentImage, nil
 	}
-	env := managerutil.GetEnv(ctx)
-	if env.AgentImage == "" {
-		img, err = managerutil.AgentImageFromSystemA(ctx)
-		if err != nil && extended {
-			return "", fmt.Errorf("unable to get Ambassador Cloud preferred agent image: %w", err)
-		}
-	}
-	if img == "" {
-		img = env.QualifiedAgentImage()
-	}
+	img = managerutil.GetAgentImage(ctx)
 	if extended {
 		s.cachedAgentImage = img
 	}
