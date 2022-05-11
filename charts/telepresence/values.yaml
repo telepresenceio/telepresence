@@ -151,7 +151,6 @@ managerRbac:
 ## Agent Injector Configuration
 ################################################################################
 agentInjector:
-  create: true
   name: agent-injector
   agentImage:
     registry: docker.io/datawire

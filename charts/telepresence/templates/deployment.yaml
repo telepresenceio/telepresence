@@ -59,14 +59,12 @@ spec:
             value: {{ .Values.grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
-          {{- if .Values.agentInjector.create }}
           {{ if .Values.agentInjector.agentImage.name }}
           - name: TELEPRESENCE_AGENT_IMAGE
             value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
           {{- end }}
           - name: TELEPRESENCE_APP_PROTO_STRATEGY
             value: {{ .Values.agentInjector.appProtocolStrategy }}
-          {{- end }}
           - name: MANAGER_NAMESPACE
             valueFrom:
               fieldRef:
@@ -98,11 +96,9 @@ spec:
             mountPath: /home/telepresence
             readOnly: true
           {{- end }}
-          {{- if .Values.agentInjector.create }}
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
-          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -125,12 +121,10 @@ spec:
           defaultMode: 420
           secretName: {{ .Values.licenseKey.secret.name }}
       {{- end }}
-      {{- if .Values.agentInjector.create }}
       - name: tls
         secret:
           defaultMode: 420
           secretName: {{ .Values.agentInjector.secret.name }}
-      {{- end }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
 {{- end }}
