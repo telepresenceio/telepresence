@@ -138,7 +138,11 @@ get_intercept_id() {
 is_prop_traffic_agent() {
     local present=${1}
     local image
-    image=$(kubectl get deployment dataprocessingservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}")
+    while [[ $(kubectl get pod -l run=dataprocessingservice --no-headers | wc -l) -gt 1 ]]; do
+        kubectl rollout status -n default deploy dataprocessingservice
+        sleep 10
+    done
+    image=$(kubectl get pod -l run=dataprocessingservice -o "jsonpath={.items[].spec.containers[?(@.name=='traffic-agent')].image}")
     if [[ -z $image ]]; then
         echo "There is no traffic-agent sidecar and there should be"
         exit 1
@@ -166,7 +170,7 @@ is_prop_traffic_agent() {
 
 get_config() {
     if [ -n "$TELEPRESENCE_AGENT_IMAGE" ]; then
-        echo "Use images.agentImage in your config.yml to configure the Smart Agent Image to use"
+        echo "Use images.webhookAgentImage in your config.yml to configure the Smart Agent Image to use"
         exit 1
     fi
 
@@ -189,7 +193,7 @@ get_config() {
 
 unset_agent_image_config() {
     if [ -f "$config_file" ]; then
-        sed -i.bak 's/^  agentImage:.*//' "${config_file}"
+        sed -i.bak 's/^  webhookAgentImage:.*//' "${config_file}"
     fi
 }
 
@@ -274,7 +278,8 @@ prepare_license_config() {
     yq e '.cloud.skipLogin = true' -i ~/Library/Application\ Support/telepresence/config.yml
     yq e '.cloud.systemaHost = "127.0.0.1"' -i ~/Library/Application\ Support/telepresence/config.yml
     yq e '.cloud.systemaPort = 456' -i ~/Library/Application\ Support/telepresence/config.yml
-    yq e ".images.agentImage = \"ambassador-telepresence-agent:$TELEPRESENCE_LICENSE_AGENT_IMAGE\"" -i ~/Library/Application\ Support/telepresence/config.yml
+    yq e ".images.webhookAgentImage = \"ambassador-telepresence-agent:$TELEPRESENCE_LICENSE_AGENT_IMAGE\"" -i ~/Library/Application\ Support/telepresence/config.yml
+    yq e ".images.webhookRegistry = \"ambassador-telepresence-agent:$TELEPRESENCE_LICENSE_AGENT_IMAGE\"" -i ~/Library/Application\ Support/telepresence/config.yml
     yq e '.images.registry = "datawire"' -i ~/Library/Application\ Support/telepresence/config.yml
     echo "Using the following config for license testing:"
     yq e '.' "$config_file"
@@ -325,7 +330,7 @@ echo
 # var here, and will re-set it after we log in.
 get_config
 if [ -f "$config_file" ]; then
-    smart_agent=$(sed -n -e 's/^[ ]*agentImage\:[ ]*//p' "$config_file")
+    smart_agent=$(sed -n -e 's/^[ ]*webhookAgentImage\:[ ]*//p' "$config_file")
     echo "Smart agent: $smart_agent"
     unset_agent_image_config
     trap restore_config EXIT
@@ -498,7 +503,7 @@ finish_step
 # here. The integration tests *do* test mounts on Windows and Linux so this
 # testing is really being extra cautious. We can remove this whole step if/when
 # the macfuse issue is cleared up in the macos executors.
-mount_path=$($TELEPRESENCE list --json | jq '.[] | select(.name=="dataprocessingservice") | .intercept_info.spec.mount_point' | sed 's/"//g')
+mount_path=$($TELEPRESENCE list --json | jq -r '.[] | select(.name=="dataprocessingservice") | .intercept_infos[0].client_mount_point')
 if [[ -z $mount_path ]]; then
     echo "Mount path was empty and it shouldn't have been"
     exit 1
@@ -557,7 +562,8 @@ if [ -f "$config_file" ]; then
     trap - EXIT
     echo "Using the following config for remainder of tests:"
     yq e '.' "$config_file"
-    $TELEPRESENCE quit > "$output_location"
+    # Need to uninstall in case the traffic agent webhook image has changed
+    $TELEPRESENCE uninstall -e > "$output_location"
 fi
 
 $TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-header=all --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default >"$output_location"
@@ -618,7 +624,7 @@ finish_step
 #### Step 10 - licensed selective intercept w/o preview url ####
 ###############################################################
 
-sleep 5 # avoid known agent mechanism-args race
+sleep 15 # avoid known agent mechanism-args race
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false)
 sleep 1
 has_intercept_id true
