@@ -6,7 +6,7 @@ This documentation covers the full extent of permissions necessary to administra
 
 There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
 
-In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
+In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside of the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
 
 ## Requirements
 
@@ -56,52 +56,41 @@ kind: ClusterRole
 metadata:
   name: telepresence-admin-role
 rules:
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "create", "delete", "watch"]
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list", "update", "create", "delete"]
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
-  - apiGroups:
-      - "apps"
+  - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets"]
     verbs: ["get", "list", "update", "create", "delete", "watch"]
-  - apiGroups:
-      - "getambassador.io"
-    resources: ["hosts", "mappings"]
-    verbs: ["*"]
-  - apiGroups:
-      - ""
-    resources: ["endpoints"]
-    verbs: ["get", "list"]
-  - apiGroups:
-      - "rbac.authorization.k8s.io"
+  - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
     verbs: ["get", "list", "watch", "create", "delete"]
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "delete"]
+    resourceNames: ["telepresence-agents"]
+  - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list", "watch", "create"]
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "create", "list", "delete"]
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["get", "create", "delete"]
-  - apiGroups:
-      - "admissionregistration.k8s.io"
+  - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["mutatingwebhookconfigurations"]
     verbs: ["get", "create", "delete"]
-  - apiGroups:
-      - ""
+  - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["list", "get", "watch"]
 ---
@@ -142,37 +131,19 @@ kind: ClusterRole
 metadata:
   name: telepresence-role
 rules:
-- apiGroups:
-  - ""
-  resources: ["pods", "pods/log"]
-  verbs: ["get", "list", "create", "delete"]
-- apiGroups:
-  - ""
-  resources: ["services"]
-  verbs: ["get", "list", "update", "watch"]
-- apiGroups:
-  - ""
-  resources: ["pods/portforward"]
-  verbs: ["create"]
-- apiGroups:
-  - "apps"
+# For gather-logs command
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+# Needed in order to maintain a list of workloads
+- apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update", "patch", "watch"]
-- apiGroups:
-  - "getambassador.io"
-  resources: ["hosts", "mappings"]
-  verbs: ["*"]
-- apiGroups:
-  - ""
-  resources: ["endpoints"]
-  verbs: ["get", "list"]
-- apiGroups:
-  - "rbac.authorization.k8s.io"
-  resources: ["clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
-- apiGroups:
-  - ""
-  resources: ["namespaces"]
+- apiGroups: [""]
+  resources: ["namespaces", "services"]
   verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -189,103 +160,77 @@ roleRef:
   kind: ClusterRole
 ```
 
+### Traffic Manager connect permission
+In addition to the cluster-wide permissions, the client will also need the following namespace scoped permissions
+in the traffic-manager's namespace in order to establish the needed port-forward to the traffic-manager.
+```yaml
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  traffic-manager-connect
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager-connect
+subjects:
+  - name: telepresence-test-developer
+    kind: ServiceAccount
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  name: traffic-manager-connect
+  kind: Role
+```
+
 ## Namespace only telepresence user access
 
 RBAC for multi-tenant scenarios where multiple dev teams are sharing a single cluster where users are constrained to a specific namespace(s).
 
 <Alert severity="warning">The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator</Alert>
 
+For each accessible namespace
 ```yaml
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: tp-user                                       # Update value for appropriate user name
-  namespace: ambassador                                # Traffic-Manager is deployed to Ambassador namespace
+  name: tp-user             # Update value for appropriate user name
+  namespace: tp-namespace   # Update value for appropriate namespace
 ---
-kind: ClusterRole
+kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name:  telepresence-role
+  namespace: tp-namespace    # Should be the same as metadata.namespace of above  ServiceAccount
 rules:
-- apiGroups:
-  - ""
-  resources: ["pods"]
-  verbs: ["get", "list", "create", "watch", "delete"]
-- apiGroups:
-  - ""
+- apiGroups: [""]
   resources: ["services"]
-  verbs: ["update"]
-- apiGroups:
-  - ""
-  resources: ["pods/portforward"]
-  verbs: ["create"]
-- apiGroups:
-  - "apps"
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "update", "watch"]
-- apiGroups:
-  - "getambassador.io"
-  resources: ["hosts", "mappings"]
-  verbs: ["*"]
-- apiGroups:
-  - ""
-  resources: ["endpoints"]
   verbs: ["get", "list", "watch"]
 ---
-kind: RoleBinding                                      # RBAC to access ambassador namespace
+kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: t2-ambassador-binding
-  namespace: ambassador
+  name: telepresence-role-binding
+  namespace: tp-namespace   # Should be the same as metadata.namespace of above  ServiceAccount
 subjects:
 - kind: ServiceAccount
-  name: tp-user                                       # Should be the same as metadata.name of above ServiceAccount
-  namespace: ambassador
+  name: tp-user             # Should be the same as metadata.name of above ServiceAccount
 roleRef:
-  kind: ClusterRole
+  kind: Role
   name: telepresence-role
-  apiGroup: rbac.authorization.k8s.io
----
-kind: RoleBinding                                      # RoleBinding T2 namespace to be intecpeted
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: telepresence-test-binding                      # Update "test" for appropriate namespace to be intercepted
-  namespace: test                                      # Update "test" for appropriate namespace to be intercepted
-subjects:
-- kind: ServiceAccount
-  name: tp-user                                       # Should be the same as metadata.name of above ServiceAccount
-  namespace: ambassador
-roleRef:
-  kind: ClusterRole
-  name: telepresence-role
-  apiGroup: rbac.authorization.k8s.io
-​
----
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name:  telepresence-namespace-role
-rules:
-- apiGroups:
-  - ""
-  resources: ["namespaces"]
-  verbs: ["get", "list", "watch"]
-- apiGroups:
-  - ""
-  resources: ["services"]
-  verbs: ["get", "list", "watch"]
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: telepresence-namespace-binding
-subjects:
-- kind: ServiceAccount
-  name: tp-user                                       # Should be the same as metadata.name of above ServiceAccount
-  namespace: ambassador
-roleRef:
-  kind: ClusterRole
-  name: telepresence-namespace-role
   apiGroup: rbac.authorization.k8s.io
 ```
+
+The user will also need the [Traffic Manager connect permission](#traffic-manager-connect-permission) described above.

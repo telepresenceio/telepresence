@@ -4,22 +4,19 @@ import Alert from '@material-ui/lab/Alert';
 
 You can directly modify your workload's YAML configuration to add the Telepresence Traffic Agent and enable it to be intercepted.
 
-When you use a Telepresence intercept, Telepresence automatically edits the workload and services when you use
-`telepresence uninstall --agent <your_agent_name>`. In some GitOps workflows, you may need to use the
-[Telepresence Mutating Webhook](../../cluster-config/#mutating-webhook) to keep intercepted workloads unmodified
-while you target changes on specific pods.
+When you use a Telepresence intercept for the first time on a Pod, the [Telepresence Mutating Webhook](../../cluster-config/#mutating-webhook)
+will automatically inject a Traffic Agent sidecar into it. There might be some situations where this approach cannot be used, such
+as very strict company security policies preventing it.
 
 <Alert severity="warning">
-In situations where you don't have access to the proper permissions for numeric ports, as noted in the Note on numeric ports
-section of the documentation, it is possible to manually inject the Traffic Agent. Because this is not the recommended approach
-to making a workload interceptable, try the Mutating Webhook before proceeding."
+Although it is possible to manually inject the Traffic Agent, it is not the recommended approach to making a workload interceptable,
+try the Mutating Webhook before proceeding.
 </Alert>
 
 ## Procedure
 
 You can manually inject the agent into Deployments, StatefulSets, or ReplicaSets. The example on this page
-uses the following Deployment:
-
+uses the following Deployment and Service. It's a prerequisite that they have been applied to the cluster:
 
 ```yaml
 apiVersion: apps/v1
@@ -44,11 +41,7 @@ spec:
           ports:
             - containerPort: 8080
           resources: {}
-```
-
-The deployment is being exposed by the following service:
-
-```yaml
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -64,34 +57,49 @@ spec:
 
 ### 1. Generating the YAML
 
-First, generate the YAML for the traffic-agent container:
+First, generate the YAML for the traffic-agent configmap entry. It's important that the generated file have
+the same name as the service, and no extension:
 
 ```console
-$ telepresence genyaml container --container-name echo-container --port 8080 --output - --input deployment.yaml
+$ telepresence genyaml config --workload my-service -o /tmp/my-service
+$ cat /tmp/my-service-config.yaml
+agentImage: docker.io/datawire/tel2:2.6.0
+agentName: my-service
+containers:
+- Mounts: null
+  envPrefix: A_
+  intercepts:
+  - agentPort: 9900
+    containerPort: 8080
+    protocol: TCP
+    serviceName: my-service
+    servicePort: 80
+    serviceUID: f6680334-10ef-4703-aa4e-bb1f9d1665fd
+  mountPoint: /tel_app_mounts/echo-container
+  name: echo-container
+logLevel: info
+managerHost: traffic-manager.ambassador
+managerPort: 8081
+manual: true
+namespace: default
+workloadKind: Deployment
+workloadName: my-service
+```
+
+Next, generate the YAML for the traffic-agent container:
+
+```console
+$ telepresence genyaml container --config /tmp/my-service -o /tmp/my-service-agent.yaml
+$ cat /tmp/my-service-agent.yaml 
 args:
 - agent
 env:
-- name: TELEPRESENCE_CONTAINER
-  value: echo-container
-- name: _TEL_AGENT_LOG_LEVEL
-  value: info
-- name: _TEL_AGENT_NAME
-  value: my-service
-- name: _TEL_AGENT_NAMESPACE
-  valueFrom:
-    fieldRef:
-      fieldPath: metadata.namespace
 - name: _TEL_AGENT_POD_IP
   valueFrom:
     fieldRef:
+      apiVersion: v1
       fieldPath: status.podIP
-- name: _TEL_AGENT_APP_PORT
-  value: "8080"
-- name: _TEL_AGENT_AGENT_PORT
-  value: "9900"
-- name: _TEL_AGENT_MANAGER_HOST
-  value: traffic-manager.ambassador
-image: docker.io/datawire/tel2:2.4.6
+image: docker.io/datawire/tel2:2.6.0-beta.12
 name: traffic-agent
 ports:
 - containerPort: 9900
@@ -105,117 +113,155 @@ resources: {}
 volumeMounts:
 - mountPath: /tel_pod_info
   name: traffic-annotations
+- mountPath: /etc/traffic-agent
+  name: traffic-config
+- mountPath: /tel_app_exports
+  name: export-volume
+  name: traffic-annotations
 ```
 
-Next, generate the YAML for the volume:
+Next, generate the init-container
 
 ```console
-$ telepresence genyaml volume --output - --input deployment.yaml
-downwardAPI:
-  items:
-  - fieldRef:
-      fieldPath: metadata.annotations
-    path: annotations
-name: traffic-annotations
+$ telepresence genyaml initcontainer --config /tmp/my-service -o /tmp/my-service-init.yaml
+$ cat /tmp/my-service-init.yaml 
+args:
+- agent-init
+image: docker.io/datawire/tel2:2.6.0-beta.12
+name: tel-agent-init
+resources: {}
+securityContext:
+  capabilities:
+    add:
+    - NET_ADMIN
+volumeMounts:
+- mountPath: /etc/traffic-agent
+  name: traffic-config
+```
+
+Next, generate the YAML for the volumes:
+
+```console
+$ telepresence genyaml volume --workload my-service -o /tmp/my-service-volume.yaml
+$ cat /tmp/my-service-volume.yaml 
+- downwardAPI:
+    items:
+    - fieldRef:
+        apiVersion: v1
+        fieldPath: metadata.annotations
+      path: annotations
+  name: traffic-annotations
+- configMap:
+    items:
+    - key: my-service
+      path: config.yaml
+    name: telepresence-agents
+  name: traffic-config
+- emptyDir: {}
+  name: export-volume
+
 ```
 
 <Alert severity="info">
 Enter `telepresence genyaml container --help` or `telepresence genyaml volume --help` for more information about these flags.
 </Alert>
 
-### 2. Injecting the YAML into the Deployment
+### 2. Creating (or updating) the configmap
 
-You need to add the `Deployment` YAML you genereated to include the container and the volume. These are placed as elements of `spec.template.spec.containers` and `spec.template.spec.volumes` respectively.
-You also need to modify `spec.template.metadata.annotations` and add the annotation `telepresence.getambassador.io/manually-injected: "true"`.
-These changes should look like the following:
+The generated configmap entry must be insterted into the `telepresence-agents` `ConfigMap` in the same namespace as the
+modified `Deployment`. If the `ConfigMap` doesn't exist yet, it can be created using the following command:
+
+```console
+$ kubectl create configmap telepresence-agents --from-file=/tmp/my-service
+```
+
+If it already exists, new entries can be added under the `Data` key using `kubectl edit configmap telepresence-agents`.
+
+### 3. Injecting the YAML into the Deployment
+
+You need to add the `Deployment` YAML you genereated to include the container and the volume. These are placed as elements
+of `spec.template.spec.containers`,  `spec.template.spec.initContainers`, and `spec.template.spec.volumes` respectively. 
+You also need to modify `spec.template.metadata.annotations` and add the annotation
+`telepresence.getambassador.io/manually-injected: "true"`.  These changes should look like the following:
 
 ```diff
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: "my-service"
-  labels:
-    service: my-service
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      service: my-service
-  template:
-    metadata:
-      labels:
-        service: my-service
-+     annotations:
-+       telepresence.getambassador.io/manually-injected: "true"
-    spec:
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: "my-service"
+   labels:
+     service: my-service
+ spec:
+   replicas: 1
+   selector:
+     matchLabels:
+       service: my-service
+   template:
+     metadata:
+       labels:
+         service: my-service
++      annotations:
++        telepresence.getambassador.io/manually-injected: "true"
+     spec:
       containers:
         - name: echo-container
           image: jmalloc/echo-server
           ports:
             - containerPort: 8080
           resources: {}
-+       - args:
-+         - agent
-+         env:
-+         - name: TELEPRESENCE_CONTAINER
-+           value: echo-container
-+         - name: _TEL_AGENT_LOG_LEVEL
-+           value: info
-+         - name: _TEL_AGENT_NAME
-+           value: my-service
-+         - name: _TEL_AGENT_NAMESPACE
-+           valueFrom:
-+             fieldRef:
-+               fieldPath: metadata.namespace
-+         - name: _TEL_AGENT_POD_IP
-+           valueFrom:
-+             fieldRef:
-+               fieldPath: status.podIP
-+         - name: _TEL_AGENT_APP_PORT
-+           value: "8080"
-+         - name: _TEL_AGENT_AGENT_PORT
-+           value: "9900"
-+         - name: _TEL_AGENT_MANAGER_HOST
-+           value: traffic-manager.ambassador
-+         image: docker.io/datawire/tel2:2.4.6
-+         name: traffic-agent
-+         ports:
-+         - containerPort: 9900
-+           protocol: TCP
-+         readinessProbe:
-+           exec:
-+             command:
-+             - /bin/stat
-+             - /tmp/agent/ready
-+         resources: {}
-+         volumeMounts:
-+         - mountPath: /tel_pod_info
-+           name: traffic-annotations
-+     volumes:
-+       - downwardAPI:
-+           items:
-+           - fieldRef:
-+               fieldPath: metadata.annotations
-+             path: annotations
-+         name: traffic-annotations
-```
-
-### 3. Modifying the service
-
-Once the modified deployment YAML has been applied to the cluster, you need to modify the Service to route traffic to the Traffic Agent.
-You can do this by changing the exposed `targetPort` to `9900`. The resulting service should look like:
-
-```diff
-apiVersion: v1
-kind: Service
-metadata:
-  name: "my-service"
-spec:
-  type: ClusterIP
-  selector:
-    service: my-service
-  ports:
-    - port: 80
--     targetPort: 8080
-+     targetPort: 9900
++        - args:
++            - agent
++          env:
++            - name: _TEL_AGENT_POD_IP
++              valueFrom:
++                fieldRef:
++                  apiVersion: v1
++                  fieldPath: status.podIP
++          image: docker.io/datawire/tel2:2.6.0-beta.12
++          name: traffic-agent
++          ports:
++            - containerPort: 9900
++              protocol: TCP
++          readinessProbe:
++            exec:
++              command:
++                - /bin/stat
++                - /tmp/agent/ready
++          resources: { }
++          volumeMounts:
++            - mountPath: /tel_pod_info
++              name: traffic-annotations
++            - mountPath: /etc/traffic-agent
++              name: traffic-config
++            - mountPath: /tel_app_exports
++              name: export-volume
++      initContainers:
++        - args:
++            - agent-init
++          image: docker.io/datawire/tel2:2.6.0-beta.12
++          name: tel-agent-init
++          resources: { }
++          securityContext:
++            capabilities:
++              add:
++                - NET_ADMIN
++          volumeMounts:
++            - mountPath: /etc/traffic-agent
++              name: traffic-config
++      volumes:
++        - downwardAPI:
++            items:
++              - fieldRef:
++                  apiVersion: v1
++                  fieldPath: metadata.annotations
++                path: annotations
++          name: traffic-annotations
++        - configMap:
++            items:
++              - key: my-service
++                path: config.yaml
++            name: telepresence-agents
++          name: traffic-config
++        - emptyDir: { }
++          name: export-volume
 ```
