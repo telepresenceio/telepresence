@@ -36,7 +36,7 @@ type Manager struct {
 	ID          string
 	state       *state.State
 	clusterInfo cluster.Info
-	license     *license
+	license     *LicenseBundle
 
 	rpc.UnsafeManagerServer
 }
@@ -59,7 +59,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context) {
 	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	ret.ctx = ctx
 
-	l, err := newLicenseFromDisk("/home/telepresence")
+	l, err := newLicenseBundleFromDisk("/home/telepresence")
 	if err == nil {
 		ret.license = l
 	}
@@ -78,7 +78,7 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
 	if m.license == nil {
 		var err error
-		m.license, err = newLicenseFromDisk("/home/telepresence")
+		m.license, err = newLicenseBundleFromDisk("/home/telepresence")
 		if err != nil {
 			return nil, err
 		}
@@ -86,8 +86,8 @@ func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License,
 
 	return &rpc.License{
 		ClusterId: m.clusterInfo.GetClusterID(),
-		License:   m.license.license,
-		Host:      m.license.host,
+		License:   m.license.License,
+		Host:      m.license.Host,
 	}, nil
 }
 
@@ -123,12 +123,13 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	dlog.Debug(ctx, "ArriveAsClient called")
 
 	if env := managerutil.GetEnv(ctx); 0 < len(env.GetManagedNamespaces()) {
-		li, err := m.license.getClaims(ctx)
+		li, err := m.license.extractLicenseClaims()
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 
-		if val, err := li.isValidForCluster(m.clusterInfo); !val {
+		cid := m.clusterInfo.GetClusterID()
+		if val, err := li.IsValidForCluster(cid); !val {
 			return nil, status.Errorf(codes.Unauthenticated, err.Error())
 		}
 	}

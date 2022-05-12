@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"context"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -10,24 +9,32 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
-type license struct {
-	license string
-	host    string
-	pubKeys map[string]string
+type LicenseInfo struct {
+	ValidLicense bool
+	LicenseErr   error
+	Claims       *LicenseClaims
+
+	CanConnectCloud bool
+	SystemaURL      string
 }
 
-func newLicenseFromDisk(rootDir string) (*license, error) {
-	var l license
+type LicenseBundle struct {
+	License string
+	Host    string
+	PubKeys map[string]string
+}
+
+func newLicenseBundleFromDisk(rootDir string) (*LicenseBundle, error) {
+	var lb LicenseBundle
 
 	buf, err := os.ReadFile(filepath.Join(rootDir, "license"))
 	if err != nil {
 		return nil, fmt.Errorf("error reading license: %w", err)
 	}
-	if l.license = string(buf); l.license == "" {
+	if lb.License = string(buf); lb.License == "" {
 		return nil, fmt.Errorf("license is empty")
 	}
 
@@ -35,23 +42,23 @@ func newLicenseFromDisk(rootDir string) (*license, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading hostDomain: %w", err)
 	}
-	if l.host = string(buf); l.host == "" {
+	if lb.Host = string(buf); lb.Host == "" {
 		return nil, fmt.Errorf("host domain is empty")
 	}
 
-	return &l, nil
+	return &lb, nil
 }
 
-func (l *license) getClaims(ctx context.Context) (*licenseClaims, error) {
+func (l *LicenseBundle) extractLicenseClaims() (*LicenseClaims, error) {
 	if l == nil {
 		return nil, fmt.Errorf("no license available")
 	}
 
-	if len(l.pubKeys) == 0 {
-		l.pubKeys = pubKeys
+	if len(l.PubKeys) == 0 {
+		l.PubKeys = pubKeys
 	}
 
-	hostKey, ok := l.pubKeys[l.host]
+	hostKey, ok := l.PubKeys[l.Host]
 	if !ok {
 		return nil, fmt.Errorf("unknown host")
 	}
@@ -66,29 +73,44 @@ func (l *license) getClaims(ctx context.Context) (*licenseClaims, error) {
 		return nil, err
 	}
 
-	token, err := jwt.ParseSigned(l.license)
+	token, err := jwt.ParseSigned(l.License)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse license: %w", err)
 	}
 
-	var claims licenseClaims
+	var claims LicenseClaims
 	return &claims, token.Claims(pubKey, &claims)
 }
 
-type licenseClaims struct {
+func (l *LicenseBundle) GetLicenseInfo(clusterID string, canConnectCloud bool, systemaURL string) *LicenseInfo {
+	info := LicenseInfo{
+		CanConnectCloud: canConnectCloud,
+		SystemaURL:      systemaURL,
+	}
+
+	info.Claims, info.LicenseErr = l.extractLicenseClaims()
+	if info.LicenseErr != nil {
+		return &info
+	}
+
+	info.ValidLicense, info.LicenseErr = info.Claims.IsValidForCluster(clusterID)
+
+	return &info
+}
+
+type LicenseClaims struct {
 	jwt.Claims
 	AccountID string      `json:"accountId"`
 	Limits    interface{} `json:"limits"`
 	Scope     string      `json:"scope"`
 }
 
-func (lc *licenseClaims) isValidForCluster(ci cluster.Info) (bool, error) {
+func (lc *LicenseClaims) IsValidForCluster(cid string) (bool, error) {
 	expiry := lc.Expiry
 	if expiry != nil && time.Now().After(expiry.Time()) {
 		return false, errors.New("license has expired")
 	}
 
-	cid := ci.GetClusterID()
 	claims := lc.Claims
 	if !claims.Audience.Contains(cid) {
 		return false, fmt.Errorf("license is for cluster(s) with these UIDs: %v. This cluster has ID: %s", claims.Audience, cid)
