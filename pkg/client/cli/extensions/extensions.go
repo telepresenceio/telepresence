@@ -312,6 +312,7 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 
 // AgentImage returns the repository/name combination that will be assigned to the container
 // image attribute.
+// Deprecated: The image to  use is determined by the traffic-manager
 func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if ai := cfg.Images.AgentImage(ctx); ai != "" {

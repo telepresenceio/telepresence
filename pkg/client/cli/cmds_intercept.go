@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -625,11 +626,22 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 			return nil, err
 		}
 	}
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-	if err != nil {
-		return nil, err
-	}
 
+	// The agentImage is only needed if we're dealing with a traffic-manager older than 2.6.0
+	vi, err := is.managerClient.Version(ctx, &empty.Empty{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
+	}
+	mv, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
+	}
+	if mv.Major == 2 && mv.Minor < 6 {
+		ir.AgentImage, err = is.args.extState.AgentImage(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return ir, nil
 }
 
