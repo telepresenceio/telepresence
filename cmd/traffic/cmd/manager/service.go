@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"sort"
 	"time"
 
@@ -37,6 +36,7 @@ type Manager struct {
 	ID          string
 	state       *state.State
 	clusterInfo cluster.Info
+	license     *license
 
 	rpc.UnsafeManagerServer
 }
@@ -58,6 +58,12 @@ func NewManager(ctx context.Context) (*Manager, context.Context) {
 	}
 	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	ret.ctx = ctx
+
+	l, err := newLicenseFromDisk("/home/telepresence")
+	if err == nil {
+		ret.license = l
+	}
+
 	return ret, ctx
 }
 
@@ -70,32 +76,19 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
-	clusterID := m.clusterInfo.GetClusterID()
-	resp := &rpc.License{ClusterId: clusterID}
-	// We want to be able to test GetClusterID easily in our integration tests,
-	// so we return the error in the license.ErrMsg response RPC.
-	var errMsg string
-
-	// This is the actual license used by the cluster
-	licenseData, err := os.ReadFile("/home/telepresence/license")
-	if err != nil {
-		errMsg += fmt.Sprintf("error reading license: %s\n", err)
-	} else {
-		resp.License = string(licenseData)
+	if m.license == nil {
+		var err error
+		m.license, err = newLicenseFromDisk("/home/telepresence")
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// This is the host domain associated with a license
-	hostDomainData, err := os.ReadFile("/home/telepresence/hostDomain")
-	if err != nil {
-		errMsg += fmt.Sprintf("error reading hostDomain: %s\n", err)
-	} else {
-		resp.Host = string(hostDomainData)
-	}
-
-	if errMsg != "" {
-		resp.ErrMsg = errMsg
-	}
-	return resp, nil
+	return &rpc.License{
+		ClusterId: m.clusterInfo.GetClusterID(),
+		License:   m.license.license,
+		Host:      m.license.host,
+	}, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
@@ -129,13 +122,15 @@ func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
 
-	li, err := getLicenseClaims(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
-	}
+	if env := managerutil.GetEnv(ctx); 0 < len(env.GetManagedNamespaces()) {
+		li, err := m.license.getClaims(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
 
-	if val, err := li.isValidForCluster(m.clusterInfo); !val {
-		return nil, status.Errorf(codes.Unauthenticated, err.Error())
+		if val, err := li.isValidForCluster(m.clusterInfo); !val {
+			return nil, status.Errorf(codes.Unauthenticated, err.Error())
+		}
 	}
 
 	if val := validateClient(client); val != "" {
