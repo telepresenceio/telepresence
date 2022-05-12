@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
+	"github.com/datawire/dlib/dlog"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -93,8 +95,12 @@ func (s *State) qualifiedAgentImage(ctx context.Context, extended bool) (img str
 	env := managerutil.GetEnv(ctx)
 	if env.AgentImage == "" {
 		img, err = managerutil.AgentImageFromSystemA(ctx)
-		if err != nil && extended {
-			return "", fmt.Errorf("unable to get Ambassador Cloud preferred agent image: %w", err)
+		if err != nil {
+			msg := fmt.Sprintf("unable to get Ambassador Cloud preferred agent image: %v", err)
+			if extended {
+				return "", errors.New(msg)
+			}
+			dlog.Warning(ctx, msg)
 		}
 	}
 	if img == "" {
