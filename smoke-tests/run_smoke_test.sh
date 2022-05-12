@@ -139,7 +139,7 @@ is_prop_traffic_agent() {
     local present=${1}
     local image
     while [[ $(kubectl get pod -l run=dataprocessingservice --no-headers | wc -l) -gt 1 ]]; do
-        kubectl rollout status -n default deploy dataprocessingservice
+        kubectl rollout status -n default deploy dataprocessingservice > $output_location
         sleep 10
     done
     image=$(kubectl get pod -l run=dataprocessingservice -o "jsonpath={.items[].spec.containers[?(@.name=='traffic-agent')].image}")
@@ -238,11 +238,9 @@ helm_install() {
     if [[ -n $TELEPRESENCE_REGISTRY ]]; then
         helm_overrides+=("image.registry=$TELEPRESENCE_REGISTRY" "agentInjector.registry=$TELEPRESENCE_REGISTRY")
     fi
-    local regex='^([^:]+):([^:]+)$'
-    if [[ $current_image =~ $regex ]]; then
-      local image_name=${BASH_REMATCH[0]}
-      local image_tag=${BASH_REMATCH[1]}
-    else
+    local image_name=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\1/g')
+    local image_tag=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\2/g')
+    if [[ -z "$image_name" ]] || [[ -z "$image_tag" ]]; then
       echo "Malformed image \"$current_image\""
       exit 1
     fi
@@ -257,9 +255,9 @@ helm_install() {
 
     local IFS=","
     if [[ -n $values_file ]]; then
-        helm install traffic-manager charts/telepresence --namespace ambassador --set "${helm_overrides[*]}" -f "$values_file" > "$output_location" 2>&1
+        helm install traffic-manager charts/telepresence --wait --namespace ambassador --set "${helm_overrides[*]}" -f "$values_file"  > "$output_location" 2>&1
     else
-        helm install traffic-manager charts/telepresence --namespace ambassador --set "${helm_overrides[*]}" > "$output_location" 2>&1
+        helm install traffic-manager charts/telepresence --wait --namespace ambassador --set "${helm_overrides[*]}" > "$output_location" 2>&1
     fi
 }
 
@@ -281,13 +279,13 @@ prepare_license_config_systema_enabled() {
     trap restore_config EXIT
     current_image=$smart_agent
     # delete the following:
-    yq d '.cloud.systemaHost' -i $config_file
-    yq d '.cloud.systemaPort' -i $config_file
-    yq d '.cloud.skipLogin = true' -i $config_file
+    yq e 'del(.cloud.systemaHost)' -i "$config_file"
+    yq e 'del(.cloud.systemaPort)' -i "$config_file"
+    yq e 'del(.cloud.skipLogin)' -i "$config_file"
 
     # and set the following:
-    yq e ".images.agentImage = \"$current_image\"" -i $config_file
-    yq e ".images.webhookAgentImage = \"$current_image\"" -i $config_file
+    yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
+    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for license testing:"
     yq e '.' "$config_file"
 }
@@ -299,11 +297,11 @@ prepare_license_config_systema_disabled() {
     trap restore_config EXIT
     current_image=$smart_agent
     # we update the yaml file directly
-    yq e '.cloud.skipLogin = true' -i $config_file
-    yq e '.cloud.systemaHost = "127.0.0.1"' -i $config_file
-    yq e '.cloud.systemaPort = 456' -i $config_file
-    yq e ".images.agentImage = \"$current_image\"" -i $config_file
-    yq e ".images.webhookAgentImage = \"$current_image\"" -i $config_file
+    yq e '.cloud.skipLogin = true' -i "$config_file"
+    yq e '.cloud.systemaHost = "127.0.0.1"' -i "$config_file"
+    yq e '.cloud.systemaPort = 456' -i "$config_file"
+    yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
+    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for license testing:"
     yq e '.' "$config_file"
 }
@@ -317,11 +315,11 @@ prepare_oss_config() {
     trap restore_config EXIT
     current_image="tel2:$oss_tag"
     # we update the yaml file directly
-    yq e '.cloud.skipLogin = true' -i $config_file
-    yq e '.cloud.systemaHost = "127.0.0.1"' -i $config_file
-    yq e '.cloud.systemaPort = 456' -i $config_file
-    yq e ".images.agentImage = \"$current_image\"" -i $config_file
-    yq e ".images.webhookAgentImage = \"$current_image\"" -i $config_file
+    yq e '.cloud.skipLogin = true' -i "$config_file"
+    yq e '.cloud.systemaHost = "127.0.0.1"' -i "$config_file"
+    yq e '.cloud.systemaPort = 456' -i "$config_file"
+    yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
+    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for non-license testing:"
     yq e '.' "$config_file"
 }
@@ -420,6 +418,7 @@ else
     echo "Using License Agent Image for steps 14 and 15: "
     echo "${TELEPRESENCE_LICENSE_AGENT_IMAGE}"
     echo
+    USE_CHART="true" # At this point we're guaranteed to use it
 fi
 
 echo "Ensuring port $CLOSED_PORT is closed"
@@ -606,7 +605,13 @@ finish_step
 ###############################################
 
 # Now we need to update the config for license workflow
-$TELEPRESENCE uninstall --everything > "$output_location"
+if [[ -n "$USE_CHART" ]]; then
+    $TELEPRESENCE logout > "$output_location"
+    $TELEPRESENCE quit -ru > "$output_location"
+    helm uninstall -n ambassador traffic-manager > "$output_location"
+else
+    $TELEPRESENCE uninstall --everything > "$output_location"
+fi
 verify_logout
 
 restore_config
@@ -745,12 +750,11 @@ finish_step
 #### Step 14 - licensed uninstall everything          ####
 ##########################################################
 
-# First we uninstall the helm chart if it was used
-if [ -n "$USE_CHART" ]; then
-    helm uninstall traffic-manager --namespace ambassador
-fi
+# The chart was used in step 7 so at this point it has to be uninstalled...
+$TELEPRESENCE quit > "$output_location"
+helm uninstall traffic-manager --namespace ambassador
 
-# But we still want to test that uninstall logs the user out,
+# ...but we still want to test that uninstall logs the user out,
 # so we still call uninstall regardless of whether chart was used.
 $TELEPRESENCE uninstall --everything > "$output_location"
 verify_logout
@@ -787,7 +791,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
 
     # Ensure we can intercept a persona intercept and that it works with the license
     output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-header=auto)
-    sleep 1
+    sleep 15
     # Ensure we aren't logged in since we are testing air-gapped license support
     verify_logout
     has_intercept_id true
@@ -808,7 +812,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     #### Step 17 - Verify Invalid License Behavior (helm) ####
     ##########################################################
-    $TELEPRESENCE uninstall --everything >"$output_location"
+    $TELEPRESENCE quit -ru >"$output_location"
     helm uninstall traffic-manager --namespace ambassador > "$output_location" 2>&1
 
     expired_license="eyJhbGciOiJSUzI1NiJ9.eyJhY2NvdW50SWQiOiJjOWQxYmMwMi1iOWYyLTQ3NW\
