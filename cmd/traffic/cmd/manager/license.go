@@ -93,7 +93,8 @@ func (l *LicenseBundle) GetLicenseInfo(clusterID string, canConnectCloud bool, s
 		return &info
 	}
 
-	info.ValidLicense, info.LicenseErr = info.Claims.IsValidForCluster(clusterID)
+	info.LicenseErr = info.Claims.IsValidForCluster(clusterID)
+	info.ValidLicense = info.LicenseErr == nil
 
 	return &info
 }
@@ -105,18 +106,18 @@ type LicenseClaims struct {
 	Scope     string      `json:"scope"`
 }
 
-func (lc *LicenseClaims) IsValidForCluster(cid string) (bool, error) {
+func (lc *LicenseClaims) IsValidForCluster(cid string) error {
 	expiry := lc.Expiry
 	if expiry != nil && time.Now().After(expiry.Time()) {
-		return false, errors.New("license has expired")
+		return errors.New("license has expired")
 	}
 
 	claims := lc.Claims
 	if !claims.Audience.Contains(cid) {
-		return false, fmt.Errorf("license is for cluster(s) with these UIDs: %v. This cluster has ID: %s", claims.Audience, cid)
+		return fmt.Errorf("license is for cluster(s) with these UIDs: %v. This cluster has ID: %s", claims.Audience, cid)
 	}
 
-	return true, nil
+	return nil
 }
 
 var pubKeys = map[string]string{

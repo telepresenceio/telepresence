@@ -129,7 +129,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		}
 
 		cid := m.clusterInfo.GetClusterID()
-		if val, err := li.IsValidForCluster(cid); !val {
+		if err := li.IsValidForCluster(cid); err != nil {
 			return nil, status.Errorf(codes.Unauthenticated, err.Error())
 		}
 	}

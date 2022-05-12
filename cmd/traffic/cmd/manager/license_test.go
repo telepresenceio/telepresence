@@ -216,9 +216,8 @@ func TestLicenceClaims_isValidForCluster(t *testing.T) {
 				Expiry: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
 			},
 		}
-		valid, err := lc.IsValidForCluster(clusterID)
+		err := lc.IsValidForCluster(clusterID)
 		require.Error(t, err)
-		require.False(t, valid)
 	})
 
 	t.Run("wrong cluster id", func(t *testing.T) {
@@ -228,9 +227,8 @@ func TestLicenceClaims_isValidForCluster(t *testing.T) {
 				Audience: jwt.Audience{"INVALID"},
 			},
 		}
-		valid, err := lc.IsValidForCluster(clusterID)
+		err := lc.IsValidForCluster(clusterID)
 		require.Error(t, err)
-		require.False(t, valid)
 	})
 
 	t.Run("no errors", func(t *testing.T) {
@@ -240,9 +238,8 @@ func TestLicenceClaims_isValidForCluster(t *testing.T) {
 				Audience: jwt.Audience{clusterID},
 			},
 		}
-		valid, err := lc.IsValidForCluster(clusterID)
+		err := lc.IsValidForCluster(clusterID)
 		require.NoError(t, err)
-		require.True(t, valid)
 	})
 }
 
