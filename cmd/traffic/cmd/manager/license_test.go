@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,11 +17,11 @@ import (
 )
 
 func TestNewLicenseBundleFromDisk(t *testing.T) {
-	tmpRootDir, err := ioutil.TempDir("", "")
+	tmpRootDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpRootDir)
+	defer func() { _ = os.RemoveAll(tmpRootDir) }()
 	expectErrorTest := func(t *testing.T) {
 		l, err := newLicenseBundleFromDisk(tmpRootDir)
 		if err == nil {
@@ -35,27 +34,27 @@ func TestNewLicenseBundleFromDisk(t *testing.T) {
 
 	t.Run("no license file", expectErrorTest)
 
-	err = ioutil.WriteFile(filepath.Join(tmpRootDir, "license"), []byte(""), os.ModePerm)
+	err = os.WriteFile(filepath.Join(tmpRootDir, "license"), []byte(""), os.ModePerm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Run("empty license file", expectErrorTest)
 
 	expectedLicense := "LICENSE"
-	err = ioutil.WriteFile(filepath.Join(tmpRootDir, "license"), []byte(expectedLicense), os.ModePerm)
+	err = os.WriteFile(filepath.Join(tmpRootDir, "license"), []byte(expectedLicense), os.ModePerm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Run("empty license file", expectErrorTest)
 
-	err = ioutil.WriteFile(filepath.Join(tmpRootDir, "hostDomain"), []byte(""), os.ModePerm)
+	err = os.WriteFile(filepath.Join(tmpRootDir, "hostDomain"), []byte(""), os.ModePerm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Run("empty host domain file", expectErrorTest)
 
 	expectedHostDomain := "HOST"
-	err = ioutil.WriteFile(filepath.Join(tmpRootDir, "hostDomain"), []byte(expectedHostDomain), os.ModePerm)
+	err = os.WriteFile(filepath.Join(tmpRootDir, "hostDomain"), []byte(expectedHostDomain), os.ModePerm)
 	if err != nil {
 		t.Fatal(err)
 	}
