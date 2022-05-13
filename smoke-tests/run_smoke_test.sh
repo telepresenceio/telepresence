@@ -142,7 +142,7 @@ is_prop_traffic_agent() {
     local present=${1}
     local image
     while [[ $(kubectl get pod -l run=dataprocessingservice --no-headers | wc -l) -gt 1 ]]; do
-        kubectl rollout status -n default deploy dataprocessingservice > $output_location
+        kubectl rollout status -n default deploy dataprocessingservice > "$output_location"
         sleep 10
     done
     image=$(kubectl get pod -l run=dataprocessingservice -o "jsonpath={.items[].spec.containers[?(@.name=='traffic-agent')].image}")
@@ -244,8 +244,13 @@ helm_install() {
     if [[ -n $TELEPRESENCE_REGISTRY ]]; then
         helm_overrides+=("image.registry=$TELEPRESENCE_REGISTRY" "agentInjector.registry=$TELEPRESENCE_REGISTRY")
     fi
-    local image_name=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\1/g')
-    local image_tag=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\2/g')
+    local image_name
+    local image_tag
+    # Disable the shellcheck warning about sed; it's deliberately used to prevent bash incompatibilities
+    # shellcheck disable=SC2001
+    image_name=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\1/g')
+    # shellcheck disable=SC2001
+    image_tag=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\2/g')
     if [[ -z "$image_name" ]] || [[ -z "$image_tag" ]]; then
       echo "Malformed image \"$current_image\""
       exit 1
@@ -254,7 +259,8 @@ helm_install() {
     helm_overrides+=("agentInjector.agentImage.name=$image_name" "agentInjector.agentImage.tag=$image_tag")
 
     # Clean up any pre-existing helm installation for the traffic-manager
-    local output=$(helm list --namespace ambassador | grep 'traffic-manager')
+    local output
+    output=$(helm list --namespace ambassador | grep 'traffic-manager')
     if [[ -n "$output" ]]; then
         helm uninstall traffic-manager --namespace ambassador >"$output_location" 2>&1
     fi
