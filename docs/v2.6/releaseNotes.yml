@@ -53,7 +53,7 @@ items:
           The client will no longer modify <code>deployments</code>, <code>replicasets</code>, or <code>statefulsets</code> in order to
           inject a Traffic Agent into an intercepted pod. Instead, all injection is now performed by a mutating webhook. As a result,
           the client now needs less permissions in the cluster.
-        docs: ../new-in-2.6#no-more-workload-modifications
+        docs: ../install/upgrade#important-note-about-upgrading-to-2.6.0
       - type: change
         title: Autmatic upgrade of Traffic Agents
         body: >-
