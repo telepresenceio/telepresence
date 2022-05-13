@@ -97,22 +97,25 @@ get_preview_url() {
 # Puts workstation api key in a variable
 get_workstation_apikey() {
     local cache_file
-    case "$(uname)" in
-	Darwin)
-		cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
-		;;
-	Linux)
-		cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/apikeys.json"
-		;;
+    case $os in
+    darwin)
+        cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
+        ;;
+    linux)
+        cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/apikeys.json"
+        ;;
+    windows)
+        cache_file="$HOME/AppData/Local/telepresence/apikeys.json"
+        ;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
         ;;
-    esac
+  esac
     endpoint="auth.datawire.io"
     if [[ "$SYSTEMA_ENV" == 'staging' ]]; then
         endpoint="staging-auth.datawire.io"
-    fi
+     fi
     apikey=$(jq -r ".[\"$endpoint\"]|.[\"telepresence:agent-http\"]|strings" "$cache_file")
     if [[ -z $apikey ]]; then
         echo "No apikey found"
@@ -174,13 +177,16 @@ get_config() {
         exit 1
     fi
 
-    case "$(uname)" in
-	Darwin)
+    case $os in
+    darwin)
         config_file="$HOME/Library/Application Support/telepresence/config.yml"
-		;;
-	Linux)
-		config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
-		;;
+        ;;
+    Linux)
+        config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
+        ;;
+    windows)
+        config_file="$HOME/AppData/Roaming/telepresence/config.yml"
+        ;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
@@ -336,6 +342,7 @@ cleanup_demo_app() {
 DEBUG=${DEBUG:-0}
 CLOSED_PORT=${CLOSED_PORT:-1234}
 start_time=$(date -u +%s)
+os=$(go env GOOS)
 
 check_dependencies
 
@@ -764,15 +771,17 @@ finish_step
 ##########################################################
 #### Step 15 - Verify version prompts new version     ####
 ##########################################################
-os=$(uname -s | awk '{print tolower($0)}')
-echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
-sudo curl "${curl_opts[@]}" -fL "https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence" -o /tmp/old_telepresence
-sudo chmod +x /tmp/old_telepresence
-output=$(/tmp/old_telepresence version | grep 'An update of telepresence from version')
-verify_output_empty "${output}" false
-echo "Removing old version of telepresence: /tmp/old_telepresence"
-sudo rm /tmp/old_telepresence
 
+# We skip this on windows because that entails downloading a zip and installing it.
+if [[ "$os" == "linux" || $os == "darwin" ]]; then
+    echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
+    sudo curl "${curl_opts[@]}" -fL "https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence" -o /tmp/old_telepresence
+    sudo chmod +x /tmp/old_telepresence
+    output=$(/tmp/old_telepresence version | grep 'An update of telepresence from version')
+    verify_output_empty "${output}" false
+    echo "Removing old version of telepresence: /tmp/old_telepresence"
+    sudo rm /tmp/old_telepresence
+fi
 finish_step
 
 if [[ -n $TELEPRESENCE_LICENSE ]]; then
