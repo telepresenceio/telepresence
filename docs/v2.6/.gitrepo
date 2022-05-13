@@ -5,8 +5,8 @@
 ;
 [subrepo]
 	remote = https://github.com/telepresenceio/docs
-	branch = josecv/2.6.0-sync
-	commit = 906f6265e741838b1e7cc8e3b0645feef5ca6f63
-	parent = 96a1034a71ff26a58fd4f515e92d2c00fc5083e9
+	branch = release/v2.6
+	commit = b374d59d34c6c854e3af81bb4ed5e554c1a342ee
+	parent = e5e68023df7b4167f3abc2654c0d803f87adf454
 	method = merge
 	cmdver = 0.4.3
