@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.0 (TBD)
+### 2.6.0 (May 13, 2022)
 
 - Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
 

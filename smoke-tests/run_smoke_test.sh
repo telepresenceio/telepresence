@@ -97,22 +97,25 @@ get_preview_url() {
 # Puts workstation api key in a variable
 get_workstation_apikey() {
     local cache_file
-    case "$(uname)" in
-	Darwin)
-		cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
-		;;
-	Linux)
-		cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/apikeys.json"
-		;;
+    case $os in
+    darwin)
+        cache_file="$HOME/Library/Caches/telepresence/apikeys.json"
+        ;;
+    linux)
+        cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/apikeys.json"
+        ;;
+    windows)
+        cache_file="$HOME/AppData/Local/telepresence/apikeys.json"
+        ;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
         ;;
-    esac
+  esac
     endpoint="auth.datawire.io"
     if [[ "$SYSTEMA_ENV" == 'staging' ]]; then
         endpoint="staging-auth.datawire.io"
-    fi
+     fi
     apikey=$(jq -r ".[\"$endpoint\"]|.[\"telepresence:agent-http\"]|strings" "$cache_file")
     if [[ -z $apikey ]]; then
         echo "No apikey found"
@@ -138,7 +141,11 @@ get_intercept_id() {
 is_prop_traffic_agent() {
     local present=${1}
     local image
-    image=$(kubectl get deployment dataprocessingservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}")
+    while [[ $(kubectl get pod -l run=dataprocessingservice --no-headers | wc -l) -gt 1 ]]; do
+        kubectl rollout status -n default deploy dataprocessingservice > "$output_location"
+        sleep 10
+    done
+    image=$(kubectl get pod -l run=dataprocessingservice -o "jsonpath={.items[].spec.containers[?(@.name=='traffic-agent')].image}")
     if [[ -z $image ]]; then
         echo "There is no traffic-agent sidecar and there should be"
         exit 1
@@ -166,17 +173,20 @@ is_prop_traffic_agent() {
 
 get_config() {
     if [ -n "$TELEPRESENCE_AGENT_IMAGE" ]; then
-        echo "Use images.agentImage in your config.yml to configure the Smart Agent Image to use"
+        echo "Use images.webhookAgentImage in your config.yml to configure the Smart Agent Image to use"
         exit 1
     fi
 
-    case "$(uname)" in
-	Darwin)
+    case $os in
+    darwin)
         config_file="$HOME/Library/Application Support/telepresence/config.yml"
-		;;
-	Linux)
-		config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
-		;;
+        ;;
+    Linux)
+        config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
+        ;;
+    windows)
+        config_file="$HOME/AppData/Roaming/telepresence/config.yml"
+        ;;
     *)
         echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
         exit 1
@@ -185,21 +195,6 @@ get_config() {
     echo "Using config file: "
     yq e '.' "$config_file"
     echo
-}
-
-unset_agent_image_config() {
-    if [ -f "$config_file" ]; then
-        sed -i.bak 's/^  agentImage:.*//' "${config_file}"
-    fi
-}
-
-restore_config () {
-    config_bak="$config_file.bak"
-    if [ -f "$config_file" ]; then
-        echo "restoring $config_file.bak to $config_file"
-        cp "$config_bak" "$config_file"
-        rm "$config_bak"
-    fi
 }
 
 # Clones amb-code-quickstart-app and applies k8s manifests
@@ -231,52 +226,113 @@ prepare_helm_release() {
 
     # Determine if we need to override the registry
     if [[ -n $TELEPRESENCE_REGISTRY ]]; then
-        helm_overrides+=("image.registry=")
-        helm_overrides+=("$TELEPRESENCE_REGISTRY")
-        helm_overrides+=(",")
+        helm_overrides+=("image.registry=$TELEPRESENCE_REGISTRY")
     fi
 
-    semver_regex="([1-9][0-9]*)\\.([1-9][0-9]*)\\.([1-9][0-9]*)(\\-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\-[0-9]*)?"
     # Install the traffic-manager that matches the version of the cli
-    if [[ $tp_version_output =~ $semver_regex ]]; then
-        helm_overrides+=("image.tag=")
-        helm_overrides+=("${BASH_REMATCH[0]}")
-    fi
-        echo "Using helm overrides:"
-        echo "${helm_overrides[*]}"
-        echo
+    helm_overrides+=("image.tag=$oss_tag")
+
+    echo "Using helm overrides:"
+    local IFS=","; echo "${helm_overrides[*]}"
 }
 
 # Use helm to install the traffic-manager in the cluster
 helm_install() {
     local values_file=${1}
 
+    # Determine if we need to override the registry
+    if [[ -n $TELEPRESENCE_REGISTRY ]]; then
+        helm_overrides+=("image.registry=$TELEPRESENCE_REGISTRY" "agentInjector.registry=$TELEPRESENCE_REGISTRY")
+    fi
+    local image_name
+    local image_tag
+    # Disable the shellcheck warning about sed; it's deliberately used to prevent bash incompatibilities
+    # shellcheck disable=SC2001
+    image_name=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\1/g')
+    # shellcheck disable=SC2001
+    image_tag=$(echo "$current_image" | sed 's/^\([^:]*\):\([^:]*\)$/\2/g')
+    if [[ -z "$image_name" ]] || [[ -z "$image_tag" ]]; then
+      echo "Malformed image \"$current_image\""
+      exit 1
+    fi
+
+    helm_overrides+=("agentInjector.agentImage.name=$image_name" "agentInjector.agentImage.tag=$image_tag")
+
     # Clean up any pre-existing helm installation for the traffic-manager
+    local output
     output=$(helm list --namespace ambassador | grep 'traffic-manager')
     if [[ -n "$output" ]]; then
         helm uninstall traffic-manager --namespace ambassador >"$output_location" 2>&1
     fi
 
+    local IFS=","
     if [[ -n $values_file ]]; then
-        helm install traffic-manager charts/telepresence --namespace ambassador --set "${helm_overrides[*]}" -f "$values_file" > "$output_location" 2>&1
+        helm install traffic-manager charts/telepresence --wait --namespace ambassador --set "${helm_overrides[*]}" -f "$values_file"  > "$output_location" 2>&1
     else
-        helm install traffic-manager charts/telepresence --namespace ambassador --set "${helm_overrides[*]}" > "$output_location" 2>&1
+        helm install traffic-manager charts/telepresence --wait --namespace ambassador --set "${helm_overrides[*]}" > "$output_location" 2>&1
+    fi
+}
+
+restore_config () {
+    config_bak="$config_file.bak"
+    if [ -f "$config_file" ]; then
+        echo "restoring $config_file.bak to $config_file"
+        cp "$config_bak" "$config_file"
+        rm "$config_bak"
     fi
 }
 
 # Make edits to the config to test license support used
 # when in an air-gapped environment.
-prepare_license_config() {
+prepare_license_config_systema_enabled() {
     config_bak="$config_file.bak"
     echo Backing up "$config_file" to "$config_file".bak
     cp "$config_file" "$config_bak"
-    # we update the yaml file directly
-    yq e '.cloud.skipLogin = true' -i ~/Library/Application\ Support/telepresence/config.yml
-    yq e '.cloud.systemaHost = "127.0.0.1"' -i ~/Library/Application\ Support/telepresence/config.yml
-    yq e '.cloud.systemaPort = 456' -i ~/Library/Application\ Support/telepresence/config.yml
-    yq e ".images.agentImage = \"ambassador-telepresence-agent:$TELEPRESENCE_LICENSE_AGENT_IMAGE\"" -i ~/Library/Application\ Support/telepresence/config.yml
-    yq e '.images.registry = "datawire"' -i ~/Library/Application\ Support/telepresence/config.yml
+    trap restore_config EXIT
+    current_image=$smart_agent
+    # delete the following:
+    yq e 'del(.cloud.systemaHost)' -i "$config_file"
+    yq e 'del(.cloud.systemaPort)' -i "$config_file"
+    yq e 'del(.cloud.skipLogin)' -i "$config_file"
+
+    # and set the following:
+    yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
+    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for license testing:"
+    yq e '.' "$config_file"
+}
+
+prepare_license_config_systema_disabled() {
+    config_bak="$config_file.bak"
+    echo Backing up "$config_file" to "$config_file".bak
+    cp "$config_file" "$config_bak"
+    trap restore_config EXIT
+    current_image=$smart_agent
+    # we update the yaml file directly
+    yq e '.cloud.skipLogin = true' -i "$config_file"
+    yq e '.cloud.systemaHost = "127.0.0.1"' -i "$config_file"
+    yq e '.cloud.systemaPort = 456' -i "$config_file"
+    yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
+    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
+    echo "Using the following config for license testing:"
+    yq e '.' "$config_file"
+}
+
+# Make edits to the config to test license support used
+# when in an air-gapped environment.
+prepare_oss_config() {
+    config_bak="$config_file.bak"
+    echo Backing up "$config_file" to "$config_file".bak
+    cp "$config_file" "$config_bak"
+    trap restore_config EXIT
+    current_image="tel2:$oss_tag"
+    # we update the yaml file directly
+    yq e '.cloud.skipLogin = true' -i "$config_file"
+    yq e '.cloud.systemaHost = "127.0.0.1"' -i "$config_file"
+    yq e '.cloud.systemaPort = 456' -i "$config_file"
+    yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
+    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
+    echo "Using the following config for non-license testing:"
     yq e '.' "$config_file"
 }
 
@@ -292,6 +348,7 @@ cleanup_demo_app() {
 DEBUG=${DEBUG:-0}
 CLOSED_PORT=${CLOSED_PORT:-1234}
 start_time=$(date -u +%s)
+os=$(go env GOOS)
 
 check_dependencies
 
@@ -314,27 +371,34 @@ if [ "$DEBUG" == 2 ]; then
     set -x
 fi
 
-echo "Using telepresence: "
-echo "$TELEPRESENCE"
-tp_version_output=$($TELEPRESENCE version)
-echo "$tp_version_output"
-echo
-
-# If this environment variable is set, we want to run the smoke tests with that
-# agent. But this agent isn't used unless we are logged in, so we unset the
-# var here, and will re-set it after we log in.
-get_config
-if [ -f "$config_file" ]; then
-    smart_agent=$(sed -n -e 's/^[ ]*agentImage\:[ ]*//p' "$config_file")
-    echo "Smart agent: $smart_agent"
-    unset_agent_image_config
-    trap restore_config EXIT
-    echo "Using the following config for non-Smart Agent steps: "
-    config_bak="$config_file.bak"
-    yq e '.' "$config_file"
-    echo
+semver_regex='([0-9]*\.[0-9]+\.[0-9]+)(\-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\-[0-9]*)?'
+# Install the traffic-manager that matches the version of the cli
+tp_version_output="$($TELEPRESENCE version | grep Client)"
+if [[ $tp_version_output =~ $semver_regex ]]; then
+  oss_tag=${BASH_REMATCH[0]}
+else
+  echo "Unable to parse $tp_version_output into a semantic version"
+  exit 1
 fi
 
+echo "Using telepresence: "
+echo "  $TELEPRESENCE"
+echo "  $oss_tag"
+echo
+get_config
+
+if [ -f "$config_file" ]; then
+    smart_agent=$(sed -n -e 's/^[ ]*webhookAgentImage\:[ ]*//p' "$config_file")
+    echo "Smart agent: $smart_agent"
+    config_bak="$config_file.bak"
+    echo
+else
+    echo "Please set the images.webhookAgentImage to the desired smart agent"
+    exit 1
+fi
+
+prepare_oss_config
+trap restore_config EXIT
 
 echo "Using kubectl: "
 which kubectl
@@ -367,6 +431,7 @@ else
     echo "Using License Agent Image for steps 14 and 15: "
     echo "${TELEPRESENCE_LICENSE_AGENT_IMAGE}"
     echo
+    USE_CHART="true" # At this point we're guaranteed to use it
 fi
 
 echo "Ensuring port $CLOSED_PORT is closed"
@@ -498,7 +563,7 @@ finish_step
 # here. The integration tests *do* test mounts on Windows and Linux so this
 # testing is really being extra cautious. We can remove this whole step if/when
 # the macfuse issue is cleared up in the macos executors.
-mount_path=$($TELEPRESENCE list --json | jq '.[] | select(.name=="dataprocessingservice") | .intercept_info.spec.mount_point' | sed 's/"//g')
+mount_path=$($TELEPRESENCE list --json | jq -r '.[] | select(.name=="dataprocessingservice") | .intercept_infos[0].client_mount_point')
 if [[ -z $mount_path ]]; then
     echo "Mount path was empty and it shouldn't have been"
     exit 1
@@ -552,19 +617,29 @@ finish_step
 #### Step 7 - Verify login prompted        ####
 ###############################################
 
-if [ -f "$config_file" ]; then
-    restore_config
-    trap - EXIT
-    echo "Using the following config for remainder of tests:"
-    yq e '.' "$config_file"
-    $TELEPRESENCE quit > "$output_location"
+# Now we need to update the config for license workflow
+if [[ -n "$USE_CHART" ]]; then
+    $TELEPRESENCE logout > "$output_location"
+    $TELEPRESENCE quit -ru > "$output_location"
+    helm uninstall -n ambassador traffic-manager > "$output_location"
+else
+    $TELEPRESENCE uninstall --everything > "$output_location"
 fi
+verify_logout
+
+restore_config
+prepare_license_config_systema_enabled
+helm_install "smoke-tests/license-values.yaml"
+echo "Using the following config for remainder of tests:"
+yq e '.' "$config_file"
 
 $TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-header=all --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default >"$output_location"
 sleep 1
 is_prop_traffic_agent true
 
 # Verify intercept works
+output=$($TELEPRESENCE list)
+verify_output_empty "${output}" false
 output=$($TELEPRESENCE list | grep 'dataprocessingservice: intercepted')
 verify_output_empty "${output}" false
 
@@ -603,12 +678,12 @@ get_workstation_apikey
 output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" true
 
-# Verify the preview url works
-output=$(curl "${curl_opts[@]}" -H "x-ambassador-api-key: $apikey" "$preview_url"  | grep 'blue')
-verify_output_empty "${output}" false
-
 # We probably don't need this but we also check using the intercept-id header
 output=$(curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $VERYLARGEJAVASERVICE | grep 'blue')
+verify_output_empty "${output}" false
+
+# Verify the preview url works
+output=$(curl "${curl_opts[@]}" -H "x-ambassador-api-key: $apikey" "$preview_url"  | grep 'blue')
 verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingservice >"$output_location"
@@ -618,7 +693,7 @@ finish_step
 #### Step 10 - licensed selective intercept w/o preview url ####
 ###############################################################
 
-sleep 5 # avoid known agent mechanism-args race
+sleep 15 # avoid known agent mechanism-args race
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false)
 sleep 1
 has_intercept_id true
@@ -688,12 +763,11 @@ finish_step
 #### Step 14 - licensed uninstall everything          ####
 ##########################################################
 
-# First we uninstall the helm chart if it was used
-if [ -n "$USE_CHART" ]; then
-    helm uninstall traffic-manager --namespace ambassador
-fi
+# The chart was used in step 7 so at this point it has to be uninstalled...
+$TELEPRESENCE quit > "$output_location"
+helm uninstall traffic-manager --namespace ambassador
 
-# But we still want to test that uninstall logs the user out,
+# ...but we still want to test that uninstall logs the user out,
 # so we still call uninstall regardless of whether chart was used.
 $TELEPRESENCE uninstall --everything > "$output_location"
 verify_logout
@@ -703,15 +777,17 @@ finish_step
 ##########################################################
 #### Step 15 - Verify version prompts new version     ####
 ##########################################################
-os=$(uname -s | awk '{print tolower($0)}')
-echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
-sudo curl "${curl_opts[@]}" -fL "https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence" -o /tmp/old_telepresence
-sudo chmod +x /tmp/old_telepresence
-output=$(/tmp/old_telepresence version | grep 'An update of telepresence from version')
-verify_output_empty "${output}" false
-echo "Removing old version of telepresence: /tmp/old_telepresence"
-sudo rm /tmp/old_telepresence
 
+# We skip this on windows because that entails downloading a zip and installing it.
+if [[ "$os" == "linux" || $os == "darwin" ]]; then
+    echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
+    sudo curl "${curl_opts[@]}" -fL "https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence" -o /tmp/old_telepresence
+    sudo chmod +x /tmp/old_telepresence
+    output=$(/tmp/old_telepresence version | grep 'An update of telepresence from version')
+    verify_output_empty "${output}" false
+    echo "Removing old version of telepresence: /tmp/old_telepresence"
+    sudo rm /tmp/old_telepresence
+fi
 finish_step
 
 if [[ -n $TELEPRESENCE_LICENSE ]]; then
@@ -721,13 +797,16 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-tpl.yaml > smoke-tests/license-values.yaml
 
     # Now we need to update the config for license workflow
-    prepare_license_config
-    trap restore_config EXIT
+
+    # Need to uninstall in case the traffic agent webhook image has changed
+    $TELEPRESENCE uninstall -e > "$output_location"
+    restore_config
+    prepare_license_config_systema_disabled
     helm_install "smoke-tests/license-values.yaml"
 
     # Ensure we can intercept a persona intercept and that it works with the license
     output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-header=auto)
-    sleep 1
+    sleep 15
     # Ensure we aren't logged in since we are testing air-gapped license support
     verify_logout
     has_intercept_id true
@@ -748,7 +827,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     #### Step 17 - Verify Invalid License Behavior (helm) ####
     ##########################################################
-    $TELEPRESENCE uninstall --everything >"$output_location"
+    $TELEPRESENCE quit -ru >"$output_location"
     helm uninstall traffic-manager --namespace ambassador > "$output_location" 2>&1
 
     expired_license="eyJhbGciOiJSUzI1NiJ9.eyJhY2NvdW50SWQiOiJjOWQxYmMwMi1iOWYyLTQ3NW\

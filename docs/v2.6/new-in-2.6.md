@@ -26,7 +26,7 @@ intercepted.
 The sidecar is now capable of intercepting multiple containers and multiple ports on each container. As before, an intercepted port must be
 a service port that is connected to a port in a container in the intercepted workload. The difference is that now there can be any number of
 such connections, and the user can choose which ones to intercept. Even the OSS-sidecar can do this, but it’s limited to one intercept at a
-time.
+time. See [Intercepting multiple ports](../reference/intercepts#intercepting-multiple-ports) for more info
 
 ## Smarter agent
 The OSS-sidecar is only capable of handling the “tcp” mechanism. It offers no “personal” intercepts. This still holds. What’s different is

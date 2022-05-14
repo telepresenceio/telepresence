@@ -103,7 +103,11 @@ func ConnectToSystemA(ctx context.Context,
 		sc := &dhttp.ServerConfig{
 			Handler: grpcServer,
 		}
-		return sc.Serve(ctx, listener)
+		err := sc.Serve(ctx, listener)
+		if err != nil && ctx.Err() == err {
+			err = nil
+		}
+		return err
 	})
 	grp.Go("client", func(ctx context.Context) error {
 		defer conn.Close()
