@@ -77,7 +77,7 @@ func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
 	require.NoError(cmd.Run())
 	require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "rollout", "status", "-w", "deploy/traffic-manager"))
 
-	is.findTrafficManagerPresent(ctx, is.ManagerNamespace())
+	is.findTrafficManagerPresent(ctx, "default", is.ManagerNamespace())
 }
 
 func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
@@ -315,11 +315,11 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
 		return map[string]interface{}{"manager": map[string]string{"namespace": customNamespace}}
 	})
-	is.findTrafficManagerPresent(ctx, customNamespace)
+	is.findTrafficManagerPresent(ctx, "extra", customNamespace)
 }
 
-func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace string) {
-	ctx, kc := is.cluster(ctx, namespace)
+func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, namespace string) {
+	ctx, kc := is.cluster(ctx, context, namespace)
 	require := is.Require()
 	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	require.NoError(err)
@@ -337,11 +337,11 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, namespace
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
 }
 
-func (is *installSuite) cluster(ctx context.Context, managerNamespace string) (context.Context, *k8s.Cluster) {
+func (is *installSuite) cluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster) {
 	require := is.Require()
 	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{
-		"kubeconfig": itest.KubeConfig(ctx),
-		"context":    "default",
+		"KUBECONFIG": itest.KubeConfig(ctx),
+		"context":    context,
 		"namespace":  managerNamespace})
 	require.NoError(err)
 	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
@@ -350,7 +350,7 @@ func (is *installSuite) cluster(ctx context.Context, managerNamespace string) (c
 }
 
 func (is *installSuite) installer(ctx context.Context) (context.Context, trafficmgr.Installer) {
-	ctx, kc := is.cluster(ctx, is.ManagerNamespace())
+	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	is.Require().NoError(err)
 	return ctx, ti

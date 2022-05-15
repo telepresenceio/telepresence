@@ -759,19 +759,27 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	t := getT(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(t, err, "unable to read %s", kc)
-	require.NoError(t, err, api.MinifyConfig(cfg), "unable to minify config")
-	var cluster *api.Cluster
-	for _, c := range cfg.Clusters {
-		cluster = c
-		break
-	}
-	require.NotNil(t, cluster, "unable to get cluster from config")
+	cluster := cfg.Clusters["default"]
+	require.NotNil(t, cluster, "unable to get default cluster from config")
 
 	raw, err := json.Marshal(extProducer(cluster))
 	require.NoError(t, err, "unable to json.Marshal extension map")
 	cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{Raw: raw}}
 
+	context := &api.Context{
+		Cluster:   "extra",
+		AuthInfo:  "default",
+		Namespace: "default",
+	}
+	cfg = &api.Config{
+		Kind:           "Config",
+		APIVersion:     "v1",
+		Preferences:    api.Preferences{},
+		Clusters:       map[string]*api.Cluster{"extra": cluster},
+		Contexts:       map[string]*api.Context{"extra": context},
+		CurrentContext: "extra",
+	}
 	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
 	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
-	return WithEnv(ctx, map[string]string{"KUBECONFIG": kubeconfigFileName})
+	return WithEnv(ctx, map[string]string{"KUBECONFIG": strings.Join([]string{kc, kubeconfigFileName}, string([]byte{os.PathListSeparator}))})
 }
