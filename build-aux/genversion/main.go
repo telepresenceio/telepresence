@@ -27,6 +27,16 @@ import (
 	"github.com/blang/semver"
 )
 
+// isReleased returns true if a release tag exist for the given version
+// A release tag is a tag that represents a semver version, without pre-version
+// or build suffixes, that is prefixed with "v", e.g. "v1.2.3" is considered
+// a release tag whereas "v1.2.3-rc.3" isn't.
+func isReleased(v semver.Version) bool {
+	v.Build = nil
+	v.Pre = nil
+	return exec.Command("git", "describe", "v"+v.String()).Run() == nil
+}
+
 func Main() error {
 	cmd := exec.Command("git", "describe", "--tags", "--match=v*")
 	cmd.Stderr = os.Stderr
@@ -40,8 +50,8 @@ func Main() error {
 		return fmt.Errorf("unable to parse semver %s: %w", gitDescStr, err)
 	}
 
-	// Bump to next patch version only if we found a release, i.e. no pre-version and no build suffix.
-	if len(gitDescVer.Pre) == 0 && len(gitDescVer.Build) == 0 {
+	// Bump to next patch version only if the version has been released.
+	if isReleased(gitDescVer) {
 		gitDescVer.Patch++
 	}
 
