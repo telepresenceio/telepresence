@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
@@ -135,8 +136,15 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
+	clonedClient, ok := proto.Clone(client).(*rpc.ClientInfo)
+	if !ok {
+		return nil, fmt.Errorf("unexpected error cloning ClientInfo proto")
+	}
+
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
+		ClusterId: m.clusterInfo.GetClusterID(),
+		Session:   &rpc.SessionInfo_Client{Client: clonedClient},
 	}, nil
 }
 
@@ -150,7 +158,16 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 	sessionID := m.state.AddAgent(agent, m.clock.Now())
 
-	return &rpc.SessionInfo{SessionId: sessionID}, nil
+	clonedAgent, ok := proto.Clone(agent).(*rpc.AgentInfo)
+	if !ok {
+		return nil, fmt.Errorf("unexpected error cloning AgentInfo proto")
+	}
+
+	return &rpc.SessionInfo{
+		SessionId: sessionID,
+		ClusterId: m.clusterInfo.GetClusterID(),
+		Session:   &rpc.SessionInfo_Agent{Agent: clonedAgent},
+	}, nil
 }
 
 // Remain indicates that the session is still valid.
@@ -410,7 +427,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	apiKey := ciReq.GetApiKey()
 	dlog.Debug(ctx, "CreateIntercept called")
 
-	if m.state.GetClient(sessionID) == nil {
+	client := m.state.GetClient(sessionID)
+
+	if client == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
@@ -418,7 +437,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	return m.state.AddIntercept(sessionID, apiKey, spec)
+	return m.state.AddIntercept(sessionID, m.clusterInfo.GetClusterID(), apiKey, client, spec)
 }
 
 func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name string) (string, error) {
