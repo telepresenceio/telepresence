@@ -301,7 +301,7 @@ func (s *State) RemoveSession(ctx context.Context, sessionID string) {
 func (s *State) unlockedRemoveSession(sessionID string) {
 	if sess, ok := s.sessions[sessionID]; ok {
 		// kill the session
-		sess.Cancel()
+		defer sess.Cancel()
 
 		// remove it from the agentsByName index (if nescessary)
 		agent, isAgent := s.agents.Load(sessionID)

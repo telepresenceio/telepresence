@@ -469,87 +469,102 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
 
-	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 	switch action := req.PreviewDomainAction.(type) {
 	case *rpc.UpdateInterceptRequest_AddPreviewDomain:
-		var domain string
-		var sa systema.SystemACRUDClient
-		var err error
-		intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
-			// Check if this is already done.
-			if intercept.PreviewDomain != "" {
-				return
-			}
-
-			// Connect to SystemA.
-			if sa == nil {
-				sa, err = systemaPool.Get(ctx)
-				if err != nil {
-					err = errors.Wrap(err, "systema: acquire connection")
-					return
-				}
-			}
-
-			// Have SystemA create the preview domain.
-			if domain == "" {
-				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
-				defer cancel()
-				var resp *systema.CreateDomainResponse
-				resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
-					InterceptId:   intercept.Id,
-					DisplayBanner: action.AddPreviewDomain.DisplayBanner,
-					InterceptSpec: intercept.Spec,
-					Host:          action.AddPreviewDomain.Ingress.L5Host,
-				})
-				if err != nil {
-					err = errors.Wrap(err, "systema: create domain")
-					return
-				}
-				domain = resp.Domain
-			}
-
-			// Apply that to the intercept.
-			intercept.PreviewDomain = domain
-			intercept.PreviewSpec = action.AddPreviewDomain
-		})
-		if err != nil || intercept == nil || domain == "" || intercept.PreviewDomain != domain {
-			// Oh no, something went wrong.  Clean up.
-			if sa != nil {
-				if domain != "" {
-					tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
-					defer cancel()
-					_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
-						Domain: domain,
-					})
-					if err != nil {
-						dlog.Errorln(ctx, "systema: remove domain:", err)
-					}
-				}
-				if err := systemaPool.Done(ctx); err != nil {
-					dlog.Errorln(ctx, "systema: release connection:", err)
-				}
-			}
+		// Check if this is already done.
+		// Connect to SystemA.
+		// Have SystemA create the preview domain.
+		// Apply that to the intercept.
+		// Oh no, something went wrong.  Clean up.
+		intercept, err := m.addInterceptDomain(ctx, interceptID, action)
+		if err != nil {
+			return nil, err
 		}
-		if intercept == nil {
-			err = status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)
-		}
-		return intercept, err
+		return intercept, nil
 	case *rpc.UpdateInterceptRequest_RemovePreviewDomain:
-		var domain string
-		intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
-			// Check if this is already done.
-			if intercept.PreviewDomain == "" {
+		// Check if this is already done.
+		// Remove the domain
+		return m.removeInterceptDomain(ctx, interceptID)
+	default:
+		panic(errors.Errorf("Unimplemented UpdateInterceptRequest action: %T", action))
+	}
+}
+
+func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
+	var domain string
+	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
+		if intercept.PreviewDomain == "" {
+			return
+		}
+		domain = intercept.PreviewDomain
+		intercept.PreviewDomain = ""
+	})
+	if domain != "" {
+		if sa, err := systemaPool.Get(ctx); err != nil {
+			dlog.Errorln(ctx, "systema: acquire connection:", err)
+		} else {
+			tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
+			defer cancel()
+			_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
+				Domain: domain,
+			})
+			if err != nil {
+				dlog.Errorln(ctx, "systema: remove domain:", err)
+			}
+			if err := systemaPool.Done(ctx); err != nil {
+				dlog.Errorln(ctx, "systema: release connection:", err)
+			}
+		}
+	}
+	if intercept == nil {
+		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)
+	}
+	return intercept, nil
+}
+
+func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
+	var domain string
+	var sa systema.SystemACRUDClient
+	var err error
+	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
+
+		if intercept.PreviewDomain != "" {
+			return
+		}
+
+		if sa == nil {
+			sa, err = systemaPool.Get(ctx)
+			if err != nil {
+				err = errors.Wrap(err, "systema: acquire connection")
 				return
 			}
+		}
 
-			// Remove the domain
-			domain = intercept.PreviewDomain
-			intercept.PreviewDomain = ""
-		})
-		if domain != "" {
-			if sa, err := systemaPool.Get(ctx); err != nil {
-				dlog.Errorln(ctx, "systema: acquire connection:", err)
-			} else {
+		if domain == "" {
+			tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
+			defer cancel()
+			var resp *systema.CreateDomainResponse
+			resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
+				InterceptId:   intercept.Id,
+				DisplayBanner: action.AddPreviewDomain.DisplayBanner,
+				InterceptSpec: intercept.Spec,
+				Host:          action.AddPreviewDomain.Ingress.L5Host,
+			})
+			if err != nil {
+				err = errors.Wrap(err, "systema: create domain")
+				return
+			}
+			domain = resp.Domain
+		}
+
+		intercept.PreviewDomain = domain
+		intercept.PreviewSpec = action.AddPreviewDomain
+	})
+	if err != nil || intercept == nil || domain == "" || intercept.PreviewDomain != domain {
+		if sa != nil {
+			if domain != "" {
 				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
 				defer cancel()
 				_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
@@ -558,18 +573,16 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 				if err != nil {
 					dlog.Errorln(ctx, "systema: remove domain:", err)
 				}
-				if err := systemaPool.Done(ctx); err != nil {
-					dlog.Errorln(ctx, "systema: release connection:", err)
-				}
+			}
+			if err := systemaPool.Done(ctx); err != nil {
+				dlog.Errorln(ctx, "systema: release connection:", err)
 			}
 		}
-		if intercept == nil {
-			return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)
-		}
-		return intercept, nil
-	default:
-		panic(errors.Errorf("Unimplemented UpdateInterceptRequest action: %T", action))
 	}
+	if intercept == nil {
+		err = status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)
+	}
+	return intercept, err
 }
 
 // RemoveIntercept lets a client remove an intercept.
