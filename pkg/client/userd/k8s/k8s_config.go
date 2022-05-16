@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +62,7 @@ type Config struct {
 	Server      string
 	flagMap     map[string]string
 	ConfigFlags *genericclioptions.ConfigFlags
-	config      *rest.Config
+	RestConfig  *rest.Config
 }
 
 const configExtension = "telepresence.io"
@@ -70,6 +71,21 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
+
+	// The KUBECONFIG entry is a copy of the KUBECONFIG environment variable sent to us from the CLI to give
+	// this long-running daemon a chance to update it. Using the --kubeconfig flag to send the info isn't
+	// sufficient because that flag doesn't allow for multiple path entries like the KUBECONFIG does.
+	if kcEnv, ok := flagMap["KUBECONFIG"]; ok {
+		delete(flagMap, "KUBECONFIG")
+		if err := os.Setenv("KUBECONFIG", kcEnv); err != nil {
+			return nil, err
+		}
+	} else {
+		// If user unsets the KUBECONFIG, we need to do that too
+		if err := os.Unsetenv("KUBECONFIG"); err != nil {
+			return nil, err
+		}
+	}
 
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
@@ -121,7 +137,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 		Namespace:   namespace,
 		flagMap:     flagMap,
 		ConfigFlags: configFlags,
-		config:      restConfig,
+		RestConfig:  restConfig,
 	}
 
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
