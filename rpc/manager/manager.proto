@@ -237,6 +237,11 @@ message InterceptInfo {
 
 message SessionInfo {
   string session_id = 1;
+  string cluster_id = 2;
+  oneof session {
+    ClientInfo client = 3;
+    AgentInfo agent = 4;
+  }
 }
 
 message AgentsRequest {
