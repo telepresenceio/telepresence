@@ -68,6 +68,7 @@ type Session interface {
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
 	GetInterceptSpec(string) *manager.InterceptSpec
+	InterceptsForWorkload(string, string) []*manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	ClearIntercepts(context.Context) error

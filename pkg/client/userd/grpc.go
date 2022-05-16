@@ -135,7 +135,44 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 	return
 }
 
-func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult, err error) ([]scout.Entry, bool) {
+// isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
+// If it is, then the first returned value will be true and the second will indicate if those intercepts are
+// on different services. Otherwise, this function returns false, false
+func (s *service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
+	s.sessionLock.RLock()
+	defer s.sessionLock.RUnlock()
+	if s.session == nil {
+		return false, false
+	}
+	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
+
+	// The InterceptsForWorkload will not include failing or removed intercepts so the
+	// subject must be added unless it's already there.
+	active := false
+	for _, is := range wis {
+		if is.Name == spec.Name {
+			active = true
+			break
+		}
+	}
+	if !active {
+		wis = append(wis, spec)
+	}
+	if len(wis) < 2 {
+		return false, false
+	}
+	var suid string
+	for _, is := range wis {
+		if suid == "" {
+			suid = is.ServiceUid
+		} else if suid != is.ServiceUid {
+			return true, true
+		}
+	}
+	return true, false
+}
+
+func (s *service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult, err error) ([]scout.Entry, bool) {
 	// The scout belongs to the session and can only contain session specific meta-data
 	// so we don't want to use scout.SetMetadatum() here.
 	entries := make([]scout.Entry, 0, 7)
@@ -146,6 +183,13 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 			scout.Entry{Key: "intercept_mechanism", Value: spec.Mechanism},
 			scout.Entry{Key: "intercept_mechanism_numargs", Value: len(spec.Mechanism)},
 		)
+		multiPort, multiService := s.isMultiPortIntercept(spec)
+		if multiPort {
+			entries = append(entries, scout.Entry{Key: "multi_port", Value: multiPort})
+			if multiService {
+				entries = append(entries, scout.Entry{Key: "multi_service", Value: multiService})
+			}
+		}
 	}
 	var msg string
 	if result != nil {
@@ -169,7 +213,7 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.GetSpec(), result, err)
+		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_can_intercept_success"
@@ -190,7 +234,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.GetSpec(), result, err)
+		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_create_intercept_success"
@@ -209,7 +253,7 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	var spec *manager.InterceptSpec
 	defer func() {
-		entries, ok := scoutInterceptEntries(spec, result, err)
+		entries, ok := s.scoutInterceptEntries(spec, result, err)
 		var action string
 		if ok {
 			action = "connector_remove_intercept_success"
