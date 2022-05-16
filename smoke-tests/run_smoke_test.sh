@@ -181,14 +181,14 @@ get_config() {
     darwin)
         config_file="$HOME/Library/Application Support/telepresence/config.yml"
         ;;
-    Linux)
+    linux)
         config_file="${XDG_CONFIG_HOME:-$HOME/.config}/telepresence/config.yml"
         ;;
     windows)
         config_file="$HOME/AppData/Roaming/telepresence/config.yml"
         ;;
     *)
-        echo "OS is unknown by smoke-tests. Update get_workstation_apikey to include default config location for your OS"
+        echo "OS is unknown by smoke-tests. Update get_config to include default config location for your OS"
         exit 1
         ;;
     esac
