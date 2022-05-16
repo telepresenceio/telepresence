@@ -897,6 +897,17 @@ func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
 	return nil
 }
 
+// InterceptsForWorkload returns the client's current intercepts on the given namespace and workload combination
+func (tm *TrafficManager) InterceptsForWorkload(workloadName, namespace string) []*manager.InterceptSpec {
+	wlis := make([]*manager.InterceptSpec, 0)
+	for _, cept := range tm.getCurrentIntercepts() {
+		if cept.Spec.Agent == workloadName && cept.Spec.Namespace == namespace {
+			wlis = append(wlis, cept.Spec)
+		}
+	}
+	return wlis
+}
+
 // ClearIntercepts removes all intercepts
 func (tm *TrafficManager) ClearIntercepts(c context.Context) error {
 	for _, cept := range tm.getCurrentIntercepts() {
