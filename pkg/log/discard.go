@@ -13,13 +13,19 @@ type discard int
 func (d discard) Helper() {
 }
 
-func (d discard) Log(_ dlog.LogLevel, _ ...interface{}) {
+func (d discard) Log(_ dlog.LogLevel, _ string) {
 }
 
-func (d discard) Logf(_ dlog.LogLevel, _ string, _ ...interface{}) {
+// We need to implement the UnformattedXXX functions to prevent that
+// dlog actually formats the messages prior to discarding them
+
+func (d discard) UnformattedLog(_ dlog.LogLevel, _ ...interface{}) {
 }
 
-func (d discard) Logln(_ dlog.LogLevel, _ ...interface{}) {
+func (d discard) UnformattedLogf(_ dlog.LogLevel, _ string, _ ...interface{}) {
+}
+
+func (d discard) UnformattedLogln(_ dlog.LogLevel, _ ...interface{}) {
 }
 
 func (d discard) StdLogger(_ dlog.LogLevel) *log.Logger {

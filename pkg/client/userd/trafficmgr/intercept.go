@@ -849,7 +849,7 @@ func (tm *TrafficManager) removeIntercept(c context.Context, ii *manager.Interce
 	if ok {
 		p, err := os.FindProcess(pid)
 		if err != nil {
-			dlog.Error(c, "unable to find interceptor for intercept %s with pid %d", name, pid)
+			dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, pid)
 		} else {
 			dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, pid)
 			if runtime.GOOS == "windows" {
