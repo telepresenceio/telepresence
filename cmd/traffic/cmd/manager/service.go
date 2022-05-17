@@ -50,7 +50,7 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) (*Manager, context.Context) {
-	ctx = license.WithBundle(ctx)
+	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &Manager{
 		clock:       wall{},
 		ID:          uuid.New().String(),

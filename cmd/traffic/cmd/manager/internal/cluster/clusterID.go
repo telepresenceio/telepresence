@@ -27,7 +27,7 @@ func getClusterID(ctx context.Context, client v1.CoreV1Interface, namespace stri
 
 	lb := license.BundleFromContext(ctx)
 	if lb == nil {
-		return "", err
+		return "", fmt.Errorf("license not found: %v", err)
 	}
 
 	dlog.Infof(ctx, "unable to get namespace %q, will try license instead: %v", namespace, err)

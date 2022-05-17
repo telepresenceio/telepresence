@@ -143,10 +143,10 @@ func (lc *LicenseClaims) GetClusterID() (string, error) {
 
 type key struct{}
 
-func WithBundle(ctx context.Context) context.Context {
-	b, err := LoadBundle("/home/telepresence")
+func WithBundle(ctx context.Context, licenseDir string) context.Context {
+	b, err := LoadBundle(licenseDir)
 	if err != nil {
-		dlog.Debugf(ctx, "license not found: %v", err)
+		dlog.Infof(ctx, "unable to load license: %v", err)
 		return ctx
 	}
 
