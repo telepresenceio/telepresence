@@ -12,8 +12,15 @@ func AgentContainer(
 	config *Sidecar,
 ) *core.Container {
 	ports := make([]core.ContainerPort, 0, 5)
+	pNumbers := make(map[uint16]struct{})
 	for _, cc := range config.Containers {
 		for _, ic := range cc.Intercepts {
+			if _, ok := pNumbers[ic.AgentPort]; ok {
+				// Multiple services may use the same port. Just skip here when
+				// that happens. It's guaranteed that the rest is equal
+				continue
+			}
+			pNumbers[ic.AgentPort] = struct{}{}
 			ports = append(ports, core.ContainerPort{
 				Name:          ic.ContainerPortName,
 				ContainerPort: int32(ic.AgentPort),

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/pkg/errors"
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,11 +91,6 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	case "", "enabled":
 		config, err = a.findConfigMapValue(ctx, pod, nil)
 		if err != nil {
-			if strings.Contains(err.Error(), "unsupported workload kind") {
-				// This isn't something that we want to touch
-				dlog.Debugf(ctx, "Skipping webhook for %s.%s: %s", pod.Name, pod.Namespace, err.Error())
-				err = nil
-			}
 			return nil, err
 		}
 		if config == nil && ia == "" {
@@ -496,6 +492,13 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
 			wl, err := k8sapi.GetWorkload(ctx, or.Name, pod.GetNamespace(), or.Kind)
 			if err != nil {
+				var uwkErr k8sapi.UnsupportedWorkloadKindError
+				if errors.As(err, &uwkErr) {
+					// There can only be one managing controller. If it's of an unsupported
+					// type, then there's currently no configMapValue for the object that it
+					// controls.
+					return nil, nil
+				}
 				return nil, err
 			}
 			return a.findConfigMapValue(ctx, pod, wl)
