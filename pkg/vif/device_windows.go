@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 
 	"golang.org/x/sys/windows"
@@ -31,10 +32,8 @@ type Device struct {
 func openTun(ctx context.Context) (td *Device, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			var ok bool
-			if err, ok = r.(error); !ok {
-				err = derror.PanicToError(r)
-			}
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
 		}
 	}()
 	interfaceName := "tel0"
@@ -87,12 +86,30 @@ func (t *Device) getLUID() winipcfg.LUID {
 	return winipcfg.LUID(t.Device.(*tun.NativeTun).LUID())
 }
 
+func addrFromIP(ip net.IP) netip.Addr {
+	var addr netip.Addr
+	if ip4 := ip.To4(); ip4 != nil {
+		addr = netip.AddrFrom4(*(*[4]byte)(ip4))
+	} else if ip16 := ip.To16(); ip16 != nil {
+		addr = netip.AddrFrom16(*(*[16]byte)(ip16))
+	}
+	return addr
+}
+
+func prefixFromIPNet(subnet *net.IPNet) netip.Prefix {
+	if subnet == nil {
+		return netip.Prefix{}
+	}
+	ones, _ := subnet.Mask.Size()
+	return netip.PrefixFrom(addrFromIP(subnet.IP), ones)
+}
+
 func (t *Device) addSubnet(_ context.Context, subnet *net.IPNet) error {
-	return t.getLUID().AddIPAddress(*subnet)
+	return t.getLUID().AddIPAddress(prefixFromIPNet(subnet))
 }
 
 func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
-	return t.getLUID().DeleteIPAddress(*subnet)
+	return t.getLUID().DeleteIPAddress(prefixFromIPNet(subnet))
 }
 
 func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (err error) {
@@ -110,7 +127,7 @@ func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (e
 			_ = luid.FlushDNS(oldFamily)
 		}
 	}
-	if err = luid.SetDNS(family, []net.IP{server}, domains); err != nil {
+	if err = luid.SetDNS(family, []netip.Addr{addrFromIP(server)}, domains); err != nil {
 		return err
 	}
 
