@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.1 (TBD)
+### 2.6.1 (May 16, 2022)
 
 - Bugfix: Telepresence will now handle multiple path entries in the KUBECONFIG environment correctly.
 
