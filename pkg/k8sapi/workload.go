@@ -21,6 +21,12 @@ type Workload interface {
 	Updated(int64) bool
 }
 
+type UnsupportedWorkloadKindError string
+
+func (u UnsupportedWorkloadKindError) Error() string {
+	return fmt.Sprintf("unsupported workload kind: %q", string(u))
+}
+
 // GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
 // is optional. A search is performed in the following order if it is empty:
 //
@@ -48,7 +54,7 @@ func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj W
 		}
 		err = errors2.NewNotFound(core.Resource("workload"), name+"."+namespace)
 	default:
-		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
+		return nil, UnsupportedWorkloadKindError(workloadKind)
 	}
 	return obj, err
 }

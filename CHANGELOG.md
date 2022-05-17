@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.6.2 (TBD)
+
+- Bugfix: Workoads controlled by workloads like Argo `Rollout` are injected correctly
+
 ### 2.6.1 (May 16, 2022)
 
 - Bugfix: Telepresence will now handle multiple path entries in the KUBECONFIG environment correctly.

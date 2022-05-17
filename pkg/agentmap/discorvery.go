@@ -2,10 +2,11 @@ package agentmap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -18,6 +19,13 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
 			wl, err := k8sapi.GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
 			if err != nil {
+				var uwkErr k8sapi.UnsupportedWorkloadKindError
+				if errors.As(err, &uwkErr) {
+					// There can only be one managing controller. If it's of an unsupported
+					// type, then the object that it controls is considered the owner, unless
+					// it's a pod, in which case it has no owner.
+					break
+				}
 				return nil, err
 			}
 			return FindOwnerWorkload(ctx, wl)
@@ -34,7 +42,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 	case svcName != "":
 		svc, err := k8sapi.GetService(ctx, svcName, pod.Namespace)
 		if err != nil {
-			if errors.IsNotFound(err) {
+			if k8sErrors.IsNotFound(err) {
 				return nil, fmt.Errorf(
 					"unable to find service %s specified by annotation %s declared in pod %s.%s",
 					svcName, ServiceNameAnnotation, pod.Name, pod.Namespace)
