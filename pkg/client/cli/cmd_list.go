@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type listInfo struct {
@@ -57,7 +59,17 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
+
+		cfg := client.GetConfig(ctx)
+		maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. List can be quit long.
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+				if mz > maxRecSize {
+					maxRecSize = mz
+				}
+			}
+		}
+		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 		return err
 	})
 	if err != nil {

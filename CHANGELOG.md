@@ -6,6 +6,9 @@
 
 - Bugfix: Multiple services appointing the same container port no longer result in duplicated ports in an injected pod.
 
+- Bugfix: The `telepresence list` command no longer errors out with "grpc: received message larger than max" when listing namespaces
+  with a large number of workloads.
+
 ### 2.6.1 (May 16, 2022)
 
 - Bugfix: Telepresence will now handle multiple path entries in the KUBECONFIG environment correctly.
