@@ -18,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -36,7 +37,6 @@ type Manager struct {
 	ID          string
 	state       *state.State
 	clusterInfo cluster.Info
-	license     *LicenseBundle
 
 	rpc.UnsafeManagerServer
 }
@@ -50,6 +50,7 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) (*Manager, context.Context) {
+	ctx = license.WithBundle(ctx)
 	ret := &Manager{
 		clock:       wall{},
 		ID:          uuid.New().String(),
@@ -58,11 +59,6 @@ func NewManager(ctx context.Context) (*Manager, context.Context) {
 	}
 	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	ret.ctx = ctx
-
-	l, err := newLicenseBundleFromDisk("/home/telepresence")
-	if err == nil {
-		ret.license = l
-	}
 
 	return ret, ctx
 }
@@ -76,19 +72,19 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
-	if m.license == nil {
-		var err error
-		m.license, err = newLicenseBundleFromDisk("/home/telepresence")
-		if err != nil {
-			return nil, err
-		}
+	resp := rpc.License{
+		ClusterId: m.clusterInfo.GetClusterID(),
 	}
 
-	return &rpc.License{
-		ClusterId: m.clusterInfo.GetClusterID(),
-		License:   m.license.License,
-		Host:      m.license.Host,
-	}, nil
+	lb := license.BundleFromContext(ctx)
+	if lb == nil {
+		resp.ErrMsg = "license not found"
+	}
+
+	resp.License = lb.License()
+	resp.Host = lb.Host()
+
+	return &resp, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
@@ -121,18 +117,6 @@ func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 // ArriveAsClient establishes a session between a client and the Manager.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
-
-	if env := managerutil.GetEnv(ctx); 0 < len(env.GetManagedNamespaces()) {
-		li, err := m.license.extractLicenseClaims()
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-
-		cid := m.clusterInfo.GetClusterID()
-		if err := li.IsValidForCluster(cid); err != nil {
-			return nil, status.Errorf(codes.Unauthenticated, err.Error())
-		}
-	}
 
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)

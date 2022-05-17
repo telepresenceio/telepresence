@@ -1,4 +1,4 @@
-package manager
+package license
 
 import (
 	"crypto/rand"
@@ -16,14 +16,14 @@ import (
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
-func TestNewLicenseBundleFromDisk(t *testing.T) {
+func TestNewBundleFromDisk(t *testing.T) {
 	tmpRootDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(tmpRootDir) }()
 	expectErrorTest := func(t *testing.T) {
-		l, err := newLicenseBundleFromDisk(tmpRootDir)
+		l, err := LoadBundle(tmpRootDir)
 		if err == nil {
 			t.Errorf("expected error while reading license from disk")
 		}
@@ -59,32 +59,32 @@ func TestNewLicenseBundleFromDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("no errors", func(t *testing.T) {
-		lb, err := newLicenseBundleFromDisk(tmpRootDir)
+		lb, err := LoadBundle(tmpRootDir)
 		if err != nil {
 			t.Errorf("unexpected error while reading license from disk: %s", err.Error())
 		}
-		if lb.License != expectedLicense {
-			t.Errorf("unexpected license: %s", lb.License)
+		if lb.license != expectedLicense {
+			t.Errorf("unexpected license: %s", lb.license)
 		}
-		if lb.Host != expectedHostDomain {
-			t.Errorf("unexpected license: %s", lb.License)
+		if lb.host != expectedHostDomain {
+			t.Errorf("unexpected license: %s", lb.license)
 		}
 	})
 }
 
-func newTestLicenseBundle(host, clusterID string) (*LicenseBundle, error) {
+func newTestBundle(host, clusterID string) (*Bundle, error) {
 	privKey, pubKey, err := genKeys()
 	if err != nil {
 		return nil, err
 	}
-	l := LicenseBundle{
-		Host: host,
-		PubKeys: map[string]string{
+	l := Bundle{
+		host: host,
+		pubKeys: map[string]string{
 			host: pubKey,
 		},
 	}
 
-	l.License, err = genLicense(privKey, clusterID)
+	l.license, err = genLicense(privKey, clusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,59 +92,59 @@ func newTestLicenseBundle(host, clusterID string) (*LicenseBundle, error) {
 	return &l, nil
 }
 
-func TestLicenseBundle_extractLicenseClaims(t *testing.T) {
+func TestBundle_extractLicenseClaims(t *testing.T) {
 	t.Run("nil license", func(t *testing.T) {
-		var lb *LicenseBundle
-		claims, err := lb.extractLicenseClaims()
+		var lb *Bundle
+		claims, err := lb.GetLicenseClaims()
 		require.Error(t, err)
 		require.Nil(t, claims)
 	})
 
 	t.Run("default pubkeys", func(t *testing.T) {
-		var lb LicenseBundle
-		_, _ = lb.extractLicenseClaims()
-		require.Equal(t, lb.PubKeys, pubKeys)
+		var lb Bundle
+		_, _ = lb.GetLicenseClaims()
+		require.Equal(t, lb.pubKeys, pubKeys)
 	})
 
 	host := "test-auth.datawire.io"
 	t.Run("non-PEM pub key", func(t *testing.T) {
-		lb := LicenseBundle{
-			Host: host,
-			PubKeys: map[string]string{
+		lb := Bundle{
+			host: host,
+			pubKeys: map[string]string{
 				host: "INVALID KEY",
 			},
 		}
-		_, err := lb.extractLicenseClaims()
+		_, err := lb.GetLicenseClaims()
 		require.Error(t, err)
 	})
 
 	t.Run("non-PKIX pub key", func(t *testing.T) {
-		lb := LicenseBundle{
-			Host: host,
-			PubKeys: map[string]string{
+		lb := Bundle{
+			host: host,
+			pubKeys: map[string]string{
 				host: "-----BEGIN TEST-----\n-----END TEST-----",
 			},
 		}
-		_, err := lb.extractLicenseClaims()
+		_, err := lb.GetLicenseClaims()
 		require.Error(t, err)
 	})
 
 	clusterID := "582656ff-054c-474d-841f-a94c6282f9e7"
 	t.Run("non-JWT license", func(t *testing.T) {
-		lb, err := newTestLicenseBundle(host, clusterID)
+		lb, err := newTestBundle(host, clusterID)
 		require.NoError(t, err)
 
-		lb.License = "INVALID"
+		lb.license = "INVALID"
 
-		_, err = lb.extractLicenseClaims()
+		_, err = lb.GetLicenseClaims()
 		require.Error(t, err)
 	})
 
 	t.Run("no errors", func(t *testing.T) {
-		lb, err := newTestLicenseBundle(host, clusterID)
+		lb, err := newTestBundle(host, clusterID)
 		require.NoError(t, err)
 
-		claims, err := lb.extractLicenseClaims()
+		claims, err := lb.GetLicenseClaims()
 		require.NoError(t, err)
 
 		require.Contains(t, claims.Audience, clusterID)
@@ -242,12 +242,12 @@ func TestLicenceClaims_isValidForCluster(t *testing.T) {
 	})
 }
 
-func TestLicenseBundle_GetLicenseInfo(t *testing.T) {
+func TestBundle_GetLicenseInfo(t *testing.T) {
 	host := "test-auth.datawire.io"
 	canConnectCloud := true
 	systemaURL := "SYSTEMAURL"
 	clusterID := "582656ff-054c-474d-841f-a94c6282f9e7"
-	lb, err := newTestLicenseBundle(host, clusterID)
+	lb, err := newTestBundle(host, clusterID)
 	require.NoError(t, err)
 
 	li := lb.GetLicenseInfo(clusterID, canConnectCloud, systemaURL)
@@ -256,4 +256,29 @@ func TestLicenseBundle_GetLicenseInfo(t *testing.T) {
 	require.Equal(t, li.SystemaURL, systemaURL)
 	require.NoError(t, li.LicenseErr)
 	require.NotNil(t, li.Claims)
+}
+
+func TestLicenseClaims_GetCLusterID(t *testing.T) {
+	t.Run("no error", func(t *testing.T) {
+		expectedClusterID := "pr38253v40"
+		claims := LicenseClaims{
+			Claims: jwt.Claims{
+				Audience: []string{expectedClusterID},
+			},
+		}
+
+		clusterID, err := claims.GetClusterID()
+		require.NoError(t, err)
+		require.Equal(t, clusterID, expectedClusterID)
+	})
+
+	t.Run("empty claims", func(t *testing.T) {
+		claims := LicenseClaims{
+			Claims: jwt.Claims{},
+		}
+
+		clusterID, err := claims.GetClusterID()
+		require.Error(t, err)
+		require.Equal(t, clusterID, "")
+	})
 }

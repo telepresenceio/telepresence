@@ -1,6 +1,7 @@
-package manager
+package license
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -9,10 +10,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
-type LicenseInfo struct {
+var ClusterIDZero = "00000000-0000-0000-0000-000000000000"
+
+type Info struct {
 	ValidLicense bool
 	LicenseErr   error
 	Claims       *LicenseClaims
@@ -21,20 +25,20 @@ type LicenseInfo struct {
 	SystemaURL      string
 }
 
-type LicenseBundle struct {
-	License string
-	Host    string
-	PubKeys map[string]string
+type Bundle struct {
+	license string
+	host    string
+	pubKeys map[string]string
 }
 
-func newLicenseBundleFromDisk(rootDir string) (*LicenseBundle, error) {
-	var lb LicenseBundle
+func LoadBundle(rootDir string) (*Bundle, error) {
+	var lb Bundle
 
 	buf, err := os.ReadFile(filepath.Join(rootDir, "license"))
 	if err != nil {
 		return nil, fmt.Errorf("error reading license: %w", err)
 	}
-	if lb.License = string(buf); lb.License == "" {
+	if lb.license = string(buf); lb.license == "" {
 		return nil, fmt.Errorf("license is empty")
 	}
 
@@ -42,23 +46,31 @@ func newLicenseBundleFromDisk(rootDir string) (*LicenseBundle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading hostDomain: %w", err)
 	}
-	if lb.Host = string(buf); lb.Host == "" {
+	if lb.host = string(buf); lb.host == "" {
 		return nil, fmt.Errorf("host domain is empty")
 	}
 
 	return &lb, nil
 }
 
-func (l *LicenseBundle) extractLicenseClaims() (*LicenseClaims, error) {
+func (b *Bundle) License() string {
+	return b.license
+}
+
+func (b *Bundle) Host() string {
+	return b.host
+}
+
+func (l *Bundle) GetLicenseClaims() (*LicenseClaims, error) {
 	if l == nil {
 		return nil, fmt.Errorf("no license available")
 	}
 
-	if len(l.PubKeys) == 0 {
-		l.PubKeys = pubKeys
+	if len(l.pubKeys) == 0 {
+		l.pubKeys = pubKeys
 	}
 
-	hostKey, ok := l.PubKeys[l.Host]
+	hostKey, ok := l.pubKeys[l.host]
 	if !ok {
 		return nil, fmt.Errorf("unknown host")
 	}
@@ -73,7 +85,7 @@ func (l *LicenseBundle) extractLicenseClaims() (*LicenseClaims, error) {
 		return nil, err
 	}
 
-	token, err := jwt.ParseSigned(l.License)
+	token, err := jwt.ParseSigned(l.license)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse license: %w", err)
 	}
@@ -82,13 +94,13 @@ func (l *LicenseBundle) extractLicenseClaims() (*LicenseClaims, error) {
 	return &claims, token.Claims(pubKey, &claims)
 }
 
-func (l *LicenseBundle) GetLicenseInfo(clusterID string, canConnectCloud bool, systemaURL string) *LicenseInfo {
-	info := LicenseInfo{
+func (l *Bundle) GetLicenseInfo(clusterID string, canConnectCloud bool, systemaURL string) *Info {
+	info := Info{
 		CanConnectCloud: canConnectCloud,
 		SystemaURL:      systemaURL,
 	}
 
-	info.Claims, info.LicenseErr = l.extractLicenseClaims()
+	info.Claims, info.LicenseErr = l.GetLicenseClaims()
 	if info.LicenseErr != nil {
 		return &info
 	}
@@ -120,23 +132,28 @@ func (lc *LicenseClaims) IsValidForCluster(cid string) error {
 	return nil
 }
 
-var pubKeys = map[string]string{
-	"beta-auth.datawire.io": `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA15qWmyHoAE2Voqg91Ugh
-hVUfQPYofd3eYOqpatWsILnNy68DtOSO/JWAao0YE63aBUHnSe08gGaVEZuWaQH3
-jg7E5pvnAMwEHsDFegKR08Z4nGTkAMIR3SSr63nroMCEeTRFW0TWb3zDlk3u4tAE
-zVsdui2mGIMnbYNYsiKE5988KWOhRf6OjAGldA+dIgS5vnEClocoyQNKlTME2qHL
-4FMKgsaitLzrOMPZH2zHbf/AK6/KdJmCTBZlHH2zEMMnOXaw1Oe3SHubHax9KYi5
-CaGJ+ividI7W6cwy90CtdAUObEVW+5KscNupltt9PyUJN69F0wPCY5yjSQCar27p
-5QIDAQAB
------END PUBLIC KEY-----`,
-	"auth.datawire.io": `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzDwrd/nO5ofA0WoH8NYv
-Y0XX3SzYq6BmSxM3/P4ZZBvW35il8hBWv9T2cUPZDFdw77aOo/dhEXqiqtrG49kT
-iZgNXe787q0wHqerUzLpT0ojPVE1iHLatVROcG+qQcBHJX+2+9NBRin6wh3dDAJU
-tPh/yUWDVNSWO/sCObBAwHL8O/lbgVUboN40eESefOmMWLr0GJ9wNd63t9dkq5ue
-/xu9HSPlWB3UaSz1vP5uByuX8gFH5G8uCG8Km8Qh4hObiSgkuJwdO4iBF/VeYYNh
-EtZipbj7iCRMzkMo2QQfMz58V1G9I1kuC6+xKyKBUxtfUDuEDCgyC66ig35iGChg
-uwIDAQAB
------END PUBLIC KEY-----`,
+func (lc *LicenseClaims) GetClusterID() (string, error) {
+	n := len(lc.Audience)
+	if n == 1 {
+		return lc.Audience[0], nil
+	}
+
+	return "", fmt.Errorf("found %d audience claims", n)
+}
+
+type key struct{}
+
+func WithBundle(ctx context.Context) context.Context {
+	b, err := LoadBundle("/home/telepresence")
+	if err != nil {
+		dlog.Debugf(ctx, "license not found: %v", err)
+		return ctx
+	}
+
+	return context.WithValue(ctx, key{}, b)
+}
+
+func BundleFromContext(ctx context.Context) *Bundle {
+	b, _ := ctx.Value(key{}).(*Bundle)
+	return b
 }
