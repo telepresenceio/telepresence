@@ -59,11 +59,15 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*a
 	}
 
 	var ccs []*agentconfig.Container
-	pns := make(map[int32]struct{})
+	pns := make(map[int32]uint16)
 	portNumber := func(cnPort int32) uint16 {
-		// Increase the agent's port number only for unique container ports
-		pns[cnPort] = struct{}{}
-		return cfg.AgentPort + uint16(len(pns)-1)
+		if p, ok := pns[cnPort]; ok {
+			// Port already mapped. Reuse that mapping
+			return p
+		}
+		p := cfg.AgentPort + uint16(len(pns))
+		pns[cnPort] = p
+		return p
 	}
 
 	for _, svc := range svcs {
