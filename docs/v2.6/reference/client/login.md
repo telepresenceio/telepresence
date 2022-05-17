@@ -32,7 +32,7 @@ login` with the `--apikey` flag.
 ## Telepresence
 
 When you run `telepresence login`, the CLI installs
-the Telepresence binary.  The Telepresence enhanced free client [User
+a Telepresence binary.  The Telepresence enhanced free client of the [User
 Daemon](../../architecture) communicates with the Ambassador Cloud to
 provide fremium features including the ability to create intercepts from
 Ambassador Cloud.

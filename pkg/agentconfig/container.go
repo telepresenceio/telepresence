@@ -158,8 +158,26 @@ func EachContainer(pod *core.Pod, config *Sidecar, f func(*core.Container, *Cont
 }
 
 func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts []core.VolumeMount) []core.VolumeMount {
+	isVrs := func(s string) bool {
+		return strings.HasPrefix(s, "/var/run/secrets/")
+	}
+
+	// Does the current mounts slice contain the vrs?
+	vrsAdded := func() bool {
+		for _, m := range mounts {
+			if isVrs(m.MountPath) {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, m := range app.VolumeMounts {
-		if !strings.HasPrefix(m.MountPath, "/var/run/secrets/") {
+		if isVrs(m.MountPath) {
+			if vrsAdded() {
+				continue // Only add /var/run/secrets once, not once per container
+			}
+		} else {
 			m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
 		}
 		mounts = append(mounts, m)

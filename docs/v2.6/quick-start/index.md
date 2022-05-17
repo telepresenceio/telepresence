@@ -1,7 +1,7 @@
 ---
-description: Telepresence Quick Start.
+   description: Telepresence Quick Start.
 ---
 
-import NewTelepresenceQuickStartLanding from './TelepresenceQuickStartLanding'
+import TelepresenceQuickStartLanding from './TelepresenceQuickStartLanding'
 
-<NewTelepresenceQuickStartLanding/>
+<TelepresenceQuickStartLanding/>

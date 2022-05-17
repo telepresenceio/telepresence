@@ -1,6 +1,12 @@
 # Changelog
 
-### 2.6.0 (TBD)
+### 2.6.1 (TBD)
+
+- Bugfix: Telepresence will now handle multiple path entries in the KUBECONFIG environment correctly.
+
+- Bugfix: Telepresence will no longer panic when using preview URLs with traffic-managers < 2.6.0
+
+### 2.6.0 (May 13, 2022)
 
 - Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
 

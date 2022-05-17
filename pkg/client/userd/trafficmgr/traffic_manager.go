@@ -68,6 +68,7 @@ type Session interface {
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
 	GetInterceptSpec(string) *manager.InterceptSpec
+	InterceptsForWorkload(string, string) []*manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
 	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	ClearIntercepts(context.Context) error
@@ -356,11 +357,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	dlog.Debug(c, "traffic-manager started, creating port-forward")
-	restConfig, err := cluster.ConfigFlags.ToRESTConfig()
-	if err != nil {
-		return nil, stacktrace.Wrap(err, "ToRESTConfig")
-	}
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, restConfig, k8sapi.GetK8sInterface(c))
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, cluster.Config.RestConfig, k8sapi.GetK8sInterface(c))
 	if err != nil {
 		return nil, err
 	}

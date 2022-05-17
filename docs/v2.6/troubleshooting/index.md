@@ -80,7 +80,7 @@ to reach out to the owner.
 Once approval is granted, you will have to log out of Ambassador Cloud
 then back in to select the organization.
 
-## Volume mounts are not working on macOS
+### Volume mounts are not working on macOS
 
 It's necessary to have `sshfs` installed in order for volume mounts to work correctly during intercepts. Lately there's been some issues using `brew install sshfs` a macOS workstation because the required component `osxfuse` (now named `macfuse`) isn't open source and hence, no longer supported. As a workaround, you can now use `gromgit/fuse/sshfs-mac` instead. Follow these steps:
 
@@ -101,11 +101,3 @@ but one more thing must be done before it works OK:
 5. Try a mount (or an intercept that performs a mount). It will fail because you need to give permission to “Benjamin Fleischer” to execute a kernel extension (a pop-up appears that takes you to the system preferences).
 6. Approve the needed permission
 7. Reboot your computer.
-
-## Authorization for Preview URLs
-Services that require authentication may not function correctly with preview URLs. When accessing a preview URL, it is necessary to configure your intercept to use custom authentication headers for the preview URL. If you don't, you may receive an unauthorized response or be redirected to the login page for Ambassador Cloud.
-
-You can accomplish this by using a browser extension such as the `ModHeader extension` for [Chrome](https://chrome.google.com/webstore/detail/modheader/idgpnmonknjnojddfkpgkljpfnnfcklj) 
-or [Firefox](https://addons.mozilla.org/en-CA/firefox/addon/modheader-firefox/).
-
-It is important to note that Ambassador Cloud does not support OAuth browser flows when accessing a preview URL, but other auth schemes such as Basic access authentication and session cookies will work.

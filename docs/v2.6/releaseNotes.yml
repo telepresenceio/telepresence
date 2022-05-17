@@ -53,7 +53,7 @@ items:
           The client will no longer modify <code>deployments</code>, <code>replicasets</code>, or <code>statefulsets</code> in order to
           inject a Traffic Agent into an intercepted pod. Instead, all injection is now performed by a mutating webhook. As a result,
           the client now needs less permissions in the cluster.
-        docs: ../new-in-2.6#no-more-workload-modifications
+        docs: ../install/upgrade#important-note-about-upgrading-to-2.6.0
       - type: change
         title: Autmatic upgrade of Traffic Agents
         body: >-
@@ -73,9 +73,6 @@ items:
         title: Remote mounts will now function correctly with custom securityContext
         body: >-
           The bug causing permission problems when the Traffic Agent in a Pod with a custom <code>securityContext</code> has been fixed.
-      - type: bugfix
-        title: Improved presentation of flags in CLI help
-        body: The help for commands that accept kubernetes flags will now display those flags in a separate group.
       - type: bugfix
         title: Improved presentation of flags in CLI help
         body: The help for commands that accept kubernetes flags will now display those flags in a separate group.
@@ -232,12 +229,6 @@ items:
           The flag <code>--http-meta</code> can be used to declare metadata key value pairs that will be returned by the Telepresence rest
           API endpoint <code>/intercept-info</code>
         docs: reference/restapi#intercept-info
-      - type: change
-        title: --http-match renamed to --http-header
-        body: >-
-          The `telepresence intercept` command line flag <code>--http-match</code> was renamed to <code>--http-header</code>. The old flag
-          still works, but it is deprecated and doesn't show up in the help.
-        docs: concepts/intercepts#creating-and-using-personal-intercepts
       - type: change
         title: Client RBAC watch
         body: >-

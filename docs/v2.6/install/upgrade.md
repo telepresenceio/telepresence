@@ -4,6 +4,14 @@ description: "How to upgrade your installation of Telepresence and install previ
 
 import Platform from '@src/components/Platform';
 
+# Important note about upgrading to 2.6.0
+Telepresence 2.6.0 introduces a new way of configuring the traffic-agent sidecar, and will no longer modify the workloads (deployments,
+replicasets, or statefulsets) in order to inject it. Instead, all sidecar injection is performed by a mutating webhook. Because of this
+change, the traffic-manager will reject connections from older clients, which means that when installing a 2.6.0 traffic-manager in a
+cluster, all clients must also upgrade.  The 2.6.0 client will work with older traffic-managers.
+
+Please see [Whats new in 2.6.0](../../new-in-2.6) for more info.
+
 # Upgrade Process
 The Telepresence CLI will periodically check for new versions and notify you when an upgrade is available.  Running the same commands used for installation will replace your current binary with the latest version.
 

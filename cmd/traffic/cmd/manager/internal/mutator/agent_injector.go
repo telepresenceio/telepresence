@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/google/go-cmp/cmp"
@@ -26,6 +27,7 @@ import (
 var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
 
 type agentInjector struct {
+	sync.Mutex
 	agentConfigs Map
 	agentImage   string
 	terminating  int64
@@ -104,7 +106,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			return nil, nil
 		}
-		if config, err = agentmap.GenerateForPod(ctx, pod, env.GeneratorConfig(a.agentImage)); err != nil {
+		if config, err = agentmap.GenerateForPod(ctx, pod, env.GeneratorConfig(a.getAgentImage(ctx))); err != nil {
 			return nil, err
 		}
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
@@ -138,6 +140,15 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	return patches, nil
 }
 
+func (a *agentInjector) getAgentImage(ctx context.Context) string {
+	a.Lock()
+	defer a.Unlock()
+	if a.agentImage == "" {
+		a.agentImage = managerutil.GetAgentImage(ctx)
+	}
+	return a.agentImage
+}
+
 // uninstall ensures that no more webhook injections is made and that all the workloads of currently injected
 // pods are rolled out.
 func (a *agentInjector) uninstall(ctx context.Context) {
@@ -146,8 +157,8 @@ func (a *agentInjector) uninstall(ctx context.Context) {
 }
 
 // upgradeLegacy
-func (a *agentInjector) upgradeLegacy(ctx context.Context, extendedAgentImage string) {
-	a.agentConfigs.UninstallV25(ctx, extendedAgentImage)
+func (a *agentInjector) upgradeLegacy(ctx context.Context) {
+	a.agentConfigs.UninstallV25(ctx)
 }
 
 func needInitContainer(config *agentconfig.Sidecar) bool {

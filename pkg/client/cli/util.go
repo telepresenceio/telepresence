@@ -22,12 +22,6 @@ func kubeFlagMap(kubeFlags *pflag.FlagSet) map[string]string {
 	kubeFlags.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			kubeFlagMap[flag.Name] = flag.Value.String()
-		} else if flag.Name == "kubeconfig" {
-			// Certain options' default are bound to the connector daemon process; this is notably true of the kubeconfig file to use
-			// So if we connect, disconnect, switch kubeconfigs, and reconnect, we'll connect to our old context -- setting the flag explicitly will prevent that.
-			if cfg, ok := os.LookupEnv("KUBECONFIG"); ok {
-				kubeFlagMap[flag.Name] = cfg
-			}
 		}
 	})
 	return kubeFlagMap
@@ -67,6 +61,19 @@ func withConnector(cmd *cobra.Command, retain bool, request *connector.ConnectRe
 	})
 }
 
+func addKubeconfigEnv(cr *connector.ConnectRequest) {
+	// Certain options' default are bound to the connector daemon process; this is notably true of the kubeconfig file(s) to use,
+	// and since those files can be specified, both as a --kubeconfig flag and in the KUBECONFIG setting, and since the flag won't
+	// accept multiple path entries, we need to pass the environment setting to the connector daemon so that it can set it every
+	// time it receives a new config.
+	if cfg, ok := os.LookupEnv("KUBECONFIG"); ok {
+		if cr.KubeFlags == nil {
+			cr.KubeFlags = make(map[string]string)
+		}
+		cr.KubeFlags["KUBECONFIG"] = cfg
+	}
+}
+
 func connect(ctx context.Context, connectorClient connector.ConnectorClient, stdout io.Writer, request *connector.ConnectRequest) (bool, *connector.ConnectInfo, error) {
 	var ci *connector.ConnectInfo
 	var err error
@@ -74,6 +81,7 @@ func connect(ctx context.Context, connectorClient connector.ConnectorClient, std
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		ci, err = connectorClient.Status(ctx, &empty.Empty{})
 	} else {
+		addKubeconfigEnv(request)
 		ci, err = connectorClient.Connect(ctx, request)
 	}
 	if err != nil {

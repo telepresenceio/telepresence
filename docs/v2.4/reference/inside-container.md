@@ -14,7 +14,7 @@ FROM alpine:3.13
 RUN apk add --no-cache curl iproute2 sshfs
 
 # Download and install the telepresence binary
-RUN curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence -o telepresence && \
+RUN curl -fL https://app.getambassador.io/download/tel2/linux/amd64/2.4.11/telepresence -o telepresence && \
    install -o root -g root -m 0755 telepresence /usr/local/bin/telepresence
 ```
 In order to build the container, do this in the same directory as the `Dockerfile`:
