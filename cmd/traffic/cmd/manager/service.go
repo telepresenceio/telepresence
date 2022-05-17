@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
@@ -136,15 +135,11 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
-	clonedClient, ok := proto.Clone(client).(*rpc.ClientInfo)
-	if !ok {
-		return nil, fmt.Errorf("unexpected error cloning ClientInfo proto")
-	}
-
+	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
 		ClusterId: m.clusterInfo.GetClusterID(),
-		Session:   &rpc.SessionInfo_Client{Client: clonedClient},
+		InstallId: &installId,
 	}, nil
 }
 
@@ -158,15 +153,9 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 	sessionID := m.state.AddAgent(agent, m.clock.Now())
 
-	clonedAgent, ok := proto.Clone(agent).(*rpc.AgentInfo)
-	if !ok {
-		return nil, fmt.Errorf("unexpected error cloning AgentInfo proto")
-	}
-
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
 		ClusterId: m.clusterInfo.GetClusterID(),
-		Session:   &rpc.SessionInfo_Agent{Agent: clonedAgent},
 	}, nil
 }
 

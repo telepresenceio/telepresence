@@ -518,10 +518,7 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
 	s.interceptAPIKeys[interceptID] = apiKey
-	clonedClient, ok := proto.Clone(client).(*rpc.ClientInfo)
-	if !ok {
-		return nil, fmt.Errorf("unexpected error trying to create intercept: failed to clone ClientInfo proto")
-	}
+	installId := client.GetInstallId()
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		Disposition: rpc.InterceptDispositionType_WAITING,
@@ -530,7 +527,7 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 		ClientSession: &rpc.SessionInfo{
 			SessionId: sessionID,
 			ClusterId: clusterID,
-			Session:   &rpc.SessionInfo_Client{Client: clonedClient},
+			InstallId: &installId,
 		},
 		ApiKey: apiKey,
 	}
