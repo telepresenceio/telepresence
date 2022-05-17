@@ -7,14 +7,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 func TestNewInfo_GetClusterID(t *testing.T) {

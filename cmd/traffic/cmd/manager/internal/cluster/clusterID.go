@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
+
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 )
 
 func getClusterID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {

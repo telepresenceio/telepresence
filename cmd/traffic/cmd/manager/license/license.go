@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
 	"gopkg.in/square/go-jose.v2/jwt"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 var ClusterIDZero = "00000000-0000-0000-0000-000000000000"
