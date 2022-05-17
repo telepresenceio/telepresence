@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.2 (TBD)
+### 2.6.2 (May 17, 2022)
 
 - Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.
 
