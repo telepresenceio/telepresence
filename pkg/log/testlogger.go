@@ -48,7 +48,11 @@ func (w *tbWrapper) WithField(key string, value interface{}) dlog.Logger {
 	return &ret
 }
 
-func (w *tbWrapper) Log(level dlog.LogLevel, args ...interface{}) {
+func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
+	w.UnformattedLog(level, msg)
+}
+
+func (w *tbWrapper) UnformattedLog(level dlog.LogLevel, args ...interface{}) {
 	if level > w.level {
 		return
 	}
@@ -77,10 +81,10 @@ func (w *tbWrapper) Log(level dlog.LogLevel, args ...interface{}) {
 	w.TB.Log(sb.String())
 }
 
-func (w *tbWrapper) Logf(level dlog.LogLevel, format string, args ...interface{}) {
+func (w *tbWrapper) UnformattedLogf(level dlog.LogLevel, format string, args ...interface{}) {
 	w.Log(level, fmt.Sprintf(format, args...))
 }
 
-func (w *tbWrapper) Logln(level dlog.LogLevel, args ...interface{}) {
+func (w *tbWrapper) UnformattedLogln(level dlog.LogLevel, args ...interface{}) {
 	w.Log(level, fmt.Sprintln(args...))
 }
