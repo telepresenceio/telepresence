@@ -2,7 +2,9 @@
 
 ### 2.6.2 (TBD)
 
-- Bugfix: Workoads controlled by workloads like Argo `Rollout` are injected correctly
+- Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.
+
+- Bugfix: Multiple services appointing the same container port no longer result in duplicated ports in an injected pod.
 
 ### 2.6.1 (May 16, 2022)
 

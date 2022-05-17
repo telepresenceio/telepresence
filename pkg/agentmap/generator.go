@@ -59,10 +59,16 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*a
 	}
 
 	var ccs []*agentconfig.Container
-	agentPort := cfg.AgentPort
+	pns := make(map[int32]struct{})
+	portNumber := func(cnPort int32) uint16 {
+		// Increase the agent's port number only for unique container ports
+		pns[cnPort] = struct{}{}
+		return cfg.AgentPort + uint16(len(pns)-1)
+	}
+
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, &agentPort, ccs); err != nil {
+		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs); err != nil {
 			return nil, err
 		}
 	}
@@ -85,7 +91,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*a
 	return ag, nil
 }
 
-func appendAgentContainerConfigs(svc *core.Service, pod *core.PodTemplateSpec, portNumber *uint16, ccs []*agentconfig.Container) ([]*agentconfig.Container, error) {
+func appendAgentContainerConfigs(svc *core.Service, pod *core.PodTemplateSpec, portNumber func(int32) uint16, ccs []*agentconfig.Container) ([]*agentconfig.Container, error) {
 	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
 	ports, err := install.FilterServicePorts(svc, portNameOrNumber)
 	if err != nil {
@@ -119,11 +125,10 @@ nextSvcPort:
 			ServicePort:       uint16(port.Port),
 			Protocol:          string(port.Protocol),
 			AppProtocol:       appProto,
-			AgentPort:         *portNumber,
+			AgentPort:         portNumber(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,
 			ContainerPort:     uint16(appPort.ContainerPort),
 		}
-		*portNumber++
 
 		// The container might already have intercepts declared
 		for _, cc := range ccs {
