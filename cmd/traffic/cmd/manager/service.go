@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"sort"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -50,6 +50,7 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) (*Manager, context.Context) {
+	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &Manager{
 		clock:       wall{},
 		ID:          uuid.New().String(),
@@ -58,6 +59,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context) {
 	}
 	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	ret.ctx = ctx
+
 	return ret, ctx
 }
 
@@ -70,32 +72,19 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
-	clusterID := m.clusterInfo.GetClusterID()
-	resp := &rpc.License{ClusterId: clusterID}
-	// We want to be able to test GetClusterID easily in our integration tests,
-	// so we return the error in the license.ErrMsg response RPC.
-	var errMsg string
-
-	// This is the actual license used by the cluster
-	licenseData, err := os.ReadFile("/home/telepresence/license")
-	if err != nil {
-		errMsg += fmt.Sprintf("error reading license: %s\n", err)
-	} else {
-		resp.License = string(licenseData)
+	resp := rpc.License{
+		ClusterId: m.clusterInfo.GetClusterID(),
 	}
 
-	// This is the host domain associated with a license
-	hostDomainData, err := os.ReadFile("/home/telepresence/hostDomain")
-	if err != nil {
-		errMsg += fmt.Sprintf("error reading hostDomain: %s\n", err)
-	} else {
-		resp.Host = string(hostDomainData)
+	lb := license.BundleFromContext(ctx)
+	if lb == nil {
+		resp.ErrMsg = "license not found"
 	}
 
-	if errMsg != "" {
-		resp.ErrMsg = errMsg
-	}
-	return resp, nil
+	resp.License = lb.License()
+	resp.Host = lb.Host()
+
+	return &resp, nil
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable

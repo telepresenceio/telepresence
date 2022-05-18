@@ -15,6 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -82,23 +83,12 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	// Get the clusterID from the default namespace, or from the manager's namespace if
-	// the traffic-manager doesn't have access to the default namespace.
-	nsForID := "default"
-	ns, err := client.Namespaces().Get(ctx, nsForID, metav1.GetOptions{})
-	if err != nil {
-		dlog.Infof(ctx, "unable to get namespace %q, will try %q instead: %v", nsForID, env.ManagerNamespace, err)
-		nsForID = env.ManagerNamespace
-		ns, err = client.Namespaces().Get(ctx, nsForID, metav1.GetOptions{})
-	}
-	if err != nil {
+	if oi.clusterID, err = getClusterID(ctx, client, env.ManagerNamespace); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
-		oi.clusterID = "00000000-0000-0000-0000-000000000000"
-		dlog.Warnf(ctx, "unable to get namespace %q, will use default clusterID: %s: %v",
-			nsForID, oi.clusterID, err)
-	} else {
-		oi.clusterID = string(ns.GetUID())
+		oi.clusterID = license.ClusterIDZero
+		dlog.Warnf(ctx, "unable to get namespace \"default\", will use default clusterID: %s: %v",
+			oi.clusterID, err)
 	}
 
 	// places to look for the cluster's DNS service

@@ -15,6 +15,8 @@
 
 - Bugfix: Telepresence will no longer panic when using preview URLs with traffic-managers < 2.6.0
 
+- Change: Traffic-manager now attempts to obtain a cluster id from the license if it could not obtain it from the Kubernetes API.
+
 ### 2.6.0 (May 13, 2022)
 
 - Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
