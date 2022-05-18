@@ -39,7 +39,7 @@ type awaitingBidiPipe struct {
 
 type sessionState struct {
 	sync.Mutex
-	done                <-chan struct{}
+	ctx                 context.Context
 	cancel              context.CancelFunc
 	lastMarked          time.Time
 	awaitingBidiPipeMap map[tunnel.ConnID]*awaitingBidiPipe
@@ -65,7 +65,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 
 	// Send dial request to the client/agent
 	select {
-	case <-ss.done:
+	case <-ss.Done():
 		return nil, status.Error(codes.Canceled, "session cancelled")
 	case ss.dials <- &rpc.DialRequest{ConnId: []byte(id), RoundtripLatency: int64(stream.RoundtripLatency()), DialTimeout: int64(stream.DialTimeout())}:
 	}
@@ -76,7 +76,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	select {
 	case <-ctx.Done():
 		return nil, status.Error(codes.DeadlineExceeded, "timeout while establishing bidipipe")
-	case <-ss.done:
+	case <-ss.Done():
 		return nil, status.Error(codes.Canceled, "session cancelled")
 	case bidi := <-bidiPipeCh:
 		return bidi, nil
@@ -104,7 +104,7 @@ func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tu
 
 	defer close(abp.bidiPipeCh)
 	select {
-	case <-ss.done:
+	case <-ss.Done():
 		return nil, status.Error(codes.Canceled, "session cancelled")
 	case abp.bidiPipeCh <- bidiPipe:
 		return bidiPipe, nil
@@ -121,7 +121,7 @@ func (ss *sessionState) Dials() <-chan *rpc.DialRequest {
 }
 
 func (ss *sessionState) Done() <-chan struct{} {
-	return ss.done
+	return ss.ctx.Done()
 }
 
 func (ss *sessionState) LastMarked() time.Time {
@@ -175,12 +175,14 @@ type State struct {
 	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
 	//  8. `cfgMapLocks` access must be concurrency protected
 	//  9. `cachedAgentImage` access must be concurrency protected
+	// 10. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
 	intercepts       watchable.InterceptMap
 	agents           watchable.AgentMap                   // info for agent sessions
 	clients          watchable.ClientMap                  // info for client sessions
 	sessions         map[string]SessionState              // info for all sessions
 	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates  map[string]*interceptState
 	timedLogLevel    log.TimedLevel
 	llSubs           *loglevelSubscribers
 	cfgMapLocks      map[string]*sync.Mutex
@@ -195,6 +197,7 @@ func NewState(ctx context.Context) *State {
 		interceptAPIKeys: make(map[string]string),
 		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
 		cfgMapLocks:      make(map[string]*sync.Mutex),
+		interceptStates:  make(map[string]*interceptState),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
@@ -301,7 +304,7 @@ func (s *State) RemoveSession(ctx context.Context, sessionID string) {
 func (s *State) unlockedRemoveSession(sessionID string) {
 	if sess, ok := s.sessions[sessionID]; ok {
 		// kill the session
-		sess.Cancel()
+		defer sess.Cancel()
 
 		// remove it from the agentsByName index (if nescessary)
 		agent, isAgent := s.agents.Load(sessionID)
@@ -326,7 +329,7 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 			if intercept.ClientSession.SessionId == sessionID {
 				// Client went away:
 				// Delete it.
-				s.intercepts.Delete(interceptID)
+				s.RemoveIntercept(interceptID)
 			} else if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
 				// Refcount went to zero:
 				// Tell the client, so that the client can tell us to delete it.
@@ -399,7 +402,7 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.sessions[sessionID] = &clientSessionState{
 		sessionState: sessionState{
-			done:       ctx.Done(),
+			ctx:        ctx,
 			cancel:     cancel,
 			lastMarked: now,
 			dials:      make(chan *rpc.DialRequest),
@@ -449,7 +452,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.sessions[sessionID] = &agentSessionState{
 		sessionState: sessionState{
-			done:       ctx.Done(),
+			ctx:        ctx,
 			cancel:     cancel,
 			lastMarked: now,
 			dials:      make(chan *rpc.DialRequest),
@@ -548,7 +551,24 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
 	}
 
+	sess := s.sessions[sessionID].(*clientSessionState)
+	state := newInterceptState(sess.ctx, s.ctx, cept.Id, func() (*rpc.InterceptInfo, bool) {
+		return s.intercepts.Load(cept.Id)
+	})
+	s.interceptStates[interceptID] = state
+
 	return cept, nil
+}
+
+func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, ok := s.interceptStates[interceptID]
+	if !ok {
+		return fmt.Errorf("no such intercept %s", interceptID)
+	}
+	state.addFinalizer(finalizer)
+	return nil
 }
 
 // getAgentsInterceptedByClient returns the session IDs for each agent that are currently
@@ -608,7 +628,18 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 }
 
 func (s *State) RemoveIntercept(interceptID string) bool {
-	_, didDelete := s.intercepts.LoadAndDelete(interceptID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.unlockedRemoveIntercept(interceptID)
+}
+
+func (s *State) unlockedRemoveIntercept(interceptID string) bool {
+	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
+	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
+		delete(s.interceptStates, interceptID)
+		state.terminate(intercept)
+	}
+
 	return didDelete
 }
 

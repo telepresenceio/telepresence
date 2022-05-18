@@ -410,3 +410,62 @@ func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (fou
 	}
 	return nil, nil, errcat.User.Newf("%s %s.%s has no interceptable port%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, ss)
 }
+
+type InterceptFinalizer func(ctx context.Context, interceptInfo *managerrpc.InterceptInfo) error
+type interceptRefresher func() (*managerrpc.InterceptInfo, bool)
+
+type interceptState struct {
+	sync.Mutex
+	lastInfoCh       chan *managerrpc.InterceptInfo
+	finalizers       []InterceptFinalizer
+	refreshIntercept interceptRefresher
+	interceptID      string
+}
+
+func newInterceptState(clientCtx context.Context, tmCtx context.Context, interceptID string, refreshIntercept interceptRefresher) *interceptState {
+	is := &interceptState{
+		lastInfoCh:       make(chan *managerrpc.InterceptInfo),
+		interceptID:      interceptID,
+		refreshIntercept: refreshIntercept,
+	}
+	go is.monitor(clientCtx, tmCtx)
+	return is
+}
+
+func (is *interceptState) addFinalizer(finalizer InterceptFinalizer) {
+	is.Lock()
+	defer is.Unlock()
+	is.finalizers = append(is.finalizers, finalizer)
+}
+
+func (is *interceptState) terminate(info *managerrpc.InterceptInfo) {
+	is.lastInfoCh <- info
+}
+
+func (is *interceptState) monitor(clientCtx context.Context, tmCtx context.Context) {
+	for {
+		select {
+		case <-tmCtx.Done():
+			dlog.Warnf(tmCtx, "Traffic manager is closing but intercept %s is still open", is.interceptID)
+			return
+		case interceptInfo := <-is.lastInfoCh:
+			parentCtx := clientCtx
+			if parentCtx.Err() != nil {
+				// Currently this has no implications, but in future it may mean that the operations below happen
+				// with the API key of a user other than the intercept's owner
+				dlog.Warnf(tmCtx, "Intercept %s will be closed with global context", is.interceptID)
+				parentCtx = tmCtx
+			}
+			is.Lock()
+			defer is.Unlock()
+			for i := len(is.finalizers) - 1; i >= 0; i-- {
+				f := is.finalizers[i]
+				err := f(parentCtx, interceptInfo)
+				if err != nil {
+					dlog.Errorf(parentCtx, "Error cleaning up intercept %s: %v", is.interceptID, err)
+				}
+			}
+			return
+		}
+	}
+}
