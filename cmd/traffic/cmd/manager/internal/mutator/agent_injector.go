@@ -384,7 +384,7 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 // the same replacement on all references to that port from the probes of the container
 func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
 	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
-		for _, ic := range cc.Intercepts {
+		for _, ic := range agentconfig.PortUniqueIntercepts(cc) {
 			if ic.Headless || ic.ContainerPortName == "" {
 				// Rely on iptables mapping instead of port renames
 				continue
