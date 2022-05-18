@@ -142,7 +142,7 @@ func (lc *LicenseClaims) GetClusterID() (string, error) {
 	return "", fmt.Errorf("found %d audience claims", n)
 }
 
-type key struct{}
+type licenseKey struct{}
 
 func WithBundle(ctx context.Context, licenseDir string) context.Context {
 	b, err := LoadBundle(licenseDir)
@@ -151,10 +151,10 @@ func WithBundle(ctx context.Context, licenseDir string) context.Context {
 		return ctx
 	}
 
-	return context.WithValue(ctx, key{}, b)
+	return context.WithValue(ctx, licenseKey{}, b)
 }
 
 func BundleFromContext(ctx context.Context) *Bundle {
-	b, _ := ctx.Value(key{}).(*Bundle)
+	b, _ := ctx.Value(licenseKey{}).(*Bundle)
 	return b
 }
