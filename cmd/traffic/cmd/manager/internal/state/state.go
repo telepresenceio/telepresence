@@ -512,12 +512,13 @@ func (s *State) WatchAgents(
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
+func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.ClientInfo, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
 	s.interceptAPIKeys[interceptID] = apiKey
+	installId := client.GetInstallId()
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		Disposition: rpc.InterceptDispositionType_WAITING,
@@ -525,6 +526,8 @@ func (s *State) AddIntercept(sessionID, apiKey string, spec *rpc.InterceptSpec) 
 		Id:          interceptID,
 		ClientSession: &rpc.SessionInfo{
 			SessionId: sessionID,
+			ClusterId: clusterID,
+			InstallId: &installId,
 		},
 		ApiKey: apiKey,
 	}

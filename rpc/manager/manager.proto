@@ -237,6 +237,8 @@ message InterceptInfo {
 
 message SessionInfo {
   string session_id = 1;
+  string cluster_id = 2;
+  optional string install_id = 3;
 }
 
 message AgentsRequest {

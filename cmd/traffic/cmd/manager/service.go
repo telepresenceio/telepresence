@@ -135,8 +135,11 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
+	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
+		ClusterId: m.clusterInfo.GetClusterID(),
+		InstallId: &installId,
 	}, nil
 }
 
@@ -150,7 +153,10 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 	sessionID := m.state.AddAgent(agent, m.clock.Now())
 
-	return &rpc.SessionInfo{SessionId: sessionID}, nil
+	return &rpc.SessionInfo{
+		SessionId: sessionID,
+		ClusterId: m.clusterInfo.GetClusterID(),
+	}, nil
 }
 
 // Remain indicates that the session is still valid.
@@ -410,7 +416,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	apiKey := ciReq.GetApiKey()
 	dlog.Debug(ctx, "CreateIntercept called")
 
-	if m.state.GetClient(sessionID) == nil {
+	client := m.state.GetClient(sessionID)
+
+	if client == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
@@ -418,7 +426,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	return m.state.AddIntercept(sessionID, apiKey, spec)
+	return m.state.AddIntercept(sessionID, m.clusterInfo.GetClusterID(), apiKey, client, spec)
 }
 
 func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name string) (string, error) {

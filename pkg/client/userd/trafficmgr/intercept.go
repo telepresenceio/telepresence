@@ -1040,6 +1040,7 @@ func (tm *TrafficManager) AddLocalOnlyIntercept(c context.Context, spec *manager
 			Spec:              spec,
 			Disposition:       manager.InterceptDispositionType_ACTIVE,
 			MechanismArgsDesc: "as local-only",
+			ClientSession:     tm.sessionInfo,
 		},
 	}, nil
 }
