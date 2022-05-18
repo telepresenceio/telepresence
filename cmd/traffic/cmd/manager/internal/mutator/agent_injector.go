@@ -160,7 +160,7 @@ func (a *agentInjector) upgradeLegacy(ctx context.Context) {
 func needInitContainer(config *agentconfig.Sidecar) bool {
 	for _, cc := range config.Containers {
 		for _, ic := range cc.Intercepts {
-			if ic.Headless || ic.ContainerPortName == "" {
+			if ic.Headless || ic.TargetPortNumeric {
 				return true
 			}
 		}
@@ -385,7 +385,7 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
 	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		for _, ic := range agentconfig.PortUniqueIntercepts(cc) {
-			if ic.Headless || ic.ContainerPortName == "" {
+			if ic.Headless || ic.TargetPortNumeric {
 				// Rely on iptables mapping instead of port renames
 				continue
 			}

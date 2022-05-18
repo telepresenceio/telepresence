@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -127,6 +128,7 @@ nextSvcPort:
 			ServiceUID:        svc.UID,
 			ServicePortName:   port.Name,
 			ServicePort:       uint16(port.Port),
+			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
 			Protocol:          string(port.Protocol),
 			AppProtocol:       appProto,
 			AgentPort:         portNumber(appPort.ContainerPort),
