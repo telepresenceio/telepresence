@@ -419,7 +419,10 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	if err != nil {
 		return nil, err
 	}
-	m.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+	err = m.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+		if interceptInfo.ApiKey == "" {
+			return nil
+		}
 		sysa := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 		if sa, err := sysa.Get(ctx); err != nil {
 			dlog.Errorln(ctx, "systema: acquire connection:", err)
@@ -429,12 +432,6 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 			_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
 				InterceptId: interceptInfo.Id,
 			})
-
-			// We remove the APIKey whether or not the RemoveIntercept call was successful, so
-			// let's do that before we check the error.
-			if wasRemoved := m.state.RemoveInterceptAPIKey(interceptInfo.Id); !wasRemoved {
-				dlog.Debugf(ctx, "Intercept ID %s had no APIKey", interceptInfo.Id)
-			}
 
 			if err != nil {
 				return err
@@ -447,6 +444,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	return interceptInfo, nil
 }
 
@@ -593,11 +593,12 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 			if err := systemaPool.Done(ctx); err != nil {
 				dlog.Errorln(ctx, "systema: release connection:", err)
 			}
+			sa = nil
 		}
 	} else if intercept != nil && domain != "" && intercept.PreviewDomain == domain {
 		// Everything was created successfully, prep cleanup
 		// Note the finalizers will be run in reverse order to how they're added.
-		m.state.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+		err = m.state.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 			// We never dereferenced the systema pool since the reverse connection it initializes must be kept around while the intercept is live.
 			if sa != nil {
 				if err := systemaPool.Done(ctx); err != nil {
@@ -606,7 +607,10 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 			}
 			return nil
 		})
-		m.state.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+		if err != nil {
+			return nil, err
+		}
+		err = m.state.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 			// Check again for a preview domain in case it was removed separately
 			if interceptInfo.PreviewDomain != "" {
 				dlog.Debugf(ctx, "systema: removing domain: %q", interceptInfo.PreviewDomain)
@@ -619,6 +623,9 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 			}
 			return nil
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	if intercept == nil {
 		err = status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)

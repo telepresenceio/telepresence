@@ -46,12 +46,6 @@ func (p *ReverseConnProvider) GetAPIKey(ctx context.Context) (string, error) {
 				break
 			}
 		}
-
-		// If there were no other clients using telepresence, we try to find an APIKey
-		// used for creating an intercept.
-		if apikey == "" {
-			apikey = p.mgr.state.GetInterceptAPIKey()
-		}
 	}
 	if apikey == "" {
 		return "", errors.New("no apikey has been provided by a client")

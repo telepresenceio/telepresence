@@ -171,16 +171,13 @@ type State struct {
 	//     `intercept.ClientSession.SessionId`)
 	//  6. `intercepts` needs to be pruned in-sync with `agents` (based on
 	//     `agent.Name == intercept.Spec.Agent`)
-	//  7. `interceptAPIKeys` need to be created and updated in-sync with `intercepts` (but not deleted
-	//      in-sync with `intercepts`; that happens separately, in `RemoveInterceptAPIKey())
-	//  8. `cfgMapLocks` access must be concurrency protected
-	//  9. `cachedAgentImage` access must be concurrency protected
-	// 10. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
+	//  7. `cfgMapLocks` access must be concurrency protected
+	//  8. `cachedAgentImage` access must be concurrency protected
+	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
 	intercepts       watchable.InterceptMap
 	agents           watchable.AgentMap                   // info for agent sessions
 	clients          watchable.ClientMap                  // info for client sessions
 	sessions         map[string]SessionState              // info for all sessions
-	interceptAPIKeys map[string]string                    // InterceptIDs mapped to the APIKey used to create them
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	interceptStates  map[string]*interceptState
 	timedLogLevel    log.TimedLevel
@@ -192,14 +189,13 @@ type State struct {
 func NewState(ctx context.Context) *State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	return &State{
-		ctx:              ctx,
-		sessions:         make(map[string]SessionState),
-		interceptAPIKeys: make(map[string]string),
-		agentsByName:     make(map[string]map[string]*rpc.AgentInfo),
-		cfgMapLocks:      make(map[string]*sync.Mutex),
-		interceptStates:  make(map[string]*interceptState),
-		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
-		llSubs:           newLoglevelSubscribers(),
+		ctx:             ctx,
+		sessions:        make(map[string]SessionState),
+		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
+		cfgMapLocks:     make(map[string]*sync.Mutex),
+		interceptStates: make(map[string]*interceptState),
+		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
+		llSubs:          newLoglevelSubscribers(),
 	}
 }
 
@@ -301,14 +297,44 @@ func (s *State) RemoveSession(ctx context.Context, sessionID string) {
 	s.unlockedRemoveSession(sessionID)
 }
 
+func (s *State) gcSessionIntercepts(sessionID string) {
+	agent, isAgent := s.agents.Load(sessionID)
+
+	// GC any intercepts that relied on this session; prune any intercepts that
+	//  1. Don't have a client session (intercept.ClientSession.SessionId)
+	//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
+	// Alternatively, if the intercept is still live but has been switched over to a different agent, send it back to WAITING state
+	for interceptID, intercept := range s.intercepts.LoadAll() {
+		if intercept.ClientSession.SessionId == sessionID {
+			// Client went away:
+			// Delete it.
+			s.unlockedRemoveIntercept(interceptID)
+		} else if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
+			// Refcount went to zero:
+			// Tell the client, so that the client can tell us to delete it.
+			intercept.Disposition = errCode
+			intercept.Message = errMsg
+			s.intercepts.Store(interceptID, intercept)
+		} else if isAgent && agent.PodIp == intercept.PodIp {
+			// The agent whose podIP was stored by the intercept is dead, but it's not the last agent
+			// Send it back to waiting so that one of the other agents can pick it up and set their own podIP
+			intercept.Disposition = rpc.InterceptDispositionType_WAITING
+			s.intercepts.Store(interceptID, intercept)
+		}
+	}
+}
+
 func (s *State) unlockedRemoveSession(sessionID string) {
 	if sess, ok := s.sessions[sessionID]; ok {
 		// kill the session
 		defer sess.Cancel()
 
-		// remove it from the agentsByName index (if nescessary)
+		s.gcSessionIntercepts(sessionID)
+
 		agent, isAgent := s.agents.Load(sessionID)
 		if isAgent {
+			// remove it from the agentsByName index (if nescessary)
+
 			delete(s.agentsByName[agent.Name], sessionID)
 			if len(s.agentsByName[agent.Name]) == 0 {
 				delete(s.agentsByName, agent.Name)
@@ -320,29 +346,6 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 		}
 
 		delete(s.sessions, sessionID)
-
-		// GC any intercepts that relied on this session; prune any intercepts that
-		//  1. Don't have a client session (intercept.ClientSession.SessionId)
-		//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
-		// Alternatively, if the intercept is still live but has been switched over to a different agent, send it back to WAITING state
-		for interceptID, intercept := range s.intercepts.LoadAll() {
-			if intercept.ClientSession.SessionId == sessionID {
-				// Client went away:
-				// Delete it.
-				s.RemoveIntercept(interceptID)
-			} else if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
-				// Refcount went to zero:
-				// Tell the client, so that the client can tell us to delete it.
-				intercept.Disposition = errCode
-				intercept.Message = errMsg
-				s.intercepts.Store(interceptID, intercept)
-			} else if isAgent && agent.PodIp == intercept.PodIp {
-				// The agent whose podIP was stored by the intercept is dead, but it's not the last agent
-				// Send it back to waiting so that one of the other agents can pick it up and set their own podIP
-				intercept.Disposition = rpc.InterceptDispositionType_WAITING
-				s.intercepts.Store(interceptID, intercept)
-			}
-		}
 	}
 }
 
@@ -520,7 +523,6 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 	defer s.mu.Unlock()
 
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
-	s.interceptAPIKeys[interceptID] = apiKey
 	installId := client.GetInstallId()
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
@@ -552,9 +554,7 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 	}
 
 	sess := s.sessions[sessionID].(*clientSessionState)
-	state := newInterceptState(sess.ctx, s.ctx, cept.Id, func() (*rpc.InterceptInfo, bool) {
-		return s.intercepts.Load(cept.Id)
-	})
+	state := newInterceptState(sess.ctx, s.ctx, cept.Id)
 	s.interceptStates[interceptID] = state
 
 	return cept, nil
@@ -641,34 +641,6 @@ func (s *State) unlockedRemoveIntercept(interceptID string) bool {
 	}
 
 	return didDelete
-}
-
-// GetInterceptAPIKey returns the first non-empty apiKey associated with an intercept IDs.
-// We use this fuction as a last resort if we need to garbage collect intercepts when
-// there are no active sessions.
-func (s *State) GetInterceptAPIKey() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, key := range s.interceptAPIKeys {
-		if key != "" {
-			return key
-		}
-	}
-	return ""
-}
-
-// RemoveInterceptAPIKey removes the associated APIKey for an Intercept ID
-// Only call on an intercept that has been deleted.
-func (s *State) RemoveInterceptAPIKey(interceptID string) bool {
-	// If the APIKey isn't present, then we return false since we didn't remove
-	// anything since no APIKey was associated with that intercept.
-	s.mu.Lock()
-	_, ok := s.interceptAPIKeys[interceptID]
-	if ok {
-		delete(s.interceptAPIKeys, interceptID)
-	}
-	s.mu.Unlock()
-	return ok
 }
 
 func (s *State) GetIntercept(interceptID string) (*rpc.InterceptInfo, bool) {
