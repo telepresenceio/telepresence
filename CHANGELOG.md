@@ -38,6 +38,8 @@
 
 - Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
 
+- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
+
 ### 2.6.2 (May 17, 2022)
 
 - Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.
