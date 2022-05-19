@@ -83,6 +83,8 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	if err != nil {
 		return nil, err
 	}
+	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
+
 	env := managerutil.GetEnv(ctx)
 
 	ia := pod.Annotations[agentconfig.InjectAnnotation]
@@ -99,14 +101,14 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			}
 			return nil, err
 		}
-		if config == nil && ia == "" {
-			if !isDelete {
-				dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or %q annotation; skipping`,
-					pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
-			}
+		switch {
+		case config == nil && isDelete:
 			return nil, nil
-		}
-		if config != nil && config.Manual {
+		case config == nil && ia == "":
+			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or %q annotation; skipping`,
+				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
+			return nil, nil
+		case config != nil && config.Manual:
 			if !isDelete {
 				dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			}
@@ -124,7 +126,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, err
 		}
 		if isDelete {
-			dlog.Debugf(ctx, "Workload %s.%s still found during deletion of pdd", wl.GetName(), wl.GetNamespace())
+			return nil, nil
 		}
 		if config, err = agentmap.Generate(ctx, wl, env.GeneratorConfig(a.getAgentImage(ctx))); err != nil {
 			return nil, err
@@ -134,11 +136,6 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
-	}
-
-	if isDelete {
-		// No point is patching a pod that's being removed
-		return nil, nil
 	}
 
 	// Create patch operations to add the traffic-agent sidecar
@@ -170,6 +167,7 @@ func (a *agentInjector) getAgentImage(ctx context.Context) string {
 	defer a.Unlock()
 	if a.agentImage == "" {
 		a.agentImage = managerutil.GetAgentImage(ctx)
+		dlog.Infof(ctx, "using agent image %s", a.agentImage)
 	}
 	return a.agentImage
 }
