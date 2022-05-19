@@ -44,6 +44,9 @@ type Intercept struct {
 	// Name of intercepted service port
 	ServicePortName string `json:"servicePortName,omitempty" yaml:"servicePortName,omitempty"`
 
+	// TargetPortNumeric is set to true unless the servicePort has a symbolic target port
+	TargetPortNumeric bool `json:"targetPortNumeric,omitempty" yaml:"targetPortNumeric,omitempty"`
+
 	// L4 protocol used by the intercepted port
 	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 

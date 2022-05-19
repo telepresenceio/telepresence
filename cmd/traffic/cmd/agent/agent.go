@@ -173,7 +173,7 @@ func Main(ctx context.Context, args ...string) error {
 			if err != nil {
 				return err
 			}
-			for _, ic := range cn.Intercepts {
+			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", ic.AgentPort))
 				if err != nil {
 					return err

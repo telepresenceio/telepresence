@@ -403,7 +403,7 @@ func (g *genInitContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]stri
 
 	for _, cc := range cm.Containers {
 		for _, ic := range cc.Intercepts {
-			if ic.Headless || ic.ContainerPortName == "" {
+			if ic.Headless || ic.TargetPortNumeric {
 				return g.writeObjToOutput(agentconfig.InitContainer(cm.AgentImage))
 			}
 		}

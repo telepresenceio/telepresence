@@ -41,6 +41,7 @@ type FileSystem interface {
 	ReadFile(name string) ([]byte, error)
 	RealPath(name string) (string, error)
 	Remove(name string) error
+	RemoveAll(name string) error
 	Stat(name string) (fs.FileInfo, error)
 	Symlink(oldName, newName string) error
 	WriteFile(name string, data []byte, perm fs.FileMode) error
@@ -94,6 +95,10 @@ func (osFs) RealPath(name string) (string, error) {
 
 func (osFs) Remove(name string) error {
 	return os.Remove(name)
+}
+
+func (osFs) RemoveAll(name string) error {
+	return os.RemoveAll(name)
 }
 
 func (osFs) Stat(name string) (fs.FileInfo, error) {
@@ -178,9 +183,14 @@ func RealPath(ctx context.Context, name string) (string, error) {
 	return getFS(ctx).RealPath(name)
 }
 
-// Remove is like os.ReadDir but delegates to the context's FS
+// Remove is like os.Remove but delegates to the context's FS
 func Remove(ctx context.Context, name string) error {
 	return getFS(ctx).Remove(name)
+}
+
+// RemoveAll is like os.RemoveAll but delegates to the context's FS
+func RemoveAll(ctx context.Context, name string) error {
+	return getFS(ctx).RemoveAll(name)
 }
 
 func WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {

@@ -1,0 +1,16 @@
+---
+# Use a second service here that appoints the same port in the replicaset to
+# make things a bit more complex for the discovery mechanism, and also force
+# use of the --service flag when intercepting
+apiVersion: v1
+kind: Service
+metadata:
+  name: rs-echo-canary
+spec:
+  type: ClusterIP
+  selector:
+    service: rs-echo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

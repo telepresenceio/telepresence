@@ -24,3 +24,19 @@ func IsInterceptFor(spi string, ic *Intercept) bool {
 	pn, err := strconv.Atoi(spi)
 	return err == nil && uint16(pn) == ic.ServicePort
 }
+
+// PortUniqueIntercepts returns a slice of intercepts for the container where each intercept
+// is unique with respect to the AgentPort.
+// This method should always be used when iterating the intercepts, except for when an
+// intercept is identified via a service.
+func PortUniqueIntercepts(cn *Container) []*Intercept {
+	um := make(map[uint16]struct{}, len(cn.Intercepts))
+	ics := make([]*Intercept, 0, len(cn.Intercepts))
+	for _, ic := range cn.Intercepts {
+		if _, ok := um[ic.AgentPort]; !ok {
+			um[ic.AgentPort] = struct{}{}
+			ics = append(ics, ic)
+		}
+	}
+	return ics
+}
