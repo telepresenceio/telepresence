@@ -250,7 +250,7 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		if currentYml, ok := cm.Data[ac.AgentName]; ok {
 			var currAc agentconfig.Sidecar
 			if err = decode(currentYml, &currAc); err == nil && currAc.Manual {
-				dlog.Warn(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", ac.AgentName, ns)
+				dlog.Warnf(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", ac.AgentName, ns)
 				return nil
 			}
 		}
