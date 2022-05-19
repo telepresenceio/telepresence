@@ -2,6 +2,7 @@ package managerutil
 
 import (
 	"context"
+	"strings"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
@@ -13,6 +14,10 @@ import (
 type SystemaCRUDClient interface {
 	systemarpc.SystemACRUDClient
 	a8rcloud.Closeable
+}
+
+func AgentIsProprietary(ctx context.Context) bool {
+	return strings.Contains(GetAgentImage(ctx), "datawire.io/telepresence-traffic-agent")
 }
 
 func GetAgentImage(ctx context.Context) string {

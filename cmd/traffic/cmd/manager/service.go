@@ -50,7 +50,10 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) (*Manager, context.Context) {
-	ctx = license.WithBundle(ctx, "/home/telepresence")
+	if lb := license.BundleFromContext(ctx); lb == nil {
+		ctx = license.WithBundleFromDir(ctx, "/home/telepresence")
+	}
+
 	ret := &Manager{
 		clock:       wall{},
 		ID:          uuid.New().String(),
@@ -117,6 +120,42 @@ func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 // ArriveAsClient establishes a session between a client and the Manager.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
+
+	if managerutil.AgentIsProprietary(ctx) {
+		lb := license.BundleFromContext(ctx)
+		cid := m.clusterInfo.GetClusterID()
+		if lb == nil && cid == license.ClusterIDZero {
+			return nil, status.Error(codes.PermissionDenied, "no license or clusterID found")
+		}
+
+		maxAuthedClientCount := 0
+		maxUnauthedClientCount := 2
+		if lb != nil {
+			claims, err := lb.GetLicenseClaims()
+			if err == nil {
+				maxAuthedClientCount = claims.MaxClientCount
+			}
+		}
+
+		authedClientCount := 0
+		currentClients := m.state.GetAllClients()
+		for _, client := range currentClients {
+			if client.GetApiKey() != "" {
+				authedClientCount++
+			}
+		}
+		unauthedCount := len(currentClients) - authedClientCount
+
+		if client.ApiKey != "" {
+			if maxAuthedClientCount != 0 && maxAuthedClientCount <= authedClientCount {
+				return nil, status.Errorf(codes.PermissionDenied, "max authenticated client count (%d) exceeded", maxAuthedClientCount)
+			}
+		} else {
+			if maxUnauthedClientCount <= unauthedCount {
+				return nil, status.Errorf(codes.PermissionDenied, "max unauthenticated client count (%d) exceeded", maxUnauthedClientCount)
+			}
+		}
+	}
 
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)

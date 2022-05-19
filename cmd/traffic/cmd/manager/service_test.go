@@ -3,18 +3,23 @@ package manager_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	fakeDiscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
@@ -24,6 +29,8 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license/licensetest"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -44,7 +51,7 @@ func TestConnect(t *testing.T) {
 
 	version.Version = "testing"
 
-	conn := getTestClientConn(t)
+	conn := getTestClientConn(ctx, t)
 	defer conn.Close()
 
 	client := rpc.NewManagerClient(conn)
@@ -288,29 +295,205 @@ func TestConnect(t *testing.T) {
 	a.NoError(err)
 }
 
-func getTestClientConn(t *testing.T) *grpc.ClientConn {
+func TestArriveAsClient(t *testing.T) {
+	prevVersion := version.Version
+	defer func() { version.Version = prevVersion }()
+	version.Version = "v2.6.0-testing"
+
+	ctx := context.Background()
+	conn := getTestClientConn(ctx, t)
+	defer conn.Close()
+
+	client := rpc.NewManagerClient(conn)
+
+	ver, err := client.Version(ctx, &empty.Empty{})
+	require.NoError(t, err)
+	require.Equal(t, version.Version, ver.Version)
+
+	sess, err := client.ArriveAsClient(ctx, &rpc.ClientInfo{
+		Name:      "TEST_NAME",
+		InstallId: "TEST_INSTALL_ID",
+		Product:   "telepresence",
+		Version:   "v2.6.0-testing",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, sess)
+}
+
+func TestArriveAsClient_ProprietaryAgent(t *testing.T) {
+	type expectationFunc func(*testing.T, *rpc.SessionInfo, error)
+	expectSucc := func(t *testing.T, sess *rpc.SessionInfo, err error) {
+		require.NoError(t, err)
+		require.NotNil(t, sess)
+	}
+	expectPermissionDenied := func(t *testing.T, sess *rpc.SessionInfo, err error) {
+		require.Error(t, err)
+		require.Nil(t, sess)
+		statErr, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, statErr.Code(), codes.PermissionDenied)
+	}
+
+	prevVersion := version.Version
+	defer func() { version.Version = prevVersion }()
+	version.Version = "v2.6.0-testing"
+
+	ctx := context.Background()
+	env := managerutil.Env{
+		AgentRegistry: "datawire.io",
+		AgentImage:    "telepresence-traffic-agent",
+	}
+	ctx = managerutil.WithEnv(ctx, &env)
+
+	t.Run("proprietary agent with no license and no clusterID", func(t *testing.T) {
+		k8sClient := fake.NewSimpleClientset()
+		ctx = k8sapi.WithK8sInterface(ctx, k8sClient)
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+
+		client := rpc.NewManagerClient(conn)
+		sess, err := client.ArriveAsClient(ctx, &rpc.ClientInfo{
+			Name:      "TEST_NAME",
+			InstallId: "TEST_INSTALL_ID",
+			Product:   "telepresence",
+			Version:   "v2.6.0-testing",
+		})
+		expectPermissionDenied(t, sess, err)
+		require.Contains(t, err.Error(), "license")
+		require.Contains(t, err.Error(), "clusterID")
+	})
+
+	t.Run("proprietary agent with no license", func(t *testing.T) {
+		k8sClient := fake.NewSimpleClientset(&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+				UID:  "TEST_CLUSTER_ID",
+			},
+		})
+		ctx = k8sapi.WithK8sInterface(ctx, k8sClient)
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+
+		client := rpc.NewManagerClient(conn)
+		// 2 unauthed clients connect successfully, third should get permission error
+		expectations := []expectationFunc{
+			expectSucc, expectSucc, expectPermissionDenied,
+		}
+		for idx, expectation := range expectations {
+			sess, err := client.ArriveAsClient(ctx, &rpc.ClientInfo{
+				Name:      fmt.Sprintf("TEST_NAME_%d", idx),
+				InstallId: fmt.Sprintf("TEST_INSTALL_ID_%d", idx),
+				Version:   version.Version,
+				Product:   "telepresence",
+			})
+			expectation(t, sess, err)
+		}
+
+		// authed clients should be able to connect successfully, checking 3
+		for idx := 0; idx < 2; idx++ {
+			sess, err := client.ArriveAsClient(ctx, &rpc.ClientInfo{
+				Name:      fmt.Sprintf("TEST_NAME_%d", idx),
+				InstallId: fmt.Sprintf("TEST_INSTALL_ID_%d", idx),
+				Version:   version.Version,
+				Product:   "telepresence",
+				ApiKey:    fmt.Sprintf("TEST_API_KEY_%d", idx),
+			})
+			expectSucc(t, sess, err)
+		}
+	})
+
+	t.Run("proprietary agent with license", func(t *testing.T) {
+		clusterID := "TEST_CLUSTER_ID"
+		k8sClient := fake.NewSimpleClientset(&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+				UID:  types.UID(clusterID),
+			},
+		})
+		ctx = k8sapi.WithK8sInterface(ctx, k8sClient)
+
+		host := "test-auth.datawire.io"
+		privKey, pubKey, err := licensetest.GenKeys()
+		require.NoError(t, err)
+		licenseString, err := licensetest.GenLicense(privKey, clusterID, map[string]interface{}{
+			"maxClientCount": 2,
+		})
+		require.NoError(t, err)
+
+		ctx = license.WithBundle(ctx, licenseString, host, map[string]string{
+			host: pubKey,
+		})
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+
+		client := rpc.NewManagerClient(conn)
+		// 2 unauthed clients connect successfully, third should get permission error
+		expectations := []expectationFunc{
+			expectSucc, expectSucc, expectPermissionDenied,
+		}
+		for idx, expectation := range expectations {
+			sess, err := client.ArriveAsClient(ctx, &rpc.ClientInfo{
+				Name:      fmt.Sprintf("TEST_NAME_%d", idx),
+				InstallId: fmt.Sprintf("TEST_INSTALL_ID_%d", idx),
+				Version:   version.Version,
+				Product:   "telepresence",
+			})
+			expectation(t, sess, err)
+		}
+
+		// 2 authed clients connect successfully, third should get permission error
+		expectations = []expectationFunc{
+			expectSucc, expectSucc, expectPermissionDenied,
+		}
+		for idx, expectation := range expectations {
+			sess, err := client.ArriveAsClient(ctx, &rpc.ClientInfo{
+				Name:      fmt.Sprintf("TEST_NAME_%d", idx),
+				InstallId: fmt.Sprintf("TEST_INSTALL_ID_%d", idx),
+				Version:   version.Version,
+				Product:   "telepresence",
+				ApiKey:    fmt.Sprintf("TEST_API_KEY_%d", idx),
+			})
+			expectation(t, sess, err)
+		}
+	})
+}
+
+func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	const bufsize = 64 * 1024
-	ctx, cancel := context.WithCancel(dlog.NewTestContext(t, true))
+	ctx, cancel := context.WithCancel(ctx)
 
 	lis := bufconn.Listen(bufsize)
 	bufDialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	}
 
-	fakeClient := fake.NewSimpleClientset(&corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "default",
-		},
-	})
+	// ensure fake k8s client is configured correctly, creating a new one if one was not already in the context
+	fakeClient := k8sapi.GetK8sInterface(ctx)
+	if fakeClient == nil {
+		fakeClient = fake.NewSimpleClientset(&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+				UID:  "",
+			},
+		})
+		ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
+	}
 	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
 		GitVersion: "v1.17.0",
 	}
-	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
-	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
-		MaxReceiveSize:  resource.Quantity{},
-		PodCIDRStrategy: "environment",
-		PodCIDRs:        "192.168.0.0/16",
-	})
+
+	// ensure env is configured correctly, creating a new one if one was not already in the context
+	env := managerutil.GetEnv(ctx)
+	if env == nil {
+		env = &managerutil.Env{}
+		ctx = managerutil.WithEnv(ctx, env)
+	}
+	env.MaxReceiveSize = resource.Quantity{}
+	env.PodCIDRStrategy = "environment"
+	env.PodCIDRs = "192.168.0.0/16"
 
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

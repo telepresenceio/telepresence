@@ -114,9 +114,10 @@ func (l *Bundle) GetLicenseInfo(clusterID string, canConnectCloud bool, systemaU
 
 type LicenseClaims struct {
 	jwt.Claims
-	AccountID string      `json:"accountId"`
-	Limits    interface{} `json:"limits"`
-	Scope     string      `json:"scope"`
+	AccountID      string      `json:"accountId"`
+	Limits         interface{} `json:"limits"`
+	Scope          string      `json:"scope"`
+	MaxClientCount int         `json:"maxClientCount"`
 }
 
 func (lc *LicenseClaims) IsValidForCluster(cid string) error {
@@ -144,7 +145,7 @@ func (lc *LicenseClaims) GetClusterID() (string, error) {
 
 type licenseKey struct{}
 
-func WithBundle(ctx context.Context, licenseDir string) context.Context {
+func WithBundleFromDir(ctx context.Context, licenseDir string) context.Context {
 	b, err := LoadBundle(licenseDir)
 	if err != nil {
 		dlog.Infof(ctx, "unable to load license: %v", err)
@@ -152,6 +153,14 @@ func WithBundle(ctx context.Context, licenseDir string) context.Context {
 	}
 
 	return context.WithValue(ctx, licenseKey{}, b)
+}
+
+func WithBundle(ctx context.Context, license, host string, pubKeys map[string]string) context.Context {
+	return context.WithValue(ctx, licenseKey{}, &Bundle{
+		license: license,
+		host:    host,
+		pubKeys: pubKeys,
+	})
 }
 
 func BundleFromContext(ctx context.Context) *Bundle {
