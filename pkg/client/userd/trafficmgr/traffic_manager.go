@@ -974,6 +974,9 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 
 	if ur.Namespace != "" {
 		tm.waitForSync(ctx)
+		if ur.Namespace == "" {
+			ur.Namespace = tm.Namespace
+		}
 		tm.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
 		namespace := tm.ActualNamespace(ur.Namespace)
 		if namespace == "" {
