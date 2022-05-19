@@ -23,7 +23,6 @@ func getClusterID(ctx context.Context, client v1.CoreV1Interface, namespace stri
 
 	cid, err = clusterIDFromNamespace(ctx, client, namespace)
 	if err == nil {
-		fmt.Printf("cid for %s: %s\n", namespace, cid)
 		return cid, nil
 	}
 
