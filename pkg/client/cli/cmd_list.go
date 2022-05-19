@@ -165,10 +165,12 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
-		go func() {
-			<-ctx.Done()
-			stream.CloseSend()
-		}()
+		/*
+			go func() {
+				<-ctx.Done()
+				stream.CloseSend()
+			}()
+		*/
 
 		for {
 			r, err := stream.Recv()
