@@ -10,6 +10,8 @@
 
 - Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
 
+- Change: Enforce license client limit upon client connection when using a proprietary traffic-manager.
+
 ### 2.6.2 (May 17, 2022)
 
 - Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.

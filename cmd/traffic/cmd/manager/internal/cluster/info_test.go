@@ -106,7 +106,7 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 		err = os.WriteFile(filepath.Join(tmpRootDir, "hostDomain"), []byte("auth.datawire.io"), os.ModePerm)
 		require.NoError(t, err)
 
-		ctx = license.WithBundle(ctx, tmpRootDir)
+		ctx = license.WithBundleFromDir(ctx, tmpRootDir)
 
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
