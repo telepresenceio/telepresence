@@ -179,7 +179,7 @@ func (w *Watcher) Watch(c context.Context, ready *sync.WaitGroup) {
 	func() {
 		w.Lock()
 		defer w.Unlock()
-		w.startLocked(c, ready)
+		c = w.startLocked(c, ready)
 	}()
 	w.run(c)
 }
@@ -187,14 +187,14 @@ func (w *Watcher) Watch(c context.Context, ready *sync.WaitGroup) {
 func (w *Watcher) startOnDemand(c context.Context) {
 	rdy := sync.WaitGroup{}
 	rdy.Add(1)
-	w.startLocked(c, &rdy)
+	c = w.startLocked(c, &rdy)
 	rdy.Wait()
 	go w.run(c)
 	cache.WaitForCacheSync(c.Done(), w.controller.HasSynced)
 	w.callStateListeners()
 }
 
-func (w *Watcher) startLocked(c context.Context, ready *sync.WaitGroup) {
+func (w *Watcher) startLocked(c context.Context, ready *sync.WaitGroup) context.Context {
 	defer ready.Done()
 
 	c, w.cancel = context.WithCancel(c)
@@ -223,6 +223,7 @@ func (w *Watcher) startLocked(c context.Context, ready *sync.WaitGroup) {
 		},
 	}
 	w.controller = cache.New(&config)
+	return c
 }
 
 func (w *Watcher) run(c context.Context) {
