@@ -24,17 +24,11 @@ rules:
   - ""
   resources:
   - pods
-  verbs:
-  - list
-  - get
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - services
   verbs:
   - list
   - get
+  - watch
 - apiGroups:
   - ""
   resources:

@@ -61,7 +61,7 @@ rules:
     verbs: ["get", "list", "create", "delete", "watch"]
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "list", "update", "create", "delete"]
+    verbs: ["get", "list", "watch", "update", "create", "delete"]
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]

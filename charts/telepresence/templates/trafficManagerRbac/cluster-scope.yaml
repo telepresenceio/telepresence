@@ -17,6 +17,8 @@ rules:
   - ""
   resources:
   - nodes
+  - pods
+  - services
   verbs:
   - list
   - get
@@ -25,19 +27,10 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - services
   - namespaces
   verbs:
   - get
   - list
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - list
-  - get
-  - watch
 - apiGroups:
   - ""
   resources:

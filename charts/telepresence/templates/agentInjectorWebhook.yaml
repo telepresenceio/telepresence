@@ -32,6 +32,7 @@ webhooks:
     - v1
     operations:
     - CREATE
+    - DELETE
     resources:
     - pods
     scope: '*'

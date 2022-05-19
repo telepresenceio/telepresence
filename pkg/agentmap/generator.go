@@ -17,6 +17,7 @@ const (
 	ServiceNameAnnotation = agentconfig.DomainPrefix + "inject-service-name"
 	ManagerAppName        = "traffic-manager"
 	ManagerPortHTTP       = 8081
+	AgentInjectorName     = "agent-injector"
 )
 
 type GeneratorConfig struct {
