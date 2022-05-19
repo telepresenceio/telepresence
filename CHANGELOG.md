@@ -2,6 +2,8 @@
 
 ### 2.6.3 (TBD)
 
+- Bugfix: The traffic-agent's configuration update automatically when services are added, updated or deleted.
+
 - Bugfix: Telepresence will now always inject an initContainer when the service's targetPort is numeric
 
 - Bugfix: Workloads that have several matching services pointing to the same target port are now handled correctly.
