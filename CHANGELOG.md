@@ -1,5 +1,15 @@
 # Changelog
 
+### 2.6.3 (TBD)
+
+- Bugfix: Telepresence will now always inject an initContainer when the service's targetPort is numeric
+
+- Bugfix: Workloads that have several matching services pointing to the same target port are now handled correctly.
+
+- Bugfix: A potential race condition causing a panic when closing a DNS connection is now handled correctly.
+
+- Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
+
 ### 2.6.2 (May 17, 2022)
 
 - Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.

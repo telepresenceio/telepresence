@@ -79,9 +79,19 @@ func (c *config) PodIP() string {
 // addAppMounts adds each of the mounts present under the containers MountPoint as a
 // symlink under the agentconfig.ExportsMountPoint/<container mount>/
 func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
+	dlog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
 	if err := dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
-		return err
+		if !os.IsExist(err) {
+			return err
+		}
+		dlog.Infof(ctx, "The directory %q already exists. Container restarted?", cnMountPoint)
+		if err = dos.RemoveAll(ctx, cnMountPoint); err != nil {
+			return err
+		}
+		if err = dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
+			return err
+		}
 	}
 	appMountsDir, err := dos.Open(ctx, ag.MountPoint)
 	if err != nil {

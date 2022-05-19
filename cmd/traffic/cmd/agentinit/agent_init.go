@@ -57,7 +57,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		hasRule := false
 	nextCn:
 		for _, cn := range c.Containers {
-			for _, ic := range cn.Intercepts {
+			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if strings.EqualFold(proto, ic.Protocol) {
 					hasRule = true
 					break nextCn
@@ -78,7 +78,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 
 		// Use our inbound chain to direct traffic coming into the app port to the agent port.
 		for _, cn := range c.Containers {
-			for _, ic := range cn.Intercepts {
+			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if strings.EqualFold(proto, ic.Protocol) {
 					err = iptables.AppendUnique(nat, chain,
 						"-p", proto, "--dport", strconv.Itoa(int(ic.ContainerPort)),

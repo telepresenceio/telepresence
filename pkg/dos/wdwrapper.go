@@ -77,6 +77,10 @@ func (w *wdWrapper) Remove(name string) error {
 	return w.base.Remove(w.basePath(name))
 }
 
+func (w *wdWrapper) RemoveAll(name string) error {
+	return w.base.RemoveAll(w.basePath(name))
+}
+
 func (w *wdWrapper) Stat(name string) (fs.FileInfo, error) {
 	return w.base.Stat(w.basePath(name))
 }

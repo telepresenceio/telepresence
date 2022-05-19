@@ -61,6 +61,7 @@ rules:
   - statefulsets
   verbs:
   - get
+  - list
   - patch
 {{- if eq . (include "telepresence.namespace" $) }}
 # Must be able to get the manager namespace in order to get the cluster-id
