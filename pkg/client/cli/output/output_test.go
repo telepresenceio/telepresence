@@ -216,9 +216,11 @@ func TestWithOutput(t *testing.T) {
 
 func TestStructuredStreamer(t *testing.T) {
 	ctx := context.Background()
+	stdoutBuf := strings.Builder{}
 	o := output{
-		originalStdout: os.Stdout,
+		originalStdout: &stdoutBuf,
 		originalStderr: os.Stderr,
+		jsonEncoder:    json.NewEncoder(&stdoutBuf),
 	}
 	o.stdout = &streamerWriter{
 		output: &o,
@@ -230,12 +232,17 @@ func TestStructuredStreamer(t *testing.T) {
 	ctx = context.WithValue(ctx, key{}, &o)
 	stdout, stderr := Structured(ctx)
 
-	_, ok := stdout.(StructuredStreamer)
+	ss, ok := stdout.(StructuredStreamer)
 	if !ok {
 		t.Errorf("expected StructuredStreamer stdout")
 	}
 	_, ok = stderr.(StructuredStreamer)
 	if !ok {
 		t.Errorf("expected StructuredStreamer stdout")
+	}
+
+	ss.StructuredStream(map[string]string{"key": "value"}, errors.New("ERROR"))
+	if stdoutBuf.String() == "" {
+		t.Errorf("expected non empty output")
 	}
 }
