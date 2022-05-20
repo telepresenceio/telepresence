@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 
@@ -47,88 +48,7 @@ func listCommand() *cobra.Command {
 
 // list requests a list current intercepts from the daemon
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
-	state := func(workload *connector.WorkloadInfo) string {
-		if iis := workload.InterceptInfos; len(iis) > 0 {
-			return DescribeIntercepts(iis, nil, s.debug)
-		}
-		ai := workload.AgentInfo
-		if ai != nil {
-			return "ready to intercept (traffic-agent already installed)"
-		}
-		if workload.NotInterceptableReason != "" {
-			return "not interceptable (traffic-agent not installed): " + workload.NotInterceptableReason
-		} else {
-			return "ready to intercept (traffic-agent not yet installed)"
-		}
-	}
-
 	stdout := cmd.OutOrStdout()
-	printList := func(workloads []*connector.WorkloadInfo) {
-		if len(workloads) == 0 {
-			if s.json {
-				fmt.Fprintln(stdout, "[]")
-			} else {
-				fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
-			}
-			return
-		}
-
-		if s.json {
-			msg, err := json.Marshal(workloads)
-			if err != nil {
-				fmt.Fprintf(stdout, "json marshal error: %v", err)
-			} else {
-				fmt.Fprintf(stdout, "%s", msg)
-			}
-		} else {
-			includeNs := false
-			ns := s.namespace
-			for _, dep := range workloads {
-				depNs := dep.Namespace
-				if depNs == "" {
-					// Local-only, so use namespace of first intercept
-					depNs = dep.InterceptInfos[0].Spec.Namespace
-				}
-				if ns != "" && depNs != ns {
-					includeNs = true
-					break
-				}
-				ns = depNs
-			}
-			nameLen := 0
-			for _, dep := range workloads {
-				n := dep.Name
-				if n == "" {
-					// Local-only, so use name of first intercept
-					n = dep.InterceptInfos[0].Spec.Name
-				}
-				nl := len(n)
-				if includeNs {
-					nl += len(dep.Namespace) + 1
-				}
-				if nl > nameLen {
-					nameLen = nl
-				}
-			}
-			for _, workload := range workloads {
-				if workload.Name == "" {
-					// Local-only, so use name of first intercept
-					n := workload.InterceptInfos[0].Spec.Name
-					if includeNs {
-						n += "." + workload.Namespace
-					}
-					fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, n)
-				} else {
-					n := workload.Name
-					if includeNs {
-						n += "." + workload.Namespace
-					}
-					fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, n, state(workload))
-				}
-			}
-		}
-	}
-
 	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		var filter connector.ListRequest_Filter
 		switch {
@@ -157,7 +77,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			if err != nil {
 				return err
 			}
-			printList(r.Workloads)
+			s.printList(r.Workloads, stdout)
 			return nil
 		}
 
@@ -177,9 +97,91 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			if err != nil {
 				return err
 			}
-			printList(r.Workloads)
+			s.printList(r.Workloads, stdout)
 		}
 	})
+}
+
+func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer) {
+	state := func(workload *connector.WorkloadInfo) string {
+		if iis := workload.InterceptInfos; len(iis) > 0 {
+			return DescribeIntercepts(iis, nil, s.debug)
+		}
+		ai := workload.AgentInfo
+		if ai != nil {
+			return "ready to intercept (traffic-agent already installed)"
+		}
+		if workload.NotInterceptableReason != "" {
+			return "not interceptable (traffic-agent not installed): " + workload.NotInterceptableReason
+		} else {
+			return "ready to intercept (traffic-agent not yet installed)"
+		}
+	}
+
+	if len(workloads) == 0 {
+		if s.json {
+			fmt.Fprintln(stdout, "[]")
+		} else {
+			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+		}
+		return
+	}
+
+	if s.json {
+		msg, err := json.Marshal(workloads)
+		if err != nil {
+			fmt.Fprintf(stdout, "json marshal error: %v", err)
+		} else {
+			fmt.Fprintf(stdout, "%s", msg)
+		}
+	} else {
+		includeNs := false
+		ns := s.namespace
+		for _, dep := range workloads {
+			depNs := dep.Namespace
+			if depNs == "" {
+				// Local-only, so use namespace of first intercept
+				depNs = dep.InterceptInfos[0].Spec.Namespace
+			}
+			if ns != "" && depNs != ns {
+				includeNs = true
+				break
+			}
+			ns = depNs
+		}
+		nameLen := 0
+		for _, dep := range workloads {
+			n := dep.Name
+			if n == "" {
+				// Local-only, so use name of first intercept
+				n = dep.InterceptInfos[0].Spec.Name
+			}
+			nl := len(n)
+			if includeNs {
+				nl += len(dep.Namespace) + 1
+			}
+			if nl > nameLen {
+				nameLen = nl
+			}
+		}
+		for _, workload := range workloads {
+			if workload.Name == "" {
+				// Local-only, so use name of first intercept
+				n := workload.InterceptInfos[0].Spec.Name
+				if includeNs {
+					n += "." + workload.Namespace
+				}
+				fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, n)
+			} else {
+				n := workload.Name
+				if includeNs {
+					n += "." + workload.Namespace
+				}
+				fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, n, state(workload))
+			}
+		}
+	}
+
 }
 
 func DescribeIntercepts(iis []*manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
