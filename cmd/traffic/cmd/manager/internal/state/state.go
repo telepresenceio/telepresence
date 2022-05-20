@@ -132,6 +132,16 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 	ss.lastMarked = lastMarked
 }
 
+func (s *State) newSessionState(now time.Time) sessionState {
+	ctx, cancel := context.WithCancel(s.ctx)
+	return sessionState{
+		ctx:        ctx,
+		cancel:     cancel,
+		lastMarked: now,
+		dials:      make(chan *rpc.DialRequest),
+	}
+}
+
 type clientSessionState struct {
 	sessionState
 	name string
@@ -402,16 +412,10 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	if oldClient, hasConflict := s.clients.LoadOrStore(sessionID, client); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
-	ctx, cancel := context.WithCancel(s.ctx)
 	s.sessions[sessionID] = &clientSessionState{
-		sessionState: sessionState{
-			ctx:        ctx,
-			cancel:     cancel,
-			lastMarked: now,
-			dials:      make(chan *rpc.DialRequest),
-		},
-		name: client.Name,
-		pool: tunnel.NewPool(),
+		sessionState: s.newSessionState(now),
+		name:         client.Name,
+		pool:         tunnel.NewPool(),
 	}
 	return sessionID
 }
@@ -452,14 +456,8 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
 
-	ctx, cancel := context.WithCancel(s.ctx)
 	s.sessions[sessionID] = &agentSessionState{
-		sessionState: sessionState{
-			ctx:        ctx,
-			cancel:     cancel,
-			lastMarked: now,
-			dials:      make(chan *rpc.DialRequest),
-		},
+		sessionState:    s.newSessionState(now),
 		lookups:         make(chan *rpc.LookupHostRequest),
 		lookupResponses: make(map[string]chan *rpc.LookupHostResponse),
 		agent:           agent,
@@ -522,6 +520,11 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	sess, ok := s.sessions[sessionID].(*clientSessionState)
+	if sess == nil || !ok {
+		return nil, status.Errorf(codes.NotFound, "session %q not found", sessionID)
+	}
+
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
 	installId := client.GetInstallId()
 	cept := &rpc.InterceptInfo{
@@ -553,7 +556,6 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
 	}
 
-	sess := s.sessions[sessionID].(*clientSessionState)
 	state := newInterceptState(sess.ctx, s.ctx, cept.Id)
 	s.interceptStates[interceptID] = state
 
