@@ -565,7 +565,7 @@ func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	defer s.mu.RUnlock()
 	state, ok := s.interceptStates[interceptID]
 	if !ok {
-		return fmt.Errorf("no such intercept %s", interceptID)
+		return status.Errorf(codes.NotFound, "no such intercept %s", interceptID)
 	}
 	state.addFinalizer(finalizer)
 	return nil
