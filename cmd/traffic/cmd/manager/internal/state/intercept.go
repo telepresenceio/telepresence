@@ -410,3 +410,40 @@ func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (fou
 	}
 	return nil, nil, errcat.User.Newf("%s %s.%s has no interceptable port%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, ss)
 }
+
+type InterceptFinalizer func(ctx context.Context, interceptInfo *managerrpc.InterceptInfo) error
+
+type interceptState struct {
+	sync.Mutex
+	lastInfoCh  chan *managerrpc.InterceptInfo
+	finalizers  []InterceptFinalizer
+	interceptID string
+	clientCtx   context.Context
+}
+
+func newInterceptState(clientCtx context.Context, tmCtx context.Context, interceptID string) *interceptState {
+	is := &interceptState{
+		lastInfoCh:  make(chan *managerrpc.InterceptInfo),
+		interceptID: interceptID,
+		clientCtx:   clientCtx,
+	}
+	return is
+}
+
+func (is *interceptState) addFinalizer(finalizer InterceptFinalizer) {
+	is.Lock()
+	defer is.Unlock()
+	is.finalizers = append(is.finalizers, finalizer)
+}
+
+func (is *interceptState) terminate(interceptInfo *managerrpc.InterceptInfo) {
+	is.Lock()
+	defer is.Unlock()
+	for i := len(is.finalizers) - 1; i >= 0; i-- {
+		f := is.finalizers[i]
+		err := f(is.clientCtx, interceptInfo)
+		if err != nil {
+			dlog.Errorf(is.clientCtx, "Error cleaning up intercept %s: %v", is.interceptID, err)
+		}
+	}
+}
