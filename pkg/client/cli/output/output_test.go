@@ -96,7 +96,6 @@ func TestWithOutput(t *testing.T) {
 			t.Errorf("expected empty stderr, got: %s", stderr)
 		}
 	})
-
 	t.Run("json output with error", func(t *testing.T) {
 		expectedErr := "ERROR"
 		cmd, outBuf, _ := newCmdWithBufs()
@@ -131,6 +130,9 @@ func TestWithOutput(t *testing.T) {
 		cmd.LocalFlags().Bool("json", false, "")
 		_ = cmd.LocalFlags().Set("json", "true")
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			SetJSONStdout(ctx)
+
 			stdout := cmd.OutOrStdout()
 			_ = json.NewEncoder(stdout).Encode(expectedNativeJSONMap)
 			return nil
@@ -157,7 +159,8 @@ func TestWithOutput(t *testing.T) {
 		expectedJSONOutputBytes, _ := json.Marshal(expectedNativeJSONMap)
 
 		if string(jsonOutputBytes) != string(expectedJSONOutputBytes) {
-			t.Errorf("did not get expected stdout json, got: %+v", m["stdout"])
+			fmt.Printf("expected: %s", expectedJSONOutputBytes)
+			t.Errorf("did not get expected stdout json, got: %s", jsonOutputBytes)
 		}
 
 		stderr := errBuf.String()
@@ -211,56 +214,35 @@ func TestWithOutput(t *testing.T) {
 	})
 }
 
-func TestOutputs(t *testing.T) {
-	t.Run("no output in context", func(t *testing.T) {
-		ctx := context.Background()
-		stdout, stderr := Structured(ctx)
+func TestStructuredStreamer(t *testing.T) {
+	ctx := context.Background()
+	stdoutBuf := strings.Builder{}
+	o := output{
+		originalStdout: &stdoutBuf,
+		originalStderr: os.Stderr,
+		jsonEncoder:    json.NewEncoder(&stdoutBuf),
+	}
+	o.stdout = &streamerWriter{
+		output: &o,
+	}
+	o.stderr = &streamerWriter{
+		output: &o,
+	}
 
-		if stdout != os.Stdout {
-			t.Errorf("expected stdout to be os.Stdout")
-		}
+	ctx = context.WithValue(ctx, key{}, &o)
+	stdout, stderr := Structured(ctx)
 
-		if stderr != os.Stderr {
-			t.Errorf("expected stdout to be os.Stderr")
-		}
-	})
+	ss, ok := stdout.(StructuredStreamer)
+	if !ok {
+		t.Errorf("expected StructuredStreamer stdout")
+	}
+	_, ok = stderr.(StructuredStreamer)
+	if !ok {
+		t.Errorf("expected StructuredStreamer stdout")
+	}
 
-	t.Run("with output in context", func(t *testing.T) {
-		ctx := context.Background()
-		o := output{
-			stdoutBuf:  strings.Builder{},
-			stderrBuf:  strings.Builder{},
-			outputJSON: true,
-		}
-
-		ctx = context.WithValue(ctx, key{}, &o)
-		stdout, stderr := Structured(ctx)
-
-		if stdout != &o.stdoutBuf {
-			t.Errorf("got unexpected stdout")
-		}
-
-		if stderr != &o.stderrBuf {
-			t.Errorf("got unexpected stderr")
-		}
-	})
-
-	t.Run("with output in context no json", func(t *testing.T) {
-		ctx := context.Background()
-		o := output{
-			stdoutBuf: strings.Builder{},
-			stderrBuf: strings.Builder{},
-		}
-
-		ctx = context.WithValue(ctx, key{}, &o)
-		stdout, stderr := Structured(ctx)
-
-		if stdout != os.Stdout {
-			t.Errorf("got unexpected stdout")
-		}
-
-		if stderr != os.Stderr {
-			t.Errorf("got unexpected stderr")
-		}
-	})
+	ss.StructuredStream(map[string]string{"key": "value"}, errors.New("ERROR"))
+	if stdoutBuf.String() == "" {
+		t.Errorf("expected non empty output")
+	}
 }
