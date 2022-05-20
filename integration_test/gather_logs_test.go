@@ -102,6 +102,7 @@ func (s *singleServiceSuite) TestGatherLogs_OnlyMappedLogs() {
 	ctx := s.Context()
 	otherNS := fmt.Sprintf("other-ns-%s", s.Suffix())
 	itest.CreateNamespaces(ctx, otherNS)
+	defer itest.DeleteNamespaces(ctx, otherNS)
 	itest.ApplyEchoService(ctx, s.ServiceName(), otherNS, 8083)
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherNS, "--mount", "false", s.ServiceName())
 	s.Eventually(
