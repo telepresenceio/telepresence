@@ -181,7 +181,6 @@ func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writ
 			}
 		}
 	}
-
 }
 
 func DescribeIntercepts(iis []*manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
