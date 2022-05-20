@@ -44,6 +44,7 @@ func (s *interceptMountSuite) SetupSuite() {
 	port, s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", s.mountPoint, "--port", strconv.Itoa(port))
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
+	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 }
 
 func (s *interceptMountSuite) TearDownSuite() {
@@ -66,7 +67,7 @@ func (s *interceptMountSuite) TearDownSuite() {
 
 func (s *interceptMountSuite) Test_InterceptMount() {
 	if runtime.GOOS == "darwin" {
-		s.T().SkipNow()
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
 	}
 	require := s.Require()
 	ctx := s.Context()
@@ -79,6 +80,42 @@ func (s *interceptMountSuite) Test_InterceptMount() {
 	require.NoError(err, "Stat on <mount point> failed")
 	require.True(st.IsDir(), "Mount point is not a directory")
 	st, err = os.Stat(filepath.Join(s.mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+func (s *singleServiceSuite) Test_InterceptMountRelative() {
+	if runtime.GOOS == "darwin" {
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
+	}
+	if runtime.GOOS == "windows" {
+		s.T().Skip("Windows mount on driver letters. Relative mounts are not possible")
+	}
+	require := s.Require()
+
+	ctx := s.Context()
+	port, cancel := itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
+	defer cancel()
+
+	nwd, err := os.MkdirTemp("", "mount-") // Don't use the testing.Tempdir() because deletion is delayed.
+	require.NoError(err)
+	ctx = itest.WithWorkingDir(ctx, nwd)
+	stdout := itest.TelepresenceOk(ctx,
+		"intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", "rel-dir", "--port", strconv.Itoa(port))
+	defer func() {
+		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	}()
+	s.Contains(stdout, "Using Deployment "+s.ServiceName())
+
+	stdout = itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
+
+	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
+	mountPoint := filepath.Join(nwd, "rel-dir")
+	st, err := os.Stat(mountPoint)
+	require.NoError(err, "Stat on <mount point> failed")
+	require.True(st.IsDir(), "Mount point is not a directory")
+	st, err = os.Stat(filepath.Join(mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
