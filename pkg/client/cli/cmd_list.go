@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
 type listInfo struct {
@@ -22,7 +22,6 @@ type listInfo struct {
 	onlyInterceptable bool
 	debug             bool
 	namespace         string
-	snapshot          bool
 	watch             bool
 }
 
@@ -41,7 +40,6 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
-	flags.BoolVarP(&s.snapshot, "snapshot", "S", false, "print the full snapshot object")
 	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
 	return cmd
 }
@@ -72,12 +70,13 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			}
 		}
 
+		jsonOut := output.WantsJSONOutput(cmd.Flags())
 		if !s.watch {
 			r, err := cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 			if err != nil {
 				return err
 			}
-			s.printList(r.Workloads, stdout)
+			s.printList(r.Workloads, stdout, jsonOut)
 			return nil
 		}
 
@@ -91,15 +90,24 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			if err != nil {
 				return err
 			}
-			s.printList(r.Workloads, stdout)
+			s.printList(r.Workloads, stdout, jsonOut)
 		}
 	})
 }
 
-func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer) {
+func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer, jsonOut bool) {
+	var streamerOut output.StructuredStreamer
+
+	if jsonOut {
+		streamerOut, _ = stdout.(output.StructuredStreamer)
+		if streamerOut == nil {
+			panic("writer not output.StructuredStreamer")
+		}
+	}
+
 	if len(workloads) == 0 {
-		if s.snapshot {
-			fmt.Fprintln(stdout, "[]")
+		if jsonOut {
+			streamerOut.StructuredStream([]struct{}{}, nil)
 		} else {
 			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		}
@@ -121,13 +129,8 @@ func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writ
 		}
 	}
 
-	if s.snapshot {
-		msg, err := json.Marshal(workloads)
-		if err != nil {
-			fmt.Fprintf(stdout, "json marshal error: %v", err)
-		} else {
-			fmt.Fprintf(stdout, "%s", msg)
-		}
+	if jsonOut {
+		streamerOut.StructuredStream(workloads, nil)
 	} else {
 		includeNs := false
 		ns := s.namespace
