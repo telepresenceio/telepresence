@@ -22,7 +22,7 @@ type listInfo struct {
 	onlyInterceptable bool
 	debug             bool
 	namespace         string
-	json              bool
+	snapshot          bool
 	watch             bool
 }
 
@@ -41,7 +41,7 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
-	flags.BoolVarP(&s.json, "json", "j", false, "output as json array")
+	flags.BoolVarP(&s.snapshot, "snapshot", "S", false, "print the full snapshot object")
 	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
 	return cmd
 }
@@ -85,12 +85,6 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
-		/*
-			go func() {
-				<-ctx.Done()
-				stream.CloseSend()
-			}()
-		*/
 
 		for {
 			r, err := stream.Recv()
@@ -103,6 +97,15 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 }
 
 func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer) {
+	if len(workloads) == 0 {
+		if s.snapshot {
+			fmt.Fprintln(stdout, "[]")
+		} else {
+			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+		}
+		return
+	}
+
 	state := func(workload *connector.WorkloadInfo) string {
 		if iis := workload.InterceptInfos; len(iis) > 0 {
 			return DescribeIntercepts(iis, nil, s.debug)
@@ -118,16 +121,7 @@ func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writ
 		}
 	}
 
-	if len(workloads) == 0 {
-		if s.json {
-			fmt.Fprintln(stdout, "[]")
-		} else {
-			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
-		}
-		return
-	}
-
-	if s.json {
+	if s.snapshot {
 		msg, err := json.Marshal(workloads)
 		if err != nil {
 			fmt.Fprintf(stdout, "json marshal error: %v", err)
