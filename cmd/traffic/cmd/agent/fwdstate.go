@@ -14,7 +14,7 @@ import (
 
 type fwdState struct {
 	*simpleState
-	intercept  *agentconfig.Intercept
+	intercepts []*agentconfig.Intercept
 	forwarder  *forwarder.Forwarder
 	mountPoint string
 	env        map[string]string
@@ -22,18 +22,18 @@ type fwdState struct {
 
 // NewInterceptState creates a InterceptState that performs intercepts by using a forwarder.Forwarder. A forwarder will indiscriminately
 // intercept all traffic to the port that it forwards.
-func NewInterceptState(s State, forwarder *forwarder.Forwarder, intercept *agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
+func NewInterceptState(s State, forwarder *forwarder.Forwarder, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
 	return &fwdState{
 		simpleState: s.(*simpleState),
 		mountPoint:  mountPoint,
-		intercept:   intercept,
+		intercepts:  intercepts,
 		forwarder:   forwarder,
 		env:         env,
 	}
 }
 
-func (fs *fwdState) InterceptConfig() *agentconfig.Intercept {
-	return fs.intercept
+func (fs *fwdState) InterceptConfigs() []*agentconfig.Intercept {
+	return fs.intercepts
 }
 
 func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
@@ -56,8 +56,6 @@ func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, co
 
 func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
 	var myChoice, activeIntercept *manager.InterceptInfo
-
-	dlog.Debug(ctx, "HandleIntercepts called")
 
 	// Find the chosen intercept if it still exists
 	if fs.chosenIntercept != nil {

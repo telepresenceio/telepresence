@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/strings/slices"
 
@@ -34,13 +35,18 @@ type agentInjector struct {
 	terminating  int64
 }
 
-func getPod(req *admission.AdmissionRequest) (*core.Pod, error) {
+func getPod(req *admission.AdmissionRequest, isDelete bool) (*core.Pod, error) {
 	if req.Resource != podResource {
 		return nil, fmt.Errorf("expect resource to be %s, got %s", podResource, req.Resource)
 	}
 
 	// Parse the Pod object.
-	raw := req.Object.Raw
+	var raw []byte
+	if isDelete {
+		raw = req.OldObject.Raw
+	} else {
+		raw = req.Object.Raw
+	}
 	pod := core.Pod{}
 	if _, _, err := universalDeserializer.Decode(raw, nil, &pod); err != nil {
 		return nil, fmt.Errorf("could not deserialize pod object: %v", err)
@@ -67,23 +73,22 @@ func getPod(req *admission.AdmissionRequest) (*core.Pod, error) {
 }
 
 func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequest) (patchOps, error) {
-	if req.Operation == admission.Delete {
-		dlog.Debugf(ctx, "Skipping DELETE webhook for %s.%s", req.Name, req.Namespace)
-		return nil, nil
-	}
+	isDelete := req.Operation == admission.Delete
 	if atomic.LoadInt64(&a.terminating) > 0 {
 		dlog.Debugf(ctx, "Skipping webhook for %s.%s because the agent-injector is terminating", req.Name, req.Namespace)
 		return nil, nil
 	}
 
-	pod, err := getPod(req)
+	pod, err := getPod(req, isDelete)
 	if err != nil {
 		return nil, err
 	}
+	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
+
 	env := managerutil.GetEnv(ctx)
 
-	var config *agentconfig.Sidecar
 	ia := pod.Annotations[agentconfig.InjectAnnotation]
+	var config *agentconfig.Sidecar
 	switch ia {
 	case "false", "disabled":
 		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agentconfig.InjectAnnotation)
@@ -91,18 +96,39 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	case "", "enabled":
 		config, err = a.findConfigMapValue(ctx, pod, nil)
 		if err != nil {
+			if isDelete {
+				err = nil
+			}
 			return nil, err
 		}
-		if config == nil && ia == "" {
+		switch {
+		case config == nil && isDelete:
+			return nil, nil
+		case config == nil && ia == "":
 			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or %q annotation; skipping`,
 				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
-		}
-		if config != nil && config.Manual {
-			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
+		case config != nil && config.Manual:
+			if !isDelete {
+				dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
+			}
 			return nil, nil
 		}
-		if config, err = agentmap.GenerateForPod(ctx, pod, env.GeneratorConfig(a.getAgentImage(ctx))); err != nil {
+		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+		if err != nil {
+			if k8sErrors.IsNotFound(err) {
+				err = nil
+				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
+				if isDelete && config != nil {
+					err = a.agentConfigs.Delete(ctx, config.WorkloadName, config.Namespace)
+				}
+			}
+			return nil, err
+		}
+		if isDelete {
+			return nil, nil
+		}
+		if config, err = agentmap.Generate(ctx, wl, env.GeneratorConfig(a.getAgentImage(ctx))); err != nil {
 			return nil, err
 		}
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
@@ -141,6 +167,7 @@ func (a *agentInjector) getAgentImage(ctx context.Context) string {
 	defer a.Unlock()
 	if a.agentImage == "" {
 		a.agentImage = managerutil.GetAgentImage(ctx)
+		dlog.Infof(ctx, "using agent image %s", a.agentImage)
 	}
 	return a.agentImage
 }
@@ -476,22 +503,25 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 	}
 	var refs []meta.OwnerReference
 	if wl != nil {
-		ag := agentconfig.Sidecar{}
-		ok, err := a.agentConfigs.GetInto(wl.GetName(), wl.GetNamespace(), &ag)
-		if err != nil {
-			return nil, err
-		}
-		if ok && (ag.WorkloadKind == "" || ag.WorkloadKind == wl.GetKind()) {
-			return &ag, nil
-		}
 		refs = wl.GetOwnerReferences()
 	} else {
 		refs = pod.GetOwnerReferences()
 	}
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			wl, err := k8sapi.GetWorkload(ctx, or.Name, pod.GetNamespace(), or.Kind)
+			ag := agentconfig.Sidecar{}
+			ok, err := a.agentConfigs.GetInto(or.Name, pod.GetNamespace(), &ag)
 			if err != nil {
+				return nil, err
+			}
+			if ok && (ag.WorkloadKind == "" || ag.WorkloadKind == or.Kind) {
+				return &ag, nil
+			}
+			wl, err = k8sapi.GetWorkload(ctx, or.Name, pod.GetNamespace(), or.Kind)
+			if err != nil {
+				if k8sErrors.IsNotFound(err) {
+					return nil, nil
+				}
 				var uwkErr k8sapi.UnsupportedWorkloadKindError
 				if errors.As(err, &uwkErr) {
 					// There can only be one managing controller. If it's of an unsupported

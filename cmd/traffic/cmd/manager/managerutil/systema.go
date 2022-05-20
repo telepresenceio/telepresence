@@ -32,7 +32,6 @@ func GetAgentImage(ctx context.Context) string {
 	if agentImage == "" {
 		agentImage = env.QualifiedAgentImage()
 	}
-	dlog.Infof(ctx, "using agent image %s", agentImage)
 	return agentImage
 }
 

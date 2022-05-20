@@ -27,6 +27,7 @@ import (
 type Map interface {
 	GetInto(string, string, interface{}) (bool, error)
 	Run(context.Context) error
+	Delete(context.Context, string, string) error
 	Store(context.Context, *agentconfig.Sidecar, bool) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
 	UninstallV25(ctx context.Context)
@@ -57,7 +58,7 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 	}
 	wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to get %s %s.%s: %v", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, err)
+		return nil, nil, err
 	}
 	return ac, wl, nil
 }
@@ -66,6 +67,7 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
 		// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
 		// set must be scaled down and then up again.
+		dlog.Debugf(ctx, "Performing ReplicaSet rollout of %s.%s using scaling", wl.GetName(), wl.GetNamespace())
 		replicas := 1
 		if rp := rs.Spec.Replicas; rp != nil {
 			replicas = int(*rp)
@@ -80,6 +82,8 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
 				dlog.Errorf(ctx, "unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
 			}
+		} else {
+			dlog.Debugf(ctx, "ReplicaSet %s.%s has zero replicas so rollout was a no-op", wl.GetName(), wl.GetNamespace())
 		}
 		return
 	}
@@ -131,10 +135,12 @@ func (c *configWatcher) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case e := <-delCh:
-			dlog.Infof(ctx, "del %s.%s", e.name, e.namespace)
+			dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
 			ac, wl, err := e.workload(ctx)
 			if err != nil {
-				dlog.Error(ctx, err)
+				if !errors.IsNotFound(err) {
+					dlog.Error(ctx, err)
+				}
 				continue
 			}
 			if ac.Create || ac.Manual {
@@ -143,10 +149,12 @@ func (c *configWatcher) Run(ctx context.Context) error {
 			}
 			triggerRollout(ctx, wl)
 		case e := <-addCh:
-			dlog.Infof(ctx, "add %s.%s", e.name, e.namespace)
+			dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
 			ac, wl, err := e.workload(ctx)
 			if err != nil {
-				dlog.Error(ctx, err)
+				if !errors.IsNotFound(err) {
+					dlog.Error(ctx, err)
+				}
 				continue
 			}
 			if ac.Manual {
@@ -186,6 +194,35 @@ func (c *configWatcher) GetInto(key, ns string, into interface{}) (bool, error) 
 	return true, nil
 }
 
+// Delete will delete an agent config from the agents ConfigMap for the given namespace. It will
+// also update the current snapshot.
+// An attempt to delete a manually added config is a no-op
+func (c *configWatcher) Delete(ctx context.Context, name, namespace string) error {
+	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
+	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
+		}
+		return nil
+	}
+	yml, ok := cm.Data[name]
+	if !ok {
+		return nil
+	}
+	var ac agentconfig.Sidecar
+	if err = decode(yml, &ac); err != nil {
+		return err
+	}
+	if ac.Manual {
+		return nil
+	}
+	delete(cm.Data, name)
+	dlog.Debugf(ctx, "Deleting %s from ConfigMap %s.%s", name, agentconfig.ConfigMap, namespace)
+	_, err = api.Update(ctx, cm, meta.UpdateOptions{})
+	return err
+}
+
 // Store will store an agent config in the agents ConfigMap for the given namespace. It will
 // also update the current snapshot if the updateSnapshot is true. This update will prevent
 // the rollout that otherwise occur when the ConfigMap is updated.
@@ -194,10 +231,20 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 	if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
 		return err
 	}
+
 	yml := bf.String()
+	ns := ac.Namespace
+	c.RLock()
+	var eq bool
+	if nm, ok := c.data[ns]; ok {
+		eq = nm[ac.AgentName] == yml
+	}
+	c.RUnlock()
+	if eq {
+		return nil
+	}
 
 	create := false
-	ns := ac.Namespace
 	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
 	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
@@ -205,25 +252,30 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
 		}
 		create = true
+	} else {
+		// Ensure that we're not about to overwrite a manually added config entry
+		if currentYml, ok := cm.Data[ac.AgentName]; ok {
+			var currAc agentconfig.Sidecar
+			if err = decode(currentYml, &currAc); err == nil && currAc.Manual {
+				dlog.Warnf(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", ac.AgentName, ns)
+				return nil
+			}
+		}
+		if cm.Data == nil {
+			cm.Data = make(map[string]string)
+		}
+		if cm.Data[ac.AgentName] == yml {
+			// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
+			return nil
+		}
 	}
 
-	eq := false
-	c.Lock()
-	nm, ok := c.data[ns]
-	if ok {
-		if old, ok := nm[ac.AgentName]; ok {
-			eq = old == yml
+	if updateSnapshot {
+		c.Lock()
+		if nm, ok := c.data[ns]; ok {
+			nm[ac.AgentName] = yml
 		}
-	} else {
-		nm = make(map[string]string)
-		c.data[ns] = nm
-	}
-	if updateSnapshot && !eq {
-		nm[ac.AgentName] = yml
-	}
-	c.Unlock()
-	if eq {
-		return nil
+		c.Unlock()
 	}
 
 	if create {
@@ -240,12 +292,13 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 				ac.AgentName: yml,
 			},
 		}
-		dlog.Infof(ctx, "creating new ConfigMap %s.%s", agentconfig.ConfigMap, ns)
+		dlog.Debugf(ctx, "Creating new ConfigMap %s.%s with %s", agentconfig.ConfigMap, ns, ac.AgentName)
 		_, err = api.Create(ctx, cm, meta.CreateOptions{})
 	} else {
-		dlog.Infof(ctx, "updating ConfigMap %s.%s", agentconfig.ConfigMap, ns)
-		if cm.Data == nil {
-			cm.Data = make(map[string]string)
+		if _, ok := cm.Data[ac.AgentName]; ok {
+			dlog.Debugf(ctx, "Updating %s in ConfigMap %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
+		} else {
+			dlog.Debugf(ctx, "Adding %s to ConfigMap %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
 		}
 		cm.Data[ac.AgentName] = yml
 		_, err = api.Update(ctx, cm, meta.UpdateOptions{})
@@ -253,44 +306,71 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 	return err
 }
 
+func whereWeWatch(ns string) string {
+	if ns == "" {
+		return "cluster wide"
+	}
+	return "in namespace " + ns
+}
+
+func (c *configWatcher) watchConfigMap(ctx context.Context, ns string) {
+	dlog.Infof(ctx, "Started watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
+	defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
+
+	// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
+	// so when it closes, the watch must start over. This goes on until the context is cancelled.
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	for ctx.Err() == nil {
+		w, err := api.ConfigMaps(ns).Watch(ctx, meta.SingleObject(meta.ObjectMeta{
+			Name: agentconfig.ConfigMap,
+		}))
+		if err != nil {
+			dlog.Errorf(ctx, "unable to create configmap watcher: %v", err)
+			return
+		}
+		if !c.configMapEventHandler(ctx, w.ResultChan()) {
+			return
+		}
+	}
+}
+
+func (c *configWatcher) watchServices(ctx context.Context, ns string) {
+	dlog.Infof(ctx, "Started watcher for Services %s", whereWeWatch(ns))
+	defer dlog.Infof(ctx, "Ended watcher for Services %s", whereWeWatch(ns))
+
+	// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
+	// so when it closes, the watch must start over. This goes on until the context is cancelled.
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	for ctx.Err() == nil {
+		w, err := api.Services(ns).Watch(ctx, meta.ListOptions{})
+		if err != nil {
+			dlog.Errorf(ctx, "unable to create service watcher: %v", err)
+			return
+		}
+		if !c.svcEventHandler(ctx, w.ResultChan()) {
+			return
+		}
+	}
+}
+
 func (c *configWatcher) Start(ctx context.Context) (modCh <-chan entry, delCh <-chan entry, err error) {
 	c.Lock()
 	c.modCh = make(chan entry)
 	c.delCh = make(chan entry)
 	c.Unlock()
-
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	do := func(ns string) {
-		dlog.Infof(ctx, "Started watcher for ConfigMap %s.%s", agentconfig.ConfigMap, ns)
-		defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s.%s", agentconfig.ConfigMap, ns)
-
-		// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
-		// so when it closes, the watch must start over. This goes on until the context is cancelled.
-		for ctx.Err() == nil {
-			w, err := api.ConfigMaps(ns).Watch(ctx, meta.SingleObject(meta.ObjectMeta{
-				Name: agentconfig.ConfigMap,
-			}))
-			if err != nil {
-				dlog.Errorf(ctx, "unable to create watcher: %v", err)
-				return
-			}
-			if !c.eventHandler(ctx, w.ResultChan()) {
-				return
-			}
-		}
-	}
-
 	if len(c.namespaces) == 0 {
-		go do("")
+		go c.watchConfigMap(ctx, "")
+		go c.watchServices(ctx, "")
 	} else {
 		for _, ns := range c.namespaces {
-			go do(ns)
+			go c.watchConfigMap(ctx, ns)
+			go c.watchServices(ctx, ns)
 		}
 	}
 	return c.modCh, c.delCh, nil
 }
 
-func (c *configWatcher) eventHandler(ctx context.Context, evCh <-chan watch.Event) bool {
+func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan watch.Event) bool {
 	for {
 		select {
 		case <-ctx.Done():
@@ -302,16 +382,137 @@ func (c *configWatcher) eventHandler(ctx context.Context, evCh <-chan watch.Even
 			switch event.Type {
 			case watch.Deleted:
 				if m, ok := event.Object.(*core.ConfigMap); ok {
-					dlog.Infof(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
+					dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
 					c.update(ctx, m.Namespace, nil)
 				}
 			case watch.Added, watch.Modified:
 				if m, ok := event.Object.(*core.ConfigMap); ok {
-					dlog.Infof(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
+					dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
 					if m.Name != agentconfig.ConfigMap {
 						continue
 					}
 					c.update(ctx, m.Namespace, m.Data)
+				}
+			}
+		}
+	}
+}
+
+func (c *configWatcher) configsAffectedBySvcUID(ctx context.Context, nsData map[string]string, uid types.UID) []*agentconfig.Sidecar {
+	references := func(ac *agentconfig.Sidecar, uid types.UID) bool {
+		for _, cn := range ac.Containers {
+			for _, ic := range cn.Intercepts {
+				if ic.ServiceUID == uid {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	var affected []*agentconfig.Sidecar
+	for _, cfg := range nsData {
+		ac := &agentconfig.Sidecar{}
+		if err := decode(cfg, ac); err != nil {
+			dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", cfg)
+		} else if references(ac, uid) {
+			affected = append(affected, ac)
+		}
+	}
+	return affected
+}
+
+func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData map[string]string, wls []k8sapi.Workload) []*agentconfig.Sidecar {
+	var affected []*agentconfig.Sidecar
+	for _, wl := range wls {
+		if nsd, ok := nsData[wl.GetName()]; ok {
+			ac := &agentconfig.Sidecar{}
+			if err := decode(nsd, ac); err != nil {
+				dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", nsd)
+			} else {
+				affected = append(affected, ac)
+			}
+		}
+	}
+	return affected
+}
+
+func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []*agentconfig.Sidecar {
+	c.RLock()
+	defer c.RUnlock()
+	ns := svc.Namespace
+	nsData, ok := c.data[ns]
+	if !ok || len(nsData) == 0 {
+		return nil
+	}
+
+	if isDelete {
+		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
+	}
+
+	var wls []k8sapi.Workload
+	// Find workloads that the updated service is referencing.
+	selector := svc.Spec.Selector
+	if len(selector) > 0 {
+		if deps, err := k8sapi.Deployments(ctx, ns, selector); err == nil {
+			wls = append(wls, deps...)
+		}
+		if reps, err := k8sapi.ReplicaSets(ctx, ns, selector); err == nil {
+			wls = append(wls, reps...)
+		}
+		if stss, err := k8sapi.StatefulSets(ctx, ns, selector); err == nil {
+			wls = append(wls, stss...)
+		}
+	}
+	return c.configsAffectedByWorkloads(ctx, nsData, wls)
+}
+
+func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
+	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
+	// If so, include them, or if workload for the config entry isn't found, delete that entry
+	cfg := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	for _, ac := range c.affectedConfigs(ctx, svc, isDelete) {
+		wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
+				if err = c.Delete(ctx, ac.AgentName, ac.Namespace); err != nil {
+					dlog.Error(ctx, err)
+				}
+			} else {
+				dlog.Error(ctx, err)
+			}
+			continue
+		}
+		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
+		acn, err := agentmap.Generate(ctx, wl, cfg)
+		if err != nil {
+			dlog.Error(ctx, err)
+			continue
+		}
+		if err = c.Store(ctx, acn, false); err != nil {
+			dlog.Error(ctx, err)
+		}
+	}
+}
+
+func (c *configWatcher) svcEventHandler(ctx context.Context, evCh <-chan watch.Event) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case event, ok := <-evCh:
+			if !ok {
+				return true // restart watcher
+			}
+			switch event.Type {
+			case watch.Deleted:
+				if svc, ok := event.Object.(*core.Service); ok {
+					c.updateSvc(ctx, svc, true)
+				}
+			case watch.Added, watch.Modified:
+				if svc, ok := event.Object.(*core.Service); ok {
+					c.updateSvc(ctx, svc, false)
 				}
 			}
 		}
@@ -350,8 +551,12 @@ func (c *configWatcher) update(ctx context.Context, ns string, m map[string]stri
 		}
 	}
 	c.Unlock()
-	go writeToChan(ctx, dels, c.delCh)
-	go writeToChan(ctx, mods, c.modCh)
+	if len(dels) > 0 {
+		go writeToChan(ctx, dels, c.delCh)
+	}
+	if len(mods) > 0 {
+		go writeToChan(ctx, mods, c.modCh)
+	}
 }
 
 func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {

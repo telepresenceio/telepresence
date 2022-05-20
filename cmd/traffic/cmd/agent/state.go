@@ -30,7 +30,7 @@ type State interface {
 // An InterceptState implements what's needed to intercept one port.
 type InterceptState interface {
 	State
-	InterceptConfig() *agentconfig.Intercept
+	InterceptConfigs() []*agentconfig.Intercept
 	InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error)
 	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
 }
@@ -90,12 +90,14 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 	var rs []*manager.ReviewInterceptRequest
 	for _, ist := range s.interceptStates {
 		ms := make([]*manager.InterceptInfo, 0, len(iis))
-		ic := ist.InterceptConfig()
 		for _, ii := range iis {
-			if agentconfig.SpecMatchesIntercept(ii.Spec, ic) {
-				dlog.Debugf(ctx, "intercept id %s svc=%q, svcPort=%q matches config svc=%q, svcPort=%d",
-					ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort)
-				ms = append(ms, ii)
+			for _, ic := range ist.InterceptConfigs() {
+				if agentconfig.SpecMatchesIntercept(ii.Spec, ic) {
+					dlog.Debugf(ctx, "intercept id %s svc=%q, svcPort=%q matches config svc=%q, svcPort=%d",
+						ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort)
+					ms = append(ms, ii)
+					break // Break inner loop, we don't want to add ii more than once
+				}
 			}
 		}
 		rs = append(rs, ist.HandleIntercepts(ctx, ms)...)
@@ -124,7 +126,7 @@ func (s *simpleState) HandleIntercepts(ctx context.Context, iis []*manager.Inter
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
 	for _, is := range s.interceptStates {
-		if containerPort == 0 || containerPort == is.InterceptConfig().ContainerPort {
+		if containerPort == 0 || containerPort == is.InterceptConfigs()[0].ContainerPort {
 			return is.InterceptInfo(ctx, callerID, path, containerPort, headers)
 		}
 	}

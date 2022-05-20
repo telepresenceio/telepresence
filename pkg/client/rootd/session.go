@@ -4,17 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/blang/semver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dcontext"
@@ -377,7 +379,17 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 		for err == nil && ctx.Err() == nil {
 			mgrInfo, err := infoStream.Recv()
 			if err != nil {
-				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				if gErr, ok := status.FromError(err); ok {
+					switch gErr.Code() {
+					case codes.Canceled:
+						// The connector, which is routing this connection, cancelled it, which means that the client
+						// session is dead.
+						return
+					case codes.Unavailable:
+						// Abrupt shutdown. This is nothing that the session should survive
+						dlog.Errorf(ctx, "WatchClusterInfo recv: Unavailable: %v", gErr.Message())
+					}
+				} else {
 					dlog.Errorf(ctx, "WatchClusterInfo recv: %v", err)
 				}
 				break
@@ -399,8 +411,8 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 		}
 		dtime.SleepWithContext(ctx, backoff)
 		backoff *= 2
-		if backoff > 3*time.Second {
-			backoff = 3 * time.Second
+		if backoff > 15*time.Second {
+			backoff = 15 * time.Second
 		}
 	}
 }
@@ -449,8 +461,16 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 func (s *session) run(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
+	cancelDNSLock := sync.Mutex{}
+	cancelDNS := func() {}
+
 	cfgComplete := make(chan struct{})
 	g.Go("watch-cluster-info", func(ctx context.Context) error {
+		defer func() {
+			cancelDNSLock.Lock()
+			cancelDNS()
+			cancelDNSLock.Unlock()
+		}()
 		s.watchClusterInfo(ctx, cfgComplete)
 		return nil
 	})
@@ -467,7 +487,10 @@ func (s *session) run(c context.Context) error {
 	// 2. The TUN device is closed (by the stop method). This unblocks the routerWorker's pending read on the device.
 	// 3. The routerWorker terminates.
 	g.Go("dns", func(ctx context.Context) error {
-		defer s.stop(c)
+		defer s.stop(c) // using group parent context
+		cancelDNSLock.Lock()
+		ctx, cancelDNS = context.WithCancel(ctx)
+		cancelDNSLock.Unlock()
 		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
 	})
 	g.Go("router", s.routerWorker)
@@ -475,13 +498,16 @@ func (s *session) run(c context.Context) error {
 }
 
 func (s *session) stop(c context.Context) {
+	if !atomic.CompareAndSwapInt32(&s.closing, 0, 1) {
+		// Session already stopped (or is stopping)
+		return
+	}
 	dlog.Debug(c, "Brining down TUN-device")
 
 	s.scout.Report(c, "incluster_dns_queries",
 		scout.Entry{Key: "total", Value: s.dnsLookups},
 		scout.Entry{Key: "failures", Value: s.dnsFailures})
 
-	atomic.StoreInt32(&s.closing, 1)
 	cc, cancel := context.WithTimeout(c, time.Second)
 	defer cancel()
 	go func() {

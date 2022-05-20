@@ -173,7 +173,15 @@ func Main(ctx context.Context, args ...string) error {
 			if err != nil {
 				return err
 			}
-			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
+
+			// Group the containers intercepts by agent port
+			icStates := make(map[uint16][]*agentconfig.Intercept, len(cn.Intercepts))
+			for _, ic := range cn.Intercepts {
+				icStates[ic.AgentPort] = append(icStates[ic.AgentPort], ic)
+			}
+
+			for _, ics := range icStates {
+				ic := ics[0] // They all have the same agent port and container port, so the first one will do
 				lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", ic.AgentPort))
 				if err != nil {
 					return err
@@ -183,7 +191,7 @@ func Main(ctx context.Context, args ...string) error {
 					return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()))
 				})
 				cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
-				state.AddInterceptState(NewInterceptState(state, fwd, ic, cnMountPoint, env))
+				state.AddInterceptState(NewInterceptState(state, fwd, ics, cnMountPoint, env))
 			}
 		}
 
