@@ -214,15 +214,28 @@ func TestWithOutput(t *testing.T) {
 	})
 }
 
-func TestOutputs(t *testing.T) {
+func TestStructuredStreamer(t *testing.T) {
 	ctx := context.Background()
-	stdout, stderr := Structured(ctx)
-
-	if stdout != os.Stdout {
-		t.Errorf("expected stdout to be os.Stdout")
+	o := output{
+		originalStdout: os.Stdout,
+		originalStderr: os.Stderr,
+	}
+	o.stdout = &streamerWriter{
+		output: &o,
+	}
+	o.stderr = &streamerWriter{
+		output: &o,
 	}
 
-	if stderr != os.Stderr {
-		t.Errorf("expected stdout to be os.Stderr")
+	ctx = context.WithValue(ctx, key{}, &o)
+	stdout, stderr := Structured(ctx)
+
+	_, ok := stdout.(StructuredStreamer)
+	if !ok {
+		t.Errorf("expected StructuredStreamer stdout")
+	}
+	_, ok = stderr.(StructuredStreamer)
+	if !ok {
+		t.Errorf("expected StructuredStreamer stdout")
 	}
 }

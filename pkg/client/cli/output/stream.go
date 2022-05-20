@@ -1,7 +1,7 @@
 package output
 
 type StructuredStreamer interface {
-	StructuredStream(any, err error)
+	StructuredStream(v any, err error)
 }
 
 type streamerWriter struct {
