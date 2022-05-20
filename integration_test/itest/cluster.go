@@ -380,6 +380,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
+	dlog.Infof(ctx, "Capturing logs for pods %q", pods)
 	for _, pod := range strings.Split(pods, " ") {
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
