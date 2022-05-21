@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.3 (TBD)
+### 2.6.3 (May 20, 2022)
 
 - Bugfix: The `--mount` intercept flag now handles relative mount points correctly on non-windows platforms. Windows
   still require the argument to be a drive letter followed by a colon.
