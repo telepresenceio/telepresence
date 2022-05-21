@@ -79,10 +79,10 @@ func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License,
 	lb := license.BundleFromContext(ctx)
 	if lb == nil {
 		resp.ErrMsg = "license not found"
+	} else {
+		resp.License = lb.License()
+		resp.Host = lb.Host()
 	}
-
-	resp.License = lb.License()
-	resp.Host = lb.Host()
 
 	return &resp, nil
 }
