@@ -16,6 +16,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - services
+  verbs:
+  - update # Only needed for upgrade of older versions
+- apiGroups:
+  - ""
+  resources:
   - nodes
   - pods
   - services
@@ -59,6 +65,7 @@ rules:
   - get
   - list
   - patch
+  - update # Only needed for upgrade of older versions
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

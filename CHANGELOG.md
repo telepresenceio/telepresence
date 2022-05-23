@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.6.4 (TBD)
+
+- Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
+  permissions are needed when the traffic-manager upgrades from versions < 2.6.0 and can be revoked after the upgrade.
+
 ### 2.6.3 (May 20, 2022)
 
 - Bugfix: The `--mount` intercept flag now handles relative mount points correctly on non-windows platforms. Windows

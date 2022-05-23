@@ -23,6 +23,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - services
+  verbs:
+  - update # Only needed for upgrade of older versions
+- apiGroups:
+  - ""
+  resources:
   - pods
   - services
   verbs:
@@ -57,6 +63,7 @@ rules:
   - get
   - list
   - patch
+  - update # Only needed for upgrade of older versions
 {{- if eq . (include "telepresence.namespace" $) }}
 # Must be able to get the manager namespace in order to get the cluster-id
 - apiGroups:
