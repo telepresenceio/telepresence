@@ -1,0 +1,23 @@
+service:
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: app
+  spec:
+    ports:
+      - name: https
+        port: 8080
+      - name: grpc
+        port: 47555
+statefulset:
+  apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    name: app
+  spec:
+    template:
+      spec:
+        containers:
+          - name: app
+            imagePullPolicy: Always
+interceptPort: https

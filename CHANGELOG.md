@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.4 (TBD)
+### 2.6.4 (May 23, 2022)
 
 - Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
   permissions are needed when the traffic-manager upgrades from versions < 2.6.0 and can be revoked after the upgrade.
