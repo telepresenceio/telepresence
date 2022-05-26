@@ -3,22 +3,16 @@ package integration_test
 import (
 	"fmt"
 	"net"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
 func (s *connectedSuite) TestUDPEcho() {
 	ctx := s.Context()
 	require := s.Require()
 	svc := "udp-echo"
-	tag := s.Registry() + "/udp-test:" + strings.TrimPrefix(s.TelepresenceVersion(), "v")
-	testDir := filepath.Join("testdata", svc)
+	tag := "docker.io/thhal/udp-test:0.1.0"
 
-	require.NoError(itest.Run(ctx, "docker", "build", "-t", tag, testDir))
-	require.NoError(itest.Run(ctx, "docker", "push", tag))
 	require.NoError(s.Kubectl(ctx, "create", "deploy", svc, "--image", tag))
 	require.NoError(s.Kubectl(ctx, "expose", "deploy", svc, "--port", "80", "--protocol", "UDP", "--target-port", "8080"))
 	defer func() {
