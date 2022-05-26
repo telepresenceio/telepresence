@@ -25,14 +25,19 @@ func (s *connectedSuite) TestUDPEcho() {
 		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
 	}()
 	require.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
+
+	var conn net.Conn
 	require.Eventually(
 		func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
-			return strings.Contains(stdout, svc)
+			var err error
+			conn, err = net.Dial("udp", fmt.Sprintf("%s.%s:80", svc, s.AppNamespace()))
+			return err == nil
 		},
 		12*time.Second, // waitFor
 		3*time.Second,  // polling interval
-		`never included in list output`)
+		`dial never succeeds`)
+
+	defer conn.Close()
 
 	mb := strings.Builder{}
 	mb.WriteString("This is ")
@@ -40,13 +45,11 @@ func (s *connectedSuite) TestUDPEcho() {
 		mb.WriteString("a russian doll containing ")
 	}
 	mb.WriteString("a solid russian doll")
-	conn, err := net.Dial("udp", fmt.Sprintf("%s.%s:80", svc, s.AppNamespace()))
-	require.NoError(err)
 
 	buf := [0x10000]byte{}
 
 	echoTest := func(msg string) {
-		_, err = conn.Write([]byte(msg))
+		_, err := conn.Write([]byte(msg))
 		require.NoError(err)
 		require.NoError(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
 		n, err := conn.Read(buf[:])
