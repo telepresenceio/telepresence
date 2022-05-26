@@ -34,22 +34,17 @@ func (s *session) routerWorker(c context.Context) error {
 		}
 	}()
 
+	buf := buffer.NewData(0x10000)
 	for atomic.LoadInt32(&s.closing) < 2 {
-		data := buffer.DataPool.Get(buffer.DataPool.MTU)
-		for {
-			n, err := s.dev.ReadPacket(data)
-			if err != nil {
-				buffer.DataPool.Put(data)
-				if c.Err() != nil || atomic.LoadInt32(&s.closing) == 2 {
-					return nil
-				}
-				return fmt.Errorf("read packet error: %w", err)
+		n, err := s.dev.ReadPacket(buf)
+		if err != nil {
+			if c.Err() != nil || atomic.LoadInt32(&s.closing) == 2 {
+				return nil
 			}
-			if n > 0 {
-				data.SetLength(n)
-				bufCh <- data
-				break
-			}
+			return fmt.Errorf("read packet error: %w", err)
+		}
+		if n > 0 {
+			bufCh <- buffer.DataPool.Copy(buf, n)
 		}
 	}
 	return nil
@@ -96,7 +91,7 @@ func (s *session) handlePacket(c context.Context, data *buffer.Data) {
 			if data == nil {
 				return
 			}
-			v4Hdr = data.Buf()
+			ipHdr = ip.V4Header(data.Buf())
 		}
 	} // TODO: similar for ipv6 using segments
 
@@ -139,9 +134,9 @@ type vifWriter struct {
 }
 
 func (w vifWriter) Write(ctx context.Context, pkt ip.Packet) (err error) {
-	dlog.Tracef(ctx, "-> TUN %s", pkt)
 	d := pkt.Data()
 	l := len(d.Buf())
+	dlog.Tracef(ctx, "-> TUN %s, len %d", pkt, l)
 	o := 0
 	for {
 		var n int
