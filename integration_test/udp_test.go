@@ -38,13 +38,9 @@ func (s *connectedSuite) TestUDPEcho() {
 	mb.WriteString("This is ")
 	itm := "a russian doll containing "
 	count := 1000
-	switch runtime.GOOS {
-	case "darwin":
+	if runtime.GOOS == "darwin" {
 		// Max UDP message size is 9216 bytes
 		count = 9000 / len(itm)
-	case "windows":
-		// SO_MAX_MSG_SIZE == 8192
-		count = 8000 / len(itm)
 	}
 	for i := 0; i < count; i++ {
 		mb.WriteString(itm)

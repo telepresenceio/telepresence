@@ -76,13 +76,6 @@ func (s *session) handlePacket(c context.Context, data *buffer.Data) {
 		return
 	}
 
-	if ipHdr.PayloadLen() > buffer.DataPool.MTU-ipHdr.HeaderLen() {
-		// Packet is too large for us.
-		dlog.Error(c, "Packet exceeds MTU")
-		reply(icmp.DestinationUnreachablePacket(ipHdr, icmp.MustFragment))
-		return
-	}
-
 	if ipHdr.Version() == ipv4.Version {
 		v4Hdr := ipHdr.(ip.V4Header)
 		if v4Hdr.Flags()&ipv4.MoreFragments != 0 || v4Hdr.FragmentOffset() != 0 {
