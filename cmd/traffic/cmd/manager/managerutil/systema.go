@@ -2,9 +2,13 @@ package managerutil
 
 import (
 	"context"
+	"net"
+
+	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	systemarpc "github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -35,8 +39,41 @@ func GetAgentImage(ctx context.Context) string {
 	return agentImage
 }
 
+type UnauthdConnProvider struct {
+}
+
+func (p *UnauthdConnProvider) GetSystemaAddress(ctx context.Context) (string, error) {
+	env := GetEnv(ctx)
+	return net.JoinHostPort(env.SystemAHost, env.SystemAPort), nil
+}
+
+func (p *UnauthdConnProvider) GetAPIKey(ctx context.Context) (string, error) {
+	return "", nil
+}
+
+func (p *UnauthdConnProvider) GetInstallID(ctx context.Context) (string, error) {
+	return "", nil
+}
+
+func (p *UnauthdConnProvider) GetExtraHeaders(ctx context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+type unauthdClient struct {
+	systemarpc.SystemACRUDClient
+}
+
+func (c *unauthdClient) Close(ctx context.Context) error {
+	return nil
+}
+func (p *UnauthdConnProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (SystemaCRUDClient, error) {
+	client := systema.NewSystemACRUDClient(conn)
+	return &unauthdClient{client}, nil
+}
+
 func AgentImageFromSystemA(ctx context.Context) (string, error) {
-	systemaPool := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	// This is currently the only use case for the unauthenticated pool, but it's very important that we be able to get the image name
+	systemaPool := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
 		return "", err
