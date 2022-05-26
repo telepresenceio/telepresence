@@ -3,6 +3,7 @@ package integration_test
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -35,8 +36,18 @@ func (s *connectedSuite) TestUDPEcho() {
 
 	mb := strings.Builder{}
 	mb.WriteString("This is ")
-	for i := 0; i < 1000; i++ {
-		mb.WriteString("a russian doll containing ")
+	itm := "a russian doll containing "
+	count := 1000
+	switch runtime.GOOS {
+	case "darwin":
+		// Max UDP message size is 9216 bytes
+		count = 9000 / len(itm)
+	case "windows":
+		// SO_MAX_MSG_SIZE == 8192
+		count = 8000 / len(itm)
+	}
+	for i := 0; i < count; i++ {
+		mb.WriteString(itm)
 	}
 	mb.WriteString("a solid russian doll")
 
