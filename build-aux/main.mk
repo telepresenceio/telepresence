@@ -100,9 +100,24 @@ else
 	sdkroot=
 endif
 
+ifeq ($(GOHOSTOS),windows)
+WINTUN_VERSION=0.14.1
+$(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll:
+	mkdir -p $(BUILDDIR)
+	curl --fail -L https://www.wintun.net/builds/wintun-$(WINTUN_VERSION).zip -o $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip
+	rm -rf  $(BUILDDIR)/wintun-$(WINTUN_VERSION)
+	unzip $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip -d $(BUILDDIR)/wintun-$(WINTUN_VERSION)
+endif
+
 .PHONY: build-version build
+ifeq ($(GOHOSTOS),windows)
+build-version: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
+	mkdir -p $(BINDIR)
+	cp $< $(BINDIR)
+else
 build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
 	mkdir -p $(BINDIR)
+endif
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence/... || \
 		(git restore pkg/install/helm/telepresence-chart.tgz; exit 1) # in case the build fails
 
