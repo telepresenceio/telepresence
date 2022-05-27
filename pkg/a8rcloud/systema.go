@@ -21,8 +21,9 @@ const (
 )
 
 const (
-	TrafficManagerConnName = "traffic-manager"
-	UserdConnName          = "userd"
+	TrafficManagerConnName        = "traffic-manager"
+	UnauthdTrafficManagerConnName = "traffic-manager-unauth"
+	UserdConnName                 = "userd"
 )
 
 type Closeable interface {
@@ -152,7 +153,7 @@ func (c *systemACredentials) GetRequestMetadata(ctx context.Context, _ ...string
 	} else if installID != "" {
 		headers[InstallIDHeader] = installID
 	} else if _, ok := headers[ApiKeyHeader]; !ok {
-		return nil, fmt.Errorf("at least one of ApiKey and InstallID must return a non-empty string")
+		dlog.Warnf(ctx, "Issuing a systema request without ApiKey or InstallID may result in an error")
 	}
 	if extra, err := c.headers.GetExtraHeaders(ctx); err != nil {
 		return nil, err
