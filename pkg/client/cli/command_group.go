@@ -31,7 +31,7 @@ func init() {
 		if a == nil || b == nil {
 			return false
 		}
-		return a.Name == b.Name && a.Usage == b.Usage
+		return a.Name == b.Name && a.Usage == b.Usage && a.Hidden == b.Hidden
 	}
 
 	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {

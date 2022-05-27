@@ -4,6 +4,8 @@
 
 - Bugfix: UDP based communication with services in the cluster now works as expected.
 
+- Bugfix: The command help will only show Kubernetes flags on the commands that supports them
+
 ### 2.6.4 (May 23, 2022)
 
 - Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
