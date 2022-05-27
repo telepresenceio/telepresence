@@ -12,8 +12,8 @@ import (
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
 	"github.com/datawire/dlib/derror"
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
@@ -141,7 +141,7 @@ if ($job.State -ne 'Completed') {
 }
 $job | Receive-Job
 `, t.interfaceIndex, domain)
-	cmd := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
+	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
 	cmd.DisableLogging = true // disable chatty logging
 	dlog.Debugf(ctx, "Calling powershell's SetDNSDomain %q", domain)
 	if err := cmd.Run(); err != nil {
@@ -160,7 +160,7 @@ func maskToIP(mask net.IPMask) (ip net.IP) {
 
 func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
 	mask := maskToIP(route.RoutedNet.Mask)
-	cmd := dexec.CommandContext(ctx,
+	cmd := proc.CommandContext(ctx,
 		"route",
 		"ADD",
 		route.RoutedNet.IP.String(),
@@ -180,7 +180,7 @@ func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error 
 }
 
 func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
-	cmd := dexec.CommandContext(ctx,
+	cmd := proc.CommandContext(ctx,
 		"route",
 		"DELETE",
 		route.RoutedNet.IP.String(),

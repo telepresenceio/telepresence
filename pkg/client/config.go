@@ -940,8 +940,8 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 	}
 
 	// Sanity check
-	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "beta-app.datawire.io" {
-		return nil, errors.New("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "staging-app.datawire.io" {
+		return nil, errors.New("cloud.SystemaHost must be set to staging-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
 	}
 
 	return cfg, nil

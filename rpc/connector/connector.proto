@@ -82,8 +82,19 @@ service Connector {
 
   // ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
   // the cloud for default ingress values
-  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest) returns
-  (telepresence.userdaemon.IngressInfoResponse);
+  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest)
+      returns(telepresence.userdaemon.IngressInfoResponse);
+
+  // GatherLogs will acquire logs for the various Telepresence components in kubernetes
+  // (pending the request) and return them to the caller
+  rpc GatherLogs(LogsRequest) returns (LogsResponse);
+
+  // AddInterceptor tells the connector that a given process is serving a specific
+  // intercept. The connector must kill this process when the intercept ends
+  rpc AddInterceptor(Interceptor) returns  (google.protobuf.Empty);
+
+  // RemoveInterceptor removes a previously added interceptor
+  rpc RemoveInterceptor(Interceptor)  returns  (google.protobuf.Empty);
 }
 
 message CommandGroups {
@@ -109,6 +120,14 @@ message CommandGroups {
 
 message RunCommandRequest {
   repeated string os_args = 1;
+}
+
+message Interceptor {
+  // The ID of the intercept that is served by this interceptor process
+  string intercept_id = 1;
+
+  // The pid of the interceptor process
+  int32  pid = 2;
 }
 
 message RunCommandResponse {
@@ -155,15 +174,16 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
-  reserved 5;
-  reserved 6;
 
-  telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
-  reserved 9;
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+
+  reserved 5;
+  reserved 6;
+  reserved 7;
+  reserved 9;
 }
 
 message IngressInfos {
@@ -259,8 +279,8 @@ message WorkloadInfo {
   // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
   telepresence.manager.AgentInfo agent_info = 3;
 
-  // InterceptInfo reported from the traffic manager in case the workload is currently intercepted
-  telepresence.manager.InterceptInfo intercept_info = 4;
+  // InterceptInfos reported from the traffic manager in case the workload is currently intercepted
+  repeated telepresence.manager.InterceptInfo intercept_infos = 9;
 
   // Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
   string workload_resource_type = 5;
@@ -279,6 +299,8 @@ message WorkloadInfo {
   optional ServiceReference service = 7;
 
   string uid = 8;
+
+  reserved 4;
 }
 
 message WorkloadInfoSnapshot {
@@ -291,8 +313,7 @@ message InterceptResult {
   string error_text = 3;
   int32 error_category = 7;
 
-  // The environment of the app
-  map<string,string> environment = 4;
+  reserved 4;
 
   // The service uid associated with the workload intercepted
   string service_uid = 5;
@@ -362,4 +383,29 @@ message LicenseRequest {
 message LicenseData {
   string license = 1;
   string host_domain = 2;
+}
+
+message LogsRequest {
+  // Whether or not logs from the traffic-manager are desired.
+  bool traffic_manager = 1;
+
+  // Whether or not to get the pod yaml deployed to the cluster.
+  bool get_pod_yaml = 2;
+
+  // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
+  // or substring to filter based on pod names.
+  string agents = 3;
+
+  // Directory that the logs will be exported to
+  string export_dir = 4;
+}
+
+message LogsResponse {
+  // General error that isn't associated with a pod such as failing to list the pods.
+  string error = 1;
+
+  // pod_info contains one entry per created file name name. The value is either the string
+  // "ok" indicating that the file exists, or an error string with info why it could not
+  // be created.
+  map<string, string> pod_info = 2;
 }

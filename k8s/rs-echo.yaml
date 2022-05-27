@@ -32,7 +32,8 @@ spec:
         - name: rs-echo
           image: jmalloc/echo-server
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
           resources:
             limits:
               cpu: 50m

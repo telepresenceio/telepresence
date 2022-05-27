@@ -1,0 +1,27 @@
+# Example of a namespace scoped RBAC that can be applied in the traffic-manager namespace to
+# enable clients to establish a port-forward to the traffic-manager pod.
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  telepresence-test-connect
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: telepresence-test-connect
+subjects:
+  - name: telepresence-test-developer
+    kind: ServiceAccount
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  name: telepresence-test-connect
+  kind: Role

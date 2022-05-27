@@ -16,7 +16,6 @@ spec:
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
 ---
-{{- if .Values.agentInjector.create }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -32,5 +31,4 @@ spec:
     targetPort: https
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
-{{- end }}
 {{- end }}

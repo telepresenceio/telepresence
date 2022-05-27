@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dhttp"
@@ -41,7 +42,7 @@ func TestWrapAmbassadorCloudTunnel(t *testing.T) {
 		}
 		rawClient, err := grpc.DialContext(ctx,
 			fmt.Sprintf("127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port),
-			grpc.WithInsecure())
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, nil, err
 		}

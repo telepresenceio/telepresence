@@ -200,6 +200,10 @@ func initGlobalFlagGroups() {
 				"no-report", false,
 				"turn off anonymous crash reports and log submission on failure",
 			)
+			flags.String(
+				"output", "default",
+				"set the output format, supported values are 'json' and 'default'",
+			)
 			return flags
 		}(),
 	}}

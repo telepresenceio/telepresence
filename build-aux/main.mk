@@ -64,12 +64,13 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
 	mkdir -p $(BUILDDIR)
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external >$(BUILDDIR)/DEPENDENCIES.txt
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external \
+ 		--unparsable-packages build-aux/unparsable-packages.yaml >$(BUILDDIR)/DEPENDENCIES.txt
 	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[1-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
 	printf "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n\n" > DEPENDENCY_LICENSES.md
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
-		--output-type=json --application-type=external > $(BUILDDIR)/DEPENDENCIES.json
+		--output-type=json --application-type=external --unparsable-packages build-aux/unparsable-packages.yaml > $(BUILDDIR)/DEPENDENCIES.json
 	jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' $(BUILDDIR)/DEPENDENCIES.json > $(BUILDDIR)/LICENSES.txt
 	sed -e 's/\[\([^]]*\)]()/\1/' $(BUILDDIR)/LICENSES.txt >> DEPENDENCY_LICENSES.md
 
@@ -110,10 +111,6 @@ build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a tel
 build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
 	git restore pkg/install/helm/telepresence-chart.tgz
 
-# TODO remove the following two lines when we're passed the PR build barrier
-.PHONY: image
-image: tel2
-
 .PHONY: tel2-base tel2
 tel2-base tel2:
 	mkdir -p $(BUILDDIR)
@@ -123,6 +120,9 @@ tel2-base tel2:
 .PHONY: push-image
 push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+
+tel2-image: tel2
+	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
@@ -251,11 +251,11 @@ check-unit: ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-integration
-check-integration: ## (QA) Run the test suite
+check-integration: tools/bin/helm ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=39m ./integration_test/...
 
 .PHONY: _login
 _login:

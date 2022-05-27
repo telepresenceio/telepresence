@@ -7,6 +7,7 @@ import (
 	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -15,8 +16,24 @@ var userDaemonRunning = false
 var commandGroupMap = make(map[string]cliutil.CommandGroups)
 var globalFlagGroups []cliutil.FlagGroup
 var deprecatedGlobalFlags *pflag.FlagSet
+var kubeFlags *pflag.FlagSet
 
 func init() {
+	kubeFlags = pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeConfig := genericclioptions.NewConfigFlags(false)
+	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.AddFlags(kubeFlags)
+
+	flagEqual := func(a, b *pflag.Flag) bool {
+		if a == b {
+			return true
+		}
+		if a == nil || b == nil {
+			return false
+		}
+		return a.Name == b.Name && a.Usage == b.Usage
+	}
+
 	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {
 		return commandGroupMap[cmd.Name()]
 	})
@@ -25,6 +42,34 @@ func init() {
 	})
 	cobra.AddTemplateFunc("userDaemonRunning", func() bool {
 		return userDaemonRunning
+	})
+	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet {
+		ngFlags := pflag.NewFlagSet("local", pflag.ContinueOnError)
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			for _, g := range globalFlagGroups {
+				if flagEqual(flag, g.Flags.Lookup(flag.Name)) {
+					return
+				}
+			}
+			if flagEqual(flag, kubeFlags.Lookup(flag.Name)) {
+				return
+			}
+			ngFlags.AddFlag(flag)
+		})
+		return ngFlags
+	})
+	cobra.AddTemplateFunc("hasKubeFlags", func(cmd *cobra.Command) bool {
+		yep := true
+		flags := cmd.Flags()
+		kubeFlags.VisitAll(func(flag *pflag.Flag) {
+			if yep && !flagEqual(flag, flags.Lookup(flag.Name)) {
+				yep = false
+			}
+		})
+		return yep
+	})
+	cobra.AddTemplateFunc("kubeFlags", func() *pflag.FlagSet {
+		return kubeFlags
 	})
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
 		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
@@ -96,7 +141,11 @@ Available Commands{{- if not userDaemonRunning }} (list may be incomplete becaus
 {{- if .HasAvailableLocalFlags}}
 
 Flags:
-{{.LocalNonPersistentFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{if true}}
+{{flags . | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}
+{{- if hasKubeFlags .}}
+
+Kubernetes flags:
+{{kubeFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{if true}}
 
 Global Flags:{{range $group := globalFlagGroups}}
 

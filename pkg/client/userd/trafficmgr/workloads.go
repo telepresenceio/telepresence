@@ -16,14 +16,14 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 type workloadsAndServicesWatcher struct {
 	sync.Mutex
-	nsWatchers map[string]*namespacedWASWatcher
-	cond       sync.Cond
+	nsWatchers  map[string]*namespacedWASWatcher
+	nsListeners []func()
+	cond        sync.Cond
 }
 
 const deployments = 0
@@ -32,8 +32,8 @@ const statefulsets = 2
 
 // namespacedWASWatcher is watches Workloads And Services (WAS) for a namespace
 type namespacedWASWatcher struct {
-	svcWatcher *k8s.Watcher
-	wlWatchers [3]*k8s.Watcher
+	svcWatcher *k8sapi.Watcher
+	wlWatchers [3]*k8sapi.Watcher
 }
 
 // svcEquals compare only the Service fields that are of interest to Telepresence. They are
@@ -143,11 +143,11 @@ func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *
 	ki := k8sapi.GetK8sInterface(c)
 	appsGetter := ki.AppsV1().RESTClient()
 	w := &namespacedWASWatcher{
-		svcWatcher: k8s.NewWatcher("services", namespace, ki.CoreV1().RESTClient(), &core.Service{}, cond, svcEquals),
-		wlWatchers: [3]*k8s.Watcher{
-			k8s.NewWatcher("deployments", namespace, appsGetter, &apps.Deployment{}, cond, workloadEquals),
-			k8s.NewWatcher("replicasets", namespace, appsGetter, &apps.ReplicaSet{}, cond, workloadEquals),
-			k8s.NewWatcher("statefulsets", namespace, appsGetter, &apps.StatefulSet{}, cond, workloadEquals),
+		svcWatcher: k8sapi.NewWatcher("services", namespace, ki.CoreV1().RESTClient(), &core.Service{}, cond, svcEquals),
+		wlWatchers: [3]*k8sapi.Watcher{
+			k8sapi.NewWatcher("deployments", namespace, appsGetter, &apps.Deployment{}, cond, workloadEquals),
+			k8sapi.NewWatcher("replicasets", namespace, appsGetter, &apps.ReplicaSet{}, cond, workloadEquals),
+			k8sapi.NewWatcher("statefulsets", namespace, appsGetter, &apps.StatefulSet{}, cond, workloadEquals),
 		},
 	}
 	return w
@@ -264,7 +264,51 @@ func (w *workloadsAndServicesWatcher) setNamespacesToWatch(c context.Context, ns
 		}
 	}
 	for _, ns := range adds {
-		w.nsWatchers[ns] = newNamespaceWatcher(c, ns, &w.cond)
+		w.addNSLocked(c, ns)
+	}
+	w.Unlock()
+}
+
+func (w *workloadsAndServicesWatcher) addNSLocked(c context.Context, ns string) *namespacedWASWatcher {
+	nw := newNamespaceWatcher(c, ns, &w.cond)
+	w.nsWatchers[ns] = nw
+	for _, l := range w.nsListeners {
+		nw.svcWatcher.AddStateListener(&k8sapi.StateListener{Cb: l})
+	}
+	return nw
+}
+
+func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string, cb func(bool)) {
+	w.Lock()
+	defer w.Unlock()
+	nw, ok := w.nsWatchers[ns]
+	if !ok {
+		nw = w.addNSLocked(c, ns)
+	}
+	// Starting the svcWatcher will set it to active and also trigger its state listener
+	// which means a) that the set of active namespaces will change, and b) that the
+	// WatchAgentsNS will restart with that namespace included.
+	nw.svcWatcher.EnsureStarted(c, cb)
+}
+
+func (w *workloadsAndServicesWatcher) getActiveNamespaces() []string {
+	w.Lock()
+	nss := make([]string, 0, len(w.nsWatchers))
+	for ns, w := range w.nsWatchers {
+		if w.svcWatcher.Active() {
+			nss = append(nss, ns)
+		}
+	}
+	w.Unlock()
+	sort.Strings(nss)
+	return nss
+}
+
+func (w *workloadsAndServicesWatcher) addActiveNamespaceListener(l func()) {
+	w.Lock()
+	w.nsListeners = append(w.nsListeners, l)
+	for _, nw := range w.nsWatchers {
+		nw.svcWatcher.AddStateListener(&k8sapi.StateListener{Cb: l})
 	}
 	w.Unlock()
 }

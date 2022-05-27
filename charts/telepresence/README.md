@@ -1,7 +1,7 @@
 # Telepresence
 
-[Telepresence](https://www.getambassador.io/products/telepresence/) is a tool 
-that allows for local development of microservices running in a remote 
+[Telepresence](https://www.getambassador.io/products/telepresence/) is a tool
+that allows for local development of microservices running in a remote
 Kubernetes cluster.
 
 This chart manages the server-side components of Telepresence so that an
@@ -39,6 +39,7 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | nodeSelector             | Define which `Node`s you want to the Traffic Manager to be deployed to.                                                 | `{}`                                                                                              |
 | tolerations              | Define tolerations for the Traffic Manager to ignore `Node` taints.                                                     | `[]`                                                                                              |
 | affinity                 | Define the `Node` Affinity and Anti-Affinity for the Traffic Manager.                                                   | `{}`                                                                                              |
+| priorityClassName        | Name of the existing priority class to be used                                                                          | `""`                                                                                              |
 | service.type             | The type of `Service` for the Traffic Manager.                                                                          | `ClusterIP`                                                                                       |
 | resources                | Define resource requests and limits for the Traffic Manger.                                                             | `{}`                                                                                              |
 | logLevel                 | Define the logging level of the Traffic Manager                                                                         | `debug`                                                                                           |
@@ -48,10 +49,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | licenseKey.value         | The value of the license key.                                                                                           | `""`                                                                                              |
 | licenseKey.secret.create | Define whether you want the license key `Secret` to be managed by the release or not.                                   | `true`                                                                                            |
 | licenseKey.secret.name   | The name of the `Secret` that Traffic Manager will look for.                                                            | `systema-license`                                                                                 |
-| agentInjector.create   | Create the agentInjector objects that enables the traffic-manager deployment to act as a mutating webhook to add the agent to specified pods automatically (useful if you use GitOps style CD, like Argo).                                                                                                                                       | `true`                                                                                 |
 | agentInjector.name   | Name to use with objects associated with the agent-injector.                                                                 | `agent-injector`                                                                                 |
 | agentInjector.agentImage.registry | The registry for the injected agent image                                                                      |  `docker.io/datawire`                                                                             |
-| agentInjector.agentImage.name | The name of the injected agent image                                                                               |  `tel2`                                                                                           |
+| agentInjector.agentImage.name | The name of the injected agent image                                                                               |  `""`                                                                                           |
 | agentInjector.agentImage.tag | The tag for the injected agent image                                                                                |  `""` (Defined in `appVersion` Chart.yaml)                                                        |
 | agentInjector.appProtocolStrategy | The strategy to use when determining the application protocol to use for intercepts | `http2Probe` |
 | agentInjector.certificate.regenerate   | Define whether you want to regenerate certificate used for mutating webhook.                                                                             | `false`                                                                                 |
@@ -75,9 +75,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | telepresenceAPI.port     | The port on agent's localhost where the Telepresence API server can be found                              | |
 
 
-## License Key 
+## License Key
 
-Telepresence can create TCP intercepts without a license key. Creating 
+Telepresence can create TCP intercepts without a license key. Creating
 intercepts based on HTTP headers requires a license key from the Ambassador
 Cloud.
 
@@ -106,14 +106,14 @@ mounted in the Traffic Manager, regardless of it it is created by the chart
 
 ## RBAC
 
-Telepresence requires a cluster for installation but restricted RBAC roles can 
+Telepresence requires a cluster for installation but restricted RBAC roles can
 be used to give users access to create intercepts if they are not cluster
 admins.
 
 The chart gives you the ability to create these RBAC roles for your users and
 give access to the entire cluster or restrict to certain namespaces.
 
-You can also create a separate release for managing RBAC by setting 
+You can also create a separate release for managing RBAC by setting
 `Values.rbac.only: true`.
 
 ## Namespace-scoped traffic manager

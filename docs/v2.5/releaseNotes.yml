@@ -39,13 +39,131 @@ docDescription: >-
 changelog: https://github.com/telepresenceio/telepresence/blob/$branch$/CHANGELOG.md
 
 items:
-  - version: 2.5.4
-    date: "TBD"
+  - version: 2.5.8
+    date: "2022-04-27"
+    notes:
+      - type: bugfix
+        title: Folder creation on `telepresence login`
+        body: >-
+          Fixed a bug where the telepresence config folder would not be created if the user ran `telepresence login` before other commands.
+  - version: 2.5.7
+    date: "2022-04-25"
     notes:
       - type: change
-        title: Update status command output
+        title: RBAC requirements
         body: >-
-          The status command includes the install id, user id and account id in its result, and can print output as JSON.
+          A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
+      - type: bugfix
+        title: Windows DNS
+        body: >-
+          The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names that were resolved correctly at other times.
+      - type: bugfix
+        title: Session TTL and Reconnect
+        body: >-
+          A telepresence session will now last for 24 hours after the user's last connectivity. If a session expires, the connector will automatically try to reconnect.
+  - version: 2.5.6
+    date: "2022-04-18"
+    notes:
+      - type: change
+        title: Less Watchers
+        body: >-
+          Telepresence agents watcher will now only watch namespaces that the user has accessed since the last `connect`.
+      - type: bugfix
+        title: More Efficient `gather-logs`
+        body: >-
+          The `gather-logs` command will no longer send any logs through `gRPC`.
+  - version: 2.5.5
+    date: "2022-04-08"
+    notes:
+      - type: change
+        title: Traffic Manager Permissions
+        body: >-
+          The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
+      - type: bugfix
+        title: Linux DNS Cache
+        body: >-
+          The DNS resolver used on Linux with systemd-resolved now flushes the cache when the search path changes.
+      - type: bugfix
+        title: Automatic Connect Sync
+        body: >-
+          The `telepresence list` command will produce a correct listing even when not preceded by a `telepresence connect`.
+      - type: bugfix
+        title: Disconnect Reconnect Stability
+        body: >-
+          The root daemon will no longer get into a bad state when a disconnect is rapidly followed by a new connect.
+      - type: bugfix
+        title: Limit Watched Namespaces
+        body: >-
+          The client will now only watch agents from accessible namespaces, and is also constrained to namespaces explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
+      - type: bugfix
+        title: Limit Namespaces used in `gather-logs`
+        body: >-
+          The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
+  - version: 2.5.4
+    date: "2022-03-29"
+    notes:
+      - type: bugfix
+        title: Linux DNS Concurrency
+        body: >-
+          The DNS fallback resolver on Linux now correctly handles concurrent requests without timing them out
+      - type: bugfix
+        title: Non-Functional Flag
+        body: >-
+          The ingress-l5 flag will no longer be forcefully set to equal the --ingress-host flag
+      - type: bugfix
+        title: Automatically Remove Failed Intercepts
+        body: >-
+          Intercepts that fail to create are now consistently removed to prevent non-working dangling intercepts from sticking around.
+      - type: bugfix
+        title: Agent UID
+        body: >-
+          Agent container is no longer sensitive to a random UID or an UID imposed by a SecurityContext.
+      - type: bugfix
+        title: Gather-Logs Output Filepath
+        body: >-
+          Removed a bad concatenation that corrupted the output path of `telepresence gather-logs`.
+      - type: change
+        title: Remove Unnecessary Error Advice
+        body: >-
+          An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
+      - type: bugfix
+        title: Garbage Collection
+        body: >-
+          Client and agent sessions no longer leaves dangling waiters in the traffic-manager when they depart. 
+      - type: bugfix
+        title: Limit Gathered Logs
+        body: >-
+          The client's gather logs command and agent watcher will now respect the configured grpc.maxReceiveSize
+      - type: change
+        title: In-Cluster Checks
+        body: >-
+          The TUN device will no longer route pod or service subnets if it is running in a machine that's already connected to the cluster
+      - type: change
+        title: Expanded Status Command
+        body: >-
+          The status command includes the install id, user id, account id, and user email in its result, and can print output as JSON
+      - type: change
+        title: List Command Shows All Intercepts
+        body: >-
+          The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces
+  - version: 2.5.3
+    date: "2022-02-25"
+    notes:
+      - type: bugfix
+        title: TCP Connectivity
+        body: >-
+          Fixed bug in the TCP stack causing timeouts after repeated connects to the same address
+      - type: feature
+        title: Linux Binaries
+        body: >-
+          Client-side binaries for the arm64 architecture are now available for linux
+  - version: 2.5.2
+    date: "2022-02-23"
+    notes:
+      - type: bugfix
+        title: DNS server bugfix
+        body: >-
+          Fixed a bug where Telepresence would use the last server in resolv.conf
   - version: 2.5.1
     date: "2022-02-19"
     notes:
@@ -56,13 +174,6 @@ items:
   - version: 2.5.0
     date: "2022-02-18"
     notes:
-      - type: feature
-        title: Telepresence Pro Daemon
-        body: >-
-          Telepresence now supports a Telepresence Pro Daemon extension which
-          enables users to start intercepts via Ambassador Cloud.
-        docs: install/telepresence-pro
-        image: telepresence-2.5.0-pro-daemon.png
       - type: feature
         title: Intercept specific endpoints
         body: >-
@@ -75,12 +186,6 @@ items:
           The flag <code>--http-meta</code> can be used to declare metadata key value pairs that will be returned by the Telepresence rest
           API endpoint <code>/intercept-info</code>
         docs: reference/restapi#intercept-info
-      - type: change
-        title: --http-match renamed to --http-header
-        body: >-
-          The `telepresence intercept` command line flag <code>--http-match</code> was renamed to <code>--http-header</code>. The old flag
-          still works, but it is deprecated and doesn't show up in the help.
-        docs: concepts/intercepts#creating-and-using-personal-intercepts
       - type: change
         title: Client RBAC watch
         body: >-

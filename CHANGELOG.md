@@ -1,5 +1,113 @@
 # Changelog
 
+### 2.6.5 (TBD)
+
+- Bugfix: UDP based communication with services in the cluster now works as expected.
+
+### 2.6.4 (May 23, 2022)
+
+- Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
+  permissions are needed when the traffic-manager upgrades from versions < 2.6.0 and can be revoked after the upgrade.
+
+### 2.6.3 (May 20, 2022)
+
+- Bugfix: The `--mount` intercept flag now handles relative mount points correctly on non-windows platforms. Windows
+  still require the argument to be a drive letter followed by a colon.
+
+- Bugfix: The traffic-agent's configuration update automatically when services are added, updated or deleted.
+
+- Bugfix: Telepresence will now always inject an initContainer when the service's targetPort is numeric
+
+- Bugfix: Workloads that have several matching services pointing to the same target port are now handled correctly.
+
+- Bugfix: A potential race condition causing a panic when closing a DNS connection is now handled correctly.
+
+- Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
+
+### 2.6.2 (May 17, 2022)
+
+- Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.
+
+- Bugfix: Multiple services appointing the same container port no longer result in duplicated ports in an injected pod.
+
+- Bugfix: The `telepresence list` command no longer errors out with "grpc: received message larger than max" when listing namespaces
+  with a large number of workloads.
+
+### 2.6.1 (May 16, 2022)
+
+- Bugfix: Telepresence will now handle multiple path entries in the KUBECONFIG environment correctly.
+
+- Bugfix: Telepresence will no longer panic when using preview URLs with traffic-managers < 2.6.0
+
+- Change: Traffic-manager now attempts to obtain a cluster id from the license if it could not obtain it from the Kubernetes API.
+
+### 2.6.0 (May 13, 2022)
+
+- Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
+
+- Feature: Telepresence client now require less RBAC permissions in order to intercept.
+
+- Change: All pod-injection is performed by the mutating webhook. Client will no longer modify workloads.
+
+- Change: Traffic-agent is configured using a ConfigMap entry. In prior versions, the configuration was passed in the container environment.
+
+- Change: The helm-chart no longer has a default set for the agentInjector.image.name, and unless its set, the traffic-manager will ask
+  SystemA for the preferred image.
+
+- Change: Client no longer needs RBAC permissions to update deployments, replicasets, and statefulsets.
+
+- Change: Telepresence now uses Helm version 3.8.1 when installing the traffic-manager
+
+- Change: The traffic-manager will not accept connections from clients older than 2.6.0. It can't, because they still use the old way of
+  injecting the agent by modifying the workload.
+
+- Change: When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically. The mutating webhook will
+  then ensure that their pods will receive an updated traffic-agent.
+
+- Bugfix: Remote mounts will now function correctly with custom `securityContext`.
+
+- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group.
+
+- Bugfix: Using `telepresence leave` or `telepresence quit` on an intercept that spawned a command using `--` on the command line
+  will now terminate that command since it's considered parented by the intercept that is removed.
+
+- Change: Add support for structured output as JSON by setting the global --output=json flag.
+
+### 2.5.8 (April 27, 2022)
+
+- Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.
+
+### 2.5.7 (April 25, 2022)
+
+- Change: A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
+
+- Bugfix: The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names
+  that were resolved correctly at other times.
+
+- Bugfix: A telepresence session will now last for 24 hours after the user's last connectivity. If a session expires, the connector will automatically try to reconnect.
+
+### 2.5.6 (April 15, 2022)
+
+- Bugfix: The `gather-logs` command will no longer send any logs through `gRPC`.
+
+- Change: Telepresence agents watcher will now only watch namespaces that the user has accessed since the last `connect`.
+
+### 2.5.5 (April 8, 2022)
+
+- Change: The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
+
+- Bugfix: The DNS resolver used on Linux with systemd-resolved now flushes the cache when the search path changes.
+
+- Bugfix: The `telepresence list` command will produce a correct listing even when not preceded by a `telepresence connect`.
+
+- Bugfix: The root daemon will no longer get into a bad state when a disconnect is rapidly followed by a new connect.
+
+- Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces explicitly mapped
+  using the `connect` command's `--mapped-namespaces` flag.
+
+- Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
+  explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
+
 ### 2.5.4 (March 29, 2022)
 
 - Change: The list command, when used with the `--intercepts` flag, will list the users intercepts from all namespaces

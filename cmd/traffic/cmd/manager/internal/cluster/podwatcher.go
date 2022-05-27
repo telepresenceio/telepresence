@@ -7,7 +7,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	licorev1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
@@ -15,33 +14,43 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
-type podWatcher struct {
-	lister   licorev1.PodLister
-	informer cache.SharedIndexInformer
-	ipsMap   map[iputil.IPKey]struct{}
-	subnets  subnet.Set
-	changed  time.Time
-	lock     sync.Mutex // Protects all access to ipsMap
+// PodLister helps list Pods.
+// All objects returned here must be treated as read-only.
+type PodLister interface {
+	// List lists all Pods in the indexer.
+	// Objects returned here must be treated as read-only.
+	List(selector labels.Selector) (ret []*corev1.Pod, err error)
 }
 
-func newPodWatcher(ctx context.Context, lister licorev1.PodLister, informer cache.SharedIndexInformer) *podWatcher {
+type podWatcher struct {
+	listers   []PodLister
+	informers []cache.SharedIndexInformer
+	ipsMap    map[iputil.IPKey]struct{}
+	subnets   subnet.Set
+	changed   time.Time
+	lock      sync.Mutex // Protects all access to ipsMap
+}
+
+func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.SharedIndexInformer) *podWatcher {
 	w := &podWatcher{
-		lister:   lister,
-		informer: informer,
-		ipsMap:   make(map[iputil.IPKey]struct{}),
-		subnets:  make(subnet.Set),
+		listers:   listers,
+		informers: informers,
+		ipsMap:    make(map[iputil.IPKey]struct{}),
+		subnets:   make(subnet.Set),
 	}
-	w.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			w.onPodAdded(ctx, obj.(*corev1.Pod))
-		},
-		DeleteFunc: func(obj interface{}) {
-			w.onPodDeleted(ctx, obj.(*corev1.Pod))
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
-		},
-	})
+	for _, informer := range informers {
+		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				w.onPodAdded(ctx, obj.(*corev1.Pod))
+			},
+			DeleteFunc: func(obj interface{}) {
+				w.onPodDeleted(ctx, obj.(*corev1.Pod))
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
+			},
+		})
+	}
 	return w
 }
 
@@ -95,17 +104,18 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	pods, err := w.lister.List(labels.Everything())
-	if err != nil {
-		dlog.Errorf(ctx, "unable to list pods: %v", err)
-		return false
-	}
-
 	// Create the initial snapshot
 	changed := false
-	for _, pod := range pods {
-		if w.addLocked(podIPKeys(ctx, pod)) {
-			changed = true
+	for _, lister := range w.listers {
+		pods, err := lister.List(labels.Everything())
+		if err != nil {
+			dlog.Errorf(ctx, "unable to list pods: %v", err)
+			return false
+		}
+		for _, pod := range pods {
+			if w.addLocked(podIPKeys(ctx, pod)) {
+				changed = true
+			}
 		}
 	}
 	w.changed = time.Now()

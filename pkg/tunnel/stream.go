@@ -79,7 +79,11 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 			if err != nil {
 				close(msgCh) // Must close before posting the error to avoid potential deadlock
 				if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
-					errCh <- fmt.Errorf("!! %s %s, read from grpc.ClientStream failed", s.Tag(), s.ID())
+					err = fmt.Errorf("!! %s %s, read from grpc.ClientStream failed", s.Tag(), s.ID())
+					select {
+					case errCh <- err:
+					default:
+					}
 				}
 				return
 			}

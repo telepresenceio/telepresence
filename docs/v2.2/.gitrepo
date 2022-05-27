@@ -5,8 +5,8 @@
 ;
 [subrepo]
 	remote = https://github.com/telepresenceio/docs
-	branch = release/v2.2
+	branch = josecortes/from-telepresence.io-2022-05-10/release/v2.2
 	commit = 4545df38c5fd7f809e3ab46c0daec775b93308f0
-	parent = 12685f0268280af7eb2719a92ff3b255039ea424
+	parent = 23ece7a7c69fb839a8914cedc0091fef613db1d2
 	method = merge
 	cmdver = 0.4.3

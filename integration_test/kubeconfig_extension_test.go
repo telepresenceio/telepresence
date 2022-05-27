@@ -100,7 +100,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		require.NoError(err)
 		return map[string]interface{}{"never-proxy": []string{ip + "/32"}}
 	})
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
 
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
@@ -123,15 +123,15 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 }
 
 func (s *notConnectedSuite) Test_ConflictingProxies() {
-	topCtx := s.Context()
-	itest.TelepresenceQuitOk(topCtx)
+	ctx := s.Context()
+	itest.TelepresenceQuitOk(ctx)
 
 	testIP := &net.IPNet{
 		IP:   net.ParseIP("10.128.0.32"),
 		Mask: net.CIDRMask(32, 32),
 	}
 	// We don't really care if we can't route this with TP disconnected provided the result is the same once we connect
-	originalRoute, _ := routing.GetRoute(topCtx, testIP)
+	originalRoute, _ := routing.GetRoute(ctx, testIP)
 	for name, t := range map[string]struct {
 		alsoProxy  []string
 		neverProxy []string
@@ -150,13 +150,13 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	} {
 		s.Run(name, func() {
 			require := s.Require()
-			ctx := itest.WithKubeConfigExtension(topCtx, func(cluster *api.Cluster) map[string]interface{} {
+			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
 				return map[string]interface{}{
 					"never-proxy": t.neverProxy,
 					"also-proxy":  t.alsoProxy,
 				}
 			})
-			itest.TelepresenceOk(ctx, "connect")
+			itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 			defer itest.TelepresenceQuitOk(ctx)
 			s.Eventually(func() bool {
 				return itest.Run(ctx, "curl", "--silent", "-k", "--max-time", "0.5", "https://kubernetes.default:443") == nil
@@ -192,7 +192,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	require.NoError(err)
 	logFile := filepath.Join(logDir, "daemon.log")
 
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
 
 	retryCount := 0
@@ -201,7 +201,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 		host := fmt.Sprintf("zwslkjsdf-%d.org", retryCount)
 		short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		defer cancel()
-		_ = itest.Run(short, "curl", "--silent", "--connect-timeout", "0.5", host)
+		_, _ = net.DefaultResolver.LookupIPAddr(short, host)
 
 		// Give query time to reach telepresence and produce a log entry
 		dtime.SleepWithContext(ctx, 100*time.Millisecond)

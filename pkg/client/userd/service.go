@@ -2,6 +2,7 @@ package userd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
@@ -158,6 +160,7 @@ nextSession:
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices)
+				sCtx = a8rcloud.WithSystemAPool[*SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.sessionCancel = sCancel
@@ -186,22 +189,40 @@ nextSession:
 		// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
 		// the session is running. The s.sessionCancel is called from Disconnect
 		wg.Add(1)
-		go func() {
+		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
 			if err := s.session.Run(s.sessionContext); err != nil {
+				if errors.Is(err, trafficmgr.SessionExpiredErr) {
+					// Session has expired. We need to cancel the owner session and reconnect
+					dlog.Info(c, "refreshing session")
+					s.cancelSession()
+					select {
+					case <-c.Done():
+					case s.connectRequest <- cr:
+					}
+					return
+				}
+
 				dlog.Error(c, err)
 			}
-		}()
+		}(cr)
 	}
 	wg.Wait()
 	return nil
 }
 
-func (s *service) cancelSession() {
-	s.sessionLock.RLock()
+func (s *service) cancelSessionReadLocked() {
 	if s.sessionCancel != nil {
+		if err := s.session.ClearIntercepts(s.sessionContext); err != nil {
+			dlog.Errorf(s.sessionContext, "failed to clear intercepts: %v", err)
+		}
 		s.sessionCancel()
 	}
+}
+
+func (s *service) cancelSession() {
+	s.sessionLock.RLock()
+	s.cancelSessionReadLocked()
 	s.sessionLock.RUnlock()
 
 	// We have to cancel the session before we can acquire this write-lock, because we need any long-running RPCs
@@ -268,16 +289,6 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		ShutdownOnNonError:   true,
 	})
 
-	quitOnce := sync.Once{}
-	s.quit = func() {
-		quitOnce.Do(func() {
-			g.Go("quit", func(_ context.Context) error {
-				cliio.Close()
-				return nil
-			})
-		})
-	}
-
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		opts := []grpc.ServerOption{}
 		cfg := client.GetConfig(c)
@@ -311,7 +322,9 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		return s.manageSessions(c, sessionServices)
+		err := s.manageSessions(c, sessionServices)
+		cliio.Close()
+		return err
 	})
 
 	// background-systema runs a localhost HTTP server for handling callbacks from the

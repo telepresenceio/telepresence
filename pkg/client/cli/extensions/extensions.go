@@ -312,6 +312,7 @@ func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
 
 // AgentImage returns the repository/name combination that will be assigned to the container
 // image attribute.
+// Deprecated: The image to  use is determined by the traffic-manager
 func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if ai := cfg.Images.AgentImage(ctx); ai != "" {
@@ -433,7 +434,6 @@ type FlagInfo struct {
 	// specified then the zero value is used.
 	Default json.RawMessage `json:"default,omitempty"`
 
-	//nolint:gocritic // this is not a deprecation comment
 	// Deprecated is set if the flag is deprecated in favor of something else. Deprecation
 	// means that the flag retains its original function, is hidden from help, and that using it will
 	// display this field as a warning.

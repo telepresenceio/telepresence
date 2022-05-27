@@ -73,6 +73,14 @@ type ConnectorClient interface {
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error)
+	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
+	// (pending the request) and return them to the caller
+	GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
+	// AddInterceptor tells the connector that a given process is serving a specific
+	// intercept. The connector must kill this process when the intercept ends
+	AddInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// RemoveInterceptor removes a previously added interceptor
+	RemoveInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type connectorClient struct {
@@ -327,6 +335,33 @@ func (c *connectorClient) ResolveIngressInfo(ctx context.Context, in *userdaemon
 	return out, nil
 }
 
+func (c *connectorClient) GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error) {
+	out := new(LogsResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GatherLogs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) AddInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/AddInterceptor", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RemoveInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RemoveInterceptor", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -382,6 +417,14 @@ type ConnectorServer interface {
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error)
+	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
+	// (pending the request) and return them to the caller
+	GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error)
+	// AddInterceptor tells the connector that a given process is serving a specific
+	// intercept. The connector must kill this process when the intercept ends
+	AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
+	// RemoveInterceptor removes a previously added interceptor
+	RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -454,6 +497,15 @@ func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandReque
 }
 func (UnimplementedConnectorServer) ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
+}
+func (UnimplementedConnectorServer) GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GatherLogs not implemented")
+}
+func (UnimplementedConnectorServer) AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddInterceptor not implemented")
+}
+func (UnimplementedConnectorServer) RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveInterceptor not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -870,6 +922,60 @@ func _Connector_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_GatherLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GatherLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GatherLogs",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GatherLogs(ctx, req.(*LogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_AddInterceptor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Interceptor)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).AddInterceptor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/AddInterceptor",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).AddInterceptor(ctx, req.(*Interceptor))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RemoveInterceptor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Interceptor)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RemoveInterceptor(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/RemoveInterceptor",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RemoveInterceptor(ctx, req.(*Interceptor))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -956,6 +1062,18 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolveIngressInfo",
 			Handler:    _Connector_ResolveIngressInfo_Handler,
+		},
+		{
+			MethodName: "GatherLogs",
+			Handler:    _Connector_GatherLogs_Handler,
+		},
+		{
+			MethodName: "AddInterceptor",
+			Handler:    _Connector_AddInterceptor_Handler,
+		},
+		{
+			MethodName: "RemoveInterceptor",
+			Handler:    _Connector_RemoveInterceptor_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

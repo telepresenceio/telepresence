@@ -28,7 +28,7 @@ brew install datawire/blackbird/telepresence
 
 # OR Install manually:
 # 1. Download the latest binary (~60 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/2.4.11/telepresence \
 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
@@ -44,7 +44,7 @@ brew install datawire/blackbird/telepresence-arm64
 
 # OR Install manually:
 # 1. Download the latest binary (~60 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2/darwin/arm64/latest/telepresence \
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/arm64/2.4.11/telepresence \
 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
@@ -65,7 +65,7 @@ login`](../../reference/client/login/).
 
 ```shell
 # 1. Download the latest binary (~50 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
+sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/2.4.11/telepresence \
 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:

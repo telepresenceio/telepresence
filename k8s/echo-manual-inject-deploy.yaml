@@ -18,5 +18,5 @@ spec:
         - name: echo-container
           image: jmalloc/echo-server
           ports:
-            - containerPort: 8080
+            - containerPort: 80
           resources: {}

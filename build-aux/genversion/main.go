@@ -17,15 +17,25 @@ package main
 import (
 	"fmt"
 	"os"
+
+	//nolint:depguard // This short script has no logging and no Contexts.
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
-	//nolint:depguard // This short script has no logging and no Contexts.
-	"os/exec"
-
 	"github.com/blang/semver"
 )
+
+// isReleased returns true if a release tag exist for the given version
+// A release tag is a tag that represents a semver version, without pre-version
+// or build suffixes, that is prefixed with "v", e.g. "v1.2.3" is considered
+// a release tag whereas "v1.2.3-rc.3" isn't.
+func isReleased(v semver.Version) bool {
+	v.Build = nil
+	v.Pre = nil
+	return exec.Command("git", "describe", "v"+v.String()).Run() == nil
+}
 
 func Main() error {
 	cmd := exec.Command("git", "describe", "--tags", "--match=v*")
@@ -39,7 +49,11 @@ func Main() error {
 	if err != nil {
 		return fmt.Errorf("unable to parse semver %s: %w", gitDescStr, err)
 	}
-	gitDescVer.Patch++
+
+	// Bump to next patch version only if the version has been released.
+	if isReleased(gitDescVer) {
+		gitDescVer.Patch++
+	}
 
 	// If an additional arg has been used, we include it in the tag
 	if len(os.Args) >= 2 {

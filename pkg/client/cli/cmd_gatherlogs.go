@@ -15,9 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -62,7 +61,7 @@ telepresence gather-logs --daemons=None
 `,
 
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return gl.gatherLogs(cmd.Context(), cmd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return gl.gatherLogs(cmd.Context(), cmd)
 		},
 	}
 	flags := cmd.Flags()
@@ -85,7 +84,7 @@ type anonymizer struct {
 }
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
-func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, stdout, stderr io.Writer) error { //nolint:gocognit
+func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command) error {
 	scout := scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 	defer scout.Close()
@@ -96,10 +95,6 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		return errcat.User.New(err)
 	}
 
-	anonymizer := &anonymizer{
-		namespaces: make(map[string]string),
-		podNames:   make(map[string]string),
-	}
 	// If the user did not provide an outputFile, we'll use their current working directory
 	if gl.outputFile == "" {
 		pwd, err := os.Getwd()
@@ -119,7 +114,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	}
 	defer func() {
 		if err := os.RemoveAll(exportDir); err != nil {
-			fmt.Fprintf(stderr, "Failed to remove temp directory %s: %s", exportDir, err)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Failed to remove temp directory %s: %s", exportDir, err)
 		}
 	}()
 
@@ -147,6 +142,22 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 	scout.SetMetadatum(ctx, "anonymized_logs", gl.anon)
 	scout.Report(ctx, "used_gather_logs")
 
+	var az *anonymizer
+	if gl.anon {
+		az = &anonymizer{
+			namespaces: make(map[string]string),
+			podNames:   make(map[string]string),
+		}
+	}
+
+	// Since getting the logs from k8s requires the connector, let's only do this
+	// work if we know the user wants to get logs from k8s.
+	// We gather those logs before we gather the connector.log so that problems that
+	// may occur during that process will be included in the connector.log
+	if gl.trafficManager || gl.trafficAgents != "None" {
+		gl.gatherClusterLogs(ctx, cmd, exportDir, az)
+	}
+
 	// Get all logs from the logDir that match the daemons the user cares about.
 	logFiles, err := os.ReadDir(logDir)
 	if err != nil {
@@ -163,7 +174,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 				// The cli.log is often empty, so this check is relevant.
 				empty, err := isEmpty(srcFile)
 				if err != nil {
-					fmt.Fprintf(stderr, "failed stat on %s: %s\n", entry.Name(), err)
+					fmt.Fprintf(cmd.ErrOrStderr(), "failed stat on %s: %s\n", entry.Name(), err)
 					continue
 				}
 				if empty {
@@ -173,51 +184,10 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 				if err := copyFiles(dstFile, srcFile); err != nil {
 					// We don't want to fail / exit abruptly if we can't copy certain
 					// files, but we do want the user to know we were unsuccessful
-					fmt.Fprintf(stderr, "failed exporting %s: %s\n", entry.Name(), err)
+					fmt.Fprintf(cmd.ErrOrStderr(), "failed exporting %s: %s\n", entry.Name(), err)
 					continue
 				}
 			}
-		}
-	}
-
-	// Since getting the logs from k8s requires the connector, let's only do this
-	// work if we know the user wants to get logs from k8s.
-	if gl.trafficManager || gl.trafficAgents != "None" {
-		// To get logs from the components in the kubernetes cluster, we ask the
-		// traffic-manager.
-		rq := &manager.GetLogsRequest{
-			TrafficManager: gl.trafficManager,
-			Agents:         gl.trafficAgents,
-			GetPodYaml:     gl.podYaml,
-		}
-		err = withConnector(cmd, false, nil, func(_ context.Context, _ *connectorState) error {
-			err = cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				var opts []grpc.CallOption
-				cfg := client.GetConfig(ctx)
-				if !cfg.Grpc.MaxReceiveSize.IsZero() {
-					if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-						opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-					}
-				}
-				lr, err := managerClient.GetLogs(ctx, rq, opts...)
-				if err != nil {
-					return err
-				}
-				if err := writeResponseToFiles(lr, anonymizer, exportDir, gl.anon); err != nil {
-					return err
-				}
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		// We let the user know we were unable to get logs from the kubernetes components,
-		// and why, but this shouldn't block the command returning successful with the logs
-		// it was able to get.
-		if err != nil {
-			fmt.Fprintf(stdout, "error getting logs from kubernetes components: %s\n", err)
 		}
 	}
 
@@ -235,9 +205,9 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 
 		fullFileName := filepath.Join(exportDir, entry.Name())
 		// anonymize the log if necessary
-		if gl.anon {
-			if err := anonymizeLog(stdout, fullFileName, anonymizer); err != nil {
-				fmt.Fprintf(stdout, "error anonymizing %s: %s\n", fullFileName, err)
+		if az != nil {
+			if err := az.anonymizeLog(fullFileName); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error anonymizing %s: %s\n", fullFileName, err)
 			}
 		}
 		files[i] = fullFileName
@@ -247,45 +217,44 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command, st
 		return errcat.User.New(err)
 	}
 
-	fmt.Fprintf(stdout, "Logs have been exported to %s\n", gl.outputFile)
+	fmt.Fprintf(cmd.OutOrStdout(), "Logs have been exported to %s\n", gl.outputFile)
 	return nil
 }
 
-// writeResponseToFiles contains the logic for parsing the response from the
-// manager and writing its components into logical files.
-func writeResponseToFiles(lr *manager.LogsResponse, anonymizer *anonymizer, exportDir string, anonymize bool) error {
-	createFileWithContent := func(fileName, content string) error {
-		fd, err := os.Create(fileName)
+func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Command, exportDir string, az *anonymizer) {
+	// To get logs from the components in the kubernetes cluster, we ask the
+	// traffic-manager.
+	rq := &connector.LogsRequest{
+		TrafficManager: gl.trafficManager,
+		Agents:         gl.trafficAgents,
+		GetPodYaml:     gl.podYaml,
+		ExportDir:      exportDir,
+	}
+	err := withConnector(cmd, false, nil, func(_ context.Context, cs *connectorState) error {
+		var opts []grpc.CallOption
+		cfg := client.GetConfig(ctx)
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+				opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
+			}
+		}
+		lr, err := cs.userD.GatherLogs(ctx, rq, opts...)
 		if err != nil {
 			return err
 		}
-		defer fd.Close()
-		fdWriter := bufio.NewWriter(fd)
-		_, err = fdWriter.WriteString(content)
-		if err != nil {
-			return err
+		if az != nil {
+			if err := az.anonymizeFileNames(lr, exportDir); err != nil {
+				return err
+			}
 		}
-		fdWriter.Flush()
 		return nil
+	})
+	// We let the user know we were unable to get logs from the kubernetes components,
+	// and why, but this shouldn't block the command returning successful with the logs
+	// it was able to get.
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "error getting logs from kubernetes components: %s\n", err)
 	}
-	// Write the logs for each pod to files
-	for podName, log := range lr.PodLogs {
-		podName = getPodName(podName, anonymize, anonymizer)
-		agentLogFile := fmt.Sprintf("%s/%s.log", exportDir, podName)
-		if err := createFileWithContent(agentLogFile, log); err != nil {
-			return err
-		}
-	}
-
-	// Write the pod yaml to files
-	for podName, yaml := range lr.PodYaml {
-		podName = getPodName(podName, anonymize, anonymizer)
-		podYamlFile := filepath.Join(exportDir, podName+".yaml")
-		if err := createFileWithContent(podYamlFile, yaml); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func isEmpty(file string) (bool, error) {
@@ -385,18 +354,27 @@ func zipFiles(files []string, zipFileName string) error {
 	return nil
 }
 
-// getPodName either returns the podName passed in or gets the anonymized
-// name of the pod.  If the podName has not been yet anonymized in the
-// anonymizer, then it will create the anonymized name and store it in
-// the anonymizer.
-func getPodName(podName string, anon bool, anonymizer *anonymizer) string {
-	// If we aren't anonymizing the logs, just return the podName
-	if !anon {
-		return podName
+// anonymizeFileNames will anonymize the file names of all pods in the connector.LogResponse.
+func (a *anonymizer) anonymizeFileNames(lr *connector.LogsResponse, exportDir string) error {
+	for n, v := range lr.PodInfo {
+		qn := filepath.Join(exportDir, n)
+		if v != "ok" {
+			// Write the error to retrieve the log as the log content. It's better than nothing
+			_ = os.WriteFile(qn, []byte(v), 0666)
+		}
+		anonQn := filepath.Join(exportDir, a.getPodName(n))
+		if err := os.Rename(qn, anonQn); err != nil {
+			return fmt.Errorf("failed to anonymize by renaming file name %s to %s", qn, anonQn)
+		}
 	}
+	return nil
+}
 
+// getPodName returns an anonymized version of the podName. The anonymized value is cached so that
+// the same anonymized name will be returned on subsequent calls using the same podName.
+func (a *anonymizer) getPodName(podName string) string {
 	// If this pod name has already been mapped, return that
-	if anonName, ok := anonymizer.podNames[podName]; ok {
+	if anonName, ok := a.podNames[podName]; ok {
 		return anonName
 	}
 
@@ -411,17 +389,17 @@ func getPodName(podName string, anon bool, anonymizer *anonymizer) string {
 		// ordinals to be strictly for anonPods, we'll need to
 		// make a change here.
 		unknownPodName := fmt.Sprintf("anonPod-%d.anonNamespace",
-			len(anonymizer.podNames)+1)
-		anonymizer.podNames[podName] = unknownPodName
+			len(a.podNames)+1)
+		a.podNames[podName] = unknownPodName
 		return unknownPodName
 	}
 	var anonPodName, anonNamespace string
 	name, namespace := nameComponents[0], nameComponents[1]
-	if val, ok := anonymizer.namespaces[namespace]; ok {
+	if val, ok := a.namespaces[namespace]; ok {
 		anonNamespace = val
 	} else {
-		anonNamespace = fmt.Sprintf("namespace-%d", len(anonymizer.namespaces)+1)
-		anonymizer.namespaces[namespace] = anonNamespace
+		anonNamespace = fmt.Sprintf("namespace-%d", len(a.namespaces)+1)
+		a.namespaces[namespace] = anonNamespace
 	}
 
 	// we want to special case the traffic-manager so we can easily distinguish
@@ -429,17 +407,17 @@ func getPodName(podName string, anon bool, anonymizer *anonymizer) string {
 	if strings.Contains(name, "traffic-manager") {
 		anonPodName = fmt.Sprintf("traffic-manager.%s", anonNamespace)
 	} else {
-		anonPodName = fmt.Sprintf("pod-%d.%s", len(anonymizer.podNames)+1, anonNamespace)
+		anonPodName = fmt.Sprintf("pod-%d.%s", len(a.podNames)+1, anonNamespace)
 	}
 	// Store the anonPodName in the map
-	anonymizer.podNames[podName] = anonPodName
+	a.podNames[podName] = anonPodName
 	return anonPodName
 }
 
 // anonymizeLog is a helper function that replaces the namespace + podName
 // used in the log with its anonymized version, provided by the anonymizer.
 // It overwrites the file with the anonymized version.
-func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) error {
+func (a *anonymizer) anonymizeLog(logFile string) error {
 	// Read the contents we are going to overwrite from the file
 	content, err := os.ReadFile(logFile)
 	if err != nil {
@@ -455,11 +433,11 @@ func anonymizeLog(stdout io.Writer, logFile string, anonymizer *anonymizer) erro
 
 	// First we replace the actual namespace with the anonymized
 	// version.
-	for namespace, anonNamespace := range anonymizer.namespaces {
+	for namespace, anonNamespace := range a.namespaces {
 		stringContent = strings.ReplaceAll(stringContent, namespace, anonNamespace)
 	}
 	// Now we do pod name which is a little bit more complicated
-	for fullPodName, fullAnonPodName := range anonymizer.podNames {
+	for fullPodName, fullAnonPodName := range a.podNames {
 		// strip the namespace off of the anonymized name
 		anonPodParts := strings.Split(fullAnonPodName, ".")
 		anonPodName := anonPodParts[0]

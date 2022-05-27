@@ -65,8 +65,9 @@ func (h *dnsInterceptor) Start(ctx context.Context) {
 func (h *dnsInterceptor) connToTun(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	b := make([]byte, 0x400)
+	dnsConn := h.dnsConn
 	for ctx.Err() == nil {
-		n, err := h.dnsConn.Read(b)
+		n, err := dnsConn.Read(b)
 		if err != nil {
 			return
 		}

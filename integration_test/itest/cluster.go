@@ -35,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -88,7 +89,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.4.5-gotest." + s.suffix
+		s.testVersion = "v2.6.0-gotest.z" + s.suffix
 	}
 	version.Version = s.testVersion
 
@@ -128,6 +129,7 @@ func (s *cluster) tearDown(ctx context.Context) {
 	s.ensureQuitAndLoggedOut(ctx)
 	if s.kubeConfig != "" {
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join(s.moduleRoot, "k8s", "client_rbac.yaml"))
+		_ = Run(ctx, "kubectl", "delete", "--wait=false", "ns", "-l", "purpose=tp-cli-testing")
 	}
 }
 
@@ -230,21 +232,34 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	require.NoError(t, err, "failed to create %s service account", TestUser)
 }
 
+// PodCreateTimeout will return a timeout suitable for operations that create pods.
+// This is longer when running against clusters that scale up nodes on demand for new pods.
+func PodCreateTimeout(c context.Context) time.Duration {
+	switch GetProfile(c) {
+	case GkeAutopilotProfile:
+		return 5 * time.Minute
+	case DefaultProfile:
+		fallthrough
+	default: // this really shouldn't be happening but hey
+		return 180 * time.Second
+	}
+}
+
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
 	config := client.GetDefaultConfig()
 	config.LogLevels.UserDaemon = logrus.DebugLevel
 	config.LogLevels.RootDaemon = logrus.DebugLevel
 
 	to := &config.Timeouts
-	to.PrivateAgentInstall = 180 * time.Second
-	to.PrivateApply = 120 * time.Second
+	to.PrivateAgentInstall = PodCreateTimeout(c)
+	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
 	to.PrivateEndpointDial = 10 * time.Second
-	to.PrivateHelm = 230 * time.Second
+	to.PrivateHelm = PodCreateTimeout(c)
 	to.PrivateIntercept = 30 * time.Second
 	to.PrivateProxyDial = 30 * time.Second
 	to.PrivateRoundtripLatency = 5 * time.Second
-	to.PrivateTrafficManagerAPI = 60 * time.Second
+	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	registry := s.Registry()
@@ -366,11 +381,12 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
+	dlog.Infof(ctx, "Capturing logs for pods %q", pods)
 	for _, pod := range strings.Split(pods, " ") {
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", pod, dtime.Now().Format("20060102T150405"))))
+		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -403,6 +419,9 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 		"-n", managerNamespace, helmChart,
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
+		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", "tel2"), // Prevent attempts to retrieve image from SystemA
+		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
@@ -420,7 +439,6 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 }
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
-	TelepresenceOk(ctx, "quit")
 	t := getT(ctx)
 	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
 
@@ -442,7 +460,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
-	cmd := dexec.CommandContext(ctx, executable, args...)
+	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
 	for k, v := range getEnv(ctx) {
@@ -646,7 +664,7 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 }
 
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, PodCreateTimeout(ctx))
 	defer cancel()
 	switch {
 	case strings.HasPrefix(workload, "pod/"):
@@ -743,19 +761,27 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	t := getT(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(t, err, "unable to read %s", kc)
-	require.NoError(t, err, api.MinifyConfig(cfg), "unable to minify config")
-	var cluster *api.Cluster
-	for _, c := range cfg.Clusters {
-		cluster = c
-		break
-	}
-	require.NotNil(t, cluster, "unable to get cluster from config")
+	cluster := cfg.Clusters["default"]
+	require.NotNil(t, cluster, "unable to get default cluster from config")
 
 	raw, err := json.Marshal(extProducer(cluster))
 	require.NoError(t, err, "unable to json.Marshal extension map")
 	cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{Raw: raw}}
 
+	context := &api.Context{
+		Cluster:   "extra",
+		AuthInfo:  "default",
+		Namespace: "default",
+	}
+	cfg = &api.Config{
+		Kind:           "Config",
+		APIVersion:     "v1",
+		Preferences:    api.Preferences{},
+		Clusters:       map[string]*api.Cluster{"extra": cluster},
+		Contexts:       map[string]*api.Context{"extra": context},
+		CurrentContext: "extra",
+	}
 	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
 	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
-	return WithEnv(ctx, map[string]string{"KUBECONFIG": kubeconfigFileName})
+	return WithEnv(ctx, map[string]string{"KUBECONFIG": strings.Join([]string{kc, kubeconfigFileName}, string([]byte{os.PathListSeparator}))})
 }

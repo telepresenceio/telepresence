@@ -21,10 +21,8 @@ another.
 The Telepresence Daemon runs on a developer's workstation and is its main point of communication with the cluster's
 network. All requests from and to the cluster go through the Daemon, which communicates with the Traffic Manager.
 
-## Telepresence Pro Daemon
-When you `telepresence login`, Telepresence recommends downloading the Telepresence Pro Daemon.
-This replaces the open source User Daemon and provides additional features including:
-* Creating intercepts on your local machine from Ambassador Cloud.
+When you run telepresence login, Telepresence installs an enhanced Telepresence Daemon. This replaces the open source
+User Daemon and allows you to create intercepts on your local machine from Ambassador Cloud.
 
 ## Traffic Manager
 
@@ -41,8 +39,7 @@ URL, it forwards the request to the ingress service specified at the Preview URL
 ## Traffic Agent
 
 The Traffic Agent is a sidecar container that facilitates intercepts. When an intercept is started, the Traffic Agent
-container is injected into the workload's pod(s). You can see the Traffic Agent's status by running `kubectl describe
-pod <pod-name>`.
+container is injected into the workload's pod(s). You can see the Traffic Agent's status by running `kubectl describe pod <pod-name>`.
 
 Depending on the type of intercept that gets created, the Traffic Agent will either route the incoming request to the
 Traffic Manager so that it gets routed to a developer's workstation, or it will pass it along to the container in the
@@ -61,7 +58,7 @@ accessed them and deleting them.
 Using Ambassador's previous offering, Service Preview, the Traffic Agent had to be manually added to a pod by an
 annotation. This is no longer required as the Traffic Agent is automatically injected when an intercept is started.
 
-Service Preview also started an intercept via `edgectl intercept`.  The `edgectl` CLI is no longer required to intercept
+Service Preview also started an intercept via `edgectl intercept`. The `edgectl` CLI is no longer required to intercept
 as this functionality has been moved to the Telepresence CLI.
 
 For both the Traffic Manager and Traffic Agents, configuring Kubernetes ClusterRoles and ClusterRoleBindings is not

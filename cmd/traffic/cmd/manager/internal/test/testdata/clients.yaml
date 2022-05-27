@@ -4,23 +4,23 @@ alice:
   namespace: default
   installid: install_id_for_alice
   product: telepresence
-  version: "1"
+  version: "2.6.0"
 bob:
   name: bob@bulbasaur.bigcorp.com
   namespace: default
   installid: install_id_for_bob
   product: telepresence
-  version: "1"
+  version:  "2.6.0"
 cameron:
   name: cameron@charmander.bigcorp.com
   namespace: default
   installid: install_id_for_cameron
   product: telepresence
-  version: "1"
+  version:  "2.6.0"
 pat:
   name: pat@pikachu.bigcorp.com
   namespace: default
   installid: install_id_for_pat
   product: telepresence
-  version: "1"
+  version:  "2.6.0"
   license_key: license_key_for_pat

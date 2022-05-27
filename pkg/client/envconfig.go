@@ -81,7 +81,7 @@ func LoadEnvWith(ctx context.Context, lookuper envconfig.Lookuper) (*Env, error)
 			// But I (donnyyung) am about to be on vacation for a week so don't want
 			// to make such a huge change and then leave, so I will take care of
 			// cleaning this up once I'm back.
-			loginDomain = "beta-auth.datawire.io"
+			loginDomain = "staging-auth.datawire.io"
 		}
 		os.Setenv("TELEPRESENCE_LOGIN_DOMAIN", loginDomain)
 	}

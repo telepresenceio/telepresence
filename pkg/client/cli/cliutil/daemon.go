@@ -15,6 +15,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -23,7 +24,8 @@ import (
 var ErrNoNetwork = errors.New("telepresence network is not established")
 
 func launchDaemon(ctx context.Context) error {
-	fmt.Println("Launching Telepresence Root Daemon")
+	stdout, _ := output.Structured(ctx)
+	fmt.Fprintln(stdout, "Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
@@ -119,6 +121,7 @@ type quitting struct{}
 
 // Disconnect shuts down a session in the root daemon. When it shuts down, it will tell the connector to shut down.
 func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err error) {
+	stdout, stderr := output.Structured(ctx)
 	ctx = context.WithValue(ctx, quitting{}, true)
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
@@ -127,22 +130,22 @@ func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err e
 			if err == nil {
 				err = cerr
 			} else {
-				fmt.Fprintf(os.Stderr, "Error when quitting connector: %v\n", cerr)
+				fmt.Fprintf(stderr, "Error when quitting connector: %v\n", cerr)
 			}
 		}
 		if err == nil && quitRootDaemon {
 			err = client.WaitUntilSocketVanishes("root daemon", client.DaemonSocketName, 5*time.Second)
 		}
 	}()
-	fmt.Print("Telepresence Network ")
+	fmt.Fprint(stdout, "Telepresence Network ")
 	err = WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) (err error) {
 		defer func() {
 			if err == nil {
-				fmt.Println("done")
+				fmt.Fprintln(stdout, "done")
 			}
 		}()
 		if quitRootDaemon {
-			fmt.Print("quitting...")
+			fmt.Fprint(stdout, "quitting...")
 		} else {
 			var ds *daemon.DaemonStatus
 			if ds, err = daemonClient.Status(ctx, &empty.Empty{}); err != nil {
@@ -151,7 +154,7 @@ func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err e
 			if ds.OutboundConfig == nil {
 				return ErrNoNetwork
 			}
-			fmt.Print("disconnecting...")
+			fmt.Fprint(stdout, "disconnecting...")
 			if _, err = daemonClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
 				// nil or not unimplemented
 				return err
@@ -163,9 +166,9 @@ func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err e
 	})
 	if errors.Is(err, ErrNoNetwork) {
 		if quitRootDaemon {
-			fmt.Println("had already quit")
+			fmt.Fprintln(stdout, "had already quit")
 		} else {
-			fmt.Println("is already disconnected")
+			fmt.Fprintln(stdout, "is already disconnected")
 		}
 		err = nil
 	}

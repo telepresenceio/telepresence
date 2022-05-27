@@ -21,6 +21,12 @@ type Workload interface {
 	Updated(int64) bool
 }
 
+type UnsupportedWorkloadKindError string
+
+func (u UnsupportedWorkloadKindError) Error() string {
+	return fmt.Sprintf("unsupported workload kind: %q", string(u))
+}
+
 // GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
 // is optional. A search is performed in the following order if it is empty:
 //
@@ -48,7 +54,7 @@ func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj W
 		}
 		err = errors2.NewNotFound(core.Resource("workload"), name+"."+namespace)
 	default:
-		return nil, fmt.Errorf("unsupported workload kind: %q", workloadKind)
+		return nil, UnsupportedWorkloadKindError(workloadKind)
 	}
 	return obj, err
 }
@@ -215,6 +221,10 @@ func (o *deployment) Replicas() int {
 	return int(o.Status.Replicas)
 }
 
+func (o *deployment) Selector() (labels.Selector, error) {
+	return meta.LabelSelectorAsSelector(o.Spec.Selector)
+}
+
 func (o *deployment) Update(c context.Context) error {
 	d, err := o.ki(c).Update(c, o.Deployment, meta.UpdateOptions{})
 	if err == nil {
@@ -276,6 +286,10 @@ func (o *replicaSet) Replicas() int {
 	return int(o.Status.Replicas)
 }
 
+func (o *replicaSet) Selector() (labels.Selector, error) {
+	return meta.LabelSelectorAsSelector(o.Spec.Selector)
+}
+
 func (o *replicaSet) Update(c context.Context) error {
 	d, err := o.ki(c).Update(c, o.ReplicaSet, meta.UpdateOptions{})
 	if err == nil {
@@ -335,6 +349,10 @@ func (o *statefulSet) Refresh(c context.Context) error {
 
 func (o *statefulSet) Replicas() int {
 	return int(o.Status.Replicas)
+}
+
+func (o *statefulSet) Selector() (labels.Selector, error) {
+	return meta.LabelSelectorAsSelector(o.Spec.Selector)
 }
 
 func (o *statefulSet) Update(c context.Context) error {

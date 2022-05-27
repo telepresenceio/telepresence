@@ -4,6 +4,7 @@
 
 - Feature: Add AgentInjectorWebhook yaml files, newly introduced in 2.3.1.
 - Feature: Include service account + ClusterRole + ClusterRoleBinding for the traffic-manager, since it now communicates directly with the cluster.
+- Feature: add `priorityClassName` value.
 - Change: image.repository has been split into image.registry and image.name since the registry is now used in another field.
 - Change: the `rbac` value has been changed to be `clientRbac`.
 - Change: `service.ports` has been removed since those values are not able to be changed.

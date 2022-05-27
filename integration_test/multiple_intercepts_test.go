@@ -49,6 +49,7 @@ func (s *multipleInterceptsSuite) SetupSuite() {
 			svc := fmt.Sprintf("%s-%d", s.Name(), i)
 			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), svc, "--mount", "false", "--port", strconv.Itoa(s.servicePort[i]))
 			s.Contains(stdout, "Using Deployment "+svc)
+			s.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
 		}(i)
 	}
 	wg.Wait()

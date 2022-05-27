@@ -22,6 +22,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -30,11 +32,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-func callRecovery(r interface{}, err error) error {
+func callRecovery(c context.Context, r interface{}, err error) error {
 	if perr := derror.PanicToError(r); perr != nil {
+		dlog.Errorf(c, "%+v", perr)
 		err = perr
 	}
 	return err
@@ -75,7 +77,7 @@ func (s *service) withSession(c context.Context, callName string, f func(context
 			err = status.Error(codes.Unavailable, "no active session")
 			return
 		}
-		defer func() { err = callRecovery(recover(), err) }()
+		defer func() { err = callRecovery(c, recover(), err) }()
 		num := getReqNumber(c)
 		ctx := dgroup.WithGoroutineName(s.sessionContext, fmt.Sprintf("/%s-%d", callName, num))
 		err = f(ctx, s.session)
@@ -133,7 +135,44 @@ func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 	return
 }
 
-func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult, err error) ([]scout.Entry, bool) {
+// isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
+// If it is, then the first returned value will be true and the second will indicate if those intercepts are
+// on different services. Otherwise, this function returns false, false
+func (s *service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
+	s.sessionLock.RLock()
+	defer s.sessionLock.RUnlock()
+	if s.session == nil {
+		return false, false
+	}
+	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
+
+	// The InterceptsForWorkload will not include failing or removed intercepts so the
+	// subject must be added unless it's already there.
+	active := false
+	for _, is := range wis {
+		if is.Name == spec.Name {
+			active = true
+			break
+		}
+	}
+	if !active {
+		wis = append(wis, spec)
+	}
+	if len(wis) < 2 {
+		return false, false
+	}
+	var suid string
+	for _, is := range wis {
+		if suid == "" {
+			suid = is.ServiceUid
+		} else if suid != is.ServiceUid {
+			return true, true
+		}
+	}
+	return true, false
+}
+
+func (s *service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult, err error) ([]scout.Entry, bool) {
 	// The scout belongs to the session and can only contain session specific meta-data
 	// so we don't want to use scout.SetMetadatum() here.
 	entries := make([]scout.Entry, 0, 7)
@@ -144,13 +183,20 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 			scout.Entry{Key: "intercept_mechanism", Value: spec.Mechanism},
 			scout.Entry{Key: "intercept_mechanism_numargs", Value: len(spec.Mechanism)},
 		)
+		multiPort, multiService := s.isMultiPortIntercept(spec)
+		if multiPort {
+			entries = append(entries, scout.Entry{Key: "multi_port", Value: multiPort})
+			if multiService {
+				entries = append(entries, scout.Entry{Key: "multi_service", Value: multiService})
+			}
+		}
 	}
 	var msg string
 	if result != nil {
-		entries = append(entries,
-			scout.Entry{Key: "service_uid", Value: result.ServiceUid},
-			scout.Entry{Key: "workload_kind", Value: result.WorkloadKind},
-		)
+		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
+		if result.ServiceProps != nil {
+			entries = append(entries, scout.Entry{Key: "service_uid", Value: result.ServiceProps.ServiceUid})
+		}
 		if result.Error != rpc.InterceptError_UNSPECIFIED {
 			msg = result.Error.String()
 		}
@@ -167,7 +213,7 @@ func scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptRes
 
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
+		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_can_intercept_success"
@@ -177,25 +223,18 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		s.scout.Report(c, action, entries...)
 	}()
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
-		var wl k8sapi.Workload
-		if result, wl, _ = session.CanIntercept(c, ir); result == nil {
-			var kind string
-			if wl != nil {
-				kind = wl.GetKind()
-			}
-			result = &rpc.InterceptResult{
-				Error:        rpc.InterceptError_UNSPECIFIED,
-				WorkloadKind: kind,
-			}
+		_, result = session.CanIntercept(c, ir)
+		if result == nil {
+			result = &rpc.InterceptResult{Error: rpc.InterceptError_UNSPECIFIED}
 		}
-		return nil
+		return err
 	})
 	return
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
+		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_create_intercept_success"
@@ -214,7 +253,7 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	var spec *manager.InterceptSpec
 	defer func() {
-		entries, ok := scoutInterceptEntries(spec, result, err)
+		entries, ok := s.scoutInterceptEntries(spec, result, err)
 		var action string
 		if ok {
 			action = "connector_remove_intercept_success"
@@ -244,6 +283,18 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 		return nil
 	})
 	return result, err
+}
+
+func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, "AddInterceptor", func(_ context.Context, session trafficmgr.Session) error {
+		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
+	})
+}
+
+func (s *service) RemoveInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, "RemoveInterceptor", func(_ context.Context, session trafficmgr.Session) error {
+		return session.RemoveInterceptor(interceptor.InterceptId)
+	})
 }
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
@@ -381,6 +432,14 @@ func (s *service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rp
 	return
 }
 
+func (s *service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
+	err = s.withSession(ctx, "GatherLogs", func(c context.Context, session trafficmgr.Session) error {
+		result, err = session.GatherLogs(c, request)
+		return err
+	})
+	return
+}
+
 func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
 		duration := time.Duration(0)
@@ -400,6 +459,7 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
+		s.cancelSessionReadLocked()
 		s.quit()
 	})
 	return &empty.Empty{}, nil
@@ -430,6 +490,23 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Stdout: outW.Bytes(),
 			Stderr: errW.Bytes(),
 		}
+	})
+	return
+}
+
+func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
+	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
+		pool := a8rcloud.GetSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName)
+		systemacli, err := pool.Get(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			err := pool.Done(ctx)
+			dlog.Warnf(ctx, "Unexpected error tearing down systema connection: %v", err)
+		}()
+		resp, err = systemacli.ResolveIngressInfo(ctx, req)
+		return err
 	})
 	return
 }

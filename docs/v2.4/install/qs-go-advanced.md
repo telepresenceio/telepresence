@@ -8,7 +8,7 @@ import Alert from '@material-ui/lab/Alert';
 
 This tutorial shows you how to use Ambassador Cloud to create an effective Kubernetes development environment to enable fast, local development with the ability to interact with services and dependencies that run in a remote Kubernetes cluster.
 
-For the hands-on part of this guide, you will build upon [this tutorial with the emojivoto application](../../quick-start/go/), which is written in Go. 
+For the hands-on part of this guide, you will build upon [this tutorial with the emojivoto application](../../quick-start/go/), which is written in Go.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ To begin, you need a set of services that you can deploy to a Kubernetes cluster
 	- For helm users, the [`helm create` command](https://helm.sh/docs/helm/helm_create/) can be used to create the directory and file scaffolding for your chart.
 * Follow cloud native application architecture best practices.
 	- Design services using the [Twelve-Factor Application](https://12factor.net/) approach.
-	- Ensure that your services and ingress gateway include HTTP [header propagation](https://www.getambassador.io/learn/kubernetes-glossary/header-propagation/) for good observability and diagnostics. Many modern language-specific web frameworks support this out-of-the-box, and the [OpenTelemetry documentation](https://opentelemetry.lightstep.com/core-concepts/context-propagation/) also contains good guidance. 
+	- Ensure that your services and ingress gateway include HTTP [header propagation](https://www.getambassador.io/learn/kubernetes-glossary/header-propagation/) for good observability and diagnostics. Many modern language-specific web frameworks support this out-of-the-box, and the [OpenTelemetry documentation](https://opentelemetry.lightstep.com/core-concepts/context-propagation/) also contains good guidance.
 
 The emojivoto example you are exploring in the steps below follows all of these prerequisites.
 
@@ -50,9 +50,9 @@ After you finish your deployment, you need to configure a copy of a single servi
  To follow the previous example, enter: `cd emojivoto-voting-svc/api`
 3. Ensure that your development environment is configured to support the automatic reloading of the service when your source code changes.
  In the example, the Go applicationapplication source code is being monitored for changes, and the application is rebuilt with [Air's live-reloading utility](https://github.com/cosmtrek/air).
-4. Add a Dockerfile for your development. 
+4. Add a Dockerfile for your development.
  Alternatively, you can use a Cloud Native Buildpack, such as those provided by Google Cloud. The [Google Go buildpack](https://github.com/GoogleCloudPlatform/buildpacks) has live-reloading configured by default.
-5. Next, test that the container is working properly. In the root directory of your source rep, enter: 
+5. Next, test that the container is working properly. In the root directory of your source rep, enter:
 `docker build -t example-dev-container:0.1 -f Dev.Dockerfile .`
 If you ran the the [emojivoto application example](../../quick-start/go/), the container has already been built for you and you can skip this step.
 6. Run the development container and mount the current directory as a volume. This way, any code changes you make locally are synchronized into the container. Enter:
@@ -74,7 +74,7 @@ Once you have the development container running, you can integrate your local de
 
 1. First, download the latest [Telepresence binary](../../install/) for your operating system and run `telepresence connect`.
  Your local service is now able to interact with services and dependencies in your remote cluster.
- For example, you can run `curl remote-service-name.namespace:port/path` and get an instant response locally in the same way you would in a remote cluster.  
+ For example, you can run `curl remote-service-name.namespace:port/path` and get an instant response locally in the same way you would in a remote cluster.
 2. Extract the KUBECONFIG from your dev container from the [emojivoto application tutorial](../../quick-start/go/) and then connect your container to the remote cluster with Telepresence:
 	```
 	$ CONTAINER_ID=$(docker inspect --format="{{.Id}}" "/voting-demo")
@@ -85,10 +85,10 @@ Once you have the development container running, you can integrate your local de
 	$ telepresence intercept voting --port 8081:8080
 	```
 4. Make a small change in your local code that will cause a visible change that you will be able to see when accessing your app. Build your service to trigger a reload within the container.
-5. Now visit your ${INGRESS_IP} and view the change. 
+5. Now visit your ${INGRESS_IP} and view the change.
  Notice the instant feedback of a local change combined with being able to access the remote dependencies!
-6. Make another small change in your local code and build the application again. 
-Refresh your view of the app at ${INGRESS_IP}. 
+6. Make another small change in your local code and build the application again.
+Refresh your view of the app at ${INGRESS_IP}.
  Notice that you didn’t need to re-deploy the container in the remote cluster to view your changes. Any request you make against the remote application that accesses your service will be routed to your local machine allowing you to instantly see the effects of changes you make to the code.
 7. Now, put all these commands in a simple shell script, setup-dev-env.sh, which can auto-install Telepresence and configure your local development environment in one command. You can commit this script into your application’s source code repository and your colleagues can easily take advantage of this fast development loop you have created. An example script is included below, which follows the “[Do-nothing scripting](https://blog.danslimmon.com/2019/07/15/do-nothing-scripting-the-key-to-gradual-automation/)"" format from Dan Slimmon:
 
@@ -138,11 +138,11 @@ Refresh your view of the app at ${INGRESS_IP}.
 	    echo 'Configuring Telepresence'
 	    if [ ! command -v telepresence &> /dev/null ];  then
 	        echo "Installing Telepresence"
-	        sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence -o /usr/local/bin/telepresence
+	        sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/2.4.11/telepresence -o /usr/local/bin/telepresence
 	        sudo chmod a+x /usr/local/bin/telepresence
 	    else
 	        echo "Telepresence already installed"
-	    fi    
+	    fi
 	}
 
 	connect_local_dev_env_to_remote() {
