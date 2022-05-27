@@ -1,9 +1,5 @@
 package buffer
 
-import (
-	"sync"
-)
-
 const PrefixLen = 4
 
 // Data on a macOS consists of two slices that share the same underlying byte array. The
@@ -22,17 +18,20 @@ func (b *Data) Buf() []byte {
 	return b.buf
 }
 
-// SetLength sets the length of this buffer. This will change the slice that Buf and Raw returns
-func (b *Data) SetLength(l int) {
-	if l > cap(b.buf) {
-		raw := b.raw
-		b.raw = make([]byte, l+PrefixLen)
-		copy(b.raw, raw)
-		b.buf = b.raw[PrefixLen:]
-	} else {
-		b.buf = b.buf[:l]
-		b.raw = b.raw[:l+PrefixLen]
-	}
+// Copy copies n bytes from the given Data buffer into a new Data which is obtained from
+// the pool, and returns the new data.
+func (p *Pool) Copy(s *Data, n int) *Data {
+	c := p.Get(n)
+	c.buf = c.buf[:n]
+	c.raw = c.raw[:n+PrefixLen]
+	copy(c.raw, s.raw)
+	return c
+}
+
+// setLength sets the length of this buffer. This will change the slice that Buf and Raw returns
+func (b *Data) setLength(l int) {
+	b.buf = b.buf[:l]
+	b.raw = b.raw[:l+PrefixLen]
 }
 
 // Raw returns this Data's raw buffer. This is the buffer that should be used by the tun.Device
@@ -42,11 +41,7 @@ func (b *Data) Raw() []byte {
 	return b.raw
 }
 
-var DataPool = &Pool{
-	pool: sync.Pool{
-		New: func() interface{} {
-			raw := make([]byte, PrefixLen+defaultMTU+maxIPHeader)
-			return &Data{buf: raw[PrefixLen:], raw: raw}
-		}},
-	MTU: defaultMTU,
+func NewData(sz int) *Data {
+	raw := make([]byte, PrefixLen+sz)
+	return &Data{buf: raw[PrefixLen:], raw: raw}
 }

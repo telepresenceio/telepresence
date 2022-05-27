@@ -33,7 +33,15 @@ func (h *timedHandler) resetIdle() bool {
 }
 
 func (h *timedHandler) Close(_ context.Context) {
-	h.remove()
+	h.idleLock.Lock()
+	if h.remove != nil {
+		h.remove()
+		h.remove = nil
+		if h.idleTimer != nil {
+			h.idleTimer.Stop()
+		}
+	}
+	h.idleLock.Unlock()
 }
 
 type handler struct {
@@ -64,7 +72,8 @@ func (h *handler) HandleDatagram(ctx context.Context, dg Datagram) {
 	case h.fromTun <- dg:
 	}
 }
-func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
+
+func createReply(id tunnel.ConnID, payload []byte) Datagram {
 	pkt := NewDatagram(HeaderLen+len(payload), id.Destination(), id.Source())
 	ipHdr := pkt.IPHeader()
 	ipHdr.SetChecksum()
@@ -75,7 +84,11 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 	udpHdr.SetPayloadLen(uint16(len(payload)))
 	copy(udpHdr.Payload(), payload)
 	udpHdr.SetChecksum(ipHdr)
+	return pkt
+}
 
+func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
+	pkt := createReply(id, payload)
 	defer pkt.Release()
 	if err := toTun.Write(ctx, pkt); err != nil {
 		dlog.Errorf(ctx, "!! TUN %s: %v", id, err)
@@ -84,7 +97,25 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 
 func (h *handler) Start(ctx context.Context) {
 	h.idleTimer = time.NewTimer(idleDuration)
+	go h.readLoop(ctx)
 	go h.writeLoop(ctx)
+}
+
+func (h *handler) readLoop(ctx context.Context) {
+	defer h.Close(ctx)
+	for ctx.Err() == nil {
+		m, err := h.stream.Receive(ctx)
+		if err != nil {
+			return
+		}
+		switch m.Code() {
+		case tunnel.DialOK:
+		case tunnel.DialReject, tunnel.Disconnect:
+			return
+		case tunnel.Normal:
+			sendUDPToTun(ctx, h.id, m.Payload(), h.toTun)
+		}
+	}
 }
 
 func (h *handler) writeLoop(ctx context.Context) {
@@ -100,8 +131,8 @@ func (h *handler) writeLoop(ctx context.Context) {
 				dg.Release()
 				return
 			}
-			dlog.Debugf(ctx, "<- TUN %s", dg)
-			dlog.Debugf(ctx, "-> MGR %s", dg)
+			dlog.Tracef(ctx, "<- TUN %s", dg)
+			dlog.Tracef(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
 			err := h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
 			dg.Release()

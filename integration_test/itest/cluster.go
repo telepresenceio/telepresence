@@ -129,6 +129,7 @@ func (s *cluster) tearDown(ctx context.Context) {
 	s.ensureQuitAndLoggedOut(ctx)
 	if s.kubeConfig != "" {
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join(s.moduleRoot, "k8s", "client_rbac.yaml"))
+		_ = Run(ctx, "kubectl", "delete", "--wait=false", "ns", "-l", "purpose=tp-cli-testing")
 	}
 }
 

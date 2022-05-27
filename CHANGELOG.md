@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.6.5 (TBD)
+
+- Bugfix: UDP based communication with services in the cluster now works as expected.
+
 ### 2.6.4 (May 23, 2022)
 
 - Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
