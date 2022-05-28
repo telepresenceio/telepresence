@@ -60,22 +60,25 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return map[string]interface{}{"also-proxy": apiServers}
 	})
 
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx) // WithKubeConfigExtension sets env which gets sticky, so quitting is a must here
-	stdout := itest.TelepresenceOk(ctx, "status")
+
+	expectedLen := len(ips)
+	s.Eventually(func() bool {
+		stdout := itest.TelepresenceOk(ctx, "status")
+		return strings.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
+	}, 10*time.Second, 1*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
+
 	jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
 	var status statusResponse
 	require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
 
-	expectedLen := len(ips)
-	require.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
 	require.Len(status.RootDaemon.AlsoProxySubnets, expectedLen)
 	for _, ip := range ips {
 		rng := make(net.IP, len(ip))
 		copy(rng[:], ip)
 		rng[len(rng)-1] = 0
 		expectedValue := fmt.Sprintf("%s/24", rng)
-		require.Contains(stdout, fmt.Sprintf("- %s", expectedValue), fmt.Sprintf("Expecting to find '- %s'", expectedValue))
 		require.Contains(status.RootDaemon.AlsoProxySubnets, expectedValue)
 	}
 }
