@@ -2,6 +2,14 @@
 
 ### 2.6.5 (TBD)
 
+- Change: Telepresence on Windows upgraded wintun.dll from version 0.12 to version 0.14.1
+
+- Change: Telepresence on Windows upgraded winfsp from version 1.9 to 1.10
+
+- Change: Telepresence upgraded its embedded Helm from version 3.8.1 to 3.9
+
+- Change: Telepresence upgraded its embedded Kubernetes API from version 0.23.4 to 0.24.1
+
 - Bugfix: UDP based communication with services in the cluster now works as expected.
 
 ### 2.6.4 (May 23, 2022)
