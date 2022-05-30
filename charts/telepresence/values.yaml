@@ -100,6 +100,14 @@ systemaHost: "app.getambassador.io"
 # Default: 443
 systemaPort: "443"
 
+# Configuration if the traffic manager/agents/cluster is behind an HTTPS proxy
+httpsProxy:
+  # the name of a TLS secret that must exist in the namespace the traffic manager is installed in.
+  # Must have a ca.crt being the root CA that the proxy will sign proxied requests with
+  # if given, will be trusted for all communications with systema
+  rootCATLSSecret: ""
+
+
 # Telepresence requires a license key for creating selective intercepts. In
 # normal clusters with access to the public internet, this license is managed
 # automatically by the Ambassador Cloud. In air-gapped environments however,

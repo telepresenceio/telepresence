@@ -387,6 +387,7 @@ message License {
 message AmbassadorCloudConfig {
   string host = 1;
   string port = 2;
+  optional bytes proxy_ca = 3;
 }
 
 //

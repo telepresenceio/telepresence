@@ -2,8 +2,8 @@ package userd
 
 import (
 	"context"
-	"net"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
@@ -27,13 +27,13 @@ func (c *SessionClient) Close(ctx context.Context) error {
 	return nil
 }
 
-func (p *SessionClientProvider) GetSystemaAddress(ctx context.Context) (string, error) {
+func (p *SessionClientProvider) GetCloudConfig(ctx context.Context) (*manager.AmbassadorCloudConfig, error) {
 	managerClient := p.session.ManagerClient()
 	cloudConfig, err := managerClient.GetCloudConfig(ctx, &emptypb.Empty{})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return net.JoinHostPort(cloudConfig.GetHost(), cloudConfig.GetPort()), nil
+	return cloudConfig, nil
 }
 
 func (p *SessionClientProvider) GetAPIKey(ctx context.Context) (string, error) {

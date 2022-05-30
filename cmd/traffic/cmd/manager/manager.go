@@ -41,7 +41,10 @@ func Main(ctx context.Context, _ ...string) error {
 		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
-	mgr, ctx := NewManager(ctx)
+	mgr, ctx, err := NewManager(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to initialize traffic manager: %w", err)
+	}
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,

@@ -2,12 +2,12 @@ package managerutil
 
 import (
 	"context"
-	"net"
 
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	systemarpc "github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
@@ -40,11 +40,11 @@ func GetAgentImage(ctx context.Context) string {
 }
 
 type UnauthdConnProvider struct {
+	Config *manager.AmbassadorCloudConfig
 }
 
-func (p *UnauthdConnProvider) GetSystemaAddress(ctx context.Context) (string, error) {
-	env := GetEnv(ctx)
-	return net.JoinHostPort(env.SystemAHost, env.SystemAPort), nil
+func (p *UnauthdConnProvider) GetCloudConfig(ctx context.Context) (*manager.AmbassadorCloudConfig, error) {
+	return p.Config, nil
 }
 
 func (p *UnauthdConnProvider) GetAPIKey(ctx context.Context) (string, error) {

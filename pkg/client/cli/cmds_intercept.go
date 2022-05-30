@@ -397,6 +397,7 @@ func checkMountCapability(ctx context.Context) error {
 	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		dlog.Errorf(ctx, "sshfs not installed: %v", err)
 		return errors.New("sshfs is not installed on your local machine")
 	}
 
