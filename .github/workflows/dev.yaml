@@ -114,18 +114,12 @@ jobs:
         id: kubectl
       - run: |
           choco install make
-          mkdir -p build-output/bin
-          curl.exe -LO https://www.wintun.net/builds/wintun-0.12.zip
-          Expand-Archive -Path wintun-0.12.zip -DestinationPath .
-          #cp wintun/bin/amd64/wintun.dll "$ENV:SystemRoot\\system32\\wintun.dll"
-          #cp wintun/bin/amd64/wintun.dll .
-          cp wintun/bin/amd64/wintun.dll "build-output\\bin"
         if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
       - name: "Download sshfs"
         if: steps.get_last_run.outputs.passed != 'success'
         run: |
-          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
+          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp1.10.22006.msi
           curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
         shell: bash
       - name: "Install sshfs"
