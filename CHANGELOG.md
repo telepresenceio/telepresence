@@ -10,6 +10,8 @@
 
 - Change: Telepresence upgraded its embedded Kubernetes API from version 0.23.4 to 0.24.1
 
+- Change: The configuration setting for `images.webhookAgentImage` is now deprecated. Use `images.agentImage` instead.
+
 - Bugfix: UDP based communication with services in the cluster now works as expected.
 
 - Bugfix: The command help will only show Kubernetes flags on the commands that supports them

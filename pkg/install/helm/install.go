@@ -52,7 +52,7 @@ func getValues(ctx context.Context) map[string]interface{} {
 		}
 	}
 	apc := clientConfig.Intercept.AppProtocolStrategy
-	if wai, wr := imgConfig.WebhookAgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
+	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
 		agentImage := make(map[string]interface{})
 		if wai != "" {
 			parts := strings.Split(wai, ":")
