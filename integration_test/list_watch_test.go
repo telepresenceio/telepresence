@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -28,7 +27,8 @@ func (s *list_watchSuite) Test_ListWatch() {
 
 	teleListWatch := func(ctx context.Context) {
 		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--watch")
-		s.Require().True(strings.Contains(stdout, svc))
+		s.Fail(stdout)
+		//s.Require().True(strings.Contains(stdout, svc))
 	}
 
 	s.Run("<ctrl>-C", func() {
