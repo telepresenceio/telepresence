@@ -25,20 +25,23 @@ func init() {
 func (s *list_watchSuite) Test_ListWatch() {
 	svc := "echo-easy"
 
-	teleListWatch := func(ctx context.Context) {
+	teleListWatch := func(ctx context.Context, ch chan string) {
 		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--watch")
-		s.Fail(stdout)
-		//s.Require().True(strings.Contains(stdout, svc))
+		ch <- stdout
 	}
 
 	s.Run("<ctrl>-C", func() {
 		// Use a soft context to send a <ctrl>-c to telepresence in order to end it
 		ctx := s.Context()
 		soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
-		go teleListWatch(soft)
+		// Use a channel to pretty print error
+		ch := make(chan string)
+		go teleListWatch(soft, ch)
 		time.Sleep(time.Second)
 		s.ApplyApp(ctx, svc, "deploy/"+svc)
 		time.Sleep(time.Second)
 		softCancel()
+		stdout := <-ch
+		s.Contains(stdout, svc)
 	})
 }
