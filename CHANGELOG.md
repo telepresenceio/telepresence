@@ -12,6 +12,8 @@
 
 - Change: Telepresence upgraded its embedded Kubernetes API from version 0.23.4 to 0.24.1
 
+- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
+
 - Change: The configuration setting for `images.webhookAgentImage` is now deprecated. Use `images.agentImage` instead.
 
 - Bugfix: UDP based communication with services in the cluster now works as expected.
@@ -42,8 +44,6 @@
 - Bugfix: A potential race condition causing a panic when closing a DNS connection is now handled correctly.
 
 - Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
-
-- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
 
 ### 2.6.2 (May 17, 2022)
 
