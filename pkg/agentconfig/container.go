@@ -40,6 +40,15 @@ func AgentContainer(
 					FieldPath:  "status.podIP",
 				},
 			},
+		},
+		core.EnvVar{
+			Name: EnvPrefixAgent + "NAME",
+			ValueFrom: &core.EnvVarSource{
+				FieldRef: &core.ObjectFieldSelector{
+					APIVersion: "v1",
+					FieldPath:  "metadata.name",
+				},
+			},
 		})
 
 	mounts := make([]core.VolumeMount, 0, len(config.Containers)*3)
