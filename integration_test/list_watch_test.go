@@ -6,8 +6,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/datawire/dlib/dcontext"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -25,23 +23,19 @@ func init() {
 func (s *list_watchSuite) Test_ListWatch() {
 	svc := "echo-easy"
 
-	teleListWatch := func(ctx context.Context, ch chan string) {
+	teleListWatch := func(ctx context.Context) {
 		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--watch")
-		ch <- stdout
+		s.Contains(stdout, svc)
 	}
 
 	s.Run("<ctrl>-C", func() {
-		// Use a soft context to send a <ctrl>-c to telepresence in order to end it
+		// Use a context to end tele list -w
 		ctx := s.Context()
-		soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
-		// Use a channel to pretty print error
-		ch := make(chan string)
-		go teleListWatch(soft, ch)
+		cancelctx, cancel := context.WithCancel(ctx)
+		go teleListWatch(cancelctx)
 		time.Sleep(time.Second)
 		s.ApplyApp(ctx, svc, "deploy/"+svc)
 		time.Sleep(time.Second)
-		softCancel()
-		stdout := <-ch
-		s.Contains(stdout, svc)
+		cancel()
 	})
 }
