@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -156,29 +153,5 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 // that at least one container is still running. I.e. the pod might well be terminating
 // but still considered running.
 func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
-	out, err := s.KubectlOut(ctx, "get", "pods", "-o", "json",
-		"--field-selector", "status.phase==Running",
-		"-l", "app="+s.ServiceName())
-	if err != nil {
-		s.Fail(err.Error())
-		return nil
-	}
-	var pm core.PodList
-	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
-		s.Fail(err.Error())
-		return nil
-	}
-	pods := make([]string, 0, len(pm.Items))
-nextPod:
-	for _, pod := range pm.Items {
-		for _, cn := range pod.Status.ContainerStatuses {
-			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
-				// At least one container is still running.
-				pods = append(pods, pod.Name)
-				continue nextPod
-			}
-		}
-	}
-	dlog.Infof(ctx, "Running pods %v", pods)
-	return pods
+	return itest.RunningPods(ctx, s.ServiceName(), s.AppNamespace())
 }

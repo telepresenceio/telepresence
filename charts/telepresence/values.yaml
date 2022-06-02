@@ -180,6 +180,7 @@ agentInjector:
     servicePath: /traffic-agent
     port: 443
     failurePolicy: Ignore
+    reinvocationPolicy: Never
     sideEffects: None
     timeoutSeconds: 5
   appPortStrategy: http2Probe
