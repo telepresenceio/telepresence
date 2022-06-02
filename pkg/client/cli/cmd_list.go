@@ -96,14 +96,16 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			}
 		}(ch)
 
+	looper:
 		for {
 			select {
 			case r := <-ch:
 				s.printList(r.Workloads, stdout, jsonOut)
 			case <-ctx.Done():
-				break
+				break looper
 			}
 		}
+		return nil
 	})
 }
 
