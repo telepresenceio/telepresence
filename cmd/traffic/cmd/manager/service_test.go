@@ -318,7 +318,10 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 	}
 
 	s := grpc.NewServer()
-	mgr, ctx := manager.NewManager(ctx)
+	mgr, ctx, err := manager.NewManager(ctx)
+	if err != nil {
+		t.Fatalf("failed to build manager: %v", err)
+	}
 	rpc.RegisterManagerServer(s, mgr)
 
 	errCh := make(chan error)

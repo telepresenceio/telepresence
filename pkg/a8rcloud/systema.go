@@ -3,7 +3,6 @@ package a8rcloud
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 	"sync"
 
@@ -12,6 +11,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 const (
@@ -38,7 +38,7 @@ type HeaderProvider interface {
 
 type ClientProvider[T Closeable] interface {
 	HeaderProvider
-	GetSystemaAddress(ctx context.Context) (string, error)
+	GetCloudConfig(ctx context.Context) (*manager.AmbassadorCloudConfig, error)
 	BuildClient(ctx context.Context, conn *grpc.ClientConn) (T, error)
 }
 
@@ -80,21 +80,21 @@ func (p *systemAPool[T]) Get(ctx context.Context) (T, error) {
 		// Ya can't return generic nil, but this'll do it
 		var client T
 
-		sysaAddr, err := p.Provider.GetSystemaAddress(ctx)
+		config, err := p.Provider.GetCloudConfig(ctx)
+		if err != nil {
+			return client, err
+		}
+		certs, err := certsFromConfig(config)
 		if err != nil {
 			return client, err
 		}
 
 		// This needs to be from p.parentCtx or the connection will be dropped as soon as the goroutine requesting it finishes its context
 		ctx, cancel := context.WithCancel(dgroup.WithGoroutineName(p.parentCtx, "/systema"))
-		host, _, err := net.SplitHostPort(sysaAddr)
-		if err != nil {
-			cancel()
-			return client, fmt.Errorf("system a address %s is malformed: %w", sysaAddr, err)
-		}
+		tlsCfg := &tls.Config{ServerName: config.Host, RootCAs: certs}
 		conn, err := grpc.DialContext(ctx,
-			sysaAddr,
-			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: host})),
+			net.JoinHostPort(config.Host, config.Port),
+			grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
 			grpc.WithPerRPCCredentials(&systemACredentials{p.Provider}),
 		)
 

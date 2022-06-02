@@ -3,7 +3,10 @@ package manager
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"os"
+	"path"
 	"sort"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
@@ -37,6 +41,7 @@ type Manager struct {
 	ID          string
 	state       *state.State
 	clusterInfo cluster.Info
+	cloudConfig *rpc.AmbassadorCloudConfig
 
 	rpc.UnsafeManagerServer
 }
@@ -49,19 +54,48 @@ func (wall) Now() time.Time {
 	return time.Now()
 }
 
-func NewManager(ctx context.Context) (*Manager, context.Context) {
+func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
+	const proxyCertsPath = "/var/run/secrets/proxy_tls"
+
+	env := managerutil.GetEnv(ctx)
+	ret := &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}
+	if _, err := os.Stat(proxyCertsPath); err != nil {
+		if os.IsNotExist(err) {
+			return ret, nil
+		}
+		return nil, fmt.Errorf("could not stat %s: %w", proxyCertsPath, err)
+	}
+	f, err := os.Open(path.Join(proxyCertsPath, "ca.crt"))
+	if err != nil {
+		return nil, fmt.Errorf("unable to to open %s/ca.crt: %w", proxyCertsPath, err)
+	}
+	defer f.Close()
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read %s/ca.crt: %w", proxyCertsPath, err)
+	}
+	ret.ProxyCa = b
+	return ret, nil
+}
+
+func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &Manager{
 		clock: wall{},
 		ID:    uuid.New().String(),
 	}
+	cloudConfig, err := getCloudConfig(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	ret.cloudConfig = cloudConfig
+	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
-	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{})
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
 	ret.state = state.NewState(ctx)
-	return ret, ctx
+	return ret, ctx, nil
 }
 
 // Version returns the version information of the Manager.
@@ -105,8 +139,7 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 // GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
 // the agents)
 func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
-	env := managerutil.GetEnv(ctx)
-	return &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}, nil
+	return proto.Clone(m.cloudConfig).(*rpc.AmbassadorCloudConfig), nil
 }
 
 // GetTelepresenceAPI returns information about the TelepresenceAPI server

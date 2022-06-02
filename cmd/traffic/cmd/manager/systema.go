@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	systemarpc "github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -24,9 +25,8 @@ type reverseConnClient struct {
 	wait func() error
 }
 
-func (p *ReverseConnProvider) GetSystemaAddress(ctx context.Context) (string, error) {
-	env := managerutil.GetEnv(p.mgr.ctx)
-	return net.JoinHostPort(env.SystemAHost, env.SystemAPort), nil
+func (p *ReverseConnProvider) GetCloudConfig(ctx context.Context) (*manager.AmbassadorCloudConfig, error) {
+	return p.mgr.cloudConfig, nil
 }
 
 func (p *ReverseConnProvider) GetAPIKey(ctx context.Context) (string, error) {

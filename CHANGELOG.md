@@ -2,6 +2,8 @@
 
 ### 2.6.5 (TBD)
 
+- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy. This can be configured through the helm chart.
+
 - Change: Telepresence on Windows upgraded wintun.dll from version 0.12 to version 0.14.1
 
 - Change: Telepresence on Windows upgraded winfsp from version 1.9 to 1.10

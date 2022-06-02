@@ -96,6 +96,11 @@ spec:
             mountPath: /home/telepresence
             readOnly: true
           {{- end }}
+          {{- if .Values.httpsProxy.rootCATLSSecret }}
+          - name: proxy-ca
+            mountPath: /var/run/secrets/proxy_tls
+            readOnly: true
+          {{- end }}
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
@@ -120,6 +125,12 @@ spec:
         secret:
           defaultMode: 420
           secretName: {{ .Values.licenseKey.secret.name }}
+      {{- end }}
+      {{- if .Values.httpsProxy.rootCATLSSecret }}
+      - name: proxy-ca
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.httpsProxy.rootCATLSSecret }}
       {{- end }}
       - name: tls
         secret:
