@@ -30,6 +30,11 @@
 
 - Bugfix: The traffic-agent's configuration update automatically when services are added, updated or deleted.
 
+- Bugfix: The `--mount` intercept flag now handles relative mount points correctly on non-windows platforms. Windows
+  still require the argument to be a drive letter followed by a colon.
+
+- Bugfix: The traffic-agent's configuration update automatically when services are added, updated or deleted.
+
 - Bugfix: Telepresence will now always inject an initContainer when the service's targetPort is numeric
 
 - Bugfix: Workloads that have several matching services pointing to the same target port are now handled correctly.
@@ -37,6 +42,8 @@
 - Bugfix: A potential race condition causing a panic when closing a DNS connection is now handled correctly.
 
 - Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
+
+- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
 
 ### 2.6.2 (May 17, 2022)
 

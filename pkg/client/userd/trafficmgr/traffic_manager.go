@@ -574,6 +574,7 @@ func (tm *TrafficManager) addActiveNamespaceListener(l func()) {
 
 func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
 	tm.waitForSync(c)
+	tm.ensureWatchers(c, wr.Namespaces)
 	sCtx, sCancel := context.WithCancel(c)
 	// We need to make sure the subscription ends when we leave this method, since this is the one consuming the snapshotAvailable channel.
 	// Otherwise, the goroutine that writes to the channel will leak.
@@ -606,14 +607,8 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 	return tm.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
 }
 
-func (tm *TrafficManager) workloadInfoSnapshot(
-	ctx context.Context,
-	namespaces []string,
-	filter rpc.ListRequest_Filter,
-	includeLocalIntercepts bool,
-) (*rpc.WorkloadInfoSnapshot, error) {
-	is := tm.getCurrentIntercepts()
-
+func (tm *TrafficManager) ensureWatchers(ctx context.Context,
+	namespaces []string) {
 	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
 	waitCh := make(chan struct{}, 1)
 	tm.currentAgentsLock.Lock()
@@ -645,6 +640,16 @@ func (tm *TrafficManager) workloadInfoSnapshot(
 		case <-waitCh:
 		}
 	}
+}
+
+func (tm *TrafficManager) workloadInfoSnapshot(
+	ctx context.Context,
+	namespaces []string,
+	filter rpc.ListRequest_Filter,
+	includeLocalIntercepts bool,
+) (*rpc.WorkloadInfoSnapshot, error) {
+	is := tm.getCurrentIntercepts()
+	tm.ensureWatchers(ctx, namespaces)
 
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {

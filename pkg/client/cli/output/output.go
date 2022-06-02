@@ -5,19 +5,23 @@ package output
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func WithStructure(ctx context.Context, cmd *cobra.Command) context.Context {
 	next := cmd.PersistentPreRun
 	o := output{
-		stdout: cmd.OutOrStdout(),
-		stderr: cmd.ErrOrStderr(),
+		originalStdout: cmd.OutOrStdout(),
+		originalStderr: cmd.ErrOrStderr(),
 	}
+	o.stdout = o.originalStdout
+	o.stderr = o.originalStderr
 
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		// never output help messages as json
@@ -36,16 +40,30 @@ func WithStructure(ctx context.Context, cmd *cobra.Command) context.Context {
 }
 
 func Structured(ctx context.Context) (stdout, stderr io.Writer) {
-	o, ok := ctx.Value(key{}).(*output)
-	if !ok {
+	o, _ := ctx.Value(key{}).(*output)
+	if o == nil {
 		return os.Stdout, os.Stderr
 	}
 
-	if !o.outputJSON {
-		return os.Stdout, os.Stderr
+	return o.stdout, o.stderr
+}
+
+func SetJSONStdout(ctx context.Context) {
+	o, _ := ctx.Value(key{}).(*output)
+	if o == nil {
+		return
 	}
 
-	return &o.stdoutBuf, &o.stderrBuf
+	o.stdoutIsJSON = true
+}
+
+func SetJSONStderr(ctx context.Context) {
+	o, _ := ctx.Value(key{}).(*output)
+	if o != nil {
+		return
+	}
+
+	o.stdoutIsJSON = true
 }
 
 type key struct{}
@@ -54,55 +72,92 @@ type output struct {
 
 	stdoutBuf strings.Builder
 	stderrBuf strings.Builder
-	err       error
 
-	nativeJSON bool
-	outputJSON bool
-	stdout     io.Writer
-	stderr     io.Writer
+	stdoutIsJSON bool
+	stderrIsJSON bool
+
+	jsonEncoder *json.Encoder
+	stdout      io.Writer
+	stderr      io.Writer
+
+	originalStdout io.Writer
+	originalStderr io.Writer
 }
 
 func (o *output) runE(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		flagValue, _ := cmd.Flags().GetString("output")
-		o.outputJSON = strings.ToLower(flagValue) == "json"
-		if !o.outputJSON {
+		if !WantsJSONOutput(cmd.Flags()) {
 			return f(cmd, args)
 		}
 
-		nativeJSON, err := cmd.LocalFlags().GetBool("json")
-		if err == nil {
-			o.nativeJSON = nativeJSON
-		}
-		stdout := cmd.OutOrStdout()
-		cmd.SetOut(&o.stdoutBuf)
-		cmd.SetErr(&o.stderrBuf)
 		o.cmd = cmd.Name()
-		o.err = f(cmd, args)
-		o.writeStructured(stdout)
+		o.jsonEncoder = json.NewEncoder(o.originalStdout)
+		o.stdout = &o.stdoutBuf
+		o.stderr = &o.stderrBuf
+
+		cmd.SetOut(&streamerWriter{
+			output: o,
+		})
+		cmd.SetErr(&streamerWriter{
+			output:   o,
+			isStderr: true,
+		})
+
+		err := f(cmd, args)
+		o.writeStructured(err)
 
 		return nil
 	}
 }
 
-func (o *output) writeStructured(w io.Writer) {
-	response := struct {
-		Cmd    string      `json:"cmd"`
-		Err    string      `json:"err,omitempty"`
-		Stdout interface{} `json:"stdout,omitempty"`
-		Stderr string      `json:"stderr,omitempty"`
-	}{
-		Cmd:    o.cmd,
-		Stdout: o.stdoutBuf.String(),
-		Stderr: o.stderrBuf.String(),
+func (o *output) writeStructured(err error) {
+	response := object{
+		Cmd: o.cmd,
 	}
 
-	if o.err != nil {
-		response.Err = o.err.Error()
+	if buf := o.stdoutBuf; 0 < buf.Len() {
+		if o.stdoutIsJSON {
+			response.Stdout = json.RawMessage(buf.String())
+		} else {
+			response.Stdout = buf.String()
+		}
 	}
-	if o.nativeJSON {
-		response.Stdout = json.RawMessage(response.Stdout.(string))
+	if buf := o.stderrBuf; 0 < buf.Len() {
+		if o.stderrIsJSON {
+			response.Stderr = json.RawMessage(buf.String())
+		} else {
+			response.Stderr = buf.String()
+		}
+	}
+	if err != nil {
+		response.Err = err.Error()
 	}
 
-	_ = json.NewEncoder(w).Encode(response)
+	// dont print out the "zero" object
+	if response.hasCmdOnly() {
+		return
+	}
+
+	fmt.Printf("response: %+v\n", response)
+
+	_ = o.jsonEncoder.Encode(response)
+}
+
+func WantsJSONOutput(flags *pflag.FlagSet) bool {
+	flagValue, _ := flags.GetString("output")
+	return strings.ToLower(flagValue) == "json"
+}
+
+type object struct {
+	Cmd    string `json:"cmd"`
+	Err    string `json:"err,omitempty"`
+	Stdout any    `json:"stdout,omitempty"`
+	Stderr any    `json:"stderr,omitempty"`
+}
+
+func (o *object) hasCmdOnly() bool {
+	x := o.Err == ""
+	x = x && o.Stdout == nil
+	x = x && o.Stderr == nil
+	return x
 }

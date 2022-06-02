@@ -2,8 +2,8 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 
@@ -13,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
 type listInfo struct {
@@ -21,7 +22,7 @@ type listInfo struct {
 	onlyInterceptable bool
 	debug             bool
 	namespace         string
-	json              bool
+	watch             bool
 }
 
 func listCommand() *cobra.Command {
@@ -39,15 +40,14 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
-	flags.BoolVarP(&s.json, "json", "j", false, "output as json array")
+	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
 	return cmd
 }
 
 // list requests a list current intercepts from the daemon
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
-	var r *connector.WorkloadInfoSnapshot
-	var err error
-	err = withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
+	stdout := cmd.OutOrStdout()
+	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:
@@ -69,20 +69,63 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 				}
 			}
 		}
-		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
-		return err
+
+		jsonOut := output.WantsJSONOutput(cmd.Flags())
+		if !s.watch {
+			r, err := cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+			if err != nil {
+				return err
+			}
+			s.printList(r.Workloads, stdout, jsonOut)
+			return nil
+		}
+
+		stream, err := cs.userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+		if err != nil {
+			return err
+		}
+
+		ch := make(chan *connector.WorkloadInfoSnapshot)
+		go func() {
+			for {
+				r, err := stream.Recv()
+				if err != nil {
+					break
+				}
+				ch <- r
+			}
+		}()
+
+	looper:
+		for {
+			select {
+			case r := <-ch:
+				s.printList(r.Workloads, stdout, jsonOut)
+			case <-ctx.Done():
+				break looper
+			}
+		}
+		return nil
 	})
-	if err != nil {
-		return err
+}
+
+func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer, jsonOut bool) {
+	var streamerOut output.StructuredStreamer
+
+	if jsonOut {
+		streamerOut, _ = stdout.(output.StructuredStreamer)
+		if streamerOut == nil {
+			panic("writer not output.StructuredStreamer")
+		}
 	}
-	stdout := cmd.OutOrStdout()
-	if len(r.Workloads) == 0 {
-		if s.json {
-			fmt.Fprintln(stdout, "[]")
+
+	if len(workloads) == 0 {
+		if jsonOut {
+			streamerOut.StructuredStream([]struct{}{}, nil)
 		} else {
 			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		}
-		return nil
+		return
 	}
 
 	state := func(workload *connector.WorkloadInfo) string {
@@ -100,17 +143,12 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if s.json {
-		msg, err := json.Marshal(r.Workloads)
-		if err != nil {
-			fmt.Fprintf(stdout, "json marshal error: %v", err)
-		} else {
-			fmt.Fprintf(stdout, "%s", msg)
-		}
+	if jsonOut {
+		streamerOut.StructuredStream(workloads, nil)
 	} else {
 		includeNs := false
 		ns := s.namespace
-		for _, dep := range r.Workloads {
+		for _, dep := range workloads {
 			depNs := dep.Namespace
 			if depNs == "" {
 				// Local-only, so use namespace of first intercept
@@ -123,7 +161,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			ns = depNs
 		}
 		nameLen := 0
-		for _, dep := range r.Workloads {
+		for _, dep := range workloads {
 			n := dep.Name
 			if n == "" {
 				// Local-only, so use name of first intercept
@@ -137,7 +175,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 				nameLen = nl
 			}
 		}
-		for _, workload := range r.Workloads {
+		for _, workload := range workloads {
 			if workload.Name == "" {
 				// Local-only, so use name of first intercept
 				n := workload.InterceptInfos[0].Spec.Name
@@ -154,7 +192,6 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			}
 		}
 	}
-	return nil
 }
 
 func DescribeIntercepts(iis []*manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
