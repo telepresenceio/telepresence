@@ -89,7 +89,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 
 	s.Run("Installs Successfully", func() {
 		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
-		s.NoError(s.InstallTrafficManager(ctx, s.mgrSpace2, s.appSpace2))
+		s.NoError(s.InstallTrafficManager(ctx, nil, s.mgrSpace2, s.appSpace2))
 	})
 
 	s.Run("Can be connected to", func() {
@@ -118,5 +118,5 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 }
 
 func (s *helmSuite) Test_CollidingInstalls() {
-	s.Error(s.InstallTrafficManager(s.Context(), s.mgrSpace2, s.AppNamespace(), s.appSpace2))
+	s.Error(s.InstallTrafficManager(s.Context(), nil, s.mgrSpace2, s.AppNamespace(), s.appSpace2))
 }

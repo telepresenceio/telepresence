@@ -208,8 +208,9 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 		return patches
 	}
 
+	pis := pod.Spec.InitContainers
 	ic := agentconfig.InitContainer(config.AgentImage)
-	if len(pod.Spec.InitContainers) == 0 {
+	if len(pis) == 0 {
 		return append(patches, patchOperation{
 			Op:    "replace",
 			Path:  "/spec/initContainers",
@@ -217,7 +218,8 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 		})
 	}
 
-	for i, oc := range pod.Spec.InitContainers {
+	for i := range pis {
+		oc := &pis[i]
 		if ic.Name == oc.Name {
 			if ic.Image == oc.Image &&
 				slices.Equal(ic.Args, oc.Args) &&
@@ -299,7 +301,7 @@ func compareVolumeMounts(a, b []core.VolumeMount) bool {
 	stripKubeAPI := func(vs []core.VolumeMount) []core.VolumeMount {
 		ss := make([]core.VolumeMount, 0, len(vs))
 		for _, v := range vs {
-			if !strings.HasPrefix(v.Name, "kube-api-access-") {
+			if !(strings.HasPrefix(v.Name, "kube-api-access-") || strings.HasPrefix(v.MountPath, "/var/run/secrets/kubernetes.io/")) {
 				ss = append(ss, v)
 			}
 		}
@@ -314,7 +316,7 @@ func containerEqual(a, b *core.Container) bool {
 	return cmp.Equal(a, b,
 		cmp.Comparer(compareProbes),
 		cmp.Comparer(compareVolumeMounts),
-		cmpopts.IgnoreFields(core.Container{}, "ImagePullPolicy", "TerminationMessagePath", "TerminationMessagePolicy"))
+		cmpopts.IgnoreFields(core.Container{}, "ImagePullPolicy", "Resources", "TerminationMessagePath", "TerminationMessagePolicy"))
 }
 
 // addAgentContainer creates a patch operation to add the traffic-agent container
