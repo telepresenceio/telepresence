@@ -85,12 +85,24 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 
-		for {
-			r, err := stream.Recv()
-			if err != nil {
-				return err
+		ch := make(chan *connector.WorkloadInfoSnapshot)
+		go func(ch chan *connector.WorkloadInfoSnapshot) {
+			for {
+				r, err := stream.Recv()
+				if err != nil {
+					break
+				}
+				ch <- r
 			}
-			s.printList(r.Workloads, stdout, jsonOut)
+		}(ch)
+
+		for {
+			select {
+			case r := <-ch:
+				s.printList(r.Workloads, stdout, jsonOut)
+			case <-ctx.Done():
+				break
+			}
 		}
 	})
 }
