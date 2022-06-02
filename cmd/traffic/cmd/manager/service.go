@@ -69,6 +69,7 @@ func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to to open %s/ca.crt: %w", proxyCertsPath, err)
 	}
+	defer f.Close()
 	b, err := io.ReadAll(f)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read %s/ca.crt: %w", proxyCertsPath, err)
