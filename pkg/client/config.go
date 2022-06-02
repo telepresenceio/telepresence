@@ -520,10 +520,9 @@ func (ll *LogLevels) merge(o *LogLevels) {
 }
 
 type Images struct {
-	PrivateRegistry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
-	PrivateAgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
-	PrivateWebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
-	PrivateWebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
+	PrivateRegistry        string `json:"registry,omitempty" yaml:"registry,omitempty"`
+	PrivateAgentImage      string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
+	PrivateWebhookRegistry string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -548,7 +547,8 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "webhookRegistry":
 			img.PrivateWebhookRegistry = v.Value
 		case "webhookAgentImage":
-			img.PrivateWebhookAgentImage = v.Value
+			dlog.Warn(parseContext, withLoc(fmt.Sprintf(`deprecated key %q, please use "agentImage" instead`, kv), ms[i]))
+			img.PrivateAgentImage = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -561,9 +561,6 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 func (img *Images) merge(o *Images) {
 	if o.PrivateAgentImage != "" {
 		img.PrivateAgentImage = o.PrivateAgentImage
-	}
-	if o.PrivateWebhookAgentImage != "" {
-		img.PrivateWebhookAgentImage = o.PrivateWebhookAgentImage
 	}
 	if o.PrivateRegistry != "" {
 		img.PrivateRegistry = o.PrivateRegistry
@@ -584,19 +581,12 @@ func (img *Images) WebhookRegistry(c context.Context) string {
 	if img.PrivateWebhookRegistry != "" {
 		return img.PrivateWebhookRegistry
 	}
-	return GetEnv(c).Registry
+	return img.Registry(c)
 }
 
 func (img *Images) AgentImage(c context.Context) string {
 	if img.PrivateAgentImage != "" {
 		return img.PrivateAgentImage
-	}
-	return GetEnv(c).AgentImage
-}
-
-func (img *Images) WebhookAgentImage(c context.Context) string {
-	if img.PrivateWebhookAgentImage != "" {
-		return img.PrivateWebhookAgentImage
 	}
 	return GetEnv(c).AgentImage
 }

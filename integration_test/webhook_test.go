@@ -45,7 +45,7 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 	require.Contains(stdout, "echo-auto-inject: intercepted")
 }
 
-func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
+func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	// Restore the traffic-manager at the end of this function
 	ctx := itest.WithUser(s.Context(), "default")
 	defer func() {
@@ -57,8 +57,7 @@ func (s *notConnectedSuite) Test_WebhookAgentImageFromConfig() {
 	// latter that is used in the traffic-manager
 	ctxAI := itest.WithConfig(ctx, &client.Config{
 		Images: client.Images{
-			PrivateAgentImage:        "notUsed:0.0.1",
-			PrivateWebhookAgentImage: "imageFromConfig:0.0.1",
+			PrivateAgentImage: "imageFromConfig:0.0.1",
 		},
 	})
 
