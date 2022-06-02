@@ -173,7 +173,7 @@ is_prop_traffic_agent() {
 
 get_config() {
     if [ -n "$TELEPRESENCE_AGENT_IMAGE" ]; then
-        echo "Use images.webhookAgentImage in your config.yml to configure the Smart Agent Image to use"
+        echo "Use images.agentImage in your config.yml to configure the Smart Agent Image to use"
         exit 1
     fi
 
@@ -297,7 +297,6 @@ prepare_license_config_systema_enabled() {
 
     # and set the following:
     yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
-    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for license testing:"
     yq e '.' "$config_file"
 }
@@ -313,7 +312,6 @@ prepare_license_config_systema_disabled() {
     yq e '.cloud.systemaHost = "127.0.0.1"' -i "$config_file"
     yq e '.cloud.systemaPort = 456' -i "$config_file"
     yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
-    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for license testing:"
     yq e '.' "$config_file"
 }
@@ -331,7 +329,6 @@ prepare_oss_config() {
     yq e '.cloud.systemaHost = "127.0.0.1"' -i "$config_file"
     yq e '.cloud.systemaPort = 456' -i "$config_file"
     yq e ".images.agentImage = \"$current_image\"" -i "$config_file"
-    yq e ".images.webhookAgentImage = \"$current_image\"" -i "$config_file"
     echo "Using the following config for non-license testing:"
     yq e '.' "$config_file"
 }
@@ -388,12 +385,12 @@ echo
 get_config
 
 if [ -f "$config_file" ]; then
-    smart_agent=$(sed -n -e 's/^[ ]*webhookAgentImage\:[ ]*//p' "$config_file")
+    smart_agent=$(sed -n -e 's/^[ ]*agentImage\:[ ]*//p' "$config_file")
     echo "Smart agent: $smart_agent"
     config_bak="$config_file.bak"
     echo
 else
-    echo "Please set the images.webhookAgentImage to the desired smart agent"
+    echo "Please set the images.agentImage to the desired smart agent"
     exit 1
 fi
 
@@ -563,7 +560,7 @@ finish_step
 # here. The integration tests *do* test mounts on Windows and Linux so this
 # testing is really being extra cautious. We can remove this whole step if/when
 # the macfuse issue is cleared up in the macos executors.
-mount_path=$($TELEPRESENCE list --json | jq -r '.[] | select(.name=="dataprocessingservice") | .intercept_infos[0].client_mount_point')
+mount_path=$($TELEPRESENCE list --output json | jq -r '.stdout | .[] | select(.name=="dataprocessingservice") | .intercept_infos[0].client_mount_point')
 if [[ -z $mount_path ]]; then
     echo "Mount path was empty and it shouldn't have been"
     exit 1
@@ -597,7 +594,7 @@ finish_step
 #############################################################################
 #### Step 6 - Verify can intercept service without local process running ####
 #############################################################################
-
+sleep 1
 $TELEPRESENCE intercept dataprocessingservice --port "$CLOSED_PORT" --preview-url=false --mechanism=tcp >"$output_location"
 sleep 1
 
@@ -730,6 +727,7 @@ finish_step
 #### Step 12 - licensed intercept all w/o preview url ####
 ##########################################################
 
+sleep 1
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --http-header=all --preview-url=false)
 sleep 1
 has_intercept_id false
@@ -743,7 +741,7 @@ finish_step
 #############################################################################
 #### Step 13 - Verify can intercept service without local process running ####
 #############################################################################
-
+sleep 1
 $TELEPRESENCE intercept dataprocessingservice --port "$CLOSED_PORT" --preview-url=false >"$output_location"
 sleep 1
 
