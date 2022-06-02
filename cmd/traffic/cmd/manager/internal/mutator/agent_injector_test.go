@@ -844,6 +844,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
@@ -920,6 +925,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
@@ -1043,6 +1053,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
@@ -1132,6 +1147,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
@@ -1221,6 +1241,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
@@ -1302,15 +1327,26 @@ func TestTrafficAgentInjector(t *testing.T) {
 								Protocol:      "TCP",
 							}},
 							EnvFrom: nil,
-							Env: []core.EnvVar{{
-								Name: "_TEL_AGENT_POD_IP",
-								ValueFrom: &core.EnvVarSource{
-									FieldRef: &core.ObjectFieldSelector{
-										APIVersion: "v1",
-										FieldPath:  "status.podIP",
+							Env: []core.EnvVar{
+								{
+									Name: "_TEL_AGENT_POD_IP",
+									ValueFrom: &core.EnvVarSource{
+										FieldRef: &core.ObjectFieldSelector{
+											APIVersion: "v1",
+											FieldPath:  "status.podIP",
+										},
 									},
 								},
-							}},
+								{
+									Name: "_TEL_AGENT_NAME",
+									ValueFrom: &core.EnvVarSource{
+										FieldRef: &core.ObjectFieldSelector{
+											APIVersion: "v1",
+											FieldPath:  "metadata.name",
+										},
+									},
+								},
+							},
 							Resources:                core.ResourceRequirements{},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: "File",
@@ -1374,6 +1410,11 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
