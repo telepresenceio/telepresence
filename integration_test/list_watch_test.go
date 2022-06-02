@@ -23,19 +23,19 @@ func init() {
 func (s *list_watchSuite) Test_ListWatch() {
 	svc := "echo-easy"
 
-	teleListWatch := func(ctx context.Context) {
-		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--watch")
-		s.Contains(stdout, svc)
-	}
-
 	s.Run("<ctrl>-C", func() {
 		// Use a context to end tele list -w
 		ctx := s.Context()
 		cancelctx, cancel := context.WithCancel(ctx)
-		go teleListWatch(cancelctx)
+		ch := make(chan string)
+		go func() {
+			stdout, _, _ := itest.Telepresence(cancelctx, "list", "--namespace", s.AppNamespace(), "--watch")
+			ch <- stdout
+		}()
 		time.Sleep(time.Second)
 		s.ApplyApp(ctx, svc, "deploy/"+svc)
 		time.Sleep(time.Second)
 		cancel()
+		s.Contains(<-ch, svc)
 	})
 }

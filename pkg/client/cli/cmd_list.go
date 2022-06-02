@@ -86,7 +86,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 
 		ch := make(chan *connector.WorkloadInfoSnapshot)
-		go func(ch chan *connector.WorkloadInfoSnapshot) {
+		go func() {
 			for {
 				r, err := stream.Recv()
 				if err != nil {
@@ -94,7 +94,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 				}
 				ch <- r
 			}
-		}(ch)
+		}()
 
 	looper:
 		for {
