@@ -4,7 +4,10 @@
 
 - Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
 
-- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy. This can be configured through the helm chart.
+- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
+  This can be configured through the helm chart.
+
+- Feature: A policy that controls when the mutating webhook injects the traffic-agent was added, and can be configured in the Helm chart.
 
 - Change: Telepresence on Windows upgraded wintun.dll from version 0.12 to version 0.14.1
 

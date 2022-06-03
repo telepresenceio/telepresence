@@ -93,7 +93,14 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	case "false", "disabled":
 		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agentconfig.InjectAnnotation)
 		return nil, nil
-	case "", "enabled":
+	case "":
+		if env.AgentInjectPolicy != agentconfig.OnDemand {
+			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q annotation; skipping`,
+				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.InjectAnnotation)
+			return nil, nil
+		}
+		fallthrough
+	case "enabled":
 		config, err = a.findConfigMapValue(ctx, pod, nil)
 		if err != nil {
 			if isDelete {
@@ -104,9 +111,9 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		switch {
 		case config == nil && isDelete:
 			return nil, nil
-		case config == nil && ia == "":
-			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or %q annotation; skipping`,
-				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
+		case config == nil && !(ia == "enabled" && env.AgentInjectPolicy == agentconfig.WhenEnabled):
+			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap; skipping`,
+				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap)
 			return nil, nil
 		case config != nil && config.Manual:
 			if !isDelete {
