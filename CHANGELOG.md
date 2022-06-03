@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.5 (TBD)
+### 2.6.5 (June 3, 2022)
 
 - Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
 
