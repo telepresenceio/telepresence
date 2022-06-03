@@ -174,12 +174,14 @@ agentInjector:
     name: mutator-webhook-tls
   certificate:
     regenerate: false
+  injectPolicy: OnDemand
   webhook:
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]
     servicePath: /traffic-agent
     port: 443
     failurePolicy: Ignore
+    reinvocationPolicy: Never
     sideEffects: None
     timeoutSeconds: 5
   appPortStrategy: http2Probe

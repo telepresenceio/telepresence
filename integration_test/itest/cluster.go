@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -48,7 +49,7 @@ type Cluster interface {
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
-	InstallTrafficManager(ctx context.Context, managerNamespace string, appNamespaces ...string) error
+	InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error
 	IsCI() bool
 	Registry() string
 	SetGeneralError(error)
@@ -283,6 +284,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
 		"TELEPRESENCE_VERSION":      s.testVersion,
+		"TELEPRESENCE_AGENT_IMAGE":  "tel2:" + strings.TrimPrefix(s.testVersion, "v"), // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
 		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
 		"KUBECONFIG":                s.kubeConfig,
@@ -412,11 +414,8 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 }
 
-func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace string, appNamespaces ...string) error {
-	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
-	helmChart := filepath.Join("charts", "telepresence")
-	err := Run(WithModuleRoot(ctx), "helm", "install", "traffic-manager",
-		"-n", managerNamespace, helmChart,
+func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+	settings := []string{
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
@@ -426,9 +425,18 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
-		"-f", helmValues,
-		"--wait",
-	)
+	}
+
+	for k, v := range values {
+		settings = append(settings, "--set", k+"="+v)
+	}
+
+	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
+	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
+	args = append(args, settings...)
+	args = append(args, "traffic-manager", filepath.Join("charts", "telepresence"))
+
+	err := Run(WithModuleRoot(ctx), "helm", args...)
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
@@ -443,9 +451,8 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
-	assert.Eventually(t, func() bool {
-		return Kubectl(ctx, managerNamespace, "get", "deploy", "traffic-manager") != nil
-	}, 20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
+	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
+		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
 }
 
 func KubeConfig(ctx context.Context) string {
@@ -784,4 +791,35 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
 	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
 	return WithEnv(ctx, map[string]string{"KUBECONFIG": strings.Join([]string{kc, kubeconfigFileName}, string([]byte{os.PathListSeparator}))})
+}
+
+// RunningPods return the names of running pods with app=<service name>. Running here means
+// that at least one container is still running. I.e. the pod might well be terminating
+// but still considered running.
+func RunningPods(ctx context.Context, svc, ns string) []string {
+	out, err := KubectlOut(ctx, ns, "get", "pods", "-o", "json",
+		"--field-selector", "status.phase==Running",
+		"-l", "app="+svc)
+	if err != nil {
+		getT(ctx).Error(err.Error())
+		return nil
+	}
+	var pm core.PodList
+	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+		getT(ctx).Error(err.Error())
+		return nil
+	}
+	pods := make([]string, 0, len(pm.Items))
+nextPod:
+	for _, pod := range pm.Items {
+		for _, cn := range pod.Status.ContainerStatuses {
+			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+				// At least one container is still running.
+				pods = append(pods, pod.Name)
+				continue nextPod
+			}
+		}
+	}
+	dlog.Infof(ctx, "Running pods %v", pods)
+	return pods
 }

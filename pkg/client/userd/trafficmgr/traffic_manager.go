@@ -187,6 +187,7 @@ type interceptResult struct {
 var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
 
 func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (Session, *connector.ConnectInfo) {
+	dlog.Info(c, "-- Starting new session")
 	sr.Report(c, "connect")
 
 	rootDaemon, err := svc.RootDaemonClient(c)
@@ -477,6 +478,8 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 //      Services, and
 //    + (4) mount the appropriate remote volumes.
 func (tm *TrafficManager) Run(c context.Context) error {
+	defer dlog.Info(c, "-- Session ended")
+
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)

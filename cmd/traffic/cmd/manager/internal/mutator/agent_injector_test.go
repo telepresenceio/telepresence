@@ -622,10 +622,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 		SystemAHost: "",
 		SystemAPort: "",
 
-		ManagerNamespace: "default",
-		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.6.0",
-		AgentPort:        9900,
+		ManagerNamespace:  "default",
+		AgentRegistry:     "docker.io/datawire",
+		AgentImage:        "tel2:2.6.0",
+		AgentPort:         9900,
+		AgentInjectPolicy: agentconfig.WhenEnabled,
 	}
 	one := int32(1)
 

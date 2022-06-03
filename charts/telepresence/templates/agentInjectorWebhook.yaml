@@ -37,7 +37,7 @@ webhooks:
     - pods
     scope: '*'
   failurePolicy: {{ .Values.agentInjector.webhook.failurePolicy }}
-  reinvocationPolicy: IfNeeded
+  reinvocationPolicy: {{ .Values.agentInjector.webhook.reinvocationPolicy }}
   name: agent-injector.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}

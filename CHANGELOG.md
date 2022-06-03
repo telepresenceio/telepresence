@@ -2,7 +2,12 @@
 
 ### 2.6.5 (TBD)
 
-- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy. This can be configured through the helm chart.
+- Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
+
+- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
+  This can be configured through the helm chart.
+
+- Feature: A policy that controls when the mutating webhook injects the traffic-agent was added, and can be configured in the Helm chart.
 
 - Change: Telepresence on Windows upgraded wintun.dll from version 0.12 to version 0.14.1
 
@@ -16,9 +21,15 @@
 
 - Change: The configuration setting for `images.webhookAgentImage` is now deprecated. Use `images.agentImage` instead.
 
+- Bugfix: The `reinvocationPolicy` or the traffic-agent injector webhook now defaults to `Never` insteadof `IfNeeded` so
+  that `LimitRange`s on namespaces can inject a missing `resources` element into the injected traffic-agent container.
+
 - Bugfix: UDP based communication with services in the cluster now works as expected.
 
 - Bugfix: The command help will only show Kubernetes flags on the commands that supports them
+
+- Bugfix: Only the errors from the last session will be considered when counting the number of errors in the log after
+  a command failure.
 
 ### 2.6.4 (May 23, 2022)
 
