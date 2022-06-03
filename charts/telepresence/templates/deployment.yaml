@@ -65,6 +65,8 @@ spec:
           {{- end }}
           - name: TELEPRESENCE_APP_PROTO_STRATEGY
             value: {{ .Values.agentInjector.appProtocolStrategy }}
+          - name: AGENT_INJECT_POLICY
+            value: {{ .Values.agentInjector.injectPolicy }}
           - name: MANAGER_NAMESPACE
             valueFrom:
               fieldRef:

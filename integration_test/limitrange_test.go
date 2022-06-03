@@ -37,9 +37,6 @@ func (s *helmSuite) limitedRangeTest(origCtx context.Context, policy, limitedNS 
 
 	_, _, err := itest.Telepresence(ctx, "intercept", "--namespace", limitedNS, "--mount", "false", svc)
 	if err != nil {
-		if out, err := itest.KubectlOut(ctx, limitedNS, "describe", "replicaset", "-l", "app="+svc); err == nil {
-			dlog.Info(ctx, out)
-		}
 		if out, err := itest.KubectlOut(ctx, limitedNS, "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
 			dlog.Info(ctx, out)
 		}

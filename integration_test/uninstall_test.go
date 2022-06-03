@@ -32,8 +32,10 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	s.ApplyApp(ctx, jobname, deployname)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", jobname)
 
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
-	require.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
+	s.Eventually(func() bool {
+		stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+		return strings.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
+	}, 30*time.Second, 3*time.Second)
 
 	// The telepresence-test-developer will not be able to uninstall everything
 	stdout = itest.TelepresenceOk(ctx, "uninstall", "--everything")

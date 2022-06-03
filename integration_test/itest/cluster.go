@@ -284,6 +284,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
 		"TELEPRESENCE_VERSION":      s.testVersion,
+		"TELEPRESENCE_AGENT_IMAGE":  "tel2:" + strings.TrimPrefix(s.testVersion, "v"), // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
 		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
 		"KUBECONFIG":                s.kubeConfig,
@@ -450,9 +451,8 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
-	assert.Eventually(t, func() bool {
-		return Kubectl(ctx, managerNamespace, "get", "deploy", "traffic-manager") != nil
-	}, 20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
+	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
+		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
 }
 
 func KubeConfig(ctx context.Context) string {
