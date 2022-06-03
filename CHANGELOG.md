@@ -26,6 +26,9 @@
 
 - Bugfix: The command help will only show Kubernetes flags on the commands that supports them
 
+- Bugfix: Only the errors from the last session will be considered when counting the number of errors in the log after
+  a command failure.
+
 ### 2.6.4 (May 23, 2022)
 
 - Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those

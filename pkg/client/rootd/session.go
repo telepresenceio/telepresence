@@ -203,6 +203,7 @@ func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []routing.
 
 // newSession returns a new properly initialized session object.
 func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*session, error) {
+	dlog.Info(c, "-- Starting new session")
 	conn, mc, err := connectToManager(c)
 	if mc == nil || err != nil {
 		return nil, err
@@ -459,6 +460,8 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 }
 
 func (s *session) run(c context.Context) error {
+	defer dlog.Info(c, "-- Session ended")
+
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
 	cancelDNSLock := sync.Mutex{}
