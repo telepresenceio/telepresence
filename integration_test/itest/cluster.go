@@ -284,6 +284,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
 		"TELEPRESENCE_VERSION":      s.testVersion,
+		"TELEPRESENCE_AGENT_IMAGE":  "tel2:" + strings.TrimPrefix(s.testVersion, "v"), // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
 		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
 		"KUBECONFIG":                s.kubeConfig,
