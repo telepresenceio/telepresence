@@ -171,7 +171,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 				if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
 					workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
 
-					goldBytes, err := yaml.Marshal(map[string]interface{}{
+					goldBytes, err := yaml.Marshal(map[string]any{
 						strings.ToLower(workloadKind): actualWrk,
 						"service":                     svc,
 					})
@@ -267,7 +267,7 @@ func loadFile(filename, inputVersion string) (workload k8sapi.Workload, service 
 	}
 
 	var buff bytes.Buffer
-	err = tmpl.Execute(&buff, map[string]interface{}{
+	err = tmpl.Execute(&buff, map[string]any{
 		"Version": strings.TrimPrefix(inputVersion, "v"),
 	})
 	if err != nil {

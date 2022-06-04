@@ -29,7 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func dumps(o interface{}) string {
+func dumps(o any) string {
 	bs, _ := json.Marshal(o)
 	return string(bs)
 }

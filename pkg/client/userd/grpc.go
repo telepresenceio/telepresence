@@ -34,7 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
-func callRecovery(c context.Context, r interface{}, err error) error {
+func callRecovery(c context.Context, r any, err error) error {
 	if perr := derror.PanicToError(r); perr != nil {
 		dlog.Errorf(c, "%+v", perr)
 		err = perr

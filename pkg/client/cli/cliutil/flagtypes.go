@@ -64,7 +64,7 @@ func (t TypeEnum) sanityCheck() (ctorFn reflect.Value, ctorArgType reflect.Type)
 	return fnVal, fnTyp.In(1).Elem()
 }
 
-func convertNew(val interface{}, to reflect.Type) (ptr reflect.Value, err error) {
+func convertNew(val any, to reflect.Type) (ptr reflect.Value, err error) {
 	// convert the default value to the correct type
 	bs, err := json.Marshal(val)
 	if err != nil {
@@ -79,7 +79,7 @@ func convertNew(val interface{}, to reflect.Type) (ptr reflect.Value, err error)
 	return ptr, nil
 }
 
-func (t TypeEnum) NewFlagValueFromJson(untypedDefault interface{}) (Value, error) {
+func (t TypeEnum) NewFlagValueFromJson(untypedDefault any) (Value, error) {
 	// validate the constructor function
 	fnVal, defaultTyp := t.sanityCheck()
 
@@ -127,7 +127,7 @@ type pfs = pflag.FlagSet // to make the following table a little less over-verbo
 // initialized with `x` as the value and will adjust `x` when it gets set.  The function may or may
 // not use `fs` as a scratch space; it exists only for convenience, the function may do with `fs`
 // whatever it likes.
-var flagTypes = map[TypeEnum]interface{}{
+var flagTypes = map[TypeEnum]any{
 	// For now, just match pflag (this list is in-sync with v1.0.5).
 	// We can define our own additional pflag.Value types later, if we ever feel the need.
 
@@ -253,7 +253,7 @@ func simple(fs *pflag.FlagSet) Value {
 	}
 }
 
-func nilable(fs *pflag.FlagSet, ptr interface{}) Value {
+func nilable(fs *pflag.FlagSet, ptr any) Value {
 	return simpleValue{
 		Value: fs.Lookup("x").Value,
 		ptr:   reflect.ValueOf(ptr),
@@ -309,7 +309,7 @@ func stringSliceAsArgs(flagname string, slicePtr reflect.Value) []string {
 	}
 }
 
-func slice(fs *pflag.FlagSet, slicePtr interface{}) Value {
+func slice(fs *pflag.FlagSet, slicePtr any) Value {
 	return complexValue{
 		Value:  fs.Lookup("x").Value,
 		ptr:    reflect.ValueOf(slicePtr),
@@ -317,7 +317,7 @@ func slice(fs *pflag.FlagSet, slicePtr interface{}) Value {
 	}
 }
 
-func mapping(fs *pflag.FlagSet, mapPtr interface{}) Value {
+func mapping(fs *pflag.FlagSet, mapPtr any) Value {
 	return complexValue{
 		Value:  fs.Lookup("x").Value,
 		ptr:    reflect.ValueOf(mapPtr),

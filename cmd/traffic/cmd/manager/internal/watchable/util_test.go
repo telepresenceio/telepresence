@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func assertDeepCopies(t *testing.T, a, b proto.Message, msgAndArgs ...interface{}) bool {
+func assertDeepCopies(t *testing.T, a, b proto.Message, msgAndArgs ...any) bool {
 	t.Helper()
 	if a == b {
 		return assert.Fail(t,

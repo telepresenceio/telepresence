@@ -38,9 +38,9 @@ var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).Univ
 
 // JSON patch, see https://tools.ietf.org/html/rfc6902 .
 type patchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value any    `json:"value,omitempty"`
 }
 
 type patchOps []patchOperation

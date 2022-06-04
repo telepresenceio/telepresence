@@ -40,13 +40,13 @@ func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.S
 	}
 	for _, informer := range informers {
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
+			AddFunc: func(obj any) {
 				w.onPodAdded(ctx, obj.(*corev1.Pod))
 			},
-			DeleteFunc: func(obj interface{}) {
+			DeleteFunc: func(obj any) {
 				w.onPodDeleted(ctx, obj.(*corev1.Pod))
 			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
+			UpdateFunc: func(oldObj, newObj any) {
 				w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
 			},
 		})

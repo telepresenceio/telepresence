@@ -1527,7 +1527,7 @@ func requireContains(t *testing.T, err error, expected string) {
 	require.Contains(t, err.Error(), expected)
 }
 
-func toAdmissionRequest(resource meta.GroupVersionResource, object interface{}) *admission.AdmissionRequest {
+func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admission.AdmissionRequest {
 	bytes, _ := json.Marshal(object)
 	return &admission.AdmissionRequest{
 		Resource:  resource,

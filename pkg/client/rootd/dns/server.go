@@ -281,7 +281,7 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 }
 
 func (s *Server) flushDNS() {
-	s.cache.Range(func(key, _ interface{}) bool {
+	s.cache.Range(func(key, _ any) bool {
 		s.cache.Delete(key)
 		return true
 	})

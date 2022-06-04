@@ -114,9 +114,9 @@ func (l *Bundle) GetLicenseInfo(clusterID string, canConnectCloud bool, systemaU
 
 type LicenseClaims struct {
 	jwt.Claims
-	AccountID string      `json:"accountId"`
-	Limits    interface{} `json:"limits"`
-	Scope     string      `json:"scope"`
+	AccountID string `json:"accountId"`
+	Limits    any    `json:"limits"`
+	Scope     string `json:"scope"`
 }
 
 func (lc *LicenseClaims) IsValidForCluster(cid string) error {

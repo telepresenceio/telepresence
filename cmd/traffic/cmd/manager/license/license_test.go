@@ -182,7 +182,7 @@ func genLicense(key *rsa.PrivateKey, clusterID string) (string, error) {
 		return "", err
 	}
 
-	claims := make(map[string]interface{})
+	claims := make(map[string]any)
 	claims["aud"] = []string{clusterID}
 
 	// Generate expiration date

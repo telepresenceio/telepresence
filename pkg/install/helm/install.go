@@ -21,7 +21,7 @@ const releaseOwner = "telepresence-cli"
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
-	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...interface{}) {
+	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...any) {
 		ctx := dlog.WithField(ctx, "source", "helm")
 		dlog.Debugf(ctx, format, args...)
 	})
@@ -31,14 +31,14 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 	return helmConfig, nil
 }
 
-func getValues(ctx context.Context) map[string]interface{} {
+func getValues(ctx context.Context) map[string]any {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
 	imageRegistry := imgConfig.Registry(ctx)
 	cloudConfig := clientConfig.Cloud
 	imageTag := strings.TrimPrefix(client.Version(), "v")
-	values := map[string]interface{}{
-		"image": map[string]interface{}{
+	values := map[string]any{
+		"image": map[string]any{
 			"registry": imageRegistry,
 			"tag":      imageTag,
 		},
@@ -47,13 +47,13 @@ func getValues(ctx context.Context) map[string]interface{} {
 		"createdBy":   releaseOwner,
 	}
 	if !clientConfig.Grpc.MaxReceiveSize.IsZero() {
-		values["grpc"] = map[string]interface{}{
+		values["grpc"] = map[string]any{
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
 	apc := clientConfig.Intercept.AppProtocolStrategy
 	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
-		agentImage := make(map[string]interface{})
+		agentImage := make(map[string]any)
 		if wai != "" {
 			parts := strings.Split(wai, ":")
 			image := wai
@@ -68,14 +68,14 @@ func getValues(ctx context.Context) map[string]interface{} {
 		if wr != "" {
 			agentImage["registry"] = wr
 		}
-		agentInjector := map[string]interface{}{"agentImage": agentImage}
+		agentInjector := map[string]any{"agentImage": agentImage}
 		values["agentInjector"] = agentInjector
 		if apc != k8sapi.Http2Probe {
 			agentInjector["appProtocolStrategy"] = apc.String()
 		}
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
-		values["telepresenceAPI"] = map[string]interface{}{
+		values["telepresenceAPI"] = map[string]any{
 			"port": clientConfig.TelepresenceAPI.Port,
 		}
 	}

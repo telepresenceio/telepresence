@@ -13,7 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 )
 
-func assertMessageMapSnapshotEqual[V watchable.Message](t *testing.T, expected, actual watchable.Snapshot[V], msgAndArgs ...interface{}) bool {
+func assertMessageMapSnapshotEqual[V watchable.Message](t *testing.T, expected, actual watchable.Snapshot[V], msgAndArgs ...any) bool {
 	t.Helper()
 
 	expectedBytes, err := json.MarshalIndent(expected, "", "    ")

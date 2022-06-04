@@ -313,8 +313,8 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	defer itest.DeleteNamespaces(ctx, customNamespace)
 	defer is.UninstallTrafficManager(ctx, customNamespace)
 	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": customNamespace})
-	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
-		return map[string]interface{}{"manager": map[string]string{"namespace": customNamespace}}
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
+		return map[string]any{"manager": map[string]string{"namespace": customNamespace}}
 	})
 	is.findTrafficManagerPresent(ctx, "extra", customNamespace)
 }

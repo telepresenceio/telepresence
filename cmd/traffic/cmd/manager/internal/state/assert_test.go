@@ -18,7 +18,7 @@ type Assertions struct {
 	t *testing.T
 }
 
-func (a *Assertions) Equal(expected interface{}, actual interface{}, msgAndArgs ...interface{}) bool {
+func (a *Assertions) Equal(expected any, actual any, msgAndArgs ...any) bool {
 	a.t.Helper()
 	_, expectedIsProto := expected.(proto.Message)
 	_, actualIsProto := actual.(proto.Message)
@@ -32,7 +32,7 @@ func (a *Assertions) Equal(expected interface{}, actual interface{}, msgAndArgs 
 	return a.Assertions.Equal(expected, actual, msgAndArgs...)
 }
 
-func (a *Assertions) Contains(s, contains interface{}, msgAndArgs ...interface{}) bool {
+func (a *Assertions) Contains(s, contains any, msgAndArgs ...any) bool {
 	a.t.Helper()
 	if contains, isProto := contains.(proto.Message); isProto {
 		ok, found := includeElement(s, contains)
@@ -54,7 +54,7 @@ func (a *Assertions) Contains(s, contains interface{}, msgAndArgs ...interface{}
 //
 // This is a copy of testify's assert.includeElement, but is modified to use proto.equal instead of
 // assert.ObjectsAreEqual, and also modified to use map values instead of map keys.
-func includeElement(list interface{}, element proto.Message) (ok, found bool) {
+func includeElement(list any, element proto.Message) (ok, found bool) {
 	listValue := reflect.ValueOf(list)
 	listKind := reflect.TypeOf(list).Kind()
 	defer func() {

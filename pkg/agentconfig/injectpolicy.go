@@ -43,7 +43,7 @@ func NewEnablePolicy(s string) (InjectPolicy, error) {
 	return 0, fmt.Errorf("invalid InjectPolicy: %q", s)
 }
 
-func (aps InjectPolicy) MarshalYAML() (interface{}, error) {
+func (aps InjectPolicy) MarshalYAML() (any, error) {
 	return aps.String(), nil
 }
 

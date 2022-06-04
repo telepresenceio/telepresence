@@ -32,7 +32,7 @@ func (p *Pool) Put(b *Data) {
 
 var DataPool = &Pool{
 	pool: sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return NewData(defaultMTU + maxIPHeader)
 		}},
 	MTU: defaultMTU,

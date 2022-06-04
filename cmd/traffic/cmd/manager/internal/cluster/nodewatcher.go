@@ -30,13 +30,13 @@ func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer ca
 		subnets:  make(subnet.Set),
 	}
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			w.onNodeAdded(ctx, obj.(*corev1.Node))
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			w.onNodeDeleted(ctx, obj.(*corev1.Node))
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			w.onNodeUpdated(ctx, oldObj.(*corev1.Node), newObj.(*corev1.Node))
 		},
 	})

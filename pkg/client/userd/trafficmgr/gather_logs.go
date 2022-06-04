@@ -156,7 +156,7 @@ func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.Log
 		}
 	}
 	pi := make(map[string]string)
-	result.Range(func(k, v interface{}) bool {
+	result.Range(func(k, v any) bool {
 		pi[k.(string)] = v.(string)
 		return true
 	})

@@ -10,8 +10,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-func getOsMetadata(ctx context.Context) map[string]interface{} {
-	osMeta := map[string]interface{}{
+func getOsMetadata(ctx context.Context) map[string]any {
+	osMeta := map[string]any{
 		"os_version":       "unknown",
 		"os_build_version": "unknown",
 		"os_name":          "unknown",

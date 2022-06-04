@@ -46,7 +46,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	var ips []net.IP
 	itest.TelepresenceQuitOk(ctx)
 
-	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		var apiServers []string
 		var err error
 		ips, err = getClusterIPs(cluster)
@@ -57,7 +57,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 				s.T().Skipf("test can't run on host with route %s and cluster IP %s", defaultGW.String(), ip)
 			}
 		}
-		return map[string]interface{}{"also-proxy": apiServers}
+		return map[string]any{"also-proxy": apiServers}
 	})
 
 	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
@@ -97,11 +97,11 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		"jsonpath={.spec.clusterIP}")
 	require.NoError(err)
 	var ips []net.IP
-	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		var err error
 		ips, err = getClusterIPs(cluster)
 		require.NoError(err)
-		return map[string]interface{}{"never-proxy": []string{ip + "/32"}}
+		return map[string]any{"never-proxy": []string{ip + "/32"}}
 	})
 	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
@@ -153,8 +153,8 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	} {
 		s.Run(name, func() {
 			require := s.Require()
-			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]interface{} {
-				return map[string]interface{}{
+			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]any {
+				return map[string]any{
 					"never-proxy": t.neverProxy,
 					"also-proxy":  t.alsoProxy,
 				}
@@ -187,8 +187,8 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	ctx := s.Context()
 	itest.TelepresenceQuitOk(ctx)
 
-	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]interface{} {
-		return map[string]interface{}{"dns": map[string][]string{"include-suffixes": {".org"}}}
+	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
+		return map[string]any{"dns": map[string][]string{"include-suffixes": {".org"}}}
 	})
 	require := s.Require()
 	logDir, err := filelocation.AppUserLogDir(ctx)

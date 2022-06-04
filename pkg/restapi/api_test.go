@@ -76,7 +76,7 @@ func Test_server_intercepts(t *testing.T) {
 		agent    restapi.AgentState
 		headers  map[string]string
 		endpoint string
-		want     interface{}
+		want     any
 	}{
 		{
 			"client true",
