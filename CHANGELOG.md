@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.5 (TBD)
+### 2.6.5 (June 3, 2022)
 
 - Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
 
@@ -16,6 +16,8 @@
 - Change: Telepresence upgraded its embedded Helm from version 3.8.1 to 3.9
 
 - Change: Telepresence upgraded its embedded Kubernetes API from version 0.23.4 to 0.24.1
+
+- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
 
 - Change: The configuration setting for `images.webhookAgentImage` is now deprecated. Use `images.agentImage` instead.
 
@@ -53,8 +55,6 @@
 - Bugfix: A potential race condition causing a panic when closing a DNS connection is now handled correctly.
 
 - Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
-
-- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
 
 ### 2.6.2 (May 17, 2022)
 
