@@ -49,6 +49,10 @@ func (w *tbWrapper) WithField(key string, value any) dlog.Logger {
 }
 
 func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
+	if level > w.level {
+		return
+	}
+	w.Helper()
 	w.UnformattedLog(level, msg)
 }
 
@@ -82,9 +86,17 @@ func (w *tbWrapper) UnformattedLog(level dlog.LogLevel, args ...any) {
 }
 
 func (w *tbWrapper) UnformattedLogf(level dlog.LogLevel, format string, args ...any) {
+	if level > w.level {
+		return
+	}
+	w.Helper()
 	w.Log(level, fmt.Sprintf(format, args...))
 }
 
 func (w *tbWrapper) UnformattedLogln(level dlog.LogLevel, args ...any) {
+	if level > w.level {
+		return
+	}
+	w.Helper()
 	w.Log(level, fmt.Sprintln(args...))
 }
