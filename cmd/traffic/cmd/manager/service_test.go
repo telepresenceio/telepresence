@@ -3,9 +3,12 @@ package manager_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -25,6 +28,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	mockmanagerutil "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil/mocks"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -44,7 +49,7 @@ func TestConnect(t *testing.T) {
 
 	version.Version = "testing"
 
-	conn := getTestClientConn(t)
+	conn := getTestClientConn(ctx, t)
 	defer conn.Close()
 
 	client := rpc.NewManagerClient(conn)
@@ -288,9 +293,77 @@ func TestConnect(t *testing.T) {
 	a.NoError(err)
 }
 
-func getTestClientConn(t *testing.T) *grpc.ClientConn {
+func TestRemoveIntercept_InterceptFinalizer(t *testing.T) {
+	dlog.SetFallbackLogger(dlog.WrapTB(t, false))
+	ctx := dlog.NewTestContext(t, true)
+	a := assert.New(t)
+
+	mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
+	mockSysaCRUDClient.EXPECT().RemoveIntercept(gomock.Any(), gomock.Any()).Return(&empty.Empty{}, nil)
+	mockSysaCRUDClient.EXPECT().Close(gomock.Any()).Return(nil)
+
+	mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
+		t:            t,
+		expectations: map[string][]*mockExpectation{},
+	}
+	mockSysa.EXPECT().GetCloudConfig(gomock.Any()).Return(
+		&rpc.AmbassadorCloudConfig{
+			Host: "hostname",
+			Port: "8080",
+		}, nil,
+	)
+	mockSysa.EXPECT().BuildClient(gomock.Any(), gomock.Any()).Return(
+		mockSysaCRUDClient, nil,
+	)
+	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
+
+	testClients := testdata.GetTestClients(t)
+	testAgents := testdata.GetTestAgents(t)
+
+	version.Version = "testing"
+
+	conn := getTestClientConn(ctx, t)
+	defer conn.Close()
+
+	client := rpc.NewManagerClient(conn)
+
+	ver, err := client.Version(ctx, &empty.Empty{})
+	a.NoError(err)
+	a.Equal(version.Version, ver.Version)
+
+	sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+	a.NoError(err)
+
+	spec := &rpc.InterceptSpec{
+		Name:       "first",
+		Namespace:  "default",
+		Client:     testClients["alice"].Name,
+		Agent:      testAgents["hello"].Name,
+		Mechanism:  "tcp",
+		TargetHost: "asdf",
+		TargetPort: 9876,
+	}
+
+	first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+		Session:       sess,
+		InterceptSpec: spec,
+		ApiKey:        "apiKey",
+	})
+	a.NoError(err)
+	a.True(proto.Equal(spec, first.Spec))
+	t.Logf("=> intercept info: %s", dumps(first))
+
+	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+		Name:    spec.Name,
+		Session: sess,
+	})
+	a.NoError(err)
+}
+
+func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	const bufsize = 64 * 1024
-	ctx, cancel := context.WithCancel(dlog.NewTestContext(t, true))
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
 
 	lis := bufconn.Listen(bufsize)
 	bufDialer := func(context.Context, string) (net.Conn, error) {
@@ -340,4 +413,250 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 	})
 
 	return conn
+}
+
+type mockA8rCloudClientProvider[T a8rcloud.Closeable] struct {
+	t            *testing.T
+	expectations map[string][]*mockExpectation
+}
+
+func (m *mockA8rCloudClientProvider[T]) EXPECT() *mockA8rCloudClientProviderExpectationHandler[T] {
+	return &mockA8rCloudClientProviderExpectationHandler[T]{m._addExpectation}
+}
+
+func (m *mockA8rCloudClientProvider[T]) _addExpectation(e *mockExpectation) {
+	if m.expectations == nil {
+		m.expectations = make(map[string][]*mockExpectation)
+	}
+	var (
+		name         = e.name
+		expectations = m.expectations[name]
+	)
+	if expectations == nil {
+		expectations = make([]*mockExpectation, 0)
+	}
+	expectations = append(expectations, e)
+	m.expectations[name] = expectations
+}
+
+func (m *mockA8rCloudClientProvider[T]) GetAPIKey(ctx context.Context) (string, error) {
+	var expectations = m.expectations["GetAPIKey"]
+	if len(expectations) == 0 {
+		err := errors.New("unexpected call to GetAPIKey")
+		m.t.Error(err)
+		return "", err
+	}
+
+	var e *mockExpectation
+	e, expectations = expectations[0], expectations[1:]
+	m.expectations["GetAPIKey"] = expectations
+
+	arg := e.args[0]
+	if matcher, ok := arg.(gomock.Matcher); ok {
+		if !matcher.Matches(ctx) {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return "", err
+		}
+	} else {
+		if cctx := arg.(context.Context); ctx != cctx {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return "", err
+		}
+	}
+
+	var ret = e.ret
+	return ret[0].(string), castErr(ret[1])
+}
+
+func (m *mockA8rCloudClientProvider[T]) GetInstallID(ctx context.Context) (string, error) {
+	var expectations = m.expectations["GetInstallID"]
+	if len(expectations) == 0 {
+		err := errors.New("unexpected call to GetInstallID")
+		m.t.Error(err)
+		return "", err
+	}
+
+	var e *mockExpectation
+	e, expectations = expectations[0], expectations[1:]
+	m.expectations["GetInstallID"] = expectations
+
+	arg := e.args[0]
+	if matcher, ok := arg.(gomock.Matcher); ok {
+		if !matcher.Matches(ctx) {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return "", err
+		}
+	} else {
+		if cctx := arg.(context.Context); ctx != cctx {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return "", err
+		}
+	}
+
+	var ret = e.ret
+	return ret[0].(string), castErr(ret[1])
+}
+
+func (m *mockA8rCloudClientProvider[T]) GetExtraHeaders(ctx context.Context) (map[string]string, error) {
+	var expectations = m.expectations["GetExtraHeaders"]
+	if len(expectations) == 0 {
+		err := errors.New("unexpected call to GetExtraHeaders")
+		m.t.Error(err)
+		return nil, err
+	}
+
+	var e *mockExpectation
+	e, expectations = expectations[0], expectations[1:]
+	m.expectations["GetExtraHeaders"] = expectations
+
+	arg := e.args[0]
+	if matcher, ok := arg.(gomock.Matcher); ok {
+		if !matcher.Matches(ctx) {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return nil, err
+		}
+	} else {
+		if cctx := arg.(context.Context); ctx != cctx {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return nil, err
+		}
+	}
+
+	var ret = e.ret
+	return ret[0].(map[string]string), castErr(ret[1])
+}
+
+func (m *mockA8rCloudClientProvider[T]) GetCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
+	var expectations = m.expectations["GetCloudConfig"]
+	if len(expectations) == 0 {
+		err := errors.New("unexpected call to GetCloudConfig")
+		m.t.Error(err)
+		return nil, err
+	}
+
+	var e *mockExpectation
+	e, expectations = expectations[0], expectations[1:]
+	m.expectations["GetCloudConfig"] = expectations
+
+	arg := e.args[0]
+	if matcher, ok := arg.(gomock.Matcher); ok {
+		if !matcher.Matches(ctx) {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return nil, err
+		}
+	} else {
+		if cctx := arg.(context.Context); ctx != cctx {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return nil, err
+		}
+	}
+
+	var ret = e.ret
+	return ret[0].(*rpc.AmbassadorCloudConfig), castErr(ret[1])
+}
+
+func (m *mockA8rCloudClientProvider[T]) BuildClient(ctx context.Context, conn *grpc.ClientConn) (managerutil.SystemaCRUDClient, error) {
+	var expectations = m.expectations["BuildClient"]
+	if len(expectations) == 0 {
+		err := errors.New("unexpected call to BuildClient")
+		m.t.Error(err)
+		return nil, err
+	}
+
+	var e *mockExpectation
+	e, expectations = expectations[0], expectations[1:]
+	m.expectations["BuildClient"] = expectations
+
+	arg := e.args[0]
+	if matcher, ok := arg.(gomock.Matcher); ok {
+		if !matcher.Matches(ctx) {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return nil, err
+		}
+	} else {
+		if cctx := arg.(context.Context); ctx != cctx {
+			err := fmt.Errorf("invalid argument: %v", ctx)
+			m.t.Error(err)
+			return nil, err
+		}
+	}
+
+	var ret = e.ret
+	return ret[0].(managerutil.SystemaCRUDClient), castErr(ret[1])
+}
+
+type mockA8rCloudClientProviderExpectationHandler[T a8rcloud.Closeable] struct {
+	addExpectation func(*mockExpectation)
+}
+
+func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetAPIKey(args ...any) *mockExpectation {
+	var e = mockExpectation{
+		name: "GetAPIKey",
+		args: args,
+	}
+	m.addExpectation(&e)
+	return &e
+}
+
+func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetInstallID(args ...any) *mockExpectation {
+	var e = mockExpectation{
+		name: "GetInstallID",
+		args: args,
+	}
+	m.addExpectation(&e)
+	return &e
+}
+
+func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetExtraHeaders(args ...any) *mockExpectation {
+	var e = mockExpectation{
+		name: "GetExtraHeaders",
+		args: args,
+	}
+	m.addExpectation(&e)
+	return &e
+}
+
+func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetCloudConfig(args ...any) *mockExpectation {
+	var e = mockExpectation{
+		name: "GetCloudConfig",
+		args: args,
+	}
+	m.addExpectation(&e)
+	return &e
+}
+
+func (m *mockA8rCloudClientProviderExpectationHandler[T]) BuildClient(args ...any) *mockExpectation {
+	var e = mockExpectation{
+		name: "BuildClient",
+		args: args,
+	}
+	m.addExpectation(&e)
+	return &e
+}
+
+type mockExpectation struct {
+	name string
+	args []any
+	ret  []any
+}
+
+func (m *mockExpectation) Return(v ...any) {
+	m.ret = v
+}
+
+func castErr(v any) error {
+	if v == nil {
+		return nil
+	}
+
+	return v.(error)
 }
