@@ -40,7 +40,7 @@ func NewAppProtocolStrategy(s string) (AppProtocolStrategy, error) {
 	return 0, fmt.Errorf("invalid AppProtcolStrategy: %q", s)
 }
 
-func (aps AppProtocolStrategy) MarshalYAML() (interface{}, error) {
+func (aps AppProtocolStrategy) MarshalYAML() (any, error) {
 	return aps.String(), nil
 }
 

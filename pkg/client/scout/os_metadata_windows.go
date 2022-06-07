@@ -10,11 +10,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func getOsMetadata(ctx context.Context) map[string]interface{} {
+func getOsMetadata(ctx context.Context) map[string]any {
 	cmd := proc.CommandContext(ctx, "wmic", "os", "get", "Caption,Version,BuildNumber", "/value")
 	cmd.DisableLogging = true
 	r, err := cmd.Output()
-	osMeta := map[string]interface{}{}
+	osMeta := map[string]any{}
 	if err != nil {
 		dlog.Warnf(ctx, "Error running wmic: %v", err)
 		return osMeta

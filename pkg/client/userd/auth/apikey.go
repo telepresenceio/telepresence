@@ -14,7 +14,7 @@ import (
 
 func getAPIKey(ctx context.Context, creds map[string]string, desc string) (string, error) {
 	// Build the request.
-	reqBody, err := json.Marshal(map[string]interface{}{
+	reqBody, err := json.Marshal(map[string]any{
 		"description": desc,
 	})
 	if err != nil {

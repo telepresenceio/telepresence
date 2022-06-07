@@ -21,7 +21,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 	// checkFn with a bunch of different 'a' arguments.  Mostly these will be random fuzzing
 	// values from "testing/quick", but we'll also throw in our own table of worthwhile
 	// testcases.
-	checkFn := func(t *testing.T, flagType TypeEnum, a interface{}) (ret bool) {
+	checkFn := func(t *testing.T, flagType TypeEnum, a any) (ret bool) {
 		defer func() {
 			if err := derror.PanicToError(recover()); err != nil {
 				t.Logf("%+v", err)
@@ -82,18 +82,18 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 	// addition to the testcases listed here, for every flagtype we also always check
 	// json.RawMessage(nil) and json.RawMessage(`null`).
 	configs := map[TypeEnum]struct {
-		Table  []interface{}
+		Table  []any
 		Fuzzer func([]reflect.Value, *rand.Rand)
 	}{
 		"stringSlice": {
-			Table: []interface{}{
+			Table: []any{
 				[]string{""},
 				[]string{"foo,bar", "baz"},
 			},
 		},
 		"stringToInt": {
 			// XXX: pflag doesn't support keys with `,` or `=` in them.
-			Table: []interface{}{
+			Table: []any{
 				map[string]int{
 					// "foo,bar": 12,
 					// "foo=bar": 13,
@@ -120,7 +120,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 		},
 		"stringToInt64": {
 			// XXX: pflag doesn't support keys with `,` or `=` in them.
-			Table: []interface{}{
+			Table: []any{
 				map[string]int64{
 					// "foo,bar": 12,
 					// "foo,bar": 13,
@@ -147,7 +147,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 		},
 		"stringToString": {
 			// XXX: pflag doesn't support keys with `=` in them.
-			Table: []interface{}{
+			Table: []any{
 				map[string]string{
 					// "foo=bar": "baz",
 					"foo,bar": "baz",
@@ -234,7 +234,7 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 			}()
 
 			// Second, go through the table of fixed testcases.
-			tableValues := append([]interface{}{
+			tableValues := append([]any{
 				json.RawMessage(nil),
 				json.RawMessage(`null`),
 			}, configs[flagType].Table...)

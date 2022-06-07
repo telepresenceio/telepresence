@@ -21,7 +21,7 @@ func (s *State) Add(sessionID, clientName string, now time.Time) string {
 
 type ClientInfo rpc.ClientInfo
 
-func (c *ClientInfo) Item() interface{} {
+func (c *ClientInfo) Item() any {
 	return c.Name
 }
 

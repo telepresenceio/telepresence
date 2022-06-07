@@ -166,7 +166,7 @@ func (i *genYAMLInfo) loadWorkload(ctx context.Context) (k8sapi.Workload, error)
 	return wl, nil
 }
 
-func (i *genYAMLInfo) writeObjToOutput(obj interface{}) error {
+func (i *genYAMLInfo) writeObjToOutput(obj any) error {
 	// We use sigs.ks8.io/yaml because it treats json serialization tags as if they were yaml tags.
 	doc, err := yaml.Marshal(obj)
 	if err != nil {

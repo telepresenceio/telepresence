@@ -60,7 +60,6 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 	  $$(find ./rpc/ -name '*.proto')
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
-	export GOFLAGS=-mod=mod && go generate ./...
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
 	mkdir -p $(BUILDDIR)
@@ -82,7 +81,6 @@ generate-clean: ## (Generate) Delete generated files
 	find ./rpc -name '*.go' -delete
 
 	rm -rf ./vendor
-	find pkg cmd -name 'generated_*.go' -delete
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
 
@@ -231,7 +229,6 @@ lint-deps: $(tools/helm)
 build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
 	go list ./... | xargs -n1 go test -c -o /dev/null
 
-shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/push_chart.sh

@@ -763,7 +763,7 @@ func WithConfig(c context.Context, addConfig *client.Config) context.Context {
 	return c
 }
 
-func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster) map[string]interface{}) context.Context {
+func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster) map[string]any) context.Context {
 	kc := KubeConfig(ctx)
 	t := getT(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)

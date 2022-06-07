@@ -28,8 +28,8 @@ func isWSL(ctx context.Context) bool {
 	return strings.Contains(v, "WSL") || strings.Contains(v, "Windows")
 }
 
-func getOsMetadata(ctx context.Context) map[string]interface{} {
-	osMeta := map[string]interface{}{}
+func getOsMetadata(ctx context.Context) map[string]any {
+	osMeta := map[string]any{}
 	osMeta["os_docker"] = isDocker(ctx)
 	osMeta["os_wsl"] = isWSL(ctx)
 	f, err := os.Open("/etc/os-release")

@@ -32,7 +32,7 @@ func TestInstallID(t *testing.T) {
 
 		ExpectedID      string
 		ExpectedErr     string
-		ExpectedExtra   map[string]interface{}
+		ExpectedExtra   map[string]any
 		ExpectedHomeDir map[string]string
 	}
 	var testcases map[string]testcase
@@ -40,7 +40,7 @@ func TestInstallID(t *testing.T) {
 		testcases = map[string]testcase{
 			"fresh-install": {
 				InputGOOS: "windows",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -57,7 +57,7 @@ func TestInstallID(t *testing.T) {
 					`AppData\Roaming\telepresence\id`: "tp2.1-id",
 				},
 				ExpectedID: "tp2.1-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -84,7 +84,7 @@ func TestInstallID(t *testing.T) {
 					"other-config/telepresence/id":  "tp2-id",
 				},
 				ExpectedID: "tp2-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     "tp1-id",
 					"install_id_edgectl":            "edgectl-id",
 					"install_id_telepresence-2<2.1": "tp2.1-id",
@@ -100,7 +100,7 @@ func TestInstallID(t *testing.T) {
 					".config/telepresence/id":  "tp-id",
 				},
 				ExpectedID: "tp-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            "edgectl-id",
 					"install_id_telepresence-2<2.1": "tp2.1-id",
@@ -120,7 +120,7 @@ func TestInstallID(t *testing.T) {
 					"Library/Application Support/telepresence/id": "tp2-id",
 				},
 				ExpectedID: "tp2-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     "tp1-id",
 					"install_id_edgectl":            "edgectl-id",
 					"install_id_telepresence-2<2.1": "tp2.1-id",
@@ -137,7 +137,7 @@ func TestInstallID(t *testing.T) {
 					"Library/Application Support/telepresence/id": "tp2-id",
 				},
 				ExpectedID: "tp2-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     "tp1-id",
 					"install_id_edgectl":            "edgectl-id",
 					"install_id_telepresence-2<2.1": "tp2.1-id",
@@ -158,7 +158,7 @@ func TestInstallID(t *testing.T) {
 				},
 				ExpectedID:  "00000000-0000-0000-0000-000000000000",
 				ExpectedErr: fmt.Sprintf("read %s: %s", filepath.Join("$HOME", "other-config", "telepresence", "id"), errMsg),
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -175,7 +175,7 @@ func TestInstallID(t *testing.T) {
 					".config/telepresence/id": "tp1-id",
 				},
 				ExpectedID: "tp1-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -192,7 +192,7 @@ func TestInstallID(t *testing.T) {
 					".config/edgectl/id": "edge-id",
 				},
 				ExpectedID: "edge-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -213,7 +213,7 @@ func TestInstallID(t *testing.T) {
 					"other-config/edgectl/id": "edge-id",
 				},
 				ExpectedID: "tp1-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            "edge-id",
 					"install_id_telepresence-2<2.1": nil,
@@ -230,7 +230,7 @@ func TestInstallID(t *testing.T) {
 					".config/telepresence2/id": "tp2.1-id",
 				},
 				ExpectedID: "tp2.1-id",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -243,7 +243,7 @@ func TestInstallID(t *testing.T) {
 			},
 			"fresh-install": {
 				InputGOOS: "darwin",
-				ExpectedExtra: map[string]interface{}{
+				ExpectedExtra: map[string]any{
 					"install_id_telepresence-1":     nil,
 					"install_id_edgectl":            nil,
 					"install_id_telepresence-2<2.1": nil,
@@ -441,9 +441,9 @@ func TestReport(t *testing.T) {
 			}()
 
 			// Mock server capturing reports
-			var capturedRequestBodies []map[string]interface{}
+			var capturedRequestBodies []map[string]any
 			testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-				var body map[string]interface{}
+				var body map[string]any
 				bodyBytes, err := io.ReadAll(request.Body)
 				if err != nil {
 					t.Fatalf("Could not read request body: %v", err)
@@ -488,7 +488,7 @@ func TestReport(t *testing.T) {
 
 			// And expect...
 			require.Len(t, capturedRequestBodies, 1)
-			metadata := capturedRequestBodies[0]["metadata"].(map[string]interface{})
+			metadata := capturedRequestBodies[0]["metadata"].(map[string]any)
 			for expectedKey, expectedValue := range tcData.ExpectedMetadata {
 				assert.Equal(t, expectedValue, metadata[expectedKey])
 			}

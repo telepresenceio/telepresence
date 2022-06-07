@@ -227,22 +227,6 @@ environment.
 
 ### Errors from `make generate`
 
-#### Outdated or missing bash
-When running `make generate` you may hit errors that look like:
-
-```
-./generic.gen: line 23: generated_${MAPTYPE,,}.go: bad substitution
-./generic.gen: line 37: generated_${MAPTYPE,,}_test.go: bad substitution
-cmd/traffic/cmd/manager/internal/watchable/generic.go:1: running "./generic.gen": exit status 1
-```
-
-To fix them, ensure that you're running `bash` 4.0 (2009) or newer.
-In MacOS this can be done installing it from Homebrew:
-
-```bash
-brew install bash
-```
-
 #### Missing go.sum entries
 If you get an error like this:
 

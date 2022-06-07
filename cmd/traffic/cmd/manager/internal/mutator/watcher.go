@@ -25,7 +25,7 @@ import (
 )
 
 type Map interface {
-	GetInto(string, string, interface{}) (bool, error)
+	GetInto(string, string, any) (bool, error)
 	Run(context.Context) error
 	Delete(context.Context, string, string) error
 	Store(context.Context, *agentconfig.Sidecar, bool) error
@@ -33,7 +33,7 @@ type Map interface {
 	UninstallV25(ctx context.Context)
 }
 
-func decode(v string, into interface{}) error {
+func decode(v string, into any) error {
 	return yaml.NewDecoder(strings.NewReader(v)).Decode(into)
 }
 
@@ -177,7 +177,7 @@ func (c *configWatcher) Run(ctx context.Context) error {
 	}
 }
 
-func (c *configWatcher) GetInto(key, ns string, into interface{}) (bool, error) {
+func (c *configWatcher) GetInto(key, ns string, into any) (bool, error) {
 	c.RLock()
 	var v string
 	vs, ok := c.data[ns]

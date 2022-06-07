@@ -147,7 +147,7 @@ func TestWithOutput(t *testing.T) {
 		}
 
 		stdout := outBuf.String()
-		m := map[string]interface{}{}
+		m := map[string]any{}
 		if err := json.Unmarshal([]byte(stdout), &m); err != nil {
 			t.Errorf("did not get json as stdout, got: %s", stdout)
 		}

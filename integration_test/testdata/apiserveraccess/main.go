@@ -124,7 +124,7 @@ func apiURL() (string, error) {
 }
 
 // doRequest calls the consume-here endpoint with the given headers and returns the result
-func doRequest(c context.Context, rqUrl string, path string, hm map[string]string, objTemplate interface{}, er *restapi.ErrorResponse) (int, error) {
+func doRequest(c context.Context, rqUrl string, path string, hm map[string]string, objTemplate any, er *restapi.ErrorResponse) (int, error) {
 	rq, err := http.NewRequest("GET", rqUrl+"?path="+url.QueryEscape(path), nil)
 	if err != nil {
 		return 0, err
@@ -151,7 +151,7 @@ func doRequest(c context.Context, rqUrl string, path string, hm map[string]strin
 	return rs.StatusCode, err
 }
 
-func intercepted(c context.Context, url string, path string, w http.ResponseWriter, r *http.Request, objTemplate interface{}) {
+func intercepted(c context.Context, url string, path string, w http.ResponseWriter, r *http.Request, objTemplate any) {
 	hm := make(map[string]string, len(r.Header))
 
 	// The "X-With-" prefix is used as a backdoor to avoid triggering intercepts during test. It's

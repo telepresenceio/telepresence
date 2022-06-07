@@ -184,9 +184,9 @@ type State struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts       watchable.InterceptMap
-	agents           watchable.AgentMap                   // info for agent sessions
-	clients          watchable.ClientMap                  // info for client sessions
+	intercepts       watchable.Map[*rpc.InterceptInfo]
+	agents           watchable.Map[*rpc.AgentInfo]        // info for agent sessions
+	clients          watchable.Map[*rpc.ClientInfo]       // info for client sessions
 	sessions         map[string]SessionState              // info for all sessions
 	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	interceptStates  map[string]*interceptState
@@ -432,7 +432,7 @@ func (s *State) GetAllClients() map[string]*rpc.ClientInfo {
 func (s *State) WatchClients(
 	ctx context.Context,
 	filter func(sessionID string, client *rpc.ClientInfo) bool,
-) <-chan watchable.ClientMapSnapshot {
+) <-chan watchable.Snapshot[*rpc.ClientInfo] {
 	if filter == nil {
 		return s.clients.Subscribe(ctx)
 	} else {
@@ -506,7 +506,7 @@ func (s *State) GetAgentsByName(name, namespace string) map[string]*rpc.AgentInf
 func (s *State) WatchAgents(
 	ctx context.Context,
 	filter func(sessionID string, agent *rpc.AgentInfo) bool,
-) <-chan watchable.AgentMapSnapshot {
+) <-chan watchable.Snapshot[*rpc.AgentInfo] {
 	if filter == nil {
 		return s.agents.Subscribe(ctx)
 	} else {
@@ -652,7 +652,7 @@ func (s *State) GetIntercept(interceptID string) (*rpc.InterceptInfo, bool) {
 func (s *State) WatchIntercepts(
 	ctx context.Context,
 	filter func(sessionID string, intercept *rpc.InterceptInfo) bool,
-) <-chan watchable.InterceptMapSnapshot {
+) <-chan watchable.Snapshot[*rpc.InterceptInfo] {
 	if filter == nil {
 		return s.intercepts.Subscribe(ctx)
 	} else {

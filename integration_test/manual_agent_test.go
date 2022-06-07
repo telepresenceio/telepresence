@@ -43,7 +43,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 		assert.NoError(err)
 	}
 
-	writeYaml := func(name string, data interface{}) string {
+	writeYaml := func(name string, data any) string {
 		yf := filepath.Join(tmpDir, name)
 		b, err := yaml.Marshal(data)
 		require.NoError(err)
@@ -58,25 +58,25 @@ func (s *connectedSuite) Test_ManualAgent() {
 		"--output", "-",
 		"--config", configFile,
 		"--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
-	var container map[string]interface{}
+	var container map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &container))
 
 	stdout = itest.TelepresenceOk(ctx, "genyaml", "initcontainer", "--output", "-", "--config", configFile)
-	var initContainer map[string]interface{}
+	var initContainer map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &initContainer))
 
 	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--workload", ac.WorkloadName)
-	var volumes []map[string]interface{}
+	var volumes []map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &volumes))
 
 	b, err := os.ReadFile(filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
 	require.NoError(err)
-	var deploy map[string]interface{}
+	var deploy map[string]any
 	err = yaml.Unmarshal(b, &deploy)
 	require.NoError(err)
 
-	renameHttpPort := func(con map[string]interface{}) {
-		if ports, ok := con["ports"].([]map[string]interface{}); ok {
+	renameHttpPort := func(con map[string]any) {
+		if ports, ok := con["ports"].([]map[string]any); ok {
 			for _, port := range ports {
 				if port["name"] == "http" {
 					port["name"] = "tm_http"
@@ -85,16 +85,16 @@ func (s *connectedSuite) Test_ManualAgent() {
 		}
 	}
 
-	podTemplate := deploy["spec"].(map[string]interface{})["template"].(map[string]interface{})
-	podSpec := podTemplate["spec"].(map[string]interface{})
-	cons := podSpec["containers"].([]interface{})
+	podTemplate := deploy["spec"].(map[string]any)["template"].(map[string]any)
+	podSpec := podTemplate["spec"].(map[string]any)
+	cons := podSpec["containers"].([]any)
 	for _, con := range cons {
-		renameHttpPort(con.(map[string]interface{}))
+		renameHttpPort(con.(map[string]any))
 	}
 	podSpec["containers"] = append(cons, container)
-	podSpec["initContainers"] = []map[string]interface{}{initContainer}
+	podSpec["initContainers"] = []map[string]any{initContainer}
 	podSpec["volumes"] = volumes
-	podTemplate["metadata"].(map[string]interface{})["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
+	podTemplate["metadata"].(map[string]any)["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
 
 	// Add the configmap entry by first retrieving the current config map
 	var cfgMap *core.ConfigMap

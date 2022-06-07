@@ -896,7 +896,7 @@ const (
      (TLS-SNI, HTTP "Host" header) to be used in requests.`
 )
 
-func showPrompt(out io.Writer, question string, defaultValue interface{}) {
+func showPrompt(out io.Writer, question string, defaultValue any) {
 	if reflect.ValueOf(defaultValue).IsZero() {
 		fmt.Fprintf(out, "\n%s\n\n       [no default]: ", question)
 	} else {

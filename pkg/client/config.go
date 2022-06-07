@@ -343,7 +343,7 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 
 		v := ms[i+1]
-		var vv interface{}
+		var vv any
 		if err = v.Decode(&vv); err != nil {
 			return errors.New(withLoc("unable to parse value", v))
 		}
@@ -391,7 +391,7 @@ func (t Timeouts) IsZero() bool {
 }
 
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
-func (t Timeouts) MarshalYAML() (interface{}, error) {
+func (t Timeouts) MarshalYAML() (any, error) {
 	tm := make(map[string]string)
 	if t.PrivateAgentInstall != 0 && t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
 		tm["agentInstall"] = t.PrivateAgentInstall.String()
@@ -657,8 +657,8 @@ func (c Cloud) IsZero() bool {
 }
 
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
-func (c Cloud) MarshalYAML() (interface{}, error) {
-	cm := make(map[string]interface{})
+func (c Cloud) MarshalYAML() (any, error) {
+	cm := make(map[string]any)
 	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
 		cm["refreshMessages"] = c.RefreshMessages.String()
 	}
@@ -733,8 +733,8 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 }
 
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
-func (g Grpc) MarshalYAML() (interface{}, error) {
-	cm := make(map[string]interface{})
+func (g Grpc) MarshalYAML() (any, error) {
+	cm := make(map[string]any)
 	if !g.MaxReceiveSize.IsZero() {
 		cm["maxReceiveSize"] = g.MaxReceiveSize.String()
 	}
@@ -787,8 +787,8 @@ func (ic Intercept) IsZero() bool {
 }
 
 // MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
-func (ic Intercept) MarshalYAML() (interface{}, error) {
-	im := make(map[string]interface{})
+func (ic Intercept) MarshalYAML() (any, error) {
+	im := make(map[string]any)
 	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
 		im["defaultPort"] = ic.DefaultPort
 	}

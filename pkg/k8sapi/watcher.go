@@ -131,7 +131,7 @@ func (w *Watcher) HasSynced() bool {
 	return true
 }
 
-func (w *Watcher) Get(c context.Context, obj interface{}) (interface{}, bool, error) {
+func (w *Watcher) Get(c context.Context, obj any) (any, bool, error) {
 	w.Lock()
 	defer w.Unlock()
 	if w.store == nil {
@@ -158,7 +158,7 @@ func (w *Watcher) EnsureStarted(c context.Context, cb func(bool)) {
 	}
 }
 
-func (w *Watcher) List(c context.Context) []interface{} {
+func (w *Watcher) List(c context.Context) []any {
 	w.Lock()
 	defer w.Unlock()
 	if w.store == nil {
@@ -213,7 +213,7 @@ func (w *Watcher) startLocked(c context.Context, ready *sync.WaitGroup) context.
 	config := cache.Config{
 		Queue:         fifo,
 		ListerWatcher: newListerWatcher(c, w.getter, w.resource, w.namespace),
-		Process: func(obj interface{}) error {
+		Process: func(obj any) error {
 			return w.process(c, obj.(cache.Deltas), eventCh)
 		},
 		ObjectType:       w.objType,

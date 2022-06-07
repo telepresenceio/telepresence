@@ -118,8 +118,8 @@ func (lpf livePortForwards) cancelUnwanted(ctx context.Context) {
 
 // reconcileMountPoints deletes mount points for which there no longer is an intercept
 func (tm *TrafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
-	var mountsToDelete []interface{}
-	tm.mountPoints.Range(func(key, value interface{}) bool {
+	var mountsToDelete []any
+	tm.mountPoints.Range(func(key, value any) bool {
 		if _, ok := existingIntercepts[value.(string)]; !ok {
 			mountsToDelete = append(mountsToDelete, key)
 		}
@@ -729,7 +729,7 @@ func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 }
 
 func (tm *TrafficManager) mountPointForIntercept(name string) (mountPoint string) {
-	tm.mountPoints.Range(func(key, value interface{}) bool {
+	tm.mountPoints.Range(func(key, value any) bool {
 		if name == value.(string) {
 			mountPoint = key.(string)
 			return false
