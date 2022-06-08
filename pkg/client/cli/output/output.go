@@ -5,7 +5,6 @@ package output
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -137,8 +136,6 @@ func (o *output) writeStructured(err error) {
 	if response.hasCmdOnly() {
 		return
 	}
-
-	fmt.Printf("response: %+v\n", response)
 
 	_ = o.jsonEncoder.Encode(response)
 }
