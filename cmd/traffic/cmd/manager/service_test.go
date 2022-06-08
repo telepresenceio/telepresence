@@ -25,6 +25,7 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -294,70 +295,337 @@ func TestConnect(t *testing.T) {
 }
 
 func TestRemoveIntercept_InterceptFinalizer(t *testing.T) {
-	dlog.SetFallbackLogger(dlog.WrapTB(t, false))
-	ctx := dlog.NewTestContext(t, true)
-	a := assert.New(t)
-
-	mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
-	mockSysaCRUDClient.EXPECT().RemoveIntercept(gomock.Any(), gomock.Any()).Return(&empty.Empty{}, nil)
-	mockSysaCRUDClient.EXPECT().Close(gomock.Any()).Return(nil)
-
-	mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
-		t:            t,
-		expectations: map[string][]*mockExpectation{},
-	}
-	mockSysa.EXPECT().GetCloudConfig(gomock.Any()).Return(
-		&rpc.AmbassadorCloudConfig{
+	var (
+		testClients = testdata.GetTestClients(t)
+		testAgents  = testdata.GetTestAgents(t)
+		spec        = &rpc.InterceptSpec{
+			Name:       "first",
+			Namespace:  "default",
+			Client:     testClients["alice"].Name,
+			Agent:      testAgents["hello"].Name,
+			Mechanism:  "tcp",
+			TargetHost: "asdf",
+			TargetPort: 9876,
+		}
+		a8rCloudConfig = rpc.AmbassadorCloudConfig{
 			Host: "hostname",
 			Port: "8080",
-		}, nil,
+		}
 	)
-	mockSysa.EXPECT().BuildClient(gomock.Any(), gomock.Any()).Return(
-		mockSysaCRUDClient, nil,
-	)
-	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
 
-	testClients := testdata.GetTestClients(t)
-	testAgents := testdata.GetTestAgents(t)
-
+	prevVersion := version.Version
+	defer func() { version.Version = prevVersion }()
 	version.Version = "testing"
 
-	conn := getTestClientConn(ctx, t)
-	defer conn.Close()
+	t.Run("error removing intercept with systema", func(t *testing.T) {
+		dlog.SetFallbackLogger(dlog.WrapTB(t, false))
+		ctx := dlog.NewTestContext(t, false)
+		a := assert.New(t)
 
-	client := rpc.NewManagerClient(conn)
+		mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
+		mockSysaCRUDClient.EXPECT().
+			RemoveIntercept(gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("ERROR"))
 
-	ver, err := client.Version(ctx, &empty.Empty{})
-	a.NoError(err)
-	a.Equal(version.Version, ver.Version)
+		mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
+			t:            t,
+			expectations: map[string][]*mockExpectation{},
+		}
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
 
-	sess, err := client.ArriveAsClient(ctx, testClients["alice"])
-	a.NoError(err)
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
 
-	spec := &rpc.InterceptSpec{
-		Name:       "first",
-		Namespace:  "default",
-		Client:     testClients["alice"].Name,
-		Agent:      testAgents["hello"].Name,
-		Mechanism:  "tcp",
-		TargetHost: "asdf",
-		TargetPort: 9876,
-	}
+		sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		a.NoError(err)
 
-	first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
-		Session:       sess,
-		InterceptSpec: spec,
-		ApiKey:        "apiKey",
+		first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+			Session:       sess,
+			InterceptSpec: spec,
+			ApiKey:        "apiKey",
+		})
+		a.NoError(err)
+		a.True(proto.Equal(spec, first.Spec))
+
+		_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+			Name:    spec.Name,
+			Session: sess,
+		})
+		a.NoError(err)
 	})
-	a.NoError(err)
-	a.True(proto.Equal(spec, first.Spec))
-	t.Logf("=> intercept info: %s", dumps(first))
 
-	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
-		Name:    spec.Name,
-		Session: sess,
+	t.Run("error closing connection with systema", func(t *testing.T) {
+		dlog.SetFallbackLogger(dlog.WrapTB(t, false))
+		ctx := dlog.NewTestContext(t, false)
+		a := assert.New(t)
+
+		mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
+		mockSysaCRUDClient.EXPECT().
+			RemoveIntercept(gomock.Any(), gomock.Any()).
+			Return(&empty.Empty{}, nil)
+		mockSysaCRUDClient.EXPECT().
+			Close(gomock.Any()).
+			Return(errors.New("ERROR"))
+
+		mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
+			t:            t,
+			expectations: map[string][]*mockExpectation{},
+		}
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		a.NoError(err)
+
+		first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+			Session:       sess,
+			InterceptSpec: spec,
+			ApiKey:        "apiKey",
+		})
+
+		a.NoError(err)
+		a.True(proto.Equal(spec, first.Spec))
+
+		_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+			Name:    spec.Name,
+			Session: sess,
+		})
+		a.NoError(err)
 	})
-	a.NoError(err)
+
+	t.Run("no error removing intercept with systema", func(t *testing.T) {
+		dlog.SetFallbackLogger(dlog.WrapTB(t, false))
+		ctx := dlog.NewTestContext(t, false)
+		a := assert.New(t)
+
+		mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
+		mockSysaCRUDClient.EXPECT().
+			RemoveIntercept(gomock.Any(), gomock.Any()).
+			Return(&empty.Empty{}, nil)
+		mockSysaCRUDClient.EXPECT().
+			Close(gomock.Any()).
+			Return(nil)
+
+		mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
+			t:            t,
+			expectations: map[string][]*mockExpectation{},
+		}
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		a.NoError(err)
+
+		first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+			Session:       sess,
+			InterceptSpec: spec,
+			ApiKey:        "apiKey",
+		})
+
+		a.NoError(err)
+		a.True(proto.Equal(spec, first.Spec))
+
+		_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+			Name:    spec.Name,
+			Session: sess,
+		})
+		a.NoError(err)
+	})
+}
+
+func TestUpdateIntercept(t *testing.T) {
+	var (
+		testClients = testdata.GetTestClients(t)
+		testAgents  = testdata.GetTestAgents(t)
+		spec        = &rpc.InterceptSpec{
+			Name:       "first",
+			Namespace:  "default",
+			Client:     testClients["alice"].Name,
+			Agent:      testAgents["hello"].Name,
+			Mechanism:  "tcp",
+			TargetHost: "asdf",
+			TargetPort: 9876,
+		}
+		a8rCloudConfig = rpc.AmbassadorCloudConfig{
+			Host: "hostname",
+			Port: "8080",
+		}
+	)
+
+	prevVersion := version.Version
+	defer func() { version.Version = prevVersion }()
+	version.Version = "testing"
+
+	t.Run("add preview domain", func(t *testing.T) {
+		dlog.SetFallbackLogger(dlog.WrapTB(t, false))
+		ctx := dlog.NewTestContext(t, false)
+		a := assert.New(t)
+
+		mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
+		mockSysaCRUDClient.EXPECT().
+			CreateDomain(gomock.Any(), gomock.Any()).
+			Return(&systema.CreateDomainResponse{
+				Domain: "test.com",
+			}, nil)
+		mockSysaCRUDClient.EXPECT().
+			RemoveDomain(gomock.Any(), gomock.Any()).
+			Return(&empty.Empty{}, nil)
+		mockSysaCRUDClient.EXPECT().
+			Close(gomock.Any()).
+			Return(nil)
+		mockSysaCRUDClient.EXPECT().
+			RemoveIntercept(gomock.Any(), gomock.Any()).
+			Return(&empty.Empty{}, nil)
+		mockSysaCRUDClient.EXPECT().
+			Close(gomock.Any()).
+			Return(nil)
+
+		mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
+			t:            t,
+			expectations: map[string][]*mockExpectation{},
+		}
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		a.NoError(err)
+
+		first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+			Session:       sess,
+			InterceptSpec: spec,
+			ApiKey:        "apiKey",
+		})
+
+		a.NoError(err)
+		a.True(proto.Equal(spec, first.Spec))
+
+		_, err = client.UpdateIntercept(ctx, &rpc.UpdateInterceptRequest{
+			Session: sess,
+			Name:    spec.Name,
+			PreviewDomainAction: &rpc.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: &rpc.PreviewSpec{
+					Ingress: &rpc.IngressInfo{},
+				},
+			},
+		})
+		a.NoError(err)
+
+		_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+			Name:    spec.Name,
+			Session: sess,
+		})
+		a.NoError(err)
+	})
+
+	t.Run("remove preview domain", func(t *testing.T) {
+		dlog.SetFallbackLogger(dlog.WrapTB(t, false))
+		ctx := dlog.NewTestContext(t, false)
+		a := assert.New(t)
+
+		mockSysaCRUDClient := mockmanagerutil.NewMockSystemaCRUDClient(gomock.NewController(t))
+		mockSysaCRUDClient.EXPECT().
+			CreateDomain(gomock.Any(), gomock.Any()).
+			Return(&systema.CreateDomainResponse{
+				Domain: "test.com",
+			}, nil)
+		mockSysaCRUDClient.EXPECT().
+			RemoveDomain(gomock.Any(), gomock.Any()).
+			Return(&empty.Empty{}, nil)
+
+		mockSysa := mockA8rCloudClientProvider[managerutil.SystemaCRUDClient]{
+			t:            t,
+			expectations: map[string][]*mockExpectation{},
+		}
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		mockSysa.EXPECT().
+			GetCloudConfig(gomock.Any()).
+			Return(&a8rCloudConfig, nil)
+		mockSysa.EXPECT().
+			BuildClient(gomock.Any(), gomock.Any()).
+			Return(mockSysaCRUDClient, nil)
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &mockSysa)
+
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		a.NoError(err)
+
+		first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+			Session:       sess,
+			InterceptSpec: spec,
+			ApiKey:        "apiKey",
+		})
+
+		a.NoError(err)
+		a.True(proto.Equal(spec, first.Spec))
+
+		_, err = client.UpdateIntercept(ctx, &rpc.UpdateInterceptRequest{
+			Session: sess,
+			Name:    spec.Name,
+			PreviewDomainAction: &rpc.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: &rpc.PreviewSpec{
+					Ingress: &rpc.IngressInfo{},
+				},
+			},
+		})
+		a.NoError(err)
+
+		_, err = client.UpdateIntercept(ctx, &rpc.UpdateInterceptRequest{
+			Session: sess,
+			Name:    spec.Name,
+			PreviewDomainAction: &rpc.UpdateInterceptRequest_RemovePreviewDomain{
+				RemovePreviewDomain: true,
+			},
+		})
+		a.NoError(err)
+	})
 }
 
 func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
