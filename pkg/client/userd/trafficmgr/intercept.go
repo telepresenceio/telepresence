@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
@@ -928,7 +929,7 @@ func (tm *TrafficManager) reconcileAPIServers(ctx context.Context) {
 
 	agentAPIPort := func(ii *manager.InterceptInfo) int {
 		is := ii.Spec
-		if ps, ok := ii.Environment["TELEPRESENCE_API_PORT"]; ok {
+		if ps, ok := ii.Environment[agentconfig.EnvAPIPort]; ok {
 			port, err := strconv.ParseUint(ps, 10, 16)
 			if err == nil {
 				return int(port)

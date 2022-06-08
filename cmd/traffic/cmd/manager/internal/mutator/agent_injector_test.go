@@ -921,6 +921,8 @@ func TestTrafficAgentInjector(t *testing.T) {
     args:
     - agent
     env:
+    - name: TELEPRESENCE_API_PORT
+      value: "9981"
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
