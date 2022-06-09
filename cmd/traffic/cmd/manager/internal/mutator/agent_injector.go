@@ -155,9 +155,9 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
 
-	if env.APIPort != 0 {
+	if config.APIPort != 0 {
 		tpEnv := make(map[string]string)
-		tpEnv["TELEPRESENCE_API_PORT"] = strconv.Itoa(int(env.APIPort))
+		tpEnv[agentconfig.EnvAPIPort] = strconv.Itoa(int(config.APIPort))
 		patches = addTPEnv(pod, config, tpEnv, patches)
 	}
 

@@ -173,7 +173,7 @@ func appEnvironment(appContainer *core.Container, apiPort int) []core.EnvVar {
 	copy(envCopy, appEnv)
 	if apiPort != 0 {
 		envCopy = append(envCopy, core.EnvVar{
-			Name:  "TELEPRESENCE_API_PORT",
+			Name:  agentconfig.EnvAPIPort,
 			Value: strconv.Itoa(apiPort),
 		})
 	}

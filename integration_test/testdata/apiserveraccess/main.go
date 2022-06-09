@@ -16,6 +16,7 @@ import (
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -111,14 +112,13 @@ func run(c context.Context) error {
 	return nil
 }
 
-const portEnv = "TELEPRESENCE_API_PORT"
 const interceptIdEnv = "TELEPRESENCE_INTERCEPT_ID"
 
 // apiURL creates the generic URL needed to access the service
 func apiURL() (string, error) {
-	pe := os.Getenv(portEnv)
+	pe := os.Getenv(agentconfig.EnvAPIPort)
 	if _, err := strconv.ParseUint(pe, 10, 16); err != nil {
-		return "", fmt.Errorf("value %q of env %s does not represent a valid port number", pe, portEnv)
+		return "", fmt.Errorf("value %q of env %s does not represent a valid port number", pe, agentconfig.EnvAPIPort)
 	}
 	return "http://localhost:" + pe, nil
 }

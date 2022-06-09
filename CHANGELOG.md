@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.6.6 (TBD)
+
+- Bugfix: The propagation of the `TELEPRESENCE_API_PORT` environment variable now works correctly.
+
 ### 2.6.5 (June 3, 2022)
 
 - Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.

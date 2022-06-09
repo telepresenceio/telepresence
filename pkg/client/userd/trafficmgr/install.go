@@ -21,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
@@ -681,7 +682,7 @@ func addAgentToWorkload(
 	if telepresenceAPIPort != 0 {
 		addTPEnvAction = &addTPEnvironmentAction{
 			ContainerName: container.Name,
-			Env:           map[string]string{"TELEPRESENCE_API_PORT": strconv.Itoa(int(telepresenceAPIPort))},
+			Env:           map[string]string{agentconfig.EnvAPIPort: strconv.Itoa(int(telepresenceAPIPort))},
 		}
 	}
 

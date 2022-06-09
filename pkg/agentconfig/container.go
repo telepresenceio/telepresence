@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"strconv"
 	"strings"
 
 	core "k8s.io/api/core/v1"
@@ -31,6 +32,12 @@ func AgentContainer(
 		evs = appendAppContainerEnv(app, cc, evs)
 		efs = appendAppContainerEnvFrom(app, cc, efs)
 	})
+	if config.APIPort > 0 {
+		evs = append(evs, core.EnvVar{
+			Name:  EnvAPIPort,
+			Value: strconv.Itoa(int(config.APIPort)),
+		})
+	}
 	evs = append(evs,
 		core.EnvVar{
 			Name: EnvPrefixAgent + "POD_IP",

@@ -26,6 +26,9 @@ const (
 	// EnvInterceptMounts mount points propagated to client during intercept
 	EnvInterceptMounts = "TELEPRESENCE_MOUNTS"
 
+	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled
+	EnvAPIPort = "TELEPRESENCE_API_PORT"
+
 	DomainPrefix     = "telepresence.getambassador.io/"
 	InjectAnnotation = DomainPrefix + "inject-" + ContainerName
 )
