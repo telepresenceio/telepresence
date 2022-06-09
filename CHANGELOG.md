@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.6 (TBD)
+### 2.6.6 (June 9, 2022)
 
 - Bugfix: The propagation of the `TELEPRESENCE_API_PORT` environment variable now works correctly.
 
