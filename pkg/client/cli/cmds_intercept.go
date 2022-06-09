@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"reflect"
 	"regexp"
@@ -38,6 +39,7 @@ type interceptArgs struct {
 	name        string // Args[0] || `${Args[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
 	agentName   string // --workload || Args[0] // only valid if !localOnly
 	namespace   string // --namespace
+	address     string // --address // only valid if !localOnly
 	port        string // --port // only valid if !localOnly
 	serviceName string // --service // only valid if !localOnly
 	localOnly   bool   // --local-only
@@ -121,6 +123,11 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
 		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
+	)
+
+	flags.StringVar(&args.address, "address", "127.0.0.1", ``+
+		`Local address to forward to, Only accepts IP address as a value. `+
+		`e.g. '--address 10.0.0.2'`,
 	)
 
 	flags.StringVar(&args.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
@@ -478,7 +485,11 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	}
 
 	spec.Agent = is.args.agentName
-	spec.TargetHost = "127.0.0.1"
+
+	if net.ParseIP(is.args.address) == nil {
+		return nil, errcat.User.Newf("address must be a valid IP address")
+	}
+	spec.TargetHost = is.args.address
 
 	// Parse port into spec based on how it's formatted
 	var err error
