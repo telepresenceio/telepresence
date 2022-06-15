@@ -23,10 +23,16 @@ spec:
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       restartPolicy: Never
+      securityContext:
+        {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
       containers:
         - name: upgrade-legacy
           securityContext:
+            {{- if .Values.hooks.securityContext }}
+            {{- toYaml .Values.hooks.securityContext | nindent 12 }}
+            {{- else }}
             {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- end }}
           image: "{{ .Values.tools.registry }}/curlimages/curl"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
@@ -35,6 +41,8 @@ spec:
           env:
             - name: CURL_CA_BUNDLE
               value: /secret/ca.crt
+          resources:
+            {{- toYaml .Values.hooks.resources | nindent 12 }}
           # Helm considers applying a deployment a success. It doesn't wait for readinessProbes
           # unless explicitly told to do so by passing --wait and there's no guarantee that's
           # been done. Therefore, a retry is needed here to ensure proper upgrade.

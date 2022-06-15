@@ -257,3 +257,25 @@ rbac:
   #
   # Default: false
   only: false
+
+# Values specific to the helm chart hooks for managing upgrade/deleting
+hooks:
+  podSecurityContext:
+    {}
+    # fsGroup: 2000
+
+  # Falls back to the root securityContext if not supplied
+  securityContext:
+    {}
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+
+  resources:
+    {}
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
