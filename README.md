@@ -308,6 +308,24 @@ The telepresence background processes `daemon` and `connector` both produces log
 - macOS `~/Library/Logs/telepresence`
 - Linux `~/.cache/telepresence/logs`
 
+## How it works
+
+When Telepresence 2 connects to a Kubernetes cluster, it
+
+ 1. Ensures Traffic Manager is installed in the cluster.
+ 2. Looks for the relevant subnets in the kubernetes cluster.
+ 3. Creates a virtual network device called a _TUN device_ and names it `tel0`.
+ 4. Assigns a non-conflicting IP address to `tel0` for each of the subnets.
+ 5. Binds itself to `tel0` and starts listening for traffic from `tel0` and Traffic Manager.
+ 6. Starts listening for and serving DNS requests.
+
+When a locally running application makes a network request to a service in the cluster, Telepresence will resolve the name to an address within the cluster.
+The operating system then sees that the TUN device has an address in the same subnet as the address of the outgoing packets and sends them to `tel0`.
+Telepresence is on the other side of `tel0` and picks up the packets, injecting them into the cluster through a gRPC connection with Traffic Manager.
+
+For a more in-depth overview, checkout our blog post: [Implementing Telepresence Networking with a TUN device](https://blog.getambassador.io/implementing-telepresence-networking-with-a-tun-device-a23a786d51e9)
+
+
 ## Comparison to classic Telepresence
 
 Telepresence will launch your command, or a shell, when you start a session. When that program ends, the session ends and Telepresence cleans up.
