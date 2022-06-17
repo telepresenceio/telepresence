@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.6.7 (tbd)
+
+- Feature: Adds the subcommand `completion` to generate a shell completion script. Supports bash, zsh, powershell and fish.
+
 ### 2.6.6 (June 9, 2022)
 
 - Bugfix: The propagation of the `TELEPRESENCE_API_PORT` environment variable now works correctly.

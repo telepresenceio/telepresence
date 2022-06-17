@@ -27,15 +27,15 @@ func addCompletionCommand(rootCmd *cobra.Command) {
 			var err error
 			switch shell {
 			case "zsh":
-				rootCmd.GenZshCompletionNoDesc(os.Stdout)
+				err = rootCmd.GenZshCompletionNoDesc(os.Stdout)
 			case "bash":
-				rootCmd.GenBashCompletionV2(os.Stdout, false)
+				err = rootCmd.GenBashCompletionV2(os.Stdout, false)
 			case "fish":
-				rootCmd.GenFishCompletion(os.Stdout, false)
+				err = rootCmd.GenFishCompletion(os.Stdout, false)
 			case "ps":
 				fallthrough
 			case "powershell":
-				rootCmd.GenPowerShellCompletion(os.Stdout)
+				err = rootCmd.GenPowerShellCompletion(os.Stdout)
 			case "":
 				err = errcat.User.Newf("shell not specified")
 			}
