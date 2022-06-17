@@ -32,6 +32,30 @@ Unless the daemons are already started, an attempt will be made to start them.
 This will involve a call to sudo unless this command is run as root (not
 recommended) which in turn may result in a password prompt.`
 
+type calledSubcommandNameKey struct{}
+
+func WithCalledSubcommandName(ctx context.Context) context.Context {
+	var x string
+	return context.WithValue(ctx, calledSubcommandNameKey{}, &x)
+}
+
+func setCalledSubcommandName(ctx context.Context, name string) {
+	n, _ := ctx.Value(calledSubcommandNameKey{}).(*string)
+	if n == nil {
+		return
+	}
+	*n = name
+}
+
+func GetCalledSubcommandName(ctx context.Context) string {
+	n, _ := ctx.Value(calledSubcommandNameKey{}).(*string)
+	if n == nil {
+		return ""
+	}
+
+	return *n
+}
+
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
 func OnlySubcommands(cmd *cobra.Command, args []string) error {
@@ -103,6 +127,9 @@ func Command(ctx context.Context) *cobra.Command {
 		SilenceErrors:      true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:       true, // our FlagErrorFunc will handle it
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			setCalledSubcommandName(cmd.Context(), cmd.Name())
+		},
 	}
 
 	var groups cliutil.CommandGroups
@@ -117,6 +144,7 @@ func Command(ctx context.Context) *cobra.Command {
 	}
 
 	rootCmd.InitDefaultHelpCmd()
+	addCompletionCommand(rootCmd)
 	static := cliutil.CommandGroups{
 		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
 		"Traffic Commands": []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},

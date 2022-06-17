@@ -35,6 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 	ctx = client.WithEnv(ctx, env)
+	ctx = cli.WithCalledSubcommandName(ctx)
 
 	var cmd *cobra.Command
 	if isDaemon() {
@@ -73,17 +74,30 @@ func main() {
 		})
 		ctx = output.WithStructure(ctx, cmd)
 		if err := cmd.ExecuteContext(ctx); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			if errcat.GetCategory(err) > errcat.NoDaemonLogs {
+			var (
+				cmdPath = cmd.CommandPath()
+				errCat  = errcat.GetCategory(err)
+				errW    = cmd.ErrOrStderr()
+			)
+
+			fmt.Fprintf(errW, "%s: error: %v\n", cmdPath, err)
+			switch {
+			case errCat == errcat.User:
+				scName := cli.GetCalledSubcommandName(ctx)
+				if scName != "" {
+					fmt.Fprintf(errW, "see '%s %s -h' for help\n", cmdPath, scName)
+				}
+			case errCat > errcat.NoDaemonLogs:
 				summarizeLogs(ctx, cmd)
 				// If the user gets here, it might be an actual bug that they found, so
 				// point them to the `gather-logs` command in case they want to open an
 				// issue.
-				fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
+				fmt.Fprintln(errW, "If you think you have encountered a bug"+
 					", please run `telepresence gather-logs` and attach the "+
 					"telepresence_logs.zip to your github issue or create a new one: "+
 					"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
 			}
+
 			os.Exit(1)
 		}
 	}
