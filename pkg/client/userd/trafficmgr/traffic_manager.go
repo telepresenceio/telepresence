@@ -398,16 +398,45 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		return nil, client.CheckTimeout(tc, fmt.Errorf("unable to parse manager.Version: %w", err))
 	}
 
-	dlog.Debugf(c, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
-	si, err := mClient.ArriveAsClient(tc, &manager.ClientInfo{
-		Name:      userAndHost,
-		InstallId: installID,
-		Product:   "telepresence",
-		Version:   client.Version(),
-		ApiKey:    apiKey,
-	})
+	clusterHost := cluster.Config.RestConfig.Host
+	si, err := LoadSessionFromUserCache(c, clusterHost)
 	if err != nil {
-		return nil, client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
+		return nil, err
+	}
+
+	if si != nil {
+		// Check if the session is still valid in the traffic-manager by calling Remain
+		_, err = mClient.Remain(c, &manager.RemainRequest{
+			Session: si,
+			ApiKey: func() string {
+				// Discard any errors; including an apikey with this request
+				// is optional.  We might not even be logged in.
+				tok, _ := svc.LoginExecutor().GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false)
+				return tok
+			}(),
+		})
+		if err == nil {
+			dlog.Debugf(c, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", userAndHost)
+		} else {
+			si = nil
+		}
+	}
+
+	if si == nil {
+		dlog.Debugf(c, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
+		si, err = mClient.ArriveAsClient(tc, &manager.ClientInfo{
+			Name:      userAndHost,
+			InstallId: installID,
+			Product:   "telepresence",
+			Version:   client.Version(),
+			ApiKey:    apiKey,
+		})
+		if err != nil {
+			return nil, client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
+		}
+		if err = SaveSessionToUserCache(c, clusterHost, si); err != nil {
+			return nil, err
+		}
 	}
 
 	return &TrafficManager{
@@ -736,6 +765,11 @@ func (tm *TrafficManager) remain(c context.Context) error {
 		defer cancel()
 		if _, err := tm.managerClient.Depart(c, tm.session()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
+		} else {
+			// Depart succeeded so the traffic-manager has dropped the session. We should too
+			if err = DeleteSessionFromUserCache(c); err != nil {
+				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
+			}
 		}
 		tm.managerConn.Close()
 	}()
