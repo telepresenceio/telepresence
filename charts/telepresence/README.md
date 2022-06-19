@@ -79,9 +79,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | managerRbac.namespaced                         | Whether the traffic manager should be restricted to specific namespaces                                                   | `false`                                                                     |
 | managerRbac.namespaces                         | Which namespaces the traffic manager should be restricted to                                                              | `[]`                                                                        |
 | telepresenceAPI.port                           | The port on agent's localhost where the Telepresence API server can be found                                              |                                                                             |
-| hooks.podSecurityContext | The Kubernetes SecurityContext for the chart hooks `Pod` | `{}` |  |
-| hooks.securityContext |  The Kubernetes SecurityContext for the chart hooks `Container` | securityContext |  |
-| hooks.resources |  Define resource requests and limits for the chart hooks                | `{}` |  |
+| hooks.podSecurityContext                       | The Kubernetes SecurityContext for the chart hooks `Pod`                                                                  | `{}`                                                                        |
+| hooks.securityContext                          | The Kubernetes SecurityContext for the chart hooks `Container`                                                            | securityContext                                                             |
+| hooks.resources                                | Define resource requests and limits for the chart hooks                                                                   | `{}`                                                                        |
 
 ## License Key
 
