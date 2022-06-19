@@ -15,6 +15,8 @@
 - Bugfix: Telepresence no longer fails to inject the traffic agent into the pod generated for workloads that have no
   volumes and `automountServiceAccountToken: false`.
 
+- Feature: The helm-chart now supports settings resources, securityContext and podSecurityContext for use with chart hooks.
+
 ### 2.6.7 (June 22, 2022)
 
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
