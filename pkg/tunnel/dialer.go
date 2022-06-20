@@ -110,7 +110,7 @@ func (h *dialer) Start(ctx context.Context) {
 		go h.connToStreamLoop(ctx, &wg)
 		go h.streamToConnLoop(ctx, &wg)
 		wg.Wait()
-		h.Close(ctx)
+		h.Stop(ctx)
 	}()
 }
 
@@ -125,7 +125,7 @@ func (h *dialer) getTTL() time.Duration {
 func (h *dialer) handleControl(ctx context.Context, cm Message) {
 	switch cm.Code() {
 	case Disconnect: // Peer responded to our disconnect or wants to hard-close. No more messages will arrive
-		h.Close(ctx)
+		h.Stop(ctx)
 	case KeepAlive:
 		h.resetIdle()
 	case DialOK:
@@ -141,8 +141,8 @@ func (h *dialer) handleControl(ctx context.Context, cm Message) {
 	}
 }
 
-// Close will close the underlying TCP/UDP connection
-func (h *dialer) Close(ctx context.Context) {
+// Stop will close the underlying TCP/UDP connection
+func (h *dialer) Stop(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&h.connected, connected, notConnected) {
 		dlog.Debugf(ctx, "   CONN %s explicitly closing connection", h.stream.ID())
 		_ = h.conn.Close()

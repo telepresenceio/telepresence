@@ -13,7 +13,7 @@ func (h *handler) handleStreamControl(ctx context.Context, ctrl tunnel.Message) 
 	switch ctrl.Code() {
 	case tunnel.DialOK:
 	case tunnel.DialReject, tunnel.Disconnect:
-		h.Close(ctx)
+		h.Stop(ctx)
 	case tunnel.KeepAlive:
 	}
 }
@@ -33,7 +33,7 @@ func (h *handler) sendToMgr(ctx context.Context, pkt Packet) bool {
 		pkt.Release()
 		if h.packetLostTimer == nil {
 			h.packetLostTimer = time.AfterFunc(5*time.Second, func() {
-				h.Close(ctx)
+				h.Stop(ctx)
 			})
 		}
 		return false
@@ -66,7 +66,7 @@ func (h *handler) adjustReceiveWindow() {
 func (h *handler) readFromMgrLoop(ctx context.Context) {
 	h.wg.Add(1)
 	defer func() {
-		h.Close(ctx)
+		h.Stop(ctx)
 		h.wg.Done()
 	}()
 	fromMgrCh, fromMgrErrs := tunnel.ReadLoop(ctx, h.stream)

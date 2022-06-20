@@ -216,7 +216,7 @@ func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
 	}
 }
 
-func (h *handler) Close(ctx context.Context) {
+func (h *handler) Stop(ctx context.Context) {
 	if h.state() == stateEstablished || h.state() == stateSynReceived {
 		h.setState(ctx, stateFinWait1)
 		h.sendFin(ctx, true)

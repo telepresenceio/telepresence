@@ -32,7 +32,7 @@ func (h *timedHandler) resetIdle() bool {
 	return stopped
 }
 
-func (h *timedHandler) Close(_ context.Context) {
+func (h *timedHandler) Stop(_ context.Context) {
 	h.idleLock.Lock()
 	if h.remove != nil {
 		h.remove()
@@ -102,7 +102,7 @@ func (h *handler) Start(ctx context.Context) {
 }
 
 func (h *handler) readLoop(ctx context.Context) {
-	defer h.Close(ctx)
+	defer h.Stop(ctx)
 	for ctx.Err() == nil {
 		m, err := h.stream.Receive(ctx)
 		if err != nil {
@@ -119,7 +119,7 @@ func (h *handler) readLoop(ctx context.Context) {
 }
 
 func (h *handler) writeLoop(ctx context.Context) {
-	defer h.Close(ctx)
+	defer h.Stop(ctx)
 	for {
 		select {
 		case <-ctx.Done():

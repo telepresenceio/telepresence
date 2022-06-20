@@ -36,11 +36,11 @@ func NewDnsInterceptor(toTun ip.Writer, id tunnel.ConnID, remove func(), dnsAddr
 	return h, nil
 }
 
-func (h *dnsInterceptor) Close(ctx context.Context) {
+func (h *dnsInterceptor) Stop(ctx context.Context) {
 	if h.dnsConn != nil {
 		_ = h.dnsConn.Close()
 	}
-	h.timedHandler.Close(ctx)
+	h.timedHandler.Stop(ctx)
 }
 
 func (h *dnsInterceptor) HandleDatagram(ctx context.Context, dg Datagram) {
@@ -53,7 +53,7 @@ func (h *dnsInterceptor) HandleDatagram(ctx context.Context, dg Datagram) {
 func (h *dnsInterceptor) Start(ctx context.Context) {
 	h.idleTimer = time.NewTimer(idleDuration)
 	go func() {
-		defer h.Close(ctx)
+		defer h.Stop(ctx)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 		go h.connToTun(ctx, &wg)
