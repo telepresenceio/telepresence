@@ -18,7 +18,7 @@ func AgentContainer(
 			ports = append(ports, core.ContainerPort{
 				Name:          ic.ContainerPortName,
 				ContainerPort: int32(ic.AgentPort),
-				Protocol:      core.Protocol(ic.Protocol),
+				Protocol:      ic.Protocol,
 			})
 		}
 	}
