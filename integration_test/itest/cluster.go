@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -670,6 +671,14 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
 }
 
+func ApplyTestApp(ctx context.Context, name, namespace, workload string) {
+	t := getT(ctx)
+	t.Helper()
+	manifest := filepath.Join("testdata", "k8s", name+".yaml")
+	require.NoError(t, Kubectl(ctx, namespace, "apply", "-f", manifest), "failed to apply %s", manifest)
+	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
+}
+
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
 	ctx, cancel := context.WithTimeout(ctx, PodCreateTimeout(ctx))
 	defer cancel()
@@ -743,6 +752,47 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 		_ = sc.Serve(ctx, l)
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
+}
+
+// PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
+// that an intercept is active for the given svc and svcPort that will redirect to that local server.
+func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
+	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+	require.Eventually(getT(ctx), func() bool {
+		// condition
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		if len(ips) != 1 {
+			dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
+			return false
+		}
+
+		hc := http.Client{Timeout: 2 * time.Second}
+		resp, err := hc.Get(fmt.Sprintf("http://%s:%s", ips[0], svcPort))
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		r := string(body)
+		if r != expectedOutput {
+			dlog.Infof(ctx, "body: %q != %q", r, expectedOutput)
+			return false
+		}
+		return true
+	},
+		time.Minute,   // waitFor
+		3*time.Second, // polling interval
+		`body of %q equals %q`, "http://"+svc, expectedOutput,
+	)
 }
 
 func WithConfig(c context.Context, addConfig *client.Config) context.Context {
