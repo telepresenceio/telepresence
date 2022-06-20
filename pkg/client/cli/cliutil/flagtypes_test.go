@@ -27,7 +27,6 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 				t.Logf("%+v", err)
 				ret = false
 			}
-			t.Logf(" => %v", ret)
 		}()
 
 		_, argTyp := flagType.sanityCheck()
@@ -54,7 +53,6 @@ func TestFlagTypes(t *testing.T) { //nolint:gocognit
 		fs := pflag.NewFlagSet("", pflag.ContinueOnError)
 		fs.Var(bVal, "tst", "")
 		args := aVal.AsArgs("tst")
-		t.Logf("args: %#v", args)
 		if err := fs.Parse(args); err != nil {
 			t.Logf("fs.Parse returned err: %v", err)
 			return false

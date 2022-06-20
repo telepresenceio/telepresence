@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -87,7 +88,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 	testcases := getTests(t)
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
-	ctx := dlog.NewTestContext(t, true)
+	ctx := dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelWarn))
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		t.Fatal(err)
