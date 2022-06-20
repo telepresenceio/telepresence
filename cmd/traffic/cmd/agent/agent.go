@@ -187,7 +187,7 @@ func Main(ctx context.Context, args ...string) error {
 				}
 				fwd := forwarder.NewInterceptor(lisAddr, "127.0.0.1", cp)
 				g.Go(fmt.Sprintf("forward-%s:%d", cn.Name, cp), func(ctx context.Context) error {
-					return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()))
+					return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 				})
 				cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
 				state.AddInterceptState(NewInterceptState(state, fwd, ics, cnMountPoint, env))

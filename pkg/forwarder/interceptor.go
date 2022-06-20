@@ -18,7 +18,7 @@ type Interceptor interface {
 	io.Closer
 	InterceptId() string
 	InterceptInfo() *restapi.InterceptInfo
-	Serve(context.Context) error
+	Serve(context.Context, chan<- net.Addr) error
 	SetIntercepting(*manager.InterceptInfo)
 	SetManager(*manager.SessionInfo, manager.ManagerClient, semver.Version)
 	Target() (string, uint16)

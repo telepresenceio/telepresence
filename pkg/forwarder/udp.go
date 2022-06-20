@@ -28,12 +28,11 @@ func newUDP(listen *net.UDPAddr, targetHost string, targetPort uint16) Intercept
 	}
 }
 
-func (f *udp) Serve(ctx context.Context) error {
+func (f *udp) Serve(ctx context.Context, initCh chan<- net.Addr) error {
 	// Set up listener lifetime (same as the overall forwarder lifetime)
 	f.mu.Lock()
-	la := f.listenAddr
+	la := f.listenAddr.(*net.UDPAddr)
 	ctx, f.lCancel = context.WithCancel(ctx)
-	ctx = dlog.WithField(ctx, "lis", la.String())
 	f.lCtx = ctx
 
 	// Set up target lifetime
@@ -41,13 +40,15 @@ func (f *udp) Serve(ctx context.Context) error {
 	f.mu.Unlock()
 
 	defer func() {
+		if initCh != nil {
+			close(initCh)
+		}
 		f.lCancel()
 		f.targets.CloseAll(ctx)
 		dlog.Infof(ctx, "Done forwarding udp from %s", la)
 	}()
 
-	dlog.Infof(ctx, "Forwarding udp from %s", la)
-	for {
+	for first := true; ; first = false {
 		f.mu.Lock()
 		ctx = f.tCtx
 		intercept := f.intercept
@@ -55,23 +56,36 @@ func (f *udp) Serve(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		if err := f.forward(ctx, intercept); err != nil {
+		lc := net.ListenConfig{}
+		pc, err := lc.ListenPacket(ctx, la.Network(), la.String())
+		if err != nil {
+			return err
+		}
+		if first {
+			// The address to listen to is likely to change the first time around, because it may
+			// be ":0", so let's ensure that the same address is used next time
+			la = pc.LocalAddr().(*net.UDPAddr)
+			f.listenAddr = la
+			dlog.Infof(ctx, "Forwarding udp from %s", la)
+			if initCh != nil {
+				initCh <- la
+				close(initCh)
+				initCh = nil
+			}
+		}
+		if err := f.forward(ctx, pc.(*net.UDPConn), intercept); err != nil {
 			return err
 		}
 	}
 }
 
-func (f *udp) forward(ctx context.Context, intercept *manager.InterceptInfo) error {
-	lc := net.ListenConfig{}
-	pc, err := lc.ListenPacket(ctx, f.listenAddr.Network(), f.listenAddr.String())
-	if err == nil {
-		defer pc.Close()
-		conn := pc.(*net.UDPConn)
-		if intercept != nil {
-			err = f.interceptConn(ctx, conn, intercept)
-		} else {
-			err = f.forwardConn(ctx, conn)
-		}
+func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager.InterceptInfo) error {
+	defer conn.Close()
+	var err error
+	if intercept != nil {
+		err = f.interceptConn(ctx, conn, intercept)
+	} else {
+		err = f.forwardConn(ctx, conn)
 	}
 	return err
 }
@@ -80,12 +94,12 @@ func (f *udp) forward(ctx context.Context, intercept *manager.InterceptInfo) err
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.
 func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
-	la := f.listenAddr
 	targetAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", f.targetHost, f.targetPort))
 	if err != nil {
 		return fmt.Errorf("error on resolve(%s:%d): %w", f.targetHost, f.targetPort, err)
 	}
 
+	la := conn.LocalAddr()
 	dlog.Infof(ctx, "Forwarding udp from %s to %s", la, targetAddr)
 	defer func() {
 		f.targets.CloseAll(ctx)

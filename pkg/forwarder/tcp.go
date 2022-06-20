@@ -27,12 +27,17 @@ func newTCP(listen net.Addr, targetHost string, targetPort uint16) Interceptor {
 	}
 }
 
-func (f *tcp) Serve(ctx context.Context) error {
-	listener, err := f.Listen(ctx)
+func (f *tcp) Serve(ctx context.Context, initCh chan<- net.Addr) error {
+	listener, err := f.listen(ctx)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
+
+	if initCh != nil {
+		initCh <- listener.Addr()
+		close(initCh)
+	}
 
 	dlog.Debugf(ctx, "Forwarding from %s", f.listenAddr.String())
 	defer dlog.Debugf(ctx, "Done forwarding from %s", f.listenAddr.String())
@@ -65,7 +70,7 @@ func (f *tcp) Serve(ctx context.Context) error {
 	}
 }
 
-func (f *tcp) Listen(ctx context.Context) (*net.TCPListener, error) {
+func (f *tcp) listen(ctx context.Context) (*net.TCPListener, error) {
 	f.mu.Lock()
 
 	// Set up listener lifetime (same as the overall forwarder lifetime)

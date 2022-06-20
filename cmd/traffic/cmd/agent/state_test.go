@@ -28,7 +28,7 @@ func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.Sta
 
 	f := forwarder.NewInterceptor(lAddr, appHost, appPort)
 	go func() {
-		if err := f.Serve(context.Background()); err != nil {
+		if err := f.Serve(context.Background(), nil); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()
