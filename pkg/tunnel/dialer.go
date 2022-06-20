@@ -30,11 +30,9 @@ const (
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections
 type dialer struct {
+	TimedHandler
 	stream    Stream
 	conn      net.Conn
-	idleTimer *time.Timer
-	idleLock  sync.Mutex
-	ttl       int64
 	connected int32
 	done      chan struct{}
 }
@@ -58,11 +56,11 @@ func NewConnEndpoint(stream Stream, conn net.Conn) Endpoint {
 		state = connecting
 	}
 	return &dialer{
-		stream:    stream,
-		conn:      conn,
-		connected: state,
-		ttl:       int64(ttl),
-		done:      make(chan struct{}),
+		TimedHandler: NewTimedHandler(stream.ID(), ttl, nil),
+		stream:       stream,
+		conn:         conn,
+		connected:    state,
+		done:         make(chan struct{}),
 	}
 }
 
@@ -102,7 +100,7 @@ func (h *dialer) Start(ctx context.Context) {
 		}
 
 		// Set up the idle timer to close and release this endpoint when it's been idle for a while.
-		h.idleTimer = time.NewTimer(h.getTTL())
+		h.TimedHandler.Start(ctx)
 		h.connected = connected
 
 		wg := sync.WaitGroup{}
@@ -118,16 +116,12 @@ func (h *dialer) Done() <-chan struct{} {
 	return h.done
 }
 
-func (h *dialer) getTTL() time.Duration {
-	return time.Duration(atomic.LoadInt64(&h.ttl))
-}
-
 func (h *dialer) handleControl(ctx context.Context, cm Message) {
 	switch cm.Code() {
 	case Disconnect: // Peer responded to our disconnect or wants to hard-close. No more messages will arrive
 		h.Stop(ctx)
 	case KeepAlive:
-		h.resetIdle()
+		h.ResetIdle()
 	case DialOK:
 		// So how can a dialer get a DialOK from a peer? Surely, there cannot be a dialer at both ends?
 		// Well, the story goes like this:
@@ -153,7 +147,7 @@ func (h *dialer) startDisconnect(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&h.connected, connected, disconnecting) {
 		id := h.stream.ID()
 		dlog.Debugf(ctx, "   CONN %s disconnecting", id)
-		atomic.StoreInt64(&h.ttl, int64(partlyClosedDuration))
+		h.SetTTL(partlyClosedDuration)
 		if err := h.conn.Close(); err != nil {
 			dlog.Debugf(ctx, "!! CONN %s, Close failed: %v", id, err)
 		}
@@ -167,7 +161,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 
 	outgoing := make(chan Message, 5)
 	defer func() {
-		if !h.resetIdle() {
+		if !h.ResetIdle() {
 			// Hard close of peer. We don't want any more data
 			select {
 			case outgoing <- NewMessage(Disconnect, nil):
@@ -202,7 +196,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 
 		dlog.Tracef(ctx, "<- CONN %s, len %d", id, n)
 		switch {
-		case !h.resetIdle():
+		case !h.ResetIdle():
 			endReason = "it was idle for too long"
 			return
 		case n > 0:
@@ -234,7 +228,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 		case <-ctx.Done():
 			endReason = ctx.Err().Error()
 			return
-		case <-h.idleTimer.C:
+		case <-h.Idle():
 			endReason = "it was idle for too long"
 			return
 		case err := <-errCh:
@@ -246,7 +240,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 				endLevel = dlog.LogLevelDebug
 				return
 			}
-			if !h.resetIdle() {
+			if !h.ResetIdle() {
 				endReason = "it was idle for too long"
 				return
 			}
@@ -268,16 +262,6 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 			}
 		}
 	}
-}
-
-func (h *dialer) resetIdle() bool {
-	h.idleLock.Lock()
-	stopped := h.idleTimer.Stop()
-	if stopped {
-		h.idleTimer.Reset(h.getTTL())
-	}
-	h.idleLock.Unlock()
-	return stopped
 }
 
 // DialWaitLoop reads from the given dialStream. A new goroutine that creates a Tunnel to the manager and then

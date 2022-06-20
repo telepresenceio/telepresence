@@ -2,7 +2,6 @@ package udp
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -15,37 +14,8 @@ type DatagramHandler interface {
 	HandleDatagram(ctx context.Context, dg Datagram)
 }
 
-type timedHandler struct {
-	id        tunnel.ConnID
-	idleTimer *time.Timer
-	idleLock  sync.Mutex
-	remove    func()
-}
-
-func (h *timedHandler) resetIdle() bool {
-	h.idleLock.Lock()
-	stopped := h.idleTimer.Stop()
-	if stopped {
-		h.idleTimer.Reset(idleDuration)
-	}
-	h.idleLock.Unlock()
-	return stopped
-}
-
-func (h *timedHandler) Stop(_ context.Context) {
-	h.idleLock.Lock()
-	if h.remove != nil {
-		h.remove()
-		h.remove = nil
-		if h.idleTimer != nil {
-			h.idleTimer.Stop()
-		}
-	}
-	h.idleLock.Unlock()
-}
-
 type handler struct {
-	timedHandler
+	tunnel.TimedHandler
 	stream  tunnel.Stream
 	toTun   ip.Writer
 	fromTun chan Datagram
@@ -56,13 +26,10 @@ const idleDuration = 5 * time.Second
 
 func NewHandler(stream tunnel.Stream, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
 	return &handler{
-		timedHandler: timedHandler{
-			id:     id,
-			remove: remove,
-		},
-		stream:  stream,
-		toTun:   toTun,
-		fromTun: make(chan Datagram, ioChannelSize),
+		TimedHandler: tunnel.NewTimedHandler(id, idleDuration, remove),
+		stream:       stream,
+		toTun:        toTun,
+		fromTun:      make(chan Datagram, ioChannelSize),
 	}
 }
 
@@ -96,7 +63,7 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 }
 
 func (h *handler) Start(ctx context.Context) {
-	h.idleTimer = time.NewTimer(idleDuration)
+	h.TimedHandler.Start(ctx)
 	go h.readLoop(ctx)
 	go h.writeLoop(ctx)
 }
@@ -113,7 +80,7 @@ func (h *handler) readLoop(ctx context.Context) {
 		case tunnel.DialReject, tunnel.Disconnect:
 			return
 		case tunnel.Normal:
-			sendUDPToTun(ctx, h.id, m.Payload(), h.toTun)
+			sendUDPToTun(ctx, h.ID, m.Payload(), h.toTun)
 		}
 	}
 }
@@ -124,10 +91,10 @@ func (h *handler) writeLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-h.idleTimer.C:
+		case <-h.Idle():
 			return
 		case dg := <-h.fromTun:
-			if !h.resetIdle() {
+			if !h.ResetIdle() {
 				dg.Release()
 				return
 			}
