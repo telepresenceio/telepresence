@@ -360,7 +360,7 @@ func unmarshalConfigMapEntry(y string, name, namespace string) (*agentconfig.Sid
 
 // findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port
 func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
-	spi := spec.ServicePortIdentifier
+	spi := agentconfig.PortIdentifier(spec.ServicePortIdentifier)
 	for _, cn := range ac.Containers {
 		for _, ic := range cn.Intercepts {
 			if !(spec.ServiceName == "" || spec.ServiceName == ic.ServiceName) {

@@ -322,6 +322,16 @@ func (s *serviceProps) interceptResult() *rpc.InterceptResult {
 	}
 }
 
+func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
+	var spi string
+	if s.preparedIntercept.ServicePortName == "" {
+		spi = strconv.Itoa(int(s.preparedIntercept.ServicePort))
+	} else {
+		spi = s.preparedIntercept.ServicePortName
+	}
+	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
+}
+
 func imageVersion(image string) *semver.Version {
 	if cp := strings.LastIndexByte(image, ':'); cp > 0 {
 		if v, err := semver.Parse(image[cp+1:]); err == nil {
@@ -580,7 +590,11 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	} else {
 		// Make spec port identifier unambiguous.
 		spec.ServiceName = svcProps.preparedIntercept.ServiceName
-		spec.ServicePortIdentifier = svcProps.preparedIntercept.ServicePortName
+		pi, err := svcProps.portIdentifier()
+		if err != nil {
+			return nil, err
+		}
+		spec.ServicePortIdentifier = pi.String()
 	}
 
 	spec.ServiceUid = result.ServiceUid

@@ -436,6 +436,9 @@ func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, sv
 				return portError()
 			}
 		} else {
+			if err := agentconfig.ValidatePort(p); err != nil {
+				return portError()
+			}
 			svcPortId = p
 		}
 	case 3:
@@ -446,6 +449,9 @@ func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, sv
 			return portError()
 		}
 		svcPortId = portMapping[2]
+		if err := agentconfig.ValidatePort(svcPortId); err != nil {
+			return portError()
+		}
 	default:
 		return portError()
 	}

@@ -94,11 +94,10 @@ message InterceptSpec {
   string target_host = 6;
 
   // The port on the workstation that the intercept is redirected to
-  // Deprecated but still in use if the manager version is < 2.6.0
   int32 target_port = 7;
 
   // Identifier for the service port: either the name or port number
-  // Deprecated but still in use if the manager version is < 2.6.0
+  // optionally followed by a "/TCP" or "/UDP"
   string service_port_identifier = 10;
 
   // .uid.metadata of service associated with intercept
@@ -269,6 +268,7 @@ message PreparedIntercept {
   string service_name = 5;
   string service_port_name = 6;
   int32 service_port = 7;
+  string protocol = 10; // TCP or UDP
   string workload_kind = 8;
   string agent_image = 9;
 }
