@@ -107,8 +107,9 @@ message InterceptSpec {
   string service_name = 14;
 
   // Extra ports that will be forwarded from the intercepting client's localhost
-  // to the intercepted pod.
-  repeated int32 extra_ports = 15;
+  // to the intercepted pod. Each entry is a string containing a port number followed
+  // by an optional "/TCP" or "/UDP".
+  repeated string local_ports = 18;
 
   // The delay imposed by a call roundtrip between the traffic-agent and
   // the client on the workstation. This delay is added to the dial_timeout
@@ -117,6 +118,11 @@ message InterceptSpec {
 
   // The dial timeout to use when a dial is made on the intercepting workstation.
   int64 dial_timeout = 17;
+
+  // Extra ports that will be forwarded from the intercepting client's localhost
+  // to the intercepted pod.
+  // Deprecated: use local_ports instead
+  repeated int32 extra_ports = 15;
 
   // Used to be mount_point and only utilized when passing the spec between
   // the user daemon and the CLI. It's now moved to InterceptInfo
