@@ -104,10 +104,8 @@ func SftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 			if err = s.Serve(); err != nil {
 				if !errors.Is(err, io.EOF) {
 					dlog.Errorf(ctx, "sftp server completed with error %v", err)
-					return
 				}
 			}
-			dlog.Errorf(ctx, "sftp server completed because client exited")
 		}()
 	}
 }

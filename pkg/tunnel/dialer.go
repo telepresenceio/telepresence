@@ -156,7 +156,7 @@ func (h *dialer) startDisconnect(ctx context.Context) {
 
 func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	endReason := ""
-	endLevel := dlog.LogLevelError
+	endLevel := dlog.LogLevelDebug
 	id := h.stream.ID()
 
 	outgoing := make(chan Message, 5)
@@ -183,12 +183,11 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 			switch {
 			case errors.Is(err, io.EOF):
 				endReason = "EOF was encountered"
-				endLevel = dlog.LogLevelDebug
 			case errors.Is(err, net.ErrClosed):
 				endReason = "the connection was closed"
-				endLevel = dlog.LogLevelDebug
 			default:
 				endReason = fmt.Sprintf("a read error occurred: %v", err)
+				endLevel = dlog.LogLevelError
 			}
 			h.startDisconnect(ctx)
 			return
@@ -211,8 +210,8 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
-	endReason := ""
-	endLevel := dlog.LogLevelError
+	var endReason string
+	endLevel := dlog.LogLevelDebug
 	id := h.stream.ID()
 	defer func() {
 		wg.Done()
@@ -237,7 +236,6 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 			if dg == nil {
 				// h.incoming was closed by the reader and is now drained.
 				endReason = "there was no more input"
-				endLevel = dlog.LogLevelDebug
 				return
 			}
 			if !h.ResetIdle() {
@@ -255,6 +253,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 				if err != nil {
 					h.startDisconnect(ctx)
 					endReason = fmt.Sprintf("a write error occurred: %v", err)
+					endLevel = dlog.LogLevelError
 					return
 				}
 				dlog.Tracef(ctx, "-> CONN %s, len %d", id, wn)
@@ -262,6 +261,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 			}
 		}
 	}
+	endReason = "no longer connected"
 }
 
 // DialWaitLoop reads from the given dialStream. A new goroutine that creates a Tunnel to the manager and then

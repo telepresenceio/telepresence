@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -28,7 +29,7 @@ func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.Stat
 	f := forwarder.NewForwarder(lAddr, appHost, appPort)
 	go func() {
 		if err := f.Serve(context.Background()); err != nil {
-			panic(err)
+			dlog.Error(ctx, err)
 		}
 	}()
 

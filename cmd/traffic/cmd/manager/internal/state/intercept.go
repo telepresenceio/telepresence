@@ -407,6 +407,8 @@ func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (fou
 		} else {
 			ss = fmt.Sprintf(" matching service %s", spec.ServiceName)
 		}
+	} else if spi != "" {
+		ss = fmt.Sprintf(" matching port %s", spi)
 	}
 	return nil, nil, errcat.User.Newf("%s %s.%s has no interceptable port%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, ss)
 }
