@@ -17,12 +17,22 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-type Forwarder struct {
+type Interceptor interface {
+	io.Closer
+	InterceptId() string
+	InterceptInfo() *restapi.InterceptInfo
+	Serve(context.Context) error
+	SetIntercepting(*manager.InterceptInfo)
+	SetManager(*manager.SessionInfo, manager.ManagerClient, semver.Version)
+	Target() (string, uint16)
+}
+
+type interceptor struct {
 	mu sync.Mutex
 
 	lCtx       context.Context
 	lCancel    context.CancelFunc
-	listenAddr *net.TCPAddr
+	listenAddr net.Addr
 
 	tCtx       context.Context
 	tCancel    context.CancelFunc
@@ -36,15 +46,15 @@ type Forwarder struct {
 	mgrVersion semver.Version
 }
 
-func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort uint16) *Forwarder {
-	return &Forwarder{
+func NewInterceptor(listen net.Addr, targetHost string, targetPort uint16) Interceptor {
+	return &interceptor{
 		listenAddr: listen,
 		targetHost: targetHost,
 		targetPort: targetPort,
 	}
 }
 
-func (f *Forwarder) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+func (f *interceptor) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sessionInfo = sessionInfo
@@ -52,7 +62,7 @@ func (f *Forwarder) SetManager(sessionInfo *manager.SessionInfo, manager manager
 	f.mgrVersion = version
 }
 
-func (f *Forwarder) Serve(ctx context.Context) error {
+func (f *interceptor) Serve(ctx context.Context) error {
 	listener, err := f.Listen(ctx)
 	if err != nil {
 		return err
@@ -60,7 +70,7 @@ func (f *Forwarder) Serve(ctx context.Context) error {
 	return f.ServeListener(ctx, listener)
 }
 
-func (f *Forwarder) ServeListener(ctx context.Context, listener *net.TCPListener) error {
+func (f *interceptor) ServeListener(ctx context.Context, listener *net.TCPListener) error {
 	defer listener.Close()
 
 	dlog.Debugf(ctx, "Forwarding from %s", f.listenAddr.String())
@@ -94,7 +104,7 @@ func (f *Forwarder) ServeListener(ctx context.Context, listener *net.TCPListener
 	}
 }
 
-func (f *Forwarder) Listen(ctx context.Context) (*net.TCPListener, error) {
+func (f *interceptor) Listen(ctx context.Context) (*net.TCPListener, error) {
 	f.mu.Lock()
 
 	// Set up listener lifetime (same as the overall forwarder lifetime)
@@ -106,22 +116,22 @@ func (f *Forwarder) Listen(ctx context.Context) (*net.TCPListener, error) {
 	listenAddr := f.listenAddr
 
 	f.mu.Unlock()
-	return net.ListenTCP("tcp", listenAddr)
+	return net.ListenTCP("tcp", listenAddr.(*net.TCPAddr))
 }
 
-func (f *Forwarder) Close() error {
+func (f *interceptor) Close() error {
 	f.lCancel()
 	return nil
 }
 
-func (f *Forwarder) Target() (string, uint16) {
+func (f *interceptor) Target() (string, uint16) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	return f.targetHost, f.targetPort
 }
 
-func (f *Forwarder) InterceptInfo() *restapi.InterceptInfo {
+func (f *interceptor) InterceptInfo() *restapi.InterceptInfo {
 	ii := &restapi.InterceptInfo{}
 	f.mu.Lock()
 	if f.intercept != nil {
@@ -132,7 +142,7 @@ func (f *Forwarder) InterceptInfo() *restapi.InterceptInfo {
 	return ii
 }
 
-func (f *Forwarder) InterceptId() (id string) {
+func (f *interceptor) InterceptId() (id string) {
 	f.mu.Lock()
 	if f.intercept != nil {
 		id = f.intercept.Id
@@ -141,7 +151,7 @@ func (f *Forwarder) InterceptId() (id string) {
 	return id
 }
 
-func (f *Forwarder) SetIntercepting(intercept *manager.InterceptInfo) {
+func (f *interceptor) SetIntercepting(intercept *manager.InterceptInfo) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -173,7 +183,7 @@ func (f *Forwarder) SetIntercepting(intercept *manager.InterceptInfo) {
 	f.intercept = intercept
 }
 
-func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
+func (f *interceptor) forwardConn(clientConn *net.TCPConn) error {
 	f.mu.Lock()
 	ctx := f.tCtx
 	targetHost := f.targetHost
@@ -232,7 +242,7 @@ func (f *Forwarder) forwardConn(clientConn *net.TCPConn) error {
 	return nil
 }
 
-func (f *Forwarder) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
+func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
 	dlog.Infof(ctx, "Accept got connection from %s", conn.RemoteAddr())
 
 	srcIp, srcPort, err := iputil.SplitToIPPort(conn.RemoteAddr())

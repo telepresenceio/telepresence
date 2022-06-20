@@ -15,14 +15,14 @@ import (
 type fwdState struct {
 	*simpleState
 	intercepts []*agentconfig.Intercept
-	forwarder  *forwarder.Forwarder
+	forwarder  forwarder.Interceptor
 	mountPoint string
 	env        map[string]string
 }
 
-// NewInterceptState creates a InterceptState that performs intercepts by using a forwarder.Forwarder. A forwarder will indiscriminately
-// intercept all traffic to the port that it forwards.
-func NewInterceptState(s State, forwarder *forwarder.Forwarder, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
+// NewInterceptState creates a InterceptState that performs intercepts by using an Interceptor which indiscriminately
+// intercepts all traffic to the port that it forwards.
+func NewInterceptState(s State, forwarder forwarder.Interceptor, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
 	return &fwdState{
 		simpleState: s.(*simpleState),
 		mountPoint:  mountPoint,

@@ -184,7 +184,7 @@ func Main(ctx context.Context, args ...string) error {
 				if err != nil {
 					return err
 				}
-				fwd := forwarder.NewForwarder(lisAddr, "", ic.ContainerPort)
+				fwd := forwarder.NewInterceptor(lisAddr, "", ic.ContainerPort)
 				g.Go(fmt.Sprintf("forward-%s:%d", cn.Name, ic.ContainerPort), func(ctx context.Context) error {
 					return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()))
 				})

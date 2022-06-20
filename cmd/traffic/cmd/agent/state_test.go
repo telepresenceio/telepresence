@@ -22,11 +22,11 @@ const (
 	appPort uint16 = 5000
 )
 
-func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.State) {
+func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
-	f := forwarder.NewForwarder(lAddr, appHost, appPort)
+	f := forwarder.NewInterceptor(lAddr, appHost, appPort)
 	go func() {
 		if err := f.Serve(context.Background()); err != nil {
 			dlog.Error(ctx, err)

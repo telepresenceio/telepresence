@@ -722,7 +722,7 @@ func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 		IP:   net.IPv4(127, 0, 0, 1),
 		Port: int(pf.Port),
 	}
-	f := forwarder.NewForwarder(&addr, pf.PodIP, uint16(pf.Port))
+	f := forwarder.NewInterceptor(&addr, pf.PodIP, uint16(pf.Port))
 	err := f.Serve(ctx)
 	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
