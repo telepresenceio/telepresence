@@ -48,6 +48,9 @@ The output of `make help` has a bit more information.
    point to a different file) file in order to connect to a cluster;
    same as any other Kubernetes tool.
 
+ - You will need to have [mockgen](https://github.com/golang/mock) installed
+   to generate new or updated testing mocks for interfaces.
+
 ## Build the binary, push the image
 
 The easiest thing to do to get going:
