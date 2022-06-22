@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.7 (TBD)
+### 2.6.7 (June 22, 2022)
 
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
   or other reason that caused an unclean disconnect.
