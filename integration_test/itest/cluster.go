@@ -46,6 +46,7 @@ const TestUser = "telepresence-test-developer"
 const TestUserAccount = "system:serviceaccount:default:" + TestUser
 
 type Cluster interface {
+	AgentImageName() string
 	CapturePodLogs(ctx context.Context, app, container, ns string)
 	Executable() string
 	GeneralError() error
@@ -76,6 +77,8 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	agentImageName   string
+	agentImageTag    string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -95,11 +98,20 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	version.Version = s.testVersion
 
+	t := getT(ctx)
+	s.agentImageName = "tel2"
+	s.agentImageTag = s.testVersion[1:]
+	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
+		i := strings.IndexByte(agentImageQN, ':')
+		require.Greater(t, i, 0)
+		s.agentImageName = agentImageQN[:i]
+		s.agentImageTag = agentImageQN[i+1:]
+	}
+
 	s.registry = os.Getenv("DTEST_REGISTRY")
 	if s.registry == "" {
 		s.registry = "localhost:5000"
 	}
-	t := getT(ctx)
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -285,7 +297,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
 		"TELEPRESENCE_VERSION":      s.testVersion,
-		"TELEPRESENCE_AGENT_IMAGE":  "tel2:" + strings.TrimPrefix(s.testVersion, "v"), // Prevent attempts to retrieve image from SystemA
+		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
 		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
 		"KUBECONFIG":                s.kubeConfig,
@@ -356,6 +368,10 @@ func (s *cluster) TelepresenceVersion() string {
 	return s.testVersion
 }
 
+func (s *cluster) AgentImageName() string {
+	return s.agentImageName
+}
+
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
@@ -420,8 +436,8 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
-		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", "tel2"), // Prevent attempts to retrieve image from SystemA
-		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.TelepresenceVersion()[1:]),
+		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
+		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
