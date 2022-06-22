@@ -124,7 +124,10 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 
-	wg := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	wg := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		SoftShutdownTimeout: time.Second * 10,
+		HardShutdownTimeout: time.Second * 10,
+	})
 	wg.Go("lookupHostWait", func(ctx context.Context) error {
 		return lookupHostWaitLoop(ctx, manager, session, lrStream)
 	})
