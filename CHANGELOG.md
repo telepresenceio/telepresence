@@ -5,6 +5,8 @@
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
   or other reason that caused an unclean disconnect.
 
+- Bugfix: Telepresence will no longer forward DNS requests for "wpad" to the cluster.
+
 ### 2.6.6 (June 9, 2022)
 
 - Bugfix: The propagation of the `TELEPRESENCE_API_PORT` environment variable now works correctly.

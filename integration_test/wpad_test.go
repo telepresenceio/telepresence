@@ -1,0 +1,120 @@
+package integration_test
+
+import (
+	"bufio"
+	"context"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+)
+
+// Test_WpadNotForwarded tests that DNS request aren't forwarded
+// to the cluster.
+func (s *connectedSuite) Test_WpadNotForwarded() {
+	require := s.Require()
+	ctx := s.Context()
+
+	// Ensure that DNS has full functionality
+	s.Eventually(func() bool {
+		short, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		as, err := net.DefaultResolver.LookupIPAddr(short, "kubernetes.default")
+		return err == nil && len(as) > 0
+	}, 30*time.Second, time.Second, "DNS is not functional")
+
+	logDir, err := filelocation.AppUserLogDir(ctx)
+	require.NoError(err)
+	logFile := filepath.Join(logDir, "daemon.log")
+
+	tests := []struct {
+		qn      string
+		forward bool
+	}{
+		{
+			"wpad",
+			false,
+		},
+		{
+			"wpad.default",
+			false,
+		},
+		{
+			"wpad.cluster.local",
+			false,
+		},
+		{
+			"wpad.svc.cluster.local",
+			false,
+		},
+		{
+			"wpad.default.svc.cluster.local",
+			false,
+		},
+		/* revisit after checking relevant log messages on all platforms
+		{
+			"wpad.bogus.nu",
+			true,
+		},
+		*/
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.qn, func() {
+			require := s.Require()
+			ctx := s.Context()
+
+			// Figure out where the current end of the logfile is
+			s, err := os.Stat(logFile)
+			require.NoError(err)
+			pos := s.Size()
+
+			// Make an attempt to resolve the host
+			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+			defer cancel()
+			_, _ = net.DefaultResolver.LookupIPAddr(short, tt.qn)
+			dtime.SleepWithContext(ctx, 200*time.Millisecond)
+
+			// Seek to the end of the log as it were before the lookup
+			rootLog, err := os.Open(logFile)
+			require.NoError(err)
+			defer rootLog.Close()
+			_, err = rootLog.Seek(pos, 0)
+			require.NoError(err)
+
+			// Ensure that there's an A record with an NXDOMAIN but no LookupHost call
+			// with a "wpad." prefix. The host may not match exactly due to how the
+			// OS handles search paths.
+			hasNX := false
+			hasLookup := false
+			scn := bufio.NewScanner(rootLog)
+			for scn.Scan() {
+				txt := scn.Text()
+				if strings.Contains(txt, "wpad") {
+					if !hasLookup {
+						hasLookup = strings.Contains(txt, "LookupHost ")
+					}
+					if !hasNX {
+						hasNX = strings.Contains(txt, "-> NXDOMAIN")
+					}
+				}
+			}
+			if tt.qn == "wpad" && !hasNX && !hasLookup {
+				// this is very likely OK because our DNS server never received the request. It
+				// was filtered by the OS DNS framework. Those tests are only relevant when the overriding
+				// DNS resolver is used.
+				return
+			}
+			if tt.forward {
+				require.Truef(hasLookup, "Missing expected LookupHost log for %s", tt.qn)
+			} else {
+				require.Falsef(hasLookup, "Found unexpected LookupHost log for %s", tt.qn)
+				require.Truef(hasNX, "No NXDOMAIN record found for %s", tt.qn)
+			}
+		})
+	}
+}
