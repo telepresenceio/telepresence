@@ -7,6 +7,8 @@
 
 - Bugfix: Telepresence will no longer forward DNS requests for "wpad" to the cluster.
 
+- Bugfix: The traffic-agent will properly shut down if one of its goroutines errors.
+
 ### 2.6.6 (June 9, 2022)
 
 - Bugfix: The propagation of the `TELEPRESENCE_API_PORT` environment variable now works correctly.
