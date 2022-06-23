@@ -34,6 +34,10 @@ type Env struct {
 	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`
 	PodCIDRs        string `env:"POD_CIDRS,default="`
 	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
+
+	DNSServiceName      string `env:"DNS_SERVICE_NAME,default=coredns"`
+	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
+	DNSServiceIP        string `env:"DNS_SERVICE_IP,default="`
 }
 
 type envKey struct{}

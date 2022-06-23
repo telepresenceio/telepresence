@@ -105,6 +105,10 @@ func NewInfo(ctx context.Context) Info {
 			Name:      "dns-default",
 			Namespace: "openshift-dns",
 		},
+		{
+			Name:      env.DNSServiceName,
+			Namespace: env.DNSServiceNamespace,
+		},
 	}
 	for _, svc := range dnsServices {
 		if ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc.Name+"."+svc.Namespace); err == nil && len(ips) > 0 {
@@ -112,6 +116,18 @@ func NewInfo(ctx context.Context) Info {
 			oi.KubeDnsIp = ips[0]
 			break
 		}
+	}
+
+	if oi.KubeDnsIp == nil && env.DNSServiceIP != "" {
+		dlog.Infof(ctx, "Unable to determine DNS IP, using user supplied IP %s", env.DNSServiceIP)
+		oi.KubeDnsIp = net.ParseIP(env.DNSServiceIP)
+		if oi.KubeDnsIp == nil {
+			dlog.Warn(ctx, "The user supplied IP is not a valid IP address")
+		}
+	}
+
+	if oi.KubeDnsIp == nil {
+		dlog.Warn(ctx, "Could not determine DNS ClusterIP")
 	}
 
 	apiSvc := "kubernetes.default.svc"

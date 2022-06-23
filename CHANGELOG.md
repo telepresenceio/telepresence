@@ -1,9 +1,19 @@
 # Changelog
 
-### 2.6.7 (TBD)
+### 2.6.8 (TBD)
+
+- Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
+
+- Feature: Should the DNS auto-detection logic in the traffic-manager fail, users can now specify a fallback IP to use.
+
+### 2.6.7 (June 22, 2022)
 
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
   or other reason that caused an unclean disconnect.
+
+- Bugfix: Telepresence will no longer forward DNS requests for "wpad" to the cluster.
+
+- Bugfix: The traffic-agent will properly shut down if one of its goroutines errors.
 
 ### 2.6.6 (June 9, 2022)
 
