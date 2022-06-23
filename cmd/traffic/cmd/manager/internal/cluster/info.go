@@ -108,7 +108,7 @@ func NewInfo(ctx context.Context) Info {
 		{
 			Name:      env.DNSServiceName,
 			Namespace: env.DNSServiceNamespace,
-                },
+		},
 	}
 	for _, svc := range dnsServices {
 		if ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc.Name+"."+svc.Namespace); err == nil && len(ips) > 0 {
