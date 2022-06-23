@@ -9,6 +9,9 @@
 - Change: The Helm chart will now add the `nodeSelector`, `affinity` and `tolerations` values to the traffic-manager's
   post-upgrade-hook and pre-delete-hook jobs.
 
+- Bugfix: Telepresence no longer fails to inject the traffic agent into the pod generated for workloads that have no
+  volumes and `automountServiceAccountToken: false`.
+
 ### 2.6.7 (June 22, 2022)
 
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
