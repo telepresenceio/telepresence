@@ -30,17 +30,19 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := managerutil.Env{
-		User:            "",
-		ServerHost:      "",
-		ServerPort:      "8081",
-		SystemAHost:     "app.getambassador.io",
-		SystemAPort:     "443",
-		AgentRegistry:   "docker.io/datawire",
-		AgentImage:      "",
-		AgentPort:       9900,
-		MaxReceiveSize:  resource.MustParse("4Mi"),
-		PodCIDRStrategy: "auto",
-		LogLevel:        "info",
+		User:                "",
+		ServerHost:          "",
+		ServerPort:          "8081",
+		SystemAHost:         "app.getambassador.io",
+		SystemAPort:         "443",
+		AgentRegistry:       "docker.io/datawire",
+		AgentImage:          "",
+		AgentPort:           9900,
+		MaxReceiveSize:      resource.MustParse("4Mi"),
+		PodCIDRStrategy:     "auto",
+		DNSServiceName:      "coredns",
+		DNSServiceNamespace: "kube-system",
+		LogLevel:            "info",
 	}
 
 	testcases := map[string]struct {
