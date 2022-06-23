@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
@@ -46,7 +47,7 @@ var testConfig = agentconfig.Sidecar{
 				ServiceUID:        "",
 				ServicePortName:   "http",
 				ServicePort:       80,
-				Protocol:          "TCP",
+				Protocol:          core.ProtocolTCP,
 				AgentPort:         9900,
 				ContainerPort:     8080,
 			},

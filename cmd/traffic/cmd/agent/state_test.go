@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -21,14 +22,14 @@ const (
 	appPort uint16 = 5000
 )
 
-func makeFS(t *testing.T, ctx context.Context) (*forwarder.Forwarder, agent.State) {
+func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
-	f := forwarder.NewForwarder(lAddr, appHost, appPort)
+	f := forwarder.NewInterceptor(lAddr, appHost, appPort)
 	go func() {
-		if err := f.Serve(context.Background()); err != nil {
-			panic(err)
+		if err := f.Serve(context.Background(), nil); err != nil {
+			dlog.Error(ctx, err)
 		}
 	}()
 

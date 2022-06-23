@@ -57,7 +57,7 @@ type mountForward struct {
 
 type portForward struct {
 	forwardKey
-	Port int32
+	Port string
 }
 
 // The livePortForward struct provides synchronization for cancellation of port forwards.
@@ -88,12 +88,20 @@ func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *m
 		Name:  ii.Spec.Name,
 		PodIP: ii.PodIp,
 	}
+
+	// Older versions use ii.extraPorts (TCP only), newer versions use ii.localPorts.
+	if len(ii.Spec.LocalPorts) == 0 {
+		for _, ep := range ii.Spec.ExtraPorts {
+			ii.Spec.LocalPorts = append(ii.Spec.LocalPorts, strconv.Itoa(int(ep)))
+		}
+	}
+
 	if tm.shouldForward(ii) {
 		lpf.snapshot[fk] = struct{}{}
 		if _, isLive := lpf.live[fk]; !isLive {
 			pfCtx, pfCancel := context.WithCancel(ctx)
 			livePortForward := &livePortForward{cancel: pfCancel}
-			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint, ii.Spec.ExtraPorts)
+			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint, ii.Spec.LocalPorts)
 			dlog.Debugf(ctx, "Started forward for %+v", fk)
 			lpf.live[fk] = livePortForward
 		}
@@ -320,6 +328,16 @@ func (s *serviceProps) interceptResult() *rpc.InterceptResult {
 			Namespace:             s.service.Namespace,
 		},
 	}
+}
+
+func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
+	var spi string
+	if s.preparedIntercept.ServicePortName == "" {
+		spi = strconv.Itoa(int(s.preparedIntercept.ServicePort))
+	} else {
+		spi = s.preparedIntercept.ServicePortName
+	}
+	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
 }
 
 func imageVersion(image string) *semver.Version {
@@ -580,7 +598,11 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	} else {
 		// Make spec port identifier unambiguous.
 		spec.ServiceName = svcProps.preparedIntercept.ServiceName
-		spec.ServicePortIdentifier = svcProps.preparedIntercept.ServicePortName
+		pi, err := svcProps.portIdentifier()
+		if err != nil {
+			return nil, err
+		}
+		spec.ServicePortIdentifier = pi.String()
 	}
 
 	spec.ServiceUid = result.ServiceUid
@@ -692,20 +714,20 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 // shouldForward returns true if the intercept info given should result in mounts or ports being forwarded
 func (tm *TrafficManager) shouldForward(ii *manager.InterceptInfo) bool {
-	return ii.SftpPort > 0 || len(ii.Spec.ExtraPorts) > 0
+	return ii.SftpPort > 0 || len(ii.Spec.LocalPorts) > 0
 }
 
 // startForwards starts port forwards and mounts for the given forwardKey.
 // It assumes that the user has called shouldForward and is sure that something will be started.
-func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, remoteMountPoint string, extraPorts []int32) {
+func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, remoteMountPoint string, localPorts []string) {
 	if sftpPort > 0 {
 		// There's nothing to mount if the SftpPort is zero
 		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
 		wg.Add(1)
 		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort, remoteMountPoint}, wg)
 	}
-	for _, port := range extraPorts {
-		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, port))
+	for _, port := range localPorts {
+		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", fk.PodIP, port))
 		wg.Add(1)
 		go tm.workerPortForwardIntercept(pfCtx, portForward{fk, port}, wg)
 	}
@@ -713,17 +735,18 @@ func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup,
 
 func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
 	defer wg.Done()
-	// Using kubectl port-forward here would require the pod name to be either fetched from the API server, or threaded
-	// all the way through from the intercept request to the agent and into the WatchIntercepts; it would also create
-	// additional connections that would have to be recovered in case of failure. Instead, we re-use the forwarder from
-	// the agent, and dial the pod's IP directly. This will keep all connections to the cluster going through the TUN
-	// device and the existing port-forward to the traffic manager.
-	addr := net.TCPAddr{
-		IP:   net.IPv4(127, 0, 0, 1),
-		Port: int(pf.Port),
+	pp, err := agentconfig.NewPortAndProto(pf.Port)
+	if err != nil {
+		dlog.Errorf(ctx, "malformed extra port %q: %v", pf.Port, err)
+		return
 	}
-	f := forwarder.NewForwarder(&addr, pf.PodIP, uint16(pf.Port))
-	err := f.Serve(ctx)
+	addr, err := pp.Addr()
+	if err != nil {
+		dlog.Errorf(ctx, "unable to resolve extra port %q: %v", pf.Port, err)
+		return
+	}
+	f := forwarder.NewInterceptor(addr, pf.PodIP, pp.Port)
+	err = f.Serve(ctx, nil)
 	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
 	}

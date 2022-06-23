@@ -1,0 +1,27 @@
+# The echo-no-containerport deployment doesn't expose any ports but will reply on port 8080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-no-containerport
+  labels:
+    app: echo-no-containerport
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-no-containerport
+  template:
+    metadata:
+      labels:
+        app: echo-no-containerport
+    spec:
+      containers:
+        - name: echo-server
+          image: docker.io/thhal/echo-server:latest
+          env:
+            - name: PORTS
+              value: "8080,8081"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi

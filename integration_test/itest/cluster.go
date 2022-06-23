@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -45,6 +46,7 @@ const TestUser = "telepresence-test-developer"
 const TestUserAccount = "system:serviceaccount:default:" + TestUser
 
 type Cluster interface {
+	AgentImageName() string
 	CapturePodLogs(ctx context.Context, app, container, ns string)
 	Executable() string
 	GeneralError() error
@@ -75,6 +77,8 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	agentImageName   string
+	agentImageTag    string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -94,11 +98,20 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	version.Version = s.testVersion
 
+	t := getT(ctx)
+	s.agentImageName = "tel2"
+	s.agentImageTag = s.testVersion[1:]
+	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
+		i := strings.IndexByte(agentImageQN, ':')
+		require.Greater(t, i, 0)
+		s.agentImageName = agentImageQN[:i]
+		s.agentImageTag = agentImageQN[i+1:]
+	}
+
 	s.registry = os.Getenv("DTEST_REGISTRY")
 	if s.registry == "" {
 		s.registry = "localhost:5000"
 	}
-	t := getT(ctx)
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -284,7 +297,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
 		"TELEPRESENCE_VERSION":      s.testVersion,
-		"TELEPRESENCE_AGENT_IMAGE":  "tel2:" + strings.TrimPrefix(s.testVersion, "v"), // Prevent attempts to retrieve image from SystemA
+		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
 		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
 		"KUBECONFIG":                s.kubeConfig,
@@ -355,6 +368,10 @@ func (s *cluster) TelepresenceVersion() string {
 	return s.testVersion
 }
 
+func (s *cluster) AgentImageName() string {
+	return s.agentImageName
+}
+
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
@@ -419,8 +436,8 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
-		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", "tel2"), // Prevent attempts to retrieve image from SystemA
-		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.TelepresenceVersion()[1:]),
+		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
+		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
@@ -670,6 +687,14 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
 }
 
+func ApplyTestApp(ctx context.Context, name, namespace, workload string) {
+	t := getT(ctx)
+	t.Helper()
+	manifest := filepath.Join("testdata", "k8s", name+".yaml")
+	require.NoError(t, Kubectl(ctx, namespace, "apply", "-f", manifest), "failed to apply %s", manifest)
+	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
+}
+
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
 	ctx, cancel := context.WithTimeout(ctx, PodCreateTimeout(ctx))
 	defer cancel()
@@ -743,6 +768,47 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 		_ = sc.Serve(ctx, l)
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
+}
+
+// PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
+// that an intercept is active for the given svc and svcPort that will redirect to that local server.
+func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
+	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+	require.Eventually(getT(ctx), func() bool {
+		// condition
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		if len(ips) != 1 {
+			dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
+			return false
+		}
+
+		hc := http.Client{Timeout: 2 * time.Second}
+		resp, err := hc.Get(fmt.Sprintf("http://%s:%s", ips[0], svcPort))
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		r := string(body)
+		if r != expectedOutput {
+			dlog.Infof(ctx, "body: %q != %q", r, expectedOutput)
+			return false
+		}
+		return true
+	},
+		time.Minute,   // waitFor
+		3*time.Second, // polling interval
+		`body of %q equals %q`, "http://"+svc, expectedOutput,
+	)
 }
 
 func WithConfig(c context.Context, addConfig *client.Config) context.Context {

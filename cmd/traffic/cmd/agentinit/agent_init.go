@@ -14,6 +14,7 @@ import (
 
 	"github.com/coreos/go-iptables/iptables"
 	"gopkg.in/yaml.v3"
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
@@ -53,12 +54,12 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 	agentUID := strconv.Itoa(os.Getuid())
 
 	outputInsertCount := 0
-	for _, proto := range []string{"tcp", "udp"} {
+	for _, proto := range []core.Protocol{core.ProtocolTCP, core.ProtocolUDP} {
 		hasRule := false
 	nextCn:
 		for _, cn := range c.Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
-				if strings.EqualFold(proto, ic.Protocol) {
+				if proto == ic.Protocol {
 					hasRule = true
 					break nextCn
 				}
@@ -70,7 +71,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		}
 
 		// Clearing the inbound chain will create it if it doesn't exist, or clear it out if it does.
-		chain := inboundChain + "_" + strings.ToUpper(proto)
+		chain := inboundChain + "_" + string(proto)
 		err := iptables.ClearChain(nat, chain)
 		if err != nil {
 			return fmt.Errorf("failed to clear chain %s: %w", chain, err)
@@ -79,9 +80,9 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		// Use our inbound chain to direct traffic coming into the app port to the agent port.
 		for _, cn := range c.Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
-				if strings.EqualFold(proto, ic.Protocol) {
+				if proto == ic.Protocol {
 					err = iptables.AppendUnique(nat, chain,
-						"-p", proto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
+						"-p", strings.ToLower(string(proto)), "--dport", strconv.Itoa(int(ic.ContainerPort)),
 						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
 					if err != nil {
 						return fmt.Errorf("failed to append rule to %s: %w", chain, err)
@@ -96,7 +97,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		// if one exists. If a service mesh exists, its PREROUTING rules will kick in before ours, ensuring traffic
 		// coming into the pod does not bypass the mesh.
 		err = iptables.AppendUnique(nat, "PREROUTING",
-			"-p", proto,
+			"-p", strings.ToLower(string(proto)),
 			"-j", chain)
 		if err != nil {
 			return fmt.Errorf("failed to append prerouting rule to direct to %s: %w", chain, err)
@@ -120,7 +121,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		// This is needed to support requesting an intercepted pod by IP (or to intercept a headless service).
 		err = iptables.Insert(nat, "OUTPUT", 1,
 			"-o", loopback,
-			"-p", proto,
+			"-p", strings.ToLower(string(proto)),
 			"!", "-d", "127.0.0.1/32",
 			"-m", "owner", "--uid-owner", agentUID,
 			"-j", chain)

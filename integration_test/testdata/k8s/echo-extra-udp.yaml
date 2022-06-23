@@ -1,0 +1,52 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-extra-udp
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-extra-udp
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-extra-udp
+  labels:
+    app: echo-extra-udp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-extra-udp
+  template:
+    metadata:
+      labels:
+        app: echo-extra-udp
+    spec:
+      containers:
+        - name: echo-udp-server
+          image: docker.io/thhal/udp-test:0.1.0
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi
+        - name: echo-server
+          image: docker.io/thhal/echo-server:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi
