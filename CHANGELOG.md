@@ -6,6 +6,9 @@
 
 - Feature: Should the DNS auto-detection logic in the traffic-manager fail, users can now specify a fallback IP to use.
 
+- Feature: It is now possible to intercept UDP ports with Telepresence and also use `--to-pod` to forward UDP
+  traffic from ports on localhost.
+
 - Change: The Helm chart will now add the `nodeSelector`, `affinity` and `tolerations` values to the traffic-manager's
   post-upgrade-hook and pre-delete-hook jobs.
 
