@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.6.8 (TBD)
+
+- Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
+
+- Feature: Should the DNS auto-detection logic in the traffic-manager fail, users can now specify a fallback IP to use.
+
 ### 2.6.7 (June 22, 2022)
 
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
