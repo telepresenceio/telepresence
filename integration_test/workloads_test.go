@@ -60,3 +60,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsReplicaSet() {
 func (s *connectedSuite) Test_SuccessfullyInterceptsStatefulSet() {
 	s.successfulIntercept("StatefulSet", "ss-echo", "9092")
 }
+
+func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithNoVolumes() {
+	s.successfulIntercept("Deployment", "echo-no-vols", "9093")
+}

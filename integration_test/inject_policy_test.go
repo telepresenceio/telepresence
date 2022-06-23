@@ -24,10 +24,11 @@ func (s *helmSuite) assertInjected(ctx context.Context, name, namespace string, 
 	s.T().Helper()
 	out, err := itest.KubectlOut(ctx, namespace, "get", "pods", "-l", "app="+name, "-o", "jsonpath={.items.*.spec.containers[?(@.name=='traffic-agent')].image}")
 	s.NoError(err)
+	n := "/" + s.AgentImageName() + ":"
 	if present {
-		s.Contains(out, "/tel2:")
+		s.Contains(out, n)
 	} else {
-		s.NotContains(out, "/tel2:")
+		s.NotContains(out, n)
 	}
 }
 

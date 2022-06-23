@@ -3,15 +3,11 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -86,45 +82,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 			stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 			require.Contains(stdout, "echo-headless: intercepted")
 			require.NotContains(stdout, "Volume Mount Point")
-
-			expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-			resolver := &net.Resolver{}
-			require.Eventually(
-				// condition
-				func() bool {
-					ips, err := resolver.LookupIP(ctx, "ip4", svc)
-					if err != nil {
-						dlog.Infof(ctx, "%v", err)
-						return false
-					}
-					if 1 != len(ips) {
-						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
-						return false
-					}
-
-					url := fmt.Sprintf("http://%s:8080", ips[0])
-
-					dlog.Infof(ctx, "trying %q...", url)
-					hc := http.Client{Timeout: 2 * time.Second}
-					resp, err := hc.Get(url)
-					if err != nil {
-						dlog.Infof(ctx, "%v", err)
-						return false
-					}
-					defer resp.Body.Close()
-					dlog.Infof(ctx, "status code: %v", resp.StatusCode)
-					body, err := io.ReadAll(resp.Body)
-					if err != nil {
-						dlog.Infof(ctx, "%v", err)
-						return false
-					}
-					dlog.Infof(ctx, "body: %q", body)
-					return string(body) == expectedOutput
-				},
-				time.Minute,   // waitFor
-				3*time.Second, // polling interval
-				`body of %q equals %q`, "http://"+svc, expectedOutput,
-			)
+			itest.PingInterceptedEchoServer(ctx, svc, "8080")
 		})
 	}
 }

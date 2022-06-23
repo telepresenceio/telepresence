@@ -19,12 +19,14 @@ import (
 	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -147,7 +149,8 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 
 	flags.StringSliceVar(&args.toPod, "to-pod", []string{}, ``+
 		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
-		`Use this to, for example, access proxy/helper sidecars in the intercepted pod.`)
+		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
+		`Use <port>/UDP for UDP ports`)
 
 	flags.BoolVarP(&args.dockerRun, "docker-run", "", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
@@ -412,14 +415,6 @@ func checkMountCapability(ctx context.Context) error {
 	return nil
 }
 
-func parseNumericPort(portStr string) (uint16, error) {
-	port, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		return 0, errcat.User.Newf("port numbers must be a valid, positive int, you gave: %q", portStr)
-	}
-	return uint16(port), nil
-}
-
 // parsePort parses portSpec based on how it's formatted
 func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, svcPortId string, err error) {
 	portMapping := strings.Split(portSpec, ":")
@@ -430,28 +425,35 @@ func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, sv
 		return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>[:<svcPortIdentifier>]")
 	}
 
-	if local, err = parseNumericPort(portMapping[0]); err != nil {
+	if local, err = agentconfig.ParseNumericPort(portMapping[0]); err != nil {
 		return portError()
 	}
 
 	switch len(portMapping) {
 	case 1:
 	case 2:
+		p := portMapping[1]
 		if dockerRun {
-			if docker, err = parseNumericPort(portMapping[1]); err != nil {
+			if docker, err = agentconfig.ParseNumericPort(p); err != nil {
 				return portError()
 			}
 		} else {
-			svcPortId = portMapping[1]
+			if err := agentconfig.ValidatePort(p); err != nil {
+				return portError()
+			}
+			svcPortId = p
 		}
 	case 3:
 		if !dockerRun {
 			return portError()
 		}
-		if docker, err = parseNumericPort(portMapping[1]); err != nil {
+		if docker, err = agentconfig.ParseNumericPort(portMapping[1]); err != nil {
 			return portError()
 		}
 		svcPortId = portMapping[2]
+		if err := agentconfig.ValidatePort(svcPortId); err != nil {
+			return portError()
+		}
 	default:
 		return portError()
 	}
@@ -503,11 +505,15 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	}
 
 	for _, toPod := range is.args.toPod {
-		var port uint16
-		if port, err = parseNumericPort(toPod); err != nil {
-			return nil, errcat.User.Newf("Unable to parse port %s: %w", toPod, err)
+		pp, err := agentconfig.NewPortAndProto(toPod)
+		if err != nil {
+			return nil, errcat.User.New(err)
 		}
-		spec.ExtraPorts = append(spec.ExtraPorts, int32(port))
+		spec.LocalPorts = append(spec.LocalPorts, pp.String())
+		if pp.Proto == core.ProtocolTCP {
+			// For backward compatibility
+			spec.ExtraPorts = append(spec.ExtraPorts, int32(pp.Port))
+		}
 	}
 
 	if is.args.dockerMount != "" {

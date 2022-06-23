@@ -112,7 +112,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 		}
 		origCfgYaml = ""
 	} else {
-		require.NoError(yaml.Unmarshal([]byte(origCfgYaml), cfgMap))
+		require.NoError(yaml.Unmarshal([]byte(origCfgYaml), &cfgMap))
 	}
 	if cfgMap.Data == nil {
 		cfgMap.Data = make(map[string]string)

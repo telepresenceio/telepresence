@@ -32,9 +32,7 @@ func addCompletionCommand(rootCmd *cobra.Command) {
 				err = rootCmd.GenBashCompletionV2(os.Stdout, false)
 			case "fish":
 				err = rootCmd.GenFishCompletion(os.Stdout, false)
-			case "ps":
-				fallthrough
-			case "powershell":
+			case "ps", "powershell":
 				err = rootCmd.GenPowerShellCompletion(os.Stdout)
 			case "":
 				err = errcat.User.Newf("shell not specified")

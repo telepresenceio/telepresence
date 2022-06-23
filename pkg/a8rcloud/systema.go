@@ -45,7 +45,11 @@ type ClientProvider[T Closeable] interface {
 type systemaPoolKey string
 
 func WithSystemAPool[T Closeable](ctx context.Context, poolName string, provider ClientProvider[T]) context.Context {
-	return context.WithValue(ctx, systemaPoolKey(poolName), &systemAPool[T]{Provider: provider, Name: poolName, parentCtx: ctx})
+	key := systemaPoolKey(poolName)
+	if x := ctx.Value(key); x != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, key, &systemAPool[T]{Provider: provider, Name: poolName, parentCtx: ctx})
 }
 
 func GetSystemAPool[T Closeable](ctx context.Context, poolName string) SystemAPool[T] {

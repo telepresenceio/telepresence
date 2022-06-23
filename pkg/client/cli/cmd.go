@@ -188,8 +188,8 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 
 func initDeprecatedPersistentFlags(cmd *cobra.Command) {
 	cmd.Flags().AddFlagSet(deprecatedGlobalFlags)
-	opf := cmd.PostRun
-	cmd.PostRun = func(cmd *cobra.Command, args []string) {
+	opf := cmd.PreRunE
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		// Allow deprecated global flags so that scripts using them don't break, but print
 		// a warning that their values are ignored.
 		deprecatedGlobalFlags.VisitAll(func(f *pflag.Flag) {
@@ -199,8 +199,9 @@ func initDeprecatedPersistentFlags(cmd *cobra.Command) {
 			}
 		})
 		if opf != nil {
-			opf(cmd, args)
+			return opf(cmd, args)
 		}
+		return nil
 	}
 }
 

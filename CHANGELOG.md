@@ -1,8 +1,30 @@
 # Changelog
 
-### 2.6.7 (tbd)
+### 2.6.8 (TBD)
 
+- Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
+
+- Feature: Should the DNS auto-detection logic in the traffic-manager fail, users can now specify a fallback IP to use.
+
+- Feature: It is now possible to intercept UDP ports with Telepresence and also use `--to-pod` to forward UDP
+  traffic from ports on localhost.
+
+- Change: The Helm chart will now add the `nodeSelector`, `affinity` and `tolerations` values to the traffic-manager's
+  post-upgrade-hook and pre-delete-hook jobs.
+
+- Bugfix: Telepresence no longer fails to inject the traffic agent into the pod generated for workloads that have no
+  volumes and `automountServiceAccountToken: false`.
+  
 - Feature: Adds the subcommand `completion` to generate a shell completion script. Supports bash, zsh, powershell and fish.
+
+### 2.6.7 (June 22, 2022)
+
+- Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
+  or other reason that caused an unclean disconnect.
+
+- Bugfix: Telepresence will no longer forward DNS requests for "wpad" to the cluster.
+
+- Bugfix: The traffic-agent will properly shut down if one of its goroutines errors.
 
 ### 2.6.6 (June 9, 2022)
 
