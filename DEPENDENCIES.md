@@ -56,6 +56,7 @@ following Free and Open Source software:
     github.com/godbus/dbus/v5                         v5.1.0                                    2-clause BSD license
     github.com/gogo/protobuf                          v1.3.2                                    3-clause BSD license
     github.com/golang-jwt/jwt/v4                      v4.0.0                                    MIT license
+    github.com/golang/mock                            v1.6.0                                    Apache License 2.0
     github.com/golang/protobuf                        v1.5.2                                    3-clause BSD license
     github.com/google/btree                           v1.0.1                                    Apache License 2.0
     github.com/google/gnostic                         v0.5.7-v3refs                             Apache License 2.0

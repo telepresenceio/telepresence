@@ -1,0 +1,41 @@
+# The echo-double-unnamed deployment exposes two unnamed ports, 8080 and 8081 from a single container
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-udp-tcp-unnamed
+  labels:
+    app: echo-udp-tcp-unnamed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-udp-tcp-unnamed
+  template:
+    metadata:
+      labels:
+        app: echo-udp-tcp-unnamed
+    spec:
+      containers:
+        - name: echo-udp-server
+          image: docker.io/thhal/udp-test:0.1.0
+          ports:
+            - containerPort: 8080
+              protocol: UDP
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi
+        - name: echo-server
+          image: docker.io/thhal/echo-server:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi

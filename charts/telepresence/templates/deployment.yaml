@@ -37,6 +37,12 @@ spec:
             value: {{ .Values.logLevel }}
           - name: POD_CIDR_STRATEGY
             value: {{ .Values.podCIDRStrategy }}
+          - name: DNS_SERVICE_NAME
+            value: {{ .Values.dnsServiceName }}
+          - name: DNS_SERVICE_NAMESPACE
+            value: {{ .Values.dnsServiceNamespace }}
+          - name: DNS_SERVICE_IP
+            value: {{ .Values.dnsServiceIP }}
           {{- with .Values.podCIDRs }}
           - name: POD_CIDRS
             value: "{{ join " " . }}"

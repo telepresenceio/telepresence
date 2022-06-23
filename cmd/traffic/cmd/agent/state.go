@@ -93,8 +93,8 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 		for _, ii := range iis {
 			for _, ic := range ist.InterceptConfigs() {
 				if agentconfig.SpecMatchesIntercept(ii.Spec, ic) {
-					dlog.Debugf(ctx, "intercept id %s svc=%q, svcPort=%q matches config svc=%q, svcPort=%d",
-						ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort)
+					dlog.Debugf(ctx, "intercept id %s svc=%q, svcPortId=%q matches config svc=%q, svcPort=%d, protocol=%s",
+						ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort, ic.Protocol)
 					ms = append(ms, ii)
 					break // Break inner loop, we don't want to add ii more than once
 				}

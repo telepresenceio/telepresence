@@ -13,10 +13,12 @@ import (
 type NamespacePair interface {
 	Harness
 	ApplyApp(ctx context.Context, name, workload string)
+	ApplyTestApp(ctx context.Context, name, workload string)
 	ApplyEchoService(ctx context.Context, name string, port int)
 	AppNamespace() string
 	DeleteSvcAndWorkload(ctx context.Context, workload, name string)
 	Kubectl(ctx context.Context, args ...string) error
+	KubectlOk(ctx context.Context, args ...string) string
 	KubectlOut(ctx context.Context, args ...string) (string, error)
 	ManagerNamespace() string
 	RolloutStatusWait(ctx context.Context, workload string) error
@@ -92,6 +94,11 @@ func (s *nsPair) ApplyApp(ctx context.Context, name, workload string) {
 	ApplyApp(ctx, name, s.namespace, workload)
 }
 
+func (s *nsPair) ApplyTestApp(ctx context.Context, name, workload string) {
+	getT(ctx).Helper()
+	ApplyTestApp(ctx, name, s.namespace, workload)
+}
+
 func (s *nsPair) RolloutStatusWait(ctx context.Context, workload string) error {
 	return RolloutStatusWait(ctx, s.namespace, workload)
 }
@@ -105,6 +112,14 @@ func (s *nsPair) DeleteSvcAndWorkload(ctx context.Context, workload, name string
 func (s *nsPair) Kubectl(ctx context.Context, args ...string) error {
 	getT(ctx).Helper()
 	return Kubectl(ctx, s.namespace, args...)
+}
+
+// KubectlOk runs kubectl with the default context and the application namespace and returns its combined output
+// and fails if an error occurred
+func (s *nsPair) KubectlOk(ctx context.Context, args ...string) string {
+	out, err := KubectlOut(ctx, s.namespace, args...)
+	require.NoError(getT(ctx), err)
+	return out
 }
 
 // KubectlOut runs kubectl with the default context and the application namespace and returns its combined output

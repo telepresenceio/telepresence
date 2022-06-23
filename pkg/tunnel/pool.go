@@ -14,8 +14,8 @@ type Pool struct {
 }
 
 type Handler interface {
-	// Close closes the handle
-	Close(context.Context)
+	// Stop closes the handle
+	Stop(context.Context)
 
 	Start(ctx context.Context)
 }
@@ -97,6 +97,6 @@ func (p *Pool) CloseAll(ctx context.Context) {
 	p.lock.RUnlock()
 
 	for _, handler := range handlers {
-		handler.Close(ctx)
+		handler.Stop(ctx)
 	}
 }

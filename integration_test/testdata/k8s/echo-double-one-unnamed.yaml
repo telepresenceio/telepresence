@@ -1,0 +1,30 @@
+# The echo-double-unnamed deployment exposes two unnamed ports, 8080 and 8081 from a single container
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-double-one-unnamed
+  labels:
+    app: echo-double-one-unnamed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-double-one-unnamed
+  template:
+    metadata:
+      labels:
+        app: echo-double-one-unnamed
+    spec:
+      containers:
+        - name: echo-server
+          image: docker.io/thhal/echo-server:latest
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+          env:
+            - name: PORTS
+              value: "8080,8081"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi

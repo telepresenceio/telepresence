@@ -132,12 +132,30 @@ func NewServer(config *rpc.DNSConfig, clusterLookup func(context.Context, string
 // will be resolved as "<single label name>." using the search path of this resolver.
 const tel2SubDomain = "tel2-search"
 const tel2SubDomainDot = tel2SubDomain + "."
+const wpadDot = "wpad."
 
 var localhostIPs = []net.IP{{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
 func (s *Server) shouldDoClusterLookup(query string) bool {
-	if strings.HasSuffix(query, "."+s.clusterDomain) && strings.Count(query, ".") < 4 {
-		return false
+	n := strings.Count(query, ".")
+	if strings.HasSuffix(query, "."+s.clusterDomain) {
+		switch {
+		case n < 4:
+			// Reject "<label>.cluster.local."
+			return false
+		case (n == 4 || n == 5) && strings.HasPrefix(query, wpadDot) && strings.Contains(query, ".svc."):
+			// Reject "wpad.svc.cluster.local." and "wpad.<namespace>.svc.cluster.local."
+			return false
+		}
+	} else {
+		switch {
+		case n == 1 && query == wpadDot:
+			// Reject "wpad."
+			return false
+		case n == 2 && strings.HasPrefix(query, wpadDot):
+			// Reject "wpad.<namespace>."
+			return false
+		}
 	}
 
 	query = query[:len(query)-1] // skip last dot

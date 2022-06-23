@@ -28,6 +28,19 @@
    `tel2-base` with various version tags.  It is not necessary to set
    this unless you have set `DTEST_KUBECONFIG`.
 
+ - `DEV_TELEPRESENCE_VERSION` (optional) if set to a version such as
+   `v2.6.7-alpha.0`, the integration tests will assume that this version
+   is pre-built and available, both as a CLI client (accessible from the
+   current runtime path), and also pre-pushed into a pre-existing cluster
+   accessible from `DTEST_KUBECONFIG`. In other words, if this is set, no
+   no binaries will be built or pushed so the developement + test cycle
+   can be quit rapid.
+
+ - `DEV_AGENT_IMAGE` (optional) can be set to an alternative image to use
+   for the traffic agent, such as `ambassador-telepresence-agent:1.12.7-alpha.0`.
+   This will make all tests use that traffic-agent instead of the default
+   which uses the same image as the traffic-manager.
+
 The output of `make help` has a bit more information.
 
 ### Runtime environment
@@ -36,17 +49,24 @@ The output of `make help` has a bit more information.
    (`~/Library/Application Support/telepresence/config.yml` on macOS)
    file you set `images.registry` to match the `TELEPRESENCE_REGISTRY`
    environment variable. See
-   https://www.telepresence.io/docs/latest/reference/config/ for more
-   information.
+   https://www.getambassador.io/docs/telepresence/latest/reference/config/ 
+   for more information.
 
  - `TELEPRESENCE_VERSION` is is the "vSEMVER" string used by the
    `telepresence` binary *if* one was not compiled in (for example, if
    you're running it with `go run ./cmd/telepresence` rather than
    having built it with `make build`).
 
+ - `TELEPRESENCE_AGENT_IMAGE` is is the "name:vSEMVER" string used when
+   the telepresence auto-installs the traffic-manager unless the config.yml
+   overrides it by defining `images.agentImage`.
+
  - You will need have a `~/.kube/config` file (or set `KUBECONFIG` to
    point to a different file) file in order to connect to a cluster;
    same as any other Kubernetes tool.
+
+ - You will need to have [mockgen](https://github.com/golang/mock) installed
+   to generate new or updated testing mocks for interfaces.
 
 ## Build the binary, push the image
 
@@ -54,9 +74,10 @@ The easiest thing to do to get going:
 
 ```console
 $ TELEPRESENCE_REGISTRY=docker.io/lukeshu make build push-images # use .\build-aux\winmake.bat build on windows
-[make] TELEPRESENCE_VERSION=v2.5.2-19-g9d0329c0-1645717779
+$ TELEPRESENCE_REGISTRY=docker.io/thhal make build push-images # use .\build-aux\winmake.bat build on windows
+[make] TELEPRESENCE_VERSION=v2.6.7-19-g37085c2d7-1655891839
 ... # Lots of output
-2.5.2-19-g9d0329c0-1645717779: digest: sha256:3f8ed251437032273d959c175e91e36ddc8d89168d425dc278924246805abab9 size: 4078
+2.6.7-19-g37085c2d7-1655891839: digest: sha256:40fe852f8d8026a89f196293f37ae8c462c765c85572150d26263d78c43cdd4b size: 1157
 ```
 
 This has 2 primary outputs:
@@ -106,32 +127,15 @@ $ sudo id
 [sudo] password for lukeshu:
 uid=0(root) gid=0(root) groups=0(root)
 
-$ make check-unit
-[make] TELEPRESENCE_VERSION=v2.4.9-1-g349d3bbb-1638829681
-GOOS=linux GOARCH=amd64 go run ./build-aux/package_embedded_chart/main.go v2.4.9-1-g349d3bbb-1638829681
+$ make make check-unit
+[make] TELEPRESENCE_VERSION=v2.6.7-20-g9de10e316-1655892249
 ...
 ```
 
 The first time you run the tests, you should use `make check`, to get
-`make` to automatically create the requisite `ko` and `heml` tool
+`make` to automatically create the requisite `heml` tool
 binaries.  However, after that initial run, you can instead use
 `gotestsum` or `go test` if you prefer.
-
-### I've made a change to the agent-installer, how do I update the testdata output files?
-
-If you've made a change to the agent-installer that requires updating
-the `testadata/addAgentToWorkload/*.output.yaml` files, it can be
-tedious to update each file separately.
-
-If you set the `DEV_TELEPRESENCE_GENERATE_GOLD` environment variable
-to a non-empty value, and run the test again, it will update the files
-based on the current behavior (the test will still fail that first
-run, though).  Be sure to look at the diff and make sure that new
-behavior is actually correct!
-
-```console
-$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/userd/trafficmgr
-```
 
 ## Building for Release
 
@@ -145,7 +149,8 @@ Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDEN
 
 ### Building on Windows
 
-We do not currently support using `make` directly to build on Windows. Instead, use `build-aux\winmake.bat` and pass it the same parameters you would pass to make. `winmake.bat` will run `make` from inside a Docker container, with appropriate parameters to build windows binaries.
+We do not currently support using `make` directly to build on Windows. Instead, use `build-aux\winmake.bat` and pass it the same parameters
+you would pass to make. `winmake.bat` will run `make` from inside a Docker container, with appropriate parameters to build windows binaries.
 
 ## Debugging and Troubleshooting
 
@@ -165,6 +170,7 @@ The location of both logs is:
 
  - on macOS: `~/Library/Logs/telepresence/`
  - on GNU/Linux: `~/.cache/telepresence/logs/`
+ - on Windows `"%USERPROFILE%\AppData\Local\logs"`
 
 The logs are rotating and a new log is created every time Telepresence
 creates a new connection to the cluster, e.g. on `telepresence

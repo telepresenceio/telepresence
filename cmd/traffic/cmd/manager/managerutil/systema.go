@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
+//go:generate mockgen -destination=mocks/systemaCRUDClient_mock.go -package=mockmanagerutil . SystemaCRUDClient
 type SystemaCRUDClient interface {
 	systemarpc.SystemACRUDClient
 	a8rcloud.Closeable

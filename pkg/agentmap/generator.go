@@ -130,7 +130,7 @@ nextSvcPort:
 			ServicePortName:   port.Name,
 			ServicePort:       uint16(port.Port),
 			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
-			Protocol:          string(port.Protocol),
+			Protocol:          port.Protocol,
 			AppProtocol:       appProto,
 			AgentPort:         portNumber(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,

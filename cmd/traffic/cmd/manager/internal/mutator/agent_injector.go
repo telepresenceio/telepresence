@@ -255,13 +255,29 @@ func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) p
 			return patches
 		}
 	}
-	for _, av := range agentconfig.AgentVolumes(ag.AgentName) {
+	avs := agentconfig.AgentVolumes(ag.AgentName)
+	if len(avs) == 0 {
+		return patches
+	}
+
+	// Ensure that /spec/volumes exists in the pod. It won't be present when the pod doesn't have
+	// any volumes and automountServiceAccountToken == false
+	if pod.Spec.Volumes == nil {
 		patches = append(patches,
 			patchOperation{
-				Op:    "add",
-				Path:  "/spec/volumes/-",
-				Value: av,
+				Op:    "replace",
+				Path:  "/spec/volumes",
+				Value: avs,
 			})
+	} else {
+		for _, av := range avs {
+			patches = append(patches,
+				patchOperation{
+					Op:    "add",
+					Path:  "/spec/volumes/-",
+					Value: av,
+				})
+		}
 	}
 	return patches
 }

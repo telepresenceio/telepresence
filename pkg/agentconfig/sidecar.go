@@ -1,6 +1,9 @@
 package agentconfig
 
-import "k8s.io/apimachinery/pkg/types"
+import (
+	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+)
 
 const (
 	// ConfigMap is the name of the ConfigMap that contains the agent configs
@@ -51,7 +54,7 @@ type Intercept struct {
 	TargetPortNumeric bool `json:"targetPortNumeric,omitempty" yaml:"targetPortNumeric,omitempty"`
 
 	// L4 protocol used by the intercepted port
-	Protocol string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	Protocol core.Protocol `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 
 	// L7 protocol used by the intercepted port
 	AppProtocol string `json:"appProtocol,omitempty" yaml:"appProtocol,omitempty"`
