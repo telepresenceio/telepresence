@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -28,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 const ProcessName = "connector"
@@ -97,7 +100,10 @@ func (s *Service) RootDaemonClient(c context.Context) (daemon.DaemonClient, erro
 	}
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(c, "Connecting to root daemon...")
-	conn, err := client.DialSocket(c, client.DaemonSocketName)
+	conn, err := client.DialSocket(c, client.DaemonSocketName,
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	)
 	if err != nil {
 		dlog.Errorf(c, "unable to connect to root daemon: %+v", err)
 		return nil, err
@@ -280,6 +286,14 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 	sr := scout.NewReporter(c, "connector")
 	cliio := &broadcastqueue.BroadcastQueue{}
 
+	tracer, err := tracing.NewTraceServer(c, tracing.TraceConfig{
+		ProcessID:   3,
+		ProcessName: "user-daemon",
+	})
+	if err != nil {
+		return err
+	}
+
 	s := &Service{
 		scout:             sr,
 		connectRequest:    make(chan *rpc.ConnectRequest),
@@ -301,7 +315,10 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 	})
 
 	g.Go("server-grpc", func(c context.Context) (err error) {
-		opts := []grpc.ServerOption{}
+		opts := []grpc.ServerOption{
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+		}
 		cfg := client.GetConfig(c)
 		if !cfg.Grpc.MaxReceiveSize.IsZero() {
 			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
@@ -311,6 +328,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		s.svc = grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(s.svc, s)
 		manager.RegisterManagerServer(s.svc, s.ManagerProxy)
+		common.RegisterTracingServer(s.svc, tracer)
 		for _, ds := range daemonServices {
 			dlog.Infof(c, "Starting additional daemon service %s", ds.Name())
 			if err := ds.Start(c, sr, s.svc, s.withSession); err != nil {

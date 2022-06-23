@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -129,7 +130,10 @@ func ServeMutator(ctx context.Context) error {
 		return cw.Run(ctx)
 	})
 
-	server := &dhttp.ServerConfig{Handler: mux}
+	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+		return operation + r.URL.Path
+	}))
+	server := &dhttp.ServerConfig{Handler: wrapped}
 	addr := ":" + strconv.Itoa(install.MutatorWebhookPortHTTPS)
 
 	dlog.Infof(ctx, "Mutating webhook service is listening on %v", addr)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 const ProcessName = "daemon"
@@ -295,7 +297,7 @@ nextSession:
 	return nil
 }
 
-func (d *service) serveGrpc(c context.Context, l net.Listener) error {
+func (d *service) serveGrpc(c context.Context, l net.Listener, tracer common.TracingServer) error {
 	defer func() {
 		// Error recovery.
 		if perr := derror.PanicToError(recover()); perr != nil {
@@ -303,7 +305,10 @@ func (d *service) serveGrpc(c context.Context, l net.Listener) error {
 		}
 	}()
 
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+	}
 	cfg := client.GetConfig(c)
 	if !cfg.Grpc.MaxReceiveSize.IsZero() {
 		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
@@ -312,6 +317,7 @@ func (d *service) serveGrpc(c context.Context, l net.Listener) error {
 	}
 	svc := grpc.NewServer(opts...)
 	rpc.RegisterDaemonServer(svc, d)
+	common.RegisterTracingServer(svc, tracer)
 
 	sc := &dhttp.ServerConfig{
 		Handler: svc,
@@ -352,6 +358,14 @@ func run(c context.Context, loggingDir, configDir string) error {
 		return err
 	}
 
+	tracer, err := tracing.NewTraceServer(c, tracing.TraceConfig{
+		ProcessID:   4,
+		ProcessName: "root-daemon",
+	})
+	if err != nil {
+		return err
+	}
+
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
@@ -388,7 +402,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
 	g.Go("session", d.manageSessions)
-	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
+	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener, tracer) })
 	g.Go("metriton", d.scout.Run)
 	err = g.Wait()
 	if err != nil {

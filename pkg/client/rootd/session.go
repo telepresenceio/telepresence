@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -141,7 +142,10 @@ func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClien
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err := client.DialSocket(tc, client.ConnectorSocketName)
+	conn, err := client.DialSocket(tc, client.ConnectorSocketName,
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// The connector called us, and then it died which means we will die too. This is

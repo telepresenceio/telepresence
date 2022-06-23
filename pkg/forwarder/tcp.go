@@ -11,6 +11,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type tcp struct {
@@ -88,6 +90,8 @@ func (f *tcp) listen(ctx context.Context) (*net.TCPListener, error) {
 func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 	f.mu.Lock()
 	ctx := f.tCtx
+	ctx, span := otel.Tracer("").Start(ctx, "forwardConn")
+	defer span.End()
 	targetHost := f.targetHost
 	targetPort := f.targetPort
 	intercept := f.intercept
@@ -145,6 +149,9 @@ func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 }
 
 func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
+	ctx, span := otel.Tracer("").Start(ctx, "interceptConn")
+	defer span.End()
+	span.SetAttributes(attribute.String("intercept-id", iCept.Id))
 	addr := conn.RemoteAddr()
 	dlog.Infof(ctx, "Accept got connection from %s", addr)
 

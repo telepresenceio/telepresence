@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/client-go/kubernetes"
@@ -24,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -53,6 +55,22 @@ func Main(ctx context.Context, _ ...string) error {
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 	})
+
+	env := managerutil.GetEnv(ctx)
+
+	if env.TracingPort != 0 {
+		tracer, err := tracing.NewTraceServer(ctx, tracing.TraceConfig{
+			ProcessID:   1,
+			ProcessName: "traffic-manager",
+		})
+		if err != nil {
+			return err
+		}
+		g.Go("tracer-grpc", func(c context.Context) error {
+			return tracer.ServeGrpc(c, uint16(env.TracingPort))
+		})
+		defer tracer.Shutdown(ctx)
+	}
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
@@ -93,7 +111,10 @@ func (m *Manager) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+	}
 	if mz, ok := env.MaxReceiveSize.AsInt64(); ok {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}

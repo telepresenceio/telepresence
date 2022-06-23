@@ -13,6 +13,14 @@ spec:
   - name: api
     port: 8081
     targetPort: api
+  {{- with .Values.tracing }}
+  {{- if .grpcPort }}
+  - name: grpc-trace
+    port: {{ .grpcPort }}
+    targetPort: "grpc-trace"
+  {{- end }}
+  {{- end }}
+
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
 ---

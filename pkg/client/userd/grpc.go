@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/codes"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	grpcCodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 func callRecovery(c context.Context, r any, err error) error {
@@ -75,12 +76,14 @@ func (s *Service) withSession(c context.Context, callName string, f func(context
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			err = status.Error(codes.Unavailable, "no active session")
+			err = grpcStatus.Error(grpcCodes.Unavailable, "no active session")
 			return
 		}
 		defer func() { err = callRecovery(c, recover(), err) }()
 		num := getReqNumber(c)
 		ctx := dgroup.WithGoroutineName(s.sessionContext, fmt.Sprintf("/%s-%d", callName, num))
+		ctx, span := otel.Tracer("").Start(ctx, callName)
+		defer span.End()
 		err = f(ctx, s.session)
 	})
 	return
@@ -102,14 +105,14 @@ func (s *Service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	s.logCall(ctx, "Connect", func(c context.Context) {
 		select {
 		case <-ctx.Done():
-			err = status.Error(codes.Unavailable, ctx.Err().Error())
+			err = grpcStatus.Error(grpcCodes.Unavailable, ctx.Err().Error())
 			return
 		case s.connectRequest <- cr:
 		}
 
 		select {
 		case <-ctx.Done():
-			err = status.Error(codes.Unavailable, ctx.Err().Error())
+			err = grpcStatus.Error(grpcCodes.Unavailable, ctx.Err().Error())
 		case result = <-s.connectResponse:
 		}
 	})
@@ -224,6 +227,8 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		s.scout.Report(c, action, entries...)
 	}()
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
+		span := trace.SpanFromContext(c)
+		tracing.RecordInterceptSpec(span, ir.Spec)
 		_, result = session.CanIntercept(c, ir)
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
@@ -245,7 +250,12 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		s.scout.Report(c, action, entries...)
 	}()
 	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) error {
+		span := trace.SpanFromContext(c)
+		tracing.RecordInterceptSpec(span, ir.Spec)
 		result, err = session.AddIntercept(c, ir)
+		if err == nil && result != nil && result.InterceptInfo != nil {
+			tracing.RecordInterceptInfo(span, result.InterceptInfo)
+		}
 		return err
 	})
 	return
