@@ -87,9 +87,13 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		}
 	}
 
+	secretMode := int32(0644)
+	yes := true
+	no := false
 	podNamedPort := core.Pod{
 		ObjectMeta: podObjectMeta("named-port", "service"),
 		Spec: core.PodSpec{
+			AutomountServiceAccountToken: &yes,
 			Containers: []core.Container{
 				{
 					Name: "some-container",
@@ -98,10 +102,23 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 							Name: "http", ContainerPort: 8888,
 						},
 					},
-					VolumeMounts: []core.VolumeMount{{
-						Name:      "bob",
-						MountPath: "/home/bob",
-					}},
+					VolumeMounts: []core.VolumeMount{
+						{
+							Name:      "default-token-nkspp",
+							MountPath: serviceAccountMountPath,
+						},
+					},
+				},
+			},
+			Volumes: []core.Volume{
+				{
+					Name: "default-token-nkspp",
+					VolumeSource: core.VolumeSource{
+						Secret: &core.SecretVolumeSource{
+							SecretName:  "default-token-nkspp",
+							DefaultMode: &secretMode,
+						},
+					},
 				},
 			},
 		},
@@ -110,6 +127,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	podNumericPort := core.Pod{
 		ObjectMeta: podObjectMeta("numeric-port", "app"),
 		Spec: core.PodSpec{
+			AutomountServiceAccountToken: &no,
 			Containers: []core.Container{
 				{
 					Name: "some-container",
@@ -132,6 +150,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			OwnerReferences: podOwner("named-and-numeric"),
 		},
 		Spec: core.PodSpec{
+			AutomountServiceAccountToken: &yes,
 			Containers: []core.Container{
 				{
 					Name: "named-port-container",
@@ -141,10 +160,16 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 							ContainerPort: 8888,
 						},
 					},
-					VolumeMounts: []core.VolumeMount{{
-						Name:      "bob",
-						MountPath: "/home/bob",
-					}},
+					VolumeMounts: []core.VolumeMount{
+						{
+							Name:      "bob",
+							MountPath: "/home/bob",
+						},
+						{
+							Name:      "default-token-nkspp",
+							MountPath: serviceAccountMountPath,
+						},
+					},
 				},
 				{
 					Name: "numeric-port-container",
@@ -152,6 +177,23 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						{
 							ContainerPort: 8899,
 						},
+					},
+				},
+			},
+			Volumes: []core.Volume{
+				{
+					Name: "default-token-nkspp",
+					VolumeSource: core.VolumeSource{
+						Secret: &core.SecretVolumeSource{
+							SecretName:  "default-token-nkspp",
+							DefaultMode: &secretMode,
+						},
+					},
+				},
+				{
+					Name: "bob",
+					VolumeSource: core.VolumeSource{
+						EmptyDir: &core.EmptyDirVolumeSource{},
 					},
 				},
 			},
@@ -167,6 +209,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			OwnerReferences: podOwner("multi-port"),
 		},
 		Spec: core.PodSpec{
+			AutomountServiceAccountToken: &no,
 			Containers: []core.Container{
 				{
 					Name: "multi-port-container",
@@ -184,6 +227,14 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						Name:      "bob",
 						MountPath: "/home/bob",
 					}},
+				},
+			},
+			Volumes: []core.Volume{
+				{
+					Name: "bob",
+					VolumeSource: core.VolumeSource{
+						EmptyDir: &core.EmptyDirVolumeSource{},
+					},
 				},
 			},
 		},
@@ -406,7 +457,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/some-container",
-						Mounts:     []string{"/home/bob"},
+						Mounts:     []string{"/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
 				},
 			},
@@ -474,7 +525,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/named-port-container",
-						Mounts:     []string{"/home/bob"},
+						Mounts:     []string{"/home/bob", "/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
 					{
 						Name: "numeric-port-container",
@@ -634,6 +685,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	podName := func(name string) string {
 		return name + podSuffix
 	}
+	secretMode := int32(0644)
 
 	wlName := func(podName string) string {
 		return strings.TrimSuffix(podName, podSuffix)
@@ -869,29 +921,23 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
-- op: add
-  path: /spec/volumes/-
+- op: replace
+  path: /spec/volumes
   value:
-    downwardAPI:
+  - downwardAPI:
       items:
       - fieldRef:
           apiVersion: v1
           fieldPath: metadata.annotations
         path: annotations
     name: traffic-annotations
-- op: add
-  path: /spec/volumes/-
-  value:
-    configMap:
+  - configMap:
       items:
       - key: named-port
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
-- op: add
-  path: /spec/volumes/-
-  value:
-    emptyDir: {}
+  - emptyDir: {}
     name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
@@ -952,29 +998,23 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
-- op: add
-  path: /spec/volumes/-
+- op: replace
+  path: /spec/volumes
   value:
-    downwardAPI:
+  - downwardAPI:
       items:
       - fieldRef:
           apiVersion: v1
           fieldPath: metadata.annotations
         path: annotations
     name: traffic-annotations
-- op: add
-  path: /spec/volumes/-
-  value:
-    configMap:
+  - configMap:
       items:
       - key: named-port
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
-- op: add
-  path: /spec/volumes/-
-  value:
-    emptyDir: {}
+  - emptyDir: {}
     name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
@@ -1080,29 +1120,23 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
-- op: add
-  path: /spec/volumes/-
+- op: replace
+  path: /spec/volumes
   value:
-    downwardAPI:
+  - downwardAPI:
       items:
       - fieldRef:
           apiVersion: v1
           fieldPath: metadata.annotations
         path: annotations
     name: traffic-annotations
-- op: add
-  path: /spec/volumes/-
-  value:
-    configMap:
+  - configMap:
       items:
       - key: named-port
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
-- op: add
-  path: /spec/volumes/-
-  value:
-    emptyDir: {}
+  - emptyDir: {}
     name: export-volume
 - op: replace
   path: /spec/containers/0/ports/0/name
@@ -1173,29 +1207,23 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
-- op: add
-  path: /spec/volumes/-
+- op: replace
+  path: /spec/volumes
   value:
-    downwardAPI:
+  - downwardAPI:
       items:
       - fieldRef:
           apiVersion: v1
           fieldPath: metadata.annotations
         path: annotations
     name: traffic-annotations
-- op: add
-  path: /spec/volumes/-
-  value:
-    configMap:
+  - configMap:
       items:
       - key: numeric-port
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
-- op: add
-  path: /spec/volumes/-
-  value:
-    emptyDir: {}
+  - emptyDir: {}
     name: export-volume
 `,
 			"",
@@ -1267,29 +1295,23 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
-- op: add
-  path: /spec/volumes/-
+- op: replace
+  path: /spec/volumes
   value:
-    downwardAPI:
+  - downwardAPI:
       items:
       - fieldRef:
           apiVersion: v1
           fieldPath: metadata.annotations
         path: annotations
     name: traffic-annotations
-- op: add
-  path: /spec/volumes/-
-  value:
-    configMap:
+  - configMap:
       items:
       - key: numeric-port
         path: config.yaml
       name: telepresence-agents
     name: traffic-config
-- op: add
-  path: /spec/volumes/-
-  value:
-    emptyDir: {}
+  - emptyDir: {}
     name: export-volume
 `,
 			"",
@@ -1396,8 +1418,19 @@ func TestTrafficAgentInjector(t *testing.T) {
 							Name: "http", ContainerPort: 8888},
 						},
 						VolumeMounts: []core.VolumeMount{
-							{Name: "some-token", ReadOnly: true, MountPath: serviceAccountMountPath},
+							{Name: "default-token-nkspp", ReadOnly: true, MountPath: serviceAccountMountPath},
 						}},
+					},
+					Volumes: []core.Volume{
+						{
+							Name: "default-token-nkspp",
+							VolumeSource: core.VolumeSource{
+								Secret: &core.SecretVolumeSource{
+									SecretName:  "default-token-nkspp",
+									DefaultMode: &secretMode,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1432,7 +1465,7 @@ func TestTrafficAgentInjector(t *testing.T) {
     resources: {}
     volumeMounts:
     - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-      name: some-token
+      name: default-token-nkspp
       readOnly: true
     - mountPath: /tel_pod_info
       name: traffic-annotations
