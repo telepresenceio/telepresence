@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.6.8 (TBD)
+### 2.6.8 (June 23, 2022)
 
 - Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
 
