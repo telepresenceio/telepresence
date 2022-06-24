@@ -19,6 +19,8 @@ const (
 	MountPrefixApp       = "/tel_app_mounts"
 	ExportsVolumeName    = "export-volume"
 	ExportsMountPoint    = "/tel_app_exports"
+	TempVolumeName       = "tel-agent-tmp"
+	TempMountPoint       = "/tmp"
 	EnvPrefix            = "_TEL_"
 	EnvPrefixAgent       = EnvPrefix + "AGENT_"
 	EnvPrefixApp         = EnvPrefix + "APP_"

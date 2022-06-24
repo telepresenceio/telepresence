@@ -993,6 +993,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
 - op: replace
   path: /spec/volumes
   value:
@@ -1011,6 +1013,8 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: traffic-config
   - emptyDir: {}
     name: export-volume
+  - emptyDir: {}
+    name: tel-agent-tmp
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1070,6 +1074,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
 - op: replace
   path: /spec/volumes
   value:
@@ -1088,6 +1094,8 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: traffic-config
   - emptyDir: {}
     name: export-volume
+  - emptyDir: {}
+    name: tel-agent-tmp
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1192,6 +1200,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
 - op: replace
   path: /spec/volumes
   value:
@@ -1210,6 +1220,8 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: traffic-config
   - emptyDir: {}
     name: export-volume
+  - emptyDir: {}
+    name: tel-agent-tmp
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1279,6 +1291,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
 - op: replace
   path: /spec/volumes
   value:
@@ -1297,6 +1311,8 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: traffic-config
   - emptyDir: {}
     name: export-volume
+  - emptyDir: {}
+    name: tel-agent-tmp
 `,
 			"",
 			nil,
@@ -1367,6 +1383,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
 - op: replace
   path: /spec/volumes
   value:
@@ -1385,6 +1403,8 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: traffic-config
   - emptyDir: {}
     name: export-volume
+  - emptyDir: {}
+    name: tel-agent-tmp
 `,
 			"",
 			nil,
@@ -1459,6 +1479,10 @@ func TestTrafficAgentInjector(t *testing.T) {
 								{
 									Name:      "export-volume",
 									MountPath: "/tel_app_exports",
+								},
+								{
+									Name:      "tel-agent-tmp",
+									MountPath: "/tmp",
 								},
 							},
 							ReadinessProbe: &core.Probe{
@@ -1545,6 +1569,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       name: traffic-config
     - mountPath: /tel_app_exports
       name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
 - op: add
   path: /spec/volumes/-
   value:
@@ -1569,6 +1595,11 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     emptyDir: {}
     name: export-volume
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: tel-agent-tmp
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http

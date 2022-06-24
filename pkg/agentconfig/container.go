@@ -76,6 +76,10 @@ func AgentContainer(
 			Name:      ExportsVolumeName,
 			MountPath: ExportsMountPoint,
 		},
+		core.VolumeMount{
+			Name:      TempVolumeName,
+			MountPath: TempMountPoint,
+		},
 	)
 
 	if len(efs) == 0 {
@@ -152,6 +156,12 @@ func AgentVolumes(agentName string) []core.Volume {
 		},
 		{
 			Name: ExportsVolumeName,
+			VolumeSource: core.VolumeSource{
+				EmptyDir: &core.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: TempVolumeName,
 			VolumeSource: core.VolumeSource{
 				EmptyDir: &core.EmptyDirVolumeSource{},
 			},
