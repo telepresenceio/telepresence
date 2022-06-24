@@ -20,13 +20,13 @@ spec:
   template:
     metadata:
       name: uninstall-agents
-      securityContext:
-        {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
       labels:
         app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
+      securityContext:
+        {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
       restartPolicy: Never
       containers:
         - name: uninstall-agents
