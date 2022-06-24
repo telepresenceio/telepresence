@@ -60,7 +60,7 @@ func AgentContainer(
 
 	mounts := make([]core.VolumeMount, 0, len(config.Containers)*3)
 	EachContainer(pod, config, func(app *core.Container, cc *Container) {
-		mounts = appendAppContainerVolumeMounts(app, cc, mounts)
+		mounts = appendAppContainerVolumeMounts(app, cc, mounts, pod.ObjectMeta.Annotations)
 	})
 
 	mounts = append(mounts,
@@ -173,7 +173,7 @@ func EachContainer(pod *core.Pod, config *Sidecar, f func(*core.Container, *Cont
 	}
 }
 
-func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts []core.VolumeMount) []core.VolumeMount {
+func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts []core.VolumeMount, annotations map[string]string) []core.VolumeMount {
 	isVrs := func(s string) bool {
 		return strings.HasPrefix(s, "/var/run/secrets/")
 	}
@@ -188,7 +188,12 @@ func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts [
 		return false
 	}
 
+	ignoredVolumeMounts := getIgnoredVolumeMounts(annotations)
+
 	for _, m := range app.VolumeMounts {
+		if _, ok := ignoredVolumeMounts[m.Name]; ok {
+			continue
+		}
 		if isVrs(m.MountPath) {
 			if vrsAdded() {
 				continue // Only add /var/run/secrets once, not once per container
@@ -215,4 +220,13 @@ func appendAppContainerEnvFrom(app *core.Container, cc *Container, es []core.Env
 		es = append(es, e)
 	}
 	return es
+}
+
+func getIgnoredVolumeMounts(annotations map[string]string) map[string]struct{} {
+	vmSlice := strings.Split(annotations["telepresence.getambassador.io/inject-ignore-volume-mounts"], ",")
+	ivms := make(map[string]struct{}, len(vmSlice))
+	for _, vm := range vmSlice {
+		ivms[strings.TrimSpace(vm)] = struct{}{}
+	}
+	return ivms
 }
