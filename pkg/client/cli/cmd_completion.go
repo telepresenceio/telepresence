@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
