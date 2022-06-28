@@ -155,6 +155,9 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 		case n == 2 && strings.HasPrefix(query, wpadDot):
 			// Reject "wpad.<namespace>."
 			return false
+		case n == 3 && strings.HasSuffix(query, ".svc"):
+			// Accept "<service-name>.<namespace>.svc"
+			return true
 		}
 	}
 
