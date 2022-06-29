@@ -3,6 +3,7 @@ package telepresence.connector;
 
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
+import "rpc/common/errors.proto";
 import "rpc/manager/manager.proto";
 import "rpc/userdaemon/userdaemon.proto";
 
@@ -224,27 +225,6 @@ message CreateInterceptRequest {
   string agent_image = 3;
 }
 
-// InterceptError is a common error type used by the intercept call family (add,
-// remove, list, available).
-enum InterceptError {
-  UNSPECIFIED = 0; // no error
-  reserved 1;
-  NO_CONNECTION = 2; // Have not made the .Connect RPC call (or it errored)
-  NO_TRAFFIC_MANAGER = 3;
-  TRAFFIC_MANAGER_CONNECTING = 4;
-  TRAFFIC_MANAGER_ERROR = 5;
-  ALREADY_EXISTS = 6;
-  LOCAL_TARGET_IN_USE = 7;
-  NO_ACCEPTABLE_WORKLOAD = 8;
-  AMBIGUOUS_MATCH = 9;
-  FAILED_TO_ESTABLISH = 10;
-  UNSUPPORTED_WORKLOAD = 11;
-  MISCONFIGURED_WORKLOAD = 14;
-  NOT_FOUND = 12;
-  MOUNT_POINT_BUSY = 13;
-  UNKNOWN_FLAG = 15;
-}
-
 message ListRequest {
   enum Filter {
     UNSPECIFIED = 0;
@@ -309,7 +289,7 @@ message WorkloadInfoSnapshot {
 
 message InterceptResult {
   telepresence.manager.InterceptInfo intercept_info = 1;
-  InterceptError error = 2;
+  telepresence.common.InterceptError error = 2;
   string error_text = 3;
   int32 error_category = 7;
 

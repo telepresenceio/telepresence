@@ -5,6 +5,8 @@ syntax = "proto3";
 package telepresence.userdaemon;
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "rpc/common/errors.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/userdaemon";
 
@@ -26,6 +28,10 @@ service SystemA {
 
   // ReportAvailableNamespaces
   rpc ReportAvailableNamespaces(stream AvailableNamespacesRequest) returns (google.protobuf.Empty);
+
+  rpc ReportInterceptCreation(InterceptCreationResult) returns (google.protobuf.Empty);
+
+  rpc GetInterceptDefinition(GetInterceptDefinitionRequest) returns (InterceptDefinition);
 }
 
 // AvailableServicesRequest contains a list of services that can be intercepted by the daemon
@@ -64,10 +70,6 @@ message NamespacesToWatchRequest {
   repeated Namespace namespaces = 2;
 }
 
-message NamespacesToWatchResponse {
-  repeated Namespace namespaces = 1;
-}
-
 // IngressInfoRequest represents the intercept properties required to resolve ingress info
 message IngressInfoRequest {
   // The service uid defined in the service's metadata
@@ -101,6 +103,10 @@ message IngressInfoResponse {
   string l5host = 4;
 }
 
+message NamespacesToWatchResponse {
+  repeated Namespace namespaces = 1;
+}
+
 // AvailableNamespacesRequest contains a list of namespaces that can be intercepted by the daemon
 message AvailableNamespacesRequest {
   DaemonInfo daemon_info = 1;
@@ -119,4 +125,26 @@ message DaemonInfo {
   string workstation_name = 2;
   string kube_context_name = 3;
   string session_id = 4;
+}
+
+message InterceptCreationResult {
+  string telepresence_version = 1;
+  google.protobuf.Timestamp started_at = 2;
+  google.protobuf.Timestamp ended_at = 3;
+  string intercept_name = 4;
+  repeated string arguments = 5;
+  string command_to_execute = 6;
+  telepresence.common.InterceptError intercept_error = 7;
+  string intercept_error_text = 8;
+}
+
+message GetInterceptDefinitionRequest {
+  string name = 1;
+}
+
+message InterceptDefinition {
+  string telepresence_version = 1;
+  string intercept_name = 2;
+  string arguments = 3;
+  string command_to_execute = 4;
 }
