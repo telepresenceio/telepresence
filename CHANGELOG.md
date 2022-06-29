@@ -4,6 +4,8 @@
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.
 
+- Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
+
 ### 2.6.8 (June 23, 2022)
 
 - Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
