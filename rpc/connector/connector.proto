@@ -2,8 +2,8 @@ syntax = "proto3";
 package telepresence.connector;
 
 import "google/protobuf/empty.proto";
-import "rpc/common/version.proto";
 import "rpc/common/errors.proto";
+import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
 import "rpc/userdaemon/userdaemon.proto";
 

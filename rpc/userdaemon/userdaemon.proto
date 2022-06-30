@@ -127,24 +127,62 @@ message DaemonInfo {
   string session_id = 4;
 }
 
+// InterceptCreationResult represents the result of an intercept execution
 message InterceptCreationResult {
-  string telepresence_version = 1;
-  google.protobuf.Timestamp started_at = 2;
-  google.protobuf.Timestamp ended_at = 3;
-  string intercept_name = 4;
-  repeated string arguments = 5;
-  string command_to_execute = 6;
-  telepresence.common.InterceptError intercept_error = 7;
-  string intercept_error_text = 8;
+  // Telepresence CLI version
+  string telepresence_cli_version = 1;
+
+  // Telepresence User Daemon version
+  string telepresence_user_daemon_version = 2;
+
+  // Time at which the command execution started
+  google.protobuf.Timestamp started_at = 3;
+
+  // Time at which the command execution completed
+  google.protobuf.Timestamp ended_at = 4;
+
+  // Base name of the intercept, as represented by `telepresence intercept <intercept_base_name>`
+  string intercept_base_name = 5;
+
+  // List of arguments that were passed to the command and should be of format "--argument-name=argument value"
+  repeated string intercept_parameters = 6;
+
+  // Exec command and arguments that can optionally be passed
+  string intercept_exec_command = 7;
+
+  // InterceptError resulting from the execution
+  telepresence.common.InterceptError intercept_error = 8;
+
+  // Error text message if any
+  string intercept_error_text = 9;
+
+  // Cluster ID in which the intercept was executed
+  string cluster_id = 10;
+
+  // Namespace in which the intercept was executed. Must be the same as the `--namespace` argument if passed.
+  string cluster_namespace = 11;
 }
 
+// GetInterceptDefinitionRequest represents a request to get a specific InterceptDefinition by its name
 message GetInterceptDefinitionRequest {
+  // Name of the intercept definition to look up
   string name = 1;
 }
 
+// InterceptDefinition represents a set of properties that can be put back together to instantiate an intercept
 message InterceptDefinition {
-  string telepresence_version = 1;
-  string intercept_name = 2;
-  string arguments = 3;
-  string command_to_execute = 4;
+  // Telepresence CLI version
+  string telepresence_cli_version = 1;
+
+  // Telepresence User Daemon version
+  string telepresence_user_daemon_version = 2;
+
+  // Base name of the intercept, as represented by `telepresence intercept <intercept_base_name>`
+  string intercept_base_name = 3;
+
+  // List of arguments that were passed to the command and should be of format "--argument-name=argument value"
+  string intercept_parameters = 4;
+
+  // Exec command and arguments that can optionally be passed
+  string intercept_exec_command = 5;
 }
