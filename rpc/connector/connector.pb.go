@@ -2822,52 +2822,54 @@ var file_rpc_connector_connector_proto_depIdxs = []int32{
 	46, // 25: telepresence.connector.Connector.Status:input_type -> google.protobuf.Empty
 	14, // 26: telepresence.connector.Connector.CanIntercept:input_type -> telepresence.connector.CreateInterceptRequest
 	14, // 27: telepresence.connector.Connector.CreateIntercept:input_type -> telepresence.connector.CreateInterceptRequest
-	47, // 28: telepresence.connector.Connector.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
-	12, // 29: telepresence.connector.Connector.Uninstall:input_type -> telepresence.connector.UninstallRequest
-	15, // 30: telepresence.connector.Connector.List:input_type -> telepresence.connector.ListRequest
-	16, // 31: telepresence.connector.Connector.WatchWorkloads:input_type -> telepresence.connector.WatchWorkloadsRequest
-	46, // 32: telepresence.connector.Connector.UserNotifications:input_type -> google.protobuf.Empty
-	21, // 33: telepresence.connector.Connector.Login:input_type -> telepresence.connector.LoginRequest
-	46, // 34: telepresence.connector.Connector.Logout:input_type -> google.protobuf.Empty
-	23, // 35: telepresence.connector.Connector.GetCloudUserInfo:input_type -> telepresence.connector.UserInfoRequest
-	25, // 36: telepresence.connector.Connector.GetCloudAPIKey:input_type -> telepresence.connector.KeyRequest
-	27, // 37: telepresence.connector.Connector.GetCloudLicense:input_type -> telepresence.connector.LicenseRequest
-	46, // 38: telepresence.connector.Connector.GetIngressInfos:input_type -> google.protobuf.Empty
-	48, // 39: telepresence.connector.Connector.SetLogLevel:input_type -> telepresence.manager.LogLevelRequest
-	46, // 40: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
-	46, // 41: telepresence.connector.Connector.ListCommands:input_type -> google.protobuf.Empty
-	6,  // 42: telepresence.connector.Connector.RunCommand:input_type -> telepresence.connector.RunCommandRequest
-	45, // 43: telepresence.connector.Connector.ResolveIngressInfo:input_type -> telepresence.userdaemon.IngressInfoRequest
-	29, // 44: telepresence.connector.Connector.GatherLogs:input_type -> telepresence.connector.LogsRequest
-	7,  // 45: telepresence.connector.Connector.AddInterceptor:input_type -> telepresence.connector.Interceptor
-	7,  // 46: telepresence.connector.Connector.RemoveInterceptor:input_type -> telepresence.connector.Interceptor
-	49, // 47: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
-	10, // 48: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
-	46, // 49: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
-	10, // 50: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
-	19, // 51: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
-	19, // 52: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
-	19, // 53: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
-	13, // 54: telepresence.connector.Connector.Uninstall:output_type -> telepresence.connector.UninstallResult
-	18, // 55: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	18, // 56: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	20, // 57: telepresence.connector.Connector.UserNotifications:output_type -> telepresence.connector.Notification
-	22, // 58: telepresence.connector.Connector.Login:output_type -> telepresence.connector.LoginResult
-	46, // 59: telepresence.connector.Connector.Logout:output_type -> google.protobuf.Empty
-	24, // 60: telepresence.connector.Connector.GetCloudUserInfo:output_type -> telepresence.connector.UserInfo
-	26, // 61: telepresence.connector.Connector.GetCloudAPIKey:output_type -> telepresence.connector.KeyData
-	28, // 62: telepresence.connector.Connector.GetCloudLicense:output_type -> telepresence.connector.LicenseData
-	11, // 63: telepresence.connector.Connector.GetIngressInfos:output_type -> telepresence.connector.IngressInfos
-	46, // 64: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
-	46, // 65: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
-	5,  // 66: telepresence.connector.Connector.ListCommands:output_type -> telepresence.connector.CommandGroups
-	8,  // 67: telepresence.connector.Connector.RunCommand:output_type -> telepresence.connector.RunCommandResponse
-	50, // 68: telepresence.connector.Connector.ResolveIngressInfo:output_type -> telepresence.userdaemon.IngressInfoResponse
-	30, // 69: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
-	46, // 70: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
-	46, // 71: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
-	47, // [47:72] is the sub-list for method output_type
-	22, // [22:47] is the sub-list for method input_type
+	14, // 28: telepresence.connector.Connector.CreatePoddIntercept:input_type -> telepresence.connector.CreateInterceptRequest
+	47, // 29: telepresence.connector.Connector.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
+	12, // 30: telepresence.connector.Connector.Uninstall:input_type -> telepresence.connector.UninstallRequest
+	15, // 31: telepresence.connector.Connector.List:input_type -> telepresence.connector.ListRequest
+	16, // 32: telepresence.connector.Connector.WatchWorkloads:input_type -> telepresence.connector.WatchWorkloadsRequest
+	46, // 33: telepresence.connector.Connector.UserNotifications:input_type -> google.protobuf.Empty
+	21, // 34: telepresence.connector.Connector.Login:input_type -> telepresence.connector.LoginRequest
+	46, // 35: telepresence.connector.Connector.Logout:input_type -> google.protobuf.Empty
+	23, // 36: telepresence.connector.Connector.GetCloudUserInfo:input_type -> telepresence.connector.UserInfoRequest
+	25, // 37: telepresence.connector.Connector.GetCloudAPIKey:input_type -> telepresence.connector.KeyRequest
+	27, // 38: telepresence.connector.Connector.GetCloudLicense:input_type -> telepresence.connector.LicenseRequest
+	46, // 39: telepresence.connector.Connector.GetIngressInfos:input_type -> google.protobuf.Empty
+	48, // 40: telepresence.connector.Connector.SetLogLevel:input_type -> telepresence.manager.LogLevelRequest
+	46, // 41: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
+	46, // 42: telepresence.connector.Connector.ListCommands:input_type -> google.protobuf.Empty
+	6,  // 43: telepresence.connector.Connector.RunCommand:input_type -> telepresence.connector.RunCommandRequest
+	45, // 44: telepresence.connector.Connector.ResolveIngressInfo:input_type -> telepresence.userdaemon.IngressInfoRequest
+	29, // 45: telepresence.connector.Connector.GatherLogs:input_type -> telepresence.connector.LogsRequest
+	7,  // 46: telepresence.connector.Connector.AddInterceptor:input_type -> telepresence.connector.Interceptor
+	7,  // 47: telepresence.connector.Connector.RemoveInterceptor:input_type -> telepresence.connector.Interceptor
+	49, // 48: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
+	10, // 49: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
+	46, // 50: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
+	10, // 51: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
+	19, // 52: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
+	19, // 53: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
+	19, // 54: telepresence.connector.Connector.CreatePoddIntercept:output_type -> telepresence.connector.InterceptResult
+	19, // 55: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
+	13, // 56: telepresence.connector.Connector.Uninstall:output_type -> telepresence.connector.UninstallResult
+	18, // 57: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	18, // 58: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	20, // 59: telepresence.connector.Connector.UserNotifications:output_type -> telepresence.connector.Notification
+	22, // 60: telepresence.connector.Connector.Login:output_type -> telepresence.connector.LoginResult
+	46, // 61: telepresence.connector.Connector.Logout:output_type -> google.protobuf.Empty
+	24, // 62: telepresence.connector.Connector.GetCloudUserInfo:output_type -> telepresence.connector.UserInfo
+	26, // 63: telepresence.connector.Connector.GetCloudAPIKey:output_type -> telepresence.connector.KeyData
+	28, // 64: telepresence.connector.Connector.GetCloudLicense:output_type -> telepresence.connector.LicenseData
+	11, // 65: telepresence.connector.Connector.GetIngressInfos:output_type -> telepresence.connector.IngressInfos
+	46, // 66: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
+	46, // 67: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
+	5,  // 68: telepresence.connector.Connector.ListCommands:output_type -> telepresence.connector.CommandGroups
+	8,  // 69: telepresence.connector.Connector.RunCommand:output_type -> telepresence.connector.RunCommandResponse
+	50, // 70: telepresence.connector.Connector.ResolveIngressInfo:output_type -> telepresence.userdaemon.IngressInfoResponse
+	30, // 71: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
+	46, // 72: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
+	46, // 73: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
+	48, // [48:74] is the sub-list for method output_type
+	22, // [22:48] is the sub-list for method input_type
 	22, // [22:22] is the sub-list for extension type_name
 	22, // [22:22] is the sub-list for extension extendee
 	0,  // [0:22] is the sub-list for field type_name
@@ -3253,8 +3255,7 @@ func file_rpc_connector_connector_proto_init() {
 		}
 	}
 	
-	file_rpc_connector_connector_proto_msgTypes[3].OneofWrappers = []interface{}{}
-	file_rpc_connector_connector_proto_msgTypes[11].OneofWrappers = []interface{}{}
+	file_rpc_connector_connector_proto_msgTypes[4].OneofWrappers = []interface{}{}
 	file_rpc_connector_connector_proto_msgTypes[12].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
