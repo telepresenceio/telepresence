@@ -12,17 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
 type yesNoClient bool
 type yesNoCluster bool
 
-func (yn yesNoClient) InterceptInfo(_ context.Context, _, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (yn yesNoClient) InterceptInfo(_ context.Context, _, _ string, _ uint16, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: true}, nil
 }
 
-func (yn yesNoCluster) InterceptInfo(_ context.Context, _, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
+func (yn yesNoCluster) InterceptInfo(_ context.Context, _, _ string, _ uint16, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: false}, nil
 }
 
@@ -39,12 +40,12 @@ func (t textMatcher) intercepted(header http.Header) bool {
 	return true
 }
 
-func (t textMatcherClient) InterceptInfo(_ context.Context, _, _ string, header http.Header) (*restapi.InterceptInfo, error) {
-	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(header), ClientSide: true}, nil
+func (t textMatcherClient) InterceptInfo(_ context.Context, _, _ string, _ uint16, headers http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(headers), ClientSide: true}, nil
 }
 
-func (t textMatcherCluster) InterceptInfo(_ context.Context, _, _ string, header http.Header) (*restapi.InterceptInfo, error) {
-	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(header), ClientSide: false}, nil
+func (t textMatcherCluster) InterceptInfo(_ context.Context, _, _ string, _ uint16, headers http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: textMatcher(t).intercepted(headers), ClientSide: false}, nil
 }
 
 type matcherWithMetadata struct {
@@ -52,22 +53,22 @@ type matcherWithMetadata struct {
 	meta map[string]string
 }
 
-func (t *matcherWithMetadata) InterceptInfo(c context.Context, ci, p string, header http.Header) (*restapi.InterceptInfo, error) {
-	ret, _ := t.textMatcherCluster.InterceptInfo(c, ci, p, header)
+func (t *matcherWithMetadata) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
+	ret, _ := t.textMatcherCluster.InterceptInfo(ctx, callerID, path, containerPort, headers)
 	ret.Metadata = t.meta
 	return ret, nil
 }
 
 type callerIdMatcherClient string
 
-func (c callerIdMatcherClient) InterceptInfo(_ context.Context, callerId, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
-	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: true}, nil
+func (c callerIdMatcherClient) InterceptInfo(_ context.Context, callerID, _ string, _ uint16, _ http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: callerID == string(c), ClientSide: true}, nil
 }
 
 type callerIdMatcherCluster string
 
-func (c callerIdMatcherCluster) InterceptInfo(_ context.Context, callerId, _ string, _ http.Header) (*restapi.InterceptInfo, error) {
-	return &restapi.InterceptInfo{Intercepted: callerId == string(c), ClientSide: false}, nil
+func (c callerIdMatcherCluster) InterceptInfo(_ context.Context, callerID, _ string, _ uint16, _ http.Header) (*restapi.InterceptInfo, error) {
+	return &restapi.InterceptInfo{Intercepted: callerID == string(c), ClientSide: false}, nil
 }
 
 func Test_server_intercepts(t *testing.T) {
@@ -76,7 +77,7 @@ func Test_server_intercepts(t *testing.T) {
 		agent    restapi.AgentState
 		headers  map[string]string
 		endpoint string
-		want     interface{}
+		want     any
 	}{
 		{
 			"client true",
@@ -239,7 +240,8 @@ func Test_server_intercepts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, cancel := context.WithCancel(dlog.NewTestContext(t, false))
+			c := dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelWarn))
+			c, cancel := context.WithCancel(c)
 			ln, err := net.Listen("tcp", ":0")
 			require.NoError(t, err)
 			wg := sync.WaitGroup{}

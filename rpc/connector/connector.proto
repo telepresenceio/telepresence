@@ -89,6 +89,13 @@ service Connector {
   // GatherLogs will acquire logs for the various Telepresence components in kubernetes
   // (pending the request) and return them to the caller
   rpc GatherLogs(LogsRequest) returns (LogsResponse);
+
+  // AddInterceptor tells the connector that a given process is serving a specific
+  // intercept. The connector must kill this process when the intercept ends
+  rpc AddInterceptor(Interceptor) returns  (google.protobuf.Empty);
+
+  // RemoveInterceptor removes a previously added interceptor
+  rpc RemoveInterceptor(Interceptor)  returns  (google.protobuf.Empty);
 }
 
 message CommandGroups {
@@ -114,6 +121,14 @@ message CommandGroups {
 
 message RunCommandRequest {
   repeated string os_args = 1;
+}
+
+message Interceptor {
+  // The ID of the intercept that is served by this interceptor process
+  string intercept_id = 1;
+
+  // The pid of the interceptor process
+  int32  pid = 2;
 }
 
 message RunCommandResponse {
@@ -266,8 +281,8 @@ message WorkloadInfo {
   // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
   telepresence.manager.AgentInfo agent_info = 3;
 
-  // InterceptInfo reported from the traffic manager in case the workload is currently intercepted
-  telepresence.manager.InterceptInfo intercept_info = 4;
+  // InterceptInfos reported from the traffic manager in case the workload is currently intercepted
+  repeated telepresence.manager.InterceptInfo intercept_infos = 9;
 
   // Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
   string workload_resource_type = 5;
@@ -286,6 +301,8 @@ message WorkloadInfo {
   optional ServiceReference service = 7;
 
   string uid = 8;
+
+  reserved 4;
 }
 
 message WorkloadInfoSnapshot {
@@ -298,8 +315,7 @@ message InterceptResult {
   string error_text = 3;
   int32 error_category = 7;
 
-  // The environment of the app
-  map<string,string> environment = 4;
+  reserved 4;
 
   // The service uid associated with the workload intercepted
   string service_uid = 5;
@@ -375,25 +391,23 @@ message LogsRequest {
   // Whether or not logs from the traffic-manager are desired.
   bool traffic_manager = 1;
 
+  // Whether or not to get the pod yaml deployed to the cluster.
+  bool get_pod_yaml = 2;
+
   // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
   // or substring to filter based on pod names.
-  string agents = 2;
+  string agents = 3;
 
-  // Whether or not to get the pod yaml deployed to the cluster.
-  bool get_pod_yaml = 3;
+  // Directory that the logs will be exported to
+  string export_dir = 4;
 }
 
 message LogsResponse {
+  // General error that isn't associated with a pod such as failing to list the pods.
+  string error = 1;
 
-  // The map contains assocations between <podName.namespace> and the logs
-  // from that pod.
-  map<string, string> pod_logs = 1;
-
-  // Errors encountered when getting logs from the traffic-manager
-  // and/or traffic-agents.
-  string err_msg = 2;
-
-  // The map contains assocations between <podName.namespace> and the pod's
-  // yaml.
-  map<string, string> pod_yaml = 3;
+  // pod_info contains one entry per created file name name. The value is either the string
+  // "ok" indicating that the file exists, or an error string with info why it could not
+  // be created.
+  map<string, string> pod_info = 2;
 }

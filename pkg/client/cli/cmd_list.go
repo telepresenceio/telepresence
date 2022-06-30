@@ -2,16 +2,19 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
 func xlistCommand() *cobra.Command {
@@ -38,10 +41,7 @@ func xlistCommand() *cobra.Command {
 				if err := watchClient.CloseSend(); err != nil {
 					return err
 				}
-
-				for _, intercept := range snapshot.Intercepts {
-					fmt.Println(DescribeIntercept(intercept, nil, true))
-				}
+				fmt.Println(DescribeIntercepts(snapshot.Intercepts, nil, true))
 
 				return nil
 			})
@@ -55,7 +55,7 @@ type listInfo struct {
 	onlyInterceptable bool
 	debug             bool
 	namespace         string
-	json              bool
+	watch             bool
 }
 
 func listCommand() *cobra.Command {
@@ -73,15 +73,14 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
-	flags.BoolVarP(&s.json, "json", "j", false, "output as json array")
+	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
 	return cmd
 }
 
 // list requests a list current intercepts from the daemon
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
-	var r *connector.WorkloadInfoSnapshot
-	var err error
-	err = withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
+	stdout := cmd.OutOrStdout()
+	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
 		var filter connector.ListRequest_Filter
 		switch {
 		case s.onlyIntercepts:
@@ -93,25 +92,78 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace})
-		return err
+
+		cfg := client.GetConfig(ctx)
+		maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. List can be quit long.
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+				if mz > maxRecSize {
+					maxRecSize = mz
+				}
+			}
+		}
+
+		jsonOut := output.WantsJSONOutput(cmd.Flags())
+		if !s.watch {
+			r, err := cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+			if err != nil {
+				return err
+			}
+			s.printList(r.Workloads, stdout, jsonOut)
+			return nil
+		}
+
+		stream, err := cs.userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+		if err != nil {
+			return err
+		}
+
+		ch := make(chan *connector.WorkloadInfoSnapshot)
+		go func() {
+			for {
+				r, err := stream.Recv()
+				if err != nil {
+					break
+				}
+				ch <- r
+			}
+		}()
+
+	looper:
+		for {
+			select {
+			case r := <-ch:
+				s.printList(r.Workloads, stdout, jsonOut)
+			case <-ctx.Done():
+				break looper
+			}
+		}
+		return nil
 	})
-	if err != nil {
-		return err
+}
+
+func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer, jsonOut bool) {
+	var streamerOut output.StructuredStreamer
+
+	if jsonOut {
+		streamerOut, _ = stdout.(output.StructuredStreamer)
+		if streamerOut == nil {
+			panic("writer not output.StructuredStreamer")
+		}
 	}
-	stdout := cmd.OutOrStdout()
-	if len(r.Workloads) == 0 {
-		if s.json {
-			fmt.Fprintln(stdout, "[]")
+
+	if len(workloads) == 0 {
+		if jsonOut {
+			streamerOut.StructuredStream([]struct{}{}, nil)
 		} else {
 			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		}
-		return nil
+		return
 	}
 
 	state := func(workload *connector.WorkloadInfo) string {
-		if ii := workload.InterceptInfo; ii != nil {
-			return DescribeIntercept(ii, nil, s.debug)
+		if iis := workload.InterceptInfos; len(iis) > 0 {
+			return DescribeIntercepts(iis, nil, s.debug)
 		}
 		ai := workload.AgentInfo
 		if ai != nil {
@@ -124,21 +176,16 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if s.json {
-		msg, err := json.Marshal(r.Workloads)
-		if err != nil {
-			fmt.Fprintf(stdout, "json marshal error: %v", err)
-		} else {
-			fmt.Fprintf(stdout, "%s", msg)
-		}
+	if jsonOut {
+		streamerOut.StructuredStream(workloads, nil)
 	} else {
 		includeNs := false
 		ns := s.namespace
-		for _, dep := range r.Workloads {
+		for _, dep := range workloads {
 			depNs := dep.Namespace
 			if depNs == "" {
-				// Local-only, so use namespace of intercept
-				depNs = dep.InterceptInfo.Spec.Namespace
+				// Local-only, so use namespace of first intercept
+				depNs = dep.InterceptInfos[0].Spec.Namespace
 			}
 			if ns != "" && depNs != ns {
 				includeNs = true
@@ -147,11 +194,11 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			ns = depNs
 		}
 		nameLen := 0
-		for _, dep := range r.Workloads {
+		for _, dep := range workloads {
 			n := dep.Name
 			if n == "" {
-				// Local-only, so use name of intercept
-				n = dep.InterceptInfo.Spec.Name
+				// Local-only, so use name of first intercept
+				n = dep.InterceptInfos[0].Spec.Name
 			}
 			nl := len(n)
 			if includeNs {
@@ -161,10 +208,10 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 				nameLen = nl
 			}
 		}
-		for _, workload := range r.Workloads {
+		for _, workload := range workloads {
 			if workload.Name == "" {
-				// Local-only, so use name of intercept
-				n := workload.InterceptInfo.Spec.Name
+				// Local-only, so use name of first intercept
+				n := workload.InterceptInfos[0].Spec.Name
 				if includeNs {
 					n += "." + workload.Namespace
 				}
@@ -178,12 +225,21 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 			}
 		}
 	}
-	return nil
 }
 
-func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
-	msg := "intercepted"
+func DescribeIntercepts(iis []*manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
+	sb := strings.Builder{}
+	sb.WriteString("intercepted")
+	for i, ii := range iis {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		describeIntercept(ii, volumeMountsPrevented, debug, &sb)
+	}
+	return sb.String()
+}
 
+func describeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, debug bool, sb *strings.Builder) {
 	type kv struct {
 		Key   string
 		Value string
@@ -221,8 +277,8 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 		fields = append(fields, kv{"Metadata", fmt.Sprintf("%q", ii.Metadata)})
 	}
 
-	if ii.Spec.MountPoint != "" {
-		fields = append(fields, kv{"Volume Mount Point", ii.Spec.MountPoint})
+	if ii.ClientMountPoint != "" {
+		fields = append(fields, kv{"Volume Mount Point", ii.ClientMountPoint})
 	} else if volumeMountsPrevented != nil {
 		fields = append(fields, kv{"Volume Mount Error", volumeMountsPrevented.Error()})
 	}
@@ -262,10 +318,10 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	}
 	for _, kv := range fields {
 		vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
-		msg += fmt.Sprintf("\n    %-*s: %s", klen, kv.Key, vlines[0])
+		fmt.Fprintf(sb, "\n    %-*s: %s", klen, kv.Key, vlines[0])
 		for _, vline := range vlines[1:] {
-			msg += "\n      " + vline
+			sb.WriteString("\n      ")
+			sb.WriteString(vline)
 		}
 	}
-	return msg
 }

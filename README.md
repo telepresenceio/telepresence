@@ -4,7 +4,7 @@
 
 Telepresence gives developers infinite scale development environments for Kubernetes. 
 
-Website: [https://www.telepresence.io](https://www.telepresence.io)  
+Website: [https://www.getambassador.io/products/telepresence/](https://www.getambassador.io/products/telepresence/)  
 Slack: [Discuss](https://datawire-oss.slack.com/signup#/domain-signup)
 
 **With Telepresence:**
@@ -67,7 +67,9 @@ pod/hello-9954f98bf-6p2k9   1/1     Running   0          2m15s
 Check telepresence version
 ```console
 $ telepresence version
-Client v2.0.2
+Client: v2.6.7 (api v3)
+Root Daemon: v2.6.7 (api v3)
+User Daemon: v2.6.7 (api v3)
 ```
 
 ### Establish a connection to  the cluster (outbound traffic)
@@ -75,8 +77,8 @@ Client v2.0.2
 Let telepresence connect:
 ```console
 $ telepresence connect
-Launching Telepresence Daemon v2.0.2 (api v3)
-Connecting to traffic manager...
+Launching Telepresence Root Daemon
+Launching Telepresence User Daemon
 Connected to context default (https://35.232.104.64)
 ```
 
@@ -85,7 +87,7 @@ A session is now active and outbound connections will be routed to the cluster. 
 ```console
 $ curl hello.default
 CLIENT VALUES:
-client_address=10.42.0.7
+client_address=10.42.0.189
 command=GET
 real path=/
 query=nil
@@ -98,7 +100,7 @@ server_version=nginx: 1.10.0 - lua: 10001
 HEADERS RECEIVED:
 accept=*/*
 host=hello.default
-user-agent=curl/7.71.1
+user-agent=curl/7.79.1
 BODY:
 -no body in request-
 ```
@@ -109,12 +111,16 @@ Add an intercept for the hello deployment on port 9000. Here, we also start a se
 
 ```console
 $ telepresence intercept hello --port 9000 -- python3 -m http.server 9000
-Using deployment hello
+Using Deployment hello
 intercepted
-    State       : ACTIVE
-    Destination : 127.0.0.1:9000
-    Intercepting: all connections
-Serving HTTP on :: port 9000 (http://[::]:9000/) ...
+    Intercept name         : hello
+    State                  : ACTIVE
+    Workload kind          : Deployment
+    Destination            : 127.0.0.1:9000
+    Service Port Identifier: 80
+    Volume Mount Point     : /tmp/telfs-524630891
+    Intercepting           : all TCP requests
+Serving HTTP on 0.0.0.0 port 9000 (http://0.0.0.0:9000/) ...
 ```
 
 The `python -m httpserver` is now started on port 9000 and will run until terminated by `<ctrl>-C`. Access it from a browser using `http://hello/` or use curl from another terminal. With curl, it presents a html listing from the directory where the server was started. Something like:
@@ -139,9 +145,8 @@ $ curl hello
 ```
 
 Observe that the python service reports that it's being accessed:
-```console
-::ffff:127.0.0.1 - - [17/Feb/2021 13:14:20] "GET / HTTP/1.1" 200 -
-::ffff:127.0.0.1 - - [17/Feb/2021 13:16:54] "GET / HTTP/1.1" 200 -
+```
+127.0.0.1 - - [16/Jun/2022 11:39:20] "GET / HTTP/1.1" 200 -
 ```
 
 Since telepresence is now intercepting services in the default namespace, all services in that namespace can now be reached directly by their name. You can of course still use the namespaced name too, e.g. `curl hello.default`.
@@ -152,130 +157,158 @@ End the service with `<ctrl>-C` and then try `curl hello.default` or `http://hel
 
 Now end the session too. Your desktop no longer has access to the cluster internals.
 ```console
-$ telepresence quit -u
-Telepresence Network is already disconnected
-Telepresence Traffic Manager had already quit
-$ telepresence quit -r
-Telepresence Network quitting...done
-Telepresence Traffic Manager is already disconnected
+$ telepresence quit
+Telepresence Network disconnecting...done
+Telepresence Traffic Manager disconnecting...done
 $ curl hello.default
 curl: (6) Could not resolve host: hello.default
 ```
 
-### Start outbound and intercept with one single command
-
-There is no need to start a telepresence subshell when doing an intercept. Telepresence will automatically detect that a session is active, and if not, start one. The session then ends when the command exits, as shown in this example:
+The telepresence daemons are still running in the background, which is harmless. You'll need to stop them before you
+upgrade telepresence. That's done by passing the options `-u` (stop user daemon) and `-r` (stop root daemon) to the
+quit command.
 
 ```console
-telepresence intercept hello --port 9000 -- python3 -m http.server 9000
-Launching Telepresence Daemon v2.0.1-64-g814052e (api v3)
-Connecting to traffic manager...
-Connected to context default (https://35.202.114.63)
-Using deployment hello
-intercepted
-    State       : ACTIVE
-    Destination : 127.0.0.1:9000
-    Intercepting: all connections
-Serving HTTP on :: port 9000 (http://[::]:9000/) ...
-::ffff:127.0.0.1 - - [17/Feb/2021 14:05:37] "GET / HTTP/1.1" 200 -
-^C
-Keyboard interrupt received, exiting.
-Disconnecting...done
-Telepresence Daemon quitting...done
+$ telepresence quit -ur
+Telepresence Network quitting...done
+Telepresence Traffic Manager quitting...done
 ```
 
 ### What got installed in the cluster?
 
+Telepresence installs the Traffic Manager in your cluster if it is not already present. This deployment remains unless you uninstall it.
+
+Telepresence injects the Traffic Agent as an additional container into the pods of the workload you intercept, and  will optionally install
+an init-container to route traffic through the agent (the init-container is only injected when the service is headless or uses a numerical
+`targetPort`). The modifications persist unless you uninstall them.
+
 At first glance, we can see that the deployment is installed ...
 ```console
-kubectl get svc,deploy,pod
-NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
-service/kubernetes   ClusterIP   10.43.0.1      <none>        443/TCP   25m
-service/hello        ClusterIP   10.43.73.112   <none>        80/TCP    23m
+$ kubectl get svc,deploy,pod
+service/kubernetes   ClusterIP   10.43.0.1       <none>        443/TCP                      7d22h
+service/hello        ClusterIP   10.43.145.57    <none>        80/TCP                       13m
 
 NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/hello   1/1     1            1           23m
+deployment.apps/hello   1/1     1            1           13m
 
-NAME                        READY   STATUS    RESTARTS   AGE
-pod/hello-75c8ffd99-dklkl   2/2     Running   0          15m
+NAME                         READY   STATUS    RESTARTS        AGE
+pod/hello-774455b6f5-6x6vs   2/2     Running   0               10m
 ```
 
 ... and that the traffic-manager is installed in the "ambassador" namespace.
+
 ```console
-kubectl -n ambassador get svc,deploy,pod
-NAME                      TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)             AGE
-service/traffic-manager   ClusterIP   None         <none>        8022/TCP,8081/TCP   23m
+$ kubectl -n ambassador get svc,deploy,pod
+NAME                      TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+service/traffic-manager   ClusterIP   None           <none>        8081/TCP   17m
+service/agent-injector    ClusterIP   10.43.72.154   <none>        443/TCP    17m
 
 NAME                              READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/traffic-manager   1/1     1            1           23m
+deployment.apps/traffic-manager   1/1     1            1           17m
 
-NAME                                   READY   STATUS    RESTARTS   AGE
-pod/traffic-manager-596b6cdf68-sclsx   1/1     Running   0          20m
+NAME                                  READY   STATUS    RESTARTS   AGE
+pod/traffic-manager-dcd4cc64f-6v5bp   1/1     Running   0          17m
 ```
 
-The traffic-agent is installed too, in the hello pod.
+The traffic-agent is installed too, in the hello pod. Here together with an init-container, because the service is using a numerical
+`targetPort`.
 
 ```console
-kubectl describe pod hello-75c8ffd99-dklkl
-Name:         hello-75c8ffd99-dklkl
+$ kubectl describe pod hello-774455b6f5-6x6vs 
+Name:         hello-774455b6f5-6x6vs
 Namespace:    default
 Priority:     0
-Node:         bobtester/10.88.24.2
-Start Time:   Wed, 17 Feb 2021 13:13:03 +0100
+Node:         multi/192.168.1.110
+Start Time:   Thu, 16 Jun 2022 11:38:22 +0200
 Labels:       app=hello
-              pod-template-hash=75c8ffd99
-Annotations:  <none>
+              pod-template-hash=774455b6f5
+Annotations:  telepresence.getambassador.io/inject-traffic-agent: enabled
+              telepresence.getambassador.io/restartedAt: 2022-06-16T09:38:21Z
 Status:       Running
-IP:           10.42.0.8
+IP:           10.42.0.191
 IPs:
-  IP:           10.42.0.8
-Controlled By:  ReplicaSet/hello-75c8ffd99
+  IP:           10.42.0.191
+Controlled By:  ReplicaSet/hello-774455b6f5
+Init Containers:
+  tel-agent-init:
+    Container ID:  containerd://e968352b3d85d6f966ac55f02da2401f93935f6df1f087b06bbe1cfc8854d5fb
+    Image:         docker.io/datawire/ambassador-telepresence-agent:1.12.6
+    Image ID:      docker.io/datawire/ambassador-telepresence-agent@sha256:2652d2767d1e8968be3fb22f365747315e25ac95e12c3d39f1206080a1e66af3
+    Port:          <none>
+    Host Port:     <none>
+    Args:
+      agent-init
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 16 Jun 2022 11:38:39 +0200
+      Finished:     Thu, 16 Jun 2022 11:38:39 +0200
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /etc/traffic-agent from traffic-config (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-wzhhs (ro)
 Containers:
   echoserver:
-    Container ID:   containerd://270098cea9f15fc8974603bde47fde7d36022524967d7b40a81f18324c657686
+    Container ID:   containerd://80d4645769a06b8671b5a4ce29d28abfa72ce5659ba96916c231bb9629593a29
     Image:          k8s.gcr.io/echoserver:1.4
     Image ID:       sha256:523cad1a4df732d41406c9de49f932cd60d56ffd50619158a2977fd1066028f9
     Port:           <none>
     Host Port:      <none>
     State:          Running
-      Started:      Wed, 17 Feb 2021 13:13:03 +0100
+      Started:      Thu, 16 Jun 2022 11:38:40 +0200
     Ready:          True
     Restart Count:  0
     Environment:    <none>
     Mounts:
-      /var/run/secrets/kubernetes.io/serviceaccount from default-token-zkwqq (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-wzhhs (ro)
   traffic-agent:
-    Container ID:  containerd://b0253a0e3ecc3d03991d7e92c0ab92123fc60245cc0277a7a07185933690fc4a
-    Image:         docker.io/datawire/tel2:2.0.2
-    Image ID:      docker.io/datawire/tel2@sha256:9002068a5dc224c029754c80e1b4616139a8f4aca5608942f75488debbe387cf
+    Container ID:  containerd://ef3605a60f7c02229f156e3dc0e99f9b055fba1037587513871e64180670d0a4
+    Image:         docker.io/datawire/ambassador-telepresence-agent:1.12.6
+    Image ID:      docker.io/datawire/ambassador-telepresence-agent@sha256:2652d2767d1e8968be3fb22f365747315e25ac95e12c3d39f1206080a1e66af3
     Port:          9900/TCP
     Host Port:     0/TCP
     Args:
       agent
     State:          Running
-      Started:      Wed, 17 Feb 2021 13:13:04 +0100
+      Started:      Thu, 16 Jun 2022 11:38:41 +0200
     Ready:          True
     Restart Count:  0
+    Readiness:      exec [/bin/stat /tmp/agent/ready] delay=0s timeout=1s period=10s #success=1 #failure=3
     Environment:
-      TELEPRESENCE_CONTAINER:  echoserver
-      LOG_LEVEL:               debug
-      AGENT_NAME:              hello
-      AGENT_POD_NAME:          hello-75c8ffd99-dklkl (v1:metadata.name)
-      AGENT_NAMESPACE:         default (v1:metadata.namespace)
-      APP_PORT:                8080
+      _TEL_AGENT_POD_IP:   (v1:status.podIP)
+      _TEL_AGENT_NAME:    hello-774455b6f5-6x6vs (v1:metadata.name)
     Mounts:
-      /var/run/secrets/kubernetes.io/serviceaccount from default-token-zkwqq (ro)
+      /etc/traffic-agent from traffic-config (rw)
+      /tel_app_exports from export-volume (rw)
+      /tel_pod_info from traffic-annotations (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-wzhhs (ro)
 Conditions:
   Type              Status
-  Initialized       True
-  Ready             True
-  ContainersReady   True
-  PodScheduled      True
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
 Volumes:
-  default-token-zkwqq:
-    Type:        Secret (a volume populated by a Secret)
-    SecretName:  default-token-zkwqq
-    Optional:    false
+  kube-api-access-wzhhs:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+  traffic-annotations:
+    Type:  DownwardAPI (a volume populated by information about the pod)
+    Items:
+      metadata.annotations -> annotations
+  traffic-config:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      telepresence-agents
+    Optional:  false
+  export-volume:
+    Type:        EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:      
+    SizeLimit:   <unset>
 QoS Class:       BestEffort
 Node-Selectors:  <none>
 Tolerations:     node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
@@ -283,18 +316,23 @@ Tolerations:     node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
 Events:
   Type    Reason     Age   From               Message
   ----    ------     ----  ----               -------
-  Normal  Scheduled  19m   default-scheduler  Successfully assigned default/hello-75c8ffd99-dklkl to bobtester
-  Normal  Pulled     19m   kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
-  Normal  Created    19m   kubelet            Created container echoserver
-  Normal  Started    19m   kubelet            Started container echoserver
-  Normal  Pulled     19m   kubelet            Container image "docker.io/datawire/tel2:2.0.2" already present on machine
-  Normal  Created    19m   kubelet            Created container traffic-agent
-  Normal  Started    19m   kubelet            Started container traffic-agent
+  Normal  Scheduled  13m   default-scheduler  Successfully assigned default/hello-774455b6f5-6x6vs to multi
+  Normal  Pulling    13m   kubelet            Pulling image "docker.io/datawire/ambassador-telepresence-agent:1.12.6"
+  Normal  Pulled     13m   kubelet            Successfully pulled image "docker.io/datawire/ambassador-telepresence-agent:1.12.6" in 17.043659509s
+  Normal  Created    13m   kubelet            Created container tel-agent-init
+  Normal  Started    13m   kubelet            Started container tel-agent-init
+  Normal  Pulled     13m   kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
+  Normal  Created    13m   kubelet            Created container echoserver
+  Normal  Started    13m   kubelet            Started container echoserver
+  Normal  Pulled     13m   kubelet            Container image "docker.io/datawire/ambassador-telepresence-agent:1.12.6" already present on machine
+  Normal  Created    13m   kubelet            Created container traffic-agent
+  Normal  Started    13m   kubelet            Started container traffic-agent
 ```
 
 ### Uninstalling
 
-You can uninstall the traffic-agent from specific deployments or from all deployments. Or you can choose to uninstall everything in which case the traffic-manager and all traffic-agents will be uninstalled.
+You can uninstall the traffic-agent from specific deployments or from all deployments. Or you can choose to uninstall everything in which
+case the traffic-manager and all traffic-agents will be uninstalled.
 
 ```
 telepresence uninstall --everything
@@ -303,32 +341,12 @@ will remove everything that was automatically installed by telepresence from the
 
 ### Troubleshooting
 
-The telepresence background processes `daemon` and `connector` both produces log files that can be very helpful when problems are encountered. The files are named `daemon.log` and `connector.log`. The location of the logs differ depending on what platform that is used:
+The telepresence background processes `daemon` and `connector` both produces log files that can be very helpful when problems are
+encountered. The files are named `daemon.log` and `connector.log`. The location of the logs differ depending on what platform that is used:
 
 - macOS `~/Library/Logs/telepresence`
 - Linux `~/.cache/telepresence/logs`
+- Windows `"%USERPROFILE%\AppData\Local\logs"`
 
-## Comparison to classic Telepresence
-
-Telepresence will launch your command, or a shell, when you start a session. When that program ends, the session ends and Telepresence cleans up.
-
-### What works
-
-- Outbound: You can `curl` a service running in the cluster while a session is running.
-- Inbound: You can intercept a deployment, causing all requests to that deployment to go to your laptop instead.
-- Namespaces: You can intercept multiple deployments in different namespaces simultaneously.
-- Environment variables: The environment variables of the intercepted pod can be captured in a file or propagated to a command.
-- Filesystem forwarding for volume mounts: If the intercepted service has mounted volumes, those are made available as remote mounts on the desktop during an intercept.
-- Also Proxy: If you have a resource that is external to the cluster that is needed for your intercept, you can create a Headless Service (including ExternalName) that points to your resource to access it from your local machine.
-
-### What doesn't work yet
-
-- Container method
-
-### What behaves differently
-
-Telepresence installs the Traffic Manager in your cluster if it is not already present. This deployment remains unless you uninstall it.
-
-Telepresence installs the Traffic Agent as an additional container in any deployment you intercept, and modifies any associated services it finds to route traffic through the agent. This modification persists unless you uninstall it.
-
-You can launch other Telepresence sessions to the same cluster while an existing session is running, letting you intercept other deployments.
+Visit the troubleshooting section in the Telepresence documentation for more advice:  
+[Troubleshooting](https://www.getambassador.io/docs/telepresence/latest/troubleshooting/)

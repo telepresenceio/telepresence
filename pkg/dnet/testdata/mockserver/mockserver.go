@@ -95,12 +95,12 @@ func (s *mockAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("ACCESS '%s' '%s'\n", r.Method, urlpath)
 
 	if urlpath == "/api" {
-		data := map[string]interface{}{
+		data := map[string]any{
 			"kind": "APIVersions",
 			"versions": []string{
 				"v1",
 			},
-			"serverAddressByClientCIDRs": []map[string]interface{}{
+			"serverAddressByClientCIDRs": []map[string]any{
 				{
 					"clientCIDR":    "0.0.0.0/0",
 					"serverAddress": "10.88.3.3:6443",
@@ -111,10 +111,10 @@ func (s *mockAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(bs)
 	} else if urlpath == "/api/v1" {
-		data := map[string]interface{}{
+		data := map[string]any{
 			"kind":         "APIResourceList",
 			"groupVersion": "v1",
-			"resources": []map[string]interface{}{
+			"resources": []map[string]any{
 				{
 					"name":       "pods",
 					"namespaced": true,
@@ -137,15 +137,15 @@ func (s *mockAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(bs)
 	} else if match := regexp.MustCompile(`^/api/v1/namespaces/([^/]+)/pods/([^/]+)$`).FindStringSubmatch(urlpath); match != nil {
 		// "/api/v1/namespaces/{namespace}/pods/{podname}"
-		data := map[string]interface{}{
+		data := map[string]any{
 			"kind":       "Pod",
 			"apiVersion": "v1",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      match[2],
 				"namespace": match[1],
 			},
-			"spec": map[string]interface{}{
-				"containers": []map[string]interface{}{
+			"spec": map[string]any{
+				"containers": []map[string]any{
 					{
 						"name": "some-container",
 					},

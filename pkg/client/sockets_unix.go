@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -30,7 +31,7 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 	defer cancel()
 	for firstTry := true; ; firstTry = false {
 		conn, err := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
-			grpc.WithInsecure(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true),

@@ -100,10 +100,10 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 
 func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
+	d.quit()
 	d.sessionLock.Lock()
 	defer d.sessionLock.Unlock()
 	d.session = nil
-	d.quit()
 	return &empty.Empty{}, nil
 }
 
@@ -299,7 +299,7 @@ func (d *service) serveGrpc(c context.Context, l net.Listener) error {
 	defer func() {
 		// Error recovery.
 		if perr := derror.PanicToError(recover()); perr != nil {
-			dlog.Error(c, perr)
+			dlog.Errorf(c, "%+v", perr)
 		}
 	}()
 

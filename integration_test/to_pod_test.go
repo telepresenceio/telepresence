@@ -1,6 +1,8 @@
 package integration_test
 
 import (
+	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -45,4 +47,42 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 		}, 15*time.Second, 2*time.Second, "Non-forwarded port is reachable")
 	}()
 	wg.Wait()
+}
+
+func (s *connectedSuite) Test_ToPodUDPPortForwarding() {
+	const svc = "echo-extra-udp"
+	ctx := s.Context()
+	s.ApplyTestApp(ctx, svc, "deploy/"+svc)
+	defer func() {
+		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
+	}()
+
+	require := s.Require()
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "9080", "--to-pod", "8080/UDP")
+	defer itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+	require.Contains(stdout, "Using Deployment "+svc)
+	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+	require.Contains(stdout, svc+": intercepted")
+	itest.TelepresenceOk(ctx, "loglevel", "trace")
+	defer itest.TelepresenceOk(ctx, "loglevel", "debug")
+	s.CapturePodLogs(ctx, "app="+svc, "traffic-agent", s.AppNamespace())
+
+	conn, err := net.Dial("udp", "localhost:8080")
+	require.NoError(err)
+	defer conn.Close()
+
+	pingPong := func(msg string) {
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+		bm := []byte(msg)
+		n, err := conn.Write(bm)
+		require.NoError(err)
+		require.Equal(len(bm), n)
+		buf := [0x100]byte{}
+		n, err = conn.Read(buf[:])
+		require.NoError(err)
+		require.Equal(fmt.Sprintf("Reply from UDP-echo: %s", msg), string(buf[0:n]))
+	}
+
+	pingPong("12345678")
+	pingPong("a slightly longer message")
 }

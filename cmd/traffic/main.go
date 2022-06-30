@@ -39,11 +39,10 @@ func main() {
 
 	if cmd, cmdOK := cmds[name]; cmdOK {
 		logLevel := os.Getenv("LOG_LEVEL")
-		if name == "agent" {
-			logLevel = agent.GetLogLevel()
-		}
-
 		ctx := log.MakeBaseLogger(context.Background(), logLevel)
+		if name == "agent" {
+			logLevel = agent.GetLogLevel(ctx)
+		}
 
 		if err := cmd(ctx, args...); err != nil {
 			dlog.Errorf(ctx, "quit: %v", err)

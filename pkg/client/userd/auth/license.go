@@ -11,11 +11,11 @@ import (
 )
 
 type LicenseInfo struct {
-	ID             string      `json:"id"`             // License ID, used to identify the license
-	Description    string      `json:"description"`    // Description for which the license should be used
-	Audiences      []string    `json:"audiences"`      // Cluster IDs that this license can be used with
-	ExpirationDate string      `json:"expirationDate"` // ($date-time) the license will expire on
-	Limits         interface{} `json:"limits"`         // Map of limits determining bound to the license
+	ID             string   `json:"id"`             // License ID, used to identify the license
+	Description    string   `json:"description"`    // Description for which the license should be used
+	Audiences      []string `json:"audiences"`      // Cluster IDs that this license can be used with
+	ExpirationDate string   `json:"expirationDate"` // ($date-time) the license will expire on
+	Limits         any      `json:"limits"`         // Map of limits determining bound to the license
 }
 
 // getLicenseJWT does the REST call to system and returns the jwt formatted license on success

@@ -25,7 +25,7 @@ const (
 // New creates a new categorized error based in its argument. The argument
 // can be an error or a string. If it isn't, it will be converted to a string
 // using its '%v' formatter.
-func (c Category) New(untypedErr interface{}) error {
+func (c Category) New(untypedErr any) error {
 	var err error
 	switch untypedErr := untypedErr.(type) {
 	case nil:
@@ -42,7 +42,7 @@ func (c Category) New(untypedErr interface{}) error {
 
 // Newf creates a new categorized error based on a format string with arguments. The
 // error is created using fmt.Errorf() so using '%w' is relevant for error arguments.
-func (c Category) Newf(format string, a ...interface{}) error {
+func (c Category) Newf(format string, a ...any) error {
 	return &categorized{error: fmt.Errorf(format, a...), category: c}
 }
 

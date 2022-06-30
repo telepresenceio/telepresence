@@ -1,10 +1,168 @@
 # Changelog
 
-### 2.5.6 (TBD)
+### 2.6.9 (TBD)
+
+- Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.
+
+- Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
 
 - Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers in every preview page request
 
-### 2.5.5 (TBD)
+### 2.6.8 (June 23, 2022)
+
+- Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
+
+- Feature: Should the DNS auto-detection logic in the traffic-manager fail, users can now specify a fallback IP to use.
+
+- Feature: It is now possible to intercept UDP ports with Telepresence and also use `--to-pod` to forward UDP
+  traffic from ports on localhost.
+
+- Change: The Helm chart will now add the `nodeSelector`, `affinity` and `tolerations` values to the traffic-manager's
+  post-upgrade-hook and pre-delete-hook jobs.
+
+- Bugfix: Telepresence no longer fails to inject the traffic agent into the pod generated for workloads that have no
+  volumes and `automountServiceAccountToken: false`.
+
+### 2.6.7 (June 22, 2022)
+
+- Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
+  or other reason that caused an unclean disconnect.
+
+- Bugfix: Telepresence will no longer forward DNS requests for "wpad" to the cluster.
+
+- Bugfix: The traffic-agent will properly shut down if one of its goroutines errors.
+
+### 2.6.6 (June 9, 2022)
+
+- Bugfix: The propagation of the `TELEPRESENCE_API_PORT` environment variable now works correctly.
+
+- Bugfix: The `--output json` global flag no longer outputs multiple objects.
+
+### 2.6.5 (June 3, 2022)
+
+- Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
+
+- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
+  This can be configured through the helm chart.
+
+- Feature: A policy that controls when the mutating webhook injects the traffic-agent was added, and can be configured in the Helm chart.
+
+- Change: Telepresence on Windows upgraded wintun.dll from version 0.12 to version 0.14.1
+
+- Change: Telepresence on Windows upgraded winfsp from version 1.9 to 1.10
+
+- Change: Telepresence upgraded its embedded Helm from version 3.8.1 to 3.9
+
+- Change: Telepresence upgraded its embedded Kubernetes API from version 0.23.4 to 0.24.1
+
+- Feature: Added a `--watch` flag to `telepresence list` that can be used to watch interceptable workloads.
+
+- Change: The configuration setting for `images.webhookAgentImage` is now deprecated. Use `images.agentImage` instead.
+
+- Bugfix: The `reinvocationPolicy` or the traffic-agent injector webhook now defaults to `Never` insteadof `IfNeeded` so
+  that `LimitRange`s on namespaces can inject a missing `resources` element into the injected traffic-agent container.
+
+- Bugfix: UDP based communication with services in the cluster now works as expected.
+
+- Bugfix: The command help will only show Kubernetes flags on the commands that supports them
+
+- Bugfix: Only the errors from the last session will be considered when counting the number of errors in the log after
+  a command failure.
+
+### 2.6.4 (May 23, 2022)
+
+- Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
+  permissions are needed when the traffic-manager upgrades from versions < 2.6.0 and can be revoked after the upgrade.
+
+### 2.6.3 (May 20, 2022)
+
+- Bugfix: The `--mount` intercept flag now handles relative mount points correctly on non-windows platforms. Windows
+  still require the argument to be a drive letter followed by a colon.
+
+- Bugfix: The traffic-agent's configuration update automatically when services are added, updated or deleted.
+
+- Bugfix: The `--mount` intercept flag now handles relative mount points correctly on non-windows platforms. Windows
+  still require the argument to be a drive letter followed by a colon.
+
+- Bugfix: The traffic-agent's configuration update automatically when services are added, updated or deleted.
+
+- Bugfix: Telepresence will now always inject an initContainer when the service's targetPort is numeric
+
+- Bugfix: Workloads that have several matching services pointing to the same target port are now handled correctly.
+
+- Bugfix: A potential race condition causing a panic when closing a DNS connection is now handled correctly.
+
+- Bugfix: A container start would sometimes fail because and old directory remained in a mounted temp volume.
+
+### 2.6.2 (May 17, 2022)
+
+- Bugfix: Workloads controlled by workloads like Argo `Rollout` are injected correctly.
+
+- Bugfix: Multiple services appointing the same container port no longer result in duplicated ports in an injected pod.
+
+- Bugfix: The `telepresence list` command no longer errors out with "grpc: received message larger than max" when listing namespaces
+  with a large number of workloads.
+
+### 2.6.1 (May 16, 2022)
+
+- Bugfix: Telepresence will now handle multiple path entries in the KUBECONFIG environment correctly.
+
+- Bugfix: Telepresence will no longer panic when using preview URLs with traffic-managers < 2.6.0
+
+- Change: Traffic-manager now attempts to obtain a cluster id from the license if it could not obtain it from the Kubernetes API.
+
+### 2.6.0 (May 13, 2022)
+
+- Feature: Traffic-agent is now capable of intercepting multiple containers and multiple ports per container.
+
+- Feature: Telepresence client now require less RBAC permissions in order to intercept.
+
+- Change: All pod-injection is performed by the mutating webhook. Client will no longer modify workloads.
+
+- Change: Traffic-agent is configured using a ConfigMap entry. In prior versions, the configuration was passed in the container environment.
+
+- Change: The helm-chart no longer has a default set for the agentInjector.image.name, and unless its set, the traffic-manager will ask
+  SystemA for the preferred image.
+
+- Change: Client no longer needs RBAC permissions to update deployments, replicasets, and statefulsets.
+
+- Change: Telepresence now uses Helm version 3.8.1 when installing the traffic-manager
+
+- Change: The traffic-manager will not accept connections from clients older than 2.6.0. It can't, because they still use the old way of
+  injecting the agent by modifying the workload.
+
+- Change: When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically. The mutating webhook will
+  then ensure that their pods will receive an updated traffic-agent.
+
+- Bugfix: Remote mounts will now function correctly with custom `securityContext`.
+
+- Bugfix: The help for commands that accept kubernetes flags will now display those flags in a separate group.
+
+- Bugfix: Using `telepresence leave` or `telepresence quit` on an intercept that spawned a command using `--` on the command line
+  will now terminate that command since it's considered parented by the intercept that is removed.
+
+- Change: Add support for structured output as JSON by setting the global --output=json flag.
+
+### 2.5.8 (April 27, 2022)
+
+- Bugfix: Telepresence now ensures that the download folder for the enhanced free client is created prior to downloading it.
+
+### 2.5.7 (April 25, 2022)
+
+- Change: A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
+
+- Bugfix: The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names
+  that were resolved correctly at other times.
+
+- Bugfix: A telepresence session will now last for 24 hours after the user's last connectivity. If a session expires, the connector will automatically try to reconnect.
+
+### 2.5.6 (April 15, 2022)
+
+- Bugfix: The `gather-logs` command will no longer send any logs through `gRPC`.
+
+- Change: Telepresence agents watcher will now only watch namespaces that the user has accessed since the last `connect`.
+
+### 2.5.5 (April 8, 2022)
 
 - Change: The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
 

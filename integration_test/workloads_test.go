@@ -28,17 +28,24 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 	require.Contains(stdout, svc+": intercepted")
 	require.NotContains(stdout, "Volume Mount Point")
+	s.CapturePodLogs(ctx, "service="+svc, "traffic-agent", s.AppNamespace())
 	itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 	require.NotContains(stdout, svc+": intercepted")
 
-	itest.TelepresenceOk(ctx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
+	itest.TelepresenceQuitOk(ctx)
+
+	dfltCtx := itest.WithUser(ctx, "default")
+	itest.TelepresenceOk(dfltCtx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
+	itest.TelepresenceQuitOk(dfltCtx)
+	itest.TelepresenceOk(ctx, "connect")
+
 	require.Eventually(
 		func() bool {
 			return !strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents"), svc)
 		},
-		30*time.Second, // waitFor
-		2*time.Second,  // polling interval
+		120*time.Second, // waitFor
+		6*time.Second,   // polling interval
 	)
 }
 
@@ -52,4 +59,8 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsReplicaSet() {
 
 func (s *connectedSuite) Test_SuccessfullyInterceptsStatefulSet() {
 	s.successfulIntercept("StatefulSet", "ss-echo", "9092")
+}
+
+func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithNoVolumes() {
+	s.successfulIntercept("Deployment", "echo-no-vols", "9093")
 }

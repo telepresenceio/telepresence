@@ -17,14 +17,15 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v2"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 // EnsureLoggedIn ensures that the user is logged in to Ambassador Cloud.  An error is returned if
@@ -165,7 +166,7 @@ func telProBinary(ctx context.Context) (string, error) {
 }
 
 func checkProVersion(ctx context.Context, telProLocation string) (bool, error) {
-	proCmd := dexec.CommandContext(ctx, telProLocation, "pro-version")
+	proCmd := proc.CommandContext(ctx, telProLocation, "pro-version")
 	proCmd.DisableLogging = true
 	output, err := proCmd.CombinedOutput()
 	if err != nil {
@@ -253,7 +254,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	}
 	replaceConnectorConn(ctx, nil)
 
-	if err = downloadProDaemon("the enhanced free client", resp.Body, telProLocation); err != nil {
+	if err = downloadProDaemon(ctx, "the enhanced free client", resp.Body, telProLocation); err != nil {
 		return err
 	}
 	if wasRunning {
@@ -270,8 +271,13 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 // downloadProDaemon copies the 'from' stream into a temporary file in the same directory as the
 // designated binary, chmods it to be executable, removes the old binary, and then renames the
 // temporary file as the new binary
-func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string) (err error) {
+func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, telProLocation string) (err error) {
+	stdout, _ := output.Structured(ctx)
 	dir := filepath.Dir(telProLocation)
+	if err = os.MkdirAll(dir, 0777); err != nil {
+		return errcat.NoDaemonLogs.Newf("error creating directory %q: %w", dir, err)
+	}
+
 	name := filepath.Base(telProLocation)
 	var tmp *os.File
 	if tmp, err = os.CreateTemp(dir, name); err != nil {
@@ -287,13 +293,13 @@ func downloadProDaemon(downloadURL string, from io.Reader, telProLocation string
 	}()
 
 	// Perform the actual download
-	fmt.Printf("Downloading %s...", downloadURL)
+	fmt.Fprintf(stdout, "Downloading %s...", downloadURL)
 	_, err = io.Copy(tmp, from)
 	_ = tmp.Close() // Important to close here. Don't defer this one
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
-	fmt.Println("done")
+	fmt.Fprintln(stdout, "done")
 	if err = os.Chmod(tmpName, 0755); err != nil {
 		return errcat.NoDaemonLogs.Newf("unable to set permissions of %q to 755: %w", telProLocation, err)
 	}

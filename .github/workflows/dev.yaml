@@ -21,15 +21,12 @@ jobs:
           go-version: '1.18'
       - name: Build dev image
         run: |
-          TAG="2.4.5-gotest.${GITHUB_SHA:0:7}"
-          TELEPRESENCE_VERSION="v${TAG}" make tel2
-          mkdir -p /tmp/workspace
-          docker save "datawire/tel2:${TAG}" > tel2-image.tar
+          make tel2-image
       - name: Upload image
         uses: actions/upload-artifact@v2
         with:
           name: image
-          path: tel2-image.tar
+          path: build-output/tel2-image.tar
   "macos_test":
     runs-on: macos-latest
     needs: "build_image"
@@ -117,18 +114,12 @@ jobs:
         id: kubectl
       - run: |
           choco install make
-          mkdir -p build-output/bin
-          curl.exe -LO https://www.wintun.net/builds/wintun-0.12.zip
-          Expand-Archive -Path wintun-0.12.zip -DestinationPath .
-          #cp wintun/bin/amd64/wintun.dll "$ENV:SystemRoot\\system32\\wintun.dll"
-          #cp wintun/bin/amd64/wintun.dll .
-          cp wintun/bin/amd64/wintun.dll "build-output\\bin"
         if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
       - name: "Download sshfs"
         if: steps.get_last_run.outputs.passed != 'success'
         run: |
-          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.9/winfsp-1.9.21096.msi
+          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.10/winfsp-1.10.22006.msi
           curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
         shell: bash
       - name: "Install sshfs"

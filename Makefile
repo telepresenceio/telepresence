@@ -13,9 +13,15 @@
 # limitations under the License.
 
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
+ifdef GITHUB_SHA
+  TELEPRESENCE_VERSION ?= v2.6.0-gotest.z$(shell bash -c 'echo $${GITHUB_SHA:0:7}')
+else
+  TELEPRESENCE_VERSION ?= $(shell unset GOOS GOARCH; go run ./build-aux/genversion)
+  # Ensure that the variable is fully expanded. We don't want to call genversion repeatedly
+  # as it may produce different results every time.
+  TELEPRESENCE_VERSION := ${TELEPRESENCE_VERSION}
+endif
 
-_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build-aux/genversion)
-TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
   $(info [make] TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
   $(error TELEPRESENCE_VERSION variable is invalid: It must be a v2.* string, but is '$(TELEPRESENCE_VERSION)'))

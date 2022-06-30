@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -35,6 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -43,11 +46,12 @@ const TestUser = "telepresence-test-developer"
 const TestUserAccount = "system:serviceaccount:default:" + TestUser
 
 type Cluster interface {
+	AgentImageName() string
 	CapturePodLogs(ctx context.Context, app, container, ns string)
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
-	InstallTrafficManager(ctx context.Context, managerNamespace string, appNamespaces ...string) error
+	InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error
 	IsCI() bool
 	Registry() string
 	SetGeneralError(error)
@@ -73,6 +77,8 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	agentImageName   string
+	agentImageTag    string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -88,15 +94,24 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.4.5-gotest." + s.suffix
+		s.testVersion = "v2.6.0-gotest.z" + s.suffix
 	}
 	version.Version = s.testVersion
+
+	t := getT(ctx)
+	s.agentImageName = "tel2"
+	s.agentImageTag = s.testVersion[1:]
+	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
+		i := strings.IndexByte(agentImageQN, ':')
+		require.Greater(t, i, 0)
+		s.agentImageName = agentImageQN[:i]
+		s.agentImageTag = agentImageQN[i+1:]
+	}
 
 	s.registry = os.Getenv("DTEST_REGISTRY")
 	if s.registry == "" {
 		s.registry = "localhost:5000"
 	}
-	t := getT(ctx)
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -128,6 +143,7 @@ func (s *cluster) tearDown(ctx context.Context) {
 	s.ensureQuitAndLoggedOut(ctx)
 	if s.kubeConfig != "" {
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join(s.moduleRoot, "k8s", "client_rbac.yaml"))
+		_ = Run(ctx, "kubectl", "delete", "--wait=false", "ns", "-l", "purpose=tp-cli-testing")
 	}
 }
 
@@ -230,21 +246,34 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	require.NoError(t, err, "failed to create %s service account", TestUser)
 }
 
+// PodCreateTimeout will return a timeout suitable for operations that create pods.
+// This is longer when running against clusters that scale up nodes on demand for new pods.
+func PodCreateTimeout(c context.Context) time.Duration {
+	switch GetProfile(c) {
+	case GkeAutopilotProfile:
+		return 5 * time.Minute
+	case DefaultProfile:
+		fallthrough
+	default: // this really shouldn't be happening but hey
+		return 180 * time.Second
+	}
+}
+
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
 	config := client.GetDefaultConfig()
 	config.LogLevels.UserDaemon = logrus.DebugLevel
 	config.LogLevels.RootDaemon = logrus.DebugLevel
 
 	to := &config.Timeouts
-	to.PrivateAgentInstall = 180 * time.Second
-	to.PrivateApply = 120 * time.Second
+	to.PrivateAgentInstall = PodCreateTimeout(c)
+	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
 	to.PrivateEndpointDial = 10 * time.Second
-	to.PrivateHelm = 230 * time.Second
+	to.PrivateHelm = PodCreateTimeout(c)
 	to.PrivateIntercept = 30 * time.Second
 	to.PrivateProxyDial = 30 * time.Second
 	to.PrivateRoundtripLatency = 5 * time.Second
-	to.PrivateTrafficManagerAPI = 60 * time.Second
+	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	registry := s.Registry()
@@ -268,6 +297,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
 		"TELEPRESENCE_VERSION":      s.testVersion,
+		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
 		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
 		"KUBECONFIG":                s.kubeConfig,
@@ -338,6 +368,10 @@ func (s *cluster) TelepresenceVersion() string {
 	return s.testVersion
 }
 
+func (s *cluster) AgentImageName() string {
+	return s.agentImageName
+}
+
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
@@ -366,11 +400,12 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
+	dlog.Infof(ctx, "Capturing logs for pods %q", pods)
 	for _, pod := range strings.Split(pods, " ") {
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", pod, dtime.Now().Format("20060102T150405"))))
+		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -396,20 +431,29 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 }
 
-func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace string, appNamespaces ...string) error {
-	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
-	helmChart := filepath.Join("charts", "telepresence")
-	err := Run(WithModuleRoot(ctx), "helm", "install", "traffic-manager",
-		"-n", managerNamespace, helmChart,
+func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+	settings := []string{
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("image.tag=%s", s.TelepresenceVersion()[1:]),
+		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
+		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
-		"-f", helmValues,
-		"--wait",
-	)
+	}
+
+	for k, v := range values {
+		settings = append(settings, "--set", k+"="+v)
+	}
+
+	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
+	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
+	args = append(args, settings...)
+	args = append(args, "traffic-manager", filepath.Join("charts", "telepresence"))
+
+	err := Run(WithModuleRoot(ctx), "helm", args...)
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
@@ -420,14 +464,12 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, managerNamespace st
 }
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
-	TelepresenceOk(ctx, "quit")
 	t := getT(ctx)
 	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
-	assert.Eventually(t, func() bool {
-		return Kubectl(ctx, managerNamespace, "get", "deploy", "traffic-manager") != nil
-	}, 20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
+	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
+		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
 }
 
 func KubeConfig(ctx context.Context) string {
@@ -442,7 +484,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
-	cmd := dexec.CommandContext(ctx, executable, args...)
+	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
 	for k, v := range getEnv(ctx) {
@@ -645,8 +687,16 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
 }
 
+func ApplyTestApp(ctx context.Context, name, namespace, workload string) {
+	t := getT(ctx)
+	t.Helper()
+	manifest := filepath.Join("testdata", "k8s", name+".yaml")
+	require.NoError(t, Kubectl(ctx, namespace, "apply", "-f", manifest), "failed to apply %s", manifest)
+	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
+}
+
 func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, PodCreateTimeout(ctx))
 	defer cancel()
 	switch {
 	case strings.HasPrefix(workload, "pod/"):
@@ -720,6 +770,47 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 	return l.Addr().(*net.TCPAddr).Port, cancel
 }
 
+// PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
+// that an intercept is active for the given svc and svcPort that will redirect to that local server.
+func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
+	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+	require.Eventually(getT(ctx), func() bool {
+		// condition
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		if len(ips) != 1 {
+			dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
+			return false
+		}
+
+		hc := http.Client{Timeout: 2 * time.Second}
+		resp, err := hc.Get(fmt.Sprintf("http://%s:%s", ips[0], svcPort))
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		r := string(body)
+		if r != expectedOutput {
+			dlog.Infof(ctx, "body: %q != %q", r, expectedOutput)
+			return false
+		}
+		return true
+	},
+		time.Minute,   // waitFor
+		3*time.Second, // polling interval
+		`body of %q equals %q`, "http://"+svc, expectedOutput,
+	)
+}
+
 func WithConfig(c context.Context, addConfig *client.Config) context.Context {
 	if addConfig != nil {
 		t := getT(c)
@@ -738,24 +829,63 @@ func WithConfig(c context.Context, addConfig *client.Config) context.Context {
 	return c
 }
 
-func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster) map[string]interface{}) context.Context {
+func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster) map[string]any) context.Context {
 	kc := KubeConfig(ctx)
 	t := getT(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(t, err, "unable to read %s", kc)
-	require.NoError(t, err, api.MinifyConfig(cfg), "unable to minify config")
-	var cluster *api.Cluster
-	for _, c := range cfg.Clusters {
-		cluster = c
-		break
-	}
-	require.NotNil(t, cluster, "unable to get cluster from config")
+	cluster := cfg.Clusters["default"]
+	require.NotNil(t, cluster, "unable to get default cluster from config")
 
 	raw, err := json.Marshal(extProducer(cluster))
 	require.NoError(t, err, "unable to json.Marshal extension map")
 	cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{Raw: raw}}
 
+	context := &api.Context{
+		Cluster:   "extra",
+		AuthInfo:  "default",
+		Namespace: "default",
+	}
+	cfg = &api.Config{
+		Kind:           "Config",
+		APIVersion:     "v1",
+		Preferences:    api.Preferences{},
+		Clusters:       map[string]*api.Cluster{"extra": cluster},
+		Contexts:       map[string]*api.Context{"extra": context},
+		CurrentContext: "extra",
+	}
 	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
 	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
-	return WithEnv(ctx, map[string]string{"KUBECONFIG": kubeconfigFileName})
+	return WithEnv(ctx, map[string]string{"KUBECONFIG": strings.Join([]string{kc, kubeconfigFileName}, string([]byte{os.PathListSeparator}))})
+}
+
+// RunningPods return the names of running pods with app=<service name>. Running here means
+// that at least one container is still running. I.e. the pod might well be terminating
+// but still considered running.
+func RunningPods(ctx context.Context, svc, ns string) []string {
+	out, err := KubectlOut(ctx, ns, "get", "pods", "-o", "json",
+		"--field-selector", "status.phase==Running",
+		"-l", "app="+svc)
+	if err != nil {
+		getT(ctx).Error(err.Error())
+		return nil
+	}
+	var pm core.PodList
+	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+		getT(ctx).Error(err.Error())
+		return nil
+	}
+	pods := make([]string, 0, len(pm.Items))
+nextPod:
+	for _, pod := range pm.Items {
+		for _, cn := range pod.Status.ContainerStatuses {
+			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+				// At least one container is still running.
+				pods = append(pods, pod.Name)
+				continue nextPod
+			}
+		}
+	}
+	dlog.Infof(ctx, "Running pods %v", pods)
+	return pods
 }

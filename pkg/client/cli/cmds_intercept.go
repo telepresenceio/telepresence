@@ -16,13 +16,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -145,7 +149,8 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 
 	flags.StringSliceVar(&args.toPod, "to-pod", []string{}, ``+
 		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
-		`Use this to, for example, access proxy/helper sidecars in the intercepted pod.`)
+		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
+		`Use <port>/UDP for UDP ports`)
 
 	flags.BoolVarP(&args.dockerRun, "docker-run", "", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
@@ -252,11 +257,53 @@ func intercept(cmd *cobra.Command, args interceptArgs) error {
 		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
 			defer is.scout.Close()
-			return client.WithEnsuredState(ctx, is, false, func() error {
+			return client.WithEnsuredState(ctx, is, false, func() (err error) {
+				ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
+				defer cancel()
+				var cmd *dexec.Cmd
 				if args.dockerRun {
-					return is.runInDocker(ctx, is.cmd, args.cmdline)
+					envFile := is.args.envFile
+					if envFile == "" {
+						file, err := os.CreateTemp("", "tel-*.env")
+						if err != nil {
+							return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
+						}
+						defer os.Remove(file.Name())
+
+						if err = is.writeEnvToFileAndClose(file); err != nil {
+							return err
+						}
+						envFile = file.Name()
+					}
+					cmd, err = is.startInDocker(ctx, envFile, args.cmdline)
+				} else {
+					cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
 				}
-				return proc.Run(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
+				if err == nil {
+					// Send info about the pid and intercept id to the traffic-manager so that it kills
+					// the process if it receives a leave of quit call.
+					cc := is.connectorClient
+					ior := &connector.Interceptor{
+						InterceptId: is.env["TELEPRESENCE_INTERCEPT_ID"],
+						Pid:         int32(os.Getpid()),
+					}
+					if _, err = cc.AddInterceptor(ctx, ior); err != nil {
+						_ = cmd.Process.Kill()
+						return err
+					}
+					defer func() {
+						if _, err := cc.RemoveInterceptor(ctx, ior); err != nil {
+							dlog.Error(ctx, err)
+						}
+					}()
+					err = proc.Wait(ctx, cancel, cmd)
+				}
+				// The external command will not output anything to the logs. An error here
+				// is likely caused by the user hitting <ctrl>-C to terminate the process.
+				if err != nil {
+					err = errcat.NoDaemonLogs.New(err)
+				}
+				return err
 			})
 		})
 	})
@@ -351,13 +398,14 @@ func checkMountCapability(ctx context.Context) error {
 	// need to upgrade to a newer version of macFUSE or not
 	var cmd *dexec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = dexec.CommandContext(ctx, "sshfs-win", "cmd", "-V")
+		cmd = proc.CommandContext(ctx, "sshfs-win", "cmd", "-V")
 	} else {
-		cmd = dexec.CommandContext(ctx, "sshfs", "-V")
+		cmd = proc.CommandContext(ctx, "sshfs", "-V")
 	}
 	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		dlog.Errorf(ctx, "sshfs not installed: %v", err)
 		return errors.New("sshfs is not installed on your local machine")
 	}
 
@@ -370,6 +418,54 @@ func checkMountCapability(ctx context.Context) error {
 		return errors.New(`macFUSE 4.0.5 or higher is required on your local machine`)
 	}
 	return nil
+}
+
+// parsePort parses portSpec based on how it's formatted
+func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, svcPortId string, err error) {
+	portMapping := strings.Split(portSpec, ":")
+	portError := func() (uint16, uint16, string, error) {
+		if dockerRun {
+			return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>:<container-port>[:<svcPortIdentifier>]")
+		}
+		return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>[:<svcPortIdentifier>]")
+	}
+
+	if local, err = agentconfig.ParseNumericPort(portMapping[0]); err != nil {
+		return portError()
+	}
+
+	switch len(portMapping) {
+	case 1:
+	case 2:
+		p := portMapping[1]
+		if dockerRun {
+			if docker, err = agentconfig.ParseNumericPort(p); err != nil {
+				return portError()
+			}
+		} else {
+			if err := agentconfig.ValidatePort(p); err != nil {
+				return portError()
+			}
+			svcPortId = p
+		}
+	case 3:
+		if !dockerRun {
+			return portError()
+		}
+		if docker, err = agentconfig.ParseNumericPort(portMapping[1]); err != nil {
+			return portError()
+		}
+		svcPortId = portMapping[2]
+		if err := agentconfig.ValidatePort(svcPortId); err != nil {
+			return portError()
+		}
+	default:
+		return portError()
+	}
+	if dockerRun && docker == 0 {
+		docker = local
+	}
+	return local, docker, svcPortId, nil
 }
 
 func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
@@ -392,57 +488,15 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	spec.TargetHost = "127.0.0.1"
 
 	// Parse port into spec based on how it's formatted
-	portMapping := strings.Split(is.args.port, ":")
-	portError := func() error {
-		if is.args.dockerRun {
-			return errcat.User.New("ports must be of the format --ports <local-port>:<container-port>[:<svcPortIdentifier>]")
-		}
-		return errcat.User.New("ports must be of the format --ports <local-port>[:<svcPortIdentifier>]")
-	}
-
-	parsePort := func(portStr string) (uint16, error) {
-		port, err := strconv.ParseUint(portStr, 10, 16)
-		if err != nil {
-			return 0, errcat.User.Newf("port numbers must be a valid, positive int, you gave: %q", is.args.port)
-		}
-		return uint16(port), nil
-	}
-
-	port, err := parsePort(portMapping[0])
+	var err error
+	is.localPort, is.dockerPort, spec.ServicePortIdentifier, err = parsePort(is.args.port, is.args.dockerRun)
 	if err != nil {
 		return nil, err
 	}
-	is.localPort = port
-	spec.TargetPort = int32(port)
-
-	switch len(portMapping) {
-	case 1:
-	case 2:
-		if port, err = parsePort(portMapping[1]); err == nil && is.args.dockerRun {
-			is.dockerPort = port
-		} else {
-			spec.ServicePortIdentifier = portMapping[1]
-		}
-	case 3:
-		if !is.args.dockerRun {
-			return nil, portError()
-		}
-		if port, err = parsePort(portMapping[1]); err != nil {
-			return nil, err
-		}
-		is.dockerPort = port
-		spec.ServicePortIdentifier = portMapping[2]
-	default:
-		return nil, portError()
-	}
-
-	if is.args.dockerRun && is.dockerPort == 0 {
-		is.dockerPort = is.localPort
-	}
+	spec.TargetPort = int32(is.localPort)
 
 	doMount := false
-	err = checkMountCapability(ctx)
-	if err == nil {
+	if err = checkMountCapability(ctx); err == nil {
 		if ir.MountPoint, doMount, err = is.getMountPoint(); err != nil {
 			return nil, err
 		}
@@ -456,11 +510,15 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	}
 
 	for _, toPod := range is.args.toPod {
-		port, err := parsePort(toPod)
+		pp, err := agentconfig.NewPortAndProto(toPod)
 		if err != nil {
-			return nil, errcat.User.Newf("Unable to parse port %s: %w", toPod, err)
+			return nil, errcat.User.New(err)
 		}
-		spec.ExtraPorts = append(spec.ExtraPorts, int32(port))
+		spec.LocalPorts = append(spec.LocalPorts, pp.String())
+		if pp.Proto == core.ProtocolTCP {
+			// For backward compatibility
+			spec.ExtraPorts = append(spec.ExtraPorts, int32(pp.Port))
+		}
 	}
 
 	if is.args.dockerMount != "" {
@@ -472,12 +530,10 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 		}
 	}
 
-	spec.Mechanism, err = is.args.extState.Mechanism()
-	if err != nil {
+	if spec.Mechanism, err = is.args.extState.Mechanism(); err != nil {
 		return nil, err
 	}
-	spec.MechanismArgs, err = is.args.extState.MechanismArgs()
-	if err != nil {
+	if spec.MechanismArgs, err = is.args.extState.MechanismArgs(); err != nil {
 		return nil, err
 	}
 	return ir, nil
@@ -582,11 +638,22 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 			return nil, err
 		}
 	}
-	ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-	if err != nil {
-		return nil, err
-	}
 
+	// The agentImage is only needed if we're dealing with a traffic-manager older than 2.6.0
+	vi, err := is.managerClient.Version(ctx, &empty.Empty{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
+	}
+	mv, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
+	}
+	if mv.Major == 2 && mv.Minor < 6 {
+		ir.AgentImage, err = is.args.extState.AgentImage(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return ir, nil
 }
 
@@ -683,8 +750,9 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	}
 	is.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
 
-	is.env = r.Environment
+	is.env = intercept.Environment
 	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
+	is.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
 	if args.envFile != "" {
 		if err = is.writeEnvFile(); err != nil {
 			return true, err
@@ -701,7 +769,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	if doMount || err != nil {
 		volumeMountProblem = checkMountCapability(ctx)
 	}
-	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
+	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 
@@ -733,21 +801,7 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
-	envFile := is.args.envFile
-	if envFile == "" {
-		file, err := os.CreateTemp("", "tel-*.env")
-		if err != nil {
-			return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
-		}
-		defer os.Remove(file.Name())
-
-		if err = is.writeEnvToFileAndClose(file); err != nil {
-			return err
-		}
-		envFile = file.Name()
-	}
-
+func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
 		"--dns-search", "tel2-search",
@@ -778,7 +832,7 @@ func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand,
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return proc.Run(ctx, nil, "docker", append(ourArgs, args...)...)
+	return proc.Start(ctx, nil, "docker", append(ourArgs, args...)...)
 }
 
 func (is *interceptState) writeEnvFile() error {
@@ -841,7 +895,7 @@ const (
      (TLS-SNI, HTTP "Host" header) to be used in requests.`
 )
 
-func showPrompt(out io.Writer, question string, defaultValue interface{}) {
+func showPrompt(out io.Writer, question string, defaultValue any) {
 	if reflect.ValueOf(defaultValue).IsZero() {
 		fmt.Fprintf(out, "\n%s\n\n       [no default]: ", question)
 	} else {

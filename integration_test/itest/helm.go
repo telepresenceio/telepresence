@@ -33,7 +33,7 @@ func (h *helmAndService) setup(ctx context.Context) bool {
 
 	// Destroy the telepresence-clusterrolebinding so that we actually test the RBAC set up in the helm chart
 	require.NoError(t, Kubectl(ctx, "", "delete", "clusterrolebinding", "telepresence-clusterrolebinding"))
-	require.NoError(t, h.InstallTrafficManager(ctx, h.ManagerNamespace(), h.AppNamespace()))
+	require.NoError(t, h.InstallTrafficManager(ctx, nil, h.ManagerNamespace(), h.AppNamespace()))
 
 	stdout := TelepresenceOk(ctx, "connect")
 	require.Contains(t, stdout, "Connected to context")
@@ -41,6 +41,7 @@ func (h *helmAndService) setup(ctx context.Context) bool {
 }
 
 func (h *helmAndService) tearDown(ctx context.Context) {
+	TelepresenceOk(ctx, "quit")
 	h.UninstallTrafficManager(ctx, h.ManagerNamespace())
 
 	// Helm uninstall does deletions asynchronously, which means the rbac might not be cleaned

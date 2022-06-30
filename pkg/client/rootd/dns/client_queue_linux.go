@@ -30,14 +30,14 @@ func (pq clientQueue) Swap(i, j int) {
 	pq[j].index = j
 }
 
-func (pq *clientQueue) Push(x interface{}) {
+func (pq *clientQueue) Push(x any) {
 	n := len(*pq)
 	item := x.(*waitingClient)
 	item.index = n
 	*pq = append(*pq, item)
 }
 
-func (pq *clientQueue) Pop() interface{} {
+func (pq *clientQueue) Pop() any {
 	old := *pq
 	n := len(old)
 	item := old[n-1]

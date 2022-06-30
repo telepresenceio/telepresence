@@ -96,7 +96,7 @@ func previewCommand() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					fmt.Println(DescribeIntercept(intercept, nil, false))
+					fmt.Println(DescribeIntercepts([]*manager.InterceptInfo{intercept}, nil, false))
 					return nil
 				})
 			})
@@ -122,7 +122,7 @@ func previewCommand() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					fmt.Println(DescribeIntercept(intercept, nil, false))
+					fmt.Println(DescribeIntercepts([]*manager.InterceptInfo{intercept}, nil, false))
 					return nil
 				})
 			})

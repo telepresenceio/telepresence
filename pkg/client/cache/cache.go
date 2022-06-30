@@ -22,7 +22,7 @@ func ensureCacheDir(ctx context.Context) (string, error) {
 	return cacheDir, nil
 }
 
-func SaveToUserCache(ctx context.Context, object interface{}, file string) error {
+func SaveToUserCache(ctx context.Context, object any, file string) error {
 	jsonContent, err := json.Marshal(object)
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func SaveToUserCache(ctx context.Context, object interface{}, file string) error
 	return os.WriteFile(filepath.Join(dir, file), jsonContent, 0600)
 }
 
-func LoadFromUserCache(ctx context.Context, dest interface{}, file string) error {
+func LoadFromUserCache(ctx context.Context, dest any, file string) error {
 	dir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
 		return err

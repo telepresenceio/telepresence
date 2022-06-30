@@ -295,20 +295,6 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 }
 
 func Test_gatherLogsGetPodName(t *testing.T) {
-	type testcase struct {
-		name string
-		anon bool
-	}
-	testCases := []testcase{
-		{
-			name: "noAnonymize",
-			anon: false,
-		},
-		{
-			name: "anonymize",
-			anon: true,
-		},
-	}
 	podNames := []string{
 		"echo-auto-inject-64323-3454.default",
 		"echo-easy-141245-23432.ambassador",
@@ -320,45 +306,28 @@ func Test_gatherLogsGetPodName(t *testing.T) {
 		"traffic-manager.namespace-2",
 	}
 
-	for _, tc := range testCases {
-		tcName := tc.name
-		tc := tc
-		// We need a fresh anonymizer for each test
-		anonymizer := &anonymizer{
-			namespaces: make(map[string]string),
-			podNames:   make(map[string]string),
-		}
-		t.Run(tcName, func(t *testing.T) {
-			// Get the newPodName for each pod
-			for _, podName := range podNames {
-				newPodName := getPodName(podName, tc.anon, anonymizer)
-				if !tc.anon {
-					require.Equal(t, podName, newPodName)
-				} else {
-					require.NotEqual(t, podName, newPodName)
-				}
-			}
-			if !tc.anon {
-				// If we weren't anonymizing the names, then the
-				// maps should be empty
-				require.Empty(t, anonymizer.podNames)
-				require.Empty(t, anonymizer.namespaces)
-			} else {
-				// Ensure the anonymizer contains the total expected values
-				require.Equal(t, 3, len(anonymizer.podNames))
-				require.Equal(t, 2, len(anonymizer.namespaces))
-
-				// Ensure the podNames were anonymized correctly
-				for i := range podNames {
-					require.Equal(t, podMapping[i], anonymizer.podNames[podNames[i]])
-				}
-
-				// Ensure the namespaces were anonymized correctly
-				require.Equal(t, "namespace-1", anonymizer.namespaces["default"])
-				require.Equal(t, "namespace-2", anonymizer.namespaces["ambassador"])
-			}
-		})
+	// We need a fresh anonymizer for each test
+	anonymizer := &anonymizer{
+		namespaces: make(map[string]string),
+		podNames:   make(map[string]string),
 	}
+	// Get the newPodName for each pod
+	for _, podName := range podNames {
+		newPodName := anonymizer.getPodName(podName)
+		require.NotEqual(t, podName, newPodName)
+	}
+	// Ensure the anonymizer contains the total expected values
+	require.Equal(t, 3, len(anonymizer.podNames))
+	require.Equal(t, 2, len(anonymizer.namespaces))
+
+	// Ensure the podNames were anonymized correctly
+	for i := range podNames {
+		require.Equal(t, podMapping[i], anonymizer.podNames[podNames[i]])
+	}
+
+	// Ensure the namespaces were anonymized correctly
+	require.Equal(t, "namespace-1", anonymizer.namespaces["default"])
+	require.Equal(t, "namespace-2", anonymizer.namespaces["ambassador"])
 }
 
 func Test_gatherLogsAnonymizeLogs(t *testing.T) {
@@ -385,7 +354,7 @@ func Test_gatherLogsAnonymizeLogs(t *testing.T) {
 		err := copyFiles(dstFile, srcFile)
 		require.NoError(t, err)
 
-		err = anonymizeLog(dstFile, anonymizer)
+		err = anonymizer.anonymizeLog(dstFile)
 		require.NoError(t, err)
 
 		// Now verify things have actually been anonymized

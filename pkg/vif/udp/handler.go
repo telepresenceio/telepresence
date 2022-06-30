@@ -2,7 +2,6 @@ package udp
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -15,29 +14,8 @@ type DatagramHandler interface {
 	HandleDatagram(ctx context.Context, dg Datagram)
 }
 
-type timedHandler struct {
-	id        tunnel.ConnID
-	idleTimer *time.Timer
-	idleLock  sync.Mutex
-	remove    func()
-}
-
-func (h *timedHandler) resetIdle() bool {
-	h.idleLock.Lock()
-	stopped := h.idleTimer.Stop()
-	if stopped {
-		h.idleTimer.Reset(idleDuration)
-	}
-	h.idleLock.Unlock()
-	return stopped
-}
-
-func (h *timedHandler) Close(_ context.Context) {
-	h.remove()
-}
-
 type handler struct {
-	timedHandler
+	tunnel.TimedHandler
 	stream  tunnel.Stream
 	toTun   ip.Writer
 	fromTun chan Datagram
@@ -48,13 +26,10 @@ const idleDuration = 5 * time.Second
 
 func NewHandler(stream tunnel.Stream, toTun ip.Writer, id tunnel.ConnID, remove func()) DatagramHandler {
 	return &handler{
-		timedHandler: timedHandler{
-			id:     id,
-			remove: remove,
-		},
-		stream:  stream,
-		toTun:   toTun,
-		fromTun: make(chan Datagram, ioChannelSize),
+		TimedHandler: tunnel.NewTimedHandler(id, idleDuration, remove),
+		stream:       stream,
+		toTun:        toTun,
+		fromTun:      make(chan Datagram, ioChannelSize),
 	}
 }
 
@@ -64,7 +39,8 @@ func (h *handler) HandleDatagram(ctx context.Context, dg Datagram) {
 	case h.fromTun <- dg:
 	}
 }
-func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
+
+func createReply(id tunnel.ConnID, payload []byte) Datagram {
 	pkt := NewDatagram(HeaderLen+len(payload), id.Destination(), id.Source())
 	ipHdr := pkt.IPHeader()
 	ipHdr.SetChecksum()
@@ -75,7 +51,11 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 	udpHdr.SetPayloadLen(uint16(len(payload)))
 	copy(udpHdr.Payload(), payload)
 	udpHdr.SetChecksum(ipHdr)
+	return pkt
+}
 
+func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
+	pkt := createReply(id, payload)
 	defer pkt.Release()
 	if err := toTun.Write(ctx, pkt); err != nil {
 		dlog.Errorf(ctx, "!! TUN %s: %v", id, err)
@@ -83,25 +63,43 @@ func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun i
 }
 
 func (h *handler) Start(ctx context.Context) {
-	h.idleTimer = time.NewTimer(idleDuration)
+	h.TimedHandler.Start(ctx)
+	go h.readLoop(ctx)
 	go h.writeLoop(ctx)
 }
 
+func (h *handler) readLoop(ctx context.Context) {
+	defer h.Stop(ctx)
+	for ctx.Err() == nil {
+		m, err := h.stream.Receive(ctx)
+		if err != nil {
+			return
+		}
+		switch m.Code() {
+		case tunnel.DialOK:
+		case tunnel.DialReject, tunnel.Disconnect:
+			return
+		case tunnel.Normal:
+			sendUDPToTun(ctx, h.ID, m.Payload(), h.toTun)
+		}
+	}
+}
+
 func (h *handler) writeLoop(ctx context.Context) {
-	defer h.Close(ctx)
+	defer h.Stop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-h.idleTimer.C:
+		case <-h.Idle():
 			return
 		case dg := <-h.fromTun:
-			if !h.resetIdle() {
+			if !h.ResetIdle() {
 				dg.Release()
 				return
 			}
-			dlog.Debugf(ctx, "<- TUN %s", dg)
-			dlog.Debugf(ctx, "-> MGR %s", dg)
+			dlog.Tracef(ctx, "<- TUN %s", dg)
+			dlog.Tracef(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
 			err := h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
 			dg.Release()

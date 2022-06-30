@@ -6,10 +6,17 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 var signalsToForward = []os.Signal{os.Interrupt}
+
+func CommandContext(ctx context.Context, name string, args ...string) *dexec.Cmd {
+	cmd := dexec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+	return cmd
+}
 
 func startInBackground(args ...string) error {
 	return shellExec("open", args[0], args[1:]...)

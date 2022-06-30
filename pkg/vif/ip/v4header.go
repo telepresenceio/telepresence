@@ -221,6 +221,8 @@ func (h V4Header) ConcatFragments(data *buffer.Data, fragsMap map[uint16][]*buff
 
 	last := V4Header(fragments[len(fragments)-1].Buf())
 	fragments = append(fragments, data)
+	fragsMap[h.ID()] = fragments
+
 	if h.FragmentOffset() < last.FragmentOffset() {
 		// Fragments didn't arrive in order. Sort them
 		sort.Slice(fragments, func(i, j int) bool {
@@ -236,7 +238,6 @@ func (h V4Header) ConcatFragments(data *buffer.Data, fragsMap map[uint16][]*buff
 	}
 
 	// Ensure that there are no holes in the fragment chain
-	lastPayload := 0
 	expectedOffset := 0
 	for _, data := range fragments {
 		eh := V4Header(data.Buf())
@@ -245,8 +246,7 @@ func (h V4Header) ConcatFragments(data *buffer.Data, fragsMap map[uint16][]*buff
 			// There's a gap. Await more fragments
 			return nil
 		}
-		lastPayload = eh.PayloadLen()
-		expectedOffset = offset + lastPayload
+		expectedOffset = offset + eh.PayloadLen()
 	}
 	totalPayload := expectedOffset
 	firstHeader := V4Header(fragments[0].Buf())
@@ -264,7 +264,7 @@ func (h V4Header) ConcatFragments(data *buffer.Data, fragsMap map[uint16][]*buff
 
 	firstHeader = fb
 	firstHeader.SetFlags(firstHeader.Flags() &^ ipv4.MoreFragments)
-	firstHeader.SetPayloadLen(firstHeader.HeaderLen() + totalPayload)
+	firstHeader.SetPayloadLen(totalPayload)
 	firstHeader.SetChecksum()
 	return final
 }

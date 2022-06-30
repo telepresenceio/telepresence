@@ -37,3 +37,6 @@ tst-systema
 # Needed to build on windows
 .wintools
 .gocache
+
+# Don't accidentally add binaries built byintegration tests
+/integration_test/testdata/echo-server/echo-server

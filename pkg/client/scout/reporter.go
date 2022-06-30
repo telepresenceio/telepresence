@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/datawire/ambassador/v2/pkg/metriton"
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/metriton-go-client/metriton"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -37,7 +37,7 @@ type Reporter struct {
 // Entry is a key/value association used when reporting
 type Entry struct {
 	Key   string
-	Value interface{}
+	Value any
 }
 
 type InstallType string
@@ -225,7 +225,7 @@ const setMetadatumAction = "__set_metadatum__"
 
 // SetMetadatum associates the given key with the given value in the metadata
 // of this instance.
-func (r *Reporter) SetMetadatum(ctx context.Context, key string, value interface{}) {
+func (r *Reporter) SetMetadatum(ctx context.Context, key string, value any) {
 	r.Report(ctx, setMetadatumAction, Entry{Key: key, Value: value})
 }
 
@@ -305,7 +305,7 @@ func (r *Reporter) Report(ctx context.Context, action string, entries ...Entry) 
 
 func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
 	r.index++
-	metadata := make(map[string]interface{}, 4+len(be.entries))
+	metadata := make(map[string]any, 4+len(be.entries))
 	metadata["action"] = be.action
 	metadata["index"] = r.index
 	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)

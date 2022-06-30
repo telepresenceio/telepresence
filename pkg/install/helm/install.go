@@ -23,7 +23,7 @@ const releaseOwner = "telepresence-cli"
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
-	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...interface{}) {
+	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...any) {
 		ctx := dlog.WithField(ctx, "source", "helm")
 		dlog.Infof(ctx, format, args...)
 	})
@@ -33,14 +33,14 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 	return helmConfig, nil
 }
 
-func getValues(ctx context.Context) map[string]interface{} {
+func getValues(ctx context.Context) map[string]any {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
 	imageRegistry := imgConfig.Registry(ctx)
 	cloudConfig := clientConfig.Cloud
 	imageTag := strings.TrimPrefix(client.Version(), "v")
-	values := map[string]interface{}{
-		"image": map[string]interface{}{
+	values := map[string]any{
+		"image": map[string]any{
 			"registry": imageRegistry,
 			"tag":      imageTag,
 		},
@@ -49,13 +49,13 @@ func getValues(ctx context.Context) map[string]interface{} {
 		"createdBy":   releaseOwner,
 	}
 	if !clientConfig.Grpc.MaxReceiveSize.IsZero() {
-		values["grpc"] = map[string]interface{}{
+		values["grpc"] = map[string]any{
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
 	apc := clientConfig.Intercept.AppProtocolStrategy
-	if wai, wr := imgConfig.WebhookAgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
-		agentImage := make(map[string]interface{})
+	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
+		agentImage := make(map[string]any)
 		if wai != "" {
 			parts := strings.Split(wai, ":")
 			image := wai
@@ -70,14 +70,14 @@ func getValues(ctx context.Context) map[string]interface{} {
 		if wr != "" {
 			agentImage["registry"] = wr
 		}
-		agentInjector := map[string]interface{}{"agentImage": agentImage}
+		agentInjector := map[string]any{"agentImage": agentImage}
 		values["agentInjector"] = agentInjector
 		if apc != k8sapi.Http2Probe {
 			agentInjector["appProtocolStrategy"] = apc.String()
 		}
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
-		values["telepresenceAPI"] = map[string]interface{}{
+		values["telepresenceAPI"] = map[string]any{
 			"port": clientConfig.TelepresenceAPI.Port,
 		}
 	}
@@ -236,18 +236,34 @@ restart:
 }
 
 // DeleteTrafficManager deletes the traffic manager
-func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
+func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
 	}
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
-		dlog.Errorf(ctx, "Unable to look for existing helm release: %v. Assuming it's already gone...", err)
+		err := fmt.Errorf("unable to look for existing helm release in namespace %s: %w", namespace, err)
+		if errOnFail {
+			return err
+		}
+		dlog.Infof(ctx, "%s. Assuming it's already gone...", err.Error())
 		return nil
 	}
-	if existing == nil || !shouldManageRelease(ctx, existing) {
-		dlog.Infof(ctx, "Traffic Manager in namespace %s already deleted or not owned by cli, will not uninstall", namespace)
+	if existing == nil {
+		err := fmt.Errorf("traffic Manager in namespace %s already deleted", namespace)
+		if errOnFail {
+			return err
+		}
+		dlog.Info(ctx, err.Error())
+		return nil
+	}
+	if !shouldManageRelease(ctx, existing) {
+		err := fmt.Errorf("traffic Manager in namespace %s is not owned by cli, will not uninstall", namespace)
+		if errOnFail {
+			return err
+		}
+		dlog.Info(ctx, err.Error())
 		return nil
 	}
 	return uninstallExisting(ctx, helmConfig, namespace)

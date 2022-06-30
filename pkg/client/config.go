@@ -343,7 +343,7 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 
 		v := ms[i+1]
-		var vv interface{}
+		var vv any
 		if err = v.Decode(&vv); err != nil {
 			return errors.New(withLoc("unable to parse value", v))
 		}
@@ -391,7 +391,7 @@ func (t Timeouts) IsZero() bool {
 }
 
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
-func (t Timeouts) MarshalYAML() (interface{}, error) {
+func (t Timeouts) MarshalYAML() (any, error) {
 	tm := make(map[string]string)
 	if t.PrivateAgentInstall != 0 && t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
 		tm["agentInstall"] = t.PrivateAgentInstall.String()
@@ -520,10 +520,9 @@ func (ll *LogLevels) merge(o *LogLevels) {
 }
 
 type Images struct {
-	PrivateRegistry          string `json:"registry,omitempty" yaml:"registry,omitempty"`
-	PrivateAgentImage        string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
-	PrivateWebhookRegistry   string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
-	PrivateWebhookAgentImage string `json:"webhookAgentImage,omitempty" yaml:"webhookAgentImage,omitempty"`
+	PrivateRegistry        string `json:"registry,omitempty" yaml:"registry,omitempty"`
+	PrivateAgentImage      string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
+	PrivateWebhookRegistry string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
 }
 
 // UnmarshalYAML parses the images YAML
@@ -548,7 +547,8 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "webhookRegistry":
 			img.PrivateWebhookRegistry = v.Value
 		case "webhookAgentImage":
-			img.PrivateWebhookAgentImage = v.Value
+			dlog.Warn(parseContext, withLoc(fmt.Sprintf(`deprecated key %q, please use "agentImage" instead`, kv), ms[i]))
+			img.PrivateAgentImage = v.Value
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -561,9 +561,6 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 func (img *Images) merge(o *Images) {
 	if o.PrivateAgentImage != "" {
 		img.PrivateAgentImage = o.PrivateAgentImage
-	}
-	if o.PrivateWebhookAgentImage != "" {
-		img.PrivateWebhookAgentImage = o.PrivateWebhookAgentImage
 	}
 	if o.PrivateRegistry != "" {
 		img.PrivateRegistry = o.PrivateRegistry
@@ -584,19 +581,12 @@ func (img *Images) WebhookRegistry(c context.Context) string {
 	if img.PrivateWebhookRegistry != "" {
 		return img.PrivateWebhookRegistry
 	}
-	return GetEnv(c).Registry
+	return img.Registry(c)
 }
 
 func (img *Images) AgentImage(c context.Context) string {
 	if img.PrivateAgentImage != "" {
 		return img.PrivateAgentImage
-	}
-	return GetEnv(c).AgentImage
-}
-
-func (img *Images) WebhookAgentImage(c context.Context) string {
-	if img.PrivateWebhookAgentImage != "" {
-		return img.PrivateWebhookAgentImage
 	}
 	return GetEnv(c).AgentImage
 }
@@ -667,8 +657,8 @@ func (c Cloud) IsZero() bool {
 }
 
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
-func (c Cloud) MarshalYAML() (interface{}, error) {
-	cm := make(map[string]interface{})
+func (c Cloud) MarshalYAML() (any, error) {
+	cm := make(map[string]any)
 	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
 		cm["refreshMessages"] = c.RefreshMessages.String()
 	}
@@ -743,8 +733,8 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 }
 
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
-func (g Grpc) MarshalYAML() (interface{}, error) {
-	cm := make(map[string]interface{})
+func (g Grpc) MarshalYAML() (any, error) {
+	cm := make(map[string]any)
 	if !g.MaxReceiveSize.IsZero() {
 		cm["maxReceiveSize"] = g.MaxReceiveSize.String()
 	}
@@ -797,8 +787,8 @@ func (ic Intercept) IsZero() bool {
 }
 
 // MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
-func (ic Intercept) MarshalYAML() (interface{}, error) {
-	im := make(map[string]interface{})
+func (ic Intercept) MarshalYAML() (any, error) {
+	im := make(map[string]any)
 	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
 		im["defaultPort"] = ic.DefaultPort
 	}
@@ -940,8 +930,8 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 	}
 
 	// Sanity check
-	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "beta-app.datawire.io" {
-		return nil, errors.New("cloud.SystemaHost must be set to beta-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "staging-app.datawire.io" {
+		return nil, errors.New("cloud.SystemaHost must be set to staging-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
 	}
 
 	return cfg, nil

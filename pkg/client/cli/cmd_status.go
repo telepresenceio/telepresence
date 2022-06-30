@@ -289,13 +289,15 @@ func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 		for _, intercept := range cs.Intercepts {
 			s.printf("    %s: %s\n", intercept.Name, intercept.Client)
 		}
+	} else {
+		s.println("User Daemon: Not running")
 	}
 }
 
-func (s *statusInfo) printf(format string, a ...interface{}) {
+func (s *statusInfo) printf(format string, a ...any) {
 	_, _ = fmt.Fprintf(s.out, format, a...)
 }
 
-func (s *statusInfo) println(a ...interface{}) {
+func (s *statusInfo) println(a ...any) {
 	_, _ = fmt.Fprintln(s.out, a...)
 }

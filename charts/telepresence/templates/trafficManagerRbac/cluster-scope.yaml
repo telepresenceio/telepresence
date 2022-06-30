@@ -1,4 +1,6 @@
 {{- if .Values.managerRbac.create }}
+{{- if (not .Values.managerRbac.namespaced) }}
+
 # This file contains all cluster-scoped permissions that the traffic manager needs.
 # This will be larger if namespaced: false, or smaller if it is true
 # This will also likely expand over time as we move more things from the clients
@@ -14,7 +16,15 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - services
+  verbs:
+  - update # Only needed for upgrade of older versions
+- apiGroups:
+  - ""
+  resources:
   - nodes
+  - pods
+  - services
   verbs:
   - list
   - get
@@ -23,7 +33,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - services
   - namespaces
   verbs:
   - get
@@ -31,23 +40,32 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
+  - configmaps
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
   verbs:
   - list
   - get
   - watch
-{{- if (not .Values.managerRbac.namespaced) }}
-# Needed for the `gather-logs` command to work on components in the kubernetes
-# cluster (traffic-manager + traffic-agents)
+  - update
+  - delete
+  resourceNames:
+  - telepresence-agents
 - apiGroups:
-  - ""
+  - "apps"
   resources:
-  - pods/log
+  - deployments
+  - replicasets
+  - statefulsets
   verbs:
-  - list
   - get
-{{- end }}
-
+  - list
+  - patch
+  - update # Only needed for upgrade of older versions
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -64,4 +82,4 @@ subjects:
   name: traffic-manager
   namespace: {{ include "telepresence.namespace" . }}
 {{- end }}
-
+{{- end }}

@@ -1,0 +1,44 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-no-vols
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-no-vols
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-no-vols
+  labels:
+    app: echo-no-vols
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-no-vols
+  template:
+    metadata:
+      labels:
+        app: echo-no-vols
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: echo-server
+          image: docker.io/thhal/echo-server:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 8Mi

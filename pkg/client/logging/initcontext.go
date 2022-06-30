@@ -83,9 +83,19 @@ func SummarizeLog(ctx context.Context, name string) (string, error) {
 	errorCount := 0
 	for scanner.Scan() {
 		// XXX: is there a better way to detect error lines?
-		parts := strings.Fields(scanner.Text())
-		if len(parts) > 2 && parts[2] == "error" {
+		txt := scanner.Text()
+		parts := strings.Fields(txt)
+		if len(parts) < 3 {
+			continue
+		}
+		switch parts[2] {
+		case "error":
 			errorCount++
+		case "info":
+			if strings.Contains(txt, "-- Starting new session") {
+				// Start over. No use counting errors from previous sessions
+				errorCount = 0
+			}
 		}
 	}
 	if errorCount == 0 {

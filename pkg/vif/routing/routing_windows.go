@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -10,8 +11,8 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 func GetRoutingTable(ctx context.Context) ([]Route, error) {
@@ -21,12 +22,12 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 	}
 	routes := []Route{}
 	for _, row := range table {
-		dst := row.DestinationPrefix.IPNet()
-		if dst.IP == nil || dst.Mask == nil {
+		dst := row.DestinationPrefix.Prefix()
+		if !dst.IsValid() {
 			continue
 		}
-		gw := row.NextHop.IP()
-		if gw == nil {
+		gw := row.NextHop.Addr()
+		if !gw.IsValid() {
 			continue
 		}
 		ifaceIdx := int(row.InterfaceIndex)
@@ -34,28 +35,32 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unable to get interface at index %d: %w", ifaceIdx, err)
 		}
-		localIP, err := interfaceLocalIP(iface, dst.IP.To4() != nil)
+		localIP, err := interfaceLocalIP(iface, dst.Addr().Is4())
 		if err != nil {
 			return nil, err
 		}
 		if localIP == nil {
 			continue
 		}
-		ip, gwc, mask := make(net.IP, len(dst.IP)), make(net.IP, len(gw)), make(net.IPMask, len(dst.Mask))
-		copy(gwc, gw)
-		copy(ip, dst.IP)
-		copy(mask, dst.Mask)
-		gw = gwc
+		gwc := gw.AsSlice()
+		ip := dst.Addr().AsSlice()
+		var mask net.IPMask
+		if dst.Bits() > 0 {
+			if dst.Addr().Is4() {
+				mask = net.CIDRMask(dst.Bits(), 32)
+			} else {
+				mask = net.CIDRMask(dst.Bits(), 128)
+			}
+		}
 		var dflt bool
-		if gw4 := gw.To4(); gw4 != nil {
-			gw = gw4
-			dflt = !gw.Equal(net.IP{0, 0, 0, 0})
+		if len(gwc) == 4 {
+			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0})
 		} else {
-			dflt = !gw.Equal(net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 		}
 		routes = append(routes, Route{
 			LocalIP: localIP,
-			Gateway: gw,
+			Gateway: gwc,
 			RoutedNet: &net.IPNet{
 				IP:   ip,
 				Mask: mask,
@@ -79,7 +84,7 @@ $obj.IPAddress
 $obj.NextHop
 $obj.InterfaceIndex[0]
 `, ip)
-	cmd := dexec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
+	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {

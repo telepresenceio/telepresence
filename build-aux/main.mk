@@ -64,16 +64,16 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 	  $$(find ./rpc/ -name '*.proto')
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
-	export GOFLAGS=-mod=mod && go generate ./...
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
 	mkdir -p $(BUILDDIR)
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external >$(BUILDDIR)/DEPENDENCIES.txt
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external \
+ 		--unparsable-packages build-aux/unparsable-packages.yaml >$(BUILDDIR)/DEPENDENCIES.txt
 	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[1-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
 	printf "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n\n" > DEPENDENCY_LICENSES.md
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
-		--output-type=json --application-type=external > $(BUILDDIR)/DEPENDENCIES.json
+		--output-type=json --application-type=external --unparsable-packages build-aux/unparsable-packages.yaml > $(BUILDDIR)/DEPENDENCIES.json
 	jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' $(BUILDDIR)/DEPENDENCIES.json > $(BUILDDIR)/LICENSES.txt
 	sed -e 's/\[\([^]]*\)]()/\1/' $(BUILDDIR)/LICENSES.txt >> DEPENDENCY_LICENSES.md
 
@@ -85,7 +85,6 @@ generate-clean: ## (Generate) Delete generated files
 	find ./rpc -name '*.go' -delete
 
 	rm -rf ./vendor
-	find pkg cmd -name 'generated_*.go' -delete
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
 
@@ -100,6 +99,27 @@ else
 	sdkroot=
 endif
 
+ifeq ($(GOHOSTOS),windows)
+WINTUN_VERSION=0.14.1
+$(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll:
+	mkdir -p $(BUILDDIR)
+	curl --fail -L https://www.wintun.net/builds/wintun-$(WINTUN_VERSION).zip -o $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip
+	rm -rf  $(BUILDDIR)/wintun-$(WINTUN_VERSION)
+	unzip $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip -d $(BUILDDIR)/wintun-$(WINTUN_VERSION)
+endif
+
+.PHONY: build-version build
+ifeq ($(GOHOSTOS),windows)
+build-version: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
+	mkdir -p $(BINDIR)
+	cp $< $(BINDIR)
+else
+build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
+	mkdir -p $(BINDIR)
+endif
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence/... || \
+		(git restore pkg/install/helm/telepresence-chart.tgz; exit 1) # in case the build fails
+
 # Build: artifacts that don't get checked in to Git
 # =================================================
 
@@ -111,12 +131,8 @@ $(BINDIR)/telepresence: FORCE
 	rm -f $@ # sometimes Go 1.18.0 spits out an invalid binary if I don't do this
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 
-# TODO remove the following two lines when we're passed the PR build barrier
-.PHONY: image
-image: tel2
-
-.PHONY: tel2
-tel2:
+.PHONY: tel2-base tel2
+tel2-base tel2:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
@@ -124,6 +140,9 @@ tel2:
 .PHONY: push-image
 push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+
+tel2-image: tel2
+	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
@@ -216,7 +235,6 @@ lint-deps: $(tools/helm)
 build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
 	go list ./... | xargs -n1 go test -c -o /dev/null
 
-shellscripts  = ./cmd/traffic/cmd/manager/internal/watchable/generic.gen
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/push_chart.sh
@@ -255,7 +273,7 @@ check-integration: tools/bin/helm ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=39m ./integration_test/...
 
 .PHONY: _login
 _login:

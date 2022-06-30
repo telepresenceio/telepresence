@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -101,10 +102,27 @@ func (s *singleServiceSuite) TestGatherLogs_OnlyMappedLogs() {
 	ctx := s.Context()
 	otherNS := fmt.Sprintf("other-ns-%s", s.Suffix())
 	itest.CreateNamespaces(ctx, otherNS)
+	defer itest.DeleteNamespaces(ctx, otherNS)
 	itest.ApplyEchoService(ctx, s.ServiceName(), otherNS, 8083)
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherNS, "--mount", "false", s.ServiceName())
+	s.Eventually(
+		func() bool {
+			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", otherNS, "--intercepts")
+			return strings.Contains(stdout, s.ServiceName()+": intercepted")
+		},
+		10*time.Second,
+		2*time.Second,
+	)
 	itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+otherNS)
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", s.ServiceName())
+	s.Eventually(
+		func() bool {
+			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return strings.Contains(stdout, s.ServiceName()+": intercepted")
+		},
+		10*time.Second,
+		2*time.Second,
+	)
 	itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+s.AppNamespace())
 
 	bothNsRx := fmt.Sprintf("(?:%s|%s)", s.AppNamespace(), otherNS)
@@ -126,6 +144,7 @@ func (s *singleServiceSuite) TestGatherLogs_OnlyMappedLogs() {
 	}()
 
 	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), s.ServiceName())
+	itest.TelepresenceOk(ctx, "list") // To ensure that the mapped namespaces are active
 	itest.TelepresenceOk(ctx, "gather-logs", "--output-file", outputFile, "--traffic-manager=False")
 	_, foundAgents, _, fileNames = getZipData(require, outputFile, bothNsRx, s.ManagerNamespace(), s.ServiceName())
 	require.Equal(1, foundAgents, fileNames)
@@ -181,22 +200,24 @@ func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamesp
 				yamlCount++
 				continue
 			}
-			foundManager = true
 			fileContent := readZip(require, f)
 			// We can be fairly certain we actually got a traffic-manager log
 			// if we see the following
-			require.Regexp(tmHdrMatch, string(fileContent))
+			if tmHdrMatch.Match(fileContent) {
+				foundManager = true
+			}
 		}
 		if helloMatch.MatchString(f.Name) {
 			if strings.HasSuffix(f.Name, ".yaml") {
 				yamlCount++
 				continue
 			}
-			foundAgents++
 			fileContent := readZip(require, f)
-			// We can be fairly certain we actually got a traffic-manager log
+			// We can be fairly certain we actually got a traffic-agent log
 			// if we see the following
-			require.Regexp(agHdrMatch, string(fileContent))
+			if agHdrMatch.Match(fileContent) {
+				foundAgents++
+			}
 		}
 	}
 	return foundManager, foundAgents, yamlCount, fileNames

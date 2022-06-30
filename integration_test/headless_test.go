@@ -3,19 +3,18 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
 func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
+	if itest.GetProfile(s.Context()) == itest.GkeAutopilotProfile {
+		s.T().Skip("GKE Autopilot does not support NET_ADMIN containers which means headless services can't be intercepted")
+	}
 	ctx, cancel := context.WithCancel(dcontext.WithSoftness(s.Context()))
 	defer cancel()
 	const svc = "echo-headless"
@@ -25,8 +24,6 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 
 	s.ApplyApp(ctx, "echo-headless", "statefulset/echo-headless")
 	defer s.DeleteSvcAndWorkload(ctx, "statefulset", "echo-headless")
-
-	require := s.Require()
 
 	for _, test := range []struct {
 		webhook bool
@@ -42,9 +39,18 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 		},
 	} {
 		s.Run(test.name, func() {
+			require := s.Require()
 			ctx := s.Context()
 			if test.webhook {
 				require.NoError(annotateForWebhook(ctx, "statefulset", "echo-headless", s.AppNamespace(), 8080))
+				require.Eventually(
+					func() bool {
+						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+						return strings.Contains(stdout, "echo-headless: ready to intercept")
+					},
+					30*time.Second, // waitFor
+					3*time.Second,  // polling interval
+					`never gets install agent`)
 			}
 			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", strconv.Itoa(svcPort))
 			require.Contains(stdout, "Using StatefulSet echo-headless")
@@ -54,54 +60,29 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 				itest.TelepresenceOk(ctx, "leave", "echo-headless-"+s.AppNamespace())
 				if test.webhook {
 					require.NoError(dropWebhookAnnotation(ctx, "statefulset", "echo-headless", s.AppNamespace()))
-					// Give the annotation drop some time to take effect, or the next run will often fail with a "the object has been modified" error
-					dtime.SleepWithContext(ctx, 2*time.Second)
-				} else {
-					itest.TelepresenceOk(ctx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
 				}
+
+				// Switch to default user and uninstall the agent
+				itest.TelepresenceQuitOk(ctx)
+				dfltCtx := itest.WithUser(ctx, "default")
+				itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
+				itest.TelepresenceQuitOk(dfltCtx)
+				itest.TelepresenceOk(ctx, "connect")
+
+				require.Eventually(
+					func() bool {
+						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+						return !strings.Contains(stdout, "echo-headless")
+					},
+					30*time.Second, // waitFor
+					3*time.Second,  // polling interval
+					`agent is never removed`)
 			}()
 
 			stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
 			require.Contains(stdout, "echo-headless: intercepted")
 			require.NotContains(stdout, "Volume Mount Point")
-
-			expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-			s.Require().Eventually(
-				// condition
-				func() bool {
-					ip, err := net.DefaultResolver.LookupHost(ctx, svc)
-					if err != nil {
-						dlog.Infof(ctx, "%v", err)
-						return false
-					}
-					if 1 != len(ip) {
-						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
-						return false
-					}
-
-					url := fmt.Sprintf("http://%s:8080", svc)
-
-					dlog.Infof(ctx, "trying %q...", url)
-					hc := http.Client{Timeout: 2 * time.Second}
-					resp, err := hc.Get(url)
-					if err != nil {
-						dlog.Infof(ctx, "%v", err)
-						return false
-					}
-					defer resp.Body.Close()
-					dlog.Infof(ctx, "status code: %v", resp.StatusCode)
-					body, err := io.ReadAll(resp.Body)
-					if err != nil {
-						dlog.Infof(ctx, "%v", err)
-						return false
-					}
-					dlog.Infof(ctx, "body: %q", body)
-					return string(body) == expectedOutput
-				},
-				time.Minute,   // waitFor
-				3*time.Second, // polling interval
-				`body of %q equals %q`, "http://"+svc, expectedOutput,
-			)
+			itest.PingInterceptedEchoServer(ctx, svc, "8080")
 		})
 	}
 }

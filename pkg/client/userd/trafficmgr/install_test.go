@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -87,7 +88,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 	testcases := getTests(t)
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
-	ctx := dlog.NewTestContext(t, true)
+	ctx := dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelWarn))
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -139,13 +140,13 @@ func TestAddAgentToWorkload(t *testing.T) {
 					return
 				}
 
-				actualWrk, actualSvc, _, actualErr := addAgentToWorkload(
+				actualWrk, _, actualErr := addAgentToWorkload(
 					ctx,
-					&ServiceProps{
-						Service:            svc,
-						ServicePort:        servicePort,
-						Container:          container,
-						ContainerPortIndex: containerPortIndex,
+					&serviceProps{
+						service:            svc,
+						servicePort:        servicePort,
+						container:          container,
+						containerPortIndex: containerPortIndex,
 					},
 					agent_image_name, // ignore extensions
 					env.ManagerNamespace,
@@ -163,18 +164,17 @@ func TestAddAgentToWorkload(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, string(expectedJSON), string(actualJSON))
 
-				if actualSvc != nil {
-					actualSvcImpl, _ := k8sapi.ServiceImpl(actualSvc)
-					sanitizeService(actualSvcImpl)
-					assert.Equal(t, expectedSvc, actualSvcImpl)
+				if svc != nil {
+					sanitizeService(svc)
+					assert.Equal(t, expectedSvc, svc)
 				}
 
 				if t.Failed() && os.Getenv("DEV_TELEPRESENCE_GENERATE_GOLD") != "" {
 					workloadKind := actualWrk.GetObjectKind().GroupVersionKind().Kind
 
-					goldBytes, err := yaml.Marshal(map[string]interface{}{
+					goldBytes, err := yaml.Marshal(map[string]any{
 						strings.ToLower(workloadKind): actualWrk,
-						"service":                     actualSvc,
+						"service":                     svc,
 					})
 					if !assert.NoError(t, err) {
 						return
@@ -268,7 +268,7 @@ func loadFile(filename, inputVersion string) (workload k8sapi.Workload, service 
 	}
 
 	var buff bytes.Buffer
-	err = tmpl.Execute(&buff, map[string]interface{}{
+	err = tmpl.Execute(&buff, map[string]any{
 		"Version": strings.TrimPrefix(inputVersion, "v"),
 	})
 	if err != nil {

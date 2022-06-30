@@ -82,7 +82,7 @@ func GetAppProto(ctx context.Context, aps AppProtocolStrategy, p *core.ServicePo
 	return ""
 }
 
-func ObjErrorf(o Object, format string, args ...interface{}) error {
+func ObjErrorf(o Object, format string, args ...any) error {
 	return fmt.Errorf("%s name=%q namespace=%q: %w",
 		o.GetKind(), o.GetName(), o.GetNamespace(),
 		fmt.Errorf(format, args...))

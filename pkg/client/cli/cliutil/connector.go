@@ -21,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -75,7 +76,8 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, maybeSta
 		if errors.Is(err, os.ErrNotExist) {
 			err = ErrNoUserDaemon
 			if maybeStart {
-				fmt.Println("Launching Telepresence User Daemon")
+				stdout, _ := output.Structured(ctx)
+				fmt.Fprintln(stdout, "Launching Telepresence User Daemon")
 				if _, err = ensureAppUserConfigDir(ctx); err != nil {
 					return nil, err
 				}
@@ -136,6 +138,7 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 	})
 
 	grp.Go("stdio", func(ctx context.Context) error {
+		stdout, _ := output.Structured(ctx)
 		stream, err := connectorClient.UserNotifications(ctx, &empty.Empty{})
 		if err != nil {
 			return err
@@ -151,7 +154,7 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 				}
 				return err
 			}
-			fmt.Println(strings.TrimRight(msg.Message, "\n"))
+			fmt.Fprintln(stdout, strings.TrimRight(msg.Message, "\n"))
 		}
 	})
 	grp.Go("main", func(ctx context.Context) error {
@@ -162,15 +165,16 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 }
 
 func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
-	fmt.Print("Telepresence Traffic Manager ")
+	stdout, _ := output.Structured(ctx)
+	fmt.Fprint(stdout, "Telepresence Traffic Manager ")
 	err := WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
 		defer func() {
 			if err == nil {
-				fmt.Println("done")
+				fmt.Fprintln(stdout, "done")
 			}
 		}()
 		if quitUserDaemon {
-			fmt.Print("quitting...")
+			fmt.Fprint(stdout, "quitting...")
 		} else {
 			var ci *connector.ConnectInfo
 			if ci, err = connectorClient.Status(ctx, &empty.Empty{}); err != nil {
@@ -179,7 +183,7 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 			if ci.Error == connector.ConnectInfo_DISCONNECTED {
 				return ErrNoUserDaemon
 			}
-			fmt.Print("disconnecting...")
+			fmt.Fprint(stdout, "disconnecting...")
 			if _, err = connectorClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
 				// nil or not unimplemented
 				return err
@@ -193,9 +197,9 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 	})
 	if err != nil && (errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable) {
 		if quitUserDaemon {
-			fmt.Println("had already quit")
+			fmt.Fprintln(stdout, "had already quit")
 		} else {
-			fmt.Println("is already disconnected")
+			fmt.Fprintf(stdout, "is already disconnected")
 		}
 		err = nil
 	}

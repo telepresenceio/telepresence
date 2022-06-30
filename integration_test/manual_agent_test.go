@@ -1,76 +1,147 @@
 package integration_test
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
-	"gopkg.in/yaml.v3"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 func (s *connectedSuite) Test_ManualAgent() {
 	require := s.Require()
+	assert := s.Assert()
 	ctx := s.Context()
 
 	k8sDir := filepath.Join(itest.GetWorkingDir(itest.WithModuleRoot(ctx)), "k8s")
-	stdout := itest.TelepresenceOk(ctx, "genyaml", "container", "--container-name", "echo-container", "--port", "8080", "--output",
-		"-", "--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
-	container := map[string]interface{}{}
-	require.NoError(yaml.Unmarshal([]byte(stdout), &container))
+	require.NoError(itest.Kubectl(ctx, s.AppNamespace(), "apply", "-f", filepath.Join(k8sDir, "echo-manual-inject-svc.yaml")))
 
-	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--output",
-		"-", "--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
-	volume := map[string]interface{}{}
-	require.NoError(yaml.Unmarshal([]byte(stdout), &volume))
-
-	f, err := os.Open(filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
-	require.NoError(err)
-	defer f.Close()
-	b, err := io.ReadAll(f)
-	require.NoError(err)
-	deploy := map[string]interface{}{}
-	require.NoError(yaml.Unmarshal(b, &deploy))
-
-	podTemplate := deploy["spec"].(map[string]interface{})["template"].(map[string]interface{})
-	podSpec := podTemplate["spec"].(map[string]interface{})
-	cons := podSpec["containers"].([]interface{})
-	podSpec["containers"] = append(cons, container)
-	podSpec["volumes"] = []interface{}{volume}
-	podTemplate["metadata"].(map[string]interface{})["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
-
-	f, err = os.Open(filepath.Join(k8sDir, "echo-manual-inject-svc.yaml"))
-	require.NoError(err)
-	defer f.Close()
-	svc, err := io.ReadAll(f)
-	require.NoError(err)
+	agentImage := s.Registry() + "/tel2:" + strings.TrimPrefix(s.TelepresenceVersion(), "v")
+	cfgEntry := itest.TelepresenceOk(ctx, "genyaml", "config",
+		"--agent-image", agentImage,
+		"--output", "-",
+		"--manager-namespace", s.ManagerNamespace(),
+		"--namespace", s.AppNamespace(),
+		"--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"),
+		"--loglevel", "debug")
+	var ac agentconfig.Sidecar
+	require.NoError(yaml.Unmarshal([]byte(cfgEntry), &ac))
 
 	tmpDir := s.T().TempDir()
-	yamlFile := filepath.Join(tmpDir, "deployment.yaml")
-	f, err = os.Create(yamlFile)
-	require.NoError(err)
-	_, err = f.Write(svc)
-	require.NoError(err)
-	_, err = f.Write([]byte("\n---\n"))
-	require.NoError(err)
-	b, err = yaml.Marshal(&deploy)
-	require.NoError(err)
-	_, err = f.Write(b)
-	require.NoError(err)
-	f.Close()
+	writeFile := func(file string, data []byte) {
+		f, err := os.Create(file)
+		require.NoError(err)
+		defer f.Close()
+		_, err = f.Write(data)
+		assert.NoError(err)
+	}
 
-	require.NoError(s.Kubectl(ctx, "apply", "-f", yamlFile, "--context", "default"))
+	writeYaml := func(name string, data any) string {
+		yf := filepath.Join(tmpDir, name)
+		b, err := yaml.Marshal(data)
+		require.NoError(err)
+		writeFile(yf, b)
+		return yf
+	}
+
+	configFile := filepath.Join(tmpDir, ac.WorkloadName)
+	writeFile(configFile, []byte(cfgEntry))
+
+	stdout := itest.TelepresenceOk(ctx, "genyaml", "container",
+		"--output", "-",
+		"--config", configFile,
+		"--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
+	var container map[string]any
+	require.NoError(yaml.Unmarshal([]byte(stdout), &container))
+
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "initcontainer", "--output", "-", "--config", configFile)
+	var initContainer map[string]any
+	require.NoError(yaml.Unmarshal([]byte(stdout), &initContainer))
+
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--workload", ac.WorkloadName)
+	var volumes []map[string]any
+	require.NoError(yaml.Unmarshal([]byte(stdout), &volumes))
+
+	b, err := os.ReadFile(filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
+	require.NoError(err)
+	var deploy map[string]any
+	err = yaml.Unmarshal(b, &deploy)
+	require.NoError(err)
+
+	renameHttpPort := func(con map[string]any) {
+		if ports, ok := con["ports"].([]map[string]any); ok {
+			for _, port := range ports {
+				if port["name"] == "http" {
+					port["name"] = "tm_http"
+				}
+			}
+		}
+	}
+
+	podTemplate := deploy["spec"].(map[string]any)["template"].(map[string]any)
+	podSpec := podTemplate["spec"].(map[string]any)
+	cons := podSpec["containers"].([]any)
+	for _, con := range cons {
+		renameHttpPort(con.(map[string]any))
+	}
+	podSpec["containers"] = append(cons, container)
+	podSpec["initContainers"] = []map[string]any{initContainer}
+	podSpec["volumes"] = volumes
+	podTemplate["metadata"].(map[string]any)["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
+
+	// Add the configmap entry by first retrieving the current config map
+	var cfgMap *core.ConfigMap
+	origCfgYaml, err := s.KubectlOut(ctx, "get", "configmap", agentconfig.ConfigMap, "-o", "yaml", "--context", "default")
+	if err != nil {
+		cfgMap = &core.ConfigMap{
+			TypeMeta: meta.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: "v1",
+			},
+			ObjectMeta: meta.ObjectMeta{
+				Name:      agentconfig.ConfigMap,
+				Namespace: s.AppNamespace(),
+			},
+		}
+		origCfgYaml = ""
+	} else {
+		require.NoError(yaml.Unmarshal([]byte(origCfgYaml), &cfgMap))
+	}
+	if cfgMap.Data == nil {
+		cfgMap.Data = make(map[string]string)
+	}
+	cfgMap.Data[ac.WorkloadName] = cfgEntry
+
+	cfgYaml := writeYaml(agentconfig.ConfigMap+".yaml", cfgMap)
+	require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml, "--context", "default"))
 	defer func() {
-		require.NoError(s.Kubectl(ctx, "delete", "-f", yamlFile, "--context", "default"))
+		if origCfgYaml == "" {
+			require.NoError(s.Kubectl(ctx, "delete", "configmap", agentconfig.ConfigMap, "--context", "default"))
+		} else {
+			// Restore original configmap
+			writeFile(cfgYaml, []byte(origCfgYaml))
+			require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml, "--context", "default"))
+		}
 	}()
-	require.NoError(s.RolloutStatusWait(ctx, "deploy/manual-inject"))
+
+	dplYaml := writeYaml("deployment.yaml", deploy)
+	require.NoError(s.Kubectl(ctx, "apply", "-f", dplYaml, "--context", "default"))
+	defer func() {
+		require.NoError(s.Kubectl(ctx, "delete", "-f", dplYaml, "--context", "default"))
+	}()
+
+	require.NoError(s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName))
 
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
-	require.Regexp(regexp.MustCompile(`.*manual-inject\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
+	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
 
-	itest.TelepresenceOk(ctx, "intercept", "manual-inject", "--namespace", s.AppNamespace(), "--port", "9094")
-	itest.TelepresenceOk(ctx, "leave", "manual-inject-"+s.AppNamespace())
+	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--namespace", s.AppNamespace(), "--port", "9094")
+	itest.TelepresenceOk(ctx, "leave", ac.WorkloadName+"-"+s.AppNamespace())
 }

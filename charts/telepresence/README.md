@@ -1,7 +1,7 @@
 # Telepresence
 
-[Telepresence](https://www.getambassador.io/products/telepresence/) is a tool 
-that allows for local development of microservices running in a remote 
+[Telepresence](https://www.getambassador.io/products/telepresence/) is a tool
+that allows for local development of microservices running in a remote
 Kubernetes cluster.
 
 This chart manages the server-side components of Telepresence so that an
@@ -24,60 +24,66 @@ Notable chart changes are listed in the [CHANGELOG](./CHANGELOG.md)
 
 The following tables lists the configurable parameters of the Ambassador chart and their default values.
 
-| Parameter                | Description                                                                                                             | Default                                                                                           |
-|--------------------------|-------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| image.registry         | The repository to download the image from. Set `TELEPRESENCE_REGISTRY=image.registry` locally if changing this value. | `docker.io/datawire`                                                                         |
-| image.name         | The name of the image to use for the traffic-manager                                                                      | `tel2`                                                                                            |
-| image.pullPolicy         | How the `Pod` will attempt to pull the image.                                                                           | `IfNotPresent`                                                                                    |
-| image.tag                | Override the version of the Traffic Manager to be installed.                                                            | `""` (Defined in `appVersion` Chart.yaml)                                                         |
-| image.imagePullSecrets   | The `Secret` storing any credentials needed to access the image in a private registry.                                  | `[]`                                                                                              |
-| podAnnotations           | Annotations for the Traffic Manager `Pod`                                                                               | `{}`                                                                                              |
-| podCIDRs                 | Verbatim list of CIDRs that the cluster uses for pods. Only valid together with `podCIDRStrategy: environment`                         | `[]`                                                                                           |
-| podCIDRStrategy          | Define the strategy that the traffic-manager uses to discover what CIDRs the cluster uses for pods                      | `auto`                                                                                           |
-| podSecurityContext       | The Kubernetes SecurityContext for the `Pod`                                                                            | `{}`                                                                                              |
-| securityContext          | The Kubernetes SecurityContext for the `Deployment`                                                                     | `{"readOnlyRootFilesystem": true, "runAsNonRoot": true, "runAsUser": 1000}`                       |
-| nodeSelector             | Define which `Node`s you want to the Traffic Manager to be deployed to.                                                 | `{}`                                                                                              |
-| tolerations              | Define tolerations for the Traffic Manager to ignore `Node` taints.                                                     | `[]`                                                                                              |
-| affinity                 | Define the `Node` Affinity and Anti-Affinity for the Traffic Manager.                                                   | `{}`                                                                                              |
-| service.type             | The type of `Service` for the Traffic Manager.                                                                          | `ClusterIP`                                                                                       |
-| resources                | Define resource requests and limits for the Traffic Manger.                                                             | `{}`                                                                                              |
-| logLevel                 | Define the logging level of the Traffic Manager                                                                         | `debug`                                                                                           |
-| systemaHost           | Host to be used for features requiring extensions (formerly the SYSTEMA_HOST environment variable)                         | `app.getambassador.io`                                                                            |
-| systemaPort           | Port to be used with the `systemaHost` for features requiring extensions (formerly the SYSTEMA_HOST environment variable)                                                                                                                               | `443`                                                                                             |
-| licenseKey.create        | Create the license key `volume` and `volumeMount`. **Only required for clusters without access to the internet.**       | `false`                                                                                           |
-| licenseKey.value         | The value of the license key.                                                                                           | `""`                                                                                              |
-| licenseKey.secret.create | Define whether you want the license key `Secret` to be managed by the release or not.                                   | `true`                                                                                            |
-| licenseKey.secret.name   | The name of the `Secret` that Traffic Manager will look for.                                                            | `systema-license`                                                                                 |
-| agentInjector.create   | Create the agentInjector objects that enables the traffic-manager deployment to act as a mutating webhook to add the agent to specified pods automatically (useful if you use GitOps style CD, like Argo).                                                                                                                                       | `true`                                                                                 |
-| agentInjector.name   | Name to use with objects associated with the agent-injector.                                                                 | `agent-injector`                                                                                 |
-| agentInjector.agentImage.registry | The registry for the injected agent image                                                                      |  `docker.io/datawire`                                                                             |
-| agentInjector.agentImage.name | The name of the injected agent image                                                                               |  `tel2`                                                                                           |
-| agentInjector.agentImage.tag | The tag for the injected agent image                                                                                |  `""` (Defined in `appVersion` Chart.yaml)                                                        |
-| agentInjector.appProtocolStrategy | The strategy to use when determining the application protocol to use for intercepts | `http2Probe` |
-| agentInjector.certificate.regenerate   | Define whether you want to regenerate certificate used for mutating webhook.                                                                             | `false`                                                                                 |
-| agentInjector.service.type   | Type of service for the agent-injector.                                                                             | `ClusterIP`                                                                                 |
-| agentInjector.secret.name  | The name of the secret the agent-injector webhook uses for authorization with the kubernetes api will expose.                                                                                                    | `mutator-webhook-tls`                                                                                        |
-| agentInjector.webhook.name  | The name of the agent-injector webhook                                                                           | `agent-injector-webhook`                                                                                        |
-| agentInjector.webhook.admissionReviewVersions:  | List of supported admissionReviewVersions.                                                                           | `["v1"]`                                                                                        |
-| agentInjector.webhook.servicePath:  | Path to the service that provides the admission webhook                                                                          | `/traffic-agent`                                                                                        |
-| agentInjector.webhook.port:  | Port for the service that provides the admission webhook                                                                          | `443`                                                                                        |
-| agentInjector.webhook.failurePolicy:  | Action to take on unexpected failure or timeout of webhook.                                                               | `Ignore`                                                                                        |
-| agentInjector.webhook.sideEffects:  | Any side effects the admission webhook makes outside of AdmissionReview.                                                                                                                                                        | `None`                                                                                        |
-| agentInjector.webhook.timeoutSeconds:  | Timeout of the admission webhook                                                                                       | `5`                                                                                        |
-| rbac.only                | Only create the RBAC resources and omit the traffic-manger.                                                             | `false`                                                                                           |
-| clientRbac.create              | Create RBAC resources for non-admin users with this release.                                                            | `false`                                                                                           |
-| clientRbac.subjects            | The user accounts to tie the created roles to.                                                                          | `{}`                                                                                              |
-| clientRbac.namespaced          | Restrict the users to specific namespaces.                                                                              | `false`                                                                                  |
-| clientRbac.namespaces          | The namespaces to give users access to.                                                                                 | `["ambassador"]`                                                                                           |
-| managerRbac.create              | Create RBAC resources for traffic-manager with this release.                                                           | `true`                                                                                            |
-| managerRbac.namespaced    | Whether the traffic manager should be restricted to specific namespaces                                                 | `false` |
-| managerRbac.namespaces    | Which namespaces the traffic manager should be restricted to                                                 | `[]` |
-| telepresenceAPI.port     | The port on agent's localhost where the Telepresence API server can be found                              | |
+| Parameter                                      | Description                                                                                                               | Default                                                                     |
+|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| image.registry                                 | The repository to download the image from. Set `TELEPRESENCE_REGISTRY=image.registry` locally if changing this value.     | `docker.io/datawire`                                                        |
+| image.name                                     | The name of the image to use for the traffic-manager                                                                      | `tel2`                                                                      |
+| image.pullPolicy                               | How the `Pod` will attempt to pull the image.                                                                             | `IfNotPresent`                                                              |
+| image.tag                                      | Override the version of the Traffic Manager to be installed.                                                              | `""` (Defined in `appVersion` Chart.yaml)                                   |
+| image.imagePullSecrets                         | The `Secret` storing any credentials needed to access the image in a private registry.                                    | `[]`                                                                        |
+| podAnnotations                                 | Annotations for the Traffic Manager `Pod`                                                                                 | `{}`                                                                        |
+| podCIDRs                                       | Verbatim list of CIDRs that the cluster uses for pods. Only valid together with `podCIDRStrategy: environment`            | `[]`                                                                        |
+| dnsServiceName                                 | The name of the DNS Service within the cluster to add to the list of Services the DNS auto-detecting logic searches for   | `coredns`
+| dnsServiceNamespace                            | The namespace where the DNS service speficied in `dnsServiceName` resides in                                              | `kube-system`
+| dnsServiceIP                                   | Fallback IP to use for DNS in the event auto-detection fails                                                              | `""`
+| podCIDRStrategy                                | Define the strategy that the traffic-manager uses to discover what CIDRs the cluster uses for pods                        | `auto`                                                                      |
+| podSecurityContext                             | The Kubernetes SecurityContext for the `Pod`                                                                              | `{}`                                                                        |
+| securityContext                                | The Kubernetes SecurityContext for the `Deployment`                                                                       | `{"readOnlyRootFilesystem": true, "runAsNonRoot": true, "runAsUser": 1000}` |
+| nodeSelector                                   | Define which `Node`s you want to the Traffic Manager to be deployed to.                                                   | `{}`                                                                        |
+| tolerations                                    | Define tolerations for the Traffic Manager to ignore `Node` taints.                                                       | `[]`                                                                        |
+| affinity                                       | Define the `Node` Affinity and Anti-Affinity for the Traffic Manager.                                                     | `{}`                                                                        |
+| priorityClassName                              | Name of the existing priority class to be used                                                                            | `""`                                                                        |
+| service.type                                   | The type of `Service` for the Traffic Manager.                                                                            | `ClusterIP`                                                                 |
+| resources                                      | Define resource requests and limits for the Traffic Manger.                                                               | `{}`                                                                        |
+| logLevel                                       | Define the logging level of the Traffic Manager                                                                           | `debug`                                                                     |
+| systemaHost                                    | Host to be used for features requiring extensions (formerly the SYSTEMA_HOST environment variable)                        | `app.getambassador.io`                                                      |
+| systemaPort                                    | Port to be used with the `systemaHost` for features requiring extensions (formerly the SYSTEMA_HOST environment variable) | `443`                                                                       |
+| httpsProxy.rootCATLSSecret                     | The TLS Secret to use when the traffic manager is behind a proxy. Should contain the root CA for the proxy                | `""`                                                                        |
+| licenseKey.create                              | Create the license key `volume` and `volumeMount`. **Only required for clusters without access to the internet.**         | `false`                                                                     |
+| licenseKey.value                               | The value of the license key.                                                                                             | `""`                                                                        |
+| licenseKey.secret.create                       | Define whether you want the license key `Secret` to be managed by the release or not.                                     | `true`                                                                      |
+| licenseKey.secret.name                         | The name of the `Secret` that Traffic Manager will look for.                                                              | `systema-license`                                                           |
+| agentInjector.name                             | Name to use with objects associated with the agent-injector.                                                              | `agent-injector`                                                            |
+| agentInjector.agentImage.registry              | The registry for the injected agent image                                                                                 | `docker.io/datawire`                                                        |
+| agentInjector.agentImage.name                  | The name of the injected agent image                                                                                      | `""`                                                                        |
+| agentInjector.agentImage.tag                   | The tag for the injected agent image                                                                                      | `""` (Defined in `appVersion` Chart.yaml)                                   |
+| agentInjector.appProtocolStrategy              | The strategy to use when determining the application protocol to use for intercepts                                       | `http2Probe`                                                                |
+| agentInjector.certificate.regenerate           | Define whether you want to regenerate certificate used for mutating webhook.                                              | `false`                                                                     |
+| agentInjector.injectPolicy                     | Determines when an agent is injected, possible values are `OnDemand` and `WhenEnabled`                                    | `OnDemand`                                                                  |
+| agentInjector.service.type                     | Type of service for the agent-injector.                                                                                   | `ClusterIP`                                                                 |
+| agentInjector.secret.name                      | The name of the secret the agent-injector webhook uses for authorization with the kubernetes api will expose.             | `mutator-webhook-tls`                                                       |
+| agentInjector.webhook.name                     | The name of the agent-injector webhook                                                                                    | `agent-injector-webhook`                                                    |
+| agentInjector.webhook.admissionReviewVersions: | List of supported admissionReviewVersions.                                                                                | `["v1"]`                                                                    |
+| agentInjector.webhook.servicePath:             | Path to the service that provides the admission webhook                                                                   | `/traffic-agent`                                                            |
+| agentInjector.webhook.port:                    | Port for the service that provides the admission webhook                                                                  | `443`                                                                       |
+| agentInjector.webhook.reinvocationPolicy:      | Specify if the webhook may be called again after the initial webhook call. Possible values are `Never` and `IfNeeded`.    | `Never`                                                                     |
+| agentInjector.webhook.failurePolicy:           | Action to take on unexpected failure or timeout of webhook.                                                               | `Ignore`                                                                    |
+| agentInjector.webhook.sideEffects:             | Any side effects the admission webhook makes outside of AdmissionReview.                                                  | `None`                                                                      |
+| agentInjector.webhook.timeoutSeconds:          | Timeout of the admission webhook                                                                                          | `5`                                                                         |
+| rbac.only                                      | Only create the RBAC resources and omit the traffic-manger.                                                               | `false`                                                                     |
+| clientRbac.create                              | Create RBAC resources for non-admin users with this release.                                                              | `false`                                                                     |
+| clientRbac.subjects                            | The user accounts to tie the created roles to.                                                                            | `{}`                                                                        |
+| clientRbac.namespaced                          | Restrict the users to specific namespaces.                                                                                | `false`                                                                     |
+| clientRbac.namespaces                          | The namespaces to give users access to.                                                                                   | `["ambassador"]`                                                            |
+| managerRbac.create                             | Create RBAC resources for traffic-manager with this release.                                                              | `true`                                                                      |
+| managerRbac.namespaced                         | Whether the traffic manager should be restricted to specific namespaces                                                   | `false`                                                                     |
+| managerRbac.namespaces                         | Which namespaces the traffic manager should be restricted to                                                              | `[]`                                                                        |
+| telepresenceAPI.port                           | The port on agent's localhost where the Telepresence API server can be found                                              |                                                                             |
 
 
-## License Key 
+## License Key
 
-Telepresence can create TCP intercepts without a license key. Creating 
+Telepresence can create TCP intercepts without a license key. Creating
 intercepts based on HTTP headers requires a license key from the Ambassador
 Cloud.
 
@@ -106,14 +112,14 @@ mounted in the Traffic Manager, regardless of it it is created by the chart
 
 ## RBAC
 
-Telepresence requires a cluster for installation but restricted RBAC roles can 
+Telepresence requires a cluster for installation but restricted RBAC roles can
 be used to give users access to create intercepts if they are not cluster
 admins.
 
 The chart gives you the ability to create these RBAC roles for your users and
 give access to the entire cluster or restrict to certain namespaces.
 
-You can also create a separate release for managing RBAC by setting 
+You can also create a separate release for managing RBAC by setting
 `Values.rbac.only: true`.
 
 ## Namespace-scoped traffic manager

@@ -2,6 +2,7 @@ package managerutil_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -29,16 +30,19 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := managerutil.Env{
-		User:            "",
-		ServerHost:      "",
-		ServerPort:      "8081",
-		SystemAHost:     "app.getambassador.io",
-		SystemAPort:     "443",
-		AgentRegistry:   "docker.io/datawire",
-		AgentImage:      "tel2:" + strings.TrimPrefix(version.Version, "v"),
-		AgentPort:       9900,
-		MaxReceiveSize:  resource.MustParse("4Mi"),
-		PodCIDRStrategy: "auto",
+		User:                "",
+		ServerHost:          "",
+		ServerPort:          "8081",
+		SystemAHost:         "app.getambassador.io",
+		SystemAPort:         "443",
+		AgentRegistry:       "docker.io/datawire",
+		AgentImage:          "",
+		AgentPort:           9900,
+		MaxReceiveSize:      resource.MustParse("4Mi"),
+		PodCIDRStrategy:     "auto",
+		DNSServiceName:      "coredns",
+		DNSServiceNamespace: "kube-system",
+		LogLevel:            "info",
 	}
 
 	testcases := map[string]struct {
@@ -79,6 +83,8 @@ func TestEnvconfig(t *testing.T) {
 			assert.Nil(err)
 			actual := managerutil.GetEnv(ctx)
 			assert.Equal(&expected, actual)
+			assert.Equal(fmt.Sprintf("%s/tel2:%s", actual.AgentRegistry, strings.TrimPrefix(version.Version, "v")),
+				actual.QualifiedAgentImage())
 		})
 	}
 }

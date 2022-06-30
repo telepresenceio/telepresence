@@ -14,7 +14,7 @@ import (
 type tbWrapper struct {
 	testing.TB
 	level  dlog.LogLevel
-	fields map[string]interface{}
+	fields map[string]any
 }
 
 type tbWriter struct {
@@ -36,10 +36,10 @@ func (w *tbWrapper) StdLogger(l dlog.LogLevel) *log.Logger {
 	return log.New(&tbWriter{tbWrapper: w, l: l}, "", 0)
 }
 
-func (w *tbWrapper) WithField(key string, value interface{}) dlog.Logger {
+func (w *tbWrapper) WithField(key string, value any) dlog.Logger {
 	ret := tbWrapper{
 		TB:     w.TB,
-		fields: make(map[string]interface{}, len(w.fields)+1),
+		fields: make(map[string]any, len(w.fields)+1),
 	}
 	for k, v := range w.fields {
 		ret.fields[k] = v
@@ -53,10 +53,20 @@ func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
 		return
 	}
 	w.Helper()
+	w.UnformattedLog(level, msg)
+}
+
+func (w *tbWrapper) UnformattedLog(level dlog.LogLevel, args ...any) {
+	if level > w.level {
+		return
+	}
+	w.Helper()
 	sb := strings.Builder{}
 	sb.WriteString(time.Now().Format("15:04:05.0000"))
-	sb.WriteString(" ")
-	sb.WriteString(msg)
+	for _, arg := range args {
+		sb.WriteString(" ")
+		fmt.Fprint(&sb, arg)
+	}
 
 	if len(w.fields) > 0 {
 		parts := make([]string, 0, len(w.fields))
@@ -73,4 +83,20 @@ func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
 		}
 	}
 	w.TB.Log(sb.String())
+}
+
+func (w *tbWrapper) UnformattedLogf(level dlog.LogLevel, format string, args ...any) {
+	if level > w.level {
+		return
+	}
+	w.Helper()
+	w.Log(level, fmt.Sprintf(format, args...))
+}
+
+func (w *tbWrapper) UnformattedLogln(level dlog.LogLevel, args ...any) {
+	if level > w.level {
+		return
+	}
+	w.Helper()
+	w.Log(level, fmt.Sprintln(args...))
 }
