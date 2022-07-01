@@ -188,7 +188,7 @@ func NewConfigPodd(c context.Context, flagMap map[string]string) (*Config, error
 		Server:      restConfig.Host,
 		flagMap:     flagMap,
 		ConfigFlags: configFlags,
-		config:      restConfig,
+		RestConfig:  restConfig,
 		// it may be empty, but we should avoid nil deref
 		kubeconfigExtension: kubeconfigExtension{
 			Manager: &managerConfig{
