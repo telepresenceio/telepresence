@@ -52,6 +52,10 @@ affinity: {}
 ##
 priorityClassName: ""
 
+## The default registry to pull misc images
+tools:
+   registry: docker.io
+
 ################################################################################
 ## Traffic Manager Service Configuration
 ################################################################################

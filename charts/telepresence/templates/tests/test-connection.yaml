@@ -11,7 +11,7 @@ metadata:
 spec:
   containers:
     - name: wget
-      image: busybox
+      image: "{{ .Values.tools.registry }}/busybox"
       command: ['wget']
       args: ['{{ include "telepresence.fullname" . }}:8081']
   restartPolicy: Never

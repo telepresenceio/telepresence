@@ -27,7 +27,7 @@ spec:
         - name: upgrade-legacy
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "curlimages/curl"
+          image: "{{ .Values.tools.registry }}/curlimages/curl"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
             - name: secret-volume
