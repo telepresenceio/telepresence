@@ -42,6 +42,7 @@ func main() {
 		ctx := log.MakeBaseLogger(context.Background(), logLevel)
 		if name == "agent" {
 			logLevel = agent.GetLogLevel(ctx)
+			ctx = log.MakeBaseLogger(context.Background(), logLevel)
 		}
 
 		if err := cmd(ctx, args...); err != nil {
