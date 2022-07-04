@@ -25,11 +25,17 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
+      securityContext:
+        {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
       restartPolicy: Never
       containers:
         - name: uninstall-agents
           securityContext:
+            {{- if .Values.hooks.securityContext }}
+            {{- toYaml .Values.hooks.securityContext | nindent 12 }}
+            {{- else }}
             {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- end }}
           image: curlimages/curl
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
@@ -38,6 +44,8 @@ spec:
           env:
             - name: CURL_CA_BUNDLE
               value: /secret/ca.crt
+          resources:
+            {{- toYaml .Values.hooks.resources | nindent 12 }}
           command:
             - sh
             - -c
