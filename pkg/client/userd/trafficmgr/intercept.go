@@ -342,15 +342,6 @@ func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
 	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
 }
 
-func imageVersion(image string) *semver.Version {
-	if cp := strings.LastIndexByte(image, ':'); cp > 0 {
-		if v, err := semver.Parse(image[cp+1:]); err == nil {
-			return &v
-		}
-	}
-	return nil
-}
-
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
