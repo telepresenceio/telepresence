@@ -6,7 +6,7 @@
 
 - Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
 
-- Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers in every preview page request
+- Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers  in every preview page request
 
 ### 2.6.8 (June 23, 2022)
 

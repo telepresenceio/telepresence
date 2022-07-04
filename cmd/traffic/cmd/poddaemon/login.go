@@ -3,6 +3,7 @@ package poddaemon
 import (
 	"context"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 )
 
@@ -12,6 +13,8 @@ import (
 type loginExecutor struct {
 	key string
 }
+
+var _ auth.LoginExecutor = loginExecutor{}
 
 func (loginExecutor) Worker(ctx context.Context) error {
 	panic("not implemented")
@@ -38,5 +41,13 @@ func (loginExecutor) GetLicense(ctx context.Context, id string) (string, string,
 }
 
 func (loginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error) {
+	panic("not implemented")
+}
+
+func (loginExecutor) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
+	panic("not implemented")
+}
+
+func (loginExecutor) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {
 	panic("not implemented")
 }
