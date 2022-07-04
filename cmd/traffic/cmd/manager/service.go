@@ -597,10 +597,10 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 			defer cancel()
 			var resp *systema.CreateDomainResponse
 			resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
-				InterceptId:   intercept.Id,
-				DisplayBanner: action.AddPreviewDomain.DisplayBanner,
-				InterceptSpec: intercept.Spec,
-				Host:          action.AddPreviewDomain.Ingress.L5Host,
+				InterceptId:       intercept.Id,
+				DisplayBanner:     action.AddPreviewDomain.DisplayBanner,
+				InterceptSpec:     intercept.Spec,
+				Host:              action.AddPreviewDomain.Ingress.L5Host,
 				PullRequestUrl:    action.AddPreviewDomain.PullRequestUrl,
 				AddRequestHeaders: action.AddPreviewDomain.AddRequestHeaders,
 			})
@@ -870,19 +870,3 @@ func (m *Manager) expire(ctx context.Context) {
 	now := m.clock.Now()
 	m.state.ExpireSessions(ctx, now.Add(-clientSessionTTL), now.Add(-agentSessionTTL))
 }
-Footer
-© 2022 GitHub, Inc.
-Footer navigation
-
-    Terms
-    Privacy
-    Security
-    Status
-    Docs
-    Contact GitHub
-    Pricing
-    API
-    Training
-    Blog
-    About
-

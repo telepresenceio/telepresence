@@ -172,7 +172,7 @@
 
 - Bugfix: The root daemon will no longer get into a bad state when a disconnect is rapidly followed by a new connect.
 
-- Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces  explicitly mapped
+- Bugfix: The client will now only watch agents from accessible namespaces, and is also constrained to namespaces explicitly mapped
   using the `connect` command's `--mapped-namespaces` flag.
 
 - Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
