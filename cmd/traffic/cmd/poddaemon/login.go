@@ -3,7 +3,6 @@ package poddaemon
 import (
 	"context"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 )
 
@@ -13,8 +12,6 @@ import (
 type loginExecutor struct {
 	key string
 }
-
-var _ auth.LoginExecutor = loginExecutor{}
 
 func (loginExecutor) Worker(ctx context.Context) error {
 	panic("not implemented")
