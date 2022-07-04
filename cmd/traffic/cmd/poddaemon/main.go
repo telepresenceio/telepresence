@@ -70,7 +70,7 @@ func Main(ctx context.Context, argStrs ...string) error {
 				args.PreviewSpec.Ingress.L5Host = args.PreviewSpec.Ingress.Host
 			}
 
-			return main(cmd.Context(), args)
+			return main(cmd.Context(), &args)
 		},
 		SilenceErrors: true, // main() will handle it after we return from .ExecuteContext()
 		SilenceUsage:  true, // our FlagErrorFunc will handle it
@@ -121,7 +121,7 @@ func Main(ctx context.Context, argStrs ...string) error {
 }
 
 // main in mostly mimics pkg/client/userd.run(), but is trimmed down for running in a Pod.
-func main(ctx context.Context, args Args) error {
+func main(ctx context.Context, args *Args) error {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)

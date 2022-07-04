@@ -410,11 +410,9 @@ func (es *CLIFlagState) MechanismArgs() ([]string, error) {
 }
 
 func mechanismFlagSetToArgs(mechdata MechanismInfo, flagset *pflag.FlagSet, prefix string) []string {
-	var flagnames []string
-	i := 0
+	flagnames := make([]string, 0, len(mechdata.Flags))
 	for flagname := range mechdata.Flags {
-		flagnames[i] = flagname
-		i += 1
+		flagnames = append(flagnames, flagname)
 	}
 	sort.Strings(flagnames)
 
