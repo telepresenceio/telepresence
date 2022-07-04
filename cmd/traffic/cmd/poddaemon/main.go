@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/spf13/cobra"
 
 	rpc_userd "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc_manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
