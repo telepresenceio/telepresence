@@ -16,7 +16,9 @@ tmpdir=$(mktemp -d)
 go run "$TOP_DIR/packaging/gen_chart.go" "$tmpdir"
 
 package_file=("$tmpdir"/telepresence-*.tgz)
-echo "PACKAGE_FILE is here: ${package_file}"
+for f in "${package_file[@]}"; do
+    echo "PACKAGE_FILE is here: $f"
+done
 
 bucket=${AWS_BUCKET:-datawire-static-files}
 prefix=${BUCKET_DIR:-charts-dev}
@@ -50,7 +52,7 @@ echo "Pushing ${prefix}/${package_file##*/}"
 aws s3api put-object \
     --bucket "$bucket" \
     --key "${prefix}/${package_file##*/}" \
-    --body "$package_file"
+    --body "${package_file[0]}"
 echo "Successfully pushed ${prefix}/${package_file##*/}"
 
 # Clean up
