@@ -18,7 +18,7 @@ executors:
 
   "vm-linux":
     machine:
-      image: "ubuntu-2004:202010-01"
+      image: "ubuntu-2204:2022.04.2"
 
   "vm-macos":
     macos:
@@ -63,7 +63,7 @@ jobs:
             docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
       - run:
           name: Push Images
-          command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-multi-arch-images
       - run:
           name: "Publish linux (arch amd64)"
           command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable

@@ -24,6 +24,9 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
+DOCKER_BUILDER       ?= buildx-multi-arch
+DOCKER_BUILD_COMMAND ?= docker build
+
 # Build statically on linux platforms so that the binary can be used in
 # alpine containers and the like, where libc is different.
 ifeq ($(GOHOSTOS),linux)
@@ -124,15 +127,34 @@ endif
 build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
 	git restore pkg/install/helm/telepresence-chart.tgz
 
+.PHONY: prepare-buildx
+prepare-buildx: ## Create buildx builder for multi-arch build, if not exists
+	docker buildx inspect $(DOCKER_BUILDER) || docker buildx create --name=$(BUILDER) --driver=docker-container --driver-opt=network=host
+
+.PHONY: tel2-base-multi-arch
+tel2-base-multi-arch: DOCKER_BUILD_COMMAND=docker buildx build --platform=linux/amd64,linux/arm64
+tel2-base-multi-arch: prepare-buildx tel2-base
+
+.PHONY: tel2-multi-arch
+tel2-multi-arch: DOCKER_BUILD_COMMAND=docker buildx build --platform=linux/amd64,linux/arm64
+tel2-multi-arch: prepare-buildx tel2
+
 .PHONY: tel2-base tel2
 tel2-base tel2:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
-	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
+	$(DOCKER_BUILD_COMMAND) --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
 
 .PHONY: push-image
-push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
+push-image: tel2 _push-image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
+
+.PHONY: push-multi-arch-image
+push-multi-arch-image: tel2-multi-arch _push-image ## (Build) Push the manager/agent multi-arch container image to $(TELEPRESENCE_REGISTRY)
+
+.PHONY: _push-image
+_push-image:
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+
 
 tel2-image: tel2
 	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
@@ -284,8 +306,9 @@ install: build ## (Install) Installs the telepresence binary to $(bindir)
 # Aliases
 # =======
 
-.PHONY: all test images push-images
-all:         build image     ## (ZAlias) Alias for 'build image'
-test:        check-all       ## (ZAlias) Alias for 'check-all'
-images:      image           ## (ZAlias) Alias for 'image'
-push-images: push-image      ## (ZAlias) Alias for 'push-image'
+.PHONY: all test images push-images push-images-multi-arch
+all:                    build image           ## (ZAlias) Alias for 'build image'
+test:                   check-all             ## (ZAlias) Alias for 'check-all'
+images:                 image                 ## (ZAlias) Alias for 'image'
+push-images:            push-image            ## (ZAlias) Alias for 'push-image'
+push-multi-arch-images: push-multi-arch-image ## (ZAlias) Alias for 'push-multi-arch-image'

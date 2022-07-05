@@ -6,6 +6,8 @@
 
 - Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
 
+- Feature: The Docker image is built on both amd64 and arm64 architectures
+
 ### 2.6.8 (June 23, 2022)
 
 - Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
