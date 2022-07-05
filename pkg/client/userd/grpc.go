@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
@@ -478,11 +479,23 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Use: "fauxmand",
 		}
 		cli.AddCommandGroups(cmd, s.getCommands())
-		cmd.SetArgs(req.GetOsArgs())
+		args := req.GetOsArgs()
+		cmd, args, err = cmd.Find(args)
+		if err != nil {
+			return
+		}
+		cmd.SetArgs(args)
 		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
-		err = cmd.ExecuteContext(ctx)
+
+		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
+			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(ctx context.Context, s trafficmgr.Session) error {
+				return cmd.ExecuteContext(ctx)
+			})
+		} else {
+			err = cmd.ExecuteContext(ctx)
+		}
 		if err != nil {
 			return
 		}
@@ -491,7 +504,7 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Stderr: errW.Bytes(),
 		}
 	})
-	return
+	return result, err
 }
 
 func (s *service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
