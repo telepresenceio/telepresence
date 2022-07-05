@@ -158,7 +158,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 }
 
 // This represents an inClusterConfig
-func NewConfigPodd(c context.Context, flagMap map[string]string) (*Config, error) {
+func NewConfigInCluster(c context.Context, flagMap map[string]string) (*Config, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")

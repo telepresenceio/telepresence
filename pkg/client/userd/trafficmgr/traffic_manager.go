@@ -63,8 +63,7 @@ type WatchWorkloadsStream interface {
 
 type Session interface {
 	restapi.AgentState
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-	AddPoddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest, bool) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
@@ -315,7 +314,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	var config *k8s.Config
 	var err error
 	if cr.Podd != nil && *cr.Podd {
-		config, err = k8s.NewConfigPodd(c, cr.KubeFlags)
+		config, err = k8s.NewConfigInCluster(c, cr.KubeFlags)
 	} else {
 		config, err = k8s.NewConfig(c, cr.KubeFlags)
 	}
@@ -815,7 +814,7 @@ func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest
 	var config *k8s.Config
 	var err error
 	if cr.Podd != nil && *cr.Podd {
-		config, err = k8s.NewConfigPodd(c, cr.KubeFlags)
+		config, err = k8s.NewConfigInCluster(c, cr.KubeFlags)
 	} else {
 		config, err = k8s.NewConfig(c, cr.KubeFlags)
 	}
