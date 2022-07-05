@@ -244,7 +244,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		s.scout.Report(c, action, entries...)
 	}()
 	err = s.withSession(c, "CreateIntercept", func(c context.Context, session trafficmgr.Session) error {
-		result, err = session.AddIntercept(c, ir)
+		result, err = session.AddIntercept(c, ir, false)
 		return err
 	})
 	return
@@ -262,7 +262,7 @@ func (s *Service) CreatePoddIntercept(c context.Context, ir *rpc.CreateIntercept
 		s.scout.Report(c, action, entries...)
 	}()
 	err = s.withSession(c, "CreatePoddIntercept", func(c context.Context, session trafficmgr.Session) error {
-		result, err = session.AddPoddIntercept(c, ir)
+		result, err = session.AddIntercept(c, ir, true)
 		return err
 	})
 	return

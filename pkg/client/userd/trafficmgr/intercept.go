@@ -477,7 +477,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 }
 
 // AddIntercept adds one intercept
-func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest, isPodd bool) (result *rpc.InterceptResult, err error) {
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
 	if result != nil && result.Error != rpc.InterceptError_UNSPECIFIED {
@@ -529,9 +529,9 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	spec.ServiceUid = result.ServiceUid
 	spec.WorkloadKind = result.WorkloadKind
-
 	deleteMount := false
-	if ir.MountPoint != "" {
+
+	if ir.MountPoint != "" && !isPodd {
 		// Ensure that the mount-point is free to use
 		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
 			return interceptError(rpc.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
@@ -718,13 +718,15 @@ func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInte
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
-			mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
-			if mountPoint != "" && ii.SftpPort > 0 {
-				deleteMount = false // Mount-point is busy until intercept ends
-				ii.ClientMountPoint = mountPoint
+			if !isPodd {
+				mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
+				if mountPoint != "" && ii.SftpPort > 0 {
+					deleteMount = false // Mount-point is busy until intercept ends
+					ii.ClientMountPoint = mountPoint
+				}
+				success = true
+				return result, nil
 			}
-			success = true
-			return result, nil
 		}
 	}
 }
