@@ -582,6 +582,13 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			}
 		}()
 	}
+
+	apiKey, err := tm.getCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
+	if err != nil {
+		if !errors.Is(err, auth.ErrNotLoggedIn) {
+			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
+		}
+	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
@@ -591,34 +598,21 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
-	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel
+	waitCh := make(chan interceptResult)
 	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
-	defer func() {
-		if wc, loaded := tm.activeInterceptsWaiters.LoadAndDelete(spec.Name); loaded {
-			close(wc.(chan interceptResult))
-		}
-	}()
+	defer tm.activeInterceptsWaiters.Delete(spec.Name)
 
-	var ii *manager.InterceptInfo
-	ii, err = tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
-		ApiKey:        svcProps.apiKey,
+		ApiKey:        apiKey,
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		err = client.CheckTimeout(c, err)
-		code := grpcCodes.Internal
-		if errors.Is(err, context.DeadlineExceeded) {
-			code = grpcCodes.DeadlineExceeded
-		} else if errors.Is(err, context.Canceled) {
-			code = grpcCodes.Canceled
-		}
-		return nil, grpcStatus.Error(code, err.Error())
+		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
 	}
-
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
-
 	success := false
 	defer func() {
 		if !success {

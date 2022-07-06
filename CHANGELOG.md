@@ -23,6 +23,8 @@
 - Bugfix: Telepresence no longer fails to inject the traffic agent into the pod generated for workloads that have no
   volumes and `automountServiceAccountToken: false`.
 
+- Feature: The helm-chart now supports settings resources, securityContext and podSecurityContext for use with chart hooks.
+
 ### 2.6.7 (June 22, 2022)
 
 - Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
@@ -177,6 +179,9 @@
 
 - Bugfix: The `gather-logs` command will only gather traffic-agent logs from accessible namespaces, and is also constrained to namespaces
   explicitly mapped using the `connect` command's `--mapped-namespaces` flag.
+### 2.5.5 (TBD)
+
+- Feature: The flag `--preview-url-add-request-headers` can be used to inject key value pair headers in every preview page request
 
 ### 2.5.4 (March 29, 2022)
 

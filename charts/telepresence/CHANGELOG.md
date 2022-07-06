@@ -1,5 +1,9 @@
 # Change Log
 
+### 2.6.8 (TBD)
+
+- Feature: The helm-chart now supports settings resources, securityContext and podSecurityContext for use with chart hooks.
+
 ### v2.3.3-rc.0
 
 - Feature: Add AgentInjectorWebhook yaml files, newly introduced in 2.3.1.

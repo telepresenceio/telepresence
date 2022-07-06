@@ -8,6 +8,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
+const (
+	CommandRequiresSession = "cobra.telepresence.io/with-session"
+)
+
 // GetCommands will return all commands implemented by the connector daemon.
 func GetCommands() cliutil.CommandGroups {
 	return cliutil.CommandGroups{}

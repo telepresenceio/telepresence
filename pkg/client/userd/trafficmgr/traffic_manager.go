@@ -186,7 +186,7 @@ type interceptResult struct {
 // TODO: Change to released version
 var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
 
-func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (Session, *connector.ConnectInfo) {
+func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (context.Context, Session, *connector.ConnectInfo) {
 	dlog.Info(c, "-- Starting new session")
 	sr.Report(c, "connect")
 	var rootDaemon daemon.DaemonClient
@@ -202,7 +202,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	cluster, err := connectCluster(c, cr)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
-		return nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+		return c, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	dlog.Infof(c, "Connected to context %s (%s)", cluster.Context, cluster.Server)
 
@@ -223,7 +223,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
-		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+		return c, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 
 	tmgr.sessionServices = extraServices
@@ -244,31 +244,30 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	if cr.Podd != nil && !*(cr.Podd) {
 		oi := tmgr.getOutboundInfo(c)
 
-		dlog.Debug(c, "Connecting to root daemon")
-		var rootStatus *daemon.DaemonStatus
-		for attempt := 1; ; attempt++ {
-			if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
-				dlog.Errorf(c, "failed to connect to root daemon: %v", err)
-				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-			}
-			oc := rootStatus.OutboundConfig
-			if oc == nil || oc.Session == nil {
-				// This is an internal error. Something is wrong with the root daemon.
-				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
-			}
-			if oc.Session.SessionId == oi.Session.SessionId {
-				break
-			}
+	dlog.Debug(c, "Connecting to root daemon")
+	var rootStatus *daemon.DaemonStatus
+	for attempt := 1; ; attempt++ {
+		if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
+			dlog.Errorf(c, "failed to connect to root daemon: %v", err)
+			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
+		oc := rootStatus.OutboundConfig
+		if oc == nil || oc.Session == nil {
+			// This is an internal error. Something is wrong with the root daemon.
+			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
+		}
+		if oc.Session.SessionId == oi.Session.SessionId {
+			break
+		}
 
-			// Root daemon was running an old session. This indicates that this daemon somehow
-			// crashed without disconnecting. So let's do that now, and then reconnect...
-			if attempt == 2 {
-				// ...or not, since we've already done it.
-				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
-			}
-			if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
-				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
-			}
+		// Root daemon was running an old session. This indicates that this daemon somehow
+		// crashed without disconnecting. So let's do that now, and then reconnect...
+		if attempt == 2 {
+			// ...or not, since we've already done it.
+			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
+		}
+		if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
+			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
 		}
 		dlog.Debug(c, "Connected to root daemon")
 		tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
@@ -287,7 +286,8 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		SessionInfo:    tmgr.session(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
 	}
-	return tmgr, ret
+	c = WithSession(c, tmgr)
+	return c, tmgr, ret
 }
 
 func (tm *TrafficManager) RemainWithToken(ctx context.Context) error {
@@ -454,18 +454,16 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:           ti.(*installer),
-		installID:           installID,
-		userAndHost:         userAndHost,
-		getCloudAPIKey:      svc.LoginExecutor().GetCloudAPIKey,
-		managerClient:       mClient,
-		managerConn:         conn,
-		managerVersion:      managerVersion,
-		sessionInfo:         si,
-		rootDaemon:          rootDaemon,
-		localIntercepts:     map[string]string{},
-		currentInterceptors: map[string]int{},
-		wlWatcher:           newWASWatcher(),
+		installer:       ti.(*installer),
+		installID:       installID,
+		userAndHost:     userAndHost,
+		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
+		managerClient:   mClient,
+		managerConn:     conn,
+		sessionInfo:     si,
+		localIntercepts: map[string]string{},
+		wlWatcher:       newWASWatcher(),
+		managerVersion:  managerVersion,
 	}, nil
 }
 
