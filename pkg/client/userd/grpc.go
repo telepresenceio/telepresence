@@ -252,7 +252,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 
 func (s *Service) CreatePoddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	defer func() {
-		entries, ok := scoutInterceptEntries(ir.Spec, result, err)
+		entries, ok := s.scoutInterceptEntries(ir.Spec, result, err)
 		var action string
 		if ok {
 			action = "connector_create_intercept_success"

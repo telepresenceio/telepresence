@@ -454,17 +454,16 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:   ti.(*installer),
-		installID:   installID,
-		userAndHost: userAndHost,
-		getCloudAPIKey: func(ctx context.Context, desc string, autoLogin bool) (string, error) {
-			return auth.GetCloudAPIKey(ctx, svc.LoginExecutor(), desc, autoLogin)
-		},
+		installer:       ti.(*installer),
+		installID:       installID,
+		userAndHost:     userAndHost,
+		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
 		managerClient:   mClient,
 		managerConn:     conn,
 		sessionInfo:     si,
 		localIntercepts: map[string]string{},
 		wlWatcher:       newWASWatcher(),
+		managerVersion:  managerVersion,
 	}, nil
 }
 

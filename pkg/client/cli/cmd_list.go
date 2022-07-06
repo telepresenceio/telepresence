@@ -41,10 +41,7 @@ func xlistCommand() *cobra.Command {
 				if err := watchClient.CloseSend(); err != nil {
 					return err
 				}
-
-				for _, intercept := range snapshot.Intercepts {
-					fmt.Println(DescribeIntercept(intercept, nil, true))
-				}
+				fmt.Println(DescribeIntercepts(snapshot.Intercepts, nil, true))
 
 				return nil
 			})
