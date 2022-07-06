@@ -64,6 +64,7 @@ type WatchWorkloadsStream interface {
 type Session interface {
 	restapi.AgentState
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
+	AddPoddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
@@ -190,9 +191,13 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	dlog.Info(c, "-- Starting new session")
 	sr.Report(c, "connect")
 
-	rootDaemon, err := svc.RootDaemonClient(c)
-	if err != nil {
-		return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+	var rootDaemon daemon.DaemonClient
+	var err error
+	if cr.Podd != nil && !*(cr.Podd) {
+		rootDaemon, err = svc.RootDaemonClient(c)
+		if err != nil {
+			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
 	}
 
 	dlog.Info(c, "Connecting to k8s cluster...")
@@ -206,10 +211,12 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	// Phone home with the information about the size of the cluster
 	c = cluster.WithK8sInterface(c)
 	sr.SetMetadatum(c, "cluster_id", cluster.GetClusterId(c))
-	sr.Report(c, "connecting_traffic_manager", scout.Entry{
-		Key:   "mapped_namespaces",
-		Value: len(cr.MappedNamespaces),
-	})
+	if cr.Podd != nil && !*(cr.Podd) {
+		sr.Report(c, "connecting_traffic_manager", scout.Entry{
+			Key:   "mapped_namespaces",
+			Value: len(cr.MappedNamespaces),
+		})
+	}
 
 	connectStart := time.Now()
 
@@ -235,37 +242,38 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	}
 	svc.SetManagerClient(tmgr.managerClient, opts...)
 
-	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	oi := tmgr.getOutboundInfo(c)
+	// Tell daemon what it needs to know in order to establish outbount traffic to the cluster
+	if cr.Podd != nil && !*(cr.Podd) {
+		oi := tmgr.getOutboundInfo(c)
 
-	dlog.Debug(c, "Connecting to root daemon")
-	var rootStatus *daemon.DaemonStatus
-	for attempt := 1; ; attempt++ {
-		if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
-			dlog.Errorf(c, "failed to connect to root daemon: %v", err)
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-		}
-		oc := rootStatus.OutboundConfig
-		if oc == nil || oc.Session == nil {
-			// This is an internal error. Something is wrong with the root daemon.
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
-		}
-		if oc.Session.SessionId == oi.Session.SessionId {
-			break
-		}
+		dlog.Debug(c, "Connecting to root daemon")
+		var rootStatus *daemon.DaemonStatus
+		for attempt := 1; ; attempt++ {
+			if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
+				dlog.Errorf(c, "failed to connect to root daemon: %v", err)
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			}
+			oc := rootStatus.OutboundConfig
+			if oc == nil || oc.Session == nil {
+				// This is an internal error. Something is wrong with the root daemon.
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
+			}
+			if oc.Session.SessionId == oi.Session.SessionId {
+				break
+			}
 
-		// Root daemon was running an old session. This indicates that this daemon somehow
-		// crashed without disconnecting. So let's do that now, and then reconnect...
-		if attempt == 2 {
-			// ...or not, since we've already done it.
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
+			// Root daemon was running an old session. This indicates that this daemon somehow
+			// crashed without disconnecting. So let's do that now, and then reconnect...
+			if attempt == 2 {
+				// ...or not, since we've already done it.
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
+			}
+			if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
+				return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
+			}
 		}
-		if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
-		}
-	}
-	dlog.Debug(c, "Connected to root daemon")
-	tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
+		dlog.Debug(c, "Connected to root daemon")
+		tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
 
 	// Collect data on how long connection time took
 	dlog.Debug(c, "Finished connecting to traffic manager")
@@ -304,7 +312,13 @@ func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
 
 // connectCluster returns a configured cluster instance
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
-	config, err := k8s.NewConfig(c, cr.KubeFlags)
+	var config *k8s.Config
+	var err error
+ 	if cr.Podd != nil && *cr.Podd {
+		config, err = k8s.NewConfigPodd(c, cr.KubeFlags)
+	} else {
+		config, err = k8s.NewConfig(c, cr.KubeFlags)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -493,9 +507,6 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
 	paths := tm.GetCurrentNamespaces(false)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
-	if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
-		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
-	}
 	dlog.Debug(c, "search paths posted successfully")
 }
 
@@ -800,11 +811,17 @@ func (tm *TrafficManager) remain(c context.Context) error {
 }
 
 func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	config, err := k8s.NewConfig(c, cr.KubeFlags)
+	var config *k8s.Config
+ 	var err error
+ 	if cr.Podd != nil && *cr.Podd {
+ 		config, err = k8s.NewConfigPodd(c, cr.KubeFlags)
+ 	} else {
+ 		config, err = k8s.NewConfig(c, cr.KubeFlags)
+ 	}
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
-	if !tm.Config.ContextServiceAndFlagsEqual(config) {
+	if (cr.Podd == nil || !*cr.Podd) && !tm.Config.ContextServiceAndFlagsEqual(config) {
 		return &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
 			ClusterContext: tm.Config.Context,

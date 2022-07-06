@@ -1,3 +1,5 @@
+# syntax = docker/dockerfile:1.3
+
 # Copyright 2020-2022 Datawire. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,32 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The tel2-base target is reused by all telepresence cluster-side components. It's
-# never published though, as it's quite large and all builds will access to this Dockerfile
-FROM golang:alpine3.15 as tel2-base
+FROM golang:alpine3.15 as tel2-build
 
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR telepresence
-COPY go.mod .
-COPY go.sum .
-COPY rpc/go.mod rpc/
-COPY rpc/go.sum rpc/
-
-# Get dependencies - will also be cached if we won't change mod/sum
-RUN go mod download
-
-# The tel2-build target builds the traffic component, which is used both as a traffic-manager,
-# agent init-container, and agent
-FROM tel2-base AS tel2-build
-
+COPY go.mod go.sum .
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 COPY rpc/ rpc/
+COPY charts/ charts/
 COPY build-output/version.txt .
 
-RUN go install -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
-RUN cp $(go env GOPATH)/bin/traffic /usr/local/bin
+RUN \
+    --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go build -o /usr/local/bin/ -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
 
 # The tel2 targer is the one that gets published. It aims to be a small as possible.
 FROM alpine:3.15 as tel2

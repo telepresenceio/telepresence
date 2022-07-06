@@ -13,8 +13,41 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
+
+func xlistCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:  "xlist",
+		Args: cobra.NoArgs,
+
+		Short: "List all intercepts known to the Traffic Manager",
+		Long: "" +
+			"Unlike `telepresence list`, this also returns intercepts owned by " +
+			"different users, rather than just your own intercepts.  You must have " +
+			"called `telepresence connect` before calling this.",
+
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cliutil.WithManager(cmd.Context(), func(ctx context.Context, managerClient manager.ManagerClient) error {
+				watchClient, err := managerClient.WatchIntercepts(ctx, &manager.SessionInfo{})
+				if err != nil {
+					return err
+				}
+				snapshot, err := watchClient.Recv()
+				if err != nil {
+					return err
+				}
+				if err := watchClient.CloseSend(); err != nil {
+					return err
+				}
+				fmt.Println(DescribeIntercepts(snapshot.Intercepts, nil, true))
+
+				return nil
+			})
+		},
+	}
+}
 
 type listInfo struct {
 	onlyIntercepts    bool
@@ -248,6 +281,10 @@ func describeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 		fields = append(fields, kv{"Volume Mount Point", ii.ClientMountPoint})
 	} else if volumeMountsPrevented != nil {
 		fields = append(fields, kv{"Volume Mount Error", volumeMountsPrevented.Error()})
+	}
+	if debug {
+		fields = append(fields, kv{"Volume Mount Pod IP (for SFTP)", ii.PodIp})
+		fields = append(fields, kv{"Volume Mount Pod port (for SFTP)", fmt.Sprintf("%d", ii.SftpPort)})
 	}
 
 	fields = append(fields, kv{"Intercepting", func() string {

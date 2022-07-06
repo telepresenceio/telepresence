@@ -32,6 +32,10 @@ else
 CGO_ENABLED=1
 endif
 
+# DOCKER_BUILDKIT is _required_ by our Dockerfile, since we use
+# Dockerfile extensions for the Go build cache.  See
+# https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
+export DOCKER_BUILDKIT := 1
 
 .PHONY: FORCE
 FORCE:
@@ -84,9 +88,6 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
 
-pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
-	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run ./build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
-
 PKG_VERSION = $(shell go list ./pkg/version)
 
 # We might be building for arm64 on a mac that doesn't have an M1 chip
@@ -121,8 +122,14 @@ endif
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
-build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
-	git restore pkg/install/helm/telepresence-chart.tgz
+
+.PHONY: build
+build: $(BINDIR)/telepresence ## (Build) Producte a `telepresence` binary for GOOS/GOARCH
+
+$(BINDIR)/telepresence: FORCE
+	mkdir -p $(@D)
+	rm -f $@ # sometimes Go 1.18.0 spits out an invalid binary if I don't do this
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 
 .PHONY: tel2-base tel2
 tel2-base tel2:
@@ -144,25 +151,21 @@ clobber: ## (Build) Remove all build artifacts and tools
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
 
-.PHONY: update-charts
-update-charts:
+.PHONY: prepare-release
+prepare-release: generate
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
+	git add CHANGELOG.md
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
-	git add CHANGELOG.md go.mod
-	sed -i.bak "s/^version:.*/version: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
-	sed -i.bak "s/^appVersion:.*/appVersion: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
-	git add charts/telepresence/Chart.yaml
-	rm -f charts/telepresence/Chart.yaml.bak
+	git add go.mod
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
-
-.PHONY: prepare-release
-prepare-release: generate update-charts pkg/install/helm/telepresence-chart.tgz
-	git add pkg/install/helm/telepresence-chart.tgz
+	git add charts/telepresence/CHANGELOG.md
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/cur pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
+
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
 
@@ -170,7 +173,7 @@ prepare-release: generate update-charts pkg/install/helm/telepresence-chart.tgz
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: push-executable
-push-executable: build-version ## (Release) Upload the executable to S3
+push-executable: build ## (Release) Upload the executable to S3
 ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
