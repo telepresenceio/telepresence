@@ -194,7 +194,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	if cr.Podd != nil && !*(cr.Podd) {
 		rootDaemon, err = svc.RootDaemonClient(c)
 		if err != nil {
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
 	}
 
@@ -240,34 +240,35 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	}
 	svc.SetManagerClient(tmgr.managerClient, opts...)
 
-	// Tell daemon what it needs to know in order to establish outbount traffic to the cluster
+	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
 	if cr.Podd != nil && !*(cr.Podd) {
 		oi := tmgr.getOutboundInfo(c)
 
-	dlog.Debug(c, "Connecting to root daemon")
-	var rootStatus *daemon.DaemonStatus
-	for attempt := 1; ; attempt++ {
-		if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
-			dlog.Errorf(c, "failed to connect to root daemon: %v", err)
-			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-		}
-		oc := rootStatus.OutboundConfig
-		if oc == nil || oc.Session == nil {
-			// This is an internal error. Something is wrong with the root daemon.
-			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
-		}
-		if oc.Session.SessionId == oi.Session.SessionId {
-			break
-		}
+		dlog.Debug(c, "Connecting to root daemon")
+		var rootStatus *daemon.DaemonStatus
+		for attempt := 1; ; attempt++ {
+			if rootStatus, err = rootDaemon.Connect(c, oi); err != nil {
+				dlog.Errorf(c, "failed to connect to root daemon: %v", err)
+				return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			}
+			oc := rootStatus.OutboundConfig
+			if oc == nil || oc.Session == nil {
+				// This is an internal error. Something is wrong with the root daemon.
+				return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
+			}
+			if oc.Session.SessionId == oi.Session.SessionId {
+				break
+			}
 
-		// Root daemon was running an old session. This indicates that this daemon somehow
-		// crashed without disconnecting. So let's do that now, and then reconnect...
-		if attempt == 2 {
-			// ...or not, since we've already done it.
-			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
-		}
-		if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
-			return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
+			// Root daemon was running an old session. This indicates that this daemon somehow
+			// crashed without disconnecting. So let's do that now, and then reconnect...
+			if attempt == 2 {
+				// ...or not, since we've already done it.
+				return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
+			}
+			if _, err = rootDaemon.Disconnect(c, &empty.Empty{}); err != nil {
+				return c, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
+			}
 		}
 		dlog.Debug(c, "Connected to root daemon")
 		tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)

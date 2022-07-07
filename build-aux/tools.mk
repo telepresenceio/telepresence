@@ -41,7 +41,7 @@ clobber-tools:
 # running CI. If it isn't, the generate-check will fail.
 tools/protoc = $(TOOLSBINDIR)/protoc
 PROTOC_VERSION=3.17.3
-PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
+PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(patsubst darwin-%,osx-x86_64,$(GOHOSTOS)-$(shell uname -m)).zip
 $(TOOLSDIR)/$(PROTOC_ZIP):
 	mkdir -p $(@D)
 	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $@
