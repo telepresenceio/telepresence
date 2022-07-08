@@ -112,6 +112,7 @@ following Free and Open Source software:
     github.com/prometheus/procfs                      v0.7.3                                    Apache License 2.0
     github.com/rubenv/sql-migrate                     v1.1.1                                    MIT license
     github.com/russross/blackfriday                   v1.5.2                                    2-clause BSD license
+    github.com/sabhiram/go-gitignore                  v0.0.0-20210923224102-525f6e181f06        MIT license
     github.com/sethvargo/go-envconfig                 v0.6.1                                    Apache License 2.0
     github.com/shopspring/decimal                     v1.2.0                                    MIT license
     github.com/sirupsen/logrus                        v1.8.1                                    MIT license
