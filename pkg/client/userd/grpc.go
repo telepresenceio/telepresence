@@ -480,6 +480,7 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 		}
 		cli.AddCommandGroups(cmd, s.getCommands())
 		args := req.GetOsArgs()
+		cmd.SetArgs(args)
 		cmd, args, err = cmd.Find(args)
 		if err != nil {
 			return
