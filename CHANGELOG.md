@@ -8,14 +8,14 @@
 
 ### 2.6.8 (June 23, 2022)
 
-- Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
+- Feature: The name and namespace for the DNS Service that the Traffic Manager uses in DNS auto-detection can now be specified.
 
-- Feature: Should the DNS auto-detection logic in the traffic-manager fail, users can now specify a fallback IP to use.
+- Feature: Should the DNS auto-detection logic in the Traffic Manager fail, users can now specify a fallback IP to use.
 
 - Feature: It is now possible to intercept UDP ports with Telepresence and also use `--to-pod` to forward UDP
   traffic from ports on localhost.
 
-- Change: The Helm chart will now add the `nodeSelector`, `affinity` and `tolerations` values to the traffic-manager's
+- Change: The Helm chart will now add the `nodeSelector`, `affinity` and `tolerations` values to the Traffic Manager's
   post-upgrade-hook and pre-delete-hook jobs.
 
 - Bugfix: Telepresence no longer fails to inject the traffic agent into the pod generated for workloads that have no
@@ -23,7 +23,7 @@
 
 ### 2.6.7 (June 22, 2022)
 
-- Bugfix: The Telepresence client will remember and reuse the traffic-manager session after a network failure
+- Bugfix: The Telepresence client will remember and reuse the Traffic Manager session after a network failure
   or other reason that caused an unclean disconnect.
 
 - Bugfix: Telepresence will no longer forward DNS requests for "wpad" to the cluster.
@@ -40,7 +40,7 @@
 
 - Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
 
-- Feature: The traffic-manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
+- Feature: The Traffic Manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
   This can be configured through the helm chart.
 
 - Feature: A policy that controls when the mutating webhook injects the traffic-agent was added, and can be configured in the Helm chart.
@@ -69,8 +69,8 @@
 
 ### 2.6.4 (May 23, 2022)
 
-- Bugfix: The traffic-manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
-  permissions are needed when the traffic-manager upgrades from versions < 2.6.0 and can be revoked after the upgrade.
+- Bugfix: The Traffic Manager RBAC grants permissions to update services, deployments, replicatsets, and statefulsets. Those
+  permissions are needed when the Traffic Manager upgrades from versions < 2.6.0 and can be revoked after the upgrade.
 
 ### 2.6.3 (May 20, 2022)
 
@@ -119,14 +119,14 @@
 
 - Change: Traffic-agent is configured using a ConfigMap entry. In prior versions, the configuration was passed in the container environment.
 
-- Change: The helm-chart no longer has a default set for the agentInjector.image.name, and unless its set, the traffic-manager will ask
+- Change: The helm-chart no longer has a default set for the agentInjector.image.name, and unless its set, the Traffic Manager will ask
   SystemA for the preferred image.
 
 - Change: Client no longer needs RBAC permissions to update deployments, replicasets, and statefulsets.
 
-- Change: Telepresence now uses Helm version 3.8.1 when installing the traffic-manager
+- Change: Telepresence now uses Helm version 3.8.1 when installing the Traffic Manager
 
-- Change: The traffic-manager will not accept connections from clients older than 2.6.0. It can't, because they still use the old way of
+- Change: The Traffic Manager will not accept connections from clients older than 2.6.0. It can't, because they still use the old way of
   injecting the agent by modifying the workload.
 
 - Change: When upgrading, all workloads with injected agents will have their agent "uninstalled" automatically. The mutating webhook will
@@ -147,7 +147,7 @@
 
 ### 2.5.7 (April 25, 2022)
 
-- Change: A namespaced traffic-manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
+- Change: A namespaced Traffic Manager will no longer require cluster wide RBAC. Only Roles and RoleBindings are now used.
 
 - Bugfix: The DNS recursion detector didn't work correctly on Windows, resulting in sporadic failures to resolve names
   that were resolved correctly at other times.
@@ -162,7 +162,7 @@
 
 ### 2.5.5 (April 8, 2022)
 
-- Change: The traffic-manager now requires permissions to read pods across namespaces even if installed with limited permissions
+- Change: The Traffic Manager now requires permissions to read pods across namespaces even if installed with limited permissions
 
 - Bugfix: The DNS resolver used on Linux with systemd-resolved now flushes the cache when the search path changes.
 
@@ -188,7 +188,7 @@
 
 - Bugfix: The client's gather logs command and agent watcher will now respect the configured grpc.maxReceiveSize
 
-- Bugfix: Client and agent sessions no longer leaves dangling waiters in the traffic-manager when they depart.
+- Bugfix: Client and agent sessions no longer leaves dangling waiters in the Traffic Manager when they depart.
 
 - Bugfix: An advice to "see logs for details" is no longer printed when the argument count is incorrect in a CLI command.
 
@@ -329,7 +329,7 @@
 - Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the
   cluster runs in a docker-container on the client).
 
-- Bugfix: Fixed a potential deadlock when a new agent joined the traffic-manager.
+- Bugfix: Fixed a potential deadlock when a new agent joined the Traffic Manager.
 
 - Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
   original Helm chart when we release so this fix will only affect our nightly builds.
@@ -357,9 +357,9 @@
 
 - Feature: Preview url questions have more context and provide "best guess" defaults.
 
-- Feature: The `gather-logs` command added two new flags. One to anonymize pod names + namespaces and the other for getting the pod yaml of the `traffic-manager` and any pod that contains a `traffic-agent`.
+- Feature: The `gather-logs` command added two new flags. One to anonymize pod names + namespaces and the other for getting the pod yaml of the `Traffic Manager` and any pod that contains a `traffic-agent`.
 
-- Change: Use one tunnel per connection instead of multiplexing into one tunnel. This client will still be backwards compatible with older `traffic-manager`s that only support multiplexing.
+- Change: Use one tunnel per connection instead of multiplexing into one tunnel. This client will still be backwards compatible with older `Traffic Manager`s that only support multiplexing.
 
 - Bugfix: Telepresence will now log that the kubernetes server version is unsupported when using a version older than 1.17.
 
@@ -367,7 +367,7 @@
 
 ### 2.4.4 (September 27, 2021)
 
-- Feature: The strategy used by traffic-manager's discovery of pod CIDRs can now be configured using the Helm chart.
+- Feature: The strategy used by Traffic Manager's discovery of pod CIDRs can now be configured using the Helm chart.
 
 - Feature: Add the command `telepresence gather-logs`, which bundles the logs for all components
   into one zip file that can then be shared in a GitHub issue, in slack, etc. Use
@@ -375,11 +375,11 @@
 
 - Feature: The agent injector now supports injecting Traffic Agents into pods that have unnamed ports.
 
-- Bugfix: The traffic-manager now uses less CPU-cycles when computing the pod CIDRs.
+- Bugfix: The Traffic Manager now uses less CPU-cycles when computing the pod CIDRs.
 
 - Bugfix: If a deployment annotated with webhook annotations is deployed before telepresence is installed, telepresence will now install an agent in that deployment before intercept
 
-- Bugfix: Fix an issue where the traffic-manager would sometimes go into a CPU loop.
+- Bugfix: Fix an issue where the Traffic Manager would sometimes go into a CPU loop.
 
 - Bugfix: The TUN-device no longer builds an unlimited internal buffer before sending it when receiving lots of TCP-packets without PSH.
   Instead, the buffer is flushed when it reaches a size of 64K.
@@ -407,7 +407,7 @@
 
 - Bugfix: The overriding DNS resolver will no longer apply search paths when resolving "localhost".
 
-- Bugfix: The cluster domain used by the DNS resolver is retrieved from the traffic-manager instead of being
+- Bugfix: The cluster domain used by the DNS resolver is retrieved from the Traffic Manager instead of being
   hard-coded to "cluster.local".
 
 - Bugfix: "Telepresence uninstall --everything" now also uninstalls agents installed via mutating webhook
@@ -416,25 +416,25 @@
 
 - Bugfix: Passing false to the intercept command's --mount flag will no longer result in a filesystem being mounted.
 
-- Bugfix: The traffic-manager will establish outbound connections in parallel instead of sequentially.
+- Bugfix: The Traffic Manager will establish outbound connections in parallel instead of sequentially.
 
 - Bugfix: The `telepresence status` command reports correct DNS settings instead of "Local IP: nil, Remote IP: nil"
 
 ### 2.4.2 (September 1, 2021)
 
 - Feature: A new `telepresence loglevel <level>` subcommand was added that enables changing the loglevel
-  temporarily for the local daemons, the `traffic-manager` and the `traffic-agents`.
+  temporarily for the local daemons, the `Traffic Manager` and the `traffic-agents`.
 
 - Change: The default log-level is now `info` for all components of Telepresence.
 
 - Bugfix: The overriding DNS resolver will no longer apply search paths when resolving "localhost".
 
-- Bugfix: The RBAC was not updated in the helm chart to enable the traffic-manager to `get` and `list`
+- Bugfix: The RBAC was not updated in the helm chart to enable the Traffic Manager to `get` and `list`
   namespaces, which would impact users who use licensed features of the Telepresence extensions in an
   air-gapped environment.
 
 - Bugfix: The timeout for Helm actions wasn't always respected which could cause a failing install of the
-  `traffic-manager` to make the user daemon to hang indefinitely.
+  `Traffic Manager` to make the user daemon to hang indefinitely.
 
 ### 2.4.1 (August 30, 2021)
 
@@ -450,10 +450,10 @@
 - Feature: Helm chart has now a feature to on demand regenerate certificate used for mutating webhook by setting value.
   `agentInjector.certificate.regenerate`
 
-- Change: The traffic-manager now requires `get` namespace permissions to get the cluster ID instead of that value being
-  passed in as an environment variable to the traffic-manager's deployment.
+- Change: The Traffic Manager now requires `get` namespace permissions to get the cluster ID instead of that value being
+  passed in as an environment variable to the Traffic Manager's deployment.
 
-- Change: The traffic-manager is now installed via an embedded version of the Helm chart when `telepresence connect` is first performed on a cluster.
+- Change: The Traffic Manager is now installed via an embedded version of the Helm chart when `telepresence connect` is first performed on a cluster.
   This change is transparent to the user.
   A new configuration flag, `timeouts.helm` sets the timeouts for all helm operations performed by the Telepresence binary.
 
@@ -505,7 +505,7 @@
   `telepresence intercept` option `--http-match` that doesn't contain an
   equal sign.
 
-- Bugfix: The `traffic-manager` will only send subnet updates to a
+- Bugfix: The `Traffic Manager` will only send subnet updates to a
   client root daemon when the subnets actually change.
 
 - Bugfix: The agent uninstaller now distinguishes between recoverable
@@ -554,7 +554,7 @@
 
 - Bugfix: Fixed a regression introduced in 2.3.5 where the Traffic
   Manager's `RoleBinding` did not correctly appoint the
-  `traffic-manager` `Role`, causing subnet discovery to not be able to
+  `Traffic Manager` `Role`, causing subnet discovery to not be able to
   work correctly.
 
 - Bugfix: Fixed a regression introduced in 2.3.5 where the root daemon
@@ -586,8 +586,8 @@
 
 - Bugfix: Some log statements that contained garbage instead of a proper IP address now produce the correct address.
 - Bugfix: Telepresence will no longer panic when multiple services match a workload.
-- Bugfix: The traffic-manager will now accurately determine the service subnet by creating a dummy-service in its own namespace.
-- Bugfix: Telepresence connect will no longer try to update the traffic-manager's clusterrole if the live one is identical to the desired one.
+- Bugfix: The Traffic Manager will now accurately determine the service subnet by creating a dummy-service in its own namespace.
+- Bugfix: Telepresence connect will no longer try to update the Traffic Manager's clusterrole if the live one is identical to the desired one.
 - Bugfix: The Telepresence helm chart no longer fails when installing with `--set clientRbac.namespaced=true`
 
 ### 2.3.3 (July 7, 2021)
@@ -597,9 +597,9 @@
   configure the server-side components of Telepresence separately from
   the CLI (which in turn allows for better separation of permissions).
 
-- Feature: As the `traffic-manager` can now be installed in any
+- Feature: As the `Traffic Manager` can now be installed in any
   namespace via Helm, Telepresence can now be configured to look for
-  the traffic-manager in a namespace other than `ambassador`. This
+  the Traffic Manager in a namespace other than `ambassador`. This
   can be configured on a per-cluster basis.
 
 - Feature: `telepresence intercept` now supports a `--to-pod` flag
@@ -645,12 +645,12 @@
   connection. This avoids interference from certain service mesh
   configurations.
 
-- Change: The traffic-manager requires RBAC permissions to list Nodes,
+- Change: The Traffic Manager requires RBAC permissions to list Nodes,
   Pods, and to create a dummy Service in the manager's namespace.
 
 - Change: The on-laptop client no longer requires RBAC permissions to
   list Nodes in the cluster or to create Services, as that
-  functionality has been moved to the traffic-manager.
+  functionality has been moved to the Traffic Manager.
 
 - Bugfix: Telepresence will now detect the pod CIDR ranges even if
   they are not listed in the Nodes.
@@ -665,7 +665,7 @@
 
 - Change: The `trafficManagerAPI` timout default has changed from 5
   seconds to 15 seconds, in order to facilitate the extended time it
-  takes for the traffic-manager to do its initial discovery of cluster
+  takes for the Traffic Manager to do its initial discovery of cluster
   info as a result of the above bugfixes.
 
 - Bugfix: On macOS, files generated under `/etc/resolver/` as the
@@ -697,14 +697,14 @@
 - Feature: Telepresence is now installable via brew
 - Feature: `telepresence version` now also includes the version of the currently running user daemon.
 - Change: A TUN-device is used instead of firewall rules for routing outbound connections.
-- Change: Outbound connections now use gRPC instead of ssh, and the traffic-manager no longer has a sshd running.
+- Change: Outbound connections now use gRPC instead of ssh, and the Traffic Manager no longer has a sshd running.
 - Change: The traffic-agent no longer has a sshd running. Remote volume mounts use sshfs in slave mode, talking directly to sftp.
-- Change: The local DNS now routes the name lookups to intercepted agents or traffic-manager.
-- Change: The default log-level for the traffic-manager and the root-daemon was changed from "debug" to "info".
+- Change: The local DNS now routes the name lookups to intercepted agents or Traffic Manager.
+- Change: The default log-level for the Traffic Manager and the root-daemon was changed from "debug" to "info".
 - Change: The command line is now statically-linked, so it is usable on systems with different libc's.
 - Bugfix: Using --docker-run no longer fail to mount remote volumes when docker runs as root.
 - Bugfix: Fixed a number of race conditions.
-- Bugfix: Fix a crash when there is an error communicating with the traffic-manager about Ambassador Cloud.
+- Bugfix: Fix a crash when there is an error communicating with the Traffic Manager about Ambassador Cloud.
 - Bugfix: Fix a bug where sometimes when displaying or logging a timeout error it fails to determine which configurable timeout is responsible.
 - Bugfix: The root-user daemon now respects the timeouts in the normal user's configuration file.
 
