@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
@@ -467,7 +466,7 @@ func (s *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 
 func (s *service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
 	s.logCall(ctx, "ListCommands", func(ctx context.Context) {
-		groups, err = cliutil.CommandsToRPC(s.getCommands()), nil
+		groups, err = cliutil.CommandsToRPC(s.getCommands(ctx)), nil
 	})
 	return
 }
@@ -477,7 +476,7 @@ func (s *service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 		cmd := &cobra.Command{
 			Use: "fauxmand",
 		}
-		cli.AddCommandGroups(cmd, s.getCommands())
+		cliutil.AddCommandGroups(cmd, s.getCommands(ctx))
 		cmd.SetArgs(req.GetOsArgs())
 		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
 		cmd.SetOut(outW)

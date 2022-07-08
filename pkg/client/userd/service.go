@@ -55,7 +55,7 @@ type DaemonService interface {
 	Start(ctx context.Context, scout *scout.Reporter, grpcServer *grpc.Server, withSession WithSession) error
 }
 
-type CommandFactory func() cliutil.CommandGroups
+type CommandFactory func(context.Context) cliutil.CommandGroups
 
 // service represents the long-running state of the Telepresence User Daemon
 type service struct {

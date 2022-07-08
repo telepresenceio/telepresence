@@ -11,7 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 )
 
 func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err error) {
@@ -21,16 +21,18 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 			return fmt.Errorf("unable to call ListCommands: %w", err)
 		}
 		if groups, err = cliutil.RPCToCommands(remote, runRemote); err != nil {
-			groups = commands.GetCommandsForLocal(err)
+			//groups = commands.GetCommandsForLocal(err)
+			groups = userd.GetCommandsForLocal(ctx, err)
+			groups = nil
 		}
-		userDaemonRunning = true
+		cliutil.UserDaemonRunning = true
 		return nil
 	})
 	if err != nil && err != cliutil.ErrNoUserDaemon {
 		return nil, err
 	}
-	if !userDaemonRunning {
-		groups = commands.GetCommandsForLocal(err)
+	if !cliutil.UserDaemonRunning {
+		groups = userd.GetCommandsForLocal(ctx, err)
 	}
 	return groups, nil
 }

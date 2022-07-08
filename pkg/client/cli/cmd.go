@@ -130,7 +130,7 @@ func Command(ctx context.Context) *cobra.Command {
 		groups[name] = append(groups[name], cmds...)
 	}
 
-	AddCommandGroups(rootCmd, groups)
+	cliutil.AddCommandGroups(rootCmd, groups)
 	initGlobalFlagGroups()
 	for _, commands := range groups {
 		for _, command := range commands {
@@ -141,7 +141,7 @@ func Command(ctx context.Context) *cobra.Command {
 			initDeprecatedPersistentFlags(command)
 		}
 	}
-	for _, group := range globalFlagGroups {
+	for _, group := range cliutil.GlobalFlagGroups {
 		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
 	}
 	return rootCmd
@@ -159,12 +159,12 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 }
 
 func initDeprecatedPersistentFlags(cmd *cobra.Command) {
-	cmd.Flags().AddFlagSet(deprecatedGlobalFlags)
+	cmd.Flags().AddFlagSet(cliutil.DeprecatedGlobalFlags)
 	opf := cmd.PreRunE
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		// Allow deprecated global flags so that scripts using them don't break, but print
 		// a warning that their values are ignored.
-		deprecatedGlobalFlags.VisitAll(func(f *pflag.Flag) {
+		cliutil.DeprecatedGlobalFlags.VisitAll(func(f *pflag.Flag) {
 			if f.Changed {
 				fmt.Fprintf(cmd.ErrOrStderr(),
 					"use of global flag '--%s' is deprecated and its value is ignored\n", f.Name)
@@ -178,22 +178,22 @@ func initDeprecatedPersistentFlags(cmd *cobra.Command) {
 }
 
 func initGlobalFlagGroups() {
-	deprecatedGlobalFlags = pflag.NewFlagSet("deprecated global flags", 0)
+	cliutil.DeprecatedGlobalFlags = pflag.NewFlagSet("deprecated global flags", 0)
 
 	kubeFlags := pflag.NewFlagSet("", 0)
 	genericclioptions.NewConfigFlags(false).AddFlags(kubeFlags)
-	deprecatedGlobalFlags.AddFlagSet(kubeFlags)
+	cliutil.DeprecatedGlobalFlags.AddFlagSet(kubeFlags)
 
 	netflags := pflag.NewFlagSet("", 0)
 	netflags.StringP("dns", "", "", "")
 	netflags.StringSlice("mapped-namespaces", nil, "")
 
-	deprecatedGlobalFlags.AddFlagSet(netflags)
-	deprecatedGlobalFlags.VisitAll(func(flag *pflag.Flag) {
+	cliutil.DeprecatedGlobalFlags.AddFlagSet(netflags)
+	cliutil.DeprecatedGlobalFlags.VisitAll(func(flag *pflag.Flag) {
 		flag.Hidden = true
 	})
 
-	globalFlagGroups = []cliutil.FlagGroup{{
+	cliutil.GlobalFlagGroups = []cliutil.FlagGroup{{
 		Name: "other Telepresence flags",
 		Flags: func() *pflag.FlagSet {
 			flags := pflag.NewFlagSet("", 0)
