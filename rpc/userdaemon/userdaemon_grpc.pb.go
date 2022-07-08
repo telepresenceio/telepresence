@@ -37,8 +37,11 @@ type SystemAClient interface {
 	ResolveIngressInfo(ctx context.Context, in *IngressInfoRequest, opts ...grpc.CallOption) (*IngressInfoResponse, error)
 	// ReportAvailableNamespaces
 	ReportAvailableNamespaces(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableNamespacesClient, error)
+	// ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
+	// has completed
 	ReportInterceptCreation(ctx context.Context, in *InterceptCreationResult, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetInterceptDefinition(ctx context.Context, in *GetInterceptDefinitionRequest, opts ...grpc.CallOption) (*InterceptDefinition, error)
+	// GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+	GetSavedIntercept(ctx context.Context, in *GetSavedInterceptRequest, opts ...grpc.CallOption) (*SavedIntercept, error)
 }
 
 type systemAClient struct {
@@ -144,9 +147,9 @@ func (c *systemAClient) ReportInterceptCreation(ctx context.Context, in *Interce
 	return out, nil
 }
 
-func (c *systemAClient) GetInterceptDefinition(ctx context.Context, in *GetInterceptDefinitionRequest, opts ...grpc.CallOption) (*InterceptDefinition, error) {
-	out := new(InterceptDefinition)
-	err := c.cc.Invoke(ctx, "/telepresence.userdaemon.SystemA/GetInterceptDefinition", in, out, opts...)
+func (c *systemAClient) GetSavedIntercept(ctx context.Context, in *GetSavedInterceptRequest, opts ...grpc.CallOption) (*SavedIntercept, error) {
+	out := new(SavedIntercept)
+	err := c.cc.Invoke(ctx, "/telepresence.userdaemon.SystemA/GetSavedIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +174,11 @@ type SystemAServer interface {
 	ResolveIngressInfo(context.Context, *IngressInfoRequest) (*IngressInfoResponse, error)
 	// ReportAvailableNamespaces
 	ReportAvailableNamespaces(SystemA_ReportAvailableNamespacesServer) error
+	// ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
+	// has completed
 	ReportInterceptCreation(context.Context, *InterceptCreationResult) (*emptypb.Empty, error)
-	GetInterceptDefinition(context.Context, *GetInterceptDefinitionRequest) (*InterceptDefinition, error)
+	// GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+	GetSavedIntercept(context.Context, *GetSavedInterceptRequest) (*SavedIntercept, error)
 	mustEmbedUnimplementedSystemAServer()
 }
 
@@ -195,8 +201,8 @@ func (UnimplementedSystemAServer) ReportAvailableNamespaces(SystemA_ReportAvaila
 func (UnimplementedSystemAServer) ReportInterceptCreation(context.Context, *InterceptCreationResult) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReportInterceptCreation not implemented")
 }
-func (UnimplementedSystemAServer) GetInterceptDefinition(context.Context, *GetInterceptDefinitionRequest) (*InterceptDefinition, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetInterceptDefinition not implemented")
+func (UnimplementedSystemAServer) GetSavedIntercept(context.Context, *GetSavedInterceptRequest) (*SavedIntercept, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSavedIntercept not implemented")
 }
 func (UnimplementedSystemAServer) mustEmbedUnimplementedSystemAServer() {}
 
@@ -317,20 +323,20 @@ func _SystemA_ReportInterceptCreation_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SystemA_GetInterceptDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetInterceptDefinitionRequest)
+func _SystemA_GetSavedIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSavedInterceptRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SystemAServer).GetInterceptDefinition(ctx, in)
+		return srv.(SystemAServer).GetSavedIntercept(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.userdaemon.SystemA/GetInterceptDefinition",
+		FullMethod: "/telepresence.userdaemon.SystemA/GetSavedIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SystemAServer).GetInterceptDefinition(ctx, req.(*GetInterceptDefinitionRequest))
+		return srv.(SystemAServer).GetSavedIntercept(ctx, req.(*GetSavedInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -355,8 +361,8 @@ var SystemA_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SystemA_ReportInterceptCreation_Handler,
 		},
 		{
-			MethodName: "GetInterceptDefinition",
-			Handler:    _SystemA_GetInterceptDefinition_Handler,
+			MethodName: "GetSavedIntercept",
+			Handler:    _SystemA_GetSavedIntercept_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

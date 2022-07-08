@@ -29,9 +29,12 @@ service SystemA {
   // ReportAvailableNamespaces
   rpc ReportAvailableNamespaces(stream AvailableNamespacesRequest) returns (google.protobuf.Empty);
 
+  // ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
+  // has completed
   rpc ReportInterceptCreation(InterceptCreationResult) returns (google.protobuf.Empty);
 
-  rpc GetInterceptDefinition(GetInterceptDefinitionRequest) returns (InterceptDefinition);
+  // GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+  rpc GetSavedIntercept(GetSavedInterceptRequest) returns (SavedIntercept);
 }
 
 // AvailableServicesRequest contains a list of services that can be intercepted by the daemon
@@ -163,14 +166,14 @@ message InterceptCreationResult {
   string cluster_namespace = 11;
 }
 
-// GetInterceptDefinitionRequest represents a request to get a specific InterceptDefinition by its name
-message GetInterceptDefinitionRequest {
+// GetSavedInterceptRequest represents a request to get a specific InterceptDefinition by its name
+message GetSavedInterceptRequest {
   // Name of the intercept definition to look up
   string name = 1;
 }
 
-// InterceptDefinition represents a set of properties that can be put back together to instantiate an intercept
-message InterceptDefinition {
+// SavedIntercept represents a set of properties that can be put back together to instantiate an intercept
+message SavedIntercept {
   // Telepresence CLI version
   string telepresence_cli_version = 1;
 
