@@ -12,7 +12,7 @@ Maintainers are listed in alphabetical order.
 
 ## Maintainers Emeriti
 
-* Donny Yung, [donnyyung](https://github.com/donnyyung), <donaldyung@email.io>
+* Donny Yung, [donnyyung](https://github.com/donnyyung)
 * Abhay Saxena, [ark3](https://github.com/ark3), <ark3@email.com>
 * Luke Shumaker, [LukeShu](https://github.com/LukeShu), <lukeshu@datawire.io>
 * Rafael Schloming, [rhs](https://github.com/rhs), <rhs@datawire.io>
