@@ -15,16 +15,19 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
+	"io/fs"
 	"os"
 
 	//nolint:depguard // This short script has no logging and no Contexts.
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/blang/semver"
+	ignore "github.com/sabhiram/go-gitignore"
 )
 
 // isReleased returns true if a release tag exist for the given version
@@ -35,6 +38,35 @@ func isReleased(v semver.Version) bool {
 	v.Build = nil
 	v.Pre = nil
 	return exec.Command("git", "describe", "v"+v.String()).Run() == nil
+}
+
+// dirMD5 computes the MD5 checksum of all files found when recursively
+// traversing a directory, skipping .gitignore's, _test/, and _test.go. The
+// general idea is to avoid rebuilds and pushes when repeatedly running tests,
+// even if the tests themselves actually change.
+func dirMD5(root string) ([]byte, error) {
+	ign, err := ignore.CompileIgnoreFile(filepath.Join(root, ".gitignore"))
+	if err != nil {
+		return nil, err
+	}
+	d := md5.New()
+	testMach := fmt.Sprintf("_test%c", filepath.Separator)
+	isTest := func(path string) bool {
+		return strings.Contains(path, testMach) || strings.HasSuffix(path, "_test.go")
+	}
+	err = filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
+		if err == nil && info.Mode().IsRegular() && !(ign.MatchesPath(path) || isTest(path)) {
+			var data []byte
+			if data, err = os.ReadFile(path); err == nil {
+				d.Write(data)
+			}
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return d.Sum(make([]byte, 0, md5.Size)), nil
 }
 
 func Main() error {
@@ -72,7 +104,15 @@ func Main() error {
 		return nil
 	}
 
-	if _, err := fmt.Printf("v%s-%d\n", gitDescVer, time.Now().Unix()); err != nil {
+	md5, err := dirMD5(".")
+	if err != nil {
+		return fmt.Errorf("unable to compute MD5: %w", err)
+	}
+
+	b64 := base64.RawURLEncoding.EncodeToString(md5)
+	b64 = strings.ReplaceAll(b64, "_", "Z")
+	b64 = strings.ReplaceAll(b64, "-", "z")
+	if _, err := fmt.Printf("v%s-%s\n", gitDescVer, b64); err != nil {
 		return fmt.Errorf("unable to printf: %w", err)
 	}
 
