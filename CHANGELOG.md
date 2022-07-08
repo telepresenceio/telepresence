@@ -40,7 +40,7 @@
 
 - Feature: The `reinvocationPolicy` or the traffic-agent injector webhook can now be configured using the Helm chart.
 
-- Feature: The traffic manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
+- Feature: The traffic-manager now accepts a root CA for a proxy, allowing it to connect to ambassador cloud from behind an HTTPS proxy.
   This can be configured through the helm chart.
 
 - Feature: A policy that controls when the mutating webhook injects the traffic-agent was added, and can be configured in the Helm chart.
@@ -329,7 +329,7 @@
 - Bugfix: The TUN-device will trap failed connection attempts that results in recursive calls back into the TUN-device (may happen when the
   cluster runs in a docker-container on the client).
 
-- Bugfix: Fixed a potential deadlock when a new agent joined the traffic manager.
+- Bugfix: Fixed a potential deadlock when a new agent joined the traffic-manager.
 
 - Bugfix: The app-version value of the Helm chart embedded in the telepresence binary is now automatically updated at build time. The value is hardcoded in the
   original Helm chart when we release so this fix will only affect our nightly builds.
@@ -416,7 +416,7 @@
 
 - Bugfix: Passing false to the intercept command's --mount flag will no longer result in a filesystem being mounted.
 
-- Bugfix: The traffic manager will establish outbound connections in parallel instead of sequentially.
+- Bugfix: The traffic-manager will establish outbound connections in parallel instead of sequentially.
 
 - Bugfix: The `telepresence status` command reports correct DNS settings instead of "Local IP: nil, Remote IP: nil"
 
@@ -599,7 +599,7 @@
 
 - Feature: As the `traffic-manager` can now be installed in any
   namespace via Helm, Telepresence can now be configured to look for
-  the traffic manager in a namespace other than `ambassador`. This
+  the traffic-manager in a namespace other than `ambassador`. This
   can be configured on a per-cluster basis.
 
 - Feature: `telepresence intercept` now supports a `--to-pod` flag
