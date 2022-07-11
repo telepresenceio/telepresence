@@ -404,11 +404,11 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	wl, err := k8sapi.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
 		if errors2.IsNotFound(err) {
-			return nil, interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name))
+			return nil, interceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name))
 		}
 		err = fmt.Errorf("failed to get workload %s.%s: %w", spec.Agent, spec.Namespace, err)
 		dlog.Error(c, err)
-		return nil, interceptError(rpc.InterceptError_TRAFFIC_MANAGER_ERROR, err)
+		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
 	}
 
 	podTpl := wl.GetPodTemplate()
@@ -416,7 +416,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	// Check if the workload is auto installed. This also verifies annotation consistency
 	autoInstall, err := useAutoInstall(podTpl)
 	if err != nil {
-		return nil, interceptError(rpc.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
+		return nil, interceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
 	}
 
 	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
@@ -432,7 +432,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		}
 	}
 	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, image, spec.MechanismArgs); err != nil {
-		return nil, interceptError(rpc.InterceptError_UNKNOWN_FLAG, err)
+		return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
 	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
 		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
 		ir.Spec.MechanismArgs = newMechanismArgs
@@ -483,7 +483,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	// Check if the workload is auto installed. This also verifies annotation consistency
 	autoInstall, err := useAutoInstall(podTpl)
 	if err != nil {
-		return nil, interceptError(rpc.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
+		return nil, interceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
 	}
 
 	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
@@ -499,7 +499,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 		}
 	}
 	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, image, spec.MechanismArgs); err != nil {
-		return nil, interceptError(rpc.InterceptError_UNKNOWN_FLAG, err)
+		return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
 	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
 		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
 		ir.Spec.MechanismArgs = newMechanismArgs
@@ -611,7 +611,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		err = client.CheckTimeout(c, err)
-		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
+		return &rpc.InterceptResult{Error: common.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 	success := false

@@ -595,7 +595,7 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 	}
 
 	if r.Error != common.InterceptError_UNSPECIFIED {
-		return interceptMessage(r)
+		return InterceptError(r)
 	}
 	if needLogin {
 		// We default to assuming they can connect to Ambassador Cloud
@@ -788,7 +788,7 @@ func removeIntercept(ctx context.Context, name string) error {
 			return err
 		}
 		if r.Error != common.InterceptError_UNSPECIFIED {
-			return interceptMessage(r)
+			return InterceptError(r)
 		}
 		return nil
 	})
