@@ -15,6 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -210,13 +211,13 @@ func (tm *TrafficManager) addAgent(
 	if err != nil {
 		if err == agentNotFound {
 			return nil, &rpc.InterceptResult{
-				Error:     rpc.InterceptError_NOT_FOUND,
+				Error:     common.InterceptError_NOT_FOUND,
 				ErrorText: agentName,
 			}
 		}
 		dlog.Error(c, err)
 		return nil, &rpc.InterceptResult{
-			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
+			Error:     common.InterceptError_FAILED_TO_ESTABLISH,
 			ErrorText: err.Error(),
 		}
 	}
@@ -226,7 +227,7 @@ func (tm *TrafficManager) addAgent(
 	if err != nil {
 		dlog.Error(c, err)
 		return nil, &rpc.InterceptResult{
-			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
+			Error:     common.InterceptError_FAILED_TO_ESTABLISH,
 			ErrorText: err.Error(),
 		}
 	}
