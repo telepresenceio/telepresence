@@ -18,11 +18,14 @@ type FlagGroup struct {
 	Flags *pflag.FlagSet
 }
 
-var UserDaemonRunning = false
-var commandGroupMap = make(map[string]CommandGroups)
-var GlobalFlagGroups []FlagGroup
-var DeprecatedGlobalFlags *pflag.FlagSet
-var kubeFlags *pflag.FlagSet
+var (
+	UserDaemonRunning     = false
+	GlobalFlagGroups      []FlagGroup
+	DeprecatedGlobalFlags *pflag.FlagSet
+
+	commandGroupMap = make(map[string]CommandGroups)
+	kubeFlags       *pflag.FlagSet
+)
 
 func init() {
 	kubeFlags = pflag.NewFlagSet("Kubernetes flags", 0)

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -10,6 +12,9 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -119,7 +124,7 @@ func Command(ctx context.Context) *cobra.Command {
 	rootCmd.InitDefaultHelpCmd()
 	static := cliutil.CommandGroups{
 		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		"Traffic Commands": []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
+		"Traffic Commands": []*cobra.Command{listCommand(), leaveCommand(), previewCommand()},
 		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
 		"Other Commands":   []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
 	}
@@ -208,4 +213,72 @@ func initGlobalFlagGroups() {
 			return flags
 		}(),
 	}}
+}
+
+func selectIngress(
+	ctx context.Context,
+	in io.Reader,
+	out io.Writer,
+	connInfo *connector.ConnectInfo,
+	interceptName string,
+	interceptNamespace string,
+	ingressInfos []*manager.IngressInfo,
+) (*manager.IngressInfo, error) {
+	infos, err := cache.LoadIngressesFromUserCache(ctx)
+	if err != nil {
+		return nil, err
+	}
+	key := connInfo.ClusterServer + "/" + connInfo.ClusterContext
+	selectOrConfirm := "Confirm"
+	cachedIngressInfo := infos[key]
+	if cachedIngressInfo == nil {
+		iis := ingressInfos
+		if len(iis) > 0 {
+			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
+		} else {
+			selectOrConfirm = "Select" // Hard to confirm unless there's a default.
+			if interceptNamespace == "" {
+				interceptNamespace = "default"
+			}
+			cachedIngressInfo = &manager.IngressInfo{
+				// Default Settings
+				Host:   fmt.Sprintf("%s.%s", interceptName, interceptNamespace),
+				Port:   80,
+				UseTls: false,
+			}
+		}
+	}
+
+	reader := bufio.NewReader(in)
+
+	fmt.Fprintf(out, "\n"+ingressDesc+"\n", selectOrConfirm)
+	reply := &manager.IngressInfo{}
+	if reply.Host, err = askForHost(ingressQ1, cachedIngressInfo.Host, reader, out); err != nil {
+		return nil, err
+	}
+	if reply.Port, err = askForPortNumber(cachedIngressInfo.Port, reader, out); err != nil {
+		return nil, err
+	}
+	if reply.UseTls, err = askForUseTLS(cachedIngressInfo.UseTls, reader, out); err != nil {
+		return nil, err
+	}
+	if cachedIngressInfo.L5Host == "" {
+		cachedIngressInfo.L5Host = reply.Host
+	}
+	if reply.L5Host, err = askForHost(ingressQ4, cachedIngressInfo.L5Host, reader, out); err != nil {
+		return nil, err
+	}
+	fmt.Fprintln(out)
+
+	if !ingressInfoEqual(cachedIngressInfo, reply) {
+		infos[key] = reply
+		if err = cache.SaveIngressesToUserCache(ctx, infos); err != nil {
+			return nil, err
+		}
+	}
+	return reply, nil
+}
+
+func ingressInfoEqual(a, b *manager.IngressInfo) bool {
+	return a.Host == b.Host && a.L5Host == b.L5Host && a.Port == b.Port && a.UseTls == b.UseTls
 }
