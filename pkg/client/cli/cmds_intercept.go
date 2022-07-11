@@ -24,6 +24,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -336,25 +337,25 @@ func InterceptError(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
 	switch r.Error {
-	case connector.InterceptError_UNSPECIFIED:
+	case common.InterceptError_UNSPECIFIED:
 		return nil
-	case connector.InterceptError_NO_CONNECTION:
+	case common.InterceptError_NO_CONNECTION:
 		msg = "Local network is not connected to the cluster"
-	case connector.InterceptError_NO_TRAFFIC_MANAGER:
+	case common.InterceptError_NO_TRAFFIC_MANAGER:
 		msg = "Intercept unavailable: no traffic manager"
-	case connector.InterceptError_TRAFFIC_MANAGER_CONNECTING:
+	case common.InterceptError_TRAFFIC_MANAGER_CONNECTING:
 		msg = "Connecting to traffic manager..."
-	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
+	case common.InterceptError_TRAFFIC_MANAGER_ERROR:
 		msg = r.ErrorText
-	case connector.InterceptError_ALREADY_EXISTS:
+	case common.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
-	case connector.InterceptError_LOCAL_TARGET_IN_USE:
+	case common.InterceptError_LOCAL_TARGET_IN_USE:
 		spec := r.InterceptInfo.Spec
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
 			spec.TargetHost, spec.TargetPort, spec.Name)
-	case connector.InterceptError_NO_ACCEPTABLE_WORKLOAD:
+	case common.InterceptError_NO_ACCEPTABLE_WORKLOAD:
 		msg = fmt.Sprintf("No interceptable deployment, replicaset, or statefulset matching %s found", r.ErrorText)
-	case connector.InterceptError_AMBIGUOUS_MATCH:
+	case common.InterceptError_AMBIGUOUS_MATCH:
 		var matches []manager.AgentInfo
 		err := json.Unmarshal([]byte(r.ErrorText), &matches)
 		if err != nil {
@@ -368,17 +369,17 @@ func InterceptError(r *connector.InterceptResult) error {
 			fmt.Fprintf(st, "\n%4d: %s.%s", idx+1, match.Name, match.Namespace)
 		}
 		msg = st.String()
-	case connector.InterceptError_FAILED_TO_ESTABLISH:
+	case common.InterceptError_FAILED_TO_ESTABLISH:
 		msg = fmt.Sprintf("Failed to establish intercept: %s", r.ErrorText)
-	case connector.InterceptError_UNSUPPORTED_WORKLOAD:
+	case common.InterceptError_UNSUPPORTED_WORKLOAD:
 		msg = fmt.Sprintf("Unsupported workload type: %s", r.ErrorText)
-	case connector.InterceptError_NOT_FOUND:
+	case common.InterceptError_NOT_FOUND:
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
-	case connector.InterceptError_MOUNT_POINT_BUSY:
+	case common.InterceptError_MOUNT_POINT_BUSY:
 		msg = fmt.Sprintf("Mount point already in use by intercept %q", r.ErrorText)
-	case connector.InterceptError_MISCONFIGURED_WORKLOAD:
+	case common.InterceptError_MISCONFIGURED_WORKLOAD:
 		msg = r.ErrorText
-	case connector.InterceptError_UNKNOWN_FLAG:
+	case common.InterceptError_UNKNOWN_FLAG:
 		msg = fmt.Sprintf("Unknown flag: %s", r.ErrorText)
 	default:
 		msg = fmt.Sprintf("Unknown error code %d", r.Error)
@@ -592,8 +593,9 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 	if err != nil {
 		return fmt.Errorf("connector.CanIntercept: %w", err)
 	}
-	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return InterceptError(r)
+
+	if r.Error != common.InterceptError_UNSPECIFIED {
+		return interceptMessage(r)
 	}
 	if needLogin {
 		// We default to assuming they can connect to Ambassador Cloud
@@ -698,7 +700,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
 
-	if r.Error != connector.InterceptError_UNSPECIFIED {
+	if r.Error != common.InterceptError_UNSPECIFIED {
 		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
 			_ = is.DeactivateState(ctx)
 			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
@@ -785,8 +787,8 @@ func removeIntercept(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		if r.Error != connector.InterceptError_UNSPECIFIED {
-			return InterceptError(r)
+		if r.Error != common.InterceptError_UNSPECIFIED {
+			return interceptMessage(r)
 		}
 		return nil
 	})

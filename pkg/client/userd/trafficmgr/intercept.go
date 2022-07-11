@@ -28,6 +28,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
@@ -278,7 +279,7 @@ func (tm *TrafficManager) setCurrentIntercepts(ctx context.Context, intercepts [
 	tm.currentInterceptsLock.Unlock()
 }
 
-func interceptError(tp rpc.InterceptError, err error) *rpc.InterceptResult {
+func interceptError(tp common.InterceptError, err error) *rpc.InterceptResult {
 	return &rpc.InterceptResult{
 		Error:         tp,
 		ErrorText:     err.Error(),
@@ -352,20 +353,20 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
-		return nil, interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent))
+		return nil, interceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent))
 	}
 
 	if _, inUse := tm.localIntercepts[spec.Name]; inUse {
-		return nil, interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
+		return nil, interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
 	}
 
 	for _, iCept := range tm.getCurrentIntercepts() {
 		if iCept.Spec.Name == spec.Name {
-			return nil, interceptError(rpc.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
+			return nil, interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
 		}
 		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
 			return nil, &rpc.InterceptResult{
-				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
+				Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
 				ErrorText:     spec.Name,
 				ErrorCategory: int32(errcat.User),
 				InterceptInfo: iCept,
@@ -394,10 +395,10 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		ApiKey:        apiKey,
 	})
 	if err != nil {
-		return nil, interceptError(rpc.InterceptError_TRAFFIC_MANAGER_ERROR, err)
+		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
 	}
 	if pi.Error != "" {
-		return nil, interceptError(rpc.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).Newf(pi.Error))
+		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).Newf(pi.Error))
 	}
 
 	wl, err := k8sapi.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
@@ -470,11 +471,11 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	wl, err := k8sapi.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
 		if errors2.IsNotFound(err) {
-			return nil, interceptError(rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name))
+			return nil, interceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name))
 		}
 		err = fmt.Errorf("failed to get workload %s.%s: %w", spec.Agent, spec.Namespace, err)
 		dlog.Error(c, err)
-		return nil, interceptError(rpc.InterceptError_TRAFFIC_MANAGER_ERROR, err)
+		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
 	}
 
 	podTpl := wl.GetPodTemplate()
@@ -506,7 +507,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 
 	svcProps, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, wl)
 	if err != nil {
-		return nil, interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, err)
+		return nil, interceptError(common.InterceptError_FAILED_TO_ESTABLISH, err)
 	}
 	svcProps.apiKey = apiKey
 	return svcProps, svcProps.interceptResult()
@@ -516,7 +517,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest, isPodd bool) (result *rpc.InterceptResult, err error) {
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
-	if result != nil && result.Error != rpc.InterceptError_UNSPECIFIED {
+	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
 		return result, nil
 	}
 
@@ -550,7 +551,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 		// It's OK to just call addAgent every time; if the agent is already installed then it's a
 		// no-op.
 		agentEnv, result = tm.addAgent(c, svcProps, ir.AgentImage, apiPort)
-		if result.Error != rpc.InterceptError_UNSPECIFIED {
+		if result.Error != common.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
@@ -570,7 +571,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	if ir.MountPoint != "" && !isPodd {
 		// Ensure that the mount-point is free to use
 		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
-			return interceptError(rpc.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
+			return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
 		}
 
 		// Assume that the mount-point should to be removed from the busy map. Only a happy path
@@ -642,7 +643,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			return nil, err
 		case wr := <-waitCh:
 			if wr.err != nil {
-				return interceptError(rpc.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err)), nil
+				return interceptError(common.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err)), nil
 			}
 			ii = wr.intercept
 			if ii.Disposition != manager.InterceptDispositionType_ACTIVE {

@@ -5,6 +5,8 @@ syntax = "proto3";
 package telepresence.userdaemon;
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "rpc/common/errors.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/userdaemon";
 
@@ -26,6 +28,13 @@ service SystemA {
 
   // ReportAvailableNamespaces
   rpc ReportAvailableNamespaces(stream AvailableNamespacesRequest) returns (google.protobuf.Empty);
+
+  // ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
+  // has completed
+  rpc ReportInterceptCreation(InterceptCreationResult) returns (google.protobuf.Empty);
+
+  // GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+  rpc GetSavedIntercept(GetSavedInterceptRequest) returns (SavedIntercept);
 }
 
 // AvailableServicesRequest contains a list of services that can be intercepted by the daemon
@@ -64,10 +73,6 @@ message NamespacesToWatchRequest {
   repeated Namespace namespaces = 2;
 }
 
-message NamespacesToWatchResponse {
-  repeated Namespace namespaces = 1;
-}
-
 // IngressInfoRequest represents the intercept properties required to resolve ingress info
 message IngressInfoRequest {
   // The service uid defined in the service's metadata
@@ -101,6 +106,10 @@ message IngressInfoResponse {
   string l5host = 4;
 }
 
+message NamespacesToWatchResponse {
+  repeated Namespace namespaces = 1;
+}
+
 // AvailableNamespacesRequest contains a list of namespaces that can be intercepted by the daemon
 message AvailableNamespacesRequest {
   DaemonInfo daemon_info = 1;
@@ -119,4 +128,72 @@ message DaemonInfo {
   string workstation_name = 2;
   string kube_context_name = 3;
   string session_id = 4;
+  optional string cli_version = 5;
+  optional string daemon_version = 6;
+}
+
+// InterceptCreationResult represents the result of an intercept execution
+message InterceptCreationResult {
+  // Daemon ID, as defined in DaemonInfo
+  string daemon_id = 1;
+
+  // Time at which the command execution started
+  google.protobuf.Timestamp started_at = 2;
+
+  // Time at which the command execution completed
+  google.protobuf.Timestamp ended_at = 3;
+
+  // Base name of the intercept, as represented by `telepresence intercept <intercept_base_name>`
+  string intercept_base_name = 4;
+
+  // List of parameters that were passed to the command
+  repeated InterceptParameter intercept_parameters = 5;
+
+  // Exec command and arguments that can optionally be passed
+  string intercept_exec_command = 6;
+
+  // InterceptError resulting from the execution
+  telepresence.common.InterceptError intercept_error = 7;
+
+  // Error text message if any
+  string intercept_error_text = 8;
+
+  // Cluster ID in which the intercept was executed
+  string cluster_id = 9;
+
+  // Namespace in which the intercept was executed. Must be the same as the `--namespace` argument if passed.
+  string cluster_namespace = 10;
+}
+
+// InterceptParameter represents a parameter passed to the intercept command
+message InterceptParameter {
+  // Name of the parameter
+  string name = 1;
+
+  // Value of the parameter
+  string value = 2;
+}
+
+// GetSavedInterceptRequest represents a request to get a specific InterceptDefinition by its name
+message GetSavedInterceptRequest {
+  // Name of the intercept definition to look up
+  string name = 1;
+}
+
+// SavedIntercept represents a set of properties that can be put back together to instantiate an intercept
+message SavedIntercept {
+  // Telepresence CLI version
+  string telepresence_cli_version = 1;
+
+  // Telepresence User Daemon version
+  string telepresence_user_daemon_version = 2;
+
+  // Base name of the intercept, as represented by `telepresence intercept <intercept_base_name>`
+  string intercept_base_name = 3;
+
+  // List of parameters that were passed to the command
+  repeated InterceptParameter intercept_parameters = 4;
+
+  // Exec command and arguments that can optionally be passed
+  string intercept_exec_command = 5;
 }
