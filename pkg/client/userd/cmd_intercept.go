@@ -38,11 +38,14 @@ import (
 	core "k8s.io/api/core/v1"
 )
 
-func (s *service) interceptCommand(ctx context.Context) *cobra.Command {
+func (s *service) _cmdIntercept(ctx context.Context) *cobra.Command {
 	cmd := cobra.Command{
 		Use:   "userd-intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
 		Short: "Intercept a service",
 		Args:  cobra.MinimumNArgs(1),
+		Annotations: map[string]string{
+			"cobra.commandGroup": "CHANGEME",
+		},
 	}
 
 	args := interceptArgs{}

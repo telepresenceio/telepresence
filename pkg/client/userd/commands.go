@@ -12,34 +12,8 @@ import (
 )
 
 func GetCommands(ctx context.Context) cliutil.CommandGroups {
-	var (
-		s  service
-		st = reflect.TypeOf(&s)
-		sv = reflect.ValueOf(&s)
-
-		ctxv = reflect.ValueOf(ctx)
-		cg   = cliutil.CommandGroups{}
-	)
-
-	for i := 0; i < st.NumMethod(); i++ {
-		m := st.Method(i)
-		if !strings.HasPrefix(m.Name, "_cmd") {
-			continue
-		}
-		cmdv := m.Func.Call([]reflect.Value{sv, ctxv})[0]
-		cmd := cmdv.Interface().(*cobra.Command)
-		annotations := cmd.Annotations
-		if group, ok := annotations["cobra.commandGroup"]; ok {
-			cmds := cg[group]
-			if cmds == nil {
-				cmds = []*cobra.Command{}
-			}
-			cmds = append(cmds, cmd)
-			cg[group] = cmds
-		}
-	}
-
-	return cg
+	var s service
+	return s._getCommands(ctx)
 }
 
 func GetCommandsForLocal(ctx context.Context, err error) cliutil.CommandGroups {
@@ -72,7 +46,31 @@ func (s *service) GetCommandsForLocal(ctx context.Context, err error) cliutil.Co
 
 // GetCommands will return all commands implemented by the connector daemon.
 func (s *service) _getCommands(ctx context.Context) cliutil.CommandGroups {
-	return cliutil.CommandGroups{
-		"CHANGEME": []*cobra.Command{s.interceptCommand(ctx)},
+	var (
+		st = reflect.TypeOf(s)
+		sv = reflect.ValueOf(s)
+
+		ctxv = reflect.ValueOf(ctx)
+		cg   = cliutil.CommandGroups{}
+	)
+
+	for i := 0; i < st.NumMethod(); i++ {
+		m := st.Method(i)
+		if !strings.HasPrefix(m.Name, "_cmd") {
+			continue
+		}
+		cmdv := m.Func.Call([]reflect.Value{sv, ctxv})[0]
+		cmd := cmdv.Interface().(*cobra.Command)
+		annotations := cmd.Annotations
+		if group, ok := annotations["cobra.commandGroup"]; ok {
+			cmds := cg[group]
+			if cmds == nil {
+				cmds = []*cobra.Command{}
+			}
+			cmds = append(cmds, cmd)
+			cg[group] = cmds
+		}
 	}
+
+	return cg
 }
