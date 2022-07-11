@@ -1,0 +1,25 @@
+syntax = "proto3";
+package telepresence.common;
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/common";
+
+// InterceptError is a common error type used by the intercept call family (add,
+// remove, list, available).
+enum InterceptError {
+  UNSPECIFIED = 0; // no error
+  reserved 1;
+  NO_CONNECTION = 2; // Have not made the .Connect RPC call (or it errored)
+  NO_TRAFFIC_MANAGER = 3;
+  TRAFFIC_MANAGER_CONNECTING = 4;
+  TRAFFIC_MANAGER_ERROR = 5;
+  ALREADY_EXISTS = 6;
+  LOCAL_TARGET_IN_USE = 7;
+  NO_ACCEPTABLE_WORKLOAD = 8;
+  AMBIGUOUS_MATCH = 9;
+  FAILED_TO_ESTABLISH = 10;
+  UNSUPPORTED_WORKLOAD = 11;
+  MISCONFIGURED_WORKLOAD = 14;
+  NOT_FOUND = 12;
+  MOUNT_POINT_BUSY = 13;
+  UNKNOWN_FLAG = 15;
+}

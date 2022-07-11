@@ -198,7 +198,7 @@ func (s *service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 		if result.ServiceProps != nil {
 			entries = append(entries, scout.Entry{Key: "service_uid", Value: result.ServiceProps.ServiceUid})
 		}
-		if result.Error != rpc.InterceptError_UNSPECIFIED {
+		if result.Error != common.InterceptError_UNSPECIFIED {
 			msg = result.Error.String()
 		}
 	}
@@ -226,7 +226,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	err = s.withSession(c, "CanIntercept", func(c context.Context, session trafficmgr.Session) error {
 		_, result = session.CanIntercept(c, ir)
 		if result == nil {
-			result = &rpc.InterceptResult{Error: rpc.InterceptError_UNSPECIFIED}
+			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
 		return err
 	})
@@ -272,11 +272,11 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 		}
 		if err := session.RemoveIntercept(c, rr.Name); err != nil {
 			if grpcStatus.Code(err) == grpcCodes.NotFound {
-				result.Error = rpc.InterceptError_NOT_FOUND
+				result.Error = common.InterceptError_NOT_FOUND
 				result.ErrorText = rr.Name
 				result.ErrorCategory = int32(errcat.User)
 			} else {
-				result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
+				result.Error = common.InterceptError_TRAFFIC_MANAGER_ERROR
 				result.ErrorText = err.Error()
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
