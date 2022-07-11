@@ -259,6 +259,7 @@ hooks:
   podSecurityContext:
     {}
     # fsGroup: 2000
+
   # Falls back to the root securityContext if not supplied
   securityContext:
     {}
