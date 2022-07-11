@@ -128,42 +128,50 @@ message DaemonInfo {
   string workstation_name = 2;
   string kube_context_name = 3;
   string session_id = 4;
+  optional string cli_version = 5;
+  optional string daemon_version = 6;
 }
 
 // InterceptCreationResult represents the result of an intercept execution
 message InterceptCreationResult {
-  // Telepresence CLI version
-  string telepresence_cli_version = 1;
-
-  // Telepresence User Daemon version
-  string telepresence_user_daemon_version = 2;
+  // Daemon ID, as defined in DaemonInfo
+  string daemon_id = 1;
 
   // Time at which the command execution started
-  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp started_at = 2;
 
   // Time at which the command execution completed
-  google.protobuf.Timestamp ended_at = 4;
+  google.protobuf.Timestamp ended_at = 3;
 
   // Base name of the intercept, as represented by `telepresence intercept <intercept_base_name>`
-  string intercept_base_name = 5;
+  string intercept_base_name = 4;
 
-  // List of arguments that were passed to the command and should be of format "--argument-name=argument value"
-  repeated string intercept_parameters = 6;
+  // List of parameters that were passed to the command
+  repeated InterceptParameter intercept_parameters = 5;
 
   // Exec command and arguments that can optionally be passed
-  string intercept_exec_command = 7;
+  string intercept_exec_command = 6;
 
   // InterceptError resulting from the execution
-  telepresence.common.InterceptError intercept_error = 8;
+  telepresence.common.InterceptError intercept_error = 7;
 
   // Error text message if any
-  string intercept_error_text = 9;
+  string intercept_error_text = 8;
 
   // Cluster ID in which the intercept was executed
-  string cluster_id = 10;
+  string cluster_id = 9;
 
   // Namespace in which the intercept was executed. Must be the same as the `--namespace` argument if passed.
-  string cluster_namespace = 11;
+  string cluster_namespace = 10;
+}
+
+// InterceptParameter represents a parameter passed to the intercept command
+message InterceptParameter {
+  // Name of the parameter
+  string name = 1;
+
+  // Value of the parameter
+  string value = 2;
 }
 
 // GetSavedInterceptRequest represents a request to get a specific InterceptDefinition by its name
@@ -183,8 +191,8 @@ message SavedIntercept {
   // Base name of the intercept, as represented by `telepresence intercept <intercept_base_name>`
   string intercept_base_name = 3;
 
-  // List of arguments that were passed to the command and should be of format "--argument-name=argument value"
-  string intercept_parameters = 4;
+  // List of parameters that were passed to the command
+  repeated InterceptParameter intercept_parameters = 4;
 
   // Exec command and arguments that can optionally be passed
   string intercept_exec_command = 5;
