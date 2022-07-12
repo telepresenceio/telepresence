@@ -16,10 +16,8 @@ const HeaderMaxLen = 60
 // Header represents a TCP header. The header is obtained by simply casting the IP header's payload.
 type Header []byte
 
-type optionKind byte
-
 const (
-	endOfOptions = optionKind(iota)
+	endOfOptions = byte(iota)
 	noOp
 	maximumSegmentSize
 	windowScale
@@ -28,8 +26,8 @@ const (
 
 type option []byte
 
-func (o option) kind() optionKind {
-	return optionKind(o[0])
+func (o option) kind() byte {
+	return o[0]
 }
 
 func (o option) len() int {
@@ -48,7 +46,7 @@ func options(h Header) ([]option, error) {
 		return opts, nil
 	}
 	for i := 0; i < obl; {
-		switch optionKind(ob[i]) {
+		switch ob[i] {
 		case endOfOptions:
 			return opts, nil
 		case noOp:
@@ -58,7 +56,7 @@ func options(h Header) ([]option, error) {
 			if i+1 < obl {
 				ol := int(ob[i+1])
 				if i+ol <= obl {
-					opts = append(opts, option(ob[i:i+ol]))
+					opts = append(opts, ob[i:i+ol])
 					i += ol
 					continue
 				}
@@ -113,6 +111,11 @@ func (h Header) NoFlags() bool {
 	return h[13] == 0 && !h.NS()
 }
 
+func (h Header) CopyFlagsFrom(oh Header) {
+	h[13] = oh[13]
+	h.SetNS(oh.NS())
+}
+
 func (h Header) NS() bool {
 	return h[12]&0b00000001 != 0
 }
@@ -163,6 +166,10 @@ func (h Header) SetURG(flag bool) {
 
 func (h Header) ACK() bool {
 	return h[13]&0b00010000 != 0
+}
+
+func (h Header) OnlyACK() bool {
+	return h[13] == 0b00010000 && !h.NS()
 }
 
 func (h Header) SetACK(flag bool) {
@@ -249,8 +256,18 @@ func (h Header) Payload() []byte {
 	return h[h.DataOffset()*4:]
 }
 
+func (h Header) PayloadLen() int {
+	return len(h) - h.DataOffset()*4
+}
+
 func (h Header) SetChecksum(ipHdr ip.Header) {
 	ip.L4Checksum(ipHdr, 16, ipproto.TCP)
+}
+
+func (h Header) Flags() string {
+	b := bytes.Buffer{}
+	h.AppendFlags(&b)
+	return b.String()
 }
 
 // AppendFlags appends a comma separated list of all flags that are currently set.

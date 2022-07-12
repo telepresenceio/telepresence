@@ -16,10 +16,45 @@ const (
 	Normal = MessageCode(iota)
 	streamInfo
 	streamOK
+
+	// closeSend is sent when:
+	//
+	// - a TCP client receives a FIN, after it changes its state to CLOSE_WAIT
+	//
+	// - a TCP client receives a FIN, after it changes its state to FIN_WAIT_2
+	//
+	// - a Dialer's connection has been closed by the peer
+	//
+	// - a Listener Endpoint's connection is closed by the peer
+	//
+	// When a TCP client receives a closeSend on its stream, the following applies depending on state:
+	//
+	// - in CLOSE_WAIT, the client sends a FIN, and enters the LAST_ACK state
+	//
+	// - in SYN_RECEIVED or ESTABLISHED, the client sends a FIN, and enters the FIN_WAIT_1 state
+	//
+	// If a Dialer or Endpoint receives a closeSend, it must close its connection and its ReadLoop
+	// (no more data will arrive on the stream) but its WriteLoop must continue to operate until the
+	// connection reports EOF or closed, at which time a closeSend is sent in the opposite direction.
 	closeSend
+
+	// DialOK is sent when a Dialer successfully dialed its connection.
+	//
+	// A TCP client that receives a DialOK must transit from state SYN_RECEIVED to ESTABLISHED
 	DialOK
+
+	// DialReject is sent when a Dialer fails to dial its connection.
+	//
+	// A TCP client that receives a DialReject must send an RST and transit from state SYN_RECEIVED to CLOSED
 	DialReject
+
+	// Disconnect is sent when
+	//
+	// - A TCP client receives a RST, after it has changed its state to CLOSED
+	//
+	// - A Dialer or Listener Endpoint has been made unavailable for other reasons than a proper close or EOF
 	Disconnect
+
 	KeepAlive
 	Session
 )

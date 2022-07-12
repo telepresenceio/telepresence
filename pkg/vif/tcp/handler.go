@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
@@ -18,31 +18,43 @@ type state int32
 
 const (
 	// simplified server-side tcp states
-	stateSynReceived = state(iota)
+	stateListen = state(iota)
+	stateSynReceived
 	stateSynSent
 	stateEstablished
 	stateFinWait1
 	stateFinWait2
-	stateTimedWait
-	stateIdle
+	stateCloseWait
+	stateLastAck
+	stateClosing
+	stateTimeWait
+	stateClosed
 )
 
 func (s state) String() (txt string) {
 	switch s {
-	case stateIdle:
-		txt = "IDLE"
+	case stateListen:
+		txt = "LISTEN"
 	case stateSynSent:
-		txt = "SYN SENT"
+		txt = "SYN-SENT"
 	case stateSynReceived:
-		txt = "SYN RECEIVED"
+		txt = "SYN-RECEIVED"
 	case stateEstablished:
 		txt = "ESTABLISHED"
 	case stateFinWait1:
-		txt = "FIN_WAIT_1"
+		txt = "FIN-WAIT-1"
 	case stateFinWait2:
-		txt = "FIN_WAIT_2"
-	case stateTimedWait:
-		txt = "TIMED WAIT"
+		txt = "FIN-WAIT-2"
+	case stateCloseWait:
+		txt = "CLOSE-WAIT"
+	case stateLastAck:
+		txt = "LAST-ACK"
+	case stateClosing:
+		txt = "CLOSING"
+	case stateTimeWait:
+		txt = "TIME-WAIT"
+	case stateClosed:
+		txt = "CLOSED"
 	default:
 		panic("unknown state")
 	}
@@ -59,21 +71,15 @@ var ioChannelSize = maxReceiveWindow / maxSegmentSize
 type queueElement struct {
 	sequence uint32
 	retries  int32
-	cTime    time.Time
+	cTime    int64
 	packet   Packet
 	next     *queueElement
 }
 
-type quitReason int
-
-const (
-	pleaseContinue = quitReason(iota)
-	quitByContext
-	quitByReset
-	quitByUs
-	quitByPeer
-	quitByBoth
-)
+type awaitWinSize struct {
+	done   chan struct{}
+	rqSize int64
+}
 
 type PacketHandler interface {
 	tunnel.Handler
@@ -85,6 +91,11 @@ type PacketHandler interface {
 type StreamCreator func(ctx context.Context) (tunnel.Stream, error)
 
 type handler struct {
+	sync.Mutex
+
+	// cancel will cancel all goroutines started by this handler
+	cancel context.CancelFunc
+
 	streamCreator StreamCreator
 
 	// Handle will have either a connection specific stream or a muxTunnel (the old style)
@@ -104,9 +115,6 @@ type handler struct {
 	// the dispatcher signals its intent to close in dispatcherClosing. 0 == running, 1 == closing, 2 == closed
 	dispatcherClosing *int32
 
-	// Channel to use when receiving messages to the traffic-manager
-	tunDone chan struct{}
-
 	// Channel to use when sending packets to the traffic-manager
 	toMgrCh chan Packet
 
@@ -124,14 +132,14 @@ type handler struct {
 	// oooQueue is where out-of-order packets are placed until they can be processed
 	oooQueue *queueElement
 
-	// wfState is the current workflow state
-	wfState state
+	// state is the current workflow state
+	state state
 
-	// seq is the sequence that we provide in the packets we send to TUN
-	seq uint32
+	// sequence is the sequence that we provide in the packets we send to TUN
+	sequence uint32
 
-	// seqAcked is the last sequence acked by the peer
-	seqAcked uint32
+	// sequenceAcked is the last sequence acked by the peer
+	sequenceAcked uint32
 
 	// lastKnown is generally the same as last ACK except for when packets are lost when sending them
 	// to the manager. Those packets are not ACKed so we need to keep track of what we loose to prevent
@@ -149,17 +157,19 @@ type handler struct {
 	// finalSeq is the ack sent with FIN when a connection is closing.
 	finalSeq uint32
 
-	// myWindow and is the actual size of my window
-	myWindow int64
+	// myWindowSize and is the actual size of my window
+	myWindowSize uint32
 
-	// peerSeqToAck is the peer sequence that will be acked on next send
-	peerSeqToAck uint32
+	// peerSequenceToAck is the peer sequence that will be acked on next send
+	peerSequenceToAck uint32
 
-	// peerSeqAcked was the last ack sent to the peer
-	peerSeqAcked uint32
+	// peerSequenceAcked was the last ack sent to the peer
+	peerSequenceAcked uint32
 
 	// peerWindow is the actual size of the peers window
 	peerWindow int64
+
+	awaitWinSize *awaitWinSize
 
 	// peerWindowScale is the number of bits to shift the windowSize of received packet to
 	// determine the actual peerWindow
@@ -168,12 +178,13 @@ type handler struct {
 	// peerMaxSegmentSize is the maximum size of a segment sent to the peer (not counting IP-header)
 	peerMaxSegmentSize uint16
 
-	// sendLock and sendCondition are used when throttling writes to the TUN device
-	sendLock      sync.Mutex
-	sendCondition *sync.Cond
-
 	// random generator for initial sequence number
 	rnd *rand.Rand
+
+	stopTimer *time.Timer
+
+	sqStart  uint32
+	ackStart uint32
 }
 
 func NewHandler(
@@ -192,13 +203,11 @@ func NewHandler(
 		dispatcherClosing: dispatcherClosing,
 		fromTun:           make(chan Packet, ioChannelSize),
 		toMgrCh:           make(chan Packet, ioChannelSize),
-		toMgrMsgCh:        make(chan tunnel.Message),
-		myWindow:          maxReceiveWindow,
-		wfState:           stateIdle,
+		toMgrMsgCh:        make(chan tunnel.Message, 50),
+		myWindowSize:      maxReceiveWindow,
+		state:             stateListen,
 		rnd:               rand.New(rndSource),
-		tunDone:           make(chan struct{}),
 	}
-	h.sendCondition = sync.NewCond(&h.sendLock)
 	return h
 }
 
@@ -210,34 +219,40 @@ func (h *handler) HandlePacket(ctx context.Context, pkt Packet) {
 	select {
 	case <-ctx.Done():
 		dlog.Debugf(ctx, "!! TUN %s discarded because context is cancelled", pkt)
-	case <-h.tunDone:
-		dlog.Debugf(ctx, "!! TUN %s discarded because TCP handler's input processing was cancelled", pkt)
 	case h.fromTun <- pkt:
 	}
 }
 
 func (h *handler) Stop(ctx context.Context) {
-	if h.state() == stateEstablished || h.state() == stateSynReceived {
-		h.setState(ctx, stateFinWait1)
-		h.sendFin(ctx, true)
+	h.Lock()
+	h.stopLocked(ctx)
+	h.Unlock()
+}
+
+const timeWaitDuration = 30 * time.Second
+
+func (h *handler) setStopTimer(ctx context.Context) {
+	if h.stopTimer != nil {
+		h.stopTimer.Reset(timeWaitDuration)
+	} else {
+		h.stopTimer = time.AfterFunc(timeWaitDuration, func() {
+			h.Stop(ctx)
+		})
 	}
-	// Wake up if waiting for larger window size (ends processPayload)
-	h.sendCondition.Broadcast()
 }
 
-// Reset replies to the sender of the initialPacket with a RST packet.
-func (h *handler) Reset(ctx context.Context, initialPacket ip.Packet) error {
-	return h.toTun.Write(ctx, initialPacket.(Packet).Reset())
-}
-
-func (h *handler) Start(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	go h.processResends(ctx)
-	go func() {
-		defer cancel()
-		defer func() {
-			h.remove()
+func (h *handler) stopLocked(ctx context.Context) {
+	switch h.state {
+	default:
+		h.sendRST(ctx)
+		fallthrough
+	case stateLastAck, stateTimeWait, stateClosed:
+		if rm := h.remove; rm != nil {
+			dlog.Debugf(ctx, "   TUN %s closed", h.id)
+			h.remove = nil
+			rm()
 			// Drain any incoming to unblock
+			h.cancel()
 			for {
 				select {
 				case <-h.fromTun:
@@ -245,79 +260,128 @@ func (h *handler) Start(ctx context.Context) {
 					return
 				}
 			}
+		}
+	case stateCloseWait:
+		h.setState(ctx, stateLastAck)
+		h.sendFIN(ctx, true)
+	case stateEstablished, stateSynReceived:
+		dlog.Debugf(ctx, "   TUN %s active close", h.id)
+		h.setState(ctx, stateFinWait1)
+		h.sendFIN(ctx, true)
+	}
+}
+
+// Reset replies to the sender of the initialPacket with a RST packet.
+func (h *handler) Reset(ctx context.Context, initialPacket Packet) {
+	pkt := initialPacket.Reset()
+	h.tunWriteUnlocked(ctx, pkt)
+}
+
+func (h *handler) Start(ctx context.Context) {
+	ctx, h.cancel = context.WithCancel(ctx)
+	go h.processResends(ctx)
+	go func() {
+		defer func() {
+			dlog.Debugf(ctx, "   CON %s closed", h.id)
+			h.Stop(ctx)
 		}()
 		h.processPackets(ctx)
 		h.wg.Wait()
 	}()
 }
 
-func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32, forceAck bool) {
-	h.sendLock.Lock()
-	defer h.sendLock.Unlock()
-	ackNbr := h.peerSequenceToAck()
-	seq := h.sequence()
+// prepareToSend must be called with the lock in place
+func (h *handler) prepareToSend(ctx context.Context, pkt Packet, seqAdd uint32) bool {
+	ackNbr := h.peerSequenceToAck
+	seq := h.sequence
 	tcpHdr := pkt.Header()
 	if seqAdd > 0 {
-		sq := h.addSequence(seqAdd)
+		h.sequence += seqAdd
 		h.ackWaitQueue = &queueElement{
-			sequence: sq,
-			cTime:    time.Now(),
+			sequence: h.sequence,
+			cTime:    time.Now().UnixNano(),
 			packet:   pkt,
 			next:     h.ackWaitQueue,
 		}
-		wz := int(h.peerWindow) - int(sq-h.seqAcked)
 		h.ackWaitQueueSize++
+		wz := h.peerWindow - int64(h.sequence-h.sequenceAcked)
 		if h.ackWaitQueueSize%200 == 0 {
 			dlog.Tracef(ctx, "   CON %s, Ack-queue size %d, seq %d peer window size %d",
 				h.id, h.ackWaitQueueSize, h.ackWaitQueue.sequence, wz)
 		}
-	} else if !forceAck && ackNbr == h.peerSequenceAcked() && tcpHdr.NoFlags() {
+	} else if ackNbr == h.peerSequenceAcked && tcpHdr.OnlyACK() {
 		// Redundant, skip it
-		return
+		return false
 	}
 
-	tcpHdr.SetACK(true)
 	tcpHdr.SetSequence(seq)
 	tcpHdr.SetAckNumber(ackNbr)
+	tcpHdr.SetWindowSize(uint16(h.receiveWindow() >> myWindowScale))
 	tcpHdr.SetChecksum(pkt.IPHeader())
-	h.setPeerSequenceAcked(ackNbr)
-	if err := h.toTun.Write(ctx, pkt); err != nil {
-		dlog.Errorf(ctx, "!! TUN %s: %v", h.id, err)
-	}
+	h.peerSequenceAcked = ackNbr
+	return true
 }
 
-func (h *handler) newResponse(ipPayloadLen int) Packet {
-	pkt := NewPacket(ipPayloadLen, h.id.Destination(), h.id.Source())
-	ipHdr := pkt.IPHeader()
-	ipHdr.SetL4Protocol(ipproto.TCP)
-	ipHdr.SetChecksum()
-
-	tcpHdr := Header(ipHdr.Payload())
-	tcpHdr.SetDataOffset(5)
-	tcpHdr.SetSourcePort(h.id.DestinationPort())
-	tcpHdr.SetDestinationPort(h.id.SourcePort())
-	h.myWindowToHeader(tcpHdr)
+// prepareToResend must be called with the lock in place
+func (h *handler) prepareToResend(ctx context.Context, origPkt Packet) Packet {
+	origHdr := origPkt.Header()
+	pkt := h.newResponse(ctx, origHdr.PayloadLen())
+	tcpHdr := pkt.Header()
+	tcpHdr.CopyFlagsFrom(origHdr)
+	tcpHdr.SetSequence(origHdr.Sequence())
+	tcpHdr.SetAckNumber(h.peerSequenceToAck)
+	tcpHdr.SetWindowSize(uint16(h.receiveWindow() >> myWindowScale))
+	tcpHdr.SetChecksum(pkt.IPHeader())
+	copy(tcpHdr.Payload(), origHdr.Payload())
 	return pkt
 }
 
-func (h *handler) sendAck(ctx context.Context) {
-	h.sendToTun(ctx, h.newResponse(HeaderLen), 0, false)
+func (h *handler) sendACK(ctx context.Context) {
+	pkt := h.newResponse(ctx, 0)
+	pkt.Header().SetACK(true)
+	h.sendToTun(ctx, pkt, 0)
 }
 
-func (h *handler) forceSendAck(ctx context.Context) {
-	h.sendToTun(ctx, h.newResponse(HeaderLen), 0, true)
+func (h *handler) newResponse(_ context.Context, payloadLen int) Packet {
+	return NewReplyPacket(HeaderLen, payloadLen, h.id)
 }
 
-func (h *handler) sendFin(ctx context.Context, expectAck bool) {
-	pkt := h.newResponse(HeaderLen)
+func (h *handler) sendFIN(ctx context.Context, withAck bool) {
+	pkt := NewReplyPacket(HeaderLen, 0, h.id)
 	tcpHdr := pkt.Header()
+	tcpHdr.SetPSH(true)
 	tcpHdr.SetFIN(true)
-	l := uint32(0)
-	if expectAck {
-		l = 1
-		h.finalSeq = h.sequence()
+	tcpHdr.SetACK(withAck)
+	h.finalSeq = h.sequence + 1
+	h.sendToTun(ctx, pkt, 1)
+}
+
+func (h *handler) sendRST(ctx context.Context) {
+	pkt := NewReplyPacket(HeaderLen, 0, h.id)
+	tcpHdr := pkt.Header()
+	tcpHdr.SetRST(true)
+	h.finalSeq = h.sequence + 1
+	h.sendToTun(ctx, pkt, 1)
+}
+
+func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32) {
+	if h.prepareToSend(ctx, pkt, seqAdd) {
+		h.tunWriteUnlocked(ctx, pkt)
 	}
-	h.sendToTun(ctx, pkt, l, true)
+}
+
+func (h *handler) tunWriteUnlocked(ctx context.Context, pkt Packet) {
+	h.Unlock()
+	if err := h.toTun.Write(ctx, pkt); err != nil {
+		dlog.Errorf(ctx, "!! TUN %s: %v", h.id, err)
+	}
+	h.Lock()
+}
+
+func (h *handler) tunWrite(ctx context.Context, pkt Packet) {
+	if err := h.toTun.Write(ctx, pkt); err != nil {
+		dlog.Errorf(ctx, "!! TUN %s: %v", h.id, err)
+	}
 }
 
 func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
@@ -325,108 +389,115 @@ func (h *handler) sendSynReply(ctx context.Context, syn Packet) {
 	if !synHdr.SYN() {
 		return
 	}
-	h.setPeerSequenceToAck(synHdr.Sequence() + 1)
+	h.peerSequenceToAck = synHdr.Sequence() + 1
 	h.sendSyn(ctx)
 }
 
 func (h *handler) sendSyn(ctx context.Context) {
-	hl := HeaderLen
-	hl += 8 // for the Maximum Segment Size option and for the Window Scale option
+	hl := HeaderLen + 12 // for the Maximum Segment Size, Window Scale, and Selective Ack Permitted options
 
-	pkt := h.newResponse(hl)
+	pkt := NewReplyPacket(hl, 0, h.id)
 	tcpHdr := pkt.Header()
 	tcpHdr.SetSYN(true)
+	tcpHdr.SetACK(true)
 	tcpHdr.SetWindowSize(maxReceiveWindow >> myWindowScale) // The SYN packet itself is not subject to scaling
 
 	// adjust data offset to account for options
 	tcpHdr.SetDataOffset(hl / 4)
 
 	opts := tcpHdr.OptionBytes()
-	opts[0] = byte(maximumSegmentSize)
+	opts[0] = maximumSegmentSize
 	opts[1] = 4
 	binary.BigEndian.PutUint16(opts[2:], uint16(maxSegmentSize))
 
-	opts[4] = byte(windowScale)
+	opts[4] = windowScale
 	opts[5] = 3
 	opts[6] = myWindowScale
-	opts[7] = byte(noOp)
-	h.sendToTun(ctx, pkt, 1, true)
+
+	opts[7] = selectiveAckPermitted
+	opts[8] = 2
+	h.sendToTun(ctx, pkt, 1)
 }
 
 func (h *handler) processPayload(ctx context.Context, data []byte) {
 	start := 0
 	n := len(data)
 	for n > start {
-		h.sendLock.Lock()
-		window := int(h.peerWindow) - int(h.sequence()-h.seqAcked)
-		for window <= 0 {
-			// The intended receiver is currently not accepting data. We must
-			// wait for the window to increase.
-			dlog.Debugf(ctx, "   CON %s TCP window is zero", h.id)
-			h.sendCondition.Wait()
-			if h.state() != stateEstablished {
-				h.sendLock.Unlock()
-				return
-			}
-			window = int(h.peerWindow) - int(h.sequence()-h.seqAcked)
+		h.Lock()
+		if h.state == stateTimeWait || h.state == stateClosed {
+			h.Unlock()
+			break
 		}
-		h.sendLock.Unlock()
-
-		// Give up if done is closed
-		select {
-		case <-ctx.Done():
-			return
-		case <-h.tunDone:
-			return
-		default:
+		var pkt Packet
+		start, pkt = h.preparePackageFromPayload(ctx, data, start)
+		h.Unlock()
+		if pkt == nil {
+			break
 		}
-
-		mxSend := n - start
-		if mxSend > int(h.peerMaxSegmentSize) {
-			mxSend = int(h.peerMaxSegmentSize)
-		}
-		if mxSend > window {
-			mxSend = window
-		}
-
-		pkt := h.newResponse(HeaderLen + mxSend)
-		ipHdr := pkt.IPHeader()
-		tcpHdr := pkt.Header()
-		ipHdr.SetPayloadLen(HeaderLen + mxSend)
-		ipHdr.SetChecksum()
-
-		end := start + mxSend
-		copy(tcpHdr.Payload(), data[start:end])
-		tcpHdr.SetPSH(end == n)
-		h.sendToTun(ctx, pkt, uint32(mxSend), false)
-
-		// Decrease the window size with the bytes that we just sent unless it's already updated
-		// from a received packet
-		atomic.CompareAndSwapInt64(&h.peerWindow, int64(window), int64(window-mxSend))
-		start = end
+		h.tunWrite(ctx, pkt)
 	}
 }
 
-func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
+func (h *handler) preparePackageFromPayload(ctx context.Context, data []byte, start int) (int, Packet) {
+	mxSeg := int(h.peerMaxSegmentSize)
+	window := h.peerWindow - int64(h.sequence-h.sequenceAcked)
+	minWin := int64(mxSeg * 4)
+	if window < minWin {
+		// The intended receiver is currently not accepting data. We must
+		// wait for the window to increase.
+		dlog.Tracef(ctx, "   CON %s TCP window is too small %d, %d, %d (%d < %d)", h.id, h.peerWindow, h.sequence, h.sequenceAcked, window, minWin)
+		if !h.awaitWindowSize(ctx, minWin) {
+			return 0, nil
+		}
+		dlog.Tracef(ctx, "   CON %s TCP window is big enough", h.id)
+	}
+
+	// Give up if context is done
+	if ctx.Err() != nil {
+		return 0, nil
+	}
+
+	n := len(data)
+	mxSend := n - start
+	if mxSend > mxSeg {
+		mxSend = mxSeg
+	}
+
+	pkt := h.newResponse(ctx, mxSend)
+	tcpHdr := pkt.Header()
+
+	end := start + mxSend
+	copy(tcpHdr.Payload(), data[start:end])
+	tcpHdr.SetACK(true)
+	tcpHdr.SetPSH(end == n)
+	// Decrease the window size with the bytes that we're about to send
+	h.peerWindow -= int64(mxSend)
+	if !h.prepareToSend(ctx, pkt, uint32(mxSend)) {
+		pkt = nil
+	}
+	return end, pkt
+}
+
+func (h *handler) listen(ctx context.Context, syn Packet) {
 	tcpHdr := syn.Header()
 	if tcpHdr.RST() {
-		dlog.Errorf(ctx, "   CON %s, got RST while idle", h.id)
-		return quitByReset
+		dlog.Debugf(ctx, "   CON %s, got RST while listen", h.id)
+		h.stopLocked(ctx)
+		return
 	}
 	if !tcpHdr.SYN() {
-		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
-			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
-		}
-		return quitByUs
+		dlog.Debugf(ctx, "   CON %s while listen", syn)
+		h.Reset(ctx, syn)
+		h.stopLocked(ctx)
+		return
 	}
 
 	synOpts, err := options(tcpHdr)
 	if err != nil {
-		dlog.Error(ctx, err)
-		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
-			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
-		}
-		return quitByUs
+		dlog.Debug(ctx, err)
+		h.Reset(ctx, syn)
+		h.stopLocked(ctx)
+		return
 	}
 	for _, synOpt := range synOpts {
 		switch synOpt.kind() {
@@ -443,306 +514,327 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		}
 	}
 
-	h.setSequence(uint32(h.RandomSequence()))
+	h.sequence = uint32(h.RandomSequence())
+	h.sqStart = h.sequence + 1
+	h.ackStart = tcpHdr.Sequence() + 1
+
 	h.setState(ctx, stateSynReceived)
 	// Reply to the SYN, then establish a connection. We send a reset if that fails.
 	h.sendSynReply(ctx, syn)
 	if h.stream, err = h.streamCreator(ctx); err == nil {
 		go h.readFromMgrLoop(ctx)
+		go h.writeToMgrLoop(ctx)
 	}
 	if err != nil {
 		dlog.Error(ctx, err)
-		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
-			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
-		}
-		return quitByUs
+		h.Reset(ctx, syn)
 	}
-	return pleaseContinue
 }
 
-func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
-	tcpHdr := pkt.Header()
-	if tcpHdr.RST() {
-		return quitByReset
-	}
-	if !tcpHdr.ACK() {
-		return pleaseContinue
-	}
-
-	h.onAckReceived(ctx, tcpHdr.AckNumber())
-	h.setState(ctx, stateEstablished)
-	go h.writeToMgrLoop(ctx)
-
-	pl := len(tcpHdr.Payload())
-	if pl != 0 {
-		h.lastKnown = tcpHdr.Sequence() + uint32(pl)
-		if h.sendToMgr(ctx, pkt) {
-			h.setPeerSequenceToAck(h.lastKnown)
-			h.sendAck(ctx)
-		} else {
-			h.packetsLost++
-		}
-	}
-	return pleaseContinue
+func (h *handler) inReceiveWindow(sq uint32) bool {
+	return sq >= h.peerSequenceAcked && sq < h.peerSequenceAcked+h.myWindowSize
 }
 
-func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
+func (h *handler) handleSequenceEQ(ctx context.Context, pkt Packet) {
+	state := h.state
 	tcpHdr := pkt.Header()
-	if tcpHdr.RST() {
-		return quitByReset
-	}
-
-	if !tcpHdr.ACK() {
-		// Just ignore packets that have no ack
-		return pleaseContinue
-	}
-
-	ackNbr := tcpHdr.AckNumber()
-	h.onAckReceived(ctx, ackNbr)
-
+	payloadLen := tcpHdr.PayloadLen()
 	sq := tcpHdr.Sequence()
-	lastAck := h.peerSequenceAcked()
-	payloadLen := len(tcpHdr.Payload())
-	state := h.state()
-	switch {
-	case sq == lastAck:
-		if state == stateFinWait1 && ackNbr == h.finalSeq && !tcpHdr.FIN() {
-			h.setState(ctx, stateTimedWait)
-			return quitByUs
-		}
-	case sq > lastAck:
-		if payloadLen == 0 {
-			break
-		}
-		if sq <= h.lastKnown {
-			// Previous packet lost by us. Don't ack this one, just treat it
-			// as the next lost packet.
-			if payloadLen > 0 {
-				lk := sq + uint32(payloadLen)
-				if lk > h.lastKnown {
-					h.lastKnown = lk
-					h.packetsLost++
-				}
-			}
-			return pleaseContinue
-		}
-		// Oops. Packet loss! Let sender know by sending an ACK so that we ack the receipt
-		// and also tell the sender about our expected number
-		dlog.Debugf(ctx, "   CON %s, ack-diff %d", pkt, sq-lastAck)
-		h.sendAck(ctx)
-		h.addOutOfOrderPacket(ctx, pkt)
-		return pleaseContinue
-	case sq == lastAck-1 && payloadLen == 0:
-		// keep alive, force is needed because the ackNbr is unchanged
-		h.forceSendAck(ctx)
-		go h.sendStreamControl(ctx, tunnel.KeepAlive)
-		return pleaseContinue
-	default:
-		// resend of already acknowledged packet. Just ignore
-		if payloadLen > 0 {
-			dlog.Debugf(ctx, "   CON %s, resends already acked len=%d, sq=%d", h.id, payloadLen, sq)
-		}
-		return pleaseContinue
-	}
-
 	switch {
 	case payloadLen > 0:
-		h.lastKnown = sq + uint32(payloadLen)
-		if !h.sendToMgr(ctx, pkt) {
-			h.packetsLost++
-			return pleaseContinue
-		}
-		h.setPeerSequenceToAck(h.lastKnown)
+		h.sendToMgr(ctx, pkt)
+		h.processOutOfOrderPackets(ctx, sq+uint32(payloadLen))
+		h.sendACK(ctx)
+	case tcpHdr.RST():
+		dlog.Debugf(ctx, "   CON %s", pkt)
+		h.stopLocked(ctx)
 	case tcpHdr.FIN():
-		h.setPeerSequenceToAck(lastAck + 1)
+		h.peerSequenceToAck = sq + 1
+		switch state {
+		case stateEstablished:
+			// The peer is actively closing the connection.
+			h.setState(ctx, stateCloseWait)
+			close(h.toMgrCh)
+			h.sendACK(ctx) // FIN is sent when the manager stream is closed
+			return
+		case stateFinWait1:
+			// The peer responds to our request to close the connection.
+			h.sendACK(ctx)
+			if tcpHdr.ACK() {
+				// FIN + ACK
+				h.setStopTimer(ctx)
+				h.setState(ctx, stateTimeWait)
+				h.stopLocked(ctx)
+			} else { // FIN
+				// Don't close channel just yet, more stuff may arrive
+				h.setState(ctx, stateClosing)
+			}
+		case stateFinWait2:
+			h.setStopTimer(ctx)
+			h.setState(ctx, stateTimeWait)
+			h.stopLocked(ctx)
+			h.sendACK(ctx)
+		}
 	default:
-		// don't ack an ack
-		return pleaseContinue
+		// ACK
+		an := tcpHdr.AckNumber()
+		switch state {
+		case stateSynSent:
+			if tcpHdr.SYN() {
+				h.sendACK(ctx)
+				h.setState(ctx, stateEstablished)
+			}
+		case stateSynReceived:
+			h.setState(ctx, stateEstablished)
+		case stateLastAck: // ACK of FIN
+			if an == h.finalSeq {
+				h.setState(ctx, stateClosed)
+				h.stopLocked(ctx)
+			}
+		case stateClosing:
+			if an == h.finalSeq {
+				h.setStopTimer(ctx)
+				h.setState(ctx, stateTimeWait)
+				h.stopLocked(ctx)
+			}
+		case stateFinWait1:
+			if an == h.finalSeq {
+				h.setStopTimer(ctx)
+				h.setState(ctx, stateFinWait2)
+			}
+		}
 	}
-	h.sendAck(ctx)
-
-	switch state {
-	case stateEstablished:
-		if tcpHdr.FIN() {
-			h.sendFin(ctx, false)
-			h.setState(ctx, stateTimedWait)
-			return quitByPeer
-		}
-	case stateFinWait1:
-		if tcpHdr.FIN() {
-			h.setState(ctx, stateTimedWait)
-			return quitByBoth
-		}
-		h.setState(ctx, stateFinWait2)
-	case stateFinWait2:
-		if tcpHdr.FIN() {
-			return quitByUs
-		}
-	}
-	return pleaseContinue
 }
+
+func (h *handler) handleSequenceGT(ctx context.Context, pkt Packet) {
+	tcpHdr := pkt.Header()
+	payloadLen := tcpHdr.PayloadLen()
+	sq := tcpHdr.Sequence()
+	if sq <= h.lastKnown {
+		// Previous packet lost by us. Don't ack this one, just treat it
+		// as the next lost packet.
+		if payloadLen > 0 {
+			lk := sq + uint32(payloadLen)
+			if lk > h.lastKnown {
+				h.lastKnown = lk
+				h.packetsLost++
+			}
+		}
+		return
+	}
+	if payloadLen > 0 {
+		// Oops. Packet loss! Let sender know by sending an ACK so that we ack the receipt
+		// and also tell the sender about our expected number
+		dlog.Tracef(ctx, "   CON %s, sq %d, an %d, wz %d, len %d, flags %s, ack-diff %d",
+			h.id, sq-h.ackStart, tcpHdr.AckNumber()-h.sqStart, tcpHdr.WindowSize(), payloadLen, tcpHdr.Flags(), sq-h.peerSequenceAcked)
+
+			h.addOutOfOrderPacket(pkt)
+		h.sendACK(ctx)
+	}
+}
+
+func (h *handler) handleSequenceLT(ctx context.Context, pkt Packet) {
+	tcpHdr := pkt.Header()
+	sq := tcpHdr.Sequence()
+	if tcpHdr.RST() {
+		if h.inReceiveWindow(sq) {
+			h.peerSequenceAcked--
+			h.sendACK(ctx)
+		}
+		return
+	}
+
+	if sq == h.peerSequenceAcked-1 && tcpHdr.PayloadLen() == 0 {
+		// keep alive, force is needed because the ackNbr is unchanged
+		switch h.state {
+		case stateCloseWait, stateLastAck:
+			// FIN has been sent, so this is just a repeat and can be ignored, we
+			// should ACK though, because our previous ACK might have been lost
+			if tcpHdr.OnlyACK() {
+				return
+			}
+		default:
+			// Send keep-alive unless the channel is congested
+			select {
+			case h.toMgrMsgCh <- tunnel.NewMessage(tunnel.KeepAlive, nil):
+				dlog.Tracef(ctx, "   CON %s, keep-alive", h.id)
+			default:
+			}
+		}
+		// force is needed because the ackNbr is unchanged
+		h.peerSequenceAcked--
+		h.sendACK(ctx)
+	} else {
+		// resend of already acknowledged packet. Just ignore
+		if payloadLen := tcpHdr.PayloadLen(); payloadLen > 0 {
+			dlog.Tracef(ctx, "   CON %s, sq %d, an %d, wz %d, len %d, flags %s, resends already acked",
+				h.id, sq-h.ackStart, tcpHdr.AckNumber()-h.sqStart, tcpHdr.WindowSize(), payloadLen, tcpHdr.Flags())
+		}
+	}
+}
+
+func (h *handler) handleReceived(ctx context.Context, pkt Packet) {
+	tcpHdr := pkt.Header()
+	// Just ignore packets that have no ACK unless it's a FIN
+	if !(tcpHdr.ACK() || tcpHdr.FIN() || tcpHdr.RST()) {
+		dlog.Debugf(ctx, "   CON %s, ACK not set", pkt)
+		return
+	}
+	sq := tcpHdr.Sequence()
+	switch {
+	case sq == h.peerSequenceAcked:
+		h.handleSequenceEQ(ctx, pkt)
+	case sq > h.peerSequenceAcked:
+		h.handleSequenceGT(ctx, pkt)
+	default:
+		h.handleSequenceLT(ctx, pkt)
+	}
+}
+
+const initialResendDelayMs = int64(200)
+const maxResends = 7
 
 func (h *handler) processPackets(ctx context.Context) {
 	h.wg.Add(1)
 	defer h.wg.Done()
 	defer func() {
-		close(h.tunDone)
-		h.setState(ctx, stateIdle)
-		h.sendLock.Lock()
+		if r := recover(); r != nil {
+			dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+		}
+		h.Lock()
 		h.ackWaitQueue = nil
 		h.oooQueue = nil
-		h.sendLock.Unlock()
-		if h.stream != nil {
-			go func() {
-				if err := h.stream.CloseSend(ctx); err != nil {
-					dlog.Errorf(ctx, "!! CON %s CloseSend() failed %v", h.id, err)
-				}
-			}()
-		}
+		h.Unlock()
 	}()
-
-	process := func(ctx context.Context, pkt Packet) bool {
-		h.peerWindowFromHeader(ctx, pkt.Header())
-		var end quitReason
-		switch h.state() {
-		case stateIdle:
-			end = h.idle(ctx, pkt)
-		case stateSynReceived:
-			end = h.synReceived(ctx, pkt)
-		default:
-			end = h.handleReceived(ctx, pkt)
-		}
-		switch end {
-		case quitByReset, quitByContext:
-			return false
-		case quitByUs, quitByPeer, quitByBoth:
-			h.processFinalPackets(ctx)
-			return false
-		default:
-			return true
-		}
-	}
-	h.processPacketsWithProcessor(ctx, process)
-}
-
-func (h *handler) processFinalPackets(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	defer h.setState(ctx, stateIdle)
-
-	h.processPacketsWithProcessor(ctx, func(ctx context.Context, pkt Packet) bool {
-		h.peerWindowFromHeader(ctx, pkt.Header())
-		end := h.handleReceived(ctx, pkt)
-		return end == pleaseContinue
-	})
-}
-
-const initialResendDelay = 2
-const maxResends = 7
-
-type resend struct {
-	packet Packet
-	secs   int
-	next   *resend
-}
-
-func (h *handler) processPacketsWithProcessor(ctx context.Context, process func(ctx context.Context, pkt Packet) bool) {
 	for {
 		select {
-		case pkt := <-h.fromTun:
-			if !process(ctx, pkt) {
+		case <-ctx.Done():
+			dlog.Debugf(ctx, "   CON %s context done", h.id)
+			return
+		case pkt, ok := <-h.fromTun:
+			if !ok || h.state == stateClosed {
+				dlog.Debugf(ctx, "   CON %s %t, %s", h.id, ok, h.state)
 				return
 			}
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				continueProcessing, next := h.processNextOutOfOrderPacket(ctx, process)
-				if !continueProcessing {
-					return
-				}
-				if !next {
-					break
-				}
-			}
-		case <-ctx.Done():
-			return
+			h.Lock()
+			h.process(ctx, pkt)
+			h.Unlock()
 		}
 	}
 }
 
-func (h *handler) copyPacket(orig Packet) Packet {
-	origHdr := orig.Header()
-	ipLen := HeaderLen + orig.PayloadLen()
-	pkt := h.newResponse(ipLen)
-	ipHdr := pkt.IPHeader()
-	tcpHdr := pkt.Header()
-	ipHdr.SetPayloadLen(ipLen)
-	ipHdr.SetChecksum()
-	copy(tcpHdr.Payload(), origHdr.Payload())
-	tcpHdr.SetPSH(origHdr.PSH())
-	return pkt
+func (h *handler) process(ctx context.Context, pkt Packet) {
+	h.checkAckAndPeerWindowSize(ctx, pkt.Header())
+	switch h.state {
+	case stateClosed, stateTimeWait:
+		// stray packet or duplicate, just ignore
+		return
+	case stateListen:
+		h.listen(ctx, pkt)
+	default:
+		h.handleReceived(ctx, pkt)
+	}
 }
 
+func (h *handler) processOutOfOrderPackets(ctx context.Context, seq uint32) {
+	for el := h.oooQueue; el != nil; el = el.next {
+		if el.sequence != seq {
+			break
+		}
+		th := el.packet.Header()
+		payloadLen := len(th.Payload())
+		dlog.Tracef(ctx, "   CON %s, Processing out-of-order packet sq %d, an %d, wz %d, len %d, flags %s",
+			h.id, th.Sequence()-h.ackStart, th.AckNumber()-h.sqStart, th.WindowSize(), payloadLen, th.Flags())
+		seq = el.sequence + uint32(payloadLen)
+		h.oooQueue = el.next
+		h.sendToMgr(ctx, el.packet)
+	}
+	h.lastKnown = seq
+	h.peerSequenceToAck = seq
+}
+
+type resend struct {
+	el   *queueElement
+	next *resend
+}
+
+// processResends resends packages that hasn't been acked using a timeout. This also acts as a fallback
+// when no SACKs arrive for those packages.
 func (h *handler) processResends(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+		}
+	}()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-h.tunDone:
-			return
-		case <-ticker.C:
-		}
-		now := time.Now()
-		var resends *resend
-		h.sendLock.Lock()
-		var prev *queueElement
-		for el := h.ackWaitQueue; el != nil; {
-			secs := initialResendDelay << el.retries // 2, 4, 8, 16, ...
-			deadLine := el.cTime.Add(time.Duration(secs) * time.Second)
-			if deadLine.Before(now) {
-				el.retries++
-				if el.retries > maxResends {
-					dlog.Errorf(ctx, "   CON %s, packet resent %d times, giving up", h.id, maxResends)
-					// Drop from queue and point to next
-					el = el.next
-					if prev == nil {
-						h.ackWaitQueue = el
-					} else {
-						prev.next = el
-					}
-					continue
-				}
-
-				// reverse (i.e. put in right order since ackWaitQueue is in fact reversed)
-				resends = &resend{packet: el.packet, secs: secs, next: resends}
+		case now := <-ticker.C:
+			if h.state == stateClosed {
+				return
 			}
-			prev = el
-			el = el.next
-		}
-		h.sendLock.Unlock()
-		for resends != nil {
-			pkt := h.copyPacket(resends.packet)
-			dlog.Debugf(ctx, "   CON %s resent after %d seconds", pkt, resends.secs)
-			h.sendToTun(ctx, pkt, uint32(len(pkt.Header().Payload())), false)
-			resends = resends.next
+
+			var resends *resend
+
+			h.Lock()
+			// Reverse the queue because it's in descending ack-order
+			for el := h.ackWaitQueue; el != nil; el = el.next {
+				resends = &resend{el: el, next: resends}
+			}
+			h.resend(ctx, now.UnixNano(), resends)
+			h.Unlock()
 		}
 	}
 }
 
-func (h *handler) onAckReceived(ctx context.Context, seq uint32) {
-	h.sendLock.Lock()
+func (h *handler) resend(ctx context.Context, now int64, resends *resend) {
+	for ; resends != nil; resends = resends.next {
+		el := resends.el
+		pkt := el.packet
+		th := pkt.Header()
+		sq := th.Sequence()
+
+		// The tunWriteUnlocked unlocks, so the h.sequenceAcked may be updated for each
+		// iteration. We must check that no ack has arrived.
+		if sq <= h.sequenceAcked {
+			// Packet has been acked already
+			continue
+		}
+
+		msecs := initialResendDelayMs << el.retries // 200, 400, 800, 1600, ...
+		deadLine := el.cTime + msecs*int64(time.Millisecond)
+		if now < deadLine {
+			continue
+		}
+
+		if el.retries < maxResends {
+			el.retries++
+			pkt = h.prepareToResend(ctx, pkt)
+			dlog.Tracef(ctx, "   CON %s, sq %d, resent after %d ms", h.id, sq-h.sqStart, msecs)
+			h.tunWriteUnlocked(ctx, pkt)
+			continue
+		}
+
+		dlog.Errorf(ctx, "   CON %s, sq %d, packet resent %d times, giving up", h.id, sq-h.sqStart, maxResends)
+
+		// Unlink (queue is reversed here, so this is simple)
+		if resends.next == nil {
+			// "beginning" of the queue
+			h.ackWaitQueue = el.next
+		} else {
+			resends.next.el.next = el.next
+		}
+		h.ackWaitQueueSize--
+	}
+}
+
+func (h *handler) onReceivedACK(seq uint32) {
 	// ack-queue is guaranteed to be sorted descending on sequence, so we cut from the packet with
 	// a sequence less than or equal to the received sequence.
-	sq := h.sequence()
-	oldWindow := int(h.peerWindow) - int(sq-h.seqAcked)
-	h.seqAcked = seq
-	newWindow := int(h.peerWindow) - int(sq-h.seqAcked)
-
+	h.sequenceAcked = seq
 	el := h.ackWaitQueue
 	var prev *queueElement
 	for el != nil && el.sequence > seq {
@@ -763,32 +855,9 @@ func (h *handler) onAckReceived(ctx context.Context, seq uint32) {
 			}
 		}
 	}
-	h.sendLock.Unlock()
-	if oldWindow <= 0 && newWindow > 0 {
-		dlog.Debugf(ctx, "   CON %s, TCP window %d after ack", h.id, newWindow)
-		h.sendCondition.Signal()
-	}
 }
 
-func (h *handler) processNextOutOfOrderPacket(ctx context.Context, process func(ctx context.Context, pkt Packet) bool) (bool, bool) {
-	seq := h.peerSequenceToAck()
-	var prev *queueElement
-	for el := h.oooQueue; el != nil; el = el.next {
-		if el.sequence == seq {
-			if prev != nil {
-				prev.next = el.next
-			} else {
-				h.oooQueue = el.next
-			}
-			dlog.Debugf(ctx, "   CON %s, Processing out-of-order packet %s", h.id, el.packet)
-			return process(ctx, el.packet), true
-		}
-		prev = el
-	}
-	return true, false
-}
-
-func (h *handler) addOutOfOrderPacket(ctx context.Context, pkt Packet) {
+func (h *handler) addOutOfOrderPacket(pkt Packet) {
 	hdr := pkt.Header()
 	sq := hdr.Sequence()
 
@@ -797,90 +866,132 @@ func (h *handler) addOutOfOrderPacket(ctx context.Context, pkt Packet) {
 		if el.sequence == sq {
 			return
 		}
+		if el.sequence > sq {
+			break
+		}
 		prev = el
 	}
-	dlog.Debugf(ctx, "   CON %s, out-of-order", pkt)
-	el := &queueElement{
+	pl := &queueElement{
 		sequence: sq,
-		cTime:    time.Now(),
+		cTime:    time.Now().UnixNano(),
 		packet:   pkt,
 	}
+
 	if prev == nil {
-		h.oooQueue = el
+		pl.next = h.oooQueue
+		h.oooQueue = pl
 	} else {
-		prev.next = el
+		pl.next = prev.next
+		prev.next = pl
 	}
 }
 
-func (h *handler) state() state {
-	return state(atomic.LoadInt32((*int32)(&h.wfState)))
+func (h *handler) illegalStateTransition(ctx context.Context, to state) {
+	dlog.Errorf(ctx, "   CON %s, illegal state transition %s -> %s", h.id, h.state, to)
+}
+func (h *handler) setState(ctx context.Context, s state) {
+	// Validate the transition
+	switch h.state {
+	case stateClosed:
+		if s != stateListen && s != stateSynSent {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateListen:
+		if s != stateSynReceived && s != stateSynSent && s != stateListen {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateSynReceived:
+		if s != stateEstablished && s != stateFinWait1 && s != stateClosed {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateSynSent:
+		if s != stateSynReceived && s != stateEstablished && s != stateClosed {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateEstablished:
+		if s != stateCloseWait && s != stateFinWait1 {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateFinWait1:
+		if s != stateClosing && s != stateFinWait2 && s != stateTimeWait {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateFinWait2:
+		if s != stateTimeWait {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateClosing:
+		if s != stateTimeWait {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateCloseWait:
+		if s != stateLastAck {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	case stateLastAck:
+		if s != stateClosed {
+			h.illegalStateTransition(ctx, s)
+			return
+		}
+	}
+	dlog.Debugf(ctx, "   CON %s, state %s -> %s", h.id, h.state, s)
+	h.state = s
 }
 
-func (h *handler) setState(ctx context.Context, s state) {
-	oldState := h.state()
-	if oldState != s {
-		dlog.Debugf(ctx, "   CON %s, state %s -> %s", h.id, h.state(), s)
-		atomic.StoreInt32((*int32)(&h.wfState), int32(s))
-		if oldState == stateEstablished {
-			// Unblock any sender when moving from stateEstablished
-			h.sendCondition.Signal()
+// awaitWindowSize must be called with lock in place
+func (h *handler) awaitWindowSize(ctx context.Context, sz int64) (proceed bool) {
+	ap := &awaitWinSize{
+		done:   make(chan struct{}),
+		rqSize: sz,
+	}
+	h.awaitWinSize = ap
+	h.Unlock()
+	select {
+	case <-ctx.Done():
+		proceed = false
+	case <-ap.done:
+		proceed = h.state != stateClosed
+	}
+	h.Lock()
+	return proceed
+}
+
+func (h *handler) checkAckAndPeerWindowSize(ctx context.Context, tcpHeader Header) {
+	if tcpHeader.ACK() {
+		ackNbr := tcpHeader.AckNumber()
+		if ackNbr == 0 {
+			return
+		}
+		h.onReceivedACK(ackNbr)
+		sz := int64(tcpHeader.WindowSize()) << h.peerWindowScale
+		h.peerWindow = sz
+
+		// Is the processPayload currently waiting for a larger window size in order to continue?
+		if ap := h.awaitWinSize; ap != nil {
+			wsz := sz - int64(h.sequence-ackNbr)
+
+			// Can we fulfill the request now? If so, remove the awaitWinSize and  close its channel.
+			if wsz >= ap.rqSize {
+				h.awaitWinSize = nil
+				close(ap.done)
+			}
 		}
 	}
 }
 
-// sequence is the sequence number of the packets that this client
-// sends to the TUN device.
-func (h *handler) sequence() uint32 {
-	return atomic.LoadUint32(&h.seq)
+func (h *handler) receiveWindow() uint32 {
+	return atomic.LoadUint32(&h.myWindowSize)
 }
 
-func (h *handler) addSequence(v uint32) uint32 {
-	return atomic.AddUint32(&h.seq, v)
-}
-
-func (h *handler) setSequence(v uint32) {
-	atomic.StoreUint32(&h.seq, v)
-}
-
-// peerSequenceToAck is the received sequence that this will ack on next send
-func (h *handler) peerSequenceToAck() uint32 {
-	return atomic.LoadUint32(&h.peerSeqToAck)
-}
-
-func (h *handler) setPeerSequenceToAck(v uint32) {
-	atomic.StoreUint32(&h.peerSeqToAck, v)
-}
-
-// peerSequenceAcked was the last ack sent to the peer
-func (h *handler) peerSequenceAcked() uint32 {
-	return atomic.LoadUint32(&h.peerSeqAcked)
-}
-
-func (h *handler) setPeerSequenceAcked(v uint32) {
-	atomic.StoreUint32(&h.peerSeqAcked, v)
-}
-
-func (h *handler) peerWindowFromHeader(ctx context.Context, tcpHeader Header) {
-	h.sendLock.Lock()
-	sq := h.sequence()
-	oldWindow := int(h.peerWindow) - int(sq-h.seqAcked)
-	h.peerWindow = int64(tcpHeader.WindowSize()) << h.peerWindowScale
-	newWindow := int(h.peerWindow) - int(sq-h.seqAcked)
-	h.sendLock.Unlock()
-	if oldWindow <= 0 && newWindow > 0 {
-		dlog.Debugf(ctx, "   CON %s, TCP window %d after window update", h.id, newWindow)
-		h.sendCondition.Signal()
-	}
-}
-
-func (h *handler) myWindowToHeader(tcpHeader Header) {
-	tcpHeader.SetWindowSize(uint16(h.receiveWindow() >> myWindowScale))
-}
-
-func (h *handler) receiveWindow() int {
-	return int(atomic.LoadInt64(&h.myWindow))
-}
-
-func (h *handler) setReceiveWindow(v int) {
-	atomic.StoreInt64(&h.myWindow, int64(v))
+func (h *handler) setReceiveWindow(v uint32) {
+	atomic.StoreUint32(&h.myWindowSize, v)
 }

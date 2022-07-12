@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
@@ -29,6 +30,20 @@ func PacketFromData(ipHdr ip.Header, data *buffer.Data) Packet {
 func NewPacket(ipPayloadLen int, src, dst net.IP) Packet {
 	pkt := &packet{}
 	ip.InitPacket(pkt, ipPayloadLen, src, dst)
+	return pkt
+}
+
+func NewReplyPacket(hdrLen, payloadLen int, id tunnel.ConnID) Packet {
+	pkt := NewPacket(hdrLen+payloadLen, id.Destination(), id.Source())
+	ipHdr := pkt.IPHeader()
+	ipHdr.SetL4Protocol(ipproto.TCP)
+	ipHdr.SetPayloadLen(hdrLen + payloadLen)
+	ipHdr.SetChecksum()
+
+	tcpHdr := Header(ipHdr.Payload())
+	tcpHdr.SetDataOffset(hdrLen >> 2)
+	tcpHdr.SetSourcePort(id.DestinationPort())
+	tcpHdr.SetDestinationPort(id.SourcePort())
 	return pkt
 }
 
