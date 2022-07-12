@@ -291,8 +291,8 @@ func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32, forc
 	}
 }
 
-func (h *handler) newResponse(ipPayloadLen int, withAck bool) Packet {
-	pkt := NewPacket(ipPayloadLen, h.id.Destination(), h.id.Source(), withAck)
+func (h *handler) newResponse(ipPayloadLen int) Packet {
+	pkt := NewPacket(ipPayloadLen, h.id.Destination(), h.id.Source())
 	ipHdr := pkt.IPHeader()
 	ipHdr.SetL4Protocol(ipproto.TCP)
 	ipHdr.SetChecksum()
@@ -306,15 +306,15 @@ func (h *handler) newResponse(ipPayloadLen int, withAck bool) Packet {
 }
 
 func (h *handler) sendAck(ctx context.Context) {
-	h.sendToTun(ctx, h.newResponse(HeaderLen, false), 0, false)
+	h.sendToTun(ctx, h.newResponse(HeaderLen), 0, false)
 }
 
 func (h *handler) forceSendAck(ctx context.Context) {
-	h.sendToTun(ctx, h.newResponse(HeaderLen, false), 0, true)
+	h.sendToTun(ctx, h.newResponse(HeaderLen), 0, true)
 }
 
 func (h *handler) sendFin(ctx context.Context, expectAck bool) {
-	pkt := h.newResponse(HeaderLen, true)
+	pkt := h.newResponse(HeaderLen)
 	tcpHdr := pkt.Header()
 	tcpHdr.SetFIN(true)
 	l := uint32(0)
@@ -338,7 +338,7 @@ func (h *handler) sendSyn(ctx context.Context) {
 	hl := HeaderLen
 	hl += 8 // for the Maximum Segment Size option and for the Window Scale option
 
-	pkt := h.newResponse(hl, true)
+	pkt := h.newResponse(hl)
 	tcpHdr := pkt.Header()
 	tcpHdr.SetSYN(true)
 	tcpHdr.SetWindowSize(maxReceiveWindow >> myWindowScale) // The SYN packet itself is not subject to scaling
@@ -394,7 +394,7 @@ func (h *handler) processPayload(ctx context.Context, data []byte) {
 			mxSend = window
 		}
 
-		pkt := h.newResponse(HeaderLen+mxSend, true)
+		pkt := h.newResponse(HeaderLen + mxSend)
 		ipHdr := pkt.IPHeader()
 		tcpHdr := pkt.Header()
 		ipHdr.SetPayloadLen(HeaderLen + mxSend)
@@ -681,7 +681,7 @@ func (h *handler) processPacketsWithProcessor(ctx context.Context, process func(
 func (h *handler) copyPacket(orig Packet) Packet {
 	origHdr := orig.Header()
 	ipLen := HeaderLen + orig.PayloadLen()
-	pkt := h.newResponse(ipLen, true)
+	pkt := h.newResponse(ipLen)
 	ipHdr := pkt.IPHeader()
 	tcpHdr := pkt.Header()
 	ipHdr.SetPayloadLen(ipLen)

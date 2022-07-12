@@ -18,17 +18,16 @@ type Packet interface {
 }
 
 type packet struct {
-	ipHdr   ip.Header
-	data    *buffer.Data
-	withAck bool
+	ipHdr ip.Header
+	data  *buffer.Data
 }
 
 func PacketFromData(ipHdr ip.Header, data *buffer.Data) Packet {
 	return &packet{ipHdr: ipHdr, data: data}
 }
 
-func NewPacket(ipPayloadLen int, src, dst net.IP, withAck bool) Packet {
-	pkt := &packet{withAck: withAck}
+func NewPacket(ipPayloadLen int, src, dst net.IP) Packet {
+	pkt := &packet{}
 	ip.InitPacket(pkt, ipPayloadLen, src, dst)
 	return pkt
 }
@@ -69,7 +68,7 @@ func (p *packet) Reset() Packet {
 	incIp := p.IPHeader()
 	incTcp := p.Header()
 
-	pkt := NewPacket(HeaderLen, incIp.Destination(), incIp.Source(), false)
+	pkt := NewPacket(HeaderLen, incIp.Destination(), incIp.Source())
 	iph := pkt.IPHeader()
 	iph.SetL4Protocol(ipproto.TCP)
 	iph.SetChecksum()
