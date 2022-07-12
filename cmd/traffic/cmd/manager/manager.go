@@ -13,6 +13,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -53,12 +57,33 @@ func Main(ctx context.Context, _ ...string) error {
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
 
+	// Serve Prometheus metrics
+	g.Go("prometheus", mgr.servePrometheus)
+
 	g.Go("agent-injector", mutator.ServeMutator)
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 
 	// Wait for exit
 	return g.Wait()
+}
+
+func (m *Manager) servePrometheus(ctx context.Context) error {
+	env := managerutil.GetEnv(ctx)
+	port := env.PrometheusPort
+
+	promauto.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "client_count",
+		Help: "Number of Clients Connected",
+	}, func() float64 {
+		return float64(m.state.CountAllClients())
+	})
+
+	sc := &dhttp.ServerConfig{
+		Handler: promhttp.Handler(),
+	}
+
+	return sc.ListenAndServe(ctx, ":"+port)
 }
 
 func (m *Manager) serveHTTP(ctx context.Context) error {

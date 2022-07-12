@@ -79,6 +79,13 @@ func (tm *Map[V]) LoadAll() map[string]V {
 	return tm.unlockedLoadAll()
 }
 
+// CountAll returns a count of all key/value pairs in the map.
+func (tm *Map[V]) CountAll() int {
+	tm.lock.RLock()
+	defer tm.lock.RUnlock()
+	return len(tm.value)
+}
+
 // LoadAllMatching returns a deepcopy of all key/value pairs in the map for which the given
 // function returns true. The map is locked during the evaluation of the filter.
 func (tm *Map[V]) LoadAllMatching(filter func(string, V) bool) map[string]V {

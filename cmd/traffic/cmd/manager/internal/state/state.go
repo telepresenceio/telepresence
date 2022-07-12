@@ -429,6 +429,10 @@ func (s *State) GetAllClients() map[string]*rpc.ClientInfo {
 	return s.clients.LoadAll()
 }
 
+func (s *State) CountAllClients() int {
+	return s.clients.CountAll()
+}
+
 func (s *State) WatchClients(
 	ctx context.Context,
 	filter func(sessionID string, client *rpc.ClientInfo) bool,
