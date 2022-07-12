@@ -223,6 +223,7 @@ type tmSender interface {
 func recvLoop(ctx context.Context, who string, in tmReceiver, out chan<- *managerrpc.TunnelMessage, wg *sync.WaitGroup) {
 	defer func() {
 		dlog.Debugf(ctx, "%s Recv loop ended", who)
+		close(out)
 		wg.Done()
 	}()
 	dlog.Debugf(ctx, "%s Recv loop started", who)
@@ -260,8 +261,8 @@ func sendLoop(ctx context.Context, who string, out tmSender, in <-chan *managerr
 		select {
 		case <-ctx.Done():
 			return
-		case payload := <-in:
-			if payload == nil {
+		case payload, ok := <-in:
+			if !ok {
 				return
 			}
 			if err := out.Send(payload); err != nil {
