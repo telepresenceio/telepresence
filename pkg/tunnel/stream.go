@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -66,33 +67,41 @@ type Stream interface {
 // ReadLoop reads from the Stream and dispatches messages and error to the give channels. There
 // will be max one error since the error also terminates the loop.
 func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
-	msgCh := make(chan Message)
-	errCh := make(chan error)
+	msgCh := make(chan Message, 50)
+	errCh := make(chan error, 1) // Max one message will be sent on this channel
 	dlog.Debugf(ctx, "   %s %s, ReadLoop starting", s.Tag(), s.ID())
 	go func() {
+		var endReason string
 		defer func() {
-			dlog.Debugf(ctx, "   %s %s, ReadLoop ended", s.Tag(), s.ID())
+			close(errCh)
+			close(msgCh)
+			dlog.Debugf(ctx, "   %s %s, ReadLoop ended: %s", s.Tag(), s.ID(), endReason)
 		}()
 
-		for ctx.Err() == nil {
+		for {
 			m, err := s.Receive(ctx)
-			if err != nil {
-				close(msgCh) // Must close before posting the error to avoid potential deadlock
-				if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
-					err = fmt.Errorf("!! %s %s, read from grpc.ClientStream failed", s.Tag(), s.ID())
-					select {
-					case errCh <- err:
-					default:
-					}
+			switch {
+			case err == nil:
+				select {
+				case <-ctx.Done():
+					endReason = ctx.Err().Error()
+				case msgCh <- m:
+					continue
 				}
-				return
+			case ctx.Err() != nil:
+				endReason = ctx.Err().Error()
+			case errors.Is(err, io.EOF):
+				endReason = "EOF on input"
+			case errors.Is(err, net.ErrClosed):
+				endReason = "stream closed"
+			default:
+				endReason = err.Error()
+				select {
+				case errCh <- fmt.Errorf("!! %s %s, read from grpc.ClientStream failed: %w", s.Tag(), s.ID(), err):
+				default:
+				}
 			}
-			select {
-			case <-ctx.Done():
-				close(msgCh)
-				return
-			case msgCh <- m:
-			}
+			break
 		}
 	}()
 	return msgCh, errCh
@@ -100,30 +109,38 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 
 // WriteLoop reads messages from the channel and writes them to the Stream. It will call CloseSend() on the
 // stream when the channel is closed.
-func WriteLoop(ctx context.Context, s Stream, msgCh <-chan Message) {
+func WriteLoop(ctx context.Context, s Stream, msgCh <-chan Message, wg *sync.WaitGroup) {
 	dlog.Debugf(ctx, "   %s %s, WriteLoop starting", s.Tag(), s.ID())
 	go func() {
+		var endReason string
 		defer func() {
-			dlog.Debugf(ctx, "   %s %s, WriteLoop ended", s.Tag(), s.ID())
+			dlog.Debugf(ctx, "   %s %s, WriteLoop ended: %s", s.Tag(), s.ID(), endReason)
 			if err := s.CloseSend(ctx); err != nil {
-				dlog.Errorf(ctx, "!! %s %s, CloseSend failed: %v", s.Tag(), s.ID(), err)
+				dlog.Errorf(ctx, "!! %s %s, Send of closeSend failed: %v", s.Tag(), s.ID(), err)
 			}
+			wg.Done()
 		}()
 		for {
 			select {
 			case <-ctx.Done():
-				return
-			case m := <-msgCh:
-				if m == nil {
-					return
+				endReason = ctx.Err().Error()
+			case m, ok := <-msgCh:
+				if !ok {
+					endReason = "input channel is closed"
+					break
 				}
-				if err := s.Send(ctx, m); err != nil {
-					if !errors.Is(err, net.ErrClosed) {
-						dlog.Errorf(ctx, "!! %s %s, Send failed: %v", s.Tag(), s.ID(), err)
-					}
-					return
+				err := s.Send(ctx, m)
+				switch {
+				case err == nil:
+					continue
+				case errors.Is(err, net.ErrClosed):
+					endReason = "output stream is closed"
+				default:
+					endReason = err.Error()
+					dlog.Errorf(ctx, "!! %s %s, Send failed: %v", s.Tag(), s.ID(), err)
 				}
 			}
+			break
 		}
 	}()
 }

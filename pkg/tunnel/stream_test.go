@@ -138,22 +138,27 @@ func TestStream_Connect(t *testing.T) {
 
 func produce(ctx context.Context, s Stream, msg Message, errs chan<- error) {
 	wrCh := make(chan Message)
-	WriteLoop(ctx, s, wrCh)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	WriteLoop(ctx, s, wrCh, &wg)
 	go func() {
 		for i := 0; i < 100; i++ {
 			wrCh <- msg
 		}
 		close(wrCh)
+		wg.Wait()
 	}()
 
 	rdCh, errCh := ReadLoop(ctx, s)
 	select {
 	case <-ctx.Done():
 		errs <- ctx.Err()
-	case err := <-errCh:
-		errs <- err
-	case m := <-rdCh:
-		if m != nil {
+	case err, ok := <-errCh:
+		if ok {
+			errs <- err
+		}
+	case m, ok := <-rdCh:
+		if ok {
 			errs <- fmt.Errorf("unexpected message: %s", m)
 		}
 	}
@@ -162,17 +167,21 @@ func produce(ctx context.Context, s Stream, msg Message, errs chan<- error) {
 func consume(ctx context.Context, s Stream, expectedPayload []byte, errs chan<- error) {
 	count := 0
 	wrCh := make(chan Message)
-	WriteLoop(ctx, s, wrCh)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	WriteLoop(ctx, s, wrCh, &wg)
+	defer close(wrCh)
 	rdCh, errCh := ReadLoop(ctx, s)
 	for {
 		select {
 		case <-ctx.Done():
 			errs <- ctx.Err()
-		case err := <-errCh:
-			errs <- err
-		case m := <-rdCh:
-			if m == nil {
-				close(wrCh)
+		case err, ok := <-errCh:
+			if ok {
+				errs <- err
+			}
+		case m, ok := <-rdCh:
+			if !ok {
 				return
 			}
 			if m.Code() != Normal {

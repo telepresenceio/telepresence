@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -13,6 +14,7 @@ func (h *handler) handleStreamControl(ctx context.Context, ctrl tunnel.Message) 
 	switch ctrl.Code() {
 	case tunnel.DialOK:
 	case tunnel.DialReject, tunnel.Disconnect:
+		dlog.Debugf(ctx, "   MGR %s, hard disconnect", h.id)
 		h.Stop(ctx)
 	case tunnel.KeepAlive:
 	}
@@ -63,44 +65,47 @@ func (h *handler) adjustReceiveWindow() {
 
 // readFromMgrLoop sends the packets read from the fromMgr channel to the TUN device
 func (h *handler) readFromMgrLoop(ctx context.Context) {
-	h.wg.Add(1)
 	defer func() {
-		h.Stop(ctx)
-		h.wg.Done()
+		if r := recover(); r != nil {
+			dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+		}
 	}()
-	fromMgrCh, fromMgrErrs := tunnel.ReadLoop(ctx, h.stream)
+	h.wg.Add(1)
+	defer h.wg.Done()
+	msgCh, fromMgrErrs := tunnel.ReadLoop(ctx, h.stream)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-h.tunDone:
-			return
-		case err := <-fromMgrErrs:
-			dlog.Error(ctx, err)
-		case m := <-fromMgrCh:
-			if m == nil {
+		case err, ok := <-fromMgrErrs:
+			if ok {
+				dlog.Error(ctx, err)
+			}
+		case m, ok := <-msgCh:
+			if !ok {
 				return
 			}
-
-			select {
-			case <-ctx.Done():
-				return
-			case <-h.tunDone:
-				return
-			default:
-			}
-
 			if m.Code() != tunnel.Normal {
 				h.handleStreamControl(ctx, m)
 				continue
 			}
-			h.processPayload(ctx, m.Payload())
+			if h.state() != stateIdle {
+				h.processPayload(ctx, m.Payload())
+			}
 		}
 	}
 }
 
 // writeToMgrLoop sends the packets read from the toMgrCh channel to the traffic-manager device
 func (h *handler) writeToMgrLoop(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+		}
+	}()
+	h.wg.Add(1)
+	defer h.wg.Done()
+
 	// the time to wait until we flush in spite of not getting a PSH
 	const flushDelay = 2 * time.Millisecond
 
@@ -109,7 +114,8 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 
 	var mgrWrite func(payload []byte) bool
 	defer close(h.toMgrMsgCh)
-	tunnel.WriteLoop(ctx, h.stream, h.toMgrMsgCh)
+	h.wg.Add(1)
+	tunnel.WriteLoop(ctx, h.stream, h.toMgrMsgCh, &h.wg)
 	mgrWrite = func(payload []byte) bool {
 		select {
 		case <-ctx.Done():
@@ -139,10 +145,11 @@ func (h *handler) writeToMgrLoop(ctx context.Context) {
 			if buf.Len() > 0 {
 				sendBuf()
 			}
-		case <-h.tunDone:
-			return
-		case pkt := <-h.toMgrCh:
-			if pkt == nil {
+		case pkt, ok := <-h.toMgrCh:
+			if !ok {
+				if buf.Len() > 0 {
+					sendBuf()
+				}
 				return
 			}
 			h.adjustReceiveWindow()

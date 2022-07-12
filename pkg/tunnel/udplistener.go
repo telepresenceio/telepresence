@@ -144,10 +144,12 @@ func (p *udpStream) readLoop(ctx context.Context) {
 		case <-p.Idle():
 			endReason = "it was idle for too long"
 			return
-		case err := <-errCh:
-			dlog.Error(ctx, err)
-		case dg := <-msgCh:
-			if dg == nil {
+		case err, ok := <-errCh:
+			if ok {
+				dlog.Error(ctx, err)
+			}
+		case dg, ok := <-msgCh:
+			if !ok {
 				// h.incoming was closed by the reader and is now drained.
 				endReason = "there was no more input"
 				return

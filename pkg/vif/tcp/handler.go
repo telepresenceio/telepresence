@@ -246,11 +246,6 @@ func (h *handler) Start(ctx context.Context) {
 				}
 			}
 		}()
-		defer func() {
-			if h.stream != nil {
-				_ = h.stream.CloseSend(ctx)
-			}
-		}()
 		h.processPackets(ctx)
 		h.wg.Wait()
 	}()
