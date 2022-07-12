@@ -171,6 +171,9 @@ type handler struct {
 
 	awaitWinSize *awaitWinSize
 
+	// peerPermitsSACK
+	peerPermitsSACK bool
+
 	// peerWindowScale is the number of bits to shift the windowSize of received packet to
 	// determine the actual peerWindow
 	peerWindowScale uint8
@@ -342,8 +345,75 @@ func (h *handler) sendACK(ctx context.Context) {
 	h.sendToTun(ctx, pkt, 0)
 }
 
-func (h *handler) newResponse(_ context.Context, payloadLen int) Packet {
-	return NewReplyPacket(HeaderLen, payloadLen, h.id)
+func (h *handler) newResponse(ctx context.Context, payloadLen int) Packet {
+	el := h.oooQueue
+	if el == nil {
+		return NewReplyPacket(HeaderLen, payloadLen, h.id)
+	}
+
+	// Add SACK option with edges
+
+	// The data offset is stored in 4 bits and uses a multiplier of 4 which
+	// gives us a maximum of 15 quad-bytes. In this range, we must fit size
+	// of the TCP header (5), the size of the option header (1) and 2 edges
+	// (1 each) per SACK. 15-5-1 == 9, so 2 * 4 edges.
+	const maxEdges = 8
+
+	edges := make([]uint32, 0, maxEdges)
+	var mreTs int64
+	mreIdx := -1 // Index of edge of most recently received out-of-order packet
+	for i := 0; el != nil; i += 2 {
+		leftEdge := el.sequence
+		rightEdge := leftEdge
+		for {
+			if el.cTime > mreTs {
+				mreIdx = i
+				mreTs = el.cTime
+			}
+			rightEdge += uint32(el.packet.Header().PayloadLen())
+			el = el.next
+			if el == nil || el.sequence != rightEdge {
+				break
+			}
+		}
+		edges = append(edges, leftEdge, rightEdge)
+	}
+	ne := len(edges)
+	if mreIdx > 0 {
+		// Ensure that first SACK contains the most recently received packet
+		le := edges[mreIdx]
+		re := edges[mreIdx+1]
+		edges[mreIdx] = edges[0]
+		edges[mreIdx+1] = edges[1]
+		edges[0] = le
+		edges[1] = re
+	}
+
+	if ne > maxEdges {
+		ne = maxEdges
+	}
+
+	hl := HeaderLen + 4 + ne*4 // Must be on 4 byte boundary
+	pkt := NewReplyPacket(hl, payloadLen, h.id)
+	tcpHdr := pkt.Header()
+	// adjust data offset to account for options
+	opts := tcpHdr.OptionBytes()
+	opts[0] = selectiveAck
+	opts[1] = byte(2 + ne*4)
+	i := 2
+
+	for e := 0; e < ne; {
+		re := edges[e]
+		binary.BigEndian.PutUint32(opts[i:], re)
+		e++
+		i += 4
+		le := edges[e]
+		binary.BigEndian.PutUint32(opts[i:], le)
+		e++
+		i += 4
+		dlog.Tracef(ctx, "-> TUN %s SACK %d,%d", h.id, re-h.ackStart, le-h.ackStart)
+	}
+	return pkt
 }
 
 func (h *handler) sendFIN(ctx context.Context, withAck bool) {
@@ -509,6 +579,9 @@ func (h *handler) listen(ctx context.Context, syn Packet) {
 			dlog.Tracef(ctx, "   CON %s window scale %d", h.id, h.peerWindowScale)
 		case selectiveAckPermitted:
 			dlog.Tracef(ctx, "   CON %s selective acknowledgments permitted", h.id)
+			h.peerPermitsSACK = true
+		case timestamps:
+			dlog.Tracef(ctx, "   CON %s timestamps enabled", h.id)
 		default:
 			dlog.Tracef(ctx, "   CON %s option %d with len %d", h.id, synOpt.kind(), synOpt.len())
 		}
@@ -628,7 +701,9 @@ func (h *handler) handleSequenceGT(ctx context.Context, pkt Packet) {
 		dlog.Tracef(ctx, "   CON %s, sq %d, an %d, wz %d, len %d, flags %s, ack-diff %d",
 			h.id, sq-h.ackStart, tcpHdr.AckNumber()-h.sqStart, tcpHdr.WindowSize(), payloadLen, tcpHdr.Flags(), sq-h.peerSequenceAcked)
 
+		if h.peerPermitsSACK {
 			h.addOutOfOrderPacket(pkt)
+		}
 		h.sendACK(ctx)
 	}
 }
@@ -805,6 +880,10 @@ func (h *handler) resend(ctx context.Context, now int64, resends *resend) {
 		}
 
 		msecs := initialResendDelayMs << el.retries // 200, 400, 800, 1600, ...
+		if h.peerPermitsSACK {
+			// peer will send SACK unless there's a temporary outage, so timeout can be fairly large
+			msecs *= 10
+		}
 		deadLine := el.cTime + msecs*int64(time.Millisecond)
 		if now < deadLine {
 			continue
@@ -829,6 +908,30 @@ func (h *handler) resend(ctx context.Context, now int64, resends *resend) {
 		}
 		h.ackWaitQueueSize--
 	}
+}
+
+func (h *handler) onReceivedSACK(ctx context.Context, sacks []byte) {
+	rightEdge := h.sequenceAcked
+	if rightEdge >= binary.BigEndian.Uint32(sacks) {
+		// DSACK. Already acked now so we won't resend.
+		return
+	}
+	var resends *resend
+	// Resend the gaps between the SACKs, and reset the timeout in
+	// the process
+	now := time.Now().UnixNano()
+	for i := 0; i < len(sacks); i += 8 {
+		leftEdge := binary.BigEndian.Uint32(sacks[i:])
+		for el := h.ackWaitQueue; el != nil; el = el.next {
+			if el.sequence >= rightEdge && el.sequence < leftEdge {
+				dlog.Tracef(ctx, "   TUN %s, SACK %d-%d", h.id, rightEdge-h.sqStart, leftEdge-h.sqStart)
+				el.cTime = now // Let SACK reset resend timeout
+				resends = &resend{el: el, next: resends}
+			}
+		}
+		rightEdge = binary.BigEndian.Uint32(sacks[i+4:])
+	}
+	h.resend(ctx, now, resends)
 }
 
 func (h *handler) onReceivedACK(seq uint32) {
@@ -972,6 +1075,22 @@ func (h *handler) checkAckAndPeerWindowSize(ctx context.Context, tcpHeader Heade
 			return
 		}
 		h.onReceivedACK(ackNbr)
+		opts := tcpHeader.OptionBytes()
+		for len(opts) > 0 {
+			opt := opts[0]
+			if opt == selectiveAck {
+				h.onReceivedSACK(ctx, opts[2:])
+			}
+			if opt == endOfOptions {
+				break
+			}
+			ol := 1
+			if opt != noOp {
+				ol = int(opts[1])
+			}
+			opts = opts[ol:]
+		}
+
 		sz := int64(tcpHeader.WindowSize()) << h.peerWindowScale
 		h.peerWindow = sz
 

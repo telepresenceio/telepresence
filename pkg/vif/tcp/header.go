@@ -22,6 +22,10 @@ const (
 	maximumSegmentSize
 	windowScale
 	selectiveAckPermitted
+	selectiveAck
+	_ // echo
+	_ // echoReturn
+	timestamps
 )
 
 type option []byte
