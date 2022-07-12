@@ -56,7 +56,6 @@ func createReply(id tunnel.ConnID, payload []byte) Datagram {
 
 func sendUDPToTun(ctx context.Context, id tunnel.ConnID, payload []byte, toTun ip.Writer) {
 	pkt := createReply(id, payload)
-	defer pkt.Release()
 	if err := toTun.Write(ctx, pkt); err != nil {
 		dlog.Errorf(ctx, "!! TUN %s: %v", id, err)
 	}
@@ -95,14 +94,12 @@ func (h *handler) writeLoop(ctx context.Context) {
 			return
 		case dg := <-h.fromTun:
 			if !h.ResetIdle() {
-				dg.Release()
 				return
 			}
 			dlog.Tracef(ctx, "<- TUN %s", dg)
 			dlog.Tracef(ctx, "-> MGR %s", dg)
 			udpHdr := dg.Header()
 			err := h.stream.Send(ctx, tunnel.NewMessage(tunnel.Normal, udpHdr.Payload()))
-			dg.Release()
 			if err != nil {
 				if ctx.Err() == nil {
 					dlog.Errorf(ctx, "failed to send ConnMessage: %v", err)

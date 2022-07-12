@@ -11,7 +11,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/ip"
 )
 
@@ -52,8 +51,9 @@ func (s state) String() (txt string) {
 
 const myWindowScale = 8
 const maxReceiveWindow = 4096 << myWindowScale // 1MB
+const defaultMTU = 1500
 
-var maxSegmentSize = buffer.DataPool.MTU - (20 + HeaderLen) // Ethernet MTU of 1500 - 20 byte IP header and 20 byte TCP header
+var maxSegmentSize = defaultMTU - (20 + HeaderLen) // Ethernet MTU of 1500 - 20 byte IP header and 20 byte TCP header
 var ioChannelSize = maxReceiveWindow / maxSegmentSize
 
 type queueElement struct {
@@ -276,12 +276,9 @@ func (h *handler) sendToTun(ctx context.Context, pkt Packet, seqAdd uint32, forc
 			dlog.Tracef(ctx, "   CON %s, Ack-queue size %d, seq %d peer window size %d",
 				h.id, h.ackWaitQueueSize, h.ackWaitQueue.sequence, wz)
 		}
-	} else {
-		defer pkt.Release()
-		if !forceAck && ackNbr == h.peerSequenceAcked() && tcpHdr.NoFlags() {
-			// Redundant, skip it
-			return
-		}
+	} else if !forceAck && ackNbr == h.peerSequenceAcked() && tcpHdr.NoFlags() {
+		// Redundant, skip it
+		return
 	}
 
 	tcpHdr.SetACK(true)
@@ -419,14 +416,12 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 	tcpHdr := syn.Header()
 	if tcpHdr.RST() {
 		dlog.Errorf(ctx, "   CON %s, got RST while idle", h.id)
-		syn.Release()
 		return quitByReset
 	}
 	if !tcpHdr.SYN() {
 		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
 			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
 		}
-		syn.Release()
 		return quitByUs
 	}
 
@@ -436,7 +431,6 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 		if err := h.toTun.Write(ctx, syn.Reset()); err != nil {
 			dlog.Errorf(ctx, "!! CON %s, send of RST failed: %v", h.id, err)
 		}
-		syn.Release()
 		return quitByUs
 	}
 	for _, synOpt := range synOpts {
@@ -458,7 +452,6 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 	h.setState(ctx, stateSynReceived)
 	// Reply to the SYN, then establish a connection. We send a reset if that fails.
 	h.sendSynReply(ctx, syn)
-	defer syn.Release()
 	if h.stream, err = h.streamCreator(ctx); err == nil {
 		go h.readFromMgrLoop(ctx)
 	}
@@ -473,13 +466,6 @@ func (h *handler) idle(ctx context.Context, syn Packet) quitReason {
 }
 
 func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
-	release := true
-	defer func() {
-		if release {
-			pkt.Release()
-		}
-	}()
-
 	tcpHdr := pkt.Header()
 	if tcpHdr.RST() {
 		return quitByReset
@@ -495,7 +481,6 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 	pl := len(tcpHdr.Payload())
 	if pl != 0 {
 		h.lastKnown = tcpHdr.Sequence() + uint32(pl)
-		release = false
 		if h.sendToMgr(ctx, pkt) {
 			h.setPeerSequenceToAck(h.lastKnown)
 			h.sendAck(ctx)
@@ -507,13 +492,6 @@ func (h *handler) synReceived(ctx context.Context, pkt Packet) quitReason {
 }
 
 func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
-	release := true
-	defer func() {
-		if release {
-			pkt.Release()
-		}
-	}()
-
 	tcpHdr := pkt.Header()
 	if tcpHdr.RST() {
 		return quitByReset
@@ -558,7 +536,6 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 		dlog.Debugf(ctx, "   CON %s, ack-diff %d", pkt, sq-lastAck)
 		h.sendAck(ctx)
 		h.addOutOfOrderPacket(ctx, pkt)
-		release = false
 		return pleaseContinue
 	case sq == lastAck-1 && payloadLen == 0:
 		// keep alive, force is needed because the ackNbr is unchanged
@@ -576,7 +553,6 @@ func (h *handler) handleReceived(ctx context.Context, pkt Packet) quitReason {
 	switch {
 	case payloadLen > 0:
 		h.lastKnown = sq + uint32(payloadLen)
-		release = false
 		if !h.sendToMgr(ctx, pkt) {
 			h.packetsLost++
 			return pleaseContinue
@@ -736,7 +712,6 @@ func (h *handler) processResends(ctx context.Context) {
 			if deadLine.Before(now) {
 				el.retries++
 				if el.retries > maxResends {
-					el.packet.Release()
 					dlog.Errorf(ctx, "   CON %s, packet resent %d times, giving up", h.id, maxResends)
 					// Drop from queue and point to next
 					el = el.next
@@ -787,7 +762,6 @@ func (h *handler) onAckReceived(ctx context.Context, seq uint32) {
 			prev.next = nil
 		}
 		for {
-			el.packet.Release()
 			h.ackWaitQueueSize--
 			if el = el.next; el == nil {
 				break

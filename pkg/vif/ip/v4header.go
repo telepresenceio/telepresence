@@ -251,14 +251,13 @@ func (h V4Header) ConcatFragments(data *buffer.Data, fragsMap map[uint16][]*buff
 	totalPayload := expectedOffset
 	firstHeader := V4Header(fragments[0].Buf())
 
-	final := buffer.DataPool.Get(firstHeader.HeaderLen() + totalPayload)
+	final := buffer.NewData(firstHeader.HeaderLen() + totalPayload)
 	fb := final.Buf()
 	copy(fb[:firstHeader.HeaderLen()], firstHeader)
 	offset := firstHeader.HeaderLen()
 	for _, data := range fragments {
 		eh := V4Header(data.Buf())
 		copy(fb[offset+eh.FragmentOffset()*8:], eh.Payload())
-		buffer.DataPool.Put(data)
 	}
 	delete(fragsMap, h.ID())
 

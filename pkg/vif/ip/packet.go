@@ -12,19 +12,18 @@ import (
 type Packet interface {
 	IPHeader() Header
 	Data() *buffer.Data
-	Release()
 	SetDataAndIPHeader(*buffer.Data, Header)
 }
 
 func InitPacket(pkg Packet, ipPayloadLen int, src, dst net.IP) {
 	if len(src) == 4 && len(dst) == 4 {
-		data := buffer.DataPool.Get(ipPayloadLen + ipv4.HeaderLen)
+		data := buffer.NewData(ipPayloadLen + ipv4.HeaderLen)
 		iph := V4Header(data.Buf())
 		pkg.SetDataAndIPHeader(data, iph)
 		iph.Initialize()
 		iph.SetID(NextID())
 	} else {
-		data := buffer.DataPool.Get(ipPayloadLen + ipv6.HeaderLen)
+		data := buffer.NewData(ipPayloadLen + ipv6.HeaderLen)
 		iph := V6Header(data.Buf())
 		pkg.SetDataAndIPHeader(data, iph)
 		iph.Initialize()

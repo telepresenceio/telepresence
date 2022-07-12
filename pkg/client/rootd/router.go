@@ -44,7 +44,7 @@ func (s *session) routerWorker(c context.Context) error {
 			return fmt.Errorf("read packet error: %w", err)
 		}
 		if n > 0 {
-			bufCh <- buffer.DataPool.Copy(buf, n)
+			bufCh <- buf.Copy(n)
 		}
 	}
 	return nil
@@ -57,12 +57,6 @@ var blockedUDPPorts = map[uint16]bool{
 }
 
 func (s *session) handlePacket(c context.Context, data *buffer.Data) {
-	defer func() {
-		if data != nil {
-			buffer.DataPool.Put(data)
-		}
-	}()
-
 	reply := func(pkt ip.Packet) {
 		_, err := s.dev.WritePacket(pkt.Data(), 0)
 		if err != nil {
@@ -156,9 +150,7 @@ func (s *session) tcp(c context.Context, pkt tcp.Packet) {
 	if !tcpHdr.SYN() {
 		// Only a SYN packet can create a new connection. For all other packets, the connection must already exist
 		wf := s.handlers.Get(connID)
-		if wf == nil {
-			pkt.Release()
-		} else {
+		if wf != nil {
 			wf.(tcp.PacketHandler).HandlePacket(c, pkt)
 		}
 		return
@@ -167,7 +159,6 @@ func (s *session) tcp(c context.Context, pkt tcp.Packet) {
 	if s.isForDNS(ipHdr.Destination(), tcpHdr.DestinationPort()) {
 		// Ignore TCP packets intended for the DNS resolver for now
 		// TODO: Add support to DNS over TCP. The github.com/miekg/dns can do that.
-		pkt.Release()
 		return
 	}
 
@@ -176,7 +167,6 @@ func (s *session) tcp(c context.Context, pkt tcp.Packet) {
 	})
 	if err != nil {
 		dlog.Error(c, err)
-		pkt.Release()
 		return
 	}
 	// if wf is nil, the packet should simply be ignored

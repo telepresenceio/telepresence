@@ -99,7 +99,6 @@ func (h *dnsInterceptor) tunToConn(ctx context.Context, wg *sync.WaitGroup) {
 				}
 				n += wn
 			}
-			dg.Release()
 			if !h.ResetIdle() {
 				return
 			}
