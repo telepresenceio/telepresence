@@ -44,10 +44,6 @@ func (loginExecutor) GetUserInfo(ctx context.Context, refresh bool) (*authdata.U
 	panic("not implemented")
 }
 
-func (loginExecutor) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
-	panic("not implemented")
-}
-
 func (loginExecutor) GetCloudUserInfo(ctx context.Context, refresh, autoLogin bool) (*authdata.UserInfo, error) {
 	panic("not implemented")
 }

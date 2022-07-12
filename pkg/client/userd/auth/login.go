@@ -73,7 +73,6 @@ type LoginExecutor interface {
 	LoginAPIKey(ctx context.Context, key string) (bool, error)
 	Logout(ctx context.Context) error
 	GetAPIKey(ctx context.Context, description string) (string, error)
-	GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error)
 	GetLicense(ctx context.Context, id string) (string, string, error)
 	GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error)
 }
@@ -531,10 +530,6 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 		return "", err
 	}
 	return key, nil
-}
-
-func (l *loginExecutor) GetCloudAPIKey(ctx context.Context, desc string, autoLogin bool) (string, error) {
-	panic("not implemented")
 }
 
 // Must hold l.loginMu to call this.

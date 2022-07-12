@@ -426,7 +426,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 			ApiKey: func() string {
 				// Discard any errors; including an apikey with this request
 				// is optional.  We might not even be logged in.
-				tok, _ := svc.LoginExecutor().GetCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false)
+				tok, _ := auth.GetCloudAPIKey(c, svc.LoginExecutor(), a8rcloud.KeyDescTrafficManager, false)
 				return tok
 			}(),
 		})
@@ -455,10 +455,12 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:       ti.(*installer),
-		installID:       installID,
-		userAndHost:     userAndHost,
-		getCloudAPIKey:  svc.LoginExecutor().GetCloudAPIKey,
+		installer:   ti.(*installer),
+		installID:   installID,
+		userAndHost: userAndHost,
+		getCloudAPIKey: func(ctx context.Context, desc string, autoLogin bool) (string, error) {
+			return auth.GetCloudAPIKey(ctx, svc.LoginExecutor(), desc, autoLogin)
+		},
 		managerClient:   mClient,
 		managerConn:     conn,
 		sessionInfo:     si,
