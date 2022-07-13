@@ -450,9 +450,15 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 	if info.ManagerPodIp == nil {
 		return
 	}
+	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
+	if ct == 0 {
+		dlog.Debug(ctx, "Connectivity check disabled")
+		return
+	}
 	ip := net.IP(info.ManagerPodIp).String()
-	tCtx, tCancel := context.WithTimeout(ctx, 2*time.Second)
+	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
+	dlog.Debugf(ctx, "Performing connectivity check with timeout %s", ct)
 	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
