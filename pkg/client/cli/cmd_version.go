@@ -20,7 +20,7 @@ func versionCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 
 		Short:   "Show version",
-		PreRunE: forcedUpdateCheck,
+		PreRunE: cliutil.ForcedUpdateCheck,
 		RunE:    printVersion,
 	}
 }

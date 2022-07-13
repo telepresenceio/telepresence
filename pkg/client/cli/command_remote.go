@@ -21,7 +21,7 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 			return fmt.Errorf("unable to call ListCommands: %w", err)
 		}
 		if groups, err = cliutil.RPCToCommands(remote, runRemote); err != nil {
-			groups = commands.GetCommandsForLocal(err)
+			groups = commands.GetCommandsForLocal(ctx, err)
 		}
 		userDaemonRunning = true
 		return nil
@@ -30,7 +30,7 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 		return nil, err
 	}
 	if !userDaemonRunning {
-		groups = commands.GetCommandsForLocal(err)
+		groups = commands.GetCommandsForLocal(ctx, err)
 	}
 	return groups, nil
 }
