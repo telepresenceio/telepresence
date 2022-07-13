@@ -47,6 +47,10 @@ func (c *interceptCommand) group() string {
 }
 
 func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
+	if cmd.command != nil {
+		return cmd.command
+	}
+
 	cmd.command = &cobra.Command{
 		Use:   "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
 		Args:  cobra.MinimumNArgs(1),
@@ -57,71 +61,74 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 			CommandRequiresConnectorServer: "",
 		},
 	}
-	args := interceptArgs{}
+	cmd.args = interceptArgs{}
 	flags := cmd.command.Flags()
 
-	flags.StringVarP(&args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
-	flags.StringVarP(&args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
+	flags.StringVarP(&cmd.args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
+	flags.StringVarP(&cmd.args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
 		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
 	)
 
-	flags.StringVar(&args.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
+	flags.StringVar(&cmd.args.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
 
-	flags.BoolVarP(&args.localOnly, "local-only", "l", false, ``+
+	flags.BoolVarP(&cmd.args.localOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
-	flags.BoolVarP(&args.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
+	flags.BoolVarP(&cmd.args.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
-	args.previewSpec = &manager.PreviewSpec{}
-	addPreviewFlags("preview-url-", flags, args.previewSpec)
+	cmd.args.previewSpec = &manager.PreviewSpec{}
+	addPreviewFlags("preview-url-", flags, cmd.args.previewSpec)
 
-	flags.StringVarP(&args.envFile, "env-file", "e", "", ``+
+	flags.StringVarP(&cmd.args.envFile, "env-file", "e", "", ``+
 		`Also emit the remote environment to an env file in Docker Compose format. `+
 		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
 
-	flags.StringVarP(&args.envJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
+	flags.StringVarP(&cmd.args.envJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
 
-	flags.StringVarP(&args.mount, "mount", "", "true", ``+
+	flags.StringVarP(&cmd.args.mount, "mount", "", "true", ``+
 		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
 		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
 
-	flags.StringSliceVar(&args.toPod, "to-pod", []string{}, ``+
+	flags.StringSliceVar(&cmd.args.toPod, "to-pod", []string{}, ``+
 		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
 		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
 		`Use <port>/UDP for UDP ports`)
 
-	flags.BoolVarP(&args.dockerRun, "docker-run", "", false, ``+
+	flags.BoolVarP(&cmd.args.dockerRun, "docker-run", "", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
 		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
 
-	flags.StringVarP(&args.dockerMount, "docker-mount", "", "", ``+
+	flags.StringVarP(&cmd.args.dockerMount, "docker-mount", "", "", ``+
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
-	flags.StringVarP(&args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+	flags.StringVarP(&cmd.args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
-	flags.StringVar(&args.ingressHost, "ingress-host", "", "If this flag is set, the ingress dialogue will be skipped,"+
+	flags.StringVar(&cmd.args.ingressHost, "ingress-host", "", "If this flag is set, the ingress dialogue will be skipped,"+
 		" and this value will be used as the ingress hostname.")
-	flags.Int32Var(&args.ingressPort, "ingress-port", 0, "If this flag is set, the ingress dialogue will be skipped,"+
+	flags.Int32Var(&cmd.args.ingressPort, "ingress-port", 0, "If this flag is set, the ingress dialogue will be skipped,"+
 		" and this value will be used as the ingress port.")
-	flags.BoolVar(&args.ingressTLS, "ingress-tls", false, "If this flag is set, the ingress dialogue will be skipped."+
+	flags.BoolVar(&cmd.args.ingressTLS, "ingress-tls", false, "If this flag is set, the ingress dialogue will be skipped."+
 		" If the dialogue is skipped, this flag will determine if TLS is used, and will default to false.")
-	flags.StringVar(&args.ingressL5, "ingress-l5", "", "If this flag is set, the ingress dialogue will be skipped,"+
+	flags.StringVar(&cmd.args.ingressL5, "ingress-l5", "", "If this flag is set, the ingress dialogue will be skipped,"+
 		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
 
-	args.extState, cmd.extErr = extensions.LoadExtensions(ctx, flags)
-	cmd.args = args
+	cmd.args.extState, cmd.extErr = extensions.LoadExtensions(ctx, flags)
 
 	return cmd.command
 }
 
 func (c *interceptCommand) init(ctx context.Context) {
+	if c.command == nil {
+		_ = c.cobraCommand(ctx)
+	}
+
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
 	c.command.PostRunE = cliutil.RaiseCloudMessage
-	c.command.RunE = func(_ *cobra.Command, positional []string) error {
+	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
 		if c.extErr != nil {
 			return c.extErr
 		}
@@ -172,7 +179,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 			}
 		}
 
-		return c.intercept(ctx, args)
+		return c.intercept(ccmd.Context(), args)
 	}
 }
 
@@ -301,6 +308,26 @@ func addPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewS
 	flags.BoolVarP(&spec.DisplayBanner, prefix+"banner", "b", true, "Display banner on preview page")
 }
 
+type interceptState struct {
+	// static after newInterceptState() ////////////////////////////////////
+
+	cmd  safeCobraCommand
+	args interceptArgs
+
+	scout *scout.Reporter
+
+	connectorServer connector.ConnectorServer
+	managerClient   manager.ManagerClient
+
+	// set later ///////////////////////////////////////////////////////////
+
+	env        map[string]string
+	mountPoint string // if non-empty, this the final mount point of a successful mount
+	localPort  uint16 // the parsed <local port>
+
+	dockerPort uint16
+}
+
 func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
@@ -319,27 +346,6 @@ func newInterceptState(
 	}
 	is.scout.Start(ctx)
 	return is
-}
-
-type interceptState struct {
-	// static after newInterceptState() ////////////////////////////////////
-
-	cmd  safeCobraCommand
-	args interceptArgs
-
-	scout *scout.Reporter
-
-	connectorServer connector.ConnectorServer
-	managerClient   manager.ManagerClient
-	connInfo        *connector.ConnectInfo
-
-	// set later ///////////////////////////////////////////////////////////
-
-	env        map[string]string
-	mountPoint string // if non-empty, this the final mount point of a successful mount
-	localPort  uint16 // the parsed <local port>
-
-	dockerPort uint16
 }
 
 func interceptMessage(r *connector.InterceptResult) error {
@@ -675,7 +681,8 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	// Add whatever metadata we already have to scout
 	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
-	is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
+	// TODO(raphaelreyna): figure out how to get the clusterid from here
+	//is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
 	mechanism, _ := args.extState.Mechanism()
 	mechanismArgs, _ := args.extState.MechanismArgs()
 	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
@@ -751,8 +758,9 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 		}
 
 		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-			Session: is.connInfo.SessionInfo,
-			Name:    args.name,
+			// TODO(raphaelreyna): figure out how to get session info from here
+			// Session: is.connInfo.SessionInfo,
+			Name: args.name,
 			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 				AddPreviewDomain: args.previewSpec,
 			},

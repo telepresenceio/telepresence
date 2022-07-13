@@ -49,6 +49,7 @@ func GetCommands(ctx context.Context) cliutil.CommandGroups {
 			groupName = cmd.group()
 			group     = groups[groupName]
 		)
+		cmd.init(ctx)
 		groups[groupName] = append(group, cmd.cobraCommand(ctx))
 	}
 	return groups

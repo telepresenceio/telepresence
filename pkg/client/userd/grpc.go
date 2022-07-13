@@ -490,8 +490,9 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
 
-		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			ctx = commands.WithConnectorServer(ctx, s)
+		err = cmd.ParseFlags(args)
+		if err != nil {
+			return
 		}
 
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
@@ -504,8 +505,12 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			ctx = commands.WithCwd(ctx, req.GetCwd())
 			err = cmd.ExecuteContext(ctx)
 		}
+		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+			ctx = commands.WithConnectorServer(ctx, s)
+		}
 
-		if err = cmd.ExecuteContext(ctx); err != nil {
+		err = cmd.ExecuteContext(ctx)
+		if err != nil {
 			return
 		}
 
