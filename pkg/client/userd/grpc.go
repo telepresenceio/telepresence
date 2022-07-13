@@ -512,6 +512,9 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			case <-cmdCtx.Done(): // user called quit
 			}
 		}
+		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+			ctx = commands.WithConnectorServer(ctx, s)
+		}
 
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
 			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(cmdCtx context.Context, ts trafficmgr.Session) error {
