@@ -514,7 +514,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 }
 
 // AddIntercept adds one intercept
-func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest, isPodd bool) (result *rpc.InterceptResult, err error) {
+func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
 	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
@@ -566,9 +566,9 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	spec.ServiceUid = result.ServiceUid
 	spec.WorkloadKind = result.WorkloadKind
-	deleteMount := false
 
-	if ir.MountPoint != "" && !isPodd {
+	deleteMount := false
+	if ir.MountPoint != "" {
 		// Ensure that the mount-point is free to use
 		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
 			return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
@@ -583,13 +583,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			}
 		}()
 	}
-
-	apiKey, err := tm.getCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
-	if err != nil {
-		if !errors.Is(err, auth.ErrNotLoggedIn) {
-			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
-		}
-	}
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
@@ -599,21 +592,34 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
-	waitCh := make(chan interceptResult)
+	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel
 	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
-	defer tm.activeInterceptsWaiters.Delete(spec.Name)
+	defer func() {
+		if wc, loaded := tm.activeInterceptsWaiters.LoadAndDelete(spec.Name); loaded {
+			close(wc.(chan interceptResult))
+		}
+	}()
 
-	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+	var ii *manager.InterceptInfo
+	ii, err = tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
-		ApiKey:        apiKey,
+		ApiKey:        svcProps.apiKey,
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		err = client.CheckTimeout(c, err)
-		return &rpc.InterceptResult{Error: common.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
+		code := grpcCodes.Internal
+		if errors.Is(err, context.DeadlineExceeded) {
+			code = grpcCodes.DeadlineExceeded
+		} else if errors.Is(err, context.Canceled) {
+			code = grpcCodes.Canceled
+		}
+		return nil, grpcStatus.Error(code, err.Error())
 	}
+
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
+
 	success := false
 	defer func() {
 		if !success {
@@ -654,15 +660,151 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
-			if !isPodd {
-				mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
-				if mountPoint != "" && ii.SftpPort > 0 {
-					deleteMount = false // Mount-point is busy until intercept ends
-					ii.ClientMountPoint = mountPoint
-				}
-				success = true
-				return result, nil
+			mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
+			if mountPoint != "" && ii.SftpPort > 0 {
+				deleteMount = false // Mount-point is busy until intercept ends
+				ii.ClientMountPoint = mountPoint
 			}
+			success = true
+			return result, nil
+		}
+	}
+}
+
+// AddPoddIntercept adds one intercept
+// Used for the pod daemon deploy previews so it performs the same job as AddIntercept() only without the mount info
+func (tm *TrafficManager) AddPoddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	var svcProps *serviceProps
+	svcProps, result = tm.CanIntercept(c, ir)
+	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
+		return result, nil
+	}
+
+	spec := ir.Spec
+	if svcProps == nil {
+		return tm.AddLocalOnlyIntercept(c, spec)
+	}
+
+	spec.Client = tm.userAndHost
+	if spec.Mechanism == "" {
+		spec.Mechanism = "tcp"
+	}
+
+	cfg := client.GetConfig(c)
+	apiPort := uint16(cfg.TelepresenceAPI.Port)
+	if apiPort == 0 {
+		// Default to the API port declared by the traffic-manager
+		var apiInfo *manager.TelepresenceAPIInfo
+		if apiInfo, err = tm.managerClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
+			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
+			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
+		} else {
+			apiPort = uint16(apiInfo.Port)
+		}
+	}
+
+	var agentEnv map[string]string
+	// svcProps.preparedIntercept == nil means that we're using an older traffic-manager, incapable
+	// of using PrepareIntercept.
+	if svcProps.preparedIntercept == nil {
+		// It's OK to just call addAgent every time; if the agent is already installed then it's a
+		// no-op.
+		agentEnv, result = tm.addAgent(c, svcProps, ir.AgentImage, apiPort)
+		if result.Error != common.InterceptError_UNSPECIFIED {
+			return result, nil
+		}
+	} else {
+		// Make spec port identifier unambiguous.
+		spec.ServiceName = svcProps.preparedIntercept.ServiceName
+		pi, err := svcProps.portIdentifier()
+		if err != nil {
+			return nil, err
+		}
+		spec.ServicePortIdentifier = pi.String()
+	}
+
+	spec.ServiceUid = result.ServiceUid
+	spec.WorkloadKind = result.WorkloadKind
+
+	dlog.Debugf(c, "creating intercept %s", spec.Name)
+	tos := &client.GetConfig(c).Timeouts
+	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
+	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
+	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
+	defer cancel()
+
+	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
+	// should become active within a few seconds.
+	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel
+	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
+	defer func() {
+		if wc, loaded := tm.activeInterceptsWaiters.LoadAndDelete(spec.Name); loaded {
+			close(wc.(chan interceptResult))
+		}
+	}()
+
+	var ii *manager.InterceptInfo
+	ii, err = tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+		Session:       tm.session(),
+		InterceptSpec: spec,
+		ApiKey:        svcProps.apiKey,
+	})
+	if err != nil {
+		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
+		err = client.CheckTimeout(c, err)
+		code := grpcCodes.Internal
+		if errors.Is(err, context.DeadlineExceeded) {
+			code = grpcCodes.DeadlineExceeded
+		} else if errors.Is(err, context.Canceled) {
+			code = grpcCodes.Canceled
+		}
+		return nil, grpcStatus.Error(code, err.Error())
+	}
+
+	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
+
+	success := false
+	defer func() {
+		if !success {
+			dlog.Debugf(c, "intercept %s failed to create, will remove...", ii.Spec.Name)
+
+			// Make an attempt to remove the created intercept using a time limited Context. Our
+			// context is already done.
+			rc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 5*time.Second)
+			defer cancel()
+			if removeErr := tm.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
+				dlog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)
+			}
+		}
+	}()
+
+	// Wait for the intercept to transition from WAITING or NO_AGENT to ACTIVE. This
+	// might result in more than one event.
+	for {
+		select {
+		case <-c.Done():
+			err = client.CheckTimeout(c, c.Err())
+			code := grpcCodes.Canceled
+			if errors.Is(err, context.DeadlineExceeded) {
+				code = grpcCodes.DeadlineExceeded
+			}
+			err = grpcStatus.Error(code, err.Error())
+			return nil, err
+		case wr := <-waitCh:
+			if wr.err != nil {
+				return interceptError(common.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err)), nil
+			}
+			ii = wr.intercept
+			if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
+				continue
+			}
+			// Older traffic-managers pass env in the agent info
+			if agentEnv != nil {
+				ii.Environment = agentEnv
+			}
+			result.InterceptInfo = ii
+			success = true
+			return result, nil
 		}
 	}
 }

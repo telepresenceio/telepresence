@@ -63,7 +63,8 @@ type WatchWorkloadsStream interface {
 
 type Session interface {
 	restapi.AgentState
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest, bool) (*rpc.InterceptResult, error)
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
+	AddPoddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
