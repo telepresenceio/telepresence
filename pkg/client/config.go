@@ -153,6 +153,8 @@ type Timeouts struct {
 	PrivateApply time.Duration `json:"apply,omitempty" yaml:"apply,omitempty"`
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
 	PrivateClusterConnect time.Duration `json:"clusterConnect,omitempty" yaml:"clusterConnect,omitempty"`
+	// PrivateConnectivityCheck timeout used when checking if cluster is already proxied on the workstation
+	PrivateConnectivityCheck time.Duration `json:"connectivityCheck,omitempty" yaml:"connectivityCheck,omitempty"`
 	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
 	PrivateEndpointDial time.Duration `json:"endpointDial,omitempty" yaml:"endpointDial,omitempty"`
 	// PrivateHelm is how long to wait for any helm operation.
@@ -175,6 +177,7 @@ const (
 	TimeoutAgentInstall TimeoutID = iota
 	TimeoutApply
 	TimeoutClusterConnect
+	TimeoutConnectivityCheck
 	TimeoutEndpointDial
 	TimeoutHelm
 	TimeoutIntercept
@@ -212,6 +215,8 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateApply
 	case TimeoutClusterConnect:
 		timeoutVal = t.PrivateClusterConnect
+	case TimeoutConnectivityCheck:
+		timeoutVal = t.PrivateConnectivityCheck
 	case TimeoutEndpointDial:
 		timeoutVal = t.PrivateEndpointDial
 	case TimeoutHelm:
@@ -262,6 +267,9 @@ func (e timeoutErr) Error() string {
 	case TimeoutClusterConnect:
 		yamlName = "clusterConnect"
 		humanName = "cluster connect"
+	case TimeoutConnectivityCheck:
+		yamlName = "connectivityCheck"
+		humanName = "connectivity check"
 	case TimeoutEndpointDial:
 		yamlName = "endpointDial"
 		humanName = "tunnel endpoint dial with known IP"
@@ -321,6 +329,8 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			dp = &t.PrivateApply
 		case "clusterConnect":
 			dp = &t.PrivateClusterConnect
+		case "connectivityCheck":
+			dp = &t.PrivateConnectivityCheck
 		case "endpointDial":
 			dp = &t.PrivateEndpointDial
 		case "helm":
@@ -364,6 +374,7 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 const defaultTimeoutsAgentInstall = 120 * time.Second
 const defaultTimeoutsApply = 1 * time.Minute
 const defaultTimeoutsClusterConnect = 20 * time.Second
+const defaultTimeoutsConnectivityCheck = 500 * time.Millisecond
 const defaultTimeoutsEndpointDial = 3 * time.Second
 const defaultTimeoutsHelm = 30 * time.Second
 const defaultTimeoutsIntercept = 5 * time.Second
@@ -376,6 +387,7 @@ var defaultTimeouts = Timeouts{
 	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 	PrivateApply:                 defaultTimeoutsApply,
 	PrivateClusterConnect:        defaultTimeoutsClusterConnect,
+	PrivateConnectivityCheck:     defaultTimeoutsConnectivityCheck,
 	PrivateEndpointDial:          defaultTimeoutsEndpointDial,
 	PrivateHelm:                  defaultTimeoutsHelm,
 	PrivateIntercept:             defaultTimeoutsIntercept,
@@ -401,6 +413,9 @@ func (t Timeouts) MarshalYAML() (any, error) {
 	}
 	if t.PrivateClusterConnect != 0 && t.PrivateClusterConnect != defaultTimeoutsClusterConnect {
 		tm["clusterConnect"] = t.PrivateClusterConnect.String()
+	}
+	if t.PrivateConnectivityCheck != 0 && t.PrivateConnectivityCheck != defaultTimeoutsConnectivityCheck {
+		tm["connectivityCheck"] = t.PrivateConnectivityCheck.String()
 	}
 	if t.PrivateEndpointDial != 0 && t.PrivateEndpointDial != defaultTimeoutsEndpointDial {
 		tm["endpointDial"] = t.PrivateEndpointDial.String()
@@ -428,34 +443,37 @@ func (t Timeouts) MarshalYAML() (any, error) {
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (t *Timeouts) merge(o *Timeouts) {
-	if o.PrivateAgentInstall != 0 {
+	if o.PrivateAgentInstall != defaultTimeoutsAgentInstall {
 		t.PrivateAgentInstall = o.PrivateAgentInstall
 	}
-	if o.PrivateApply != 0 {
+	if o.PrivateApply != defaultTimeoutsApply {
 		t.PrivateApply = o.PrivateApply
 	}
-	if o.PrivateClusterConnect != 0 {
+	if o.PrivateClusterConnect != defaultTimeoutsClusterConnect {
 		t.PrivateClusterConnect = o.PrivateClusterConnect
 	}
-	if o.PrivateEndpointDial != 0 {
+	if o.PrivateConnectivityCheck != defaultTimeoutsConnectivityCheck {
+		t.PrivateConnectivityCheck = o.PrivateConnectivityCheck
+	}
+	if o.PrivateEndpointDial != defaultTimeoutsEndpointDial {
 		t.PrivateEndpointDial = o.PrivateEndpointDial
 	}
-	if o.PrivateHelm != 0 {
+	if o.PrivateHelm != defaultTimeoutsHelm {
 		t.PrivateHelm = o.PrivateHelm
 	}
-	if o.PrivateIntercept != 0 {
+	if o.PrivateIntercept != defaultTimeoutsIntercept {
 		t.PrivateIntercept = o.PrivateIntercept
 	}
-	if o.PrivateProxyDial != 0 {
+	if o.PrivateProxyDial != defaultTimeoutsProxyDial {
 		t.PrivateProxyDial = o.PrivateProxyDial
 	}
-	if o.PrivateRoundtripLatency != 0 {
+	if o.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
 		t.PrivateRoundtripLatency = o.PrivateRoundtripLatency
 	}
-	if o.PrivateTrafficManagerAPI != 0 {
+	if o.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
 		t.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
 	}
-	if o.PrivateTrafficManagerConnect != 0 {
+	if o.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
 	}
 }
@@ -511,10 +529,10 @@ func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
 }
 
 func (ll *LogLevels) merge(o *LogLevels) {
-	if o.UserDaemon != 0 {
+	if o.UserDaemon != defaultLogLevelsUserDaemon {
 		ll.UserDaemon = o.UserDaemon
 	}
-	if o.RootDaemon != 0 {
+	if o.RootDaemon != defaultLogLevelsRootDaemon {
 		ll.RootDaemon = o.RootDaemon
 	}
 }
@@ -678,13 +696,13 @@ func (c *Cloud) merge(o *Cloud) {
 	if o.SkipLogin {
 		c.SkipLogin = o.SkipLogin
 	}
-	if o.RefreshMessages != 0 {
+	if o.RefreshMessages != defaultCloudRefreshMessages {
 		c.RefreshMessages = o.RefreshMessages
 	}
-	if o.SystemaHost != "" {
+	if o.SystemaHost != defaultCloudSystemAHost {
 		c.SystemaHost = o.SystemaHost
 	}
-	if o.SystemaPort != "" {
+	if o.SystemaPort != defaultCloudSystemAPort {
 		c.SystemaPort = o.SystemaPort
 	}
 }
@@ -776,7 +794,7 @@ func (ic *Intercept) merge(o *Intercept) {
 	if o.AppProtocolStrategy != k8sapi.Http2Probe {
 		ic.AppProtocolStrategy = o.AppProtocolStrategy
 	}
-	if o.DefaultPort != 0 {
+	if o.DefaultPort != defaultInterceptDefaultPort {
 		ic.DefaultPort = o.DefaultPort
 	}
 }
@@ -845,6 +863,7 @@ func GetDefaultConfig() Config {
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 			PrivateApply:                 defaultTimeoutsApply,
 			PrivateClusterConnect:        defaultTimeoutsClusterConnect,
+			PrivateConnectivityCheck:     defaultTimeoutsConnectivityCheck,
 			PrivateEndpointDial:          defaultTimeoutsEndpointDial,
 			PrivateHelm:                  defaultTimeoutsHelm,
 			PrivateIntercept:             defaultTimeoutsIntercept,
@@ -854,8 +873,8 @@ func GetDefaultConfig() Config {
 			PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
 		},
 		LogLevels: LogLevels{
-			UserDaemon: logrus.InfoLevel,
-			RootDaemon: logrus.InfoLevel,
+			UserDaemon: defaultLogLevelsUserDaemon,
+			RootDaemon: defaultLogLevelsRootDaemon,
 		},
 		Cloud: Cloud{
 			SkipLogin:       false,
@@ -905,7 +924,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		defer func() {
 			parseContext = nil
 		}()
-		fileConfig := Config{}
+		fileConfig := GetDefaultConfig() // by value copy
 		if err = yaml.Unmarshal(bs, &fileConfig); err != nil {
 			return err
 		}

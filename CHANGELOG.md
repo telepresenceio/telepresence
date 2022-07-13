@@ -2,6 +2,11 @@
 
 ### 2.7.2 (TBD)
 
+- Feature: The timeout for the initial connectivity check that Telepresence performs
+  in order to determine if the cluster's subnets are proxied or not can now be configured
+  in the `config.yml` file using `timeouts.connectivityCheck`. The default timeout was
+  changed from 5 seconds to 500 milliseconds to speed up the actual connect.
+
 - Change: The command `telepresence gather-traces` now prints out a message on success.
 
 ### 2.7.1 (August 10, 2022)

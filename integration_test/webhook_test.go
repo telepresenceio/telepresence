@@ -54,13 +54,11 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 		itest.TelepresenceDisconnectOk(ctx)
 	}()
 
-	// Use a config with agentImage and webhookAgentImage to validate that it's the
+	// Use a config with agentImage to validate that it's the
 	// latter that is used in the traffic-manager
-	ctxAI := itest.WithConfig(ctx, &client.Config{
-		Images: client.Images{
-			PrivateAgentImage: "imageFromConfig:0.0.1",
-		},
-	})
+	cfg := client.GetDefaultConfig()
+	cfg.Images.PrivateAgentImage = "imageFromConfig:0.0.1"
+	ctxAI := itest.WithConfig(ctx, &cfg)
 
 	// Remove the traffic-manager since we are altering config that applies to
 	// creating the traffic-manager

@@ -106,7 +106,6 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 	require.Error(ensureTrafficManager(ctx, kc))
 	restoreVersion()
-
 	var err error
 	require.Eventually(func() bool {
 		err = ensureTrafficManager(ctx, kc)
