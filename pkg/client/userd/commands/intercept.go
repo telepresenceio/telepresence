@@ -1,13 +1,11 @@
 package commands
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+<<<<<<<< HEAD:pkg/client/userd/commands/intercept.go
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,9 +24,19 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+========
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/datawire/dlib/dcontext"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+>>>>>>>> 5c3df498d (move intercept cmd):pkg/client/cli/cmds_intercept.go
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+<<<<<<<< HEAD:pkg/client/userd/commands/intercept.go
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -411,6 +419,39 @@ func newInterceptState(
 	return is
 }
 
+========
+)
+
+// safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
+// have to worry about things using it in ways they shouldn't.
+type safeCobraCommand interface {
+	InOrStdin() io.Reader
+	OutOrStdout() io.Writer
+	ErrOrStderr() io.Writer
+	FlagError(error) error
+}
+
+type safeCobraCommandImpl struct {
+	*cobra.Command
+}
+
+func (w safeCobraCommandImpl) FlagError(err error) error {
+	return w.Command.FlagErrorFunc()(w.Command, err)
+}
+
+func leaveCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:  "leave [flags] <intercept_name>",
+		Args: cobra.ExactArgs(1),
+
+		Short: "Remove existing intercept",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
+		},
+	}
+}
+
+>>>>>>>> 5c3df498d (move intercept cmd):pkg/client/cli/cmds_intercept.go
 func interceptMessage(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
@@ -472,6 +513,7 @@ func interceptMessage(r *connector.InterceptResult) error {
 	return errCat.Newf(msg)
 }
 
+<<<<<<<< HEAD:pkg/client/userd/commands/intercept.go
 func checkMountCapability(ctx context.Context) error {
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
@@ -888,6 +930,8 @@ func (is *interceptState) DeactivateState(ctx context.Context) error {
 	return removeIntercept(ctx, strings.TrimSpace(is.args.name))
 }
 
+========
+>>>>>>>> 5c3df498d (move intercept cmd):pkg/client/cli/cmds_intercept.go
 func removeIntercept(ctx context.Context, name string) error {
 	return cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var r *connector.InterceptResult
@@ -902,6 +946,7 @@ func removeIntercept(ctx context.Context, name string) error {
 		return nil
 	})
 }
+<<<<<<<< HEAD:pkg/client/userd/commands/intercept.go
 
 func validateDockerArgs(args []string) error {
 	for _, arg := range args {
@@ -1013,3 +1058,5 @@ func (is *interceptState) writeEnvJSON() error {
 	}
 	return os.WriteFile(is.args.envJSON, data, 0644)
 }
+========
+>>>>>>>> 5c3df498d (move intercept cmd):pkg/client/cli/cmds_intercept.go
