@@ -33,6 +33,7 @@ func TestEnvconfig(t *testing.T) {
 		User:                "",
 		ServerHost:          "",
 		ServerPort:          "8081",
+		PrometheusPort:      "0",
 		SystemAHost:         "app.getambassador.io",
 		SystemAPort:         "443",
 		AgentRegistry:       "docker.io/datawire",

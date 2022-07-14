@@ -14,12 +14,13 @@ import (
 )
 
 type Env struct {
-	LogLevel    string `env:"LOG_LEVEL,default=info"`
-	User        string `env:"USER,default="`
-	ServerHost  string `env:"SERVER_HOST,default="`
-	ServerPort  string `env:"SERVER_PORT,default=8081"`
-	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
-	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
+	LogLevel       string `env:"LOG_LEVEL,default=info"`
+	User           string `env:"USER,default="`
+	ServerHost     string `env:"SERVER_HOST,default="`
+	ServerPort     string `env:"SERVER_PORT,default=8081"`
+	PrometheusPort string `env:"PROMETHEUS_PORT,default=0"`
+	SystemAHost    string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
+	SystemAPort    string `env:"SYSTEMA_PORT,default=443"`
 
 	ManagerNamespace    string                     `env:"MANAGER_NAMESPACE,default="`
 	ManagedNamespaces   string                     `env:"MANAGED_NAMESPACES,default="`

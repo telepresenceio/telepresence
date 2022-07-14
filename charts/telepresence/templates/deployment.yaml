@@ -69,6 +69,10 @@ spec:
           - name: TELEPRESENCE_AGENT_IMAGE
             value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
           {{- end }}
+          {{- if .Values.prometheus.port }}  # 0 is false
+          - name: PROMETHEUS_PORT
+            value: "{{ .Values.prometheus.port }}"
+          {{- end }}
           - name: TELEPRESENCE_APP_PROTO_STRATEGY
             value: {{ .Values.agentInjector.appProtocolStrategy }}
           - name: AGENT_INJECT_POLICY
@@ -94,6 +98,10 @@ spec:
             containerPort: 8081
           - name: https
             containerPort: 8443
+          {{- if .Values.prometheus.port }}  # 0 is false
+          - name: prometheus
+            containerPort: {{ .Values.prometheus.port }}
+          {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

@@ -31,4 +31,22 @@ spec:
     targetPort: https
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
+{{- if .Values.prometheus.port }} # 0 is false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: telepresence-prometheus
+  namespace: {{ include "telepresence.namespace" . }}
+  labels:
+    name: telepresence-prometheus
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - name: telepresence-prometheus
+    port: 80
+    targetPort: prometheus
+  selector:
+    {{- include "telepresence.selectorLabels" . | nindent 4 }}
+{{- end }}
 {{- end }}

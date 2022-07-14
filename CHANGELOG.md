@@ -6,6 +6,8 @@
 
 - Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
 
+- Feature: Added prometheus support to the traffic manager.
+
 ### 2.6.8 (June 23, 2022)
 
 - Feature: The name and namespace for the DNS Service that the traffic-manager uses in DNS auto-detection can now be specified.
