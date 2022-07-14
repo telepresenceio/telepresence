@@ -33,7 +33,7 @@ spec:
             {{- else }}
             {{- toYaml .Values.securityContext | nindent 12 }}
             {{- end }}
-          image: "curlimages/curl"
+          image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
             - name: secret-volume

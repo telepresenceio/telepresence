@@ -89,7 +89,7 @@ podCIDRs: []
 # Default: auto
 podCIDRStrategy: auto
 
-# dnsServiceName adds a user supplied service to the list of services Telepresence tries to resolve in order to detect the 
+# dnsServiceName adds a user supplied service to the list of services Telepresence tries to resolve in order to detect the
 # clusterIP DNS is using
 dnsServiceName: "coredns"
 
@@ -275,3 +275,13 @@ hooks:
     # requests:
     #   cpu: 100m
     #   memory: 128Mi
+
+  busybox:
+    registry: docker.io
+    image: busybox
+    tag: latest
+
+  curl:
+    registry: docker.io
+    image: "curlimages/curl"
+    tag: latest
