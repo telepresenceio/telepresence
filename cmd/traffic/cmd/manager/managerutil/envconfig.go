@@ -18,7 +18,7 @@ type Env struct {
 	User           string `env:"USER,default="`
 	ServerHost     string `env:"SERVER_HOST,default="`
 	ServerPort     string `env:"SERVER_PORT,default=8081"`
-	PrometheusPort string `env:"HTTP_PORT,default=8082"`
+	PrometheusPort string `env:"PROMETHEUS_PORT,default=0"`
 	SystemAHost    string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
 	SystemAPort    string `env:"SYSTEMA_PORT,default=443"`
 

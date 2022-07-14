@@ -57,7 +57,6 @@ func Main(ctx context.Context, _ ...string) error {
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
 
-	// Serve Prometheus metrics
 	g.Go("prometheus", mgr.servePrometheus)
 
 	g.Go("agent-injector", mutator.ServeMutator)
@@ -68,22 +67,26 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
+// Serve Prometheus metrics if env.PrometheusPort != 0
 func (m *Manager) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	port := env.PrometheusPort
+	if env.PrometheusPort != "0" {
+		promauto.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "client_count",
+			Help: "Number of Clients Connected",
+		}, func() float64 {
+			return float64(m.state.CountAllClients())
+		})
 
-	promauto.NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "client_count",
-		Help: "Number of Clients Connected",
-	}, func() float64 {
-		return float64(m.state.CountAllClients())
-	})
-
-	sc := &dhttp.ServerConfig{
-		Handler: promhttp.Handler(),
+		sc := &dhttp.ServerConfig{
+			Handler: promhttp.Handler(),
+		}
+		dlog.Infof(ctx, "Prometheus metrics server started on port: %v", port)
+		return sc.ListenAndServe(ctx, ":"+port)
 	}
-
-	return sc.ListenAndServe(ctx, ":"+port)
+	dlog.Info(ctx, "Prometheus metrics server not started")
+	return nil
 }
 
 func (m *Manager) serveHTTP(ctx context.Context) error {

@@ -205,6 +205,17 @@ telepresenceAPI:
   port: 0
 
 ################################################################################
+## Prometheus Server Configuration
+################################################################################
+prometheus:
+  # Create the extra RBAC for non-admin users.
+  #
+  # Set this port number to enable a prometheus metrics http server
+  # Default: 0
+  port: 0
+  # 
+
+################################################################################
 ## User Configuration
 ################################################################################
 
