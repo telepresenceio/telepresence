@@ -679,10 +679,14 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	args := &is.args
 
+	status, err := is.connectorServer.Status(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+
 	// Add whatever metadata we already have to scout
 	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
-	// TODO(raphaelreyna): figure out how to get the clusterid from here
-	//is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
+	is.scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
 	mechanism, _ := args.extState.Mechanism()
 	mechanismArgs, _ := args.extState.MechanismArgs()
 	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
@@ -757,10 +761,14 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			}
 		}
 
+		status, err := is.connectorServer.Status(ctx, nil)
+		if err != nil {
+			return true, err
+		}
+
 		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-			// TODO(raphaelreyna): figure out how to get session info from here
-			// Session: is.connInfo.SessionInfo,
-			Name: args.name,
+			Session: status.SessionInfo,
+			Name:    args.name,
 			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 				AddPreviewDomain: args.previewSpec,
 			},
