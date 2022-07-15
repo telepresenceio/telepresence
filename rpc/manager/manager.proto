@@ -218,6 +218,7 @@ message InterceptInfo {
   // are set by the agent's call to ReviewIntercept.
   string pod_ip = 10;
   int32 sftp_port = 11;
+  int32 ftp_port = 18;
 
   // The directory where the client mounts the remote mount_point. Only
   // set when obtaining InterceptInfo from the user daemon.
@@ -308,6 +309,7 @@ message ReviewInterceptRequest {
   // pod IP and sftp port to use when doing sshfs mounts
   string pod_ip = 5;
   int32 sftp_port = 6;
+  int32 ftp_port = 12;
 
   // The directory where the intercept mounts can be found in the agent
   string mount_point = 10;

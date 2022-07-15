@@ -6,9 +6,11 @@ require (
 	github.com/Microsoft/go-winio v0.5.2
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/coreos/go-iptables v0.6.0
-	github.com/datawire/dlib v1.2.5
+	github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/datawire/metriton-go-client v0.1.1
+	github.com/fclairamb/ftpserverlib v0.18.0
+	github.com/fclairamb/go-log v0.3.0
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/go-cmp v0.5.8
@@ -19,18 +21,18 @@ require (
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/sftp v1.13.4
+	github.com/pkg/sftp v1.13.5
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sethvargo/go-envconfig v0.6.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/afero v1.8.2
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.8.0
 	github.com/telepresenceio/telepresence/rpc/v2 v2.6.8
 	golang.org/x/net v0.0.0-20220526153639-5463443f8c37
-	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
+	golang.org/x/sys v0.0.0-20220701225701-179beb0bd1a1
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
 	golang.zx2c4.com/wireguard v0.0.0-20220407013110-ef5c587f782d
 	golang.zx2c4.com/wireguard/windows v0.5.3
@@ -148,7 +150,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xlab/treeprint v0.0.0-20181112141820-a009c3971eca // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
-	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/text v0.3.8-0.20211105212822-18b340fc7af2 // indirect
