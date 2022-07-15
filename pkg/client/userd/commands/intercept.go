@@ -184,7 +184,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 }
 
 func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) error {
-	session := getSession(ctx)
+	session := GetSession(ctx)
 	if session == nil {
 		return errors.New("no session found")
 	}

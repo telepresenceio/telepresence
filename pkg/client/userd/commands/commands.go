@@ -80,7 +80,7 @@ func WithSession(ctx context.Context, s trafficmgr.Session) context.Context {
 	return context.WithValue(ctx, sessKey{}, s)
 }
 
-func getSession(ctx context.Context) trafficmgr.Session {
+func GetSession(ctx context.Context) trafficmgr.Session {
 	s, _ := ctx.Value(sessKey{}).(trafficmgr.Session)
 	return s
 }
