@@ -44,6 +44,8 @@ following Free and Open Source software:
     github.com/exponent-io/jsonpath                                              v0.0.0-20151013193312-d6023ce2651d        MIT license
     github.com/fatih/camelcase                                                   v1.0.0                                    MIT license
     github.com/fatih/color                                                       v1.13.0                                   MIT license
+    github.com/fclairamb/ftpserverlib                                            v0.18.0                                   MIT license
+    github.com/fclairamb/go-log                                                  v0.3.0                                    MIT license
     github.com/felixge/httpsnoop                                                 v1.0.3                                    MIT license
     github.com/fsnotify/fsnotify                                                 v1.5.4                                    3-clause BSD license
     github.com/go-errors/errors                                                  v1.0.1                                    MIT license
@@ -106,7 +108,7 @@ following Free and Open Source software:
     github.com/peterbourgon/diskv                                                v2.0.1+incompatible                       MIT license
     github.com/pkg/browser                                                       v0.0.0-20210911075715-681adbf594b8        2-clause BSD license
     github.com/pkg/errors                                                        v0.9.1                                    2-clause BSD license
-    github.com/pkg/sftp                                                          v1.13.4                                   2-clause BSD license
+    github.com/pkg/sftp                                                          v1.13.5                                   2-clause BSD license
     github.com/pmezard/go-difflib                                                v1.0.0                                    3-clause BSD license
     github.com/prometheus/client_golang                                          v1.12.2                                   Apache License 2.0
     github.com/prometheus/client_model                                           v0.2.0                                    Apache License 2.0
@@ -139,7 +141,7 @@ following Free and Open Source software:
     go.opentelemetry.io/otel/trace                                               v1.8.0                                    Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v0.18.0                                   Apache License 2.0
     go.starlark.net                                                              v0.0.0-20200306205701-8dd3e2ee1dd5        3-clause BSD license
-    golang.org/x/crypto                                                          v0.0.0-20220315160706-3147a52a75dd        3-clause BSD license
+    golang.org/x/crypto                                                          v0.0.0-20220622213112-05595931fe9d        3-clause BSD license
     golang.org/x/mod                                                             v0.6.0-dev.0.20220106191415-9b9b3d81d5e3  3-clause BSD license
     golang.org/x/net                                                             v0.0.0-20220708220712-1185a9018129        3-clause BSD license
     golang.org/x/oauth2                                                          v0.0.0-20220622183110-fd043fe589d2        3-clause BSD license
