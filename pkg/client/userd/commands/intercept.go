@@ -189,7 +189,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 		return errors.New("no session found")
 	}
 	mc := session.ManagerClient()
-	cs := getConnectorServer(ctx)
+	cs := GetConnectorServer(ctx)
 	if cs == nil {
 		return errors.New("no connector found")
 	}

@@ -91,7 +91,7 @@ func WithConnectorServer(ctx context.Context, cs connector.ConnectorServer) cont
 	return context.WithValue(ctx, connectorKey{}, cs)
 }
 
-func getConnectorServer(ctx context.Context) connector.ConnectorServer {
+func GetConnectorServer(ctx context.Context) connector.ConnectorServer {
 	cs, _ := ctx.Value(connectorKey{}).(connector.ConnectorServer)
 	return cs
 }
