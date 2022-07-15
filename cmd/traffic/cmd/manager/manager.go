@@ -55,6 +55,7 @@ func Main(ctx context.Context, _ ...string) error {
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
+		SoftShutdownTimeout:  5 * time.Second,
 	})
 
 	env := managerutil.GetEnv(ctx)

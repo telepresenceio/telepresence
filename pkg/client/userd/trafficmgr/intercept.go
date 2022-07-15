@@ -24,6 +24,7 @@ import (
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -53,7 +54,8 @@ type forwardKey struct {
 
 type mountForward struct {
 	forwardKey
-	SftpPort         int32
+	useFtp           bool
+	fsPort           int32
 	RemoteMountPoint string
 }
 
@@ -103,7 +105,7 @@ func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *m
 		if _, isLive := lpf.live[fk]; !isLive {
 			pfCtx, pfCancel := context.WithCancel(ctx)
 			livePortForward := &livePortForward{cancel: pfCancel}
-			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint, ii.Spec.LocalPorts)
+			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii)
 			dlog.Debugf(ctx, "Started forward for %+v", fk)
 			lpf.live[fk] = livePortForward
 		}
@@ -636,7 +638,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			result.InterceptInfo = ii
 			if !ir.IsPodDaemon {
 				mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
-				if mountPoint != "" && ii.SftpPort > 0 {
+				if mountPoint != "" && (ii.FtpPort > 0 || ii.SftpPort > 0) {
 					deleteMount = false // Mount-point is busy until intercept ends
 					ii.ClientMountPoint = mountPoint
 				}
@@ -649,23 +651,40 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 // shouldForward returns true if the intercept info given should result in mounts or ports being forwarded
 func (tm *TrafficManager) shouldForward(ii *manager.InterceptInfo) bool {
-	return ii.SftpPort > 0 || len(ii.Spec.LocalPorts) > 0
+	return ii.FtpPort > 0 || ii.SftpPort > 0 || len(ii.Spec.LocalPorts) > 0
 }
 
 // startForwards starts port forwards and mounts for the given forwardKey.
 // It assumes that the user has called shouldForward and is sure that something will be started.
-func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, remoteMountPoint string, localPorts []string) {
-	if sftpPort > 0 {
-		// There's nothing to mount if the SftpPort is zero
-		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
-		wg.Add(1)
-		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort, remoteMountPoint}, wg)
-	}
-	for _, port := range localPorts {
+func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, ii *manager.InterceptInfo) {
+	for _, port := range ii.Spec.LocalPorts {
 		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", fk.PodIP, port))
 		wg.Add(1)
 		go tm.workerPortForwardIntercept(pfCtx, portForward{fk, port}, wg)
 	}
+
+	if ii.FtpPort == 0 && ii.SftpPort == 0 {
+		// No mounts exposed by the traffic-agent
+		return
+	}
+
+	useFtp := client.GetConfig(ctx).Intercept.UseFtp
+	var fsPort int32
+	switch {
+	case ii.FtpPort == 0 && useFtp:
+		dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
+	case ii.SftpPort == 0 && !useFtp:
+		dlog.Errorf(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
+	case useFtp:
+		fsPort = ii.FtpPort
+	default:
+		fsPort = ii.SftpPort
+	}
+	ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, fsPort))
+
+	// There's nothing to mount if the SftpPort is zero
+	wg.Add(1)
+	go tm.workerMountForwardIntercept(ctx, mountForward{fk, useFtp, fsPort, ii.MountPoint}, wg)
 }
 
 func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
@@ -728,10 +747,51 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		mountMutex.Unlock()
 	}()
 
+	var err error
+	if mf.useFtp {
+		err = tm.mountFtp(ctx, mf, mountPoint)
+	} else {
+		err = tm.mountSftp(ctx, mf, mountPoint)
+	}
+	if err != nil && ctx.Err() == nil {
+		dlog.Error(ctx, err)
+	}
+}
+
+func (tm *TrafficManager) mountFtp(ctx context.Context, mf mountForward, mountPoint string) error {
 	// Retry mount in case it gets disconnected
-	err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
+	return client.Retry(ctx, "ftp", func(ctx context.Context) error {
+		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
+		rmp := strings.TrimPrefix(mf.RemoteMountPoint, agentconfig.ExportsMountPoint)
+		ftpArgs := []string{
+			// FTP options
+			"-d",
+			"-o", "ftpfs_debug=8",
+			"-o", "utf8",
+			"-o", "ftp_method=singlecwd", // favor fewer interactions for slightly more data
+			"-o", "enable_epsv", // EPSV slightly more effective than PASV when the IP is fixed
+
+			// FUSE options
+			"-f",               // foreground
+			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
+			"-o", "auto_unmount",
+			"-o", "default_permissions",
+			"-o", fmt.Sprintf("uid=%d", os.Getuid()),
+			"-o", fmt.Sprintf("gid=%d", os.Getgid()),
+
+			// What to mount
+			fmt.Sprintf("ftp://%s:%d%s/", mf.PodIP, mf.fsPort, rmp),
+			mountPoint,
+		}
+		return dexec.CommandContext(ctx, "curlftpfs", ftpArgs...).Run()
+	}, 3*time.Second, 6*time.Second)
+}
+
+func (tm *TrafficManager) mountSftp(ctx context.Context, mf mountForward, mountPoint string) error {
+	// Retry mount in case it gets disconnected
+	return client.Retry(ctx, "sshfs", func(ctx context.Context) error {
 		dl := &net.Dialer{Timeout: 3 * time.Second}
-		conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", mf.PodIP, mf.SftpPort))
+		conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", mf.PodIP, mf.fsPort))
 		if err != nil {
 			return err
 		}
@@ -768,10 +828,6 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		_ = proc.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
 		return err
 	}, 3*time.Second, 6*time.Second)
-
-	if err != nil && ctx.Err() == nil {
-		dlog.Error(ctx, err)
-	}
 }
 
 // RemoveIntercept removes one intercept by name

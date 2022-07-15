@@ -788,6 +788,7 @@ var defaultIntercept = Intercept{
 type Intercept struct {
 	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
 	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
+	UseFtp              bool                       `json:"useFtp,omitempty" yaml:"useFtp,omitempty"`
 }
 
 func (ic *Intercept) merge(o *Intercept) {
@@ -796,6 +797,9 @@ func (ic *Intercept) merge(o *Intercept) {
 	}
 	if o.DefaultPort != defaultInterceptDefaultPort {
 		ic.DefaultPort = o.DefaultPort
+	}
+	if o.UseFtp {
+		ic.UseFtp = true
 	}
 }
 
@@ -812,6 +816,9 @@ func (ic Intercept) MarshalYAML() (any, error) {
 	}
 	if ic.AppProtocolStrategy != k8sapi.Http2Probe {
 		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
+	}
+	if ic.UseFtp {
+		im["useFtp"] = true
 	}
 	return im, nil
 }
