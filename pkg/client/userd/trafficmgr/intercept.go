@@ -840,7 +840,6 @@ func (tm *TrafficManager) mountFtp(ctx context.Context, mf mountForward, mountPo
 			// FUSE options
 			"-f",               // foreground
 			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-			"-o", "auto_unmount",
 			"-o", "default_permissions",
 			"-o", fmt.Sprintf("uid=%d", os.Getuid()),
 			"-o", fmt.Sprintf("gid=%d", os.Getgid()),
