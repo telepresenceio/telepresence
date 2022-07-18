@@ -93,6 +93,16 @@ pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
+# Build: artifacts that don't get checked in to Git
+# =================================================
+
+.PHONY: build
+build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
+	git restore pkg/install/helm/telepresence-chart.tgz
+
+.PHONY: build-version
+build-version: $(BINDIR)/telepresence ## (Build) Generate a telepresence-chart.tgz and build all the source code
+
 # We might be building for arm64 on a mac that doesn't have an M1 chip
 # (which is definitely the case with circle), so GOARCH may be set for that,
 # but we need to ensure it's using the host's architecture so the go command runs successfully.
@@ -109,24 +119,18 @@ $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll:
 	curl --fail -L https://www.wintun.net/builds/wintun-$(WINTUN_VERSION).zip -o $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip
 	rm -rf  $(BUILDDIR)/wintun-$(WINTUN_VERSION)
 	unzip $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip -d $(BUILDDIR)/wintun-$(WINTUN_VERSION)
+$(BINDIR)/wintun.dll: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll
+	mkdir -p $(@D)
+	cp $< $@
 endif
 
-.PHONY: build-version build
+$(BINDIR)/telepresence: pkg/install/helm/telepresence-chart.tgz
 ifeq ($(GOHOSTOS),windows)
-build-version: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
-	mkdir -p $(BINDIR)
-	cp $< $(BINDIR)
-else
-build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
-	mkdir -p $(BINDIR)
+$(BINDIR)/telepresence: $(BINDIR)/wintun.dll
 endif
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence || \
+	mkdir -p $(@D)
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence || \
 		(git restore pkg/install/helm/telepresence-chart.tgz; exit 1) # in case the build fails
-
-# Build: artifacts that don't get checked in to Git
-# =================================================
-build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
-	git restore pkg/install/helm/telepresence-chart.tgz
 
 .PHONY: tel2
 tel2:
