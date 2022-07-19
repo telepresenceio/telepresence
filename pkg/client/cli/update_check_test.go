@@ -68,7 +68,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 		t.Fatal(errOut.String())
 	}
 	if v == nil || !lastestVer.EQ(*v) {
-		t.Fatal(fmt.Sprintf("Expected updateAvailable() to return %s", lastestVer))
+		t.Fatalf("Expected updateAvailable() to return %s", lastestVer)
 	}
 
 	// create the initial cache.
@@ -128,6 +128,6 @@ func Test_NewUpdateChecker(t *testing.T) {
 		t.Fatal(errOut.String())
 	}
 	if v == nil || !lastestVer.EQ(*v) {
-		t.Fatal(fmt.Sprintf("Expected updateAvailable() to return %s", lastestVer))
+		t.Fatalf("Expected updateAvailable() to return %s", lastestVer)
 	}
 }
