@@ -513,7 +513,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			}
 		}
 		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			ctx = commands.WithConnectorServer(ctx, s)
+			cmdCtx = commands.WithConnectorServer(cmdCtx, s)
 		}
 
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
