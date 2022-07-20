@@ -8,6 +8,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
@@ -139,11 +140,10 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 	})
 }
 
-// EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
+func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, error) {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
-		return fmt.Errorf("failed to initialize helm config: %w", err)
+		return nil, fmt.Errorf("failed to initialize helm config: %w", err)
 	}
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
@@ -153,22 +153,31 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		// is already set up. If it's the latter case (or the traffic manager isn't there), we'll be alerted by
 		// a subsequent error anyway.
 		dlog.Errorf(ctx, "Unable to look for existing helm release: %v. Assuming it's there and continuing...", err)
-		return nil
+		return nil, err
 	}
 
-	chrt, err := loadChart()
-	if err != nil {
-		return fmt.Errorf("unable to load built-in helm chart: %w", err)
-	}
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, an uninstall should clean everything up and leave us ready to install again
 	if existing != nil && shouldManageRelease(ctx, existing) && releaseNeedsCleanup(ctx, existing) {
 		err := uninstallExisting(ctx, helmConfig, namespace)
 		if err != nil {
-			return fmt.Errorf("failed to clean up leftover release history: %w", err)
+			return nil, fmt.Errorf("failed to clean up leftover release history: %w", err)
 		}
 		existing = nil
 	}
+	return existing, err
+}
+
+// EnsureTrafficManager ensures the traffic manager is installed
+func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
+	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
+	existing, err := IsTrafficManager(ctx, configFlags, namespace)
+
+	chrt, err := loadChart()
+	if err != nil {
+		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	}
+
 	if existing == nil {
 		err := importLegacy(ctx, namespace)
 		if err != nil {

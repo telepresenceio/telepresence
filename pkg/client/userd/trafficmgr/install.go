@@ -41,6 +41,8 @@ type Installer interface {
 		telepresenceAPIPort uint16,
 	) (string, string, error)
 	EnsureManager(c context.Context) error
+	IsManager(c context.Context) error
+
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
 
@@ -785,4 +787,12 @@ func addAgentToWorkload(
 
 func (ki *installer) EnsureManager(c context.Context) error {
 	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
+}
+
+func (ki *installer) IsManager(c context.Context) error {
+	existing, err := helm.IsTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
+	if err == nil && existing != nil {
+		err = errors.Errorf("Traffic manager not installed")
+	}
+	return err
 }

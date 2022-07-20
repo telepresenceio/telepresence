@@ -312,6 +312,13 @@ func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Conne
 	})
 }
 
+func (s *service) Install(c context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
+	s.logCall(c, "Install", func(c context.Context) {
+		err = trafficmgr.InstallTrafficManager(c, cr)
+	})
+	return
+}
+
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
 	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.Uninstall(c, ur)
