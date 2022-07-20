@@ -195,25 +195,23 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 	}
 	safeCmd := safeCobraCommandImpl{c.command}
 
+	is := newInterceptState(ctx, safeCmd, args, cs, mc)
+	defer is.scout.Close()
+
 	if len(args.cmdline) == 0 && !args.dockerRun {
 		// start and retain the intercept
-		is := newInterceptState(ctx, safeCmd, args, cs, mc)
-		defer is.scout.Close()
 		return client.WithEnsuredState(ctx, is, true, func() error { return nil })
 	}
 
-	is := newInterceptState(ctx, safeCmd, args, cs, mc)
-	defer is.scout.Close()
 	return client.WithEnsuredState(ctx, is, false, func() (err error) {
-		ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
-		defer cancel()
+		// start the interceptor process
 		var cmd *dexec.Cmd
 		if args.dockerRun {
 			envFile := is.args.envFile
 			if envFile == "" {
 				file, err := os.CreateTemp("", "tel-*.env")
 				if err != nil {
-					return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
+					return fmt.Errorf("failed to create temporary environment file. %w", err)
 				}
 				defer os.Remove(file.Name())
 
@@ -226,30 +224,71 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 		} else {
 			cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
 		}
-		if err == nil {
-			// Send info about the pid and intercept id to the traffic-manager so that it kills
-			// the process if it receives a leave of quit call.
-			ior := &connector.Interceptor{
-				InterceptId: is.env["TELEPRESENCE_INTERCEPT_ID"],
-				Pid:         int32(os.Getpid()),
-			}
-			if _, err = is.connectorServer.AddInterceptor(ctx, ior); err != nil {
-				_ = cmd.Process.Kill()
-				return err
-			}
-			defer func() {
-				if _, err := is.connectorServer.RemoveInterceptor(ctx, ior); err != nil {
-					dlog.Error(ctx, err)
-				}
-			}()
-			err = proc.Wait(ctx, cancel, cmd)
-		}
-		// The external command will not output anything to the logs. An error here
-		// is likely caused by the user hitting <ctrl>-C to terminate the process.
 		if err != nil {
-			err = errcat.NoDaemonLogs.New(err)
+			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
+			return err
 		}
-		return err
+
+		// setup cleanup for the interceptor process
+		var (
+			interceptID    = is.env["TELEPRESENCE_INTERCEPT_ID"]
+			interceptorPID = int32(cmd.Process.Pid)
+
+			ior = connector.Interceptor{
+				InterceptId: interceptID,
+				Pid:         interceptorPID,
+			}
+		)
+		// Send info about the pid and intercept id to the traffic-manager so that it kills
+		// the process if it receives a leave of quit call.
+		if _, err = is.connectorServer.AddInterceptor(ctx, &ior); err != nil {
+			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", interceptorPID, err)
+			_ = cmd.Process.Kill()
+			return err
+		}
+		defer func() {
+			if _, err := is.connectorServer.RemoveInterceptor(ctx, &ior); err != nil {
+				dlog.Errorf(ctx, "error removing interceptor: %v", err)
+			}
+		}()
+
+		SetCtxCancellationHandlerFunc(ctx, func() {
+			// Handles context cancellation
+			var (
+				interceptName string
+				sessionStatus = session.Status(ctx)
+			)
+
+			for _, i := range sessionStatus.Intercepts.Intercepts {
+				if i.Id == interceptID {
+					interceptName = i.Spec.Name
+				}
+			}
+
+			_, err := mc.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{
+				Session: sessionStatus.SessionInfo,
+				Name:    interceptName,
+			})
+			if err != nil {
+				dlog.Errorf(ctx, "unable to remove intercept: %v", err)
+			}
+
+			if err = cmd.Process.Kill(); err != nil {
+				dlog.Errorf(ctx, "error killing interceptor process: %v")
+			}
+
+			_, err = is.connectorServer.RemoveInterceptor(ctx, &ior)
+			if err != nil {
+				dlog.Errorf(ctx, "error removing interceptor: %v", err)
+			}
+		})
+
+		if err = proc.Wait(ctx, cmd); err != nil {
+			dlog.Errorf(ctx, "error while waiting for interceptor: %v", err)
+			return err
+		}
+
+		return nil
 	})
 }
 

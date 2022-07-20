@@ -95,3 +95,27 @@ func GetConnectorServer(ctx context.Context) connector.ConnectorServer {
 	cs, _ := ctx.Value(connectorKey{}).(connector.ConnectorServer)
 	return cs
 }
+
+type ctxCancellationHandlerFuncKey struct{}
+
+func WithCtxCancellationHandlerFunc(ctx context.Context) context.Context {
+	var f func()
+	return context.WithValue(ctx, ctxCancellationHandlerFuncKey{}, &f)
+}
+
+func SetCtxCancellationHandlerFunc(ctx context.Context, f func()) {
+	fp, ok := ctx.Value(ctxCancellationHandlerFuncKey{}).(*func())
+	if !ok {
+		return
+	}
+	*fp = f
+}
+
+func GetCtxCancellationHandlerFunc(ctx context.Context) func() {
+	fp, ok := ctx.Value(ctxCancellationHandlerFuncKey{}).(*func())
+	if !ok {
+		return nil
+	}
+
+	return *fp
+}

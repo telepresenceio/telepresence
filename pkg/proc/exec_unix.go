@@ -20,7 +20,7 @@ import (
 
 var CommandContext = dexec.CommandContext
 
-var signalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM}
+var SignalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM}
 
 func isAdmin() bool {
 	return os.Geteuid() == 0

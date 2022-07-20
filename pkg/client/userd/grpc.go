@@ -495,6 +495,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			return
 		}
 
+		var cmdCtx context.Context
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
 			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(ctx context.Context, s trafficmgr.Session) error {
 				ctx = commands.WithCwd(ctx, req.GetCwd())
@@ -506,10 +507,19 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			err = cmd.ExecuteContext(ctx)
 		}
 		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			ctx = commands.WithConnectorServer(ctx, s)
+			cmdCtx = commands.WithConnectorServer(cmdCtx, s)
 		}
 
-		err = cmd.ExecuteContext(ctx)
+		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+		go func() {
+			<-ctx.Done()
+			f := commands.GetCtxCancellationHandlerFunc(cmdCtx)
+			if f != nil {
+				f()
+			}
+		}()
+
+		err = cmd.ExecuteContext(cmdCtx)
 		if err != nil {
 			return
 		}
