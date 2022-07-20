@@ -96,10 +96,6 @@ func (h *udpListener) Done() <-chan struct{} {
 	return h.done
 }
 
-func (h *udpListener) getTTL() time.Duration {
-	return udpConnTTL
-}
-
 type udpStream struct {
 	TimedHandler
 	*udpListener
