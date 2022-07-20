@@ -129,10 +129,15 @@ Once you've `export`ed your kubeconfig, you'll have a usable openshift cluster!
 ## 5. Install Telepresence
 
 Installing Telepresence on openshift requires some special configuration.
-The easiest way to do this is to install through the helm chart; cd into `charts/telepresence` (`../../charts/telepresence` from this directory) then:
+
+The easiest way to do this is to install through the Helm chart, from
+the root of your telepresence.git checkout (`../../` from this
+directory), run:
 
 ```bash
-helm install traffic-manager . -n ambassador --create-namespace --set securityContext=null
+mkdir tmpdir
+go run ./packaging/gen_chart.go tmpdir
+helm install traffic-manager ./tmpdir/telepresence-*.tgz -n ambassador --create-namespace --set securityContext=null
 ```
 
 At that point, `telepresence connect` should work, and you can start doing testing!

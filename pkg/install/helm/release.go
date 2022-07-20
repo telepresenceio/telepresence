@@ -42,11 +42,6 @@ func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
 	return false
 }
 
-func releaseNeedsCleanup(ctx context.Context, rel *release.Release) bool {
-	dlog.Debugf(ctx, "Traffic Manager release %s was found to be in status %s", releaseVer(rel), rel.Info.Status)
-	return rel.Info.Status != release.StatusDeployed
-}
-
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
 	ver := releaseVer(rel)
 	chartVersion, err := semver.Parse(ver)
@@ -55,13 +50,17 @@ func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
 		return false
 	}
 	cliVersion := client.Semver()
-	if chartVersion.GT(cliVersion) {
+
+	switch chartVersion.Compare(cliVersion) {
+	case -1: // chartVersion < cliVersion (so chart needs an upgrade)
+		return true
+	case 0: // chartVersion == cliVersion
+		return false
+	case 1: // chartVersion > cliVersion
 		dlog.Warnf(ctx, "You are using Telepresence %s, but Traffic Manager %s is installed on the cluster.", cliVersion, ver)
 		return false
 	}
-	// At this point we could also do chartVersion != cliVersion, since chartVersion <= cliVersion
-	// But this makes it really clear that we're only doing the upgrade if chartVersion < cliVersion
-	return chartVersion.LT(cliVersion)
+	panic("not reached")
 }
 
 func releaseVer(rel *release.Release) string {

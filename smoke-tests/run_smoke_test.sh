@@ -265,11 +265,15 @@ helm_install() {
         helm uninstall traffic-manager --namespace ambassador >"$output_location" 2>&1
     fi
 
+    mkdir -p build-output
+    rm -f build-output/telepresence-*.tgz
+    go run ./packaging/gen_chart.go build-output
+
     local IFS=","
     if [[ -n $values_file ]]; then
-        helm install traffic-manager charts/telepresence --wait --namespace ambassador --set "${helm_overrides[*]}" -f "$values_file"  > "$output_location" 2>&1
+        helm install traffic-manager ./build-output/telepresence-*.tgz --wait --namespace ambassador --set "${helm_overrides[*]}" -f "$values_file"  > "$output_location" 2>&1
     else
-        helm install traffic-manager charts/telepresence --wait --namespace ambassador --set "${helm_overrides[*]}" > "$output_location" 2>&1
+        helm install traffic-manager ./build-output/telepresence-*.tgz --wait --namespace ambassador --set "${helm_overrides[*]}" > "$output_location" 2>&1
     fi
 }
 

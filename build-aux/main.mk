@@ -32,6 +32,10 @@ else
 CGO_ENABLED=1
 endif
 
+# DOCKER_BUILDKIT is _required_ by our Dockerfile, since we use
+# Dockerfile extensions for the Go build cache.  See
+# https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
+export DOCKER_BUILDKIT := 1
 
 .PHONY: FORCE
 FORCE:
@@ -64,7 +68,7 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 
 	mkdir -p $(BUILDDIR)
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external \
- 		--unparsable-packages build-aux/unparsable-packages.yaml >$(BUILDDIR)/DEPENDENCIES.txt
+		--unparsable-packages build-aux/unparsable-packages.yaml >$(BUILDDIR)/DEPENDENCIES.txt
 	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[1-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
 	printf "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n\n" > DEPENDENCY_LICENSES.md
@@ -84,10 +88,13 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
 
-pkg/install/helm/telepresence-chart.tgz: $(tools/helm) charts/telepresence FORCE
-	GOOS=$(GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) go run ./build-aux/package_embedded_chart/main.go $(TELEPRESENCE_VERSION)
-
 PKG_VERSION = $(shell go list ./pkg/version)
+
+# Build: artifacts that don't get checked in to Git
+# =================================================
+
+.PHONY: build
+build: $(BINDIR)/telepresence ## (Build) Producte a `telepresence` binary for GOOS/GOARCH
 
 # We might be building for arm64 on a mac that doesn't have an M1 chip
 # (which is definitely the case with circle), so GOARCH may be set for that,
@@ -105,27 +112,20 @@ $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll:
 	curl --fail -L https://www.wintun.net/builds/wintun-$(WINTUN_VERSION).zip -o $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip
 	rm -rf  $(BUILDDIR)/wintun-$(WINTUN_VERSION)
 	unzip $(BUILDDIR)/wintun-$(WINTUN_VERSION).zip -d $(BUILDDIR)/wintun-$(WINTUN_VERSION)
+$(BINDIR)/wintun.dll: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll
+	mkdir -p $(@D)
+	cp $< $@
 endif
 
-.PHONY: build-version build
+$(BINDIR)/telepresence: FORCE
 ifeq ($(GOHOSTOS),windows)
-build-version: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
-	mkdir -p $(BINDIR)
-	cp $< $(BINDIR)
-else
-build-version: pkg/install/helm/telepresence-chart.tgz ## (Build) Generate a telepresence-chart.tgz and build all the source code
-	mkdir -p $(BINDIR)
+$(BINDIR)/telepresence: $(BINDIR)/wintun.dll
 endif
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/telepresence/... || \
-		(git restore pkg/install/helm/telepresence-chart.tgz; exit 1) # in case the build fails
+	mkdir -p $(@D)
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 
-# Build: artifacts that don't get checked in to Git
-# =================================================
-build: build-version ## (Build)  Generate a telepresence-chart.tgz, build all the source code, then git restore telepresence-chart.tgz
-	git restore pkg/install/helm/telepresence-chart.tgz
-
-.PHONY: tel2-base tel2
-tel2-base tel2:
+.PHONY: tel2
+tel2:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
@@ -144,25 +144,24 @@ clobber: ## (Build) Remove all build artifacts and tools
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
 
-.PHONY: update-charts
-update-charts:
+.PHONY: prepare-release
+prepare-release: generate
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
+	git add CHANGELOG.md
+
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
-	git add CHANGELOG.md go.mod
-	sed -i.bak "s/^version:.*/version: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
-	sed -i.bak "s/^appVersion:.*/appVersion: $(patsubst v%,%,$(TELEPRESENCE_VERSION))/" charts/telepresence/Chart.yaml
-	git add charts/telepresence/Chart.yaml
-	rm -f charts/telepresence/Chart.yaml.bak
+	git add go.mod
+
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
+	git add charts/telepresence/CHANGELOG.md
 
-.PHONY: prepare-release
-prepare-release: generate update-charts pkg/install/helm/telepresence-chart.tgz
-	git add pkg/install/helm/telepresence-chart.tgz
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/cur pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
 	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
+
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
+
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
 
@@ -170,7 +169,7 @@ prepare-release: generate update-charts pkg/install/helm/telepresence-chart.tgz
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: push-executable
-push-executable: build-version ## (Release) Upload the executable to S3
+push-executable: build ## (Release) Upload the executable to S3
 ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
@@ -240,7 +239,7 @@ lint: lint-deps ## (QA) Run the linters
 	GOOS=windows $(tools/golangci-lint) run --timeout 5m ./...
 	$(tools/protolint) lint rpc
 	$(tools/shellcheck) $(shellscripts)
-	$(tools/helm) lint charts/telepresence --set isCI=true
+	tmpdir=$$(mktemp -d) && trap 'rm -rf "$$tmpdir"' EXIT && go run ./packaging/gen_chart.go "$$tmpdir" && $(tools/helm) lint "$$tmpdir"/*.tgz --set isCI=true
 
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints
