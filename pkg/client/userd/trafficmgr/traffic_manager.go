@@ -186,18 +186,6 @@ type interceptResult struct {
 // TODO: Change to released version
 var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
 
-func InstallTrafficManager(c context.Context, cr *rpc.ConnectRequest) error {
-	cluster, err := connectCluster(c, cr)
-	if err != nil {
-		return err
-	}
-	ti, err := NewTrafficManagerInstaller(cluster)
-	if err != nil {
-		return err
-	}
-	return ti.EnsureManager(c)
-}
-
 func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (context.Context, Session, *connector.ConnectInfo) {
 	dlog.Info(c, "-- Starting new session")
 	sr.Report(c, "connect")
@@ -358,7 +346,6 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		dlog.Errorf(c, "unable to get APIKey: %v", err)
 	}
 
-	// Here be the installer call
 	// Ensure that we have a traffic-manager to talk to.
 	ti, err := NewTrafficManagerInstaller(cluster)
 	if err != nil {
@@ -368,8 +355,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	dlog.Debug(c, "check that traffic-manager is installed")
 	if ensure_tm {
 		if err = ti.EnsureManager(c); err != nil {
-			//dlog.Errorf(c, "failed to ensure traffic-manager, %v", err)
-			return nil, fmt.Errorf("traffic manager not installed, please run 'telepresence helm install'")
+			dlog.Errorf(c, "failed to ensure traffic-manager, %v", err)
 		}
 	} else {
 		if err = ti.IsManager(c); err != nil {
