@@ -205,7 +205,11 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 
 	return client.WithEnsuredState(ctx, is, false, func() (err error) {
 		// start the interceptor process
-		var cmd *dexec.Cmd
+		var (
+			cmd           *dexec.Cmd
+			containerName string
+		)
+
 		if args.dockerRun {
 			envFile := is.args.envFile
 			if envFile == "" {
@@ -220,7 +224,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 				}
 				envFile = file.Name()
 			}
-			cmd, err = is.startInDocker(ctx, envFile, args.cmdline)
+			cmd, containerName, err = is.startInDocker(ctx, envFile, args.cmdline)
 		} else {
 			cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
 		}
@@ -273,8 +277,18 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 				dlog.Errorf(ctx, "unable to remove intercept: %v", err)
 			}
 
-			if err = cmd.Process.Kill(); err != nil {
-				dlog.Errorf(ctx, "error killing interceptor process: %v")
+			if containerName == "" {
+				if err = cmd.Process.Kill(); err != nil {
+					dlog.Errorf(ctx, "error killing interceptor process: %v")
+				}
+			} else {
+				dockerStopCmd, err := proc.Start(ctx, nil, "docker", "stop", containerName)
+				if err != nil {
+					dlog.Errorf(ctx, "error stopping docker container %s: %v", containerName, err)
+				}
+				if err := proc.Wait(ctx, dockerStopCmd); err != nil {
+					dlog.Errorf(ctx, "error wating for docker container %s to stop: %v", containerName, err)
+				}
 			}
 
 			_, err = is.connectorServer.RemoveInterceptor(ctx, &ior)
@@ -881,22 +895,35 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
+func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, string, error) {
 	ourArgs := []string{
 		"run",
 		"--dns-search", "tel2-search",
 		"--env-file", envFile,
 	}
-	hasArg := func(s string) bool {
-		for _, arg := range args {
-			if s == arg {
-				return true
+	getArg := func(s string) (string, bool) {
+		for i, arg := range args {
+			if strings.Contains(arg, s) {
+				parts := strings.Split(arg, "=")
+				if len(parts) == 2 {
+					return parts[1], true
+				}
+				if i+1 < len(args) {
+					return parts[i+1], true
+				}
+				return "", true
 			}
 		}
-		return false
+		return "", false
 	}
-	if !hasArg("--name") {
-		ourArgs = append(ourArgs, "--name", fmt.Sprintf("intercept-%s-%d", is.args.name, is.localPort))
+
+	name, hasName := getArg("--name")
+	if hasName && name == "" {
+		return nil, "", errors.New("no value found for docker flag `--name`")
+	}
+	if !hasName {
+		name = fmt.Sprintf("intercept-%s-%d", is.args.name, is.localPort)
+		ourArgs = append(ourArgs, "--name", name)
 	}
 
 	if is.dockerPort != 0 {
@@ -912,7 +939,9 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return proc.Start(ctx, nil, "docker", append(ourArgs, args...)...)
+
+	cmd, err := proc.Start(ctx, nil, "docker", append(ourArgs, args...)...)
+	return cmd, name, err
 }
 
 func (is *interceptState) writeEnvFile() error {
