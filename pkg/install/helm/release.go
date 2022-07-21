@@ -35,13 +35,6 @@ func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*rel
 	return release, nil
 }
 
-func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
-	if owner, ok := rel.Config["createdBy"]; ok {
-		return owner == releaseOwner
-	}
-	return false
-}
-
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
 	ver := releaseVer(rel)
 	chartVersion, err := semver.Parse(ver)
