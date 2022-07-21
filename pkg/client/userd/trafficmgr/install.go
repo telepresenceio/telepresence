@@ -790,8 +790,8 @@ func (ki *installer) EnsureManager(c context.Context) error {
 }
 
 func (ki *installer) IsManager(c context.Context) error {
-	existing, err := helm.IsTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
-	if err == nil && existing != nil {
+	existing, _, err := helm.IsTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
+	if err == nil && existing == nil {
 		err = errors.Errorf("Traffic manager not installed")
 	}
 	return err

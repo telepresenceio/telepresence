@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 )
 
 func helmCommand() *cobra.Command {
@@ -29,6 +32,12 @@ func installCommand() *cobra.Command {
 }
 
 func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
-
-	return nil
+	//kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
+	request := &connector.ConnectRequest{
+		//KubeFlags: kubeFlagMap(kubeFlags),
+		EnsureTrafficManager: true,
+	}
+	return withConnector(cmd, false, request, func(ctx context.Context, cs *connectorState) error {
+		return nil
+	})
 }

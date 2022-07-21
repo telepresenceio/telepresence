@@ -18,7 +18,6 @@ import (
 
 const helmDriver = "secrets"
 const releaseName = "traffic-manager"
-const releaseOwner = "telepresence-cli"
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
@@ -45,7 +44,6 @@ func getValues(ctx context.Context) map[string]any {
 		},
 		"systemaHost": cloudConfig.SystemaHost,
 		"systemaPort": cloudConfig.SystemaPort,
-		"createdBy":   releaseOwner,
 	}
 	if !clientConfig.Grpc.MaxReceiveSize.IsZero() {
 		values["grpc"] = map[string]any{
@@ -140,10 +138,10 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 	})
 }
 
-func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, error) {
+func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, *action.Configuration, error) {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize helm config: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize helm config: %w", err)
 	}
 	existing, err := getHelmRelease(ctx, helmConfig)
 	if err != nil {
@@ -153,25 +151,27 @@ func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 		// is already set up. If it's the latter case (or the traffic manager isn't there), we'll be alerted by
 		// a subsequent error anyway.
 		dlog.Errorf(ctx, "Unable to look for existing helm release: %v. Assuming it's there and continuing...", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, an uninstall should clean everything up and leave us ready to install again
-	if existing != nil && shouldManageRelease(ctx, existing) && releaseNeedsCleanup(ctx, existing) {
+	if existing != nil && releaseNeedsCleanup(ctx, existing) {
 		err := uninstallExisting(ctx, helmConfig, namespace)
 		if err != nil {
-			return nil, fmt.Errorf("failed to clean up leftover release history: %w", err)
+			return nil, nil, fmt.Errorf("failed to clean up leftover release history: %w", err)
 		}
 		existing = nil
 	}
-	return existing, err
+	return existing, helmConfig, err
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
-	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
-	existing, err := IsTrafficManager(ctx, configFlags, namespace)
+	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
+	if err != nil {
+		return fmt.Errorf("err detecting traffic manager: %w", err)
+	}
 
 	chrt, err := loadChart()
 	if err != nil {
@@ -194,7 +194,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		return nil
 	}
 	ver := releaseVer(existing)
-	if shouldManageRelease(ctx, existing) && shouldUpgradeRelease(ctx, existing) {
+	if shouldUpgradeRelease(ctx, existing) {
 		err = upgradeExisting(ctx, ver, chrt, helmConfig, namespace)
 		if err != nil {
 			return err
@@ -228,13 +228,6 @@ func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		dlog.Info(ctx, err.Error())
 		return nil
 	}
-	if !shouldManageRelease(ctx, existing) {
-		err := fmt.Errorf("traffic Manager in namespace %s is not owned by cli, will not uninstall", namespace)
-		if errOnFail {
-			return err
-		}
-		dlog.Info(ctx, err.Error())
-		return nil
-	}
+
 	return uninstallExisting(ctx, helmConfig, namespace)
 }

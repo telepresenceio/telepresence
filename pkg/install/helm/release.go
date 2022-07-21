@@ -35,13 +35,6 @@ func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*rel
 	return release, nil
 }
 
-func shouldManageRelease(ctx context.Context, rel *release.Release) bool {
-	if owner, ok := rel.Config["createdBy"]; ok {
-		return owner == releaseOwner
-	}
-	return false
-}
-
 func releaseNeedsCleanup(ctx context.Context, rel *release.Release) bool {
 	dlog.Debugf(ctx, "Traffic Manager release %s was found to be in status %s", releaseVer(rel), rel.Info.Status)
 	return rel.Info.Status != release.StatusDeployed

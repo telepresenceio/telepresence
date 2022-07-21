@@ -45,8 +45,6 @@ service Connector {
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);
 
-  rpc Install(ConnectRequest) returns (ConnectInfo);
-
   // Returns a list of workloads and their current intercept status.
   // Requires having already called Connect.
   rpc List(ListRequest) returns (WorkloadInfoSnapshot);
@@ -143,6 +141,7 @@ message ConnectRequest {
   map<string, string> kube_flags = 1;
   repeated string mapped_namespaces = 2;
   reserved 3;
+  bool ensure_traffic_manager = 4;
 }
 
 message ConnectInfo {
