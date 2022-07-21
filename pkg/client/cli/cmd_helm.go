@@ -32,9 +32,7 @@ func installCommand() *cobra.Command {
 }
 
 func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
-	//kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
 	request := &connector.ConnectRequest{
-		//KubeFlags: kubeFlagMap(kubeFlags),
 		EnsureTrafficManager: true,
 	}
 	return withConnector(cmd, false, request, func(ctx context.Context, cs *connectorState) error {

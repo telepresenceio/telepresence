@@ -191,12 +191,15 @@ restart:
 		}
 		existing = nil
 	}
-	return
+	return existing, helmConfig, err
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
 	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
+	if err != nil {
+		return fmt.Errorf("err detecting traffic manager: %w", err)
+	}
 
 	chrt, err := loadChart()
 	if err != nil {
