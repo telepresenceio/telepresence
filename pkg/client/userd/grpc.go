@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -474,12 +476,17 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 }
 
 func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
+	var cmd *cobra.Command
+	outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
-		cmd := &cobra.Command{
-			Use:          "fauxmand",
-			SilenceUsage: true,
+		cmd = &cobra.Command{
+			Use: "telepresence",
 		}
+		cmd.SetOut(outW)
+		cmd.SetErr(errW)
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
+
 		args := req.GetOsArgs()
 		cmd.SetArgs(args)
 		cmd, args, err = cmd.Find(args)
@@ -487,7 +494,6 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			return
 		}
 		cmd.SetArgs(args)
-		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
 
@@ -496,23 +502,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			return
 		}
 
-		var cmdCtx context.Context
-		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(ctx context.Context, s trafficmgr.Session) error {
-				ctx = commands.WithCwd(ctx, req.GetCwd())
-				ctx = commands.WithSession(ctx, s)
-				return cmd.ExecuteContext(ctx)
-			})
-		} else {
-			ctx = commands.WithCwd(ctx, req.GetCwd())
-			err = cmd.ExecuteContext(ctx)
-		}
-		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			cmdCtx = commands.WithConnectorServer(cmdCtx, s)
-		}
-
-		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-		go func() {
+		monitorCmd := func(ctx, cmdCtx context.Context) {
 			select {
 			case <-ctx.Done(): // user hit ctrl-c cli side
 				f := commands.GetCtxCancellationHandlerFunc(cmdCtx)
@@ -521,10 +511,28 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 				}
 			case <-cmdCtx.Done(): // user called quit
 			}
-		}()
+		}
 
-		if err = cmd.ExecuteContext(cmdCtx); err != nil {
-			return
+		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
+			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(cmdCtx context.Context, ts trafficmgr.Session) error {
+				// the context within this scope is not derived from the context of the outer scope
+				cmdCtx = commands.WithSession(cmdCtx, ts)
+				if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+					cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+				}
+				cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+				go monitorCmd(ctx, cmdCtx)
+				return cmd.ExecuteContext(cmdCtx)
+			})
+		} else {
+			cmdCtx := ctx
+			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+				cmdCtx = commands.WithConnectorServer(ctx, s)
+			}
+			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+			go monitorCmd(ctx, cmdCtx)
+			err = cmd.ExecuteContext(ctx)
+
 		}
 
 		result = &rpc.RunCommandResponse{
@@ -532,7 +540,23 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Stderr: errW.Bytes(),
 		}
 	})
-	return result, err
+	if err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			err = nil
+			outW.WriteString(cmd.UsageString())
+		} else {
+			stderr, stdout := strings.TrimSpace(errW.String()), strings.TrimSpace(outW.String())
+			dlog.Errorf(ctx, "Error running command %s: %v", cmd.Name(), err)
+			if stderr == "" && stdout == "" {
+				stdout = cmd.UsageString()
+			}
+			err = fmt.Errorf("%s\n\n%s\n%s", err.Error(), stderr, stdout)
+		}
+	}
+	return &rpc.RunCommandResponse{
+		Stdout: outW.Bytes(),
+		Stderr: errW.Bytes(),
+	}, err
 }
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {

@@ -944,8 +944,15 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-
-	cmd, err := proc.Start(ctx, nil, "docker", append(ourArgs, args...)...)
+	cmd := proc.CommandContext(ctx, "docker", append(ourArgs, args...)...)
+	cmd.DisableLogging = true
+	cmd.Stdout = is.cmd.OutOrStdout()
+	cmd.Stderr = is.cmd.ErrOrStderr()
+	cmd.Stdin = is.cmd.InOrStdin()
+	err := cmd.Start()
+	if err != nil {
+		return nil, "", err
+	}
 	return cmd, name, err
 }
 

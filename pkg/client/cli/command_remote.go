@@ -7,6 +7,7 @@ import (
 	"os/signal"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -75,6 +76,8 @@ func runRemote(cmd *cobra.Command, _ []string) error {
 				if s, ok := status.FromError(err); ok {
 					if s.Code() == codes.Canceled {
 						err = nil
+					} else {
+						err = errors.New(s.Message())
 					}
 				}
 				return err
