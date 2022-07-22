@@ -481,7 +481,8 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
 		cmd = &cobra.Command{
-			Use: "telepresence",
+			Use:          "telepresence",
+			SilenceUsage: true,
 		}
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
@@ -511,9 +512,6 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 				}
 			case <-cmdCtx.Done(): // user called quit
 			}
-		}
-		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			cmdCtx = commands.WithConnectorServer(cmdCtx, s)
 		}
 
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
