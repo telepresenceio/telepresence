@@ -476,7 +476,8 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
 		cmd := &cobra.Command{
-			Use: "fauxmand",
+			Use:          "fauxmand",
+			SilenceUsage: true,
 		}
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
 		args := req.GetOsArgs()
@@ -512,15 +513,17 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 
 		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
 		go func() {
-			<-ctx.Done()
-			f := commands.GetCtxCancellationHandlerFunc(cmdCtx)
-			if f != nil {
-				f()
+			select {
+			case <-ctx.Done(): // user hit ctrl-c cli side
+				f := commands.GetCtxCancellationHandlerFunc(cmdCtx)
+				if f != nil {
+					f()
+				}
+			case <-cmdCtx.Done(): // user called quit
 			}
 		}()
 
-		err = cmd.ExecuteContext(cmdCtx)
-		if err != nil {
+		if err = cmd.ExecuteContext(cmdCtx); err != nil {
 			return
 		}
 

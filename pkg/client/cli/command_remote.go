@@ -50,10 +50,7 @@ func runRemote(cmd *cobra.Command, _ []string) error {
 			ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
 
 			// Ensure that appropriate signals terminates the context.
-			var (
-				sigCh            = make(chan os.Signal, 1)
-				receivedOSSignal bool
-			)
+			var sigCh = make(chan os.Signal, 1)
 			signal.Notify(sigCh, proc.SignalsToForward...)
 			defer func() {
 				signal.Stop(sigCh)
@@ -66,7 +63,6 @@ func runRemote(cmd *cobra.Command, _ []string) error {
 					if sig == nil {
 						return
 					}
-					receivedOSSignal = true
 					cancel()
 				}
 			}()
@@ -77,7 +73,7 @@ func runRemote(cmd *cobra.Command, _ []string) error {
 			})
 			if err != nil {
 				if s, ok := status.FromError(err); ok {
-					if s.Code() == codes.Canceled && receivedOSSignal {
+					if s.Code() == codes.Canceled {
 						err = nil
 					}
 				}

@@ -251,6 +251,10 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 			return err
 		}
 		defer func() {
+			if ctx.Err() != nil {
+				// context cancelled; this is handled elsewhere so this step is no longer needed
+				return
+			}
 			if _, err := is.connectorServer.RemoveInterceptor(ctx, &ior); err != nil {
 				dlog.Errorf(ctx, "error removing interceptor: %v", err)
 			}
@@ -285,9 +289,10 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 				dockerStopCmd, err := proc.Start(ctx, nil, "docker", "stop", containerName)
 				if err != nil {
 					dlog.Errorf(ctx, "error stopping docker container %s: %v", containerName, err)
-				}
-				if err := proc.Wait(ctx, dockerStopCmd); err != nil {
-					dlog.Errorf(ctx, "error wating for docker container %s to stop: %v", containerName, err)
+				} else {
+					if err := proc.Wait(ctx, dockerStopCmd); err != nil {
+						dlog.Errorf(ctx, "error wating for docker container %s to stop: %v", containerName, err)
+					}
 				}
 			}
 
