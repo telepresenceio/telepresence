@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +19,8 @@ func helmCommand() *cobra.Command {
 }
 
 type installArgs struct {
+	replace bool
+	values  []string
 }
 
 func installCommand() *cobra.Command {
@@ -29,14 +33,28 @@ func installCommand() *cobra.Command {
 		RunE:  ia.runInstall,
 	}
 
+	flags := cmd.Flags()
+	flags.BoolVarP(&ia.replace, "replace", "r", false, "replace the traffic mangaer if it already exists")
+	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 	return cmd
 }
 
 func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
-	request := &connector.ConnectRequest{
-		EnsureTrafficManager: true,
+	for i, path := range ia.values {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("--values path %q not valid: %w", path, err)
+		}
+		ia.values[i] = absPath
 	}
-	return withConnector(cmd, false, request, func(ctx context.Context, cs *connectorState) error {
+
+	request := &connector.ConnectRequest{
+		EnsureManager: &connector.HelmInfo{
+			Replace:    ia.replace,
+			ValuePaths: ia.values,
+		},
+	}
+	return withConnector(cmd, true, request, func(ctx context.Context, cs *connectorState) error {
 		return nil
 	})
 }

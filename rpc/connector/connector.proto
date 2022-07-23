@@ -141,7 +141,13 @@ message ConnectRequest {
   map<string, string> kube_flags = 1;
   repeated string mapped_namespaces = 2;
   reserved 3;
-  bool ensure_traffic_manager = 4;
+  // if ensure_manager is present, the traffic manager is ensured
+  HelmInfo ensure_manager = 4;
+}
+
+message HelmInfo {
+  bool replace = 1;
+  repeated string value_paths = 2;
 }
 
 message ConnectInfo {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -41,7 +42,7 @@ type Installer interface {
 		telepresenceAPIPort uint16,
 	) (string, string, error)
 	IsManager(c context.Context) error
-	EnsureManager(c context.Context) error
+	EnsureManager(c context.Context, helmInfo *connector.HelmInfo) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
 
@@ -792,6 +793,6 @@ func (ki *installer) IsManager(c context.Context) error {
 	return err
 }
 
-func (ki *installer) EnsureManager(c context.Context) error {
-	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
+func (ki *installer) EnsureManager(c context.Context, helmInfo *connector.HelmInfo) error {
+	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), helmInfo)
 }

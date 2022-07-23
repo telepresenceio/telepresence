@@ -8,11 +8,13 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -32,7 +34,7 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 	return helmConfig, nil
 }
 
-func getValues(ctx context.Context) map[string]any {
+func getValues(ctx context.Context, valuePaths []string) map[string]any {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
 	imageRegistry := imgConfig.Registry(ctx)
@@ -79,6 +81,17 @@ func getValues(ctx context.Context) map[string]any {
 			"port": clientConfig.TelepresenceAPI.Port,
 		}
 	}
+
+	for _, path := range valuePaths {
+		vals, err := chartutil.ReadValuesFile(path)
+		if err != nil {
+			dlog.Errorf(ctx, "--values path %q not readable: %w", vals, err)
+			continue
+		}
+
+		values = chartutil.CoalesceTables(vals.AsMap(), values)
+	}
+
 	return values
 }
 
@@ -103,7 +116,7 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 	}
 }
 
-func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
+func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string, values map[string]any) error {
 	dlog.Infof(ctx, "No existing Traffic Manager found in namespace %s, installing %s...", namespace, client.Version())
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
@@ -112,19 +125,19 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 	install.CreateNamespace = true
 	return timedRun(ctx, func(timeout time.Duration) error {
 		install.Timeout = timeout
-		_, err := install.Run(chrt, getValues(ctx))
+		_, err := install.Run(chrt, values)
 		return err
 	})
 }
 
-func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string) error {
+func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string, values map[string]any) error {
 	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, namespace, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
 	return timedRun(ctx, func(timeout time.Duration) error {
 		upgrade.Timeout = timeout
-		_, err := upgrade.Run(releaseName, chrt, getValues(ctx))
+		_, err := upgrade.Run(releaseName, chrt, values)
 		return err
 	})
 }
@@ -195,7 +208,7 @@ restart:
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) error {
+func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, helmInfo *connector.HelmInfo) error {
 	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting traffic manager: %w", err)
@@ -217,21 +230,27 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		}
 
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
-		err = installNew(ctx, chrt, helmConfig, namespace)
+		err = installNew(ctx, chrt, helmConfig, namespace, getValues(ctx, helmInfo.ValuePaths))
 		if err != nil {
 			return err
 		}
 	} else { // upgrade existing install
-		if !shouldUpgradeRelease(ctx, existing) {
-			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): existing Traffic Manager (version=%q) is sufficiently new (>= %q), will not modify",
-				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-			return nil
-		}
+		/*
+			if !shouldUpgradeRelease(ctx, existing) {
+				dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): existing Traffic Manager (version=%q) is sufficiently new (>= %q), will not modify",
+					namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+				return nil
+			}
+		*/
 
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): upgrading Traffic Manager from %q to %q...",
-			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-		if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace); err != nil {
-			return err
+		if helmInfo.Replace {
+			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
+				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+			if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, getValues(ctx, helmInfo.ValuePaths)); err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("traffic manager version %q is already installed, use the '--replace' flag to replace", releaseVer(existing))
 		}
 	}
 

@@ -214,7 +214,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(c, cluster, sr.InstallID(), svc, rootDaemon, cr.GetEnsureTrafficManager())
+	tmgr, err := connectMgr(c, cluster, sr.InstallID(), svc, rootDaemon, cr.GetEnsureManager())
 
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -325,7 +325,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
-func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient, ensure_tm bool) (*TrafficManager, error) {
+func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient, ensureManager *connector.HelmInfo) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(c)
 	tos := &clientConfig.Timeouts
 
@@ -353,8 +353,8 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	dlog.Debug(c, "check that traffic-manager is installed")
-	if ensure_tm {
-		if err = ti.EnsureManager(c); err != nil {
+	if ensureManager != nil {
+		if err = ti.EnsureManager(c, ensureManager); err != nil {
 			dlog.Errorf(c, "failed to ensure traffic-manager, %v", err)
 		}
 	} else {

@@ -4,12 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/blang/semver"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
-
-	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // getHelmRelease gets the traffic-manager helm release; if it is not found, it will return nil
@@ -35,6 +31,7 @@ func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*rel
 	return release, nil
 }
 
+/*
 func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
 	ver := releaseVer(rel)
 	chartVersion, err := semver.Parse(ver)
@@ -55,6 +52,7 @@ func shouldUpgradeRelease(ctx context.Context, rel *release.Release) bool {
 	}
 	panic("not reached")
 }
+*/
 
 func releaseVer(rel *release.Release) string {
 	return strings.TrimPrefix(rel.Chart.Metadata.Version, "v")

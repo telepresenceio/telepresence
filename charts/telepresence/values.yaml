@@ -210,10 +210,10 @@ telepresenceAPI:
 prometheus:
   # Create the extra RBAC for non-admin users.
   #
-  # Set this port number to enable a prometheus metrics http server
+  # Set this port number to enable a prometheus metrics http server for the
+  # traffic manager
   # Default: 0
   port: 0
-  # 
 
 ################################################################################
 ## User Configuration
