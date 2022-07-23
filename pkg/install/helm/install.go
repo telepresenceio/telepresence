@@ -85,7 +85,7 @@ func getValues(ctx context.Context, valuePaths []string) map[string]any {
 	for _, path := range valuePaths {
 		vals, err := chartutil.ReadValuesFile(path)
 		if err != nil {
-			dlog.Errorf(ctx, "--values path %q not readable: %w", vals, err)
+			dlog.Errorf(ctx, "--values path %q not readable: %v", vals, err)
 			continue
 		}
 
