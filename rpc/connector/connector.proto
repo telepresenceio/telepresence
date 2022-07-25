@@ -121,6 +121,7 @@ message CommandGroups {
 
 message RunCommandRequest {
   repeated string os_args = 1;
+  string cwd = 2;
 }
 
 message Interceptor {

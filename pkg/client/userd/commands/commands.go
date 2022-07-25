@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,19 @@ import (
 const (
 	CommandRequiresSession = "cobra.telepresence.io/with-session"
 )
+
+type cwdKey struct{}
+
+func WithCwd(ctx context.Context, cwd string) context.Context {
+	return context.WithValue(ctx, cwdKey{}, cwd)
+}
+
+func GetCwd(ctx context.Context) string {
+	if wd, ok := ctx.Value(cwdKey{}).(string); ok {
+		return wd
+	}
+	return ""
+}
 
 // GetCommands will return all commands implemented by the connector daemon.
 func GetCommands() cliutil.CommandGroups {
