@@ -8,8 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
@@ -160,7 +161,7 @@ func (tm *TrafficManager) reconcileMountPoints(ctx context.Context, existingInte
 	}
 }
 
-func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error {
+func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error { //nolint:gocognit // bugger off
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
 	//     dgroup's other functionality
@@ -229,12 +230,15 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				}
 				if iceptError == nil {
 					namespaces[intercept.Spec.Namespace] = struct{}{}
+					if tm.isPodDaemon {
+						intercept.SftpPort = 0 // disable mount point logic
+					}
 					portForwards.start(ctx, tm, intercept)
 				}
 			}
 			portForwards.cancelUnwanted(ctx)
 			tm.reconcileMountPoints(ctx, allNames)
-			if ctx.Err() == nil {
+			if ctx.Err() == nil && !tm.isPodDaemon {
 				tm.setInterceptedNamespaces(ctx, namespaces)
 			}
 		}
@@ -341,15 +345,6 @@ func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
 	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
 }
 
-func imageVersion(image string) *semver.Version {
-	if cp := strings.LastIndexByte(image, ':'); cp > 0 {
-		if v, err := semver.Parse(image[cp+1:]); err == nil {
-			return &v
-		}
-	}
-	return nil
-}
-
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
@@ -408,12 +403,13 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
-	if spec.Mechanism == "http" {
-		if ir.Spec.MechanismArgs, err = makeFlagsCompatible(imageVersion(pi.AgentImage), ir.Spec.MechanismArgs); err != nil {
-			return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
-		}
-		dlog.Debugf(c, "Using %s flags %v", ir.Spec.Mechanism, ir.Spec.MechanismArgs)
+	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, pi.AgentImage, spec.MechanismArgs); err != nil {
+		return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
+	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
+		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
+		spec.MechanismArgs = newMechanismArgs
 	}
+
 	svcProps := &serviceProps{preparedIntercept: pi, apiKey: apiKey}
 	return svcProps, svcProps.interceptResult()
 }
@@ -456,30 +452,28 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	}
 
 	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
-	if spec.Mechanism == "http" {
-		var agentVer *semver.Version
-		podTpl := wl.GetPodTemplate()
-
-		// Check if the workload is auto installed. This also verifies annotation consistency
-		autoInstall, err := useAutoInstall(podTpl)
-		if err != nil {
-			return nil, interceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
-		}
-		for i := range podTpl.Spec.Containers {
-			if ct := &podTpl.Spec.Containers[i]; ct.Name == install.AgentContainerName {
-				image := ct.Image
-				if autoInstall {
-					// Image will be updated to the specified image unless they are equal
-					image = ir.AgentImage
-				}
-				agentVer = imageVersion(image)
+	podTpl := wl.GetPodTemplate()
+	autoInstall, err := useAutoInstall(podTpl)
+	if err != nil {
+		// useAutoInstall also verifies annotation consistency
+		return nil, interceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
+	}
+	var image string
+	if autoInstall {
+		image = ir.AgentImage
+	} else {
+		for _, container := range podTpl.Spec.Containers {
+			if container.Name == install.AgentContainerName {
+				image = container.Image
 				break
 			}
 		}
-		if spec.MechanismArgs, err = makeFlagsCompatible(agentVer, spec.MechanismArgs); err != nil {
-			return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
-		}
-		dlog.Debugf(c, "Using %s flags %v", spec.Mechanism, spec.MechanismArgs)
+	}
+	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, image, spec.MechanismArgs); err != nil {
+		return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
+	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
+		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
+		spec.MechanismArgs = newMechanismArgs
 	}
 
 	svcProps, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, wl)
@@ -490,73 +484,8 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	return svcProps, svcProps.interceptResult()
 }
 
-func makeFlagsCompatible(agentVer *semver.Version, args []string) ([]string, error) {
-	// We get a normalized representation of all flags here, regardless of if they've
-	// been set or not, so we start splitting them into flag and value and skipping
-	// those that aren't set.
-	m := make(map[string][]string, len(args))
-	for _, ma := range args {
-		if eqi := strings.IndexByte(ma, '='); eqi > 2 && eqi+1 < len(ma) {
-			k := ma[2:eqi]
-			m[k] = append(m[k], ma[eqi+1:])
-		}
-	}
-	// Concat all --match flags (renamed to --header) with --header flags
-	if hs, ok := m["match"]; ok {
-		delete(m, "match")
-		hs = append(hs, m["header"]...)
-		ds := make([]string, 0, len(hs))
-		for _, h := range hs {
-			if h != "auto" {
-				ds = append(ds, h)
-			}
-		}
-		if len(ds) == 0 {
-			// restore the default
-			ds = append(ds, "auto")
-		}
-		m["header"] = ds
-	}
-	if agentVer != nil {
-		if agentVer.LE(semver.MustParse("1.11.8")) {
-			if hs, ok := m["header"]; ok {
-				delete(m, "header")
-				m["match"] = hs
-			}
-			for ma := range m {
-				switch ma {
-				case "meta", "path-equal", "path-prefix", "path-regex":
-					return nil, errcat.User.New("--http-" + ma)
-				}
-			}
-			if agentVer.LE(semver.MustParse("1.11.7")) {
-				if pt, ok := m["plaintext"]; ok {
-					if len(pt) > 0 && pt[0] == "true" {
-						return nil, errcat.User.New("--http-plaintext")
-					}
-					delete(m, "plaintext")
-				}
-			}
-		}
-	}
-	args = make([]string, 0, len(args))
-	ks := make([]string, len(m))
-	i := 0
-	for k := range m {
-		ks[i] = k
-		i++
-	}
-	sort.Strings(ks)
-	for _, k := range ks {
-		for _, v := range m[k] {
-			args = append(args, "--"+k+"="+v)
-		}
-	}
-	return args, nil
-}
-
 // AddIntercept adds one intercept
-func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) { //nolint:gocognit // bugger off
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
 	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
@@ -610,21 +539,24 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.WorkloadKind = result.WorkloadKind
 
 	deleteMount := false
-	if ir.MountPoint != "" {
-		// Ensure that the mount-point is free to use
-		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
-			return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
-		}
-
-		// Assume that the mount-point should to be removed from the busy map. Only a happy path
-		// to successful intercept that actually has remote mounts will set this to false.
-		deleteMount = true
-		defer func() {
-			if deleteMount {
-				tm.mountPoints.Delete(ir.MountPoint)
+	if !ir.IsPodDaemon {
+		if ir.MountPoint != "" {
+			// Ensure that the mount-point is free to use
+			if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
+				return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
 			}
-		}()
+
+			// Assume that the mount-point should to be removed from the busy map. Only a happy path
+			// to successful intercept that actually has remote mounts will set this to false.
+			deleteMount = true
+			defer func() {
+				if deleteMount {
+					tm.mountPoints.Delete(ir.MountPoint)
+				}
+			}()
+		}
 	}
+
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
@@ -702,10 +634,12 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
-			mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
-			if mountPoint != "" && ii.SftpPort > 0 {
-				deleteMount = false // Mount-point is busy until intercept ends
-				ii.ClientMountPoint = mountPoint
+			if !ir.IsPodDaemon {
+				mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
+				if mountPoint != "" && ii.SftpPort > 0 {
+					deleteMount = false // Mount-point is busy until intercept ends
+					ii.ClientMountPoint = mountPoint
+				}
 			}
 			success = true
 			return result, nil

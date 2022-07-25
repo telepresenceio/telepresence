@@ -6,8 +6,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/blang/semver"
+	"github.com/spf13/pflag"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
+
+func inArray(needle string, haystack []string) bool {
+	for _, straw := range haystack {
+		if needle == straw {
+			return true
+		}
+	}
+	return false
+}
 
 // builtinExtensions is a function instead of a would-be-const var because its result includes the
 // CLI version number, which might not be initialized yet at init-time (esp. during `go test`).
@@ -40,7 +54,7 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 					Flags: map[string]FlagInfo{
 						"match": {
 							Type:       "stringArray",
-							Default:    json.RawMessage(`["auto"]`),
+							Default:    json.RawMessage(`[]`),
 							Usage:      "",
 							Deprecated: "use --http-header",
 						},
@@ -78,6 +92,62 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 								`meaningful when intercepting workloads annotated with "getambassador.io/inject-originating-tls-secret" ` +
 								`to prevent that TLS is used during intercepts`,
 						},
+					},
+					MakeArgsCompatible: func(args *pflag.FlagSet, image string) (*pflag.FlagSet, error) {
+						var agentVer *semver.Version
+						if cp := strings.LastIndexByte(image, ':'); cp > 0 {
+							if v, err := semver.Parse(image[cp+1:]); err == nil {
+								agentVer = &v
+							}
+						}
+						// Concat all --match flags (renamed to --header) with --header flags
+						if hs, _ := args.GetStringArray("match"); len(hs) > 0 {
+							if args.Changed("header") {
+								_hs, _ := args.GetStringArray("header")
+								hs = append(hs, _hs...)
+							}
+							flagType, _ := cliutil.TypeFromString("stringArray")
+							var err error
+							args.Lookup("header").Value, err = flagType.NewFlagValueFromJson(hs)
+							if err != nil {
+								return nil, err
+							}
+							args.Lookup("match").Value, err = flagType.NewFlagValueFromJson([]string{})
+							if err != nil {
+								return nil, err
+							}
+						}
+						if agentVer != nil && agentVer.LE(semver.MustParse("1.11.8")) {
+							// Swap "header" and "match"
+							header := args.Lookup("header")
+							match := args.Lookup("match")
+							header.Value, match.Value = match.Value, header.Value
+							// Check that too new of flags aren't being used.
+							blacklist := []string{
+								"meta",
+								"path-equal",
+								"path-prefix",
+								"path-regex",
+							}
+							if agentVer.LE(semver.MustParse("1.11.7")) {
+								blacklist = append(blacklist, "plaintext")
+							}
+							for _, ma := range blacklist {
+								flag := args.Lookup(ma)
+								if flag.Value.String() != flag.DefValue {
+									return nil, errcat.User.New("--http-" + ma)
+								}
+							}
+							newArgs := pflag.NewFlagSet("", pflag.ContinueOnError)
+							args.VisitAll(func(flag *pflag.Flag) {
+								if inArray(flag.Name, blacklist) {
+									return
+								}
+								newArgs.AddFlag(flag)
+							})
+							args = newArgs
+						}
+						return args, nil
 					},
 				},
 			},
