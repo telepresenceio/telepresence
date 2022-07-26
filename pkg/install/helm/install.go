@@ -34,7 +34,7 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 	return helmConfig, nil
 }
 
-func getValues(ctx context.Context, valuePaths []string) map[string]any {
+func getValues(ctx context.Context) map[string]any {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images
 	imageRegistry := imgConfig.Registry(ctx)
@@ -80,16 +80,6 @@ func getValues(ctx context.Context, valuePaths []string) map[string]any {
 		values["telepresenceAPI"] = map[string]any{
 			"port": clientConfig.TelepresenceAPI.Port,
 		}
-	}
-
-	for _, path := range valuePaths {
-		vals, err := chartutil.ReadValuesFile(path)
-		if err != nil {
-			dlog.Errorf(ctx, "--values path %q not readable: %v", vals, err)
-			continue
-		}
-
-		values = chartutil.CoalesceTables(vals.AsMap(), values)
 	}
 
 	return values
@@ -220,6 +210,17 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	}
 
 	// OK, now install things.
+	values := getValues(ctx)
+
+	for _, path := range helmInfo.ValuePaths {
+		vals, err := chartutil.ReadValuesFile(path)
+		if err != nil {
+			return fmt.Errorf("--values path %q not readable: %v", vals, err)
+		}
+
+		values = chartutil.CoalesceTables(vals.AsMap(), values)
+	}
+
 	if existing == nil { // fresh install
 		if err := importLegacy(ctx, namespace); err != nil {
 			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
@@ -230,7 +231,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		}
 
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
-		err = installNew(ctx, chrt, helmConfig, namespace, getValues(ctx, helmInfo.ValuePaths))
+		err = installNew(ctx, chrt, helmConfig, namespace, values)
 		if err != nil {
 			return err
 		}
@@ -238,7 +239,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		if helmInfo.Replace {
 			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
 				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-			if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, getValues(ctx, helmInfo.ValuePaths)); err != nil {
+			if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, values); err != nil {
 				return err
 			}
 		} else {
