@@ -347,7 +347,15 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
-func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient, ensureManager *connector.HelmInfo, isPodDaemon bool) (*TrafficManager, error) {
+func connectMgr(
+	c context.Context,
+	cluster *k8s.Cluster,
+	installID string,
+	svc Service,
+	rootDaemon daemon.DaemonClient,
+	ensureManager *connector.HelmInfo,
+	isPodDaemon bool,
+) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(c)
 	tos := &clientConfig.Timeouts
 
