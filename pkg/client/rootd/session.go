@@ -406,10 +406,10 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
 
 				// Applying DNS config
-				for _, alsoProxyIPNet := range mgrInfo.DnsConfig.AlsoProxy {
+				for _, alsoProxyIPNet := range mgrInfo.DnsConfig.GetAlsoProxySubnets() {
 					s.alsoProxySubnets = append(s.alsoProxySubnets, iputil.IPNetFromRPC(alsoProxyIPNet))
 				}
-				for _, neverProxyIPNet := range mgrInfo.DnsConfig.NeverProxy {
+				for _, neverProxyIPNet := range mgrInfo.DnsConfig.GetNeverProxySubnets() {
 					ipnet := iputil.IPNetFromRPC(neverProxyIPNet)
 					route, err := routing.GetRoute(ctx, ipnet)
 					if err != nil {

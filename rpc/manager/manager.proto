@@ -472,8 +472,8 @@ message ClusterInfo {
 }
 
 message DNSConfig {
-  repeated IPNet also_proxy = 1;
-  repeated IPNet never_proxy = 2;
+  repeated IPNet also_proxy_subnets = 1;
+  repeated IPNet never_proxy_subnets = 2;
 }
 
 
