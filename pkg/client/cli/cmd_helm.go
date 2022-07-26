@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 func helmCommand() *cobra.Command {
@@ -54,7 +55,14 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 			ValuePaths: ia.values,
 		},
 	}
+
+	// if the traffic manager should be replaced, quit first so ensureManager is called
+	if ia.replace {
+		cliutil.Disconnect(cmd.Context(), false, false)
+	}
+
 	return withConnector(cmd, true, request, func(ctx context.Context, cs *connectorState) error {
+		// connect with EnsureManager set will install the traffic agent
 		return nil
 	})
 }

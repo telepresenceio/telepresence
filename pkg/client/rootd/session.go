@@ -215,15 +215,16 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	}
 
 	s := &session{
-		cancel:            func() {},
-		scout:             scout,
-		dev:               dev,
-		handlers:          tunnel.NewPool(),
-		fragmentMap:       make(map[uint16][]*buffer.Data),
-		rndSource:         rand.NewSource(time.Now().UnixNano()),
-		session:           mi.Session,
-		managerClient:     mc,
-		clientConn:        conn,
+		cancel:        func() {},
+		scout:         scout,
+		dev:           dev,
+		handlers:      tunnel.NewPool(),
+		fragmentMap:   make(map[uint16][]*buffer.Data),
+		rndSource:     rand.NewSource(time.Now().UnixNano()),
+		session:       mi.Session,
+		managerClient: mc,
+		clientConn:    conn,
+		// dns stuff set here
 		alsoProxySubnets:  convertAlsoProxySubnets(c, mi.AlsoProxySubnets),
 		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
 		proxyCluster:      true,
@@ -284,6 +285,7 @@ func (s *session) reconcileStaticRoutes(ctx context.Context) error {
 
 	// We're not going to add static routes unless they're actually needed
 	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
+	// neverProxy in effect here
 	for _, r := range s.neverProxySubnets {
 		for _, s := range s.curSubnets {
 			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
@@ -325,6 +327,7 @@ func (s *session) refreshSubnets(ctx context.Context) error {
 	// Create a unique slice of all desired subnets.
 	desired := make([]*net.IPNet, len(s.clusterSubnets)+len(s.alsoProxySubnets))
 	copy(desired, s.clusterSubnets)
+	// alsoP added here
 	copy(desired[len(s.clusterSubnets):], s.alsoProxySubnets)
 	desired = subnet.Unique(desired)
 
@@ -404,6 +407,24 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
+
+				// Applying DNS config
+				for _, alsoProxyIPNet := range mgrInfo.DnsConfig.AlsoProxy {
+					s.alsoProxySubnets = append(s.alsoProxySubnets, iputil.IPNetFromRPC(alsoProxyIPNet))
+				}
+				for _, neverProxyIPNet := range mgrInfo.DnsConfig.NeverProxy {
+					ipnet := iputil.IPNetFromRPC(neverProxyIPNet)
+					route, err := routing.GetRoute(ctx, ipnet)
+					if err != nil {
+						// copied from convertNeverProxySubnets
+						dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s. "+
+							"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
+							"not work if it falls within the CIDR for pods/services. Error: %v",
+							ipnet, err)
+						continue
+					}
+					s.neverProxySubnets = append(s.neverProxySubnets, route)
+				}
 
 				close(cfgComplete)
 				cfgComplete = nil

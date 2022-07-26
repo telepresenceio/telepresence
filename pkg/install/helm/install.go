@@ -234,15 +234,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		if err != nil {
 			return err
 		}
-	} else { // upgrade existing install
-		/*
-			if !shouldUpgradeRelease(ctx, existing) {
-				dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): existing Traffic Manager (version=%q) is sufficiently new (>= %q), will not modify",
-					namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-				return nil
-			}
-		*/
-
+	} else { // replace existing install
 		if helmInfo.Replace {
 			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
 				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))

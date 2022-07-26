@@ -36,9 +36,11 @@ type Env struct {
 	PodCIDRs        string `env:"POD_CIDRS,default="`
 	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
 
-	DNSServiceName      string `env:"DNS_SERVICE_NAME,default=coredns"`
-	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
-	DNSServiceIP        string `env:"DNS_SERVICE_IP,default="`
+	DNSServiceName        string `env:"DNS_SERVICE_NAME,default=coredns"`
+	DNSServiceNamespace   string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
+	DNSServiceIP          string `env:"DNS_SERVICE_IP,default="`
+	DNSAlwaysProxySubnets string `env:"ALSO_PROXY_SUBNETS,default="`
+	DNSNeverProxySubnets  string `env:"NEVER_PROXY_SUBNETS,default="`
 }
 
 type envKey struct{}
@@ -66,6 +68,14 @@ func (e *Env) GetManagedNamespaces() []string {
 		return strings.Split(mns, " ")
 	}
 	return nil
+}
+
+func (e *Env) GetAlwaysProxySubnets() []string {
+	return strings.Split(e.DNSAlwaysProxySubnets, " ")
+}
+
+func (e *Env) GetNeverProxySubnets() []string {
+	return strings.Split(e.DNSNeverProxySubnets, " ")
 }
 
 func LoadEnv(ctx context.Context) (context.Context, error) {
