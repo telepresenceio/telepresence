@@ -215,16 +215,15 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	}
 
 	s := &session{
-		cancel:        func() {},
-		scout:         scout,
-		dev:           dev,
-		handlers:      tunnel.NewPool(),
-		fragmentMap:   make(map[uint16][]*buffer.Data),
-		rndSource:     rand.NewSource(time.Now().UnixNano()),
-		session:       mi.Session,
-		managerClient: mc,
-		clientConn:    conn,
-		// dns stuff set here
+		cancel:            func() {},
+		scout:             scout,
+		dev:               dev,
+		handlers:          tunnel.NewPool(),
+		fragmentMap:       make(map[uint16][]*buffer.Data),
+		rndSource:         rand.NewSource(time.Now().UnixNano()),
+		session:           mi.Session,
+		managerClient:     mc,
+		clientConn:        conn,
 		alsoProxySubnets:  convertAlsoProxySubnets(c, mi.AlsoProxySubnets),
 		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
 		proxyCluster:      true,
@@ -285,7 +284,6 @@ func (s *session) reconcileStaticRoutes(ctx context.Context) error {
 
 	// We're not going to add static routes unless they're actually needed
 	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
-	// neverProxy in effect here
 	for _, r := range s.neverProxySubnets {
 		for _, s := range s.curSubnets {
 			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
@@ -327,7 +325,6 @@ func (s *session) refreshSubnets(ctx context.Context) error {
 	// Create a unique slice of all desired subnets.
 	desired := make([]*net.IPNet, len(s.clusterSubnets)+len(s.alsoProxySubnets))
 	copy(desired, s.clusterSubnets)
-	// alsoP added here
 	copy(desired[len(s.clusterSubnets):], s.alsoProxySubnets)
 	desired = subnet.Unique(desired)
 
