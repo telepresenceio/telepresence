@@ -116,7 +116,11 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 	flags.StringVar(&cmd.args.ingressL5, "ingress-l5", "", "If this flag is set, the ingress dialogue will be skipped,"+
 		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
 
-	cmd.args.extState, cmd.extErr = extensions.LoadExtensions(ctx, flags)
+	var exts *extensions.LoadedExtensions
+	exts, cmd.extErr = extensions.LoadExtensions(ctx, flags)
+	if cmd.extErr == nil {
+		cmd.args.extState, cmd.extErr = exts.AddToFlagSet(ctx, flags)
+	}
 
 	return cmd.command
 }
@@ -331,8 +335,8 @@ type interceptArgs struct {
 	dockerRun   bool   // --docker-run
 	dockerMount string // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 
-	extState         *extensions.ExtensionsState // extension flags
-	extRequiresLogin bool                        // pre-extracted from extState
+	extState         *extensions.CLIFlagState // extension flags
+	extRequiresLogin bool                     // pre-extracted from extState
 
 	cmdline []string // Args[1:]
 

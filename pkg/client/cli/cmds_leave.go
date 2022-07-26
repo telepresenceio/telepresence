@@ -48,7 +48,7 @@ func leaveCommand() *cobra.Command {
 
 // InterceptError inspects the .Error and .ErrorText fields in an InterceptResult and returns an
 // appropriate error object, or nil if the InterceptResult doesn't represent an error.
-func interceptError(r *connector.InterceptResult) error {
+func InterceptError(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
 	switch r.Error {
@@ -118,7 +118,7 @@ func removeIntercept(ctx context.Context, name string) error {
 			return err
 		}
 		if r.Error != common.InterceptError_UNSPECIFIED {
-			return interceptError(r)
+			return InterceptError(r)
 		}
 		return nil
 	})
