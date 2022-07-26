@@ -36,9 +36,16 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 }
 
 func runRemote(cmd *cobra.Command, _ []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
 	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-			result, err := connectorClient.RunCommand(ctx, &connector.RunCommandRequest{OsArgs: os.Args[1:]})
+			result, err := connectorClient.RunCommand(ctx, &connector.RunCommandRequest{
+				OsArgs: os.Args[1:],
+				Cwd:    cwd,
+			})
 			if err != nil {
 				return err
 			}
