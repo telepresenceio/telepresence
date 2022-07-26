@@ -492,9 +492,11 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
 			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(ctx context.Context, s trafficmgr.Session) error {
+				ctx = commands.WithCwd(ctx, req.GetCwd())
 				return cmd.ExecuteContext(ctx)
 			})
 		} else {
+			ctx = commands.WithCwd(ctx, req.GetCwd())
 			err = cmd.ExecuteContext(ctx)
 		}
 		if err != nil {
