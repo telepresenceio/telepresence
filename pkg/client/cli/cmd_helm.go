@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -58,7 +59,10 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 
 	// if the traffic manager should be replaced, quit first so ensureManager is called
 	if ia.replace {
-		cliutil.Disconnect(cmd.Context(), false, false)
+		err := cliutil.Disconnect(cmd.Context(), false, false)
+		if err != nil {
+			dlog.Debugf(cmd.Context(), "Dry run quit error: %v", err)
+		}
 	}
 
 	return withConnector(cmd, true, request, func(ctx context.Context, cs *connectorState) error {

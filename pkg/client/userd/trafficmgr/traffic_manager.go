@@ -188,7 +188,12 @@ type interceptResult struct {
 // TODO: Change to released version
 var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
 
-func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, svc Service, extraServices []SessionService) (context.Context, Session, *connector.ConnectInfo) {
+func NewSession(
+	c context.Context,
+	sr *scout.Reporter,
+	cr *rpc.ConnectRequest,
+	svc Service, extraServices []SessionService,
+) (context.Context, Session, *connector.ConnectInfo) {
 	dlog.Info(c, "-- Starting new session")
 	sr.Report(c, "connect")
 
