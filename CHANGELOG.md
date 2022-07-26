@@ -7,6 +7,12 @@
   create` a `--add-request-headers` flag) that can be used to inject
   request headers in to every request made through the preview URL.
 
+- Feature: The Docker image now contains a new program in addition to
+  the existing traffic-manager and traffic-agent: the pod-daemon.  The
+  pod-daemon is a trimmed-down version of the user-daemon that is
+  designed to run as a sidecar in a Pod, enabling CI systems to create
+  preview deploys.
+
 ### 2.6.9 (TBD)
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.

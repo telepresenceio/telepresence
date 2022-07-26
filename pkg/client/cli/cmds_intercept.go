@@ -57,8 +57,8 @@ type interceptArgs struct {
 	dockerRun   bool   // --docker-run
 	dockerMount string // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 
-	extState         *extensions.ExtensionsState // extension flags
-	extRequiresLogin bool                        // pre-extracted from extState
+	extState         *extensions.CLIFlagState // extension flags
+	extRequiresLogin bool                     // pre-extracted from extState
 
 	cmdline []string // Args[1:]
 
@@ -136,7 +136,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
 	args.previewSpec = &manager.PreviewSpec{}
-	addPreviewFlags("preview-url-", flags, args.previewSpec)
+	AddPreviewFlags("preview-url-", flags, args.previewSpec)
 
 	flags.StringVarP(&args.envFile, "env-file", "e", "", ``+
 		`Also emit the remote environment to an env file in Docker Compose format. `+
@@ -172,7 +172,10 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
 
 	var extErr error
-	args.extState, extErr = extensions.LoadExtensions(ctx, flags)
+	exts, extErr := extensions.LoadExtensions(ctx, flags)
+	if extErr == nil {
+		args.extState, extErr = exts.AddToFlagSet(ctx, flags)
+	}
 
 	cmd.RunE = func(cmd *cobra.Command, positional []string) error {
 		if extErr != nil {
@@ -328,7 +331,9 @@ func newInterceptState(
 	return is
 }
 
-func interceptMessage(r *connector.InterceptResult) error {
+// InterceptError inspects the .Error and .ErrorText fields in an InterceptResult and returns an
+// appropriate error object, or nil if the InterceptResult doesn't represent an error.
+func InterceptError(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
 	switch r.Error {
@@ -589,7 +594,7 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 		return fmt.Errorf("connector.CanIntercept: %w", err)
 	}
 	if r.Error != common.InterceptError_UNSPECIFIED {
-		return interceptMessage(r)
+		return InterceptError(r)
 	}
 	if needLogin {
 		// We default to assuming they can connect to Ambassador Cloud
@@ -699,7 +704,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			_ = is.DeactivateState(ctx)
 			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
 		}
-		return false, interceptMessage(r)
+		return false, InterceptError(r)
 	}
 
 	if args.agentName == "" {
@@ -789,7 +794,7 @@ func removeIntercept(ctx context.Context, name string) error {
 			return err
 		}
 		if r.Error != common.InterceptError_UNSPECIFIED {
-			return interceptMessage(r)
+			return InterceptError(r)
 		}
 		return nil
 	})
