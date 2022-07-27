@@ -100,7 +100,10 @@ func TestToFromRPC(t *testing.T) { //nolint:gocognit,gocyclo // it's a long list
 	rpc := CommandsToRPC(CommandGroups{"Test": []*cobra.Command{rCmd}})
 	fmt.Printf("commands to rpc res: %+v\n", rpc)
 	grp, err := RPCToCommands(rpc, func(cmd *cobra.Command, args []string) error {
-		cmd.Flags().Parse(args)
+		err := cmd.Flags().Parse(args)
+		if err != nil {
+			t.Error(err)
+		}
 
 		cmdBool, err := cmd.Flags().GetBool("bool")
 		if err != nil {

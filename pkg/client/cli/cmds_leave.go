@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,23 +15,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
-
-// safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
-// have to worry about things using it in ways they shouldn't.
-type safeCobraCommand interface {
-	InOrStdin() io.Reader
-	OutOrStdout() io.Writer
-	ErrOrStderr() io.Writer
-	FlagError(error) error
-}
-
-type safeCobraCommandImpl struct {
-	*cobra.Command
-}
-
-func (w safeCobraCommandImpl) FlagError(err error) error {
-	return w.Command.FlagErrorFunc()(w.Command, err)
-}
 
 func leaveCommand() *cobra.Command {
 	return &cobra.Command{
