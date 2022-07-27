@@ -521,6 +521,8 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 					cmdCtx = commands.WithConnectorServer(cmdCtx, s)
 				}
 				cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+				cmdCtx = commands.WithCwd(cmdCtx, req.GetCwd())
+
 				go monitorCmd(ctx, cmdCtx)
 				return cmd.ExecuteContext(cmdCtx)
 			})
@@ -530,9 +532,10 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 				cmdCtx = commands.WithConnectorServer(ctx, s)
 			}
 			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+			cmdCtx = commands.WithCwd(cmdCtx, req.GetCwd())
+
 			go monitorCmd(ctx, cmdCtx)
 			err = cmd.ExecuteContext(ctx)
-
 		}
 
 		result = &rpc.RunCommandResponse{

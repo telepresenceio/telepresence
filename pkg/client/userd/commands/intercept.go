@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -575,7 +576,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 
 	doMount := false
 	if err = checkMountCapability(ctx); err == nil {
-		if ir.MountPoint, doMount, err = is.getMountPoint(); err != nil {
+		if ir.MountPoint, doMount, err = is.getMountPoint(ctx); err != nil {
 			return nil, err
 		}
 	} else if is.args.mountSet {
@@ -617,7 +618,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	return ir, nil
 }
 
-func (is *interceptState) getMountPoint() (string, bool, error) {
+func (is *interceptState) getMountPoint(ctx context.Context) (string, bool, error) {
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(is.args.mount)
 	if err != nil {
@@ -625,9 +626,16 @@ func (is *interceptState) getMountPoint() (string, bool, error) {
 		doMount = len(mountPoint) > 0
 		err = nil
 	}
+
+	if mountPoint != "" && !filepath.IsAbs(mountPoint) {
+		mountPoint = filepath.Join(GetCwd(ctx), mountPoint)
+		mountPoint = filepath.Clean(mountPoint)
+	}
+
 	if doMount {
 		mountPoint, err = cliutil.PrepareMount(mountPoint)
 	}
+
 	return mountPoint, doMount, err
 }
 
