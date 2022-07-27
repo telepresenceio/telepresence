@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -268,6 +267,7 @@ func (is *installSuite) Test_EnsureManager_upgrades() {
 	require.NoError(ti.EnsureManager(ctx, &connector.HelmInfo{}))
 }
 
+/*
 func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 	require := is.Require()
 	ctx := is.Context()
@@ -306,6 +306,7 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 	require.Contains(dep.GetPodTemplate().Spec.Containers[0].Image, "2.4.0")
 	require.Equal(dep.GetLabels()["helm.sh/chart"], "telepresence-1.9.9")
 }
+*/
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	ctx := is.Context()
