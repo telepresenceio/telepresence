@@ -41,7 +41,7 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 	return groups, nil
 }
 
-func runRemote(cmd *cobra.Command, _ []string) error {
+func runRemote(cmd *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -69,7 +69,9 @@ func runRemote(cmd *cobra.Command, _ []string) error {
 			}()
 
 			result, err := connectorClient.RunCommand(ctx, &connector.RunCommandRequest{
-				OsArgs: os.Args[1:],
+				// FlagParsing is disabled on the local-side cmd so args is actually going to hold flags and args both
+				// Thus command_name + args is the entire command line (except for the "telepresence" string in os.Args[0])
+				OsArgs: append([]string{cmd.CalledAs()}, args...),
 				Cwd:    cwd,
 			})
 			if err != nil {
