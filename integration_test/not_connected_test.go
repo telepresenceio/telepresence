@@ -22,7 +22,7 @@ func init() {
 func (s *notConnectedSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := itest.WithUser(s.Context(), "default")
-	stdout := itest.TelepresenceOk(ctx, "helm install")
+	stdout := itest.TelepresenceOk(ctx, "helm", "install")
 	s.Contains(stdout, "Connected to context")
 	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
