@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -38,6 +39,12 @@ func installCommand() *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&ia.replace, "replace", "r", false, "replace the traffic mangaer if it already exists")
 	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
+
+	kubeConfig := genericclioptions.NewConfigFlags(false)
+	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.AddFlags(kubeFlags)
+	flags.AddFlagSet(kubeFlags)
+
 	return cmd
 }
 

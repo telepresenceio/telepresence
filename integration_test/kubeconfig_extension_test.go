@@ -159,7 +159,8 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 					"also-proxy":  t.alsoProxy,
 				}
 			})
-			itest.TelepresenceOk(ctx, "connect", "--context", "extra")
+
+			itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 			defer itest.TelepresenceQuitOk(ctx)
 			s.Eventually(func() bool {
 				return itest.Run(ctx, "curl", "--silent", "-k", "--max-time", "0.5", "https://kubernetes.default:443") == nil
