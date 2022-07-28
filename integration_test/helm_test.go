@@ -32,7 +32,7 @@ func (s *helmSuite) SetupSuite() {
 	itest.TelepresenceQuitOk(ctx)
 	itest.CreateNamespaces(ctx, s.appSpace2, s.mgrSpace2)
 	itest.ApplyEchoService(ctx, s.ServiceName(), s.appSpace2, 80)
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "helm", "install")
 }
 
 func (s *helmSuite) TearDownSuite() {
