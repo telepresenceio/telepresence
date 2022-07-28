@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -41,9 +40,9 @@ func installCommand() *cobra.Command {
 	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 
 	// copied from connect cmd
-	kubeConfig := genericclioptions.NewConfigFlags(false)
-	kubeConfig.Namespace = nil
-	kubeConfig.AddFlags(kubeFlags)
+	//kubeConfig := genericclioptions.NewConfigFlags(false)
+	//kubeConfig.Namespace = nil
+	//kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
 
 	return cmd
