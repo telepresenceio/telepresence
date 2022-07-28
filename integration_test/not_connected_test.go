@@ -30,7 +30,7 @@ func (s *notConnectedSuite) SetupSuite() {
 
 func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	ctx := s.Context()
-	stdout := itest.TelepresenceOk(ctx, "connect", "--", s.Executable(), "status")
+	stdout := itest.TelepresenceOk(ctx, "helm", "install", "--", s.Executable(), "status")
 	s.Contains(stdout, "Connected to context")
 	s.Contains(stdout, "Kubernetes context:")
 	itest.TelepresenceDisconnectOk(ctx)

@@ -40,9 +40,9 @@ func installCommand() *cobra.Command {
 	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 
 	// copied from connect cmd
-	//kubeConfig := genericclioptions.NewConfigFlags(false)
-	//kubeConfig.Namespace = nil
-	//kubeConfig.AddFlags(kubeFlags)
+	// kubeConfig := genericclioptions.NewConfigFlags(false)
+	// kubeConfig.Namespace = nil
+	// kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
 
 	return cmd
@@ -58,6 +58,7 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	request := &connector.ConnectRequest{
+		KubeFlags: kubeFlagMap(kubeFlags),
 		EnsureManager: &connector.HelmInfo{
 			Replace:    ia.replace,
 			ValuePaths: ia.values,
