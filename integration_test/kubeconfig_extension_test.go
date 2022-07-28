@@ -60,7 +60,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return map[string]any{"also-proxy": apiServers}
 	})
 
-	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
+	itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx) // WithKubeConfigExtension sets env which gets sticky, so quitting is a must here
 
 	expectedLen := len(ips)
