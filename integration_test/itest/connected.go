@@ -31,7 +31,7 @@ func (ch *connected) setup(ctx context.Context) bool {
 	TelepresenceQuitOk(ctx)
 
 	// Connect using telepresence-test-developer user
-	stdout = TelepresenceOk(ctx, "connect")
+	stdout = TelepresenceOk(ctx, "helm", "install")
 	require.Contains(t, stdout, "Connected to context default")
 	TelepresenceOk(ctx, "loglevel", "-d30m", "debug")
 	ch.CapturePodLogs(ctx, "app=traffic-manager", "", ch.ManagerNamespace())

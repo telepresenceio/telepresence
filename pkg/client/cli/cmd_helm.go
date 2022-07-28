@@ -40,8 +40,9 @@ func installCommand() *cobra.Command {
 	flags.BoolVarP(&ia.replace, "replace", "r", false, "replace the traffic mangaer if it already exists")
 	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 
+	// copied from connect cmd
 	kubeConfig := genericclioptions.NewConfigFlags(false)
-	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.Namespace = nil
 	kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
 

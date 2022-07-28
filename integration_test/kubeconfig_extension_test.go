@@ -103,7 +103,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		require.NoError(err)
 		return map[string]any{"never-proxy": []string{ip + "/32"}}
 	})
-	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
+	itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
 
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
@@ -196,7 +196,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	require.NoError(err)
 	logFile := filepath.Join(logDir, "daemon.log")
 
-	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
+	itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
 
 	retryCount := 0
