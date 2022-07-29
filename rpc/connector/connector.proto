@@ -41,6 +41,9 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
+  // Installs traffic-manager in the cluster.
+  rpc Install(ConnectRequest) returns (InstallResult);
+
   // Uninstalls traffic-agents and traffic-manager from the cluster.
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);
@@ -143,6 +146,7 @@ message ConnectRequest {
   repeated string mapped_namespaces = 2;
   reserved 3;
   bool is_pod_daemon = 4;
+  InstallInfo install_info = 5;
 }
 
 message ConnectInfo {
@@ -191,6 +195,15 @@ message ConnectInfo {
 
 message IngressInfos {
   repeated manager.IngressInfo ingress_infos = 1;
+}
+
+message InstallInfo {
+  bool upgrade = 2;
+  repeated string value_paths = 3;
+}
+
+message InstallResult {
+  string error_text = 1;
 }
 
 message UninstallRequest {

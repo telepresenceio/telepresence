@@ -341,6 +341,26 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	return cluster, nil
 }
 
+func EnsureManager(ctx context.Context, req *rpc.ConnectRequest) error {
+	cluster, err := connectCluster(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	ti, err := NewTrafficManagerInstaller(cluster)
+	if err != nil {
+		return err
+	}
+
+	dlog.Debug(ctx, "ensure that traffic-manager exists")
+	helmInfo := req.GetHelmInfo()
+	if helmInfo == nil {
+		helmInfo = &rpc.HelmInfo{}
+	}
+
+	return ti.EnsureManager(ctx, helmInfo)
+}
+
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
 func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient, isPodDaemon bool) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(c)
@@ -369,10 +389,10 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		return nil, stacktrace.Wrap(err, "new installer")
 	}
 
-	dlog.Debug(c, "ensure that traffic-manager exists")
-	if err = ti.EnsureManager(c); err != nil {
-		dlog.Errorf(c, "failed to ensure traffic-manager, %v", err)
-		return nil, fmt.Errorf("failed to ensure traffic manager: %w", err)
+	dlog.Debug(c, "checking that traffic-manager exists")
+	if err = ti.IsManager(c); err != nil {
+		dlog.Errorf(c, "failed to find traffic-manager, %v", err)
+		return nil, fmt.Errorf("traffic manager not installed, please run 'telepresence helm install'")
 	}
 
 	dlog.Debug(c, "traffic-manager started, creating port-forward")
