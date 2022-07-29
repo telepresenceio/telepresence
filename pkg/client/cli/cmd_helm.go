@@ -88,7 +88,7 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 			if resp.ErrorText != "" {
 				return fmt.Errorf(resp.ErrorText)
 			}
-			fmt.Fprint(cmd.OutOrStdout(), "Traffic Manager installed successfully\n")
+			fmt.Fprint(cmd.OutOrStdout(), "\nTraffic Manager installed successfully\n")
 			return nil
 		})
 	})

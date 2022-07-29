@@ -92,6 +92,7 @@ spec:
           - name: MANAGED_NAMESPACES
             value: "{{ join " " . }}"
           {{- end }}
+          {{- end }}
           {{- with .Values.dnsConfig.alsoProxySubnets }}
           - name: ALSO_PROXY_SUBNETS
             value: "{{ join " " . }}"
@@ -99,7 +100,6 @@ spec:
           {{- with .Values.dnsConfig.neverProxySubnets }}
           - name: NEVER_PROXY_SUBNETS
             value: "{{ join " " . }}"
-          {{- end }}
           {{- end }}
           ports:
           - name: api

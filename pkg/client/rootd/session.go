@@ -406,28 +406,11 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
 
 				// Applying DNS config
-
 				// seg fault guard
 				dnsConfig := mgrInfo.GetDnsConfig()
-				if dnsConfig == nil {
-					dnsConfig = &manager.DNSConfig{}
-				}
-
-				for _, alsoProxyIPNet := range dnsConfig.GetAlsoProxySubnets() {
-					s.alsoProxySubnets = append(s.alsoProxySubnets, iputil.IPNetFromRPC(alsoProxyIPNet))
-				}
-				for _, neverProxyIPNet := range dnsConfig.GetNeverProxySubnets() {
-					ipnet := iputil.IPNetFromRPC(neverProxyIPNet)
-					route, err := routing.GetRoute(ctx, ipnet)
-					if err != nil {
-						// copied from convertNeverProxySubnets
-						dlog.Errorf(ctx, "unable to get route for never-proxied subnet %s. "+
-							"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
-							"not work if it falls within the CIDR for pods/services. Error: %v",
-							ipnet, err)
-						continue
-					}
-					s.neverProxySubnets = append(s.neverProxySubnets, route)
+				if dnsConfig != nil {
+					s.alsoProxySubnets = append(s.alsoProxySubnets, convertAlsoProxySubnets(ctx, dnsConfig.AlsoProxySubnets)...)
+					s.neverProxySubnets = append(s.neverProxySubnets, convertNeverProxySubnets(ctx, dnsConfig.NeverProxySubnets)...)
 				}
 
 				close(cfgComplete)

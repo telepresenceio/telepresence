@@ -298,7 +298,8 @@ func (is *installSuite) Test_EnsureManager_doesNotChangeExistingHelm() {
 
 	ctx, ti := is.installer(ctx)
 
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{Upgrade: true}))
+	// will throw error asking the user to use the --upgrade flag
+	require.Error(ti.EnsureManager(ctx, &connector.InstallInfo{}))
 
 	dep, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 	require.NoError(err)

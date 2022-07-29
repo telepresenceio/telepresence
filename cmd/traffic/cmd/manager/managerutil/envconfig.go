@@ -81,9 +81,10 @@ func (e *Env) GetNeverProxySubnets() ([]*manager.IPNet, error) {
 	return parseRawSubnets(e.DNSNeverProxySubnets)
 }
 
-func parseRawSubnets(rawIPNets string) ([]*manager.IPNet, error) {
+func parseRawSubnets(IPNetsStr string) ([]*manager.IPNet, error) {
+	rawIPNets := strings.Split(IPNetsStr, " ")
 	ipNets := make([]*manager.IPNet, len(rawIPNets))
-	for i, s := range strings.Split(rawIPNets, " ") {
+	for i, s := range rawIPNets {
 		_, ipNet, err := net.ParseCIDR(s)
 		if err != nil {
 			return nil, err
