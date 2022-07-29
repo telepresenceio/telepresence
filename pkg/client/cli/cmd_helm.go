@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -24,9 +25,11 @@ func helmCommand() *cobra.Command {
 }
 
 type installArgs struct {
-	upgrade   bool
-	values    []string
-	kubeFlags *pflag.FlagSet
+	upgrade          bool
+	values           []string
+	kubeFlags        *pflag.FlagSet
+	dnsIP            string
+	mappedNamespaces []string
 }
 
 func installCommand() *cobra.Command {
@@ -50,6 +53,22 @@ func installCommand() *cobra.Command {
 	kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
 	ia.kubeFlags = kubeFlags
+
+	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
+	// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
+	//  that's unknown until it's been tested during the first connect attempt.
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		nwFlags.StringVarP(&ia.dnsIP,
+			"dns", "", "",
+			"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
+		)
+	}
+	nwFlags.StringSliceVar(&ia.mappedNamespaces,
+		"mapped-namespaces", nil, ``+
+			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
+			`Defaults to all namespaces`)
+	flags.AddFlagSet(nwFlags)
+
 	return cmd
 }
 
@@ -63,7 +82,8 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	request := &connector.ConnectRequest{
-		KubeFlags: kubeFlagMap(ia.kubeFlags),
+		KubeFlags:        kubeFlagMap(ia.kubeFlags),
+		MappedNamespaces: ia.mappedNamespaces,
 		InstallInfo: &connector.InstallInfo{
 			Upgrade:    ia.upgrade,
 			ValuePaths: ia.values,
