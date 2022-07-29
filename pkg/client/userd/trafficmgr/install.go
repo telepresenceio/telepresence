@@ -42,7 +42,7 @@ type Installer interface {
 		telepresenceAPIPort uint16,
 	) (string, string, error)
 	IsManager(c context.Context) error
-	EnsureManager(c context.Context, helmInfo *connector.InstallInfo) error
+	EnsureManager(c context.Context, installInfo *connector.InstallInfo) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
 
