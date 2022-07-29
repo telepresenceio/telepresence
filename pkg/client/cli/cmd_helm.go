@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
