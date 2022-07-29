@@ -213,6 +213,7 @@ func NewInfo(ctx context.Context) Info {
 		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
 	}
 
+	oi.DnsConfig = &rpc.DNSConfig{}
 	oi.DnsConfig.AlsoProxySubnets, err = env.GetAlsoProxySubnets()
 	if err != nil {
 		dlog.Warnf(ctx, "AlsoProxySubnets not parsed: %v", err)

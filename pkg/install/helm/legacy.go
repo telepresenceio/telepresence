@@ -114,8 +114,7 @@ func getLegacyFuncs(ctx context.Context, namespace string) []func() error {
 			return err
 		},
 		func() error {
-			apps := ki.AppsV1()
-			kif := apps.Deployments(namespace)
+			kif := ki.AppsV1().Deployments(namespace)
 			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
 			if err == nil {
 				o.ObjectMeta.Labels = selector
