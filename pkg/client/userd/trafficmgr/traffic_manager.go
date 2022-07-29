@@ -353,12 +353,12 @@ func EnsureManager(ctx context.Context, req *rpc.ConnectRequest) error {
 	}
 
 	dlog.Debug(ctx, "ensure that traffic-manager exists")
-	helmInfo := req.GetHelmInfo()
-	if helmInfo == nil {
-		helmInfo = &rpc.HelmInfo{}
+	installInfo := req.GetInstallInfo()
+	if installInfo == nil {
+		installInfo = &rpc.InstallInfo{}
 	}
 
-	return ti.EnsureManager(ctx, helmInfo)
+	return ti.EnsureManager(ctx, installInfo)
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.

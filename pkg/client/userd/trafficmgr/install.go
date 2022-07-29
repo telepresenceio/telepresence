@@ -42,7 +42,7 @@ type Installer interface {
 		telepresenceAPIPort uint16,
 	) (string, string, error)
 	IsManager(c context.Context) error
-	EnsureManager(c context.Context, helmInfo *connector.HelmInfo) error
+	EnsureManager(c context.Context, helmInfo *connector.InstallInfo) error
 	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
 }
 
@@ -793,6 +793,6 @@ func (ki *installer) IsManager(c context.Context) error {
 	return err
 }
 
-func (ki *installer) EnsureManager(c context.Context, helmInfo *connector.HelmInfo) error {
-	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), helmInfo)
+func (ki *installer) EnsureManager(c context.Context, installInfo *connector.InstallInfo) error {
+	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), installInfo)
 }

@@ -35,6 +35,7 @@ func (h *helmAndService) setup(ctx context.Context) bool {
 	require.NoError(t, Kubectl(ctx, "", "delete", "clusterrolebinding", "telepresence-clusterrolebinding"))
 	require.NoError(t, h.InstallTrafficManager(ctx, nil, h.ManagerNamespace(), h.AppNamespace()))
 
+	TelepresenceOk(ctx, "helm", "install")
 	stdout := TelepresenceOk(ctx, "connect")
 	require.Contains(t, stdout, "Connected to context")
 	return true

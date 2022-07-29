@@ -63,7 +63,7 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 
 	request := &connector.ConnectRequest{
 		KubeFlags: kubeFlagMap(kubeFlags),
-		HelmInfo: &connector.HelmInfo{
+		InstallInfo: &connector.InstallInfo{
 			Upgrade:    ia.upgrade,
 			ValuePaths: ia.values,
 		},
