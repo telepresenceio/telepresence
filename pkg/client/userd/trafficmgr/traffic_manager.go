@@ -358,7 +358,8 @@ func EnsureManager(ctx context.Context, req *rpc.ConnectRequest) error {
 		installInfo = &rpc.InstallInfo{}
 	}
 
-	return ti.EnsureManager(ctx, installInfo)
+	c := cluster.WithK8sInterface(ctx)
+	return ti.EnsureManager(c, installInfo)
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.

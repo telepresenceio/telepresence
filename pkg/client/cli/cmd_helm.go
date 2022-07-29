@@ -24,8 +24,9 @@ func helmCommand() *cobra.Command {
 }
 
 type installArgs struct {
-	upgrade bool
-	values  []string
+	upgrade   bool
+	values    []string
+	kubeFlags *pflag.FlagSet
 }
 
 func installCommand() *cobra.Command {
@@ -48,7 +49,7 @@ func installCommand() *cobra.Command {
 	kubeConfig.Namespace = nil
 	kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
-
+	ia.kubeFlags = kubeFlags
 	return cmd
 }
 
@@ -62,7 +63,7 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	request := &connector.ConnectRequest{
-		KubeFlags: kubeFlagMap(kubeFlags),
+		KubeFlags: kubeFlagMap(ia.kubeFlags),
 		InstallInfo: &connector.InstallInfo{
 			Upgrade:    ia.upgrade,
 			ValuePaths: ia.values,
@@ -87,7 +88,7 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 			if resp.ErrorText != "" {
 				return fmt.Errorf(resp.ErrorText)
 			}
-			fmt.Fprint(cmd.OutOrStdout(), "Traffic Manager installed successfully ")
+			fmt.Fprint(cmd.OutOrStdout(), "Traffic Manager installed successfully\n")
 			return nil
 		})
 	})

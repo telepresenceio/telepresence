@@ -222,6 +222,14 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	}
 
 	if existing == nil { // fresh install
+		if err := importLegacy(ctx, namespace); err != nil {
+			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
+			// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
+			dlog.Errorf(ctx, "EnsureTrafficManager(namespace=%q): unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...",
+				namespace, err)
+			return nil
+		}
+
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, chrt, helmConfig, namespace, values)
 		if err != nil {

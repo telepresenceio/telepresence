@@ -2,13 +2,16 @@ package managerutil
 
 import (
 	"context"
+	"net"
 	"strings"
 
 	"github.com/sethvargo/go-envconfig"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -70,12 +73,24 @@ func (e *Env) GetManagedNamespaces() []string {
 	return nil
 }
 
-func (e *Env) GetAlsoProxySubnets() []string {
-	return strings.Split(e.DNSAlsoProxySubnets, " ")
+func (e *Env) GetAlsoProxySubnets() ([]*manager.IPNet, error) {
+	return parseRawSubnets(e.DNSAlsoProxySubnets)
 }
 
-func (e *Env) GetNeverProxySubnets() []string {
-	return strings.Split(e.DNSNeverProxySubnets, " ")
+func (e *Env) GetNeverProxySubnets() ([]*manager.IPNet, error) {
+	return parseRawSubnets(e.DNSNeverProxySubnets)
+}
+
+func parseRawSubnets(rawIPNets string) ([]*manager.IPNet, error) {
+	ipNets := make([]*manager.IPNet, len(rawIPNets))
+	for i, s := range strings.Split(rawIPNets, " ") {
+		_, ipNet, err := net.ParseCIDR(s)
+		if err != nil {
+			return nil, err
+		}
+		ipNets[i] = iputil.IPNetToRPC(ipNet)
+	}
+	return ipNets, nil
 }
 
 func LoadEnv(ctx context.Context) (context.Context, error) {

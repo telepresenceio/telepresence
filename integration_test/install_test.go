@@ -325,7 +325,7 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, 
 	require := is.Require()
 	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	require.NoError(err)
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{Upgrade: true}))
 	require.Eventually(func() bool {
 		dep, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, namespace)
 		if err != nil {
