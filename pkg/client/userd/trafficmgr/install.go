@@ -788,7 +788,7 @@ func addAgentToWorkload(
 func (ki *installer) IsManager(c context.Context) error {
 	existing, _, err := helm.IsTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
 	if err == nil && existing == nil {
-		err = errors.Errorf("Traffic manager not installed")
+		err = errors.Errorf("traffic manager not found, if it is not installed, please run 'telepresence helm install'")
 	}
 	return err
 }
