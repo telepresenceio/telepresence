@@ -544,7 +544,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			Stderr: errW.Bytes(),
 		}
 	})
-	if err != nil {
+	if errcat.GetCategory(err) > errcat.NoDaemonLogs {
 		if errors.Is(err, pflag.ErrHelp) {
 			err = nil
 			outW.WriteString(cmd.UsageString())
@@ -557,6 +557,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			err = fmt.Errorf("%s\n\n%s\n%s", err.Error(), stderr, stdout)
 		}
 	}
+
 	return &rpc.RunCommandResponse{
 		Stdout: outW.Bytes(),
 		Stderr: errW.Bytes(),
