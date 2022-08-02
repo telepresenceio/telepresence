@@ -143,10 +143,7 @@ func Main(ctx context.Context, args ...string) error {
 	})
 
 	if config.AgentConfig().TracingPort != 0 {
-		tracer, err := tracing.NewTraceServer(ctx, tracing.TraceConfig{
-			ProcessID:   2,
-			ProcessName: "traffic-agent",
-		})
+		tracer, err := tracing.NewTraceServer(ctx, "traffic-agent", OtelResources(ctx, config)...)
 		if err != nil {
 			return err
 		}

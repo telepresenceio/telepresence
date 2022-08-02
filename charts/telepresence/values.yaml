@@ -210,7 +210,7 @@ telepresenceAPI:
 ################################################################################
 tracing:
   # The port on which a grpc server will be exposed for traces
-  # To diable, set tracing to an empty object ("tracing: {}")
+  # To disable, set tracing to an empty object ("tracing: {}")
   grpcPort: 15766
 
 ################################################################################

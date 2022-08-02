@@ -358,10 +358,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 		return err
 	}
 
-	tracer, err := tracing.NewTraceServer(c, tracing.TraceConfig{
-		ProcessID:   4,
-		ProcessName: "root-daemon",
-	})
+	tracer, err := tracing.NewTraceServer(c, "root-daemon")
 	if err != nil {
 		return err
 	}

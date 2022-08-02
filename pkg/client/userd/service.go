@@ -286,10 +286,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 	sr := scout.NewReporter(c, "connector")
 	cliio := &broadcastqueue.BroadcastQueue{}
 
-	tracer, err := tracing.NewTraceServer(c, tracing.TraceConfig{
-		ProcessID:   3,
-		ProcessName: "user-daemon",
-	})
+	tracer, err := tracing.NewTraceServer(c, "user-daemon")
 	if err != nil {
 		return err
 	}

@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -23,13 +23,28 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 )
 
-type TraceConfig struct {
-	ProcessID   int64
-	ProcessName string
-}
-
-func setupTracer(ctx context.Context, cfg TraceConfig, client otlptrace.Client) (*tracesdk.TracerProvider, error) {
+func setupTracer(ctx context.Context, componentName string, client otlptrace.Client, extraAttributes ...attribute.KeyValue) (*tracesdk.TracerProvider, error) {
 	exp, err := otlptrace.New(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	r, err := resource.New(ctx,
+		// We use these instead of resource.WithProcess() because the ProcessOwner detector
+		// can break when running as a user without a username (e.g. UID 1000)
+		resource.WithProcessCommandArgs(),
+		resource.WithProcessExecutableName(),
+		resource.WithProcessExecutablePath(),
+		resource.WithProcessPID(),
+		resource.WithProcessRuntimeDescription(),
+		resource.WithProcessRuntimeName(),
+		resource.WithProcessRuntimeVersion(),
+		resource.WithContainer(),
+		resource.WithHost(),
+		resource.WithOS(),
+		resource.WithAttributes(semconv.ServiceNameKey.String(componentName)),
+		resource.WithAttributes(extraAttributes...),
+		resource.WithTelemetrySDK(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -38,11 +53,7 @@ func setupTracer(ctx context.Context, cfg TraceConfig, client otlptrace.Client) 
 		tracesdk.WithBatcher(exp),
 		tracesdk.WithSampler(tracesdk.AlwaysSample()),
 		// Record information about this application in a Resource.
-		tracesdk.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(cfg.ProcessName),
-			attribute.Int64("ID", cfg.ProcessID),
-		)),
+		tracesdk.WithResource(r),
 	)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	otel.SetTracerProvider(tp)
@@ -55,9 +66,9 @@ type TraceServer struct {
 	tp   *tracesdk.TracerProvider
 }
 
-func NewTraceServer(ctx context.Context, cfg TraceConfig) (*TraceServer, error) {
+func NewTraceServer(ctx context.Context, componentName string, extraAttributes ...attribute.KeyValue) (*TraceServer, error) {
 	client := &otlpShim{}
-	tp, err := setupTracer(ctx, cfg, client)
+	tp, err := setupTracer(ctx, componentName, client, extraAttributes...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +96,7 @@ func (ts *TraceServer) ServeGrpc(ctx context.Context, port uint16) error {
 			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 				grpcHandler.ServeHTTP(w, r)
 			} else {
-				w.WriteHeader(404)
+				w.WriteHeader(http.StatusNotFound)
 			}
 		}),
 	}

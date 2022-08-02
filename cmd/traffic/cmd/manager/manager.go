@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/client-go/kubernetes"
@@ -59,10 +60,14 @@ func Main(ctx context.Context, _ ...string) error {
 	env := managerutil.GetEnv(ctx)
 
 	if env.TracingPort != 0 {
-		tracer, err := tracing.NewTraceServer(ctx, tracing.TraceConfig{
-			ProcessID:   1,
-			ProcessName: "traffic-manager",
-		})
+		tracer, err := tracing.NewTraceServer(ctx, "traffic-manager",
+			attribute.String("tel2.agent-image", env.AgentRegistry+"/"+env.AgentImage),
+			attribute.String("tel2.managed-namespaces", env.ManagedNamespaces),
+			attribute.String("tel2.dns-service", env.DNSServiceName+"."+env.DNSServiceNamespace),
+			attribute.String("tel2.systema-endpoint", env.SystemAHost+":"+env.SystemAPort),
+			attribute.String("k8s.namespace", env.ManagerNamespace),
+			attribute.String("k8s.pod-ip", env.PodIP),
+		)
 		if err != nil {
 			return err
 		}
