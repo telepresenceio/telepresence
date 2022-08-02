@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -761,8 +763,18 @@ func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 func (tm *TrafficManager) mountFtp(ctx context.Context, mf mountForward, mountPoint string) error {
 	// Retry mount in case it gets disconnected
 	return client.Retry(ctx, "ftp", func(ctx context.Context) error {
+		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "ftp-client")
+		defer span.End()
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
 		rmp := strings.TrimPrefix(mf.RemoteMountPoint, agentconfig.ExportsMountPoint)
+		span.SetAttributes(
+			attribute.Int("uid", os.Getuid()),
+			attribute.Int("gid", os.Getgid()),
+			attribute.String("pod-ip", mf.PodIP),
+			attribute.Int("port", int(mf.fsPort)),
+			attribute.String("remote-mountpoint", rmp),
+		)
+
 		ftpArgs := []string{
 			// FTP options
 			"-d",
@@ -774,7 +786,6 @@ func (tm *TrafficManager) mountFtp(ctx context.Context, mf mountForward, mountPo
 			// FUSE options
 			"-f",               // foreground
 			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-			"-o", "auto_unmount",
 			"-o", "default_permissions",
 			"-o", fmt.Sprintf("uid=%d", os.Getuid()),
 			"-o", fmt.Sprintf("gid=%d", os.Getgid()),

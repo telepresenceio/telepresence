@@ -27,7 +27,3 @@ func RecordInterceptInfo(span trace.Span, info *manager.InterceptInfo) {
 		RecordInterceptSpec(span, info.Spec)
 	}
 }
-
-func RecordConnID(span trace.Span, id string) {
-	span.SetAttributes(attribute.String("conn-id", id))
-}
