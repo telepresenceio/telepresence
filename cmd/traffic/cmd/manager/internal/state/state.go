@@ -22,7 +22,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -679,7 +678,7 @@ func (s *State) WatchIntercepts(
 func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	ctx, span := otel.Tracer("").Start(ctx, "state.Tunnel")
 	defer span.End()
-	tracing.RecordConnID(span, stream.ID().String())
+	stream.ID().SpanRecord(span)
 
 	sessionID := stream.SessionID()
 	s.mu.RLock()
