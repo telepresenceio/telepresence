@@ -481,8 +481,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
 		cmd = &cobra.Command{
-			Use:          "telepresence",
-			SilenceUsage: true,
+			Use: "telepresence",
 		}
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
