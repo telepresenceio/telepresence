@@ -9,6 +9,9 @@ import (
 
 	ftp "github.com/fclairamb/ftpserverlib"
 	"github.com/spf13/afero"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -76,9 +79,12 @@ func (d *dbgListener) Addr() net.Addr {
 }
 
 func newDriver(ctx context.Context, publicHost string, users map[string]*user, portAnnounceCh chan<- uint16) (*driver, error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "new-ftp")
+	defer span.End()
 	lc := net.ListenConfig{}
 	l, err := lc.Listen(ctx, "tcp", "0.0.0.0:0")
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	a := l.Addr().(*net.TCPAddr)
@@ -96,19 +102,39 @@ func newDriver(ctx context.Context, publicHost string, users map[string]*user, p
 			IdleTimeout:         300,
 		}}
 
+	span.SetAttributes(
+		attribute.Int("port", a.Port),
+		attribute.String("public-host", publicHost),
+	)
 	dlog.Infof(ctx, "FTP server listening on %s", d.ListenAddr)
 	portAnnounceCh <- uint16(a.Port)
 	return d, nil
 }
 
 func (d *driver) ClientConnected(cc ftp.ClientContext) (string, error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(d.ctx, "client-connect")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("remote-addr", cc.RemoteAddr().String()),
+		attribute.String("local-addr", cc.LocalAddr().String()),
+		attribute.String("path", cc.Path()),
+	)
+
 	count := atomic.AddInt32(&d.clientCount, 1)
 	dlog.Infof(d.ctx, "Client connected, id %d, remoteAddr %s, client count %d", cc.ID(), cc.RemoteAddr(), count)
-	cc.SetDebug(dlog.MaxLogLevel(d.ctx) >= dlog.LogLevelDebug)
+	cc.SetDebug(dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug)
 	return "telepresence", nil
 }
 
 func (d *driver) ClientDisconnected(cc ftp.ClientContext) {
+	_, span := otel.GetTracerProvider().Tracer("").Start(d.ctx, "client-disconnect")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("remote-addr", cc.RemoteAddr().String()),
+		attribute.String("local-addr", cc.LocalAddr().String()),
+		attribute.String("path", cc.Path()),
+	)
+
 	count := atomic.AddInt32(&d.clientCount, -1)
 	dlog.Infof(d.ctx, "Client disconnected, id %d, remoteAddr %s, client count %d", cc.ID(), cc.RemoteAddr(), count)
 }

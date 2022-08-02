@@ -29,10 +29,6 @@ func RecordInterceptInfo(span trace.Span, info *manager.InterceptInfo) {
 	}
 }
 
-func RecordConnID(span trace.Span, id string) {
-	span.SetAttributes(attribute.String("conn-id", id))
-}
-
 func EndAndRecord(span trace.Span, err error) {
 	if err != nil {
 		span.RecordError(err)

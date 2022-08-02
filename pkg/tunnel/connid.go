@@ -6,6 +6,8 @@ import (
 	"net"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // A ConnID is a compact and immutable representation of protocol, source IP, source port, destination IP and destination port which
@@ -141,6 +143,18 @@ func (id ConnID) Network() string {
 		return "ip4"
 	}
 	return "ip6"
+}
+
+func (id ConnID) SpanRecord(span trace.Span) {
+	span.SetAttributes(
+		attribute.String("tel2.conn-id", id.String()),
+		attribute.String("tel2.protocol", id.ProtocolString()),
+		attribute.String("tel2.network", id.Network()),
+		attribute.String("tel2.source-ip", id.Source().String()),
+		attribute.String("tel2.dest-ip", id.Destination().String()),
+		attribute.Int("tel2.source-port", int(id.SourcePort())),
+		attribute.Int("tel2.dest-port", int(id.DestinationPort())),
+	)
 }
 
 // IPProto returns the IP protocol for the given network. Currently only supports

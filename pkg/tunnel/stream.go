@@ -11,6 +11,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"go.opentelemetry.io/otel"
 )
 
 // Version
@@ -74,6 +75,9 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 	errCh := make(chan error, 1) // Max one message will be sent on this channel
 	dlog.Tracef(ctx, "   %s %s, ReadLoop starting", s.Tag(), s.ID())
 	go func() {
+		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "ReadLoop")
+		defer span.End()
+		s.ID().SpanRecord(span)
 		var endReason string
 		defer func() {
 			close(errCh)
@@ -115,6 +119,9 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 func WriteLoop(ctx context.Context, s Stream, msgCh <-chan Message, wg *sync.WaitGroup) {
 	dlog.Tracef(ctx, "   %s %s, WriteLoop starting", s.Tag(), s.ID())
 	go func() {
+		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "WriteLoop")
+		defer span.End()
+		s.ID().SpanRecord(span)
 		var endReason string
 		defer func() {
 			dlog.Tracef(ctx, "   %s %s, WriteLoop ended: %s", s.Tag(), s.ID(), endReason)
