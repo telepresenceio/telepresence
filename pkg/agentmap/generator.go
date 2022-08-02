@@ -23,6 +23,7 @@ const (
 type GeneratorConfig struct {
 	AgentPort           uint16
 	APIPort             uint16
+	TracingPort         uint16
 	QualifiedAgentImage string
 	ManagerNamespace    string
 	LogLevel            string
@@ -92,6 +93,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*a
 		ManagerHost:  ManagerAppName + "." + cfg.ManagerNamespace,
 		ManagerPort:  ManagerPortHTTP,
 		APIPort:      cfg.APIPort,
+		TracingPort:  cfg.TracingPort,
 		Containers:   ccs,
 	}
 	return ag, nil

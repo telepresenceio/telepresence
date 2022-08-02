@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -19,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -64,10 +68,18 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	ss.Unlock()
 
 	// Send dial request to the client/agent
+	dr := &rpc.DialRequest{ConnId: []byte(id),
+		RoundtripLatency: int64(stream.RoundtripLatency()),
+		DialTimeout:      int64(stream.DialTimeout()),
+	}
+	propagator := otel.GetTextMapPropagator()
+	carrier := propagation.MapCarrier{}
+	propagator.Inject(ctx, carrier)
+	dr.TraceContext = carrier
 	select {
 	case <-ss.Done():
 		return nil, status.Error(codes.Canceled, "session cancelled")
-	case ss.dials <- &rpc.DialRequest{ConnId: []byte(id), RoundtripLatency: int64(stream.RoundtripLatency()), DialTimeout: int64(stream.DialTimeout())}:
+	case ss.dials <- dr:
 	}
 
 	// Wait for the client/agent to connect. Allow extra time for the call
@@ -665,6 +677,10 @@ func (s *State) WatchIntercepts(
 }
 
 func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
+	ctx, span := otel.Tracer("").Start(ctx, "state.Tunnel")
+	defer span.End()
+	tracing.RecordConnID(span, stream.ID().String())
+
 	sessionID := stream.SessionID()
 	s.mu.RLock()
 	ss, ok := s.sessions[sessionID]
@@ -679,6 +695,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	}
 
 	if bidiPipe != nil {
+		span.SetAttributes(attribute.Bool("peer-awaited", true))
 		// A peer awaited this stream. Wait for the bidiPipe to finish
 		<-bidiPipe.Done()
 		return nil
@@ -693,6 +710,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	// by, and hence, start by sending the sessionID of that client on the tunnel.
 	var peerSession SessionState
 	if _, ok := ss.(*agentSessionState); ok {
+		span.SetAttributes(attribute.String("session-type", "traffic-agent"))
 		// traffic-agent, so obtain the desired client session
 		m, err := stream.Receive(ctx)
 		if err != nil {
@@ -702,10 +720,12 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return status.Errorf(codes.FailedPrecondition, "unable to read ClientSession from agent %q", sessionID)
 		}
 		peerID := tunnel.GetSession(m)
+		span.SetAttributes(attribute.String("peer-id", peerID))
 		s.mu.RLock()
 		peerSession = s.sessions[peerID]
 		s.mu.RUnlock()
 	} else {
+		span.SetAttributes(attribute.String("session-type", "userd"))
 		peerSession = s.getRandomAgentSession(sessionID)
 	}
 

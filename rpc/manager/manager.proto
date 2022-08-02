@@ -420,6 +420,7 @@ message DialRequest {
   bytes conn_id = 1;
   int64 roundtrip_latency = 2;
   int64 dial_timeout = 3;
+  map<string,string> trace_context = 4;
 }
 
 // LookupHost request sent from a client
