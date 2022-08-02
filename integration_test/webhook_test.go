@@ -80,7 +80,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	uninstallEverything()
 
 	// And reinstall it
-	itest.TelepresenceOk(ctx, "helm", "install")
+	itest.TelepresenceOk(ctxAI, "helm", "install")
 	itest.TelepresenceOk(ctxAI, "connect")
 
 	// When this function ends we uninstall the manager
