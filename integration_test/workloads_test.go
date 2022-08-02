@@ -38,7 +38,6 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	dfltCtx := itest.WithUser(ctx, "default")
 	itest.TelepresenceOk(dfltCtx, "helm", "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
 	itest.TelepresenceQuitOk(dfltCtx)
-	itest.TelepresenceOk(ctx, "helm", "install")
 	itest.TelepresenceOk(ctx, "connect")
 
 	require.Eventually(
