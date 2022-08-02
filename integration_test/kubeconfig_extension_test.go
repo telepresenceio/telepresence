@@ -60,7 +60,6 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return map[string]any{"also-proxy": apiServers}
 	})
 
-	itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx) // WithKubeConfigExtension sets env which gets sticky, so quitting is a must here
 
@@ -110,7 +109,6 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
 	neverProxiedCount := len(ips) + 1
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 		stdout := itest.TelepresenceOk(ctx, "status")
 		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
@@ -161,7 +159,6 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 					"also-proxy":  t.alsoProxy,
 				}
 			})
-			itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 			itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 			defer itest.TelepresenceQuitOk(ctx)
 			s.Eventually(func() bool {
@@ -198,7 +195,6 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	require.NoError(err)
 	logFile := filepath.Join(logDir, "daemon.log")
 
-	itest.TelepresenceOk(ctx, "helm", "install", "--context", "extra")
 	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
 

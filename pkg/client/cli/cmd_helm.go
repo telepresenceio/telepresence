@@ -54,6 +54,7 @@ func installCommand() *cobra.Command {
 	flags.AddFlagSet(kubeFlags)
 	ia.kubeFlags = kubeFlags
 
+	// copied from connect cmd
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
 	// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
 	//  that's unknown until it's been tested during the first connect attempt.
@@ -89,6 +90,7 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 			ValuePaths: ia.values,
 		},
 	}
+	addKubeconfigEnv(request)
 
 	// if the traffic manager should be replaced, quit first
 	// so the roodD doesnt hang

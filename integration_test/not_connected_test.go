@@ -1,6 +1,8 @@
 package integration_test
 
 import (
+	"runtime"
+
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -29,14 +31,12 @@ func (s *notConnectedSuite) SetupSuite() {
 
 func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "helm", "install")
 	stdout := itest.TelepresenceOk(ctx, "connect", "--", s.Executable(), "status")
 	s.Contains(stdout, "Connected to context")
 	s.Contains(stdout, "Kubernetes context:")
 	itest.TelepresenceDisconnectOk(ctx)
 }
 
-/*
 func (s *notConnectedSuite) Test_InvalidKubeconfig() {
 	ctx := s.Context()
 	itest.TelepresenceOk(ctx, "quit", "-ur")
@@ -50,7 +50,6 @@ func (s *notConnectedSuite) Test_InvalidKubeconfig() {
 	itest.TelepresenceQuitOk(ctx) // process is started with bad env, so get rid of it
 	s.Error(err)
 }
-*/
 
 func (s *notConnectedSuite) Test_NonExistentContext() {
 	ctx := s.Context()
