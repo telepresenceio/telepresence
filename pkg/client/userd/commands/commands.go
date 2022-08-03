@@ -16,19 +16,6 @@ const (
 	CommandRequiresConnectorServer = "cobra.telepresence.io/with-connector-server"
 )
 
-type cwdKey struct{}
-
-func WithCwd(ctx context.Context, cwd string) context.Context {
-	return context.WithValue(ctx, cwdKey{}, cwd)
-}
-
-func GetCwd(ctx context.Context) string {
-	if wd, ok := ctx.Value(cwdKey{}).(string); ok {
-		return wd
-	}
-	return ""
-}
-
 type command interface {
 	init(context.Context)
 	cobraCommand(context.Context) *cobra.Command
@@ -38,6 +25,8 @@ type command interface {
 func commands() []command {
 	return []command{
 		&interceptCommand{},
+		&traceCommand{},
+		&pushTracesCommand{},
 	}
 }
 
@@ -118,4 +107,17 @@ func GetCtxCancellationHandlerFunc(ctx context.Context) func() {
 	}
 
 	return *fp
+}
+
+type cwdKey struct{}
+
+func WithCwd(ctx context.Context, cwd string) context.Context {
+	return context.WithValue(ctx, cwdKey{}, cwd)
+}
+
+func GetCwd(ctx context.Context) string {
+	if wd, ok := ctx.Value(cwdKey{}).(string); ok {
+		return wd
+	}
+	return ""
 }

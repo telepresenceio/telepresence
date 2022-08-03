@@ -55,6 +55,11 @@ type kubeconfigExtension struct {
 	Manager    *managerConfig   `json:"manager,omitempty"`
 }
 
+type KubeConfig interface {
+	GetRestConfig() *rest.Config
+	GetManagerNamespace() string
+}
+
 type Config struct {
 	kubeconfigExtension
 	Namespace   string // default cluster namespace.
@@ -209,6 +214,10 @@ func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 
 func (kf *Config) GetManagerNamespace() string {
 	return kf.kubeconfigExtension.Manager.Namespace
+}
+
+func (kf *Config) GetRestConfig() *rest.Config {
+	return kf.RestConfig
 }
 
 func mapEqual(a, b map[string]string) bool {

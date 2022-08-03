@@ -17,6 +17,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -71,19 +72,12 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 	}
 }
 
-// GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
-// connector.LogsRequest and returns them to the caller
-func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
-	exportDir := request.ExportDir
-	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
-	resp := &connector.LogsResponse{}
-	result := sync.Map{}
-	container := "traffic-agent"
+func (tm *TrafficManager) ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
 	hasContainer := func(pod *core.Pod) bool {
-		if strings.EqualFold(request.Agents, "all") || strings.Contains(pod.Name, request.Agents) {
+		if filter == nil || filter(pod) {
 			cns := pod.Spec.Containers
 			for c := range cns {
-				if cns[c].Name == container {
+				if cns[c].Name == agentconfig.ContainerName {
 					return true
 				}
 			}
@@ -91,36 +85,54 @@ func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.Log
 		return false
 	}
 
+	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
+	for _, ns := range tm.GetCurrentNamespaces(true) {
+		podsAPI := coreAPI.Pods(ns)
+		podList, err := podsAPI.List(ctx, meta.ListOptions{})
+		if err != nil {
+			return err
+		}
+		pods := podList.Items
+		podsWithContainer := make([]*core.Pod, 0, len(pods))
+		for i := range pods {
+			pod := &pods[i]
+			if hasContainer(pod) {
+				podsWithContainer = append(podsWithContainer, pod)
+			}
+		}
+		wg := sync.WaitGroup{}
+		wg.Add(len(podsWithContainer))
+		for _, pod := range podsWithContainer {
+			go func(pod *core.Pod) {
+				defer wg.Done()
+				fn(ctx, podsAPI, pod)
+			}(pod)
+		}
+		wg.Wait()
+	}
+
+	return nil
+}
+
+// GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
+// connector.LogsRequest and returns them to the caller
+func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
+	exportDir := request.ExportDir
+	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
+	resp := &connector.LogsResponse{}
+	result := sync.Map{}
+
 	if !strings.EqualFold(request.Agents, "none") {
-		for _, ns := range tm.GetCurrentNamespaces(true) {
-			podsAPI := coreAPI.Pods(ns)
-			podList, err := podsAPI.List(ctx, meta.ListOptions{})
-			if err != nil {
-				resp.Error = err.Error()
-				return resp, nil
-			}
-			pods := podList.Items
-			podsWithContainer := make([]*core.Pod, 0, len(pods))
-			for i := range pods {
-				pod := &pods[i]
-				if hasContainer(pod) {
-					podsWithContainer = append(podsWithContainer, pod)
-				}
-			}
-			wg := sync.WaitGroup{}
-			wg.Add(len(podsWithContainer))
-			for _, pod := range podsWithContainer {
-				go func(pod *core.Pod) {
-					defer wg.Done()
-					// Since the same named workload could exist in multiple namespaces
-					// we add the namespace into the name so that it's easier to make
-					// sense of the logs
-					podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
-					dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
-					getPodLog(ctx, exportDir, &result, podsAPI, pod, container, request.GetPodYaml)
-				}(pod)
-			}
-			wg.Wait()
+		err := tm.ForeachAgentPod(ctx, func(ctx context.Context, podsAPI typed.PodInterface, pod *core.Pod) {
+			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
+			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
+			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ContainerName, request.GetPodYaml)
+		}, func(pod *core.Pod) bool {
+			return strings.EqualFold(request.Agents, "all") || strings.Contains(pod.Name, request.Agents)
+		})
+		if err != nil {
+			resp.Error = err.Error()
+			return resp, nil
 		}
 	}
 

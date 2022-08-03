@@ -20,7 +20,11 @@ rules:
   verbs: ["get"]
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["list"]
+  verbs: ["list", "get"]
+# Needed for the gather-traces command
+- apiGroups: [""]
+  resources: ["pods/portforward"]
+  verbs: ["create"]
 # Needed in order to maintain a list of workloads
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]

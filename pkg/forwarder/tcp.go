@@ -7,9 +7,13 @@ import (
 	"net"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -88,6 +92,8 @@ func (f *tcp) listen(ctx context.Context) (*net.TCPListener, error) {
 func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 	f.mu.Lock()
 	ctx := f.tCtx
+	ctx, span := otel.Tracer("").Start(ctx, "forwardConn")
+	defer span.End()
 	targetHost := f.targetHost
 	targetPort := f.targetPort
 	intercept := f.intercept
@@ -101,6 +107,10 @@ func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 		return fmt.Errorf("error on resolve(%s:%d): %w", targetHost, targetPort, err)
 	}
 
+	span.SetAttributes(
+		attribute.String("client", clientConn.RemoteAddr().String()),
+		attribute.String("target", targetAddr.String()),
+	)
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
 	ctx = dlog.WithField(ctx, "target", targetAddr.String())
 
@@ -145,6 +155,9 @@ func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 }
 
 func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
+	ctx, span := otel.Tracer("").Start(ctx, "interceptConn")
+	defer span.End()
+	tracing.RecordInterceptInfo(span, iCept)
 	addr := conn.RemoteAddr()
 	dlog.Infof(ctx, "Accept got connection from %s", addr)
 
@@ -156,6 +169,7 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 	spec := iCept.Spec
 	destIp := iputil.Parse(spec.TargetHost)
 	id := tunnel.NewConnID(tunnel.IPProto(addr.Network()), srcIp, destIp, srcPort, uint16(spec.TargetPort))
+	tracing.RecordConnID(span, id.String())
 
 	ms, err := f.manager.Tunnel(ctx)
 	if err != nil {
