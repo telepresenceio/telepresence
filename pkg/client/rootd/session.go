@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -74,6 +75,8 @@ type session struct {
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
 	dev *vif.Device
+
+	stack *stack.Stack
 
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
@@ -408,6 +411,11 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
+				s.stack, err = vif.NewStack(ctx, vif.NewEndpoint(ctx, s.dev, &s.closing), s.streamCreator())
+				if err != nil {
+					dlog.Errorf(ctx, "NewStack: %v", err)
+					return
+				}
 
 				// Applying DNS config
 				// seg fault guard
@@ -514,7 +522,10 @@ func (s *session) run(c context.Context) error {
 		cancelDNSLock.Unlock()
 		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
 	})
-	g.Go("router", s.routerWorker)
+	g.Go("stack", func(_ context.Context) error {
+		s.stack.Wait()
+		return nil
+	})
 	return g.Wait()
 }
 
@@ -537,6 +548,8 @@ func (s *session) stop(c context.Context) {
 	}()
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
+
+	s.stack.Close()
 
 	cc = dcontext.WithoutCancel(c)
 	for _, np := range s.curStaticRoutes {

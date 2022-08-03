@@ -6,7 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.5.2
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/coreos/go-iptables v0.6.0
-	github.com/datawire/dlib v1.2.5
+	github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/datawire/metriton-go-client v0.1.1
 	github.com/fsnotify/fsnotify v1.5.4
@@ -39,6 +39,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
+	gvisor.dev/gvisor v0.0.0-20220728035512-d468ae337c6a
 	helm.sh/helm/v3 v3.9.0
 	k8s.io/api v0.24.2
 	k8s.io/apimachinery v0.24.2

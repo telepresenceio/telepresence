@@ -45,3 +45,13 @@ func NewData(sz int) *Data {
 	raw := make([]byte, PrefixLen+sz)
 	return &Data{buf: raw[PrefixLen:], raw: raw}
 }
+
+func (d *Data) Resize(size int) {
+	if size <= cap(d.buf) {
+		d.buf = d.buf[:size]
+		d.raw = d.raw[:size+PrefixLen]
+	} else {
+		d.raw = make([]byte, size+PrefixLen)
+		d.buf = d.raw[PrefixLen:]
+	}
+}
