@@ -36,3 +36,11 @@ func (b *Data) Raw() []byte {
 func NewData(sz int) *Data {
 	return &Data{buf: make([]byte, sz)}
 }
+
+func (d *Data) Resize(size int) {
+	if size <= cap(d.buf) {
+		d.buf = d.buf[:size]
+	} else {
+		d.buf = make([]byte, size)
+	}
+}
