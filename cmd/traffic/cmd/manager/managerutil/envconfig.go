@@ -2,13 +2,16 @@ package managerutil
 
 import (
 	"context"
+	"net"
 	"strings"
 
 	"github.com/sethvargo/go-envconfig"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -37,9 +40,11 @@ type Env struct {
 	PodCIDRs        string `env:"POD_CIDRS,default="`
 	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
 
-	DNSServiceName      string `env:"DNS_SERVICE_NAME,default=coredns"`
-	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
-	DNSServiceIP        string `env:"DNS_SERVICE_IP,default="`
+	DNSServiceName       string `env:"DNS_SERVICE_NAME,default=coredns"`
+	DNSServiceNamespace  string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
+	DNSServiceIP         string `env:"DNS_SERVICE_IP,default="`
+	DNSAlsoProxySubnets  string `env:"ALSO_PROXY_SUBNETS,default="`
+	DNSNeverProxySubnets string `env:"NEVER_PROXY_SUBNETS,default="`
 }
 
 type envKey struct{}
@@ -68,6 +73,27 @@ func (e *Env) GetManagedNamespaces() []string {
 		return strings.Split(mns, " ")
 	}
 	return nil
+}
+
+func (e *Env) GetAlsoProxySubnets() ([]*manager.IPNet, error) {
+	return parseRawSubnets(e.DNSAlsoProxySubnets)
+}
+
+func (e *Env) GetNeverProxySubnets() ([]*manager.IPNet, error) {
+	return parseRawSubnets(e.DNSNeverProxySubnets)
+}
+
+func parseRawSubnets(ipNetsStr string) ([]*manager.IPNet, error) {
+	splitIPNets := strings.Split(ipNetsStr, " ")
+	ipNets := make([]*manager.IPNet, len(splitIPNets))
+	for i, s := range splitIPNets {
+		_, ipNet, err := net.ParseCIDR(s)
+		if err != nil {
+			return nil, err
+		}
+		ipNets[i] = iputil.IPNetToRPC(ipNet)
+	}
+	return ipNets, nil
 }
 
 func LoadEnv(ctx context.Context) (context.Context, error) {

@@ -213,6 +213,23 @@ func NewInfo(ctx context.Context) Info {
 		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
 	}
 
+	oi.DnsConfig = &rpc.DNSConfig{}
+	oi.DnsConfig.AlsoProxySubnets, err = env.GetAlsoProxySubnets()
+	if err != nil {
+		dlog.Warnf(ctx, "AlsoProxySubnets not parsed: %v", err)
+	}
+	for _, subnet := range oi.DnsConfig.AlsoProxySubnets {
+		dlog.Infof(ctx, "Using AlsoProxySubnet: %+v", subnet)
+	}
+
+	oi.DnsConfig.NeverProxySubnets, err = env.GetNeverProxySubnets()
+	if err != nil {
+		dlog.Warnf(ctx, "NeverProxySubnets not parsed: %v", err)
+	}
+	for _, subnet := range oi.DnsConfig.NeverProxySubnets {
+		dlog.Infof(ctx, "Using NeverProxySubnet: %+v", subnet)
+	}
+
 	return &oi
 }
 
@@ -297,6 +314,7 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 	if allOK {
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
 		oi.PodSubnets = toRPCSubnets(subnets)
+
 		oi.ciSubs.notify(ctx, oi.clusterInfo())
 	} else {
 		dlog.Errorf(ctx, "unable to parse subnets from POD_CIDRS value %q", pcEnv)
@@ -321,6 +339,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
 		ClusterDomain: oi.ClusterDomain,
 		ManagerPodIp:  oi.ManagerPodIp,
+		DnsConfig:     oi.GetDnsConfig(),
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

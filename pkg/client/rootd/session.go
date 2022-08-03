@@ -409,6 +409,14 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
 
+				// Applying DNS config
+				// seg fault guard
+				dnsConfig := mgrInfo.GetDnsConfig()
+				if dnsConfig != nil {
+					s.alsoProxySubnets = append(s.alsoProxySubnets, convertAlsoProxySubnets(ctx, dnsConfig.AlsoProxySubnets)...)
+					s.neverProxySubnets = append(s.neverProxySubnets, convertNeverProxySubnets(ctx, dnsConfig.NeverProxySubnets)...)
+				}
+
 				close(cfgComplete)
 				cfgComplete = nil
 			}
