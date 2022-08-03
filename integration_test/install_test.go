@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -268,7 +267,7 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 }
 
-func (is *installSuite) Test_Install_Flags() {
+func (is *installSuite) Test_No_Upgrade() {
 	ctx := is.Context()
 	require := is.Require()
 	ctx, ti := is.installer(ctx)
@@ -278,15 +277,17 @@ func (is *installSuite) Test_Install_Flags() {
 	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	// errors and asks for --upgrade
 	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
-	// using --upgrade and --values replaces TM with values
-	helmValues := filepath.Join("integration_test", "testdata", "dns-values.yaml")
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{
-		Upgrade:    true,
-		ValuePaths: []string{helmValues},
-	}))
-	// check that dns values were propigated from values file to to traffic manager
-	is.CapturePodLogs(ctx, "Storing AlsoProxySubnet:", "traffic-manager", is.ManagerNamespace())
-	is.CapturePodLogs(ctx, "Storing NeverProxySubnet:", "traffic-manager", is.ManagerNamespace())
+	/*
+		// using --upgrade and --values replaces TM with values
+		helmValues := filepath.Join("integration_test", "testdata", "dns-values.yaml")
+		require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{
+			Upgrade:    true,
+			ValuePaths: []string{helmValues},
+		}))
+		// check that dns values were propigated from values file to to traffic manager
+		is.CapturePodLogs(ctx, "AlsoProxySubnet:", "traffic-manager", is.ManagerNamespace())
+		is.CapturePodLogs(ctx, "NeverProxySubnet:", "traffic-manager", is.ManagerNamespace())
+	*/
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
