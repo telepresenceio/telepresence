@@ -214,6 +214,8 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 			cmd           *dexec.Cmd
 			containerName string
 		)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
 
 		if args.dockerRun {
 			envFile := is.args.envFile
@@ -295,7 +297,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 				if err != nil {
 					dlog.Errorf(ctx, "error stopping docker container %s: %v", containerName, err)
 				} else {
-					if err := proc.Wait(ctx, dockerStopCmd); err != nil {
+					if err := proc.Wait(ctx, cancel, dockerStopCmd); err != nil {
 						dlog.Errorf(ctx, "error wating for docker container %s to stop: %v", containerName, err)
 					}
 				}
@@ -309,7 +311,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 
 		// The external command will not output anything to the logs. An error here
 		// is likely caused by the user hitting <ctrl>-C to terminate the process.
-		if err = proc.Wait(ctx, cmd); err != nil {
+		if err = proc.Wait(ctx, cancel, cmd); err != nil {
 			return errcat.NoDaemonLogs.New(err)
 		}
 

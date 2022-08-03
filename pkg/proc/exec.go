@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -29,12 +30,35 @@ func Start(ctx context.Context, env map[string]string, exe string, args ...strin
 	return cmd, nil
 }
 
-// Wait will wait for the Process of the command to finish
-func Wait(ctx context.Context, cmd *dexec.Cmd) error {
+// Wait will wait for the Process of the command to finish.
+// If cancel is not nil, Wait will listen for os signals and call cancel when it
+// receives one.
+func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error {
 	p := cmd.Process
 	if p == nil {
 		return nil
 	}
+
+	// Ensure that appropriate signals terminates the context.
+	if cancel != nil {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, SignalsToForward...)
+		defer func() {
+			signal.Stop(sigCh)
+			close(sigCh)
+		}()
+		go func() {
+			select {
+			case <-ctx.Done():
+			case sig := <-sigCh:
+				if sig == nil {
+					return
+				}
+				cancel()
+			}
+		}()
+	}
+
 	s, err := p.Wait()
 	if err != nil {
 		return fmt.Errorf("%s: %w", shellquote.ShellString(cmd.Path, cmd.Args), err)
@@ -51,11 +75,14 @@ func Wait(ctx context.Context, cmd *dexec.Cmd) error {
 // the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
 func Run(ctx context.Context, env map[string]string, exe string, args ...string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	cmd, err := Start(ctx, env, exe, args...)
 	if err != nil {
 		return err
 	}
-	return Wait(ctx, cmd)
+	return Wait(ctx, cancel, cmd)
 }
 
 func StartInBackground(args ...string) error {
