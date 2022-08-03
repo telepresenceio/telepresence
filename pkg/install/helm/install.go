@@ -198,7 +198,7 @@ restart:
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, installInfo *connector.InstallInfo) error {
+func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.InstallRequest) error {
 	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting traffic manager: %w", err)
@@ -212,7 +212,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	// OK, now install things.
 	values := getValues(ctx)
 
-	for _, path := range installInfo.ValuePaths {
+	for _, path := range req.ValuePaths {
 		vals, err := chartutil.ReadValuesFile(path)
 		if err != nil {
 			return fmt.Errorf("--values path %q not readable: %v", vals, err)
@@ -236,7 +236,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 			return err
 		}
 	} else { // replace existing install
-		if installInfo.Upgrade {
+		if req.Upgrade {
 			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
 				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
 			if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, values); err != nil {

@@ -99,12 +99,12 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 		},
 	})
 	ctx, ti := is.installer(ctx)
-	require.Error(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	restoreVersion()
 
 	var err error
 	require.Eventually(func() bool {
-		err = ti.EnsureManager(ctx, &connector.InstallInfo{})
+		err = ti.EnsureManager(ctx, &connector.InstallRequest{})
 		return err == nil
 	}, 3*time.Minute, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
 }
@@ -207,11 +207,11 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	ctx := is.Context()
 
 	ctx, ti := is.installer(ctx)
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	is.UninstallTrafficManager(ctx, is.ManagerNamespace())
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	require.Eventually(func() bool {
 		obj, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 		if err != nil {
@@ -227,11 +227,11 @@ func (is *installSuite) Test_RemoveManagerAndAgents_canUninstall() {
 	ctx := is.Context()
 	ctx, ti := is.installer(ctx)
 
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
 	// We want to make sure that we can re-install the agent after it's been uninstalled,
 	// so try to ensureManager again.
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	// Uninstall the agent one last time -- this should behave the same way as the previous uninstall
 	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
 }
@@ -246,14 +246,14 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 	ctx := is.Context()
 	ctx, ti := is.installer(ctx)
 
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	sv := version.Version
 	version.Version = "v3.0.0-bogus"
 	restoreVersion := func() { version.Version = sv }
 	defer restoreVersion()
-	require.Error(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 
 	require.Eventually(func() bool {
 		obj, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
@@ -265,7 +265,7 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 	}, 30*time.Second, 5*time.Second, "timeout waiting for deployment to update")
 
 	restoreVersion()
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 }
 
 func (is *installSuite) Test_Install_Flags() {
@@ -275,12 +275,12 @@ func (is *installSuite) Test_Install_Flags() {
 
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 	// first install
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	// errors and asks for --upgrade
-	require.Error(ti.EnsureManager(ctx, &connector.InstallInfo{}))
+	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	// using --upgrade and --values replaces TM with values
 	helmValues := filepath.Join("integration_test", "testdata", "dns-values.yaml")
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{
 		Upgrade:    true,
 		ValuePaths: []string{helmValues},
 	}))
@@ -307,7 +307,7 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, 
 	require := is.Require()
 	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
 	require.NoError(err)
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallInfo{Upgrade: true}))
+	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{Upgrade: true}))
 	require.Eventually(func() bool {
 		dep, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, namespace)
 		if err != nil {

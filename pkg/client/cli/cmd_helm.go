@@ -82,15 +82,16 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 		ia.values[i] = absPath
 	}
 
-	request := &connector.ConnectRequest{
-		KubeFlags:        kubeFlagMap(ia.kubeFlags),
-		MappedNamespaces: ia.mappedNamespaces,
-		InstallInfo: &connector.InstallInfo{
-			Upgrade:    ia.upgrade,
-			ValuePaths: ia.values,
+	request := &connector.InstallRequest{
+		Upgrade:    ia.upgrade,
+		ValuePaths: ia.values,
+
+		ConnectRequest: &connector.ConnectRequest{
+			KubeFlags:        kubeFlagMap(ia.kubeFlags),
+			MappedNamespaces: ia.mappedNamespaces,
 		},
 	}
-	addKubeconfigEnv(request)
+	addKubeconfigEnv(request.ConnectRequest)
 
 	// if the traffic manager should be replaced, quit first
 	// so the roodD doesnt hang

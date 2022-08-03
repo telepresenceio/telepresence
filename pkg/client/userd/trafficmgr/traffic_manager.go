@@ -351,8 +351,15 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	return cluster, nil
 }
 
-func EnsureManager(ctx context.Context, req *rpc.ConnectRequest) error {
-	cluster, err := connectCluster(ctx, req)
+func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
+	// seg guard
+	cr := req.GetConnectRequest()
+	if cr == nil {
+		dlog.Warn(ctx, "Connect_request in install_request was nil, using defaults")
+		cr = &rpc.ConnectRequest{}
+	}
+
+	cluster, err := connectCluster(ctx, cr)
 	if err != nil {
 		return err
 	}
@@ -362,14 +369,9 @@ func EnsureManager(ctx context.Context, req *rpc.ConnectRequest) error {
 		return err
 	}
 
-	dlog.Debug(ctx, "ensure that traffic-manager exists")
-	installInfo := req.GetInstallInfo()
-	if installInfo == nil {
-		installInfo = &rpc.InstallInfo{}
-	}
-
+	dlog.Debug(ctx, "ensuring that traffic-manager exists")
 	c := cluster.WithK8sInterface(ctx)
-	return ti.EnsureManager(c, installInfo)
+	return ti.EnsureManager(c, req)
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.

@@ -49,7 +49,7 @@ type ConnectorClient interface {
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Installs traffic-manager in the cluster.
-	Install(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*InstallResult, error)
+	Install(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (*InstallResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
@@ -160,7 +160,7 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 	return out, nil
 }
 
-func (c *connectorClient) Install(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*InstallResult, error) {
+func (c *connectorClient) Install(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (*InstallResult, error) {
 	out := new(InstallResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Install", in, out, opts...)
 	if err != nil {
@@ -404,7 +404,7 @@ type ConnectorServer interface {
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Installs traffic-manager in the cluster.
-	Install(context.Context, *ConnectRequest) (*InstallResult, error)
+	Install(context.Context, *InstallRequest) (*InstallResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
@@ -470,7 +470,7 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
-func (UnimplementedConnectorServer) Install(context.Context, *ConnectRequest) (*InstallResult, error) {
+func (UnimplementedConnectorServer) Install(context.Context, *InstallRequest) (*InstallResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Install not implemented")
 }
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error) {
@@ -667,7 +667,7 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 }
 
 func _Connector_Install_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectRequest)
+	in := new(InstallRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -679,7 +679,7 @@ func _Connector_Install_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: "/telepresence.connector.Connector/Install",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Install(ctx, req.(*ConnectRequest))
+		return srv.(ConnectorServer).Install(ctx, req.(*InstallRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
