@@ -218,9 +218,16 @@ func NewInfo(ctx context.Context) Info {
 	if err != nil {
 		dlog.Warnf(ctx, "AlsoProxySubnets not parsed: %v", err)
 	}
+	for _, subnet := range oi.DnsConfig.AlsoProxySubnets {
+		dlog.Infof(ctx, "Storing AlsoProxySubnet: %+v", subnet)
+	}
+
 	oi.DnsConfig.NeverProxySubnets, err = env.GetNeverProxySubnets()
 	if err != nil {
 		dlog.Warnf(ctx, "NeverProxySubnets not parsed: %v", err)
+	}
+	for _, subnet := range oi.DnsConfig.NeverProxySubnets {
+		dlog.Infof(ctx, "Storing NeverProxySubnet: %+v", subnet)
 	}
 
 	return &oi
