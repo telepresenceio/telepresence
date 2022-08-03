@@ -28,7 +28,7 @@ following Free and Open Source software:
     github.com/containerd/containerd                                             v1.6.3                                    Apache License 2.0
     github.com/coreos/go-iptables                                                v0.6.0                                    Apache License 2.0
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
-    github.com/datawire/dlib                                                     v1.2.5                                    Apache License 2.0
+    github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                    Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.1                                    ISC license
@@ -114,6 +114,7 @@ following Free and Open Source software:
     github.com/prometheus/procfs                                                 v0.7.3                                    Apache License 2.0
     github.com/rubenv/sql-migrate                                                v1.1.1                                    MIT license
     github.com/russross/blackfriday                                              v1.5.2                                    2-clause BSD license
+    github.com/sabhiram/go-gitignore                                             v0.0.0-20210923224102-525f6e181f06        MIT license
     github.com/sethvargo/go-envconfig                                            v0.6.1                                    Apache License 2.0
     github.com/shopspring/decimal                                                v1.2.0                                    MIT license
     github.com/sirupsen/logrus                                                   v1.8.1                                    MIT license
@@ -160,6 +161,7 @@ following Free and Open Source software:
     gopkg.in/square/go-jose.v2                                                   v2.5.1                                    3-clause BSD license, Apache License 2.0
     gopkg.in/yaml.v2                                                             v2.4.0                                    Apache License 2.0, MIT license
     gopkg.in/yaml.v3                                                             v3.0.1                                    Apache License 2.0, MIT license
+    gvisor.dev/gvisor                                                            v0.0.0-20220728035512-d468ae337c6a        Apache License 2.0
     helm.sh/helm/v3                                                              v3.9.0                                    Apache License 2.0
     k8s.io/api                                                                   v0.24.2                                   Apache License 2.0
     k8s.io/apiextensions-apiserver                                               v0.24.0                                   Apache License 2.0
