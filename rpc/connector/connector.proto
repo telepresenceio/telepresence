@@ -41,6 +41,9 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
+  // Installs traffic-manager in the cluster.
+  rpc Install(InstallRequest) returns (InstallResult);
+
   // Uninstalls traffic-agents and traffic-manager from the cluster.
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);
@@ -191,6 +194,16 @@ message ConnectInfo {
 
 message IngressInfos {
   repeated manager.IngressInfo ingress_infos = 1;
+}
+
+message InstallRequest {
+  ConnectRequest connect_request = 1;
+  bool upgrade = 2;
+  repeated string value_paths = 3;
+}
+
+message InstallResult {
+  string error_text = 1;
 }
 
 message UninstallRequest {

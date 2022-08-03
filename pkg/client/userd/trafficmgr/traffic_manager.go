@@ -351,6 +351,29 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	return cluster, nil
 }
 
+func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
+	// seg guard
+	cr := req.GetConnectRequest()
+	if cr == nil {
+		dlog.Warn(ctx, "Connect_request in install_request was nil, using defaults")
+		cr = &rpc.ConnectRequest{}
+	}
+
+	cluster, err := connectCluster(ctx, cr)
+	if err != nil {
+		return err
+	}
+
+	ti, err := NewTrafficManagerInstaller(cluster)
+	if err != nil {
+		return err
+	}
+
+	dlog.Debug(ctx, "ensuring that traffic-manager exists")
+	c := cluster.WithK8sInterface(ctx)
+	return ti.EnsureManager(c, req)
+}
+
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
 func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc Service, rootDaemon daemon.DaemonClient, isPodDaemon bool) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(c)
@@ -373,19 +396,18 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		dlog.Errorf(c, "unable to get APIKey: %v", err)
 	}
 
-	// Ensure that we have a traffic-manager to talk to.
 	ti, err := NewTrafficManagerInstaller(cluster)
 	if err != nil {
 		return nil, stacktrace.Wrap(err, "new installer")
 	}
 
-	dlog.Debug(c, "ensure that traffic-manager exists")
-	if err = ti.EnsureManager(c); err != nil {
-		dlog.Errorf(c, "failed to ensure traffic-manager, %v", err)
-		return nil, fmt.Errorf("failed to ensure traffic manager: %w", err)
+	dlog.Debug(c, "checking that traffic-manager exists")
+	isManagerErr := ti.IsManager(c)
+	if isManagerErr != nil {
+		dlog.Error(c, "failed to find traffic-manager")
 	}
 
-	dlog.Debug(c, "traffic-manager started, creating port-forward")
+	dlog.Debug(c, "creating port-forward")
 	grpcDialer, err := dnet.NewK8sPortForwardDialer(c, cluster.Config.RestConfig, k8sapi.GetK8sInterface(c))
 	if err != nil {
 		return nil, err
@@ -409,6 +431,11 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 
 	var conn *grpc.ClientConn
 	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {
+		// if traffic manager was not found in previous step, it is probably not installed
+		// return `helm install` err message
+		if isManagerErr != nil {
+			return nil, isManagerErr
+		}
 		return nil, client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))
 	}
 	defer func() {

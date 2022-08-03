@@ -120,8 +120,9 @@ func Command(ctx context.Context) *cobra.Command {
 	static := cliutil.CommandGroups{
 		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
 		"Traffic Commands": []*cobra.Command{listCommand(), leaveCommand(), previewCommand()},
+		"Install Commands": []*cobra.Command{helmCommand()},
 		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		"Other Commands":   []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
 	}
 	for name, cmds := range static {
 		if _, ok := groups[name]; !ok {

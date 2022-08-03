@@ -26,6 +26,7 @@ func (ch *connected) setup(ctx context.Context) bool {
 	t := getT(ctx)
 	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
 	// Start once with default user to ensure that the auto-installer can run OK.
+	TelepresenceOk(WithUser(ctx, "default"), "helm", "install")
 	stdout := TelepresenceOk(WithUser(ctx, "default"), "connect")
 	require.Contains(t, stdout, "Connected to context default")
 	TelepresenceQuitOk(ctx)
