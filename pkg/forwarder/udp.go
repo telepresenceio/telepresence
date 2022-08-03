@@ -6,9 +6,13 @@ import (
 	"net"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -94,6 +98,9 @@ func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.
 func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
+	ctx, span := otel.Tracer("").Start(ctx, "forwardConn")
+	defer span.End()
+
 	targetAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", f.targetHost, f.targetPort))
 	if err != nil {
 		return fmt.Errorf("error on resolve(%s:%d): %w", f.targetHost, f.targetPort, err)
@@ -117,6 +124,7 @@ func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
 				return nil
 			}
 			id := tunnel.ConnIDFromUDP(rr.Addr, targetAddr)
+			span.SetAttributes(attribute.String("conn-id", id.String()))
 			dlog.Tracef(ctx, "<- SRC udp %s, len %d", id, len(rr.Payload))
 			h, _, err := f.targets.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 				tc, err := net.DialUDP("udp", nil, id.DestinationAddr().(*net.UDPAddr))
@@ -195,6 +203,10 @@ func (u *udpHandler) forward(ctx context.Context) {
 }
 
 func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manager.InterceptInfo) error {
+	ctx, span := otel.Tracer("").Start(ctx, "interceptConn")
+	defer span.End()
+	tracing.RecordInterceptInfo(span, iCept)
+
 	spec := iCept.Spec
 	dest := &net.UDPAddr{IP: iputil.Parse(spec.TargetHost), Port: int(spec.TargetPort)}
 

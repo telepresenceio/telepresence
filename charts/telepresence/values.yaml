@@ -210,6 +210,15 @@ telepresenceAPI:
   # Default: 0
   port: 0
 
+
+################################################################################
+## Tracing configuration
+################################################################################
+tracing:
+  # The port on which a grpc server will be exposed for traces
+  # To disable, set tracing to an empty object ("tracing: {}")
+  grpcPort: 15766
+
 ################################################################################
 ## Prometheus Server Configuration
 ################################################################################

@@ -13,6 +13,12 @@
   designed to run as a sidecar in a Pod, enabling CI systems to create
   preview deploys.
 
+- Feature: The Telepresence components now collect OpenTelemetry traces.
+  Up to 10MB of trace data are available at any given time for collection from
+  components. `telepresence gather-traces` is a new command that will collect
+  all that data and place it into a gzip file, and `telepresence upload-traces` is
+  a new command that will push the gzipped data into an OTLP collector.
+
 ### 2.6.9 (TBD)
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.

@@ -127,6 +127,9 @@ type Sidecar struct {
 	// The port used by the agents restFUL API server
 	APIPort uint16 `json:"apiPort,omitempty" yaml:"apiPort,omitempty"`
 
+	// The port used by the agent's GRPC tracing server
+	TracingPort uint16 `json:"tracingPort,omitempty" yaml:"tracingPort,omitempty"`
+
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty" yaml:"containers,omitempty"`
 }

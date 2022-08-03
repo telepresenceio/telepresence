@@ -25,6 +25,9 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	typed "k8s.io/client-go/kubernetes/typed/core/v1"
+
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -63,6 +66,7 @@ type WatchWorkloadsStream interface {
 
 type Session interface {
 	restapi.AgentState
+	k8s.KubeConfig
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
 	AddInterceptor(string, int) error
@@ -80,11 +84,13 @@ type Session interface {
 	WithK8sInterface(context.Context) context.Context
 	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
 	ManagerClient() manager.ManagerClient
+	ManagerConn() *grpc.ClientConn
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
 	RemainWithToken(context.Context) error
 	AddNamespaceListener(k8s.NamespaceListener)
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
+	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 }
 
 type Service interface {
@@ -313,6 +319,10 @@ func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
 	return tm.managerClient
 }
 
+func (tm *TrafficManager) ManagerConn() *grpc.ClientConn {
+	return tm.managerConn
+}
+
 // connectCluster returns a configured cluster instance
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
 	var config *k8s.Config
@@ -412,7 +422,10 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
-		grpc.WithReturnConnectionError()}
+		grpc.WithReturnConnectionError(),
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	}
 
 	var conn *grpc.ClientConn
 	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {

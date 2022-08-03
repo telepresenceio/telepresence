@@ -10,9 +10,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
@@ -66,9 +71,13 @@ func NewConnEndpoint(stream Stream, conn net.Conn) Endpoint {
 
 func (h *dialer) Start(ctx context.Context) {
 	go func() {
+		ctx, span := otel.Tracer("").Start(ctx, "dialer")
+		defer span.End()
 		defer close(h.done)
 
 		id := h.stream.ID()
+		tracing.RecordConnID(span, id.String())
+
 		switch h.connected {
 		case notConnected:
 			// Set up the idle timer to close and release this handler when it's been idle for a while.
@@ -79,6 +88,7 @@ func (h *dialer) Start(ctx context.Context) {
 			conn, err := d.DialContext(ctx, id.ProtocolString(), id.DestinationAddr().String())
 			if err != nil {
 				dlog.Errorf(ctx, "!! CONN %s, failed to establish connection: %v", id, err)
+				span.SetStatus(codes.Error, err.Error())
 				if err = h.stream.Send(ctx, NewMessage(DialReject, nil)); err != nil {
 					dlog.Errorf(ctx, "!! CONN %s, failed to send DialReject: %v", id, err)
 				}
@@ -88,6 +98,7 @@ func (h *dialer) Start(ctx context.Context) {
 			if err = h.stream.Send(ctx, NewMessage(DialOK, nil)); err != nil {
 				_ = conn.Close()
 				dlog.Errorf(ctx, "!! CONN %s, failed to send DialOK: %v", id, err)
+				span.SetStatus(codes.Error, err.Error())
 				return
 			}
 			dlog.Debugf(ctx, "   CONN %s, dial answered", id)
@@ -282,7 +293,15 @@ func DialWaitLoop(ctx context.Context, manager rpc.ManagerClient, dialStream rpc
 }
 
 func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialRequest, sessionID string) {
+	if tc := dr.GetTraceContext(); tc != nil {
+		carrier := propagation.MapCarrier(tc)
+		propagator := otel.GetTextMapPropagator()
+		ctx = propagator.Extract(ctx, carrier)
+	}
+	ctx, span := otel.Tracer("").Start(ctx, "dialRespond")
+	defer span.End()
 	id := ConnID(dr.ConnId)
+	tracing.RecordConnID(span, id.String())
 	mt, err := manager.Tunnel(ctx)
 	if err != nil {
 		dlog.Errorf(ctx, "!! CONN %s, call to manager Tunnel failed: %v", id, err)

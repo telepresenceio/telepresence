@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -26,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -428,6 +430,8 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
 	dlog.Debugf(ctx, "PrepareIntercept called")
+	span := trace.SpanFromContext(ctx)
+	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 	return m.state.PrepareIntercept(ctx, request)
 }
 
@@ -438,6 +442,8 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	spec := ciReq.InterceptSpec
 	apiKey := ciReq.GetApiKey()
 	dlog.Debug(ctx, "CreateIntercept called")
+	span := trace.SpanFromContext(ctx)
+	tracing.RecordInterceptSpec(span, spec)
 
 	client := m.state.GetClient(sessionID)
 
@@ -452,6 +458,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	interceptInfo, err := m.state.AddIntercept(sessionID, m.clusterInfo.GetClusterID(), apiKey, client, spec)
 	if err != nil {
 		return nil, err
+	}
+	if interceptInfo != nil {
+		tracing.RecordInterceptInfo(span, interceptInfo)
 	}
 	err = m.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 		if interceptInfo.ApiKey == "" {

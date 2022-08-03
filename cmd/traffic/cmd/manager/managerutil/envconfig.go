@@ -31,6 +31,7 @@ type Env struct {
 	AgentImage          string                     `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
 	APIPort             int32                      `env:"TELEPRESENCE_API_PORT,default="`
+	TracingPort         int32                      `env:"TELEPRESENCE_GRPC_TRACE_PORT,default="`
 	MaxReceiveSize      resource.Quantity          `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
 	AppProtocolStrategy k8sapi.AppProtocolStrategy `env:"TELEPRESENCE_APP_PROTO_STRATEGY,default="`
 	AgentInjectPolicy   agentconfig.InjectPolicy   `env:"AGENT_INJECT_POLICY,default="`
@@ -52,6 +53,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorCon
 	return &agentmap.GeneratorConfig{
 		AgentPort:           uint16(e.AgentPort),
 		APIPort:             uint16(e.APIPort),
+		TracingPort:         uint16(e.TracingPort),
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
 		LogLevel:            e.LogLevel,

@@ -53,6 +53,12 @@ spec:
             value: {{ .Values.systemaPort | quote }}
           - name: TELEPRESENCE_REGISTRY
             value: {{ .Values.agentInjector.agentImage.registry }}
+          {{- with .Values.tracing }}
+          {{ if .grpcPort }}
+          - name: TELEPRESENCE_GRPC_TRACE_PORT
+            value: {{ .grpcPort | quote }}
+          {{- end }}
+          {{- end }}
           {{- with .Values.telepresenceAPI }}
           {{- if .port }}
           - name: TELEPRESENCE_API_PORT
@@ -109,6 +115,10 @@ spec:
           {{- if .Values.prometheus.port }}  # 0 is false
           - name: prometheus
             containerPort: {{ .Values.prometheus.port }}
+          {{- end }}
+          {{- with .Values.tracing }}
+          - name: grpc-trace
+            containerPort: {{ .grpcPort }}
           {{- end }}
           {{- with .Values.resources }}
           resources:

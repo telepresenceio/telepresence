@@ -1,0 +1,14 @@
+syntax = "proto3";
+package telepresence.common;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/common";
+
+service Tracing {
+  rpc DumpTraces(google.protobuf.Empty) returns (Trace);
+}
+
+message Trace {
+  bytes trace_data = 1;
+}
