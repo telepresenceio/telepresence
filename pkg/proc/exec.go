@@ -30,29 +30,35 @@ func Start(ctx context.Context, env map[string]string, exe string, args ...strin
 	return cmd, nil
 }
 
-// Wait will wait for the Process of the command to finish
+// Wait will wait for the Process of the command to finish.
+// If cancel is not nil, Wait will listen for os signals and call cancel when it
+// receives one.
 func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error {
 	p := cmd.Process
 	if p == nil {
 		return nil
 	}
+
 	// Ensure that appropriate signals terminates the context.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, signalsToForward...)
-	defer func() {
-		signal.Stop(sigCh)
-		close(sigCh)
-	}()
-	go func() {
-		select {
-		case <-ctx.Done():
-		case sig := <-sigCh:
-			if sig == nil {
-				return
+	if cancel != nil {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, SignalsToForward...)
+		defer func() {
+			signal.Stop(sigCh)
+			close(sigCh)
+		}()
+		go func() {
+			select {
+			case <-ctx.Done():
+			case sig := <-sigCh:
+				if sig == nil {
+					return
+				}
+				cancel()
 			}
-			cancel()
-		}
-	}()
+		}()
+	}
+
 	s, err := p.Wait()
 	if err != nil {
 		return fmt.Errorf("%s: %w", shellquote.ShellString(cmd.Path, cmd.Args), err)
@@ -71,6 +77,7 @@ func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error 
 func Run(ctx context.Context, env map[string]string, exe string, args ...string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	cmd, err := Start(ctx, env, exe, args...)
 	if err != nil {
 		return err

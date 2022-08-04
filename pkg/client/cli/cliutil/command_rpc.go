@@ -40,10 +40,11 @@ func RPCToCommands(remote *connector.CommandGroups, runner func(*cobra.Command, 
 		commands := []*cobra.Command{}
 		for _, cmd := range cmds.GetCommands() {
 			cobraCmd := &cobra.Command{
-				Use:   cmd.GetName(),
-				Long:  cmd.GetLongHelp(),
-				Short: cmd.GetShortHelp(),
-				RunE:  runner,
+				Use:                cmd.GetName(),
+				Long:               cmd.GetLongHelp(),
+				Short:              cmd.GetShortHelp(),
+				RunE:               runner,
+				DisableFlagParsing: true,
 			}
 			for _, flag := range cmd.GetFlags() {
 				tp, err := TypeFromString(flag.GetType())

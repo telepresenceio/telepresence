@@ -1,4 +1,4 @@
-package cli
+package cliutil
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
-func prepareMount(mountPoint string) (string, error) {
+func PrepareMount(_ string, mountPoint string) (string, error) {
 	var err error
 	if mountPoint == "" {
 		// Find a free drive letter. Background at T, loop around and skip C and D,
@@ -22,7 +22,7 @@ func prepareMount(mountPoint string) (string, error) {
 	}
 
 	// Mount point must be a drive letter
-	ok := len(mountPoint) == 2 || mountPoint[1] == ':'
+	ok := len(mountPoint) == 2 && mountPoint[1] == ':'
 	if ok {
 		dl := mountPoint[0]
 		ok = dl >= 'A' && dl <= 'Z' || dl >= 'a' && dl <= 'z'

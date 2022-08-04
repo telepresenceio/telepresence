@@ -1,4 +1,4 @@
-package cli
+package cliutil
 
 import (
 	"context"
@@ -42,11 +42,11 @@ func NewUpdateChecker(ctx context.Context, url string) (*UpdateChecker, error) {
 	return ts, nil
 }
 
-func updateCheckIfDue(cmd *cobra.Command, _ []string) error {
+func UpdateCheckIfDue(cmd *cobra.Command, _ []string) error {
 	return updateCheck(cmd, false)
 }
 
-func forcedUpdateCheck(cmd *cobra.Command, _ []string) error {
+func ForcedUpdateCheck(cmd *cobra.Command, _ []string) error {
 	return updateCheck(cmd, true)
 }
 

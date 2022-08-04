@@ -18,18 +18,34 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
 
-func PushTraces() *cobra.Command {
-	return &cobra.Command{
+type pushTracesCommand struct {
+	cmd *cobra.Command
+}
+
+func (*pushTracesCommand) group() string {
+	return "Tracing"
+}
+
+func (c *pushTracesCommand) cobraCommand(ctx context.Context) *cobra.Command {
+	if c.cmd != nil {
+		return c.cmd
+	}
+
+	c.cmd = &cobra.Command{
 		Use:  "upload-traces",
 		Args: cobra.ExactArgs(2),
 
 		Short: "Upload Traces",
 		Long:  "Upload Traces to a Jaeger instance",
-		RunE:  pushTraces,
+		RunE:  c.pushTraces,
 	}
+
+	return c.cmd
 }
 
-func traceClient(url string) (otlptrace.Client, error) {
+func (*pushTracesCommand) init(_ context.Context) {}
+
+func (c *pushTracesCommand) traceClient(url string) (otlptrace.Client, error) {
 	client := otlptracegrpc.NewClient(
 		otlptracegrpc.WithEndpoint(url),
 		otlptracegrpc.WithInsecure(),
@@ -37,7 +53,7 @@ func traceClient(url string) (otlptrace.Client, error) {
 	return client, nil
 }
 
-func pushTraces(cmd *cobra.Command, args []string) error {
+func (c *pushTracesCommand) pushTraces(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
@@ -55,7 +71,7 @@ func pushTraces(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to unzip %s: %w", zipFile, err)
 	}
 	defer zipR.Close()
-	client, err := traceClient(jaegerTarget)
+	client, err := c.traceClient(jaegerTarget)
 	if err != nil {
 		return err
 	}

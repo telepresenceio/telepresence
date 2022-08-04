@@ -1,4 +1,4 @@
-package cli
+package cliutil
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 const messagesCacheFilename = "cloud-messages.json"
@@ -98,12 +97,12 @@ func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed s
 
 // raiseCloudMessage is what is called from `PostRunE` in a command and is responsible
 // for raising the message for the command used.
-func raiseCloudMessage(cmd *cobra.Command, _ []string) error {
+func RaiseCloudMessage(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	// Currently, we only have messages that should be served when a user
 	// isn't logged in, so we check that here
-	if cliutil.HasLoggedIn(cmd.Context()) {
-		if _, err := cliutil.GetCloudUserInfo(ctx, false, true); err == nil {
+	if HasLoggedIn(cmd.Context()) {
+		if _, err := GetCloudUserInfo(ctx, false, true); err == nil {
 			return nil
 		}
 	}

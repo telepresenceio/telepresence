@@ -26,29 +26,44 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-func TraceCommand() *cobra.Command {
+type traceCommand struct {
+	command *cobra.Command
+}
+
+func (*traceCommand) group() string {
+	return "Tracing"
+}
+
+func (c *traceCommand) cobraCommand(ctx context.Context) *cobra.Command {
+	if c.command != nil {
+		return c.command
+	}
+
 	var remotePort uint16
 	var destFile string
-	cmd := &cobra.Command{
+	c.command = &cobra.Command{
 		Use:  "gather-traces",
 		Args: cobra.NoArgs,
 
 		Short: "Gather Traces",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return gatherTraces(cmd, remotePort, destFile)
+			return c.gatherTraces(cmd, remotePort, destFile)
 		},
 		Annotations: map[string]string{
 			CommandRequiresSession: "true",
 		},
 	}
-	cmd.Flags().Uint16VarP(&remotePort, "port", "p", 15766,
+	c.command.Flags().Uint16VarP(&remotePort, "port", "p", 15766,
 		"The remote port where traffic manager and agent are exposing traces."+
 			"Corresponds to tracing.grpcPort in the helm chart values")
-	cmd.Flags().StringVarP(&destFile, "output-file", "o", "./traces.gz", "The gzip to be created with binary trace data")
-	return cmd
+	c.command.Flags().StringVarP(&destFile, "output-file", "o", "./traces.gz", "The gzip to be created with binary trace data")
+
+	return c.command
 }
 
-func tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan []byte) error {
+func (*traceCommand) init(_ context.Context) {}
+
+func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan []byte) error {
 	daemonCli := common.NewTracingClient(conn)
 	result, err := daemonCli.DumpTraces(ctx, &emptypb.Empty{})
 	if err != nil {
@@ -62,7 +77,7 @@ func tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan []byte) error
 	return nil
 }
 
-func launchTraceWriter(ctx context.Context, destFile string) (chan []byte, chan error, error) {
+func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (chan []byte, chan error, error) {
 	ch := make(chan []byte)
 	if !filepath.IsAbs(destFile) {
 		wd := GetCwd(ctx)
@@ -109,35 +124,35 @@ func launchTraceWriter(ctx context.Context, destFile string) (chan []byte, chan 
 	return ch, errCh, nil
 }
 
-func userdTraces(ctx context.Context, tCh chan []byte) error {
+func (c *traceCommand) userdTraces(ctx context.Context, tCh chan []byte) error {
 	userdConn, err := client.DialSocket(ctx, client.ConnectorSocketName)
 	if err != nil {
 		return err
 	}
 	defer userdConn.Close()
 
-	err = tracesFor(ctx, userdConn, tCh)
+	err = c.tracesFor(ctx, userdConn, tCh)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func rootdTraces(ctx context.Context, tCh chan []byte) error {
+func (c *traceCommand) rootdTraces(ctx context.Context, tCh chan []byte) error {
 	dConn, err := client.DialSocket(ctx, client.DaemonSocketName)
 	if err != nil {
 		return err
 	}
 	defer dConn.Close()
 
-	err = tracesFor(ctx, dConn, tCh)
+	err = c.tracesFor(ctx, dConn, tCh)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func trafficManagerTraces(ctx context.Context, tCh chan []byte, remotePort string) error {
+func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan []byte, remotePort string) error {
 	sess := trafficmgr.GetSession(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
 	if err != nil {
@@ -160,14 +175,14 @@ func trafficManagerTraces(ctx context.Context, tCh chan []byte, remotePort strin
 	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {
 		return err
 	}
-	err = tracesFor(ctx, conn, tCh)
+	err = c.tracesFor(ctx, conn, tCh)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func agentTraces(cmd *cobra.Command, tCh chan []byte, remotePort string) error {
+func (c *traceCommand) agentTraces(cmd *cobra.Command, tCh chan []byte, remotePort string) error {
 	ctx := cmd.Context()
 	sess := trafficmgr.GetSession(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
@@ -197,7 +212,7 @@ func agentTraces(cmd *cobra.Command, tCh chan []byte, remotePort string) error {
 			return
 		}
 		defer conn.Close()
-		err := tracesFor(tc, conn, tCh)
+		err := c.tracesFor(tc, conn, tCh)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Unable to get traces for %s: %v", name, err)
 			return
@@ -205,11 +220,11 @@ func agentTraces(cmd *cobra.Command, tCh chan []byte, remotePort string) error {
 	}, nil)
 }
 
-func gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error {
+func (c *traceCommand) gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error {
 	ctx := cmd.Context()
 	port := strconv.FormatUint(uint64(remotePort), 10)
 
-	tCh, errCh, err := launchTraceWriter(ctx, destFile)
+	tCh, errCh, err := c.launchTraceWriter(ctx, destFile)
 	if err != nil {
 		return err
 	}
@@ -219,7 +234,7 @@ func gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error 
 
 	go func() {
 		defer wg.Done()
-		err := rootdTraces(ctx, tCh)
+		err := c.rootdTraces(ctx, tCh)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect root daemon traces: %v", err)
 		}
@@ -227,7 +242,7 @@ func gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error 
 
 	go func() {
 		defer wg.Done()
-		err := userdTraces(ctx, tCh)
+		err := c.userdTraces(ctx, tCh)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect user daemon traces: %v", err)
 		}
@@ -235,7 +250,7 @@ func gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error 
 
 	go func() {
 		defer wg.Done()
-		err = trafficManagerTraces(ctx, tCh, port)
+		err = c.trafficManagerTraces(ctx, tCh, port)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect traffic-manager traces: %v", err)
 		}
@@ -243,7 +258,7 @@ func gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error 
 
 	go func() {
 		defer wg.Done()
-		err := agentTraces(cmd, tCh, port)
+		err := c.agentTraces(cmd, tCh, port)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect traffic agent traces: %v", err)
 		}

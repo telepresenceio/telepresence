@@ -98,7 +98,12 @@ func TestToFromRPC(t *testing.T) { //nolint:gocognit,gocyclo // it's a long list
 	rCmd.Flags().UintSlice("uint-slice", []uint{}, "")
 
 	rpc := CommandsToRPC(CommandGroups{"Test": []*cobra.Command{rCmd}})
-	grp, err := RPCToCommands(rpc, func(cmd *cobra.Command, _ []string) error {
+	grp, err := RPCToCommands(rpc, func(cmd *cobra.Command, args []string) error {
+		err := cmd.Flags().Parse(args)
+		if err != nil {
+			t.Error(err)
+		}
+
 		cmdBool, err := cmd.Flags().GetBool("bool")
 		if err != nil {
 			t.Error(err)

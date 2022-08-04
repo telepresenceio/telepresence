@@ -1,4 +1,4 @@
-package cli
+package commands
 
 import (
 	"bufio"
@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -18,6 +16,9 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	grpcCodes "google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 
@@ -29,13 +30,294 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
+
+type interceptCommand struct {
+	args    interceptArgs
+	extErr  error
+	command *cobra.Command
+}
+
+func (c *interceptCommand) group() string {
+	return "Traffic Commands"
+}
+
+func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
+	if cmd.command != nil {
+		return cmd.command
+	}
+
+	cmd.command = &cobra.Command{
+		Use:   "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
+		Args:  cobra.MinimumNArgs(1),
+		Short: "Intercept a service",
+
+		Annotations: map[string]string{
+			CommandRequiresSession:         "",
+			CommandRequiresConnectorServer: "",
+		},
+	}
+	cmd.args = interceptArgs{}
+	flags := cmd.command.Flags()
+
+	flags.StringVarP(&cmd.args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
+	flags.StringVarP(&cmd.args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
+		`Local port to forward to. If intercepting a service with multiple ports, `+
+		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
+		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
+	)
+
+	flags.StringVar(&cmd.args.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
+
+	flags.BoolVarP(&cmd.args.localOnly, "local-only", "l", false, ``+
+		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
+
+	flags.BoolVarP(&cmd.args.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
+		`Generate an edgestack.me preview domain for this intercept. `+
+		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
+	)
+	cmd.args.previewSpec = &manager.PreviewSpec{}
+	addPreviewFlags("preview-url-", flags, cmd.args.previewSpec)
+
+	flags.StringVarP(&cmd.args.envFile, "env-file", "e", "", ``+
+		`Also emit the remote environment to an env file in Docker Compose format. `+
+		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
+
+	flags.StringVarP(&cmd.args.envJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
+
+	flags.StringVarP(&cmd.args.mount, "mount", "", "true", ``+
+		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
+		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
+
+	flags.StringSliceVar(&cmd.args.toPod, "to-pod", []string{}, ``+
+		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
+		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
+		`Use <port>/UDP for UDP ports`)
+
+	flags.BoolVarP(&cmd.args.dockerRun, "docker-run", "", false, ``+
+		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
+		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
+
+	flags.StringVarP(&cmd.args.dockerMount, "docker-mount", "", "", ``+
+		`The volume mount point in docker. Defaults to same as "--mount"`)
+
+	flags.StringVarP(&cmd.args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+
+	flags.StringVar(&cmd.args.ingressHost, "ingress-host", "", "If this flag is set, the ingress dialogue will be skipped,"+
+		" and this value will be used as the ingress hostname.")
+	flags.Int32Var(&cmd.args.ingressPort, "ingress-port", 0, "If this flag is set, the ingress dialogue will be skipped,"+
+		" and this value will be used as the ingress port.")
+	flags.BoolVar(&cmd.args.ingressTLS, "ingress-tls", false, "If this flag is set, the ingress dialogue will be skipped."+
+		" If the dialogue is skipped, this flag will determine if TLS is used, and will default to false.")
+	flags.StringVar(&cmd.args.ingressL5, "ingress-l5", "", "If this flag is set, the ingress dialogue will be skipped,"+
+		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
+
+	var exts *extensions.LoadedExtensions
+	exts, cmd.extErr = extensions.LoadExtensions(ctx, flags)
+	if cmd.extErr == nil {
+		cmd.args.extState, cmd.extErr = exts.AddToFlagSet(ctx, flags)
+	}
+
+	return cmd.command
+}
+
+func (c *interceptCommand) init(ctx context.Context) {
+	if c.command == nil {
+		_ = c.cobraCommand(ctx)
+	}
+
+	c.command.PreRunE = cliutil.UpdateCheckIfDue
+	c.command.PostRunE = cliutil.RaiseCloudMessage
+	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
+		if c.extErr != nil {
+			return c.extErr
+		}
+		// arg-parsing
+		var (
+			err  error
+			args = c.args
+		)
+		args.extRequiresLogin, err = args.extState.RequiresAPIKeyOrLicense()
+		if err != nil {
+			return err
+		}
+		args.name = positional[0]
+		args.cmdline = positional[1:]
+
+		var cmd = c.command
+		switch args.localOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
+		case true:
+			// Not actually intercepting anything -- check that the flags make sense for that
+			if args.agentName != "" {
+				return errcat.User.New("a local-only intercept cannot have a workload")
+			}
+			if args.serviceName != "" {
+				return errcat.User.New("a local-only intercept cannot have a service")
+			}
+			if cmd.Flag("port").Changed {
+				return errcat.User.New("a local-only intercept cannot have a port")
+			}
+			if cmd.Flag("mount").Changed {
+				return errcat.User.New("a local-only intercept cannot have mounts")
+			}
+			if cmd.Flag("preview-url").Changed && args.previewEnabled {
+				return errcat.User.New("a local-only intercept cannot be previewed")
+			}
+		case false:
+			// Actually intercepting something
+			if args.agentName == "" {
+				args.agentName = args.name
+				if args.namespace != "" {
+					args.name += "-" + args.namespace
+				}
+			}
+		}
+		args.mountSet = cmd.Flag("mount").Changed
+		if args.dockerRun {
+			if err := validateDockerArgs(args.cmdline); err != nil {
+				return err
+			}
+		}
+
+		return c.intercept(ccmd.Context(), args)
+	}
+}
+
+func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) error {
+	session := GetSession(ctx)
+	if session == nil {
+		return errors.New("no session found")
+	}
+	mc := session.ManagerClient()
+	cs := GetConnectorServer(ctx)
+	if cs == nil {
+		return errors.New("no connector found")
+	}
+	safeCmd := safeCobraCommandImpl{c.command}
+
+	is := newInterceptState(ctx, safeCmd, args, cs, mc)
+	defer is.scout.Close()
+
+	if len(args.cmdline) == 0 && !args.dockerRun {
+		// start and retain the intercept
+		return client.WithEnsuredState(ctx, is, true, func() error { return nil })
+	}
+
+	return client.WithEnsuredState(ctx, is, false, func() (err error) {
+		// start the interceptor process
+		var (
+			cmd           *dexec.Cmd
+			containerName string
+		)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		if args.dockerRun {
+			envFile := is.args.envFile
+			if envFile == "" {
+				file, err := os.CreateTemp("", "tel-*.env")
+				if err != nil {
+					return fmt.Errorf("failed to create temporary environment file. %w", err)
+				}
+				defer os.Remove(file.Name())
+
+				if err = is.writeEnvToFileAndClose(file); err != nil {
+					return err
+				}
+				envFile = file.Name()
+			}
+			cmd, containerName, err = is.startInDocker(ctx, envFile, args.cmdline)
+		} else {
+			cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
+		}
+		if err != nil {
+			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
+			return err
+		}
+
+		// setup cleanup for the interceptor process
+		var (
+			interceptID    = is.env["TELEPRESENCE_INTERCEPT_ID"]
+			interceptorPID = int32(cmd.Process.Pid)
+
+			ior = connector.Interceptor{
+				InterceptId: interceptID,
+				Pid:         interceptorPID,
+			}
+		)
+		// Send info about the pid and intercept id to the traffic-manager so that it kills
+		// the process if it receives a leave of quit call.
+		if _, err = is.connectorServer.AddInterceptor(ctx, &ior); err != nil {
+			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", interceptorPID, err)
+			_ = cmd.Process.Kill()
+			return err
+		}
+		defer func() {
+			if ctx.Err() != nil {
+				// context cancelled; this is handled elsewhere so this step is no longer needed
+				return
+			}
+			if _, err := is.connectorServer.RemoveInterceptor(ctx, &ior); err != nil {
+				dlog.Errorf(ctx, "error removing interceptor: %v", err)
+			}
+		}()
+
+		SetCtxCancellationHandlerFunc(ctx, func() {
+			// Handles context cancellation
+			var (
+				interceptName string
+				sessionStatus = session.Status(ctx)
+			)
+
+			for _, i := range sessionStatus.Intercepts.Intercepts {
+				if i.Id == interceptID {
+					interceptName = i.Spec.Name
+				}
+			}
+
+			_, err := mc.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{
+				Session: sessionStatus.SessionInfo,
+				Name:    interceptName,
+			})
+			if err != nil {
+				dlog.Errorf(ctx, "unable to remove intercept: %v", err)
+			}
+
+			if containerName == "" {
+				if err = cmd.Process.Kill(); err != nil {
+					dlog.Errorf(ctx, "error killing interceptor process: %v", err)
+				}
+			} else {
+				dockerStopCmd, err := proc.Start(ctx, nil, "docker", "stop", containerName)
+				if err != nil {
+					dlog.Errorf(ctx, "error stopping docker container %s: %v", containerName, err)
+				} else {
+					if err := proc.Wait(ctx, cancel, dockerStopCmd); err != nil {
+						dlog.Errorf(ctx, "error wating for docker container %s to stop: %v", containerName, err)
+					}
+				}
+			}
+
+			_, err = is.connectorServer.RemoveInterceptor(ctx, &ior)
+			if err != nil {
+				dlog.Errorf(ctx, "error removing interceptor: %v", err)
+			}
+		})
+
+		// The external command will not output anything to the logs. An error here
+		// is likely caused by the user hitting <ctrl>-C to terminate the process.
+		if err = proc.Wait(ctx, cancel, cmd); err != nil {
+			return errcat.NoDaemonLogs.New(err)
+		}
+
+		return nil
+	})
+}
 
 type interceptArgs struct {
 	name        string // Args[0] || `${Args[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
@@ -86,6 +368,12 @@ func (w safeCobraCommandImpl) FlagError(err error) error {
 	return w.Command.FlagErrorFunc()(w.Command, err)
 }
 
+// addPreviewFlags mutates 'flags', adding flags to it such that the flags set the appropriate
+// fields in the given 'spec'.  If 'prefix' is given, long-flag names are prefixed with it.
+func addPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewSpec) {
+	flags.BoolVarP(&spec.DisplayBanner, prefix+"banner", "b", true, "Display banner on preview page")
+}
+
 type interceptState struct {
 	// static after newInterceptState() ////////////////////////////////////
 
@@ -94,9 +382,8 @@ type interceptState struct {
 
 	scout *scout.Reporter
 
-	connectorClient connector.ConnectorClient
+	connectorServer connector.ConnectorServer
 	managerClient   manager.ManagerClient
-	connInfo        *connector.ConnectInfo
 
 	// set later ///////////////////////////////////////////////////////////
 
@@ -107,214 +394,11 @@ type interceptState struct {
 	dockerPort uint16
 }
 
-func interceptCommand(ctx context.Context) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:  "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
-		Args: cobra.MinimumNArgs(1),
-
-		Short:    "Intercept a service",
-		PreRunE:  updateCheckIfDue,
-		PostRunE: raiseCloudMessage,
-	}
-	args := interceptArgs{}
-	flags := cmd.Flags()
-
-	flags.StringVarP(&args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
-	flags.StringVarP(&args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
-		`Local port to forward to. If intercepting a service with multiple ports, `+
-		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
-		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
-	)
-
-	flags.StringVar(&args.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
-
-	flags.BoolVarP(&args.localOnly, "local-only", "l", false, ``+
-		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
-
-	flags.BoolVarP(&args.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
-		`Generate an edgestack.me preview domain for this intercept. `+
-		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
-	)
-	args.previewSpec = &manager.PreviewSpec{}
-	AddPreviewFlags("preview-url-", flags, args.previewSpec)
-
-	flags.StringVarP(&args.envFile, "env-file", "e", "", ``+
-		`Also emit the remote environment to an env file in Docker Compose format. `+
-		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
-
-	flags.StringVarP(&args.envJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
-
-	flags.StringVarP(&args.mount, "mount", "", "true", ``+
-		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
-		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
-
-	flags.StringSliceVar(&args.toPod, "to-pod", []string{}, ``+
-		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
-		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
-		`Use <port>/UDP for UDP ports`)
-
-	flags.BoolVarP(&args.dockerRun, "docker-run", "", false, ``+
-		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
-		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
-
-	flags.StringVarP(&args.dockerMount, "docker-mount", "", "", ``+
-		`The volume mount point in docker. Defaults to same as "--mount"`)
-
-	flags.StringVarP(&args.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
-
-	flags.StringVar(&args.ingressHost, "ingress-host", "", "If this flag is set, the ingress dialogue will be skipped,"+
-		" and this value will be used as the ingress hostname.")
-	flags.Int32Var(&args.ingressPort, "ingress-port", 0, "If this flag is set, the ingress dialogue will be skipped,"+
-		" and this value will be used as the ingress port.")
-	flags.BoolVar(&args.ingressTLS, "ingress-tls", false, "If this flag is set, the ingress dialogue will be skipped."+
-		" If the dialogue is skipped, this flag will determine if TLS is used, and will default to false.")
-	flags.StringVar(&args.ingressL5, "ingress-l5", "", "If this flag is set, the ingress dialogue will be skipped,"+
-		" and this value will be used as the L5 hostname. If the dialogue is skipped, this flag will default to the ingress-host value")
-
-	var extErr error
-	exts, extErr := extensions.LoadExtensions(ctx, flags)
-	if extErr == nil {
-		args.extState, extErr = exts.AddToFlagSet(ctx, flags)
-	}
-
-	cmd.RunE = func(cmd *cobra.Command, positional []string) error {
-		if extErr != nil {
-			return extErr
-		}
-		// arg-parsing
-		var err error
-		args.extRequiresLogin, err = args.extState.RequiresAPIKeyOrLicense()
-		if err != nil {
-			return err
-		}
-		args.name = positional[0]
-		args.cmdline = positional[1:]
-		switch args.localOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
-		case true:
-			// Not actually intercepting anything -- check that the flags make sense for that
-			if args.agentName != "" {
-				return errcat.User.New("a local-only intercept cannot have a workload")
-			}
-			if args.serviceName != "" {
-				return errcat.User.New("a local-only intercept cannot have a service")
-			}
-			if cmd.Flag("port").Changed {
-				return errcat.User.New("a local-only intercept cannot have a port")
-			}
-			if cmd.Flag("mount").Changed {
-				return errcat.User.New("a local-only intercept cannot have mounts")
-			}
-			if cmd.Flag("preview-url").Changed && args.previewEnabled {
-				return errcat.User.New("a local-only intercept cannot be previewed")
-			}
-		case false:
-			// Actually intercepting something
-			if args.agentName == "" {
-				args.agentName = args.name
-				if args.namespace != "" {
-					args.name += "-" + args.namespace
-				}
-			}
-		}
-		args.mountSet = cmd.Flag("mount").Changed
-		if args.dockerRun {
-			if err := validateDockerArgs(args.cmdline); err != nil {
-				return err
-			}
-		}
-		// run
-		return intercept(cmd, args)
-	}
-
-	return cmd
-}
-
-func leaveCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "leave [flags] <intercept_name>",
-		Args: cobra.ExactArgs(1),
-
-		Short: "Remove existing intercept",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
-		},
-	}
-}
-
-func intercept(cmd *cobra.Command, args interceptArgs) error {
-	if len(args.cmdline) == 0 && !args.dockerRun {
-		// start and retain the intercept
-		return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
-				defer is.scout.Close()
-				return client.WithEnsuredState(ctx, is, true, func() error { return nil })
-			})
-		})
-	}
-
-	// start intercept, run command, then stop the intercept
-	return withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
-		return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-			is := newInterceptState(ctx, safeCobraCommandImpl{cmd}, args, cs, managerClient)
-			defer is.scout.Close()
-			return client.WithEnsuredState(ctx, is, false, func() (err error) {
-				ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
-				defer cancel()
-				var cmd *dexec.Cmd
-				if args.dockerRun {
-					envFile := is.args.envFile
-					if envFile == "" {
-						file, err := os.CreateTemp("", "tel-*.env")
-						if err != nil {
-							return errcat.NoDaemonLogs.Newf("failed to create temporary environment file. %w", err)
-						}
-						defer os.Remove(file.Name())
-
-						if err = is.writeEnvToFileAndClose(file); err != nil {
-							return err
-						}
-						envFile = file.Name()
-					}
-					cmd, err = is.startInDocker(ctx, envFile, args.cmdline)
-				} else {
-					cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
-				}
-				if err == nil {
-					// Send info about the pid and intercept id to the traffic-manager so that it kills
-					// the process if it receives a leave of quit call.
-					cc := is.connectorClient
-					ior := &connector.Interceptor{
-						InterceptId: is.env["TELEPRESENCE_INTERCEPT_ID"],
-						Pid:         int32(os.Getpid()),
-					}
-					if _, err = cc.AddInterceptor(ctx, ior); err != nil {
-						_ = cmd.Process.Kill()
-						return err
-					}
-					defer func() {
-						if _, err := cc.RemoveInterceptor(ctx, ior); err != nil {
-							dlog.Error(ctx, err)
-						}
-					}()
-					err = proc.Wait(ctx, cancel, cmd)
-				}
-				// The external command will not output anything to the logs. An error here
-				// is likely caused by the user hitting <ctrl>-C to terminate the process.
-				if err != nil {
-					err = errcat.NoDaemonLogs.New(err)
-				}
-				return err
-			})
-		})
-	})
-}
-
 func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
 	args interceptArgs,
-	cs *connectorState,
+	cs connector.ConnectorServer,
 	managerClient manager.ManagerClient,
 ) *interceptState {
 	is := &interceptState{
@@ -323,17 +407,14 @@ func newInterceptState(
 
 		scout: scout.NewReporter(ctx, "cli"),
 
-		connectorClient: cs.userD,
 		managerClient:   managerClient,
-		connInfo:        cs.ConnectInfo,
+		connectorServer: cs,
 	}
 	is.scout.Start(ctx)
 	return is
 }
 
-// InterceptError inspects the .Error and .ErrorText fields in an InterceptResult and returns an
-// appropriate error object, or nil if the InterceptResult doesn't represent an error.
-func InterceptError(r *connector.InterceptResult) error {
+func interceptMessage(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
 	switch r.Error {
@@ -498,7 +579,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 
 	doMount := false
 	if err = checkMountCapability(ctx); err == nil {
-		if ir.MountPoint, doMount, err = is.getMountPoint(); err != nil {
+		if ir.MountPoint, doMount, err = is.getMountPoint(ctx); err != nil {
 			return nil, err
 		}
 	} else if is.args.mountSet {
@@ -540,7 +621,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	return ir, nil
 }
 
-func (is *interceptState) getMountPoint() (string, bool, error) {
+func (is *interceptState) getMountPoint(ctx context.Context) (string, bool, error) {
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(is.args.mount)
 	if err != nil {
@@ -548,15 +629,17 @@ func (is *interceptState) getMountPoint() (string, bool, error) {
 		doMount = len(mountPoint) > 0
 		err = nil
 	}
+
 	if doMount {
-		mountPoint, err = prepareMount(mountPoint)
+		mountPoint, err = cliutil.PrepareMount(GetCwd(ctx), mountPoint)
 	}
+
 	return mountPoint, doMount, err
 }
 
 func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ingressL5 string) (*manager.IngressInfo, error) {
 	ingress := &manager.IngressInfo{}
-	if hostRx.MatchString(ingressHost) {
+	if cliutil.HostRx.MatchString(ingressHost) {
 		if ingressPort > 0 {
 			ingress.Host = ingressHost
 			ingress.Port = ingressPort
@@ -566,7 +649,7 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 				ingress.L5Host = ingressHost
 				return ingress, nil
 			} else { // if L5Host is present
-				if hostRx.MatchString(ingressL5) {
+				if cliutil.HostRx.MatchString(ingressL5) {
 					ingress.L5Host = ingressL5
 					return ingress, nil
 				} else {
@@ -589,12 +672,12 @@ func makeIngressInfo(ingressHost string, ingressPort int32, ingressTLS bool, ing
 // also performs a login. This function must be called before other user interaction takes place when creating
 // an intercept. It must not be called when no user interaction is expected.
 func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connector.CreateInterceptRequest, needLogin bool) error {
-	r, err := is.connectorClient.CanIntercept(ctx, ir)
+	r, err := is.connectorServer.CanIntercept(ctx, ir)
 	if err != nil {
 		return fmt.Errorf("connector.CanIntercept: %w", err)
 	}
 	if r.Error != common.InterceptError_UNSPECIFIED {
-		return InterceptError(r)
+		return interceptMessage(r)
 	}
 	if needLogin {
 		// We default to assuming they can connect to Ambassador Cloud
@@ -605,7 +688,10 @@ func (is *interceptState) canInterceptAndLogIn(ctx context.Context, ir *connecto
 			canConnect = resp.CanConnect
 		}
 		if canConnect {
-			if _, err := cliutil.ClientEnsureLoggedIn(ctx, "", is.connectorClient); err != nil {
+			if _, err := is.connectorServer.Login(ctx, &connector.LoginRequest{ApiKey: ""}); err != nil {
+				if grpcStatus.Code(err) == grpcCodes.PermissionDenied {
+					err = errcat.User.New(grpcStatus.Convert(err).Message())
+				}
 				return err
 			}
 		}
@@ -661,9 +747,14 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	args := &is.args
 
+	status, err := is.connectorServer.Status(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+
 	// Add whatever metadata we already have to scout
 	is.scout.SetMetadatum(ctx, "service_name", args.agentName)
-	is.scout.SetMetadatum(ctx, "cluster_id", is.connInfo.ClusterId)
+	is.scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
 	mechanism, _ := args.extState.Mechanism()
 	mechanismArgs, _ := args.extState.MechanismArgs()
 	is.scout.SetMetadatum(ctx, "intercept_mechanism", mechanism)
@@ -694,7 +785,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	}()
 
 	// Submit the request
-	r, err := is.connectorClient.CreateIntercept(ctx, ir)
+	r, err := is.connectorServer.CreateIntercept(ctx, ir)
 	if err != nil {
 		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
@@ -704,7 +795,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			_ = is.DeactivateState(ctx)
 			return false, is.cmd.FlagError(errcat.User.New(r.InterceptInfo.Message))
 		}
-		return false, InterceptError(r)
+		return false, interceptMessage(r)
 	}
 
 	if args.agentName == "" {
@@ -725,7 +816,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 	if args.previewEnabled {
 		if args.previewSpec.Ingress == nil {
-			ingressInfo, err := is.connectorClient.ResolveIngressInfo(ctx, r.GetServiceProps())
+			ingressInfo, err := is.connectorServer.ResolveIngressInfo(ctx, r.GetServiceProps())
 			if err != nil {
 				return true, err
 			}
@@ -738,12 +829,21 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			}
 		}
 
-		intercept, err = AddPreviewDomain(ctx, is.scout,
-			clientUpdateInterceptFn(is.managerClient),
-			is.connInfo.SessionInfo,
-			args.name, // intercept name
-			args.previewSpec)
+		status, err := is.connectorServer.Status(ctx, nil)
 		if err != nil {
+			return true, err
+		}
+
+		intercept, err = is.managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+			Session: status.SessionInfo,
+			Name:    args.name,
+			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: args.previewSpec,
+			},
+		})
+		if err != nil {
+			is.scout.Report(ctx, "preview_domain_create_fail", scout.Entry{Key: "error", Value: err.Error()})
+			err = fmt.Errorf("creating preview domain: %w", err)
 			return true, err
 		}
 		if is.env == nil {
@@ -753,6 +853,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 
 		// MountPoint is not returned by the traffic-manager (of course, it has no idea).
 		intercept.ClientMountPoint = r.InterceptInfo.ClientMountPoint
+		is.scout.SetMetadatum(ctx, "preview_url", intercept.PreviewDomain)
 	} else {
 		intercept = r.InterceptInfo
 	}
@@ -777,7 +878,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	if doMount || err != nil {
 		volumeMountProblem = checkMountCapability(ctx)
 	}
-	fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+	fmt.Fprintln(is.cmd.OutOrStdout(), cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 
@@ -794,7 +895,7 @@ func removeIntercept(ctx context.Context, name string) error {
 			return err
 		}
 		if r.Error != common.InterceptError_UNSPECIFIED {
-			return InterceptError(r)
+			return interceptMessage(r)
 		}
 		return nil
 	})
@@ -809,22 +910,35 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
+func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, string, error) {
 	ourArgs := []string{
 		"run",
 		"--dns-search", "tel2-search",
 		"--env-file", envFile,
 	}
-	hasArg := func(s string) bool {
-		for _, arg := range args {
-			if s == arg {
-				return true
+	getArg := func(s string) (string, bool) {
+		for i, arg := range args {
+			if strings.Contains(arg, s) {
+				parts := strings.Split(arg, "=")
+				if len(parts) == 2 {
+					return parts[1], true
+				}
+				if i+1 < len(args) {
+					return parts[i+1], true
+				}
+				return "", true
 			}
 		}
-		return false
+		return "", false
 	}
-	if !hasArg("--name") {
-		ourArgs = append(ourArgs, "--name", fmt.Sprintf("intercept-%s-%d", is.args.name, is.localPort))
+
+	name, hasName := getArg("--name")
+	if hasName && name == "" {
+		return nil, "", errors.New("no value found for docker flag `--name`")
+	}
+	if !hasName {
+		name = fmt.Sprintf("intercept-%s-%d", is.args.name, is.localPort)
+		ourArgs = append(ourArgs, "--name", name)
 	}
 
 	if is.dockerPort != 0 {
@@ -840,7 +954,16 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	return proc.Start(ctx, nil, "docker", append(ourArgs, args...)...)
+	cmd := proc.CommandContext(ctx, "docker", append(ourArgs, args...)...)
+	cmd.DisableLogging = true
+	cmd.Stdout = is.cmd.OutOrStdout()
+	cmd.Stderr = is.cmd.ErrOrStderr()
+	cmd.Stdin = is.cmd.InOrStdin()
+	err := cmd.Start()
+	if err != nil {
+		return nil, "", err
+	}
+	return cmd, name, err
 }
 
 func (is *interceptState) writeEnvFile() error {
@@ -887,162 +1010,4 @@ func (is *interceptState) writeEnvJSON() error {
 		panic(err)
 	}
 	return os.WriteFile(is.args.envJSON, data, 0644)
-}
-
-var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
-
-const (
-	ingressDesc = `To create a preview URL, telepresence needs to know how requests enter
-	your cluster.  Please %s the ingress to use.`
-	ingressQ1 = `1/4: What's your ingress' IP address?
-     You may use an IP address or a DNS name (this is usually a
-     "service.namespace" DNS name).`
-	ingressQ2 = `2/4: What's your ingress' TCP port number?`
-	ingressQ3 = `3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?`
-	ingressQ4 = `4/4: If required by your ingress, specify a different hostname
-     (TLS-SNI, HTTP "Host" header) to be used in requests.`
-)
-
-func showPrompt(out io.Writer, question string, defaultValue any) {
-	if reflect.ValueOf(defaultValue).IsZero() {
-		fmt.Fprintf(out, "\n%s\n\n       [no default]: ", question)
-	} else {
-		fmt.Fprintf(out, "\n%s\n\n       [default: %v]: ", question, defaultValue)
-	}
-}
-
-func askForHost(question, cachedHost string, reader *bufio.Reader, out io.Writer) (string, error) {
-	for {
-		showPrompt(out, question, cachedHost)
-		reply, err := reader.ReadString('\n')
-		if err != nil {
-			return "", err
-		}
-		reply = strings.TrimSpace(reply)
-		if reply == "" {
-			if cachedHost == "" {
-				continue
-			}
-			return cachedHost, nil
-		}
-		if hostRx.MatchString(reply) {
-			return reply, nil
-		}
-		fmt.Fprintf(out,
-			"Address %q must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')\n",
-			reply)
-	}
-}
-
-func askForPortNumber(cachedPort int32, reader *bufio.Reader, out io.Writer) (int32, error) {
-	for {
-		showPrompt(out, ingressQ2, cachedPort)
-		reply, err := reader.ReadString('\n')
-		if err != nil {
-			return 0, err
-		}
-		reply = strings.TrimSpace(reply)
-		if reply == "" {
-			if cachedPort == 0 {
-				continue
-			}
-			return cachedPort, nil
-		}
-		port, err := strconv.Atoi(reply)
-		if err == nil && port > 0 {
-			return int32(port), nil
-		}
-		fmt.Fprintln(out, "port must be a positive integer")
-	}
-}
-
-func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool, error) {
-	yn := "n"
-	if cachedUseTLS {
-		yn = "y"
-	}
-	showPrompt(out, ingressQ3, yn)
-	for {
-		reply, err := reader.ReadString('\n')
-		if err != nil {
-			return false, err
-		}
-		switch strings.TrimSpace(reply) {
-		case "":
-			return cachedUseTLS, nil
-		case "n", "N":
-			return false, nil
-		case "y", "Y":
-			return true, nil
-		}
-		fmt.Fprintf(out, "       please answer 'y' or 'n'\n       [default: %v]: ", yn)
-	}
-}
-
-func selectIngress(
-	ctx context.Context,
-	in io.Reader,
-	out io.Writer,
-	connInfo *connector.ConnectInfo,
-	interceptName string,
-	interceptNamespace string,
-	ingressInfos []*manager.IngressInfo,
-) (*manager.IngressInfo, error) {
-	infos, err := cache.LoadIngressesFromUserCache(ctx)
-	if err != nil {
-		return nil, err
-	}
-	key := connInfo.ClusterServer + "/" + connInfo.ClusterContext
-	selectOrConfirm := "Confirm"
-	cachedIngressInfo := infos[key]
-	if cachedIngressInfo == nil {
-		iis := ingressInfos
-		if len(iis) > 0 {
-			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
-		} else {
-			selectOrConfirm = "Select" // Hard to confirm unless there's a default.
-			if interceptNamespace == "" {
-				interceptNamespace = "default"
-			}
-			cachedIngressInfo = &manager.IngressInfo{
-				// Default Settings
-				Host:   fmt.Sprintf("%s.%s", interceptName, interceptNamespace),
-				Port:   80,
-				UseTls: false,
-			}
-		}
-	}
-
-	reader := bufio.NewReader(in)
-
-	fmt.Fprintf(out, "\n"+ingressDesc+"\n", selectOrConfirm)
-	reply := &manager.IngressInfo{}
-	if reply.Host, err = askForHost(ingressQ1, cachedIngressInfo.Host, reader, out); err != nil {
-		return nil, err
-	}
-	if reply.Port, err = askForPortNumber(cachedIngressInfo.Port, reader, out); err != nil {
-		return nil, err
-	}
-	if reply.UseTls, err = askForUseTLS(cachedIngressInfo.UseTls, reader, out); err != nil {
-		return nil, err
-	}
-	if cachedIngressInfo.L5Host == "" {
-		cachedIngressInfo.L5Host = reply.Host
-	}
-	if reply.L5Host, err = askForHost(ingressQ4, cachedIngressInfo.L5Host, reader, out); err != nil {
-		return nil, err
-	}
-	fmt.Fprintln(out)
-
-	if !ingressInfoEqual(cachedIngressInfo, reply) {
-		infos[key] = reply
-		if err = cache.SaveIngressesToUserCache(ctx, infos); err != nil {
-			return nil, err
-		}
-	}
-	return reply, nil
-}
-
-func ingressInfoEqual(a, b *manager.IngressInfo) bool {
-	return a.Host == b.Host && a.L5Host == b.L5Host && a.Port == b.Port && a.UseTls == b.UseTls
 }
