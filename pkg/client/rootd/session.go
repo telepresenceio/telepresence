@@ -74,7 +74,7 @@ type session struct {
 	scout *scout.Reporter
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
-	dev *vif.Device
+	dev vif.Device
 
 	stack *stack.Stack
 
@@ -216,15 +216,9 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		return nil, err
 	}
 
-	dev, err := vif.OpenTun(c)
-	if err != nil {
-		return nil, err
-	}
-
 	s := &session{
 		cancel:            func() {},
 		scout:             scout,
-		dev:               dev,
 		handlers:          tunnel.NewPool(),
 		fragmentMap:       make(map[uint16][]*buffer.Data),
 		rndSource:         rand.NewSource(time.Now().UnixNano()),
@@ -235,6 +229,12 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
 		proxyCluster:      true,
 	}
+
+	s.dev, err = vif.OpenTun(c, &s.closing)
+	if err != nil {
+		return nil, err
+	}
+
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
 	return s, nil
 }
@@ -411,7 +411,7 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
-				s.stack, err = vif.NewStack(ctx, vif.NewEndpoint(ctx, s.dev, &s.closing), s.streamCreator())
+				s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator())
 				if err != nil {
 					dlog.Errorf(ctx, "NewStack: %v", err)
 					return

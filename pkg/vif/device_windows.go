@@ -19,16 +19,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
-// This device will require that wintun.dll is available to the loader.
+// This nativeDevice will require that wintun.dll is available to the loader.
 // See: https://www.wintun.net/ for more info.
-type Device struct {
+type nativeDevice struct {
 	tun.Device
 	name           string
 	dns            net.IP
-	interfaceIndex uint32
+	interfaceIndex int32
 }
 
-func openTun(ctx context.Context) (td *Device, err error) {
+func openTun(ctx context.Context) (td *nativeDevice, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = derror.PanicToError(r)
@@ -36,7 +36,7 @@ func openTun(ctx context.Context) (td *Device, err error) {
 		}
 	}()
 	interfaceName := "tel0"
-	td = &Device{}
+	td = &nativeDevice{}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
@@ -47,12 +47,12 @@ func openTun(ctx context.Context) (td *Device, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
 	}
-	td.interfaceIndex = iface.InterfaceIndex
+	td.interfaceIndex = int32(iface.InterfaceIndex)
 
 	return td, nil
 }
 
-func (t *Device) Close() error {
+func (t *nativeDevice) Close() error {
 	// The tun.NativeTun device has a closing mutex which is read locked during
 	// a call to Read(). The read lock prevents a call to Close() to proceed
 	// until Read() actually receives something. To resolve that "deadlock",
@@ -81,8 +81,12 @@ func (t *Device) Close() error {
 	return <-closeCh
 }
 
-func (t *Device) getLUID() winipcfg.LUID {
+func (t *nativeDevice) getLUID() winipcfg.LUID {
 	return winipcfg.LUID(t.Device.(*tun.NativeTun).LUID())
+}
+
+func (t *nativeDevice) index() int32 {
+	return t.interfaceIndex
 }
 
 func addrFromIP(ip net.IP) netip.Addr {
@@ -103,15 +107,15 @@ func prefixFromIPNet(subnet *net.IPNet) netip.Prefix {
 	return netip.PrefixFrom(addrFromIP(subnet.IP), ones)
 }
 
-func (t *Device) addSubnet(_ context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) addSubnet(_ context.Context, subnet *net.IPNet) error {
 	return t.getLUID().AddIPAddress(prefixFromIPNet(subnet))
 }
 
-func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error {
 	return t.getLUID().DeleteIPAddress(prefixFromIPNet(subnet))
 }
 
-func (t *Device) setDNS(ctx context.Context, server net.IP, domains []string) (err error) {
+func (t *nativeDevice) setDNS(ctx context.Context, server net.IP, domains []string) (err error) {
 	ipFamily := func(ip net.IP) winipcfg.AddressFamily {
 		f := winipcfg.AddressFamily(windows.AF_INET6)
 		if ip4 := ip.To4(); ip4 != nil {
@@ -168,14 +172,14 @@ $job | Receive-Job
 	return nil
 }
 
-func (t *Device) setMTU(mtu int) error {
+func (t *nativeDevice) setMTU(mtu int) error {
 	return errors.New("not implemented")
 }
 
-func (t *Device) readPacket(into *buffer.Data) (int, error) {
+func (t *nativeDevice) readPacket(into *buffer.Data) (int, error) {
 	return t.Device.Read(into.Raw(), 0)
 }
 
-func (t *Device) writePacket(from *buffer.Data, offset int) (int, error) {
+func (t *nativeDevice) writePacket(from *buffer.Data, offset int) (int, error) {
 	return t.Device.Write(from.Raw(), offset)
 }
