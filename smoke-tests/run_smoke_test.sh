@@ -622,6 +622,7 @@ finish_step
 ###############################################
 #### Step 7 - Verify login prompted        ####
 ###############################################
+yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-tpl.yaml > smoke-tests/license-values.yaml
 
 # Now we need to update the config for license workflow
 if [[ -n "$USE_CHART" ]]; then
@@ -799,8 +800,6 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     #### Step 16 - Verify License Workflow (helm)         ####
     ##########################################################
-    yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-tpl.yaml > smoke-tests/license-values.yaml
-
     # Now we need to update the config for license workflow
 
     # Need to uninstall in case the traffic agent webhook image has changed
