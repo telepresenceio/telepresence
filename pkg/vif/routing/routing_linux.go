@@ -163,3 +163,11 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 		LocalIP:   localIP,
 	}, nil
 }
+
+func (r *Route) addStatic(ctx context.Context) error {
+	return dexec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
+}
+
+func (r *Route) removeStatic(ctx context.Context) error {
+	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
+}

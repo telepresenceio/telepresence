@@ -17,7 +17,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 // This device will require that wintun.dll is available to the loader.
@@ -166,47 +165,6 @@ $job | Receive-Job
 		dlog.Errorf(ctx, "Failed to set NetworkAdapterConfiguration DNS Domain: %v. Will proceed, but namespace mapping might not be functional.", err)
 	}
 	t.dns = server
-	return nil
-}
-
-func maskToIP(mask net.IPMask) (ip net.IP) {
-	ip = make(net.IP, len(mask))
-	copy(ip[:], mask)
-	return ip
-}
-
-func (t *Device) addStaticRoute(ctx context.Context, route *routing.Route) error {
-	mask := maskToIP(route.RoutedNet.Mask)
-	cmd := proc.CommandContext(ctx,
-		"route",
-		"ADD",
-		route.RoutedNet.IP.String(),
-		"MASK",
-		mask.String(),
-		route.Gateway.String(),
-	)
-	cmd.DisableLogging = true
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to create route %s: %w", route, err)
-	}
-	if !strings.Contains(string(out), "OK!") {
-		return fmt.Errorf("failed to create route %s: %s", route, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-func (t *Device) removeStaticRoute(ctx context.Context, route *routing.Route) error {
-	cmd := proc.CommandContext(ctx,
-		"route",
-		"DELETE",
-		route.RoutedNet.IP.String(),
-	)
-	cmd.DisableLogging = true
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to delete route %s: %w", route, err)
-	}
 	return nil
 }
 

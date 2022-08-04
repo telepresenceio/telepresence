@@ -307,7 +307,7 @@ adding:
 				continue adding
 			}
 		}
-		if err := s.dev.AddStaticRoute(ctx, r); err != nil {
+		if err := r.AddStatic(ctx); err != nil {
 			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
@@ -319,7 +319,7 @@ removing:
 				continue removing
 			}
 		}
-		if err := s.dev.RemoveStaticRoute(ctx, c); err != nil {
+		if err := c.RemoveStatic(ctx); err != nil {
 			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
 		}
 	}
@@ -553,7 +553,7 @@ func (s *session) stop(c context.Context) {
 
 	cc = dcontext.WithoutCancel(c)
 	for _, np := range s.curStaticRoutes {
-		err := s.dev.RemoveStaticRoute(cc, np)
+		err := np.RemoveStatic(cc)
 		if err != nil {
 			dlog.Warnf(c, "error removing route %s: %v", np, err)
 		}
