@@ -13,20 +13,27 @@ import (
 )
 
 func main() {
-	if err := Main(os.Args[1]); err != nil {
+	var version string
+	if len(os.Args) > 2 {
+		version = os.Args[2]
+	}
+	if err := Main(os.Args[1], version); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: error: %v\n", os.Args[0], err)
 		os.Exit(1)
 	}
 }
 
-func Main(dstdir string) (err error) {
+func Main(dstdir, verStr string) (err error) {
 	maybeSetErr := func(_err error) {
 		if err == nil && _err != nil {
 			err = _err
 		}
 	}
 
-	verStr := strings.TrimPrefix(version.Version, "v")
+	if verStr == "" {
+		verStr = version.Version
+	}
+	verStr = strings.TrimPrefix(verStr, "v")
 
 	fh, err := os.OpenFile(filepath.Join(dstdir, "telepresence-"+verStr+".tgz"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
 	if err != nil {
@@ -36,7 +43,7 @@ func Main(dstdir string) (err error) {
 		maybeSetErr(fh.Close())
 	}()
 
-	if err := telcharts.WriteChart(fh, version.Version); err != nil {
+	if err := telcharts.WriteChart(fh, "v"+verStr); err != nil {
 		return err
 	}
 
