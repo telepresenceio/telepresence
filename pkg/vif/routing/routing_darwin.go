@@ -17,7 +17,7 @@ const findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0
 
 var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
 
-func GetRoutingTable(ctx context.Context) ([]Route, error) {
+func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	b, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 	if err != nil {
 		return nil, err
 	}
-	routes := []Route{}
+	routes := []*Route{}
 	for _, msg := range msgs {
 		rm := msg.(*route.RouteMessage)
 		if rm.Flags&unix.RTF_UP == 0 {
@@ -60,7 +60,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 			if !ok {
 				continue
 			}
-			routes = append(routes, Route{
+			routes = append(routes, &Route{
 				Interface: iface,
 				Gateway:   net.IP(gw.IP[:]),
 				LocalIP:   localIP,
@@ -93,7 +93,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 				}
 				i++
 			}
-			routes = append(routes, Route{
+			routes = append(routes, &Route{
 				Interface: iface,
 				Gateway:   net.IP(gw.IP[:]),
 				LocalIP:   localIP,
@@ -107,37 +107,37 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
+func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	cmd := dexec.CommandContext(ctx, "route", "-n", "get", ip.String())
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to run 'route -n get %s': %w", ip, err)
+		return nil, fmt.Errorf("unable to run 'route -n get %s': %w", ip, err)
 	}
 	match := findInterfaceRe.FindStringSubmatch(string(out))
 	// This might fail because no "gateway" is listed. The problem is that without a gateway IP we can't
 	// route to the network anyway, so we should just return an error.
 	if match == nil {
-		return Route{}, fmt.Errorf("%s did not match output of route:\n%s", findInterfaceRegex, out)
+		return nil, fmt.Errorf("%s did not match output of route:\n%s", findInterfaceRegex, out)
 	}
 	ifaceName := match[2]
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to get interface object for interface %s: %w", ifaceName, err)
+		return nil, fmt.Errorf("unable to get interface object for interface %s: %w", ifaceName, err)
 	}
 	var gatewayIp net.IP
 	if gateway := match[1]; gateway != "" {
 		gatewayIp = iputil.Parse(gateway)
 		if gatewayIp == nil {
-			return Route{}, fmt.Errorf("unable to parse gateway %s", gateway)
+			return nil, fmt.Errorf("unable to parse gateway %s", gateway)
 		}
 	}
 	localIP, err := interfaceLocalIP(iface, ip.To4() != nil)
 	if err != nil {
-		return Route{}, err
+		return nil, err
 	}
-	return Route{
+	return &Route{
 		RoutedNet: routedNet,
 		LocalIP:   localIP,
 		Interface: iface,

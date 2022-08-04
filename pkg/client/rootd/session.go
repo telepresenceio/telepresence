@@ -110,11 +110,11 @@ type session struct {
 	alsoProxySubnets []*net.IPNet
 
 	// Subnets configured not to be proxied
-	neverProxySubnets []routing.Route
+	neverProxySubnets []*routing.Route
 	// Subnets that the router is currently configured with. Managed, and only used in
 	// the refreshSubnets() method.
 	curSubnets      []*net.IPNet
-	curStaticRoutes []routing.Route
+	curStaticRoutes []*routing.Route
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -190,8 +190,8 @@ func convertAlsoProxySubnets(c context.Context, ms []*manager.IPNet) []*net.IPNe
 	return ns
 }
 
-func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []routing.Route {
-	rs := make([]routing.Route, 0, len(ms))
+func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []*routing.Route {
+	rs := make([]*routing.Route, 0, len(ms))
 	for _, m := range ms {
 		n := iputil.IPNetFromRPC(m)
 		r, err := routing.GetRoute(c, n)
@@ -287,7 +287,7 @@ func (s *session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 }
 
 func (s *session) reconcileStaticRoutes(ctx context.Context) error {
-	desired := []routing.Route{}
+	desired := []*routing.Route{}
 
 	// We're not going to add static routes unless they're actually needed
 	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
