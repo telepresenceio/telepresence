@@ -19,8 +19,6 @@
   all that data and place it into a gzip file, and `telepresence upload-traces` is
   a new command that will push the gzipped data into an OTLP collector.
 
-### 2.6.9 (TBD)
-
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.
 
 - Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
