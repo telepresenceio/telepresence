@@ -100,11 +100,11 @@ func (t *Device) removeSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return dexec.CommandContext(ctx, "ip", "a", "del", subnet.String(), "dev", t.name).Run()
 }
 
-func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
+func (t *Device) addStaticRoute(ctx context.Context, route *routing.Route) error {
 	return dexec.CommandContext(ctx, "ip", "route", "add", route.RoutedNet.String(), "via", route.Gateway.String(), "dev", route.Interface.Name).Run()
 }
 
-func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
+func (t *Device) removeStaticRoute(ctx context.Context, route *routing.Route) error {
 	return dexec.CommandContext(ctx, "ip", "route", "del", route.RoutedNet.String(), "via", route.Gateway.String(), "dev", route.Interface.Name).Run()
 }
 

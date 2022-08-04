@@ -86,13 +86,13 @@ func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
 	})
 }
 
-func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
+func (t *Device) addStaticRoute(ctx context.Context, route *routing.Route) error {
 	return withRouteSocket(func(s int) error {
 		return t.routeAdd(s, 1, route.RoutedNet, route.Gateway)
 	})
 }
 
-func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
+func (t *Device) removeStaticRoute(ctx context.Context, route *routing.Route) error {
 	return withRouteSocket(func(s int) error {
 		return t.routeClear(s, 1, route.RoutedNet, route.Gateway)
 	})

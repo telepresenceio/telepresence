@@ -15,24 +15,24 @@ type Route struct {
 	Default   bool
 }
 
-func DefaultRoute(ctx context.Context) (Route, error) {
+func DefaultRoute(ctx context.Context) (*Route, error) {
 	rt, err := GetRoutingTable(ctx)
 	if err != nil {
-		return Route{}, err
+		return nil, err
 	}
 	for _, r := range rt {
 		if r.Default {
 			return r, nil
 		}
 	}
-	return Route{}, errors.New("unable to find a default route")
+	return nil, errors.New("unable to find a default route")
 }
 
 func (r *Route) Routes(ip net.IP) bool {
 	return r.RoutedNet.Contains(ip)
 }
 
-func (r Route) String() string {
+func (r *Route) String() string {
 	if r.Default {
 		return fmt.Sprintf("default via %s dev %s, gw %s", r.LocalIP, r.Interface.Name, r.Gateway)
 	}

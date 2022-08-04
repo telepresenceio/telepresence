@@ -175,7 +175,7 @@ func maskToIP(mask net.IPMask) (ip net.IP) {
 	return ip
 }
 
-func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
+func (t *Device) addStaticRoute(ctx context.Context, route *routing.Route) error {
 	mask := maskToIP(route.RoutedNet.Mask)
 	cmd := proc.CommandContext(ctx,
 		"route",
@@ -196,7 +196,7 @@ func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error 
 	return nil
 }
 
-func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
+func (t *Device) removeStaticRoute(ctx context.Context, route *routing.Route) error {
 	cmd := proc.CommandContext(ctx,
 		"route",
 		"DELETE",
