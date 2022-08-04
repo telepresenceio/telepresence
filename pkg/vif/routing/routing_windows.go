@@ -114,3 +114,44 @@ $obj.InterfaceIndex[0]
 		RoutedNet: routedNet,
 	}, nil
 }
+
+func maskToIP(mask net.IPMask) (ip net.IP) {
+	ip = make(net.IP, len(mask))
+	copy(ip[:], mask)
+	return ip
+}
+
+func (r *Route) addStatic(ctx context.Context) error {
+	mask := maskToIP(r.RoutedNet.Mask)
+	cmd := proc.CommandContext(ctx,
+		"route",
+		"ADD",
+		r.RoutedNet.IP.String(),
+		"MASK",
+		mask.String(),
+		r.Gateway.String(),
+	)
+	cmd.DisableLogging = true
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to create route %s: %w", r, err)
+	}
+	if !strings.Contains(string(out), "OK!") {
+		return fmt.Errorf("failed to create route %s: %s", r, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (r *Route) removeStatic(ctx context.Context) error {
+	cmd := proc.CommandContext(ctx,
+		"route",
+		"DELETE",
+		r.RoutedNet.IP.String(),
+	)
+	cmd.DisableLogging = true
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to delete route %s: %w", r, err)
+	}
+	return nil
+}

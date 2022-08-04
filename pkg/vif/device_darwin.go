@@ -69,9 +69,7 @@ func (t *Device) addSubnet(_ context.Context, subnet *net.IPNet) error {
 	if err := t.setAddr(subnet, to); err != nil {
 		return err
 	}
-	return withRouteSocket(func(s int) error {
-		return t.routeAdd(s, 1, subnet, to)
-	})
+	return routing.Add(1, subnet, to)
 }
 
 func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
@@ -81,21 +79,7 @@ func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
 	if err := t.removeAddr(subnet, to); err != nil {
 		return err
 	}
-	return withRouteSocket(func(s int) error {
-		return t.routeClear(s, 1, subnet, to)
-	})
-}
-
-func (t *Device) addStaticRoute(ctx context.Context, route *routing.Route) error {
-	return withRouteSocket(func(s int) error {
-		return t.routeAdd(s, 1, route.RoutedNet, route.Gateway)
-	})
-}
-
-func (t *Device) removeStaticRoute(ctx context.Context, route *routing.Route) error {
-	return withRouteSocket(func(s int) error {
-		return t.routeClear(s, 1, route.RoutedNet, route.Gateway)
-	})
+	return routing.Clear(1, subnet, to)
 }
 
 func (t *Device) setMTU(mtu int) error {
