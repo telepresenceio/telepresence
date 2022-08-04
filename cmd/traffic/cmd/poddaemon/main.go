@@ -94,13 +94,13 @@ func Main(ctx context.Context, argStrs ...string) error {
 	})
 
 	cmd.Flags().StringVar(&args.WorkloadKind, "workload-kind", "Deployment",
-		"TODO")
+		"Target workload kind to intercept (Deployment, ReplicaSet)")
 	cmd.Flags().StringVar(&args.WorkloadName, "workload-name", "",
-		"TODO")
+		"Name of workload to intercept")
 	cmd.Flags().StringVar(&args.WorkloadNamespace, "workload-namespace", PodNamespace(),
-		"TODO")
+		"Namespace of workload to intercept")
 	cmd.Flags().Int32Var(&args.Port, "port", 8080,
-		"TODO")
+		"Workload port to forward to")
 
 	args.PreviewSpec.Ingress = &rpc_manager.IngressInfo{}
 	cmd.Flags().StringVar(&args.PreviewSpec.Ingress.Host, "ingress-host", "",
@@ -113,7 +113,7 @@ func Main(ctx context.Context, argStrs ...string) error {
 		"Hostname to put in requests (TLS-SNI and the HTTP \"Host\" header) (default is to use the L3 hostname)")
 
 	cmd.Flags().StringVar(&args.PreviewSpec.PullRequestUrl, "pull-request", "",
-		"TODO")
+		"GitHub Pull Request URL to link and notify when generating a preview domain for this intercept")
 	cli.AddPreviewFlags("preview-url-", cmd.Flags(), &args.PreviewSpec)
 
 	cmd.SetArgs(argStrs)
