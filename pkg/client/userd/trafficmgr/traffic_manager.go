@@ -351,7 +351,9 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	return cluster, nil
 }
 
-func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
+func EnsureManager(ctx context.Context, req *rpc.InstallRequest, sr *scout.Reporter) error {
+	sr.Report(ctx, "helm_install", scout.Entry{Key: "request", Value: req})
+
 	// seg guard
 	cr := req.GetConnectRequest()
 	if cr == nil {
@@ -363,6 +365,8 @@ func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
 	if err != nil {
 		return err
 	}
+	ctx = cluster.WithK8sInterface(ctx)
+	sr.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
 
 	ti, err := NewTrafficManagerInstaller(cluster)
 	if err != nil {
@@ -370,8 +374,14 @@ func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
 	}
 
 	dlog.Debug(ctx, "ensuring that traffic-manager exists")
-	c := cluster.WithK8sInterface(ctx)
-	return ti.EnsureManager(c, req)
+	err = ti.EnsureManager(ctx, req)
+	if err != nil {
+		sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
+		return err
+	}
+
+	sr.Report(ctx, "helm_install_success")
+	return nil
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
