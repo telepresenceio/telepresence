@@ -26,7 +26,11 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 		if err != nil {
 			return fmt.Errorf("unable to call ListCommands: %w", err)
 		}
-		if groups, err = cliutil.RPCToCommands(remote, runRemote); err != nil {
+		var funcBundle = cliutil.CommandFuncBundle{
+			RunE:              runRemote,
+			ValidArgsFunction: validArgsFuncRemote,
+		}
+		if groups, err = cliutil.RPCToCommands(remote, funcBundle); err != nil {
 			groups = commands.GetCommandsForLocal(ctx, err)
 		}
 		userDaemonRunning = true
@@ -39,6 +43,31 @@ func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err e
 		groups = commands.GetCommandsForLocal(ctx, err)
 	}
 	return groups, nil
+}
+
+func validArgsFuncRemote(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	var (
+		resp *connector.ValidArgsForCommandResponse
+		err  error
+	)
+
+	err = cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
+		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+			resp, err = connectorClient.ValidArgsForCommand(ctx, &connector.ValidArgsForCommandRequest{
+				CmdName:    cmd.Name(),
+				OsArgs:     args,
+				ToComplete: toComplete,
+			})
+
+			return err
+		})
+	})
+
+	if err != nil {
+		return []string{}, 0
+	}
+
+	return resp.Completions, cobra.ShellCompDirective(resp.ShellCompDirective)
 }
 
 func runRemote(cmd *cobra.Command, args []string) error {

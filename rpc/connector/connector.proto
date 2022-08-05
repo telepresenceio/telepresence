@@ -84,6 +84,9 @@ service Connector {
   // RunCommand executes a CLI command.
   rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
 
+  // ValidArgsForCommand handles autocompletion
+  rpc ValidArgsForCommand(ValidArgsForCommandRequest) returns (ValidArgsForCommandResponse);
+
   // ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
   // the cloud for default ingress values
   rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest)
@@ -125,6 +128,17 @@ message CommandGroups {
 message RunCommandRequest {
   repeated string os_args = 1;
   string cwd = 2;
+}
+
+message ValidArgsForCommandRequest {
+  string cmd_name = 1;
+  repeated string os_args = 2;
+  string to_complete = 3;
+}
+
+message ValidArgsForCommandResponse {
+  repeated string completions = 1;
+  int32 shell_comp_directive = 2;
 }
 
 message Interceptor {

@@ -63,6 +63,17 @@ func GetCommandsForLocal(ctx context.Context, err error) cliutil.CommandGroups {
 	return groups
 }
 
+func GetCommandByName(ctx context.Context, name string) *cobra.Command {
+	for _, cmd := range commands() {
+		if cmd.cobraCommand(ctx).Name() == name {
+			cmd.init(ctx)
+			return cmd.cobraCommand(ctx)
+		}
+	}
+
+	return nil
+}
+
 type sessKey struct{}
 
 func WithSession(ctx context.Context, s trafficmgr.Session) context.Context {

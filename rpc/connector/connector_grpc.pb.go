@@ -76,6 +76,8 @@ type ConnectorClient interface {
 	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
+	// ValidArgsForCommand handles autocompletion
+	ValidArgsForCommand(ctx context.Context, in *ValidArgsForCommandRequest, opts ...grpc.CallOption) (*ValidArgsForCommandResponse, error)
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error)
@@ -341,6 +343,15 @@ func (c *connectorClient) RunCommand(ctx context.Context, in *RunCommandRequest,
 	return out, nil
 }
 
+func (c *connectorClient) ValidArgsForCommand(ctx context.Context, in *ValidArgsForCommandRequest, opts ...grpc.CallOption) (*ValidArgsForCommandResponse, error) {
+	out := new(ValidArgsForCommandResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ValidArgsForCommand", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorClient) ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error) {
 	out := new(userdaemon.IngressInfoResponse)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ResolveIngressInfo", in, out, opts...)
@@ -431,6 +442,8 @@ type ConnectorServer interface {
 	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
 	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
+	// ValidArgsForCommand handles autocompletion
+	ValidArgsForCommand(context.Context, *ValidArgsForCommandRequest) (*ValidArgsForCommandResponse, error)
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
 	// the cloud for default ingress values
 	ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error)
@@ -514,6 +527,9 @@ func (UnimplementedConnectorServer) ListCommands(context.Context, *emptypb.Empty
 }
 func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
+}
+func (UnimplementedConnectorServer) ValidArgsForCommand(context.Context, *ValidArgsForCommandRequest) (*ValidArgsForCommandResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidArgsForCommand not implemented")
 }
 func (UnimplementedConnectorServer) ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
@@ -942,6 +958,24 @@ func _Connector_RunCommand_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_ValidArgsForCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidArgsForCommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ValidArgsForCommand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/ValidArgsForCommand",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ValidArgsForCommand(ctx, req.(*ValidArgsForCommandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Connector_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(userdaemon.IngressInfoRequest)
 	if err := dec(in); err != nil {
@@ -1100,6 +1134,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RunCommand",
 			Handler:    _Connector_RunCommand_Handler,
+		},
+		{
+			MethodName: "ValidArgsForCommand",
+			Handler:    _Connector_ValidArgsForCommand_Handler,
 		},
 		{
 			MethodName: "ResolveIngressInfo",

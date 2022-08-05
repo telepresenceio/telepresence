@@ -133,6 +133,9 @@ func (c *interceptCommand) init(ctx context.Context) {
 
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
 	c.command.PostRunE = cliutil.RaiseCloudMessage
+	c.command.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"hello", "hi"}, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+	}
 	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
 		if c.extErr != nil {
 			return c.extErr

@@ -600,3 +600,25 @@ func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.In
 	})
 	return result, nil
 }
+
+func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
+	var (
+		name = req.GetCmdName()
+		cmd  = commands.GetCommandByName(ctx, name)
+		resp rpc.ValidArgsForCommandResponse
+	)
+
+	if cmd == nil {
+		return nil, fmt.Errorf("command %s not found", name)
+	}
+
+	var validArgsFunc = cmd.ValidArgsFunction
+	if validArgsFunc == nil {
+		return &resp, nil
+	}
+
+	var shellCompDir cobra.ShellCompDirective
+	resp.Completions, shellCompDir = validArgsFunc(cmd, req.OsArgs, req.ToComplete)
+	resp.ShellCompDirective = int32(shellCompDir)
+	return &resp, nil
+}
