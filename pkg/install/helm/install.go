@@ -215,7 +215,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	for _, path := range req.ValuePaths {
 		vals, err := chartutil.ReadValuesFile(path)
 		if err != nil {
-			return fmt.Errorf("--values path %q not readable: %v", vals, err)
+			return fmt.Errorf("--values path %q not readable: %v", path, err)
 		}
 
 		values = chartutil.CoalesceTables(vals.AsMap(), values)
