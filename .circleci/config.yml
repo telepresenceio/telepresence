@@ -135,6 +135,7 @@ jobs:
     executor: vm-linux
     steps:
     - checkout
+    - install-go
     - run: |
         [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
 
