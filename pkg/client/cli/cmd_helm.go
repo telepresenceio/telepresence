@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 func helmCommand() *cobra.Command {
@@ -43,7 +44,7 @@ func installCommand() *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.BoolVarP(&ia.upgrade, "upgrade", "u", false, "replace the traffic mangaer if it already exists")
+	flags.BoolVarP(&ia.upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 
 	// copied from connect cmd
@@ -109,8 +110,13 @@ func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			if resp.ErrorText != "" {
-				return fmt.Errorf(resp.ErrorText)
+				ec := errcat.Unknown
+				if resp.ErrorCategory != 0 {
+					ec = errcat.Category(resp.ErrorCategory)
+				}
+				return ec.New(resp.ErrorText)
 			}
+
 			fmt.Fprint(cmd.OutOrStdout(), "\nTraffic Manager installed successfully\n")
 			return nil
 		})

@@ -216,7 +216,7 @@ func NewInfo(ctx context.Context) Info {
 	oi.DnsConfig = &rpc.DNSConfig{}
 	oi.DnsConfig.AlsoProxySubnets, err = env.GetAlsoProxySubnets()
 	if err != nil {
-		dlog.Warnf(ctx, "AlsoProxySubnets not parsed: %v", err)
+		dlog.Errorf(ctx, "AlsoProxySubnets not parsed: %v", err)
 	}
 	for _, subnet := range oi.DnsConfig.AlsoProxySubnets {
 		dlog.Infof(ctx, "Using AlsoProxySubnet: %+v", subnet)
@@ -224,7 +224,7 @@ func NewInfo(ctx context.Context) Info {
 
 	oi.DnsConfig.NeverProxySubnets, err = env.GetNeverProxySubnets()
 	if err != nil {
-		dlog.Warnf(ctx, "NeverProxySubnets not parsed: %v", err)
+		dlog.Errorf(ctx, "NeverProxySubnets not parsed: %v", err)
 	}
 	for _, subnet := range oi.DnsConfig.NeverProxySubnets {
 		dlog.Infof(ctx, "Using NeverProxySubnet: %+v", subnet)

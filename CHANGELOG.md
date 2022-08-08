@@ -3,12 +3,11 @@
 ### 2.7.0 (TBD)
 
 - Feature: `telepresence intercept` has gained a
-  `--preview-url-add-request-headers` flag (and `telepresence preview
-  create` a `--add-request-headers` flag) that can be used to inject
+  `--preview-url-add-request-headers` flag (and `telepresence preview create` a `--add-request-headers` flag) that can be used to inject
   request headers in to every request made through the preview URL.
 
 - Feature: The Docker image now contains a new program in addition to
-  the existing traffic-manager and traffic-agent: the pod-daemon.  The
+  the existing traffic-manager and traffic-agent: the pod-daemon. The
   pod-daemon is a trimmed-down version of the user-daemon that is
   designed to run as a sidecar in a Pod, enabling CI systems to create
   preview deploys.
@@ -20,6 +19,12 @@
   a new command that will push the gzipped data into an OTLP collector.
 
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.
+
+- Change: The traffic manager is no longer automatically installed into the cluster. Connecting or creating an intercept in a cluster without a traffic manager will return an error.
+
+- Feature: A new telepresence helm command was added to provide an easy way to install, upgrade, or uninstall the telepresence traffic-manager.
+
+- Change: The command `telepresence uninstall` has been moved to `telepresence helm uninstall`.
 
 - Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
 
