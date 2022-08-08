@@ -210,7 +210,7 @@ func NewInfo(ctx context.Context) Info {
 
 	oi.ManagerPodIp = iputil.Parse(env.PodIP)
 	if oi.ManagerPodIp == nil {
-		dlog.Errorf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
+		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
 	}
 
 	oi.DnsConfig = &rpc.DNSConfig{}
