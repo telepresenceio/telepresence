@@ -13,7 +13,7 @@ echo "$TOP_DIR"
 
 tmpdir=$(mktemp -d)
 
-go run "$TOP_DIR/packaging/gen_chart.go" "$tmpdir"
+go run "$TOP_DIR/packaging/gen_chart.go" "$tmpdir" "${TELEPRESENCE_VERSION}"
 
 package_files=("$tmpdir"/telepresence-*.tgz)
 package_file=${package_files[0]}
@@ -30,7 +30,7 @@ elif [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
     exit 1
 fi
 
-echo "Checking that chart hasn't already been pushed"
+echo "Checking that chart hasn't already been pushed by looking in ${bucket} / ${prefix}/${package_file##*/}"
 # We don't need the whole object, we just need the metadata
 # to see if it exists or not, so this is better than requesting
 # the whole tar file.
