@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.7.0 (TBD)
+### 2.7.0 (August 8, 2022)
 
 - Feature: `telepresence intercept` has gained a
   `--preview-url-add-request-headers` flag (and `telepresence preview create` a `--add-request-headers` flag) that can be used to inject
