@@ -22,7 +22,7 @@
 
 - Change: The traffic manager is no longer automatically installed into the cluster. Connecting or creating an intercept in a cluster without a traffic manager will return an error.
 
-- Change: The traffic manager can be installed via `telepresence helm install`.
+- Feature: A new telepresence helm command was added to provide an easy way to install, upgrade, or uninstall the telepresence traffic-manager.
 
 - Change: The command `telepresence uninstall` has been moved to `telepresence helm uninstall`.
 
