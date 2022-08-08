@@ -599,6 +599,7 @@ func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.In
 		if err != nil {
 			sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
 			result.ErrorText = err.Error()
+			result.ErrorCategory = int32(errcat.GetCategory(err))
 		} else {
 			sr.Report(ctx, "helm_install_success")
 		}
