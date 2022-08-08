@@ -594,14 +594,13 @@ func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.In
 	result := &rpc.InstallResult{}
 	s.logCall(ctx, "Install", func(c context.Context) {
 		sr := s.scout
-		sr.Report(ctx, "helm_install", scout.Entry{Key: "upgrade", Value: req.Upgrade})
 		err := trafficmgr.EnsureManager(c, req)
 		if err != nil {
-			sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
+			sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Upgrade})
 			result.ErrorText = err.Error()
 			result.ErrorCategory = int32(errcat.GetCategory(err))
 		} else {
-			sr.Report(ctx, "helm_install_success")
+			sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Upgrade})
 		}
 	})
 	return result, nil
