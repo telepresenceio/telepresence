@@ -34,4 +34,4 @@ The following metrics are collected:
 | `pro_connector_upgrade_success`       | The upgrade to the pro connector succeeded. Includes an `first_install` boolean trait.                                                               |
 | `pro_connector_upgrade_fail`          | The upgrade to the pro connector failed. Includes an `error` trait describing the failure and a `first_install` boolean trait.                       |
 | `helm_install_success`                | helm install success, contains key: "upgrade", value: bool                                                                                           |
-| `helm_install_failure`                | helm install failure, contains key: "upgrade", value: bool                                                                                           |
+| `helm_install_failure`                | helm install failure, contains key: "upgrade", value: bool, contains key: "error", value: string                                                     |
