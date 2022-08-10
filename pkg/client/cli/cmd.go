@@ -8,11 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"google.golang.org/grpc"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -215,33 +212,4 @@ func initGlobalFlagGroups() {
 			return flags
 		}(),
 	}}
-}
-
-func getInterceptableNames(ctx context.Context, cs *connectorState) ([]string, error) {
-	var namespace = "default"
-	cfg := client.GetConfig(ctx)
-	maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. List can be quit long.
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			if mz > maxRecSize {
-				maxRecSize = mz
-			}
-		}
-	}
-
-	req := connector.ListRequest{
-		Filter:    connector.ListRequest_INTERCEPTABLE,
-		Namespace: namespace,
-	}
-	r, err := cs.userD.List(ctx, &req, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
-	if err != nil {
-		return nil, err
-	}
-
-	list := make([]string, len(r.Workloads))
-	for idx, w := range r.Workloads {
-		list[idx] = w.Name
-	}
-
-	return list, nil
 }
