@@ -78,7 +78,7 @@ type Session interface {
 	ClearIntercepts(context.Context) error
 	RemoveIntercept(context.Context, string) error
 	Run(context.Context) error
-	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.UninstallResult, error)
+	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.Result, error)
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
 	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WithK8sInterface(context.Context) context.Context
@@ -110,7 +110,7 @@ type apiMatcher struct {
 }
 
 type TrafficManager struct {
-	*installer // installer is also a k8sCluster
+	*k8s.Cluster
 
 	// local information
 	installID   string // telepresence's install ID
@@ -351,11 +351,10 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	return cluster, nil
 }
 
-func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
-	// seg guard
+func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
 	cr := req.GetConnectRequest()
 	if cr == nil {
-		dlog.Info(ctx, "Connect_request in install_request was nil, using defaults")
+		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
 		cr = &rpc.ConnectRequest{}
 	}
 
@@ -364,14 +363,25 @@ func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
 		return err
 	}
 
-	ti, err := NewTrafficManagerInstaller(cluster)
+	return helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false)
+}
+
+func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
+	// seg guard
+	cr := req.GetConnectRequest()
+	if cr == nil {
+		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
+		cr = &rpc.ConnectRequest{}
+	}
+
+	cluster, err := connectCluster(ctx, cr)
 	if err != nil {
 		return err
 	}
 
 	dlog.Debug(ctx, "ensuring that traffic-manager exists")
 	c := cluster.WithK8sInterface(ctx)
-	return ti.EnsureManager(c, req)
+	return helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
@@ -396,15 +406,14 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		dlog.Errorf(c, "unable to get APIKey: %v", err)
 	}
 
-	ti, err := NewTrafficManagerInstaller(cluster)
-	if err != nil {
-		return nil, stacktrace.Wrap(err, "new installer")
+	dlog.Debug(c, "checking that traffic-manager exists")
+	existing, _, isManagerErr := helm.IsTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace())
+	if isManagerErr == nil && existing == nil {
+		return nil, errcat.User.New("traffic manager not found, if it is not installed, please run 'telepresence helm install'")
 	}
 
-	dlog.Debug(c, "checking that traffic-manager exists")
-	isManagerErr := ti.IsManager(c)
 	if isManagerErr != nil {
-		dlog.Error(c, "failed to find traffic-manager")
+		dlog.Infof(c, "unable to look for existing helm release: %v. Assuming it's there and continuing...", isManagerErr)
 	}
 
 	dlog.Debug(c, "creating port-forward")
@@ -498,7 +507,7 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 	}
 
 	return &TrafficManager{
-		installer:   ti.(*installer),
+		Cluster:     cluster,
 		installID:   installID,
 		userAndHost: userAndHost,
 		getCloudAPIKey: func(ctx context.Context, desc string, autoLogin bool) (string, error) {
@@ -922,8 +931,8 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
-	result := &rpc.UninstallResult{}
+func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
+	result := &rpc.Result{}
 	agents := tm.getCurrentAgents()
 
 	// Since workloads can have more than one replica, we get a slice of agents
@@ -957,18 +966,12 @@ func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRe
 		}
 		agents = selectedAgents
 		fallthrough
-	case rpc.UninstallRequest_ALL_AGENTS:
+	default:
 		if len(agents) > 0 {
-			if err := tm.RemoveManagerAndAgents(c, true, agents); err != nil {
+			if err := legacyRemoveAgents(c, agents); err != nil {
 				result.ErrorText = err.Error()
 				result.ErrorCategory = int32(errcat.GetCategory(err))
 			}
-		}
-	default:
-		// Cancel all communication with the manager
-		if err := tm.RemoveManagerAndAgents(c, false, agents); err != nil {
-			result.ErrorText = err.Error()
-			result.ErrorCategory = int32(errcat.GetCategory(err))
 		}
 	}
 	return result, nil
@@ -980,29 +983,19 @@ func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRe
 // a `helm uninstall traffic-manager`.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
-func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
 	if tm.managerVersion.LT(firstAgentConfigMapVersion) {
 		// fall back traffic-manager behaviour prior to 2.6
 		return tm.legacyUninstall(ctx, ur)
 	}
 
-	result := func(err error) (*rpc.UninstallResult, error) {
-		r := &rpc.UninstallResult{}
+	result := func(err error) (*rpc.Result, error) {
+		r := &rpc.Result{}
 		if err != nil {
 			r.ErrorText = err.Error()
 			r.ErrorCategory = int32(errcat.GetCategory(err))
 		}
 		return r, nil
-	}
-
-	if ur.UninstallType == rpc.UninstallRequest_EVERYTHING {
-		_ = tm.ClearIntercepts(ctx)
-		// Uninstalling using helm chart will roll out all affected pods and remove their respective traffic-agent. This
-		// of course, given that the client has permissions to do that, and the chart is owned by the client.
-		if err := helm.DeleteTrafficManager(ctx, tm.ConfigFlags, tm.GetManagerNamespace(), true); err != nil {
-			return result(errcat.User.New(err))
-		}
-		return result(nil)
 	}
 
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()

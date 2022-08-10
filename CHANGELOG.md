@@ -1,5 +1,12 @@
 # Changelog
 
+### 2.7.1 (TBD)
+
+- Change: The command `telepresence uninstall` has been restored, but the `--everything` flag is now deprecated.
+
+- Change:`telepresence helm uninstall` will only uninstall the traffic-manager and no longer accepts the `--everything`, `--agent`,
+  or `--all-agents` flags.
+
 ### 2.7.0 (August 8, 2022)
 
 - Feature: `telepresence intercept` has gained a

@@ -65,7 +65,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 				// Switch to default user and uninstall the agent
 				itest.TelepresenceQuitOk(ctx)
 				dfltCtx := itest.WithUser(ctx, "default")
-				itest.TelepresenceOk(dfltCtx, "helm", "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
+				itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
 				itest.TelepresenceQuitOk(dfltCtx)
 				itest.TelepresenceOk(ctx, "connect")
 

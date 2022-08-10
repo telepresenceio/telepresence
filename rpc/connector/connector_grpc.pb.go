@@ -48,11 +48,11 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
-	// Installs traffic-manager in the cluster.
-	Install(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (*InstallResult, error)
-	// Uninstalls traffic-agents and traffic-manager from the cluster.
+	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
+	Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*Result, error)
+	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
-	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
+	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*Result, error)
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
@@ -160,17 +160,17 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 	return out, nil
 }
 
-func (c *connectorClient) Install(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (*InstallResult, error) {
-	out := new(InstallResult)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Install", in, out, opts...)
+func (c *connectorClient) Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Helm", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error) {
-	out := new(UninstallResult)
+func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Uninstall", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -403,11 +403,11 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
-	// Installs traffic-manager in the cluster.
-	Install(context.Context, *InstallRequest) (*InstallResult, error)
-	// Uninstalls traffic-agents and traffic-manager from the cluster.
+	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
+	Helm(context.Context, *HelmRequest) (*Result, error)
+	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
-	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
+	Uninstall(context.Context, *UninstallRequest) (*Result, error)
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
@@ -470,10 +470,10 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
-func (UnimplementedConnectorServer) Install(context.Context, *InstallRequest) (*InstallResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Install not implemented")
+func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*Result, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Helm not implemented")
 }
-func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error) {
+func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
@@ -666,20 +666,20 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_Install_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InstallRequest)
+func _Connector_Helm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HelmRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServer).Install(ctx, in)
+		return srv.(ConnectorServer).Helm(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/Install",
+		FullMethod: "/telepresence.connector.Connector/Helm",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Install(ctx, req.(*InstallRequest))
+		return srv.(ConnectorServer).Helm(ctx, req.(*HelmRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1050,8 +1050,8 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_RemoveIntercept_Handler,
 		},
 		{
-			MethodName: "Install",
-			Handler:    _Connector_Install_Handler,
+			MethodName: "Helm",
+			Handler:    _Connector_Helm_Handler,
 		},
 		{
 			MethodName: "Uninstall",

@@ -38,7 +38,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	}, 30*time.Second, 3*time.Second)
 
 	// The telepresence-test-developer will not be able to uninstall everything
-	stdout = itest.TelepresenceOk(ctx, "helm", "uninstall", "--everything")
+	stdout = itest.TelepresenceOk(ctx, "helm", "uninstall")
 	itest.AssertQuitOutput(ctx, stdout)
 
 	// Double check webhook agent is uninstalled

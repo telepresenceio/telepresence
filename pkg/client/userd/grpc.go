@@ -324,7 +324,7 @@ func (s *Service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Conne
 	})
 }
 
-func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
+func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.Result, err error) {
 	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.Uninstall(c, ur)
 		return err
@@ -590,17 +590,28 @@ func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.Ingres
 	return
 }
 
-func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.InstallResult, error) {
-	result := &rpc.InstallResult{}
-	s.logCall(ctx, "Install", func(c context.Context) {
+func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, error) {
+	result := &rpc.Result{}
+	s.logCall(ctx, "Helm", func(c context.Context) {
 		sr := s.scout
-		err := trafficmgr.EnsureManager(c, req)
-		if err != nil {
-			sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Upgrade})
-			result.ErrorText = err.Error()
-			result.ErrorCategory = int32(errcat.GetCategory(err))
+		if req.Type == rpc.HelmRequest_UNINSTALL {
+			err := trafficmgr.DeleteManager(c, req)
+			if err != nil {
+				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+				result.ErrorText = err.Error()
+				result.ErrorCategory = int32(errcat.GetCategory(err))
+			} else {
+				sr.Report(ctx, "helm_uninstall_success")
+			}
 		} else {
-			sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Upgrade})
+			err := trafficmgr.EnsureManager(c, req)
+			if err != nil {
+				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
+				result.ErrorText = err.Error()
+				result.ErrorCategory = int32(errcat.GetCategory(err))
+			} else {
+				sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
+			}
 		}
 	})
 	return result, nil

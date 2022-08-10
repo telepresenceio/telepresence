@@ -159,29 +159,36 @@ restart:
 		// kind of issue communicating with kubernetes. Let's hope it's the former and let's hope the traffic manager
 		// is already set up. If it's the latter case (or the traffic manager isn't there), we'll be alerted by
 		// a subsequent error anyway.
-		dlog.Errorf(ctx, "EnsureTrafficManager(namespace=%q): unable to look for existing helm release: %v. Assuming it's there and continuing...",
-			namespace, err)
-		err = nil
 		return
 	}
 	if existing == nil {
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install: none", namespace)
+		dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install: none", namespace)
 	} else {
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
-			namespace, releaseVer(existing), existing.Config["createdBy"], existing.Info.Status, existing.Info.Description)
+		owner := "unknown"
+		if ow, ok := existing.Config["createdBy"]; ok {
+			owner = ow.(string)
+		}
+		dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
+			namespace, releaseVer(existing), owner, existing.Info.Status, existing.Info.Description)
 		if existing.Info.Status.IsPending() {
 			timeout := client.GetConfig(ctx).Timeouts.Get(client.TimeoutHelm)
 			if time.Since(transitionStart) > timeout {
-				dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); assuming it's stuck",
+				dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); assuming it's stuck",
 					namespace, timeout)
 			} else {
-				dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current install is in a pending state, waiting for it to transition...",
+				dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install is in a pending state, waiting for it to transition...",
 					namespace)
 				dtime.SleepWithContext(ctx, 1*time.Second)
 				goto restart
 			}
 		}
 	}
+	return existing, helmConfig, err
+}
+
+// EnsureTrafficManager ensures the traffic manager is installed
+func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
+	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
 
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, an uninstall should clean everything up and leave us ready to install again
@@ -190,17 +197,10 @@ restart:
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
 		err = uninstallExisting(ctx, helmConfig, namespace)
 		if err != nil {
-			err = fmt.Errorf("failed to clean up leftover release history: %w", err)
-			return
+			return fmt.Errorf("failed to clean up leftover release history: %w", err)
 		}
 		existing = nil
 	}
-	return existing, helmConfig, err
-}
-
-// EnsureTrafficManager ensures the traffic manager is installed
-func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.InstallRequest) error {
-	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting traffic manager: %w", err)
 	}
@@ -222,7 +222,8 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		values = chartutil.CoalesceTables(vals.AsMap(), values)
 	}
 
-	if existing == nil { // fresh install
+	switch {
+	case existing == nil: // fresh install
 		if err := importLegacy(ctx, namespace); err != nil {
 			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
 			// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
@@ -233,22 +234,14 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, chrt, helmConfig, namespace, values)
-		if err != nil {
-			return err
-		}
-	} else { // replace existing install
-		if req.Upgrade {
-			dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
-				namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-			if err := upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, values); err != nil {
-				return err
-			}
-		} else {
-			return errcat.User.Newf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
-		}
+	case req.Type == connector.HelmRequest_UPGRADE: // replace existing install
+		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
+			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, values)
+	default:
+		err = errcat.User.Newf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
 	}
-
-	return nil
+	return err
 }
 
 // DeleteTrafficManager deletes the traffic manager

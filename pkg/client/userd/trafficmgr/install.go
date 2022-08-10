@@ -20,35 +20,13 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
-
-type installer struct {
-	*k8s.Cluster
-}
-
-type Installer interface {
-	EnsureAgent(c context.Context,
-		obj k8sapi.Workload,
-		config *serviceProps,
-		agentImageName string,
-		telepresenceAPIPort uint16,
-	) (string, string, error)
-	IsManager(c context.Context) error
-	EnsureManager(c context.Context, req *connector.InstallRequest) error
-	RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error
-}
-
-func NewTrafficManagerInstaller(kc *k8s.Cluster) (Installer, error) {
-	return &installer{Cluster: kc}, nil
-}
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
 
@@ -56,10 +34,10 @@ func managerImageName(ctx context.Context) string {
 	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry(ctx), strings.TrimPrefix(client.Version(), "v"))
 }
 
-// RemoveManagerAndAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
+// legacyRemoveAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, agents []*manager.AgentInfo) error {
+func legacyRemoveAgents(c context.Context, agents []*manager.AgentInfo) error {
 	// Removes the manager and all agents from the cluster
 	var errs []error
 	var errsLock sync.Mutex
@@ -96,11 +74,11 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 				webhookAgentChannel <- agent
 				return
 			}
-			if err = ki.undoObjectMods(c, agent); err != nil {
+			if err = undoObjectModsAndUpdate(c, agent); err != nil {
 				addError(err)
 				return
 			}
-			if err = ki.waitForApply(c, ai.Name, ai.Namespace, agent); err != nil {
+			if err = waitForApply(c, ai.Name, ai.Namespace, agent); err != nil {
 				addError(err)
 			}
 		}()
@@ -108,28 +86,6 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 	// wait for all agents to be removed
 	wg.Wait()
 	close(webhookAgentChannel)
-
-	if !agentsOnly && len(errs) == 0 {
-		// agent removal succeeded. Remove the manager resources
-		if err := helm.DeleteTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), false); err != nil {
-			addError(err)
-		}
-
-		// roll all agents installed by webhook
-		webhookWaitGroup := sync.WaitGroup{}
-		webhookWaitGroup.Add(len(webhookAgentChannel))
-		for agent := range webhookAgentChannel {
-			go func(obj k8sapi.Object) {
-				defer webhookWaitGroup.Done()
-				err := ki.rolloutRestart(c, obj)
-				if err != nil {
-					addError(err)
-				}
-			}(agent)
-		}
-		// wait for all agents to be removed
-		webhookWaitGroup.Wait()
-	}
 
 	switch len(errs) {
 	case 0:
@@ -148,7 +104,7 @@ func (ki *installer) RemoveManagerAndAgents(c context.Context, agentsOnly bool, 
 
 // recreates "kubectl rollout restart <obj>" for obj
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) rolloutRestart(c context.Context, obj k8sapi.Object) error {
+func rolloutRestart(c context.Context, obj k8sapi.Object) error {
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
 		install.DomainPrefix,
@@ -159,7 +115,7 @@ func (ki *installer) rolloutRestart(c context.Context, obj k8sapi.Object) error 
 
 // Finds the Referenced Service in an objects' annotations
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (k8sapi.Object, error) {
+func getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (k8sapi.Object, error) {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
@@ -221,7 +177,7 @@ func checkSvcSame(_ context.Context, obj k8sapi.Object, svcName, portNameOrNumbe
 var agentNotFound = errors.New("no such agent")
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) ensureInjectedAgent(
+func ensureInjectedAgent(
 	c context.Context,
 	svc *core.Service,
 	name, namespace string,
@@ -237,7 +193,7 @@ func (ki *installer) ensureInjectedAgent(
 	if err != nil || len(pods) == 0 {
 		if webhookInjected {
 			dlog.Warnf(c, "Error finding pod for %s, rolling and proceeding anyway: %v", name, err)
-			err = ki.rolloutRestart(c, obj)
+			err = rolloutRestart(c, obj)
 			if err != nil {
 				return err
 			}
@@ -261,7 +217,7 @@ nextPod:
 	}
 	if roll {
 		if webhookInjected {
-			err = ki.rolloutRestart(c, obj)
+			err = rolloutRestart(c, obj)
 			if err != nil {
 				return err
 			}
@@ -322,13 +278,14 @@ already exist for this service`, kind, name)
 	}, nil
 }
 
-// EnsureAgent does a lot of things but at a high level it ensures that the traffic agent
+// legacyEnsureAgent does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) EnsureAgent(
+func legacyEnsureAgent(
 	c context.Context,
+	kl *k8s.Cluster,
 	obj k8sapi.Workload,
 	svcProps *serviceProps,
 	agentImageName string,
@@ -347,7 +304,7 @@ func (ki *installer) EnsureAgent(
 	}
 
 	if !autoInstall {
-		err := ki.ensureInjectedAgent(c, svcProps.service, name, namespace, podTemplate, obj)
+		err := ensureInjectedAgent(c, svcProps.service, name, namespace, podTemplate, obj)
 		if err != nil {
 			return "", "", err
 		}
@@ -368,7 +325,7 @@ func (ki *installer) EnsureAgent(
 	switch {
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
-		obj, updateSvc, err = addAgentToWorkload(c, svcProps, agentImageName, ki.GetManagerNamespace(), telepresenceAPIPort, obj)
+		obj, updateSvc, err = addAgentToWorkload(c, svcProps, agentImageName, kl.GetManagerNamespace(), telepresenceAPIPort, obj)
 		if err != nil {
 			return "", "", err
 		}
@@ -406,7 +363,7 @@ func (ki *installer) EnsureAgent(
 				return "", "", err
 			}
 		}
-		if err := ki.waitForApply(c, name, namespace, obj); err != nil {
+		if err := waitForApply(c, name, namespace, obj); err != nil {
 			return "", "", err
 		}
 	}
@@ -414,7 +371,7 @@ func (ki *installer) EnsureAgent(
 	if svc == nil {
 		// If the service is still nil, that's because an agent already exists that we can reuse.
 		// So we get the service from the deployments annotation so that we can extract the UID.
-		svc, err = ki.getSvcFromObjAnnotation(c, obj)
+		svc, err = getSvcFromObjAnnotation(c, obj)
 		if err != nil {
 			return "", "", err
 		}
@@ -423,7 +380,7 @@ func (ki *installer) EnsureAgent(
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
+func waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
@@ -435,7 +392,7 @@ func (ki *installer) waitForApply(c context.Context, name, namespace string, obj
 
 	var err error
 	if rs, ok := k8sapi.ReplicaSetImpl(obj); ok {
-		if err = ki.refreshReplicaSet(c, namespace, rs); err != nil {
+		if err = refreshReplicaSet(c, namespace, rs); err != nil {
 			return err
 		}
 	}
@@ -459,7 +416,7 @@ func (ki *installer) waitForApply(c context.Context, name, namespace string, obj
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) refreshReplicaSet(c context.Context, namespace string, rs *apps.ReplicaSet) error {
+func refreshReplicaSet(c context.Context, namespace string, rs *apps.ReplicaSet) error {
 	pods, err := k8sapi.Pods(c, namespace, rs.Spec.Selector.MatchLabels)
 	if err != nil {
 		return err
@@ -516,7 +473,7 @@ func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) undoObjectMods(c context.Context, obj k8sapi.Object) error {
+func undoObjectModsAndUpdate(c context.Context, obj k8sapi.Object) error {
 	referencedService, err := undoObjectMods(c, obj)
 	if err != nil {
 		return err
@@ -526,7 +483,7 @@ func (ki *installer) undoObjectMods(c context.Context, obj k8sapi.Object) error 
 		return err
 	}
 	if svc != nil {
-		if err = ki.undoServiceMods(c, svc); err != nil {
+		if err = undoServiceModsAndUpdate(c, svc); err != nil {
 			return err
 		}
 	}
@@ -562,7 +519,7 @@ func undoObjectMods(c context.Context, obj k8sapi.Object) (string, error) {
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func (ki *installer) undoServiceMods(c context.Context, svc k8sapi.Object) (err error) {
+func undoServiceModsAndUpdate(c context.Context, svc k8sapi.Object) (err error) {
 	if err = undoServiceMods(c, svc); err == nil {
 		err = svc.Update(c)
 	}
@@ -783,16 +740,4 @@ func addAgentToWorkload(
 	}
 
 	return object, updateService, nil
-}
-
-func (ki *installer) IsManager(c context.Context) error {
-	existing, _, err := helm.IsTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace())
-	if err == nil && existing == nil {
-		err = errors.Errorf("traffic manager not found, if it is not installed, please run 'telepresence helm install'")
-	}
-	return err
-}
-
-func (ki *installer) EnsureManager(c context.Context, req *connector.InstallRequest) error {
-	return helm.EnsureTrafficManager(c, ki.ConfigFlags, ki.GetManagerNamespace(), req)
 }
