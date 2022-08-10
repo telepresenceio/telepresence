@@ -22,4 +22,5 @@ enum InterceptError {
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
   UNKNOWN_FLAG = 15;
+  EXEC_CMD = 16; // External exec command failed
 }
