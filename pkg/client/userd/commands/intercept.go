@@ -137,7 +137,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 		if c.extErr != nil {
 			return c.extErr
 		}
-		if 1 < len(positional) && ccmd.Flags().ArgsLenAtDash() < 0 {
+		if 1 < len(positional) && ccmd.Flags().ArgsLenAtDash() != 1 {
 			err := fmt.Errorf("commands to be run with intercept must come after options")
 			return err
 		}
