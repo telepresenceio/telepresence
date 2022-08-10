@@ -269,5 +269,9 @@ func (c *traceCommand) gatherTraces(cmd *cobra.Command, remotePort uint16, destF
 	close(tCh)
 	err = <-errCh
 
-	return err
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Traces saved as %s\n", destFile)
+	return nil
 }
