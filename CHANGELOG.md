@@ -1,6 +1,11 @@
 # Changelog
 
+### 2.7.2 (TBD)
+
+- Change: The command `telepresence gather-traces` now prints out a message on success.
+
 ### 2.7.1 (August 10, 2022)
+
 
 - Change: The command `telepresence uninstall` has been restored, but the `--everything` flag is now deprecated.
 
