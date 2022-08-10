@@ -354,7 +354,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
 	cr := req.GetConnectRequest()
 	if cr == nil {
-		dlog.Info(ctx, "Connect_request in install_request was nil, using defaults")
+		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
 		cr = &rpc.ConnectRequest{}
 	}
 
@@ -370,7 +370,7 @@ func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
 	// seg guard
 	cr := req.GetConnectRequest()
 	if cr == nil {
-		dlog.Info(ctx, "Connect_request in install_request was nil, using defaults")
+		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
 		cr = &rpc.ConnectRequest{}
 	}
 

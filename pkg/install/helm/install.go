@@ -234,8 +234,6 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, chrt, helmConfig, namespace, values)
-	case releaseVer(existing) == strings.TrimPrefix(client.Version(), "v"):
-		dlog.Infof(ctx, "traffic manager version %q is up to date", releaseVer(existing))
 	case req.Type == connector.HelmRequest_UPGRADE: // replace existing install
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
 			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
