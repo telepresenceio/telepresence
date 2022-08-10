@@ -16,29 +16,28 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func getRemoteCommands(ctx context.Context) (groups cliutil.CommandGroups, err error) {
-	err = cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool) (groups cliutil.CommandGroups, err error) {
+	listCommands := func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		remote, err := connectorClient.ListCommands(ctx, &empty.Empty{})
 		if err != nil {
 			return fmt.Errorf("unable to call ListCommands: %w", err)
 		}
-		if groups, err = cliutil.RPCToCommands(remote, runRemote); err != nil {
-			groups = commands.GetCommandsForLocal(ctx, err)
-		}
+		groups, err = cliutil.RPCToCommands(remote, runRemote)
 		userDaemonRunning = true
-		return nil
-	})
-	if err != nil && err != cliutil.ErrNoUserDaemon {
-		return nil, err
+		return err
 	}
-	if !userDaemonRunning {
-		groups = commands.GetCommandsForLocal(ctx, err)
+	if forceStart {
+		err = withConnector(cmd, true, nil, func(ctx context.Context, state *connectorState) error {
+			return listCommands(ctx, state.userD)
+		})
+	} else {
+		err = cliutil.WithStartedConnector(ctx, false, listCommands)
 	}
-	return groups, nil
+	return groups, err
 }
 
 func runRemote(cmd *cobra.Command, args []string) error {
@@ -87,8 +86,10 @@ func runRemote(cmd *cobra.Command, args []string) error {
 
 			_, _ = cmd.OutOrStdout().Write(result.GetStdout())
 			_, _ = cmd.ErrOrStderr().Write(result.GetStderr())
-
-			return nil
+			if rr := result.Result; rr != nil {
+				err = errcat.Category(rr.ErrorCategory).New(rr.ErrorText)
+			}
+			return err
 		})
 	})
 }

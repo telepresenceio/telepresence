@@ -131,6 +131,8 @@ func (c *interceptCommand) init(ctx context.Context) {
 		_ = c.cobraCommand(ctx)
 	}
 
+	c.command.SilenceUsage = true
+	c.command.SilenceErrors = true
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
 	c.command.PostRunE = cliutil.RaiseCloudMessage
 	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -485,22 +484,33 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 	return
 }
 
-func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
-	var cmd *cobra.Command
-	outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
-
+func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
+	result := &rpc.RunCommandResponse{}
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
-		cmd = &cobra.Command{
+		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
 
+		errResult := func(err error) *rpc.Result {
+			if err != nil {
+				return &rpc.Result{
+					ErrorText:     err.Error(),
+					ErrorCategory: int32(errcat.GetCategory(err)),
+				}
+			}
+			return nil
+		}
+
 		args := req.GetOsArgs()
-		cmd.SetArgs(args)
-		cmd, args, err = cmd.Find(args)
+		cmd.SetArgs(req.GetOsArgs())
+		cmd, args, err := cmd.Find(args)
+
 		if err != nil {
+			result.Result = errResult(errcat.User.New(err))
 			return
 		}
 		cmd.SetArgs(args)
@@ -509,6 +519,13 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 
 		err = cmd.ParseFlags(args)
 		if err != nil {
+			if err == pflag.ErrHelp {
+				_ = cmd.Usage()
+				result.Stdout = outW.Bytes()
+				result.Stderr = errW.Bytes()
+			} else {
+				result.Result = errResult(errcat.User.New(err))
+			}
 			return
 		}
 
@@ -548,29 +565,11 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			err = cmd.ExecuteContext(ctx)
 		}
 
-		result = &rpc.RunCommandResponse{
-			Stdout: outW.Bytes(),
-			Stderr: errW.Bytes(),
-		}
+		result.Stdout = outW.Bytes()
+		result.Stderr = errW.Bytes()
+		result.Result = errResult(err)
 	})
-	if errcat.GetCategory(err) > errcat.NoDaemonLogs {
-		if errors.Is(err, pflag.ErrHelp) {
-			err = nil
-			outW.WriteString(cmd.UsageString())
-		} else {
-			stderr, stdout := strings.TrimSpace(errW.String()), strings.TrimSpace(outW.String())
-			dlog.Errorf(ctx, "Error running command %s: %v", cmd.Name(), err)
-			if stderr == "" && stdout == "" {
-				stdout = cmd.UsageString()
-			}
-			err = fmt.Errorf("%s\n\n%s\n%s", err.Error(), stderr, stdout)
-		}
-	}
-
-	return &rpc.RunCommandResponse{
-		Stdout: outW.Bytes(),
-		Stderr: errW.Bytes(),
-	}, err
+	return result, nil
 }
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {

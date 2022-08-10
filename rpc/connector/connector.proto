@@ -138,6 +138,7 @@ message Interceptor {
 message RunCommandResponse {
   bytes stdout = 1;
   bytes stderr = 2;
+  Result result = 3;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.

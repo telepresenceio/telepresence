@@ -4,12 +4,15 @@
 
 - Change: The command `telepresence gather-traces` now prints out a message on success.
 
-### 2.7.1 (TBD)
+### 2.7.1 (August 10, 2022)
+
 
 - Change: The command `telepresence uninstall` has been restored, but the `--everything` flag is now deprecated.
 
-- Change:`telepresence helm uninstall` will only uninstall the traffic-manager and no longer accepts the `--everything`, `--agent`,
+- Change: `telepresence helm uninstall` will only uninstall the traffic-manager and no longer accepts the `--everything`, `--agent`,
   or `--all-agents` flags.
+
+- Bugfix: `telepresence intercept` will attempt to connect to the traffic manager before creating an intercept.
 
 ### 2.7.0 (August 8, 2022)
 

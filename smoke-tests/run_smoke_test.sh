@@ -473,7 +473,7 @@ $TELEPRESENCE quit -ru
 # For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
 if (helm list -n ambassador | grep traffic-manager); then
-    $TELEPRESENCE helm uninstall --everything >"$output_location"
+    $TELEPRESENCE helm uninstall >"$output_location"
 else
     $TELEPRESENCE quit -ru >"$output_location"
 fi
@@ -630,7 +630,7 @@ if [[ -n "$USE_CHART" ]]; then
     $TELEPRESENCE quit -ru > "$output_location"
     helm uninstall -n ambassador traffic-manager > "$output_location"
 else
-    $TELEPRESENCE helm uninstall --everything > "$output_location"
+    $TELEPRESENCE helm uninstall > "$output_location"
 fi
 verify_logout
 
@@ -775,7 +775,7 @@ finish_step
 
 # We should be able to uninstall via this command even if the helm chart was used,
 # and this should log the user out.
-$TELEPRESENCE helm uninstall --everything > "$output_location"
+$TELEPRESENCE helm uninstall > "$output_location"
 verify_logout
 
 finish_step
@@ -862,7 +862,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
         exit 1
     fi
 
-    $TELEPRESENCE helm uninstall --everything >"$output_location"
+    $TELEPRESENCE helm uninstall >"$output_location"
     finish_step
     restore_config
     trap - EXIT
