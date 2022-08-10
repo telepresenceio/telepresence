@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.7.1 (TBD)
+### 2.7.1 (August 10, 2022)
 
 - Change: The command `telepresence uninstall` has been restored, but the `--everything` flag is now deprecated.
 
