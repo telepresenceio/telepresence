@@ -101,7 +101,7 @@ dnsServiceIP: ""
 
 dnsConfig:
   # add the following subnets to the dns server
-  # array of strings
+  # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
   alsoProxySubnets:  []
   neverProxySubnets: []
 

@@ -267,7 +267,7 @@ helm_install() {
 
     mkdir -p build-output
     rm -f build-output/telepresence-*.tgz
-    go run ./packaging/gen_chart.go build-output
+    go run ./packaging/gen_chart.go build-output "${oss_tag}"
 
     local IFS=","
     if [[ -n $values_file ]]; then
@@ -472,7 +472,11 @@ $TELEPRESENCE quit -ru
 
 # For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
-$TELEPRESENCE uninstall --everything >"$output_location"
+if (helm list -n ambassador | grep traffic-manager); then
+    $TELEPRESENCE helm uninstall --everything >"$output_location"
+else
+    $TELEPRESENCE quit -ru >"$output_location"
+fi
 if [[ -n "$INSTALL_DEMO" ]]; then
     setup_demo_app
 fi
@@ -482,6 +486,7 @@ if [[ -n "$USE_CHART" ]]; then
 fi
 
 VERYLARGEJAVASERVICE=verylargejavaservice.default:8080
+$TELEPRESENCE helm install >"$output_location"
 $TELEPRESENCE connect >"$output_location"
 $TELEPRESENCE loglevel debug --duration 5m >"$output_location"
 
@@ -617,6 +622,7 @@ finish_step
 ###############################################
 #### Step 7 - Verify login prompted        ####
 ###############################################
+yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-tpl.yaml > smoke-tests/license-values.yaml
 
 # Now we need to update the config for license workflow
 if [[ -n "$USE_CHART" ]]; then
@@ -624,7 +630,7 @@ if [[ -n "$USE_CHART" ]]; then
     $TELEPRESENCE quit -ru > "$output_location"
     helm uninstall -n ambassador traffic-manager > "$output_location"
 else
-    $TELEPRESENCE uninstall --everything > "$output_location"
+    $TELEPRESENCE helm uninstall --everything > "$output_location"
 fi
 verify_logout
 
@@ -633,6 +639,7 @@ prepare_license_config_systema_enabled
 helm_install "smoke-tests/license-values.yaml"
 echo "Using the following config for remainder of tests:"
 yq e '.' "$config_file"
+$TELEPRESENCE connect > "$output_location"
 
 $TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=true --http-header=all --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default >"$output_location"
 sleep 1
@@ -657,6 +664,7 @@ finish_step
 ###############################################
 
 login
+$TELEPRESENCE connect > "$output_location"
 sleep 5 # avoid known agent mechanism-args race
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default)
 sleep 1
@@ -765,13 +773,9 @@ finish_step
 #### Step 14 - licensed uninstall everything          ####
 ##########################################################
 
-# The chart was used in step 7 so at this point it has to be uninstalled...
-$TELEPRESENCE quit > "$output_location"
-helm uninstall traffic-manager --namespace ambassador
-
-# ...but we still want to test that uninstall logs the user out,
-# so we still call uninstall regardless of whether chart was used.
-$TELEPRESENCE uninstall --everything > "$output_location"
+# We should be able to uninstall via this command even if the helm chart was used,
+# and this should log the user out.
+$TELEPRESENCE helm uninstall --everything > "$output_location"
 verify_logout
 
 finish_step
@@ -796,12 +800,10 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     #### Step 16 - Verify License Workflow (helm)         ####
     ##########################################################
-    yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-tpl.yaml > smoke-tests/license-values.yaml
-
     # Now we need to update the config for license workflow
 
     # Need to uninstall in case the traffic agent webhook image has changed
-    $TELEPRESENCE uninstall -e > "$output_location"
+    $TELEPRESENCE helm uninstall -e > "$output_location"
     restore_config
     prepare_license_config_systema_disabled
     helm_install "smoke-tests/license-values.yaml"
@@ -846,6 +848,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
 
     # Now we need to update the config for license workflow
     helm_install "smoke-tests/license-values.yaml"
+    $TELEPRESENCE connect > "$output_location"
 
     # Ensure we can intercept a persona intercept and that it works with the license
     output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-header=auto 2>&1)
@@ -859,8 +862,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
         exit 1
     fi
 
-    $TELEPRESENCE uninstall --everything >"$output_location"
-    helm uninstall traffic-manager --namespace ambassador > "$output_location" 2>&1
+    $TELEPRESENCE helm uninstall --everything >"$output_location"
     finish_step
     restore_config
     trap - EXIT

@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -215,7 +216,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	for _, path := range req.ValuePaths {
 		vals, err := chartutil.ReadValuesFile(path)
 		if err != nil {
-			return fmt.Errorf("--values path %q not readable: %v", vals, err)
+			return errcat.User.Newf("--values path %q not readable: %v", path, err)
 		}
 
 		values = chartutil.CoalesceTables(vals.AsMap(), values)
@@ -243,7 +244,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 				return err
 			}
 		} else {
-			return fmt.Errorf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
+			return errcat.User.Newf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
 		}
 	}
 

@@ -84,6 +84,10 @@ func (e *Env) GetNeverProxySubnets() ([]*manager.IPNet, error) {
 }
 
 func parseRawSubnets(ipNetsStr string) ([]*manager.IPNet, error) {
+	if ipNetsStr == "" { // env var not set
+		return nil, nil
+	}
+
 	splitIPNets := strings.Split(ipNetsStr, " ")
 	ipNets := make([]*manager.IPNet, len(splitIPNets))
 	for i, s := range splitIPNets {

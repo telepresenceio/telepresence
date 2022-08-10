@@ -355,7 +355,7 @@ func EnsureManager(ctx context.Context, req *rpc.InstallRequest) error {
 	// seg guard
 	cr := req.GetConnectRequest()
 	if cr == nil {
-		dlog.Warn(ctx, "Connect_request in install_request was nil, using defaults")
+		dlog.Info(ctx, "Connect_request in install_request was nil, using defaults")
 		cr = &rpc.ConnectRequest{}
 	}
 

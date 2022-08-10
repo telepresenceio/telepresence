@@ -593,9 +593,14 @@ func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.Ingres
 func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.InstallResult, error) {
 	result := &rpc.InstallResult{}
 	s.logCall(ctx, "Install", func(c context.Context) {
+		sr := s.scout
 		err := trafficmgr.EnsureManager(c, req)
 		if err != nil {
+			sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Upgrade})
 			result.ErrorText = err.Error()
+			result.ErrorCategory = int32(errcat.GetCategory(err))
+		} else {
+			sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Upgrade})
 		}
 	})
 	return result, nil

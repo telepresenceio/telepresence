@@ -25,7 +25,7 @@ Notable chart changes are listed in the [CHANGELOG](./CHANGELOG.md)
 The following tables lists the configurable parameters of the Ambassador chart and their default values.
 
 | Parameter                                      | Description                                                                                                               | Default                                                                     |
-|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | image.registry                                 | The repository to download the image from. Set `TELEPRESENCE_REGISTRY=image.registry` locally if changing this value.     | `docker.io/datawire`                                                        |
 | image.name                                     | The name of the image to use for the traffic-manager                                                                      | `tel2`                                                                      |
 | image.pullPolicy                               | How the `Pod` will attempt to pull the image.                                                                             | `IfNotPresent`                                                              |
@@ -33,9 +33,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | image.imagePullSecrets                         | The `Secret` storing any credentials needed to access the image in a private registry.                                    | `[]`                                                                        |
 | podAnnotations                                 | Annotations for the Traffic Manager `Pod`                                                                                 | `{}`                                                                        |
 | podCIDRs                                       | Verbatim list of CIDRs that the cluster uses for pods. Only valid together with `podCIDRStrategy: environment`            | `[]`                                                                        |
-| dnsServiceName                                 | The name of the DNS Service within the cluster to add to the list of Services the DNS auto-detecting logic searches for   | `coredns`
-| dnsServiceNamespace                            | The namespace where the DNS service speficied in `dnsServiceName` resides in                                              | `kube-system`
-| dnsServiceIP                                   | Fallback IP to use for DNS in the event auto-detection fails                                                              | `""`
+| dnsServiceName                                 | The name of the DNS Service within the cluster to add to the list of Services the DNS auto-detecting logic searches for   | `coredns`                                                                   |
+| dnsServiceNamespace                            | The namespace where the DNS service speficied in `dnsServiceName` resides in                                              | `kube-system`                                                               |
+| dnsServiceIP                                   | Fallback IP to use for DNS in the event auto-detection fails                                                              | `""`                                                                        |
 | podCIDRStrategy                                | Define the strategy that the traffic-manager uses to discover what CIDRs the cluster uses for pods                        | `auto`                                                                      |
 | podSecurityContext                             | The Kubernetes SecurityContext for the `Pod`                                                                              | `{}`                                                                        |
 | securityContext                                | The Kubernetes SecurityContext for the `Deployment`                                                                       | `{"readOnlyRootFilesystem": true, "runAsNonRoot": true, "runAsUser": 1000}` |
@@ -82,6 +82,8 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | hooks.podSecurityContext                       | The Kubernetes SecurityContext for the chart hooks `Pod`                                                                  | `{}`                                                                        |
 | hooks.securityContext                          | The Kubernetes SecurityContext for the chart hooks `Container`                                                            | securityContext                                                             |
 | hooks.resources                                | Define resource requests and limits for the chart hooks                                                                   | `{}`                                                                        |
+| dnsConfig.alsoProxySubnets                     | Telepresence daemons connected to this manager will also proxy these subnets                                              | `[]`                                                                        |
+| dnsConfig.neverProxySubnets                    | Telepresence daemons connected to this manager will never proxy these subnets                                             | `[]`                                                                        |
 
 ## License Key
 
@@ -100,17 +102,17 @@ deploy to the cluster.
 
 These notes should help clarify your options for enabling this.
 
-* `licenseKey.create` will **always** create the `volume` and `volumeMount` for
-mounting the `Secret` in the Traffic Managed
+- `licenseKey.create` will **always** create the `volume` and `volumeMount` for
+  mounting the `Secret` in the Traffic Managed
 
-* `licenseKey.secret.name` will define the name of the `Secret` that is
-mounted in the Traffic Manager, regardless of it it is created by the chart
+- `licenseKey.secret.name` will define the name of the `Secret` that is
+  mounted in the Traffic Manager, regardless of it it is created by the chart
 
-* `licenseKey.secret.create` will create a `Secret` with
-   ```
-   data:
-     license: {{.licenseKey.value}}
-   ```
+- `licenseKey.secret.create` will create a `Secret` with
+  ```
+  data:
+    license: {{.licenseKey.value}}
+  ```
 
 ## RBAC
 
@@ -164,9 +166,9 @@ information to configure the network so that it provides access to the pods. In 
 this information, or will do it in a way that is inefficient. To remedy this, the strategy that the traffic manager uses can be configured
 using the `podCIDRStrategy`.
 
-|Value|Meaning|
-|-----|-------|
-|`auto`|First try `nodePodCIDRs` and if that fails, try `coverPodIPs`|
-|`nodePodCIDRs`|Obtain the CIDRs from the`podCIDR` and `podCIDRs` of all `Node` resource specifications.|
-|`coverPodIPs`|Obtain all IPs from the `podIP` and `podIPs` of all `Pod` resource statuses and calculate the CIDRs needed to cover them.|
-|`environment`|Pick the CIDRs from the traffic manager's `POD_CIDRS` environment variable. Use `podCIDRs` to set that variable.|
+| Value          | Meaning                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `auto`         | First try `nodePodCIDRs` and if that fails, try `coverPodIPs`                                                             |
+| `nodePodCIDRs` | Obtain the CIDRs from the`podCIDR` and `podCIDRs` of all `Node` resource specifications.                                  |
+| `coverPodIPs`  | Obtain all IPs from the `podIP` and `podIPs` of all `Pod` resource statuses and calculate the CIDRs needed to cover them. |
+| `environment`  | Pick the CIDRs from the traffic manager's `POD_CIDRS` environment variable. Use `podCIDRs` to set that variable.          |
