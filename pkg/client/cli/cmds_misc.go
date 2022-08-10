@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"runtime"
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
@@ -53,20 +52,15 @@ func ClusterIdCommand() *cobra.Command {
 }
 
 func connectCommand() *cobra.Command {
-	var dnsIP string
-	var mappedNamespaces []string
+	var kubeFlags *pflag.FlagSet
+	var request *connector.ConnectRequest
 
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
 	cmd := &cobra.Command{
 		Use:   "connect [flags] [-- <command to run while connected>]",
 		Args:  cobra.ArbitraryArgs,
 		Short: "Connect to a cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request := &connector.ConnectRequest{
-				KubeFlags:        kubeFlagMap(kubeFlags),
-				MappedNamespaces: mappedNamespaces,
-			}
-
+			request.KubeFlags = kubeFlagMap(kubeFlags)
 			if len(args) == 0 {
 				return withConnector(cmd, true, request, func(_ context.Context, _ *connectorState) error {
 					return nil
@@ -78,19 +72,16 @@ func connectCommand() *cobra.Command {
 			})
 		},
 	}
+	request, kubeFlags = initConnectRequest(cmd)
+	return cmd
+}
 
+func initConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
+	cr := connector.ConnectRequest{}
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
-	// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
-	//  that's unknown until it's been tested during the first connect attempt.
-	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
-		nwFlags.StringVarP(&dnsIP,
-			"dns", "", "",
-			"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-		)
-	}
-	nwFlags.StringSliceVar(&mappedNamespaces,
+	nwFlags.StringSliceVar(&cr.MappedNamespaces,
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
 			`Defaults to all namespaces`)
@@ -98,9 +89,10 @@ func connectCommand() *cobra.Command {
 
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
 	kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
-	return cmd
+	return &cr, kubeFlags
 }
 
 func dashboardCommand() *cobra.Command {

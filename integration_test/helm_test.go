@@ -51,6 +51,7 @@ func (s *helmSuite) Test_HelmCanInterceptInManagedNamespace() {
 
 func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	ctx := s.Context()
+	ctx = itest.WithUser(ctx, "default")
 	_, stderr, err := itest.Telepresence(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Error(err)
 	s.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`)
@@ -112,8 +113,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	})
 
 	s.Run("Uninstalls Successfully", func() {
-		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
-		s.UninstallTrafficManager(ctx, s.mgrSpace2)
+		s.UninstallTrafficManager(s.Context(), s.mgrSpace2)
 	})
 }
 

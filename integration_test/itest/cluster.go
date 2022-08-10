@@ -474,7 +474,9 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
 	t := getT(ctx)
-	require.NoError(t, Run(ctx, "helm", "uninstall", "traffic-manager", "-n", managerNamespace))
+	ctx = WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": managerNamespace})
+	ctx = WithUser(ctx, "default")
+	TelepresenceOk(ctx, "helm", "uninstall")
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },

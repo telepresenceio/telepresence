@@ -65,7 +65,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	// Remove the traffic-manager since we are altering config that applies to
 	// creating the traffic-manager
 	uninstallEverything := func() {
-		stdout := itest.TelepresenceOk(ctx, "helm", "uninstall", "--everything")
+		stdout := itest.TelepresenceOk(ctx, "helm", "uninstall")
 		itest.AssertQuitOutput(ctx, stdout)
 		s.Require().Eventually(
 			func() bool {

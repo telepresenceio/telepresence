@@ -207,7 +207,7 @@ func (tm *TrafficManager) addAgent(
 	workload := svcProps.workload
 	agentName := workload.GetName()
 	namespace := workload.GetNamespace()
-	_, kind, err := tm.EnsureAgent(c, workload, svcProps, agentImageName, telepresenceAPIPort)
+	_, kind, err := legacyEnsureAgent(c, tm.Cluster, workload, svcProps, agentImageName, telepresenceAPIPort)
 	if err != nil {
 		if err == agentNotFound {
 			return nil, &rpc.InterceptResult{
