@@ -602,6 +602,9 @@ func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.In
 }
 
 func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
+	if strings.HasPrefix(req.ToComplete, "--") {
+		return nil, nil
+	}
 	var (
 		name = req.GetCmdName()
 		cmd  = commands.GetCommandByName(ctx, name)
@@ -611,14 +614,40 @@ func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsFor
 	if cmd == nil {
 		return nil, fmt.Errorf("command %s not found", name)
 	}
-
-	var validArgsFunc = cmd.ValidArgsFunction
-	if validArgsFunc == nil {
-		return &resp, nil
+	vaf := commands.GetValidArgsFunctionFor(ctx, cmd)
+	if vaf == nil {
+		return nil, nil
 	}
 
-	var shellCompDir cobra.ShellCompDirective
-	resp.Completions, shellCompDir = validArgsFunc(cmd, req.OsArgs, req.ToComplete)
+	var (
+		shellCompDir cobra.ShellCompDirective
+		err          error
+	)
+	if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"ValidArgsFunction", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+			// the context within this scope is not derived from the context of the outer scope
+			cmdCtx = commands.WithSession(cmdCtx, ts)
+			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+			}
+			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+
+			resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+			return nil
+		})
+	} else {
+		cmdCtx := ctx
+		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+			cmdCtx = commands.WithConnectorServer(ctx, s)
+		}
+		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+
+		resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	resp.ShellCompDirective = int32(shellCompDir)
 	return &resp, nil
 }

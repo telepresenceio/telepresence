@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	CommandRequiresSession         = "cobra.telepresence.io/with-session"
-	CommandRequiresConnectorServer = "cobra.telepresence.io/with-connector-server"
+	CommandRequiresSession               = "cobra.telepresence.io/with-session"
+	CommandRequiresConnectorServer       = "cobra.telepresence.io/with-connector-server"
+	ValidArgsFuncRequiresConnectorServer = "cobra.telepresence.io/valid-args-func/with-connector-server"
 )
 
 type command interface {
@@ -21,6 +22,12 @@ type command interface {
 	cobraCommand(context.Context) *cobra.Command
 	group() string
 }
+
+type autocompleter interface {
+	validArgsFunc() ValidArgsFunction
+}
+
+type ValidArgsFunction func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 
 func commands() []command {
 	return []command{
@@ -71,6 +78,21 @@ func GetCommandByName(ctx context.Context, name string) *cobra.Command {
 		}
 	}
 
+	return nil
+}
+
+func GetValidArgsFunctionFor(ctx context.Context, cmd *cobra.Command) ValidArgsFunction {
+	name := cmd.Name()
+	for _, cmd := range commands() {
+		if cmd.cobraCommand(ctx).Name() != name {
+			continue
+		}
+		if ac, ok := cmd.(autocompleter); ok {
+			return ac.validArgsFunc()
+		} else {
+			return nil
+		}
+	}
 	return nil
 }
 
