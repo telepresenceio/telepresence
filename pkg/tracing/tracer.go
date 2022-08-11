@@ -107,6 +107,10 @@ func (ts *TraceServer) ServeGrpc(ctx context.Context, port uint16) error {
 }
 
 func (ts *TraceServer) DumpTraces(ctx context.Context, _ *emptypb.Empty) (*common.Trace, error) {
+	err := ts.tp.ForceFlush(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to force flush tracer: %w", err)
+	}
 	b, err := ts.shim.dumpTraces(ctx)
 	if err != nil {
 		return nil, err
