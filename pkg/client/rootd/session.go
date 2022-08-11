@@ -14,6 +14,8 @@ import (
 
 	"github.com/blang/semver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -34,6 +36,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
@@ -286,8 +289,10 @@ func (s *session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 	s.dnsLocalAddr = dnsLocalAddr
 }
 
-func (s *session) reconcileStaticRoutes(ctx context.Context) error {
+func (s *session) reconcileStaticRoutes(ctx context.Context) (err error) {
 	desired := []*routing.Route{}
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "reconcileStaticRoutes")
+	defer tracing.EndAndRecord(span, err)
 
 	// We're not going to add static routes unless they're actually needed
 	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
@@ -328,8 +333,10 @@ removing:
 	return nil
 }
 
-func (s *session) refreshSubnets(ctx context.Context) error {
+func (s *session) refreshSubnets(ctx context.Context) (err error) {
 	// Create a unique slice of all desired subnets.
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "refreshSubnets")
+	defer tracing.EndAndRecord(span, err)
 	desired := make([]*net.IPNet, len(s.clusterSubnets)+len(s.alsoProxySubnets))
 	copy(desired, s.clusterSubnets)
 	copy(desired[len(s.clusterSubnets):], s.alsoProxySubnets)
@@ -402,9 +409,11 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				}
 				break
 			}
+			ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "ClusterInfoUpdate")
 			if cfgComplete != nil {
 				s.checkConnectivity(ctx, mgrInfo)
 				if ctx.Err() != nil {
+					span.End()
 					return
 				}
 				remoteIp := net.IP(mgrInfo.KubeDnsIp)
@@ -424,11 +433,21 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 					s.alsoProxySubnets = append(s.alsoProxySubnets, convertAlsoProxySubnets(ctx, dnsConfig.AlsoProxySubnets)...)
 					s.neverProxySubnets = append(s.neverProxySubnets, convertNeverProxySubnets(ctx, dnsConfig.NeverProxySubnets)...)
 				}
-
 				close(cfgComplete)
 				cfgComplete = nil
+				span.SetAttributes(
+					attribute.Bool("tel2.proxy-cluster", s.proxyCluster),
+					attribute.Bool("tel2.cfg-complete", false),
+					attribute.Stringer("tel2.cluster-dns", remoteIp),
+					attribute.String("tel2.cluster-domain", mgrInfo.ClusterDomain),
+				)
+			} else {
+				span.SetAttributes(
+					attribute.Bool("cfgComplete", false),
+				)
 			}
 			s.onClusterInfo(ctx, mgrInfo)
+			span.End()
 		}
 		dtime.SleepWithContext(ctx, backoff)
 		backoff *= 2
@@ -534,7 +553,7 @@ func (s *session) stop(c context.Context) {
 		// Session already stopped (or is stopping)
 		return
 	}
-	dlog.Debug(c, "Brining down TUN-device")
+	dlog.Debug(c, "Bringing down TUN-device")
 
 	s.scout.Report(c, "incluster_dns_queries",
 		scout.Entry{Key: "total", Value: s.dnsLookups},
