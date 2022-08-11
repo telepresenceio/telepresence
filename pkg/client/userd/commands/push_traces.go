@@ -96,5 +96,6 @@ func (c *pushTracesCommand) pushTraces(cmd *cobra.Command, args []string) error 
 	if err != nil {
 		return err
 	}
+	fmt.Fprintf(cmd.OutOrStderr(), "Trace file %s uploaded to %s\n", zipFile, jaegerTarget)
 	return nil
 }
