@@ -602,21 +602,56 @@ func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.In
 }
 
 func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
-	if strings.HasPrefix(req.ToComplete, "--") {
-		return nil, nil
+	var resp = rpc.ValidArgsForCommandResponse{
+		Completions: make([]string, 0),
 	}
 	var (
 		name = req.GetCmdName()
 		cmd  = commands.GetCommandByName(ctx, name)
-		resp rpc.ValidArgsForCommandResponse
 	)
 
 	if cmd == nil {
-		return nil, fmt.Errorf("command %s not found", name)
+		return &resp, fmt.Errorf("command %s not found", name)
 	}
+
+	if l := len(req.OsArgs); l != 0 {
+		if lastArg := req.OsArgs[l-1]; strings.HasPrefix(lastArg, "--") && !strings.Contains(lastArg, "=") {
+			// user wants autocompletion on flag value and is using --flag value
+			var (
+				flagName            = strings.TrimPrefix(lastArg, "--")
+				flagValueToComplete = req.ToComplete
+			)
+
+			var shellCompDir cobra.ShellCompDirective
+			resp.Completions, shellCompDir = s.autocompleteFlag(ctx, cmd, req.OsArgs, flagName, flagValueToComplete)
+			resp.ShellCompDirective = int32(shellCompDir)
+			return &resp, nil
+		}
+	}
+	if strings.HasPrefix(req.ToComplete, "--") {
+		if !strings.Contains(req.ToComplete, "=") {
+			// user wants autocompletion on flag name
+			return &resp, nil
+		}
+
+		// user wants autocompletion on flag value and is using --flag=value
+		var (
+			flagParts           = strings.Split(req.ToComplete, "=")
+			flagName            = strings.TrimPrefix(flagParts[0], "--")
+			flagValueToComplete = flagParts[1]
+		)
+
+		var shellCompDir cobra.ShellCompDirective
+		resp.Completions, shellCompDir = s.autocompleteFlag(ctx, cmd, req.OsArgs, flagName, flagValueToComplete)
+		resp.ShellCompDirective = int32(shellCompDir)
+
+		return &resp, nil
+	}
+
+	// user wants autocompletion on argument
 	vaf := commands.GetValidArgsFunctionFor(ctx, cmd)
 	if vaf == nil {
-		return nil, nil
+		return &resp, nil
 	}
 
 	var (
@@ -624,7 +659,7 @@ func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsFor
 		err          error
 	)
 	if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-		err = s.withSession(ctx, "cmd-"+cmd.Name()+"ValidArgsFunction", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(cmdCtx context.Context, ts trafficmgr.Session) error {
 			// the context within this scope is not derived from the context of the outer scope
 			cmdCtx = commands.WithSession(cmdCtx, ts)
 			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
@@ -645,9 +680,68 @@ func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsFor
 		resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
 	}
 	if err != nil {
-		return nil, err
+		return &resp, err
 	}
 
 	resp.ShellCompDirective = int32(shellCompDir)
 	return &resp, nil
+}
+
+func (s *Service) autocompleteFlag(ctx context.Context, cmd *cobra.Command, args []string, flagName, toComplete string) ([]string, cobra.ShellCompDirective) {
+	faf := commands.GetFlagAutocompletionFuncFor(ctx, cmd, flagName)
+	if faf == nil {
+		// theres no autocompletion for this flag
+		return []string{}, 0
+	}
+
+	var (
+		requiresCS      bool
+		requiresSession bool
+		err             error
+
+		completions     = []string{}
+		shellCompDir    cobra.ShellCompDirective
+		csAnnotation, _ = cmd.Annotations[commands.FlagAutocompletionFuncRequiresConnectorServer]
+		sAnnotation, _  = cmd.Annotations[commands.FlagAutocompletionFuncRequiresSession]
+	)
+
+	for _, annotationFlagName := range strings.Split(csAnnotation, ",") {
+		if annotationFlagName == flagName {
+			requiresCS = true
+			break
+		}
+	}
+
+	for _, annotationFlagName := range strings.Split(sAnnotation, ",") {
+		if annotationFlagName == flagName {
+			requiresSession = true
+			break
+		}
+	}
+
+	if requiresSession {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-autoCompleteFlag", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+			// the context within this scope is not derived from the context of the outer scope
+			cmdCtx = commands.WithSession(cmdCtx, ts)
+			if requiresCS {
+				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+			}
+
+			completions, shellCompDir = faf(cmdCtx, cmd, args, toComplete)
+			return nil
+		})
+	} else {
+		cmdCtx := ctx
+		if requiresCS {
+			cmdCtx = commands.WithConnectorServer(ctx, s)
+		}
+
+		completions, shellCompDir = faf(cmdCtx, cmd, args, toComplete)
+	}
+
+	if err != nil {
+		return completions, cobra.ShellCompDirectiveError
+	}
+
+	return completions, shellCompDir
 }

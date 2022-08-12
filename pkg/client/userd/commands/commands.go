@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	CommandRequiresSession               = "cobra.telepresence.io/with-session"
-	CommandRequiresConnectorServer       = "cobra.telepresence.io/with-connector-server"
-	ValidArgsFuncRequiresConnectorServer = "cobra.telepresence.io/valid-args-func/with-connector-server"
+	CommandRequiresSession                        = "cobra.telepresence.io/with-session"
+	CommandRequiresConnectorServer                = "cobra.telepresence.io/with-connector-server"
+	ValidArgsFuncRequiresConnectorServer          = "cobra.telepresence.io/valid-args-func/with-connector-server"
+	FlagAutocompletionFuncRequiresConnectorServer = "cobra.telepresence.io/flag-autocompletion-func/with-connector-server"
+	FlagAutocompletionFuncRequiresSession         = "cobra.telepresence.io/flag-autocompletion-func/with-session"
 )
 
 type command interface {
@@ -23,11 +25,15 @@ type command interface {
 	group() string
 }
 
-type autocompleter interface {
-	validArgsFunc() ValidArgsFunction
+type argAutocompleter interface {
+	validArgsFunc() AutocompletionFunc
 }
 
-type ValidArgsFunction func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
+type flagAutocompleter interface {
+	flagAutocompletionFunc(flagName string) AutocompletionFunc
+}
+
+type AutocompletionFunc func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 
 func commands() []command {
 	return []command{
@@ -81,14 +87,29 @@ func GetCommandByName(ctx context.Context, name string) *cobra.Command {
 	return nil
 }
 
-func GetValidArgsFunctionFor(ctx context.Context, cmd *cobra.Command) ValidArgsFunction {
+func GetValidArgsFunctionFor(ctx context.Context, cmd *cobra.Command) AutocompletionFunc {
 	name := cmd.Name()
 	for _, cmd := range commands() {
 		if cmd.cobraCommand(ctx).Name() != name {
 			continue
 		}
-		if ac, ok := cmd.(autocompleter); ok {
+		if ac, ok := cmd.(argAutocompleter); ok {
 			return ac.validArgsFunc()
+		} else {
+			return nil
+		}
+	}
+	return nil
+}
+
+func GetFlagAutocompletionFuncFor(ctx context.Context, cmd *cobra.Command, flagName string) AutocompletionFunc {
+	name := cmd.Name()
+	for _, cmd := range commands() {
+		if cmd.cobraCommand(ctx).Name() != name {
+			continue
+		}
+		if ac, ok := cmd.(flagAutocompleter); ok {
+			return ac.flagAutocompletionFunc(flagName)
 		} else {
 			return nil
 		}

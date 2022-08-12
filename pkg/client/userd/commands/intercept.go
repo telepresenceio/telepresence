@@ -58,9 +58,10 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 		Short: "Intercept a service",
 
 		Annotations: map[string]string{
-			CommandRequiresSession:               "",
-			CommandRequiresConnectorServer:       "",
-			ValidArgsFuncRequiresConnectorServer: "",
+			CommandRequiresSession:                "",
+			CommandRequiresConnectorServer:        "",
+			ValidArgsFuncRequiresConnectorServer:  "",
+			FlagAutocompletionFuncRequiresSession: "namespace",
 		},
 	}
 	cmd.args = interceptArgs{}
@@ -189,7 +190,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 	}
 }
 
-func (c *interceptCommand) validArgsFunc() ValidArgsFunction {
+func (c *interceptCommand) validArgsFunc() AutocompletionFunc {
 	return func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		cs := GetConnectorServer(ctx)
 		if cs == nil {
@@ -226,11 +227,11 @@ func (c *interceptCommand) validArgsFunc() ValidArgsFunction {
 			return nil, cobra.ShellCompDirectiveError
 		}
 
-		list := make([]string, len(r.Workloads))
-		for idx, w := range r.Workloads {
+		list := make([]string, 0)
+		for _, w := range r.Workloads {
 			// only suggest strings that start with the string were autocompleting
 			if strings.HasPrefix(w.Name, toComplete) {
-				list[idx] = w.Name
+				list = append(list, w.Name)
 			}
 		}
 
@@ -238,6 +239,34 @@ func (c *interceptCommand) validArgsFunc() ValidArgsFunction {
 		// There probably exists a number that would be a good cutoff limit.
 
 		return list, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+	}
+}
+
+func (c *interceptCommand) flagAutocompletionFunc(flagName string) AutocompletionFunc {
+	switch flagName {
+	case "namespace":
+		return c.flagAutocompletion_namespace()
+	}
+	return nil
+}
+
+func (c *interceptCommand) flagAutocompletion_namespace() AutocompletionFunc {
+	return func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		completions := make([]string, 0)
+		session := GetSession(ctx)
+		if session == nil {
+			dlog.Debugf(ctx, "no session found")
+			return completions, cobra.ShellCompDirectiveError
+		}
+
+		namespaces := session.GetCurrentNamespaces(true)
+		for _, namespace := range namespaces {
+			if strings.HasPrefix(namespace, toComplete) {
+				completions = append(completions, namespace)
+			}
+		}
+
+		return completions, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
