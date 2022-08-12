@@ -42,6 +42,8 @@ type SystemAClient interface {
 	ReportInterceptCreation(ctx context.Context, in *InterceptCreationResult, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
 	GetSavedIntercept(ctx context.Context, in *GetSavedInterceptRequest, opts ...grpc.CallOption) (*SavedIntercept, error)
+	// AutocompleteSavedIntercept provides the functionality for autocompleting saved intercept names on the cli
+	AutocompleteSavedIntercept(ctx context.Context, in *AutocompleteSavedInterceptRequest, opts ...grpc.CallOption) (*AutocompleteSavedInterceptsResponse, error)
 }
 
 type systemAClient struct {
@@ -156,6 +158,15 @@ func (c *systemAClient) GetSavedIntercept(ctx context.Context, in *GetSavedInter
 	return out, nil
 }
 
+func (c *systemAClient) AutocompleteSavedIntercept(ctx context.Context, in *AutocompleteSavedInterceptRequest, opts ...grpc.CallOption) (*AutocompleteSavedInterceptsResponse, error) {
+	out := new(AutocompleteSavedInterceptsResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.userdaemon.SystemA/AutocompleteSavedIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SystemAServer is the server API for SystemA service.
 // All implementations must embed UnimplementedSystemAServer
 // for forward compatibility
@@ -179,6 +190,8 @@ type SystemAServer interface {
 	ReportInterceptCreation(context.Context, *InterceptCreationResult) (*emptypb.Empty, error)
 	// GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
 	GetSavedIntercept(context.Context, *GetSavedInterceptRequest) (*SavedIntercept, error)
+	// AutocompleteSavedIntercept provides the functionality for autocompleting saved intercept names on the cli
+	AutocompleteSavedIntercept(context.Context, *AutocompleteSavedInterceptRequest) (*AutocompleteSavedInterceptsResponse, error)
 	mustEmbedUnimplementedSystemAServer()
 }
 
@@ -203,6 +216,9 @@ func (UnimplementedSystemAServer) ReportInterceptCreation(context.Context, *Inte
 }
 func (UnimplementedSystemAServer) GetSavedIntercept(context.Context, *GetSavedInterceptRequest) (*SavedIntercept, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSavedIntercept not implemented")
+}
+func (UnimplementedSystemAServer) AutocompleteSavedIntercept(context.Context, *AutocompleteSavedInterceptRequest) (*AutocompleteSavedInterceptsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AutocompleteSavedIntercept not implemented")
 }
 func (UnimplementedSystemAServer) mustEmbedUnimplementedSystemAServer() {}
 
@@ -341,6 +357,24 @@ func _SystemA_GetSavedIntercept_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemA_AutocompleteSavedIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AutocompleteSavedInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemAServer).AutocompleteSavedIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.userdaemon.SystemA/AutocompleteSavedIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemAServer).AutocompleteSavedIntercept(ctx, req.(*AutocompleteSavedInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SystemA_ServiceDesc is the grpc.ServiceDesc for SystemA service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -363,6 +397,10 @@ var SystemA_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSavedIntercept",
 			Handler:    _SystemA_GetSavedIntercept_Handler,
+		},
+		{
+			MethodName: "AutocompleteSavedIntercept",
+			Handler:    _SystemA_AutocompleteSavedIntercept_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
