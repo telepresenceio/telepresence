@@ -59,7 +59,7 @@ func listCommand() *cobra.Command {
 		})
 		if err != nil {
 			dlog.Debugf(cmd.Context(), "error getting namespaces: %v", err)
-			shellCompDir = shellCompDir | cobra.ShellCompDirectiveError
+			shellCompDir |= cobra.ShellCompDirectiveError
 		}
 		return completions, shellCompDir
 	})
