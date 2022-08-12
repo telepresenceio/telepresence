@@ -745,3 +745,26 @@ func (s *Service) autocompleteFlag(ctx context.Context, cmd *cobra.Command, args
 
 	return completions, shellCompDir
 }
+
+func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {
+	var resp rpc.GetNamespacesResponse
+	err := s.withSession(ctx, "GetNamespaces", func(ctx context.Context, session trafficmgr.Session) error {
+		resp.Namespaces = session.GetCurrentNamespaces(req.ForClientAccess)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if p := req.Prefix; p != "" {
+		var namespaces = []string{}
+		for _, namespace := range resp.Namespaces {
+			if strings.HasPrefix(namespace, p) {
+				namespaces = append(namespaces, namespace)
+			}
+		}
+		resp.Namespaces = namespaces
+	}
+
+	return &resp, nil
+}

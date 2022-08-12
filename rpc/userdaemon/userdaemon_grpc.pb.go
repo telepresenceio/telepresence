@@ -39,10 +39,16 @@ type SystemAClient interface {
 	ReportAvailableNamespaces(ctx context.Context, opts ...grpc.CallOption) (SystemA_ReportAvailableNamespacesClient, error)
 	// ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
 	// has completed
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
 	ReportInterceptCreation(ctx context.Context, in *InterceptCreationResult, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
 	GetSavedIntercept(ctx context.Context, in *GetSavedInterceptRequest, opts ...grpc.CallOption) (*SavedIntercept, error)
 	// AutocompleteSavedIntercept provides the functionality for autocompleting saved intercept names on the cli
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
 	AutocompleteSavedIntercept(ctx context.Context, in *AutocompleteSavedInterceptRequest, opts ...grpc.CallOption) (*AutocompleteSavedInterceptsResponse, error)
 }
 
@@ -187,10 +193,16 @@ type SystemAServer interface {
 	ReportAvailableNamespaces(SystemA_ReportAvailableNamespacesServer) error
 	// ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
 	// has completed
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
 	ReportInterceptCreation(context.Context, *InterceptCreationResult) (*emptypb.Empty, error)
 	// GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
 	GetSavedIntercept(context.Context, *GetSavedInterceptRequest) (*SavedIntercept, error)
 	// AutocompleteSavedIntercept provides the functionality for autocompleting saved intercept names on the cli
+	//
+	// This RPC is only used by the proprietary user-daemon and not the OSS one.
 	AutocompleteSavedIntercept(context.Context, *AutocompleteSavedInterceptRequest) (*AutocompleteSavedInterceptsResponse, error)
 	mustEmbedUnimplementedSystemAServer()
 }

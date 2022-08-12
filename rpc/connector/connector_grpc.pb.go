@@ -89,6 +89,8 @@ type ConnectorClient interface {
 	AddInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// RemoveInterceptor removes a previously added interceptor
 	RemoveInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// GetNamespaces gets the mapped namespaces with an optional prefix
+	GetNamespaces(ctx context.Context, in *GetNamespacesRequest, opts ...grpc.CallOption) (*GetNamespacesResponse, error)
 }
 
 type connectorClient struct {
@@ -388,6 +390,15 @@ func (c *connectorClient) RemoveInterceptor(ctx context.Context, in *Interceptor
 	return out, nil
 }
 
+func (c *connectorClient) GetNamespaces(ctx context.Context, in *GetNamespacesRequest, opts ...grpc.CallOption) (*GetNamespacesResponse, error) {
+	out := new(GetNamespacesResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetNamespaces", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -455,6 +466,8 @@ type ConnectorServer interface {
 	AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
 	// RemoveInterceptor removes a previously added interceptor
 	RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
+	// GetNamespaces gets the mapped namespaces with an optional prefix
+	GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -542,6 +555,9 @@ func (UnimplementedConnectorServer) AddInterceptor(context.Context, *Interceptor
 }
 func (UnimplementedConnectorServer) RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveInterceptor not implemented")
+}
+func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaces not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -1048,6 +1064,24 @@ func _Connector_RemoveInterceptor_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_GetNamespaces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetNamespacesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetNamespaces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GetNamespaces",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetNamespaces(ctx, req.(*GetNamespacesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1154,6 +1188,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveInterceptor",
 			Handler:    _Connector_RemoveInterceptor_Handler,
+		},
+		{
+			MethodName: "GetNamespaces",
+			Handler:    _Connector_GetNamespaces_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
