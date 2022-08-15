@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -73,7 +74,9 @@ type session struct {
 	scout *scout.Reporter
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
-	dev *vif.Device
+	dev vif.Device
+
+	stack *stack.Stack
 
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
@@ -107,11 +110,11 @@ type session struct {
 	alsoProxySubnets []*net.IPNet
 
 	// Subnets configured not to be proxied
-	neverProxySubnets []routing.Route
+	neverProxySubnets []*routing.Route
 	// Subnets that the router is currently configured with. Managed, and only used in
 	// the refreshSubnets() method.
 	curSubnets      []*net.IPNet
-	curStaticRoutes []routing.Route
+	curStaticRoutes []*routing.Route
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -187,8 +190,8 @@ func convertAlsoProxySubnets(c context.Context, ms []*manager.IPNet) []*net.IPNe
 	return ns
 }
 
-func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []routing.Route {
-	rs := make([]routing.Route, 0, len(ms))
+func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []*routing.Route {
+	rs := make([]*routing.Route, 0, len(ms))
 	for _, m := range ms {
 		n := iputil.IPNetFromRPC(m)
 		r, err := routing.GetRoute(c, n)
@@ -213,15 +216,9 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		return nil, err
 	}
 
-	dev, err := vif.OpenTun(c)
-	if err != nil {
-		return nil, err
-	}
-
 	s := &session{
 		cancel:            func() {},
 		scout:             scout,
-		dev:               dev,
 		handlers:          tunnel.NewPool(),
 		fragmentMap:       make(map[uint16][]*buffer.Data),
 		rndSource:         rand.NewSource(time.Now().UnixNano()),
@@ -232,6 +229,12 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
 		proxyCluster:      true,
 	}
+
+	s.dev, err = vif.OpenTun(c, &s.closing)
+	if err != nil {
+		return nil, err
+	}
+
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
 	return s, nil
 }
@@ -284,7 +287,7 @@ func (s *session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 }
 
 func (s *session) reconcileStaticRoutes(ctx context.Context) error {
-	desired := []routing.Route{}
+	desired := []*routing.Route{}
 
 	// We're not going to add static routes unless they're actually needed
 	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
@@ -304,7 +307,7 @@ adding:
 				continue adding
 			}
 		}
-		if err := s.dev.AddStaticRoute(ctx, r); err != nil {
+		if err := r.AddStatic(ctx); err != nil {
 			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
@@ -316,7 +319,7 @@ removing:
 				continue removing
 			}
 		}
-		if err := s.dev.RemoveStaticRoute(ctx, c); err != nil {
+		if err := c.RemoveStatic(ctx); err != nil {
 			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
 		}
 	}
@@ -408,6 +411,11 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
 				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
 				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
+				s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator())
+				if err != nil {
+					dlog.Errorf(ctx, "NewStack: %v", err)
+					return
+				}
 
 				// Applying DNS config
 				// seg fault guard
@@ -458,9 +466,15 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 	if info.ManagerPodIp == nil {
 		return
 	}
+	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
+	if ct == 0 {
+		dlog.Debug(ctx, "Connectivity check disabled")
+		return
+	}
 	ip := net.IP(info.ManagerPodIp).String()
-	tCtx, tCancel := context.WithTimeout(ctx, 2*time.Second)
+	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
+	dlog.Debugf(ctx, "Performing connectivity check with timeout %s", ct)
 	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
@@ -508,7 +522,10 @@ func (s *session) run(c context.Context) error {
 		cancelDNSLock.Unlock()
 		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
 	})
-	g.Go("router", s.routerWorker)
+	g.Go("stack", func(_ context.Context) error {
+		s.stack.Wait()
+		return nil
+	})
 	return g.Wait()
 }
 
@@ -532,9 +549,11 @@ func (s *session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
+	s.stack.Close()
+
 	cc = dcontext.WithoutCancel(c)
 	for _, np := range s.curStaticRoutes {
-		err := s.dev.RemoveStaticRoute(cc, np)
+		err := np.RemoveStatic(cc)
 		if err != nil {
 			dlog.Warnf(c, "error removing route %s: %v", np, err)
 		}

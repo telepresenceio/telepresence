@@ -21,12 +21,12 @@ const sysProtoControl = 2
 const uTunOptIfName = 2
 const uTunControlName = "com.apple.net.utun_control"
 
-type Device struct {
+type nativeDevice struct {
 	*os.File
 	name string
 }
 
-func openTun(_ context.Context) (*Device, error) {
+func openTun(_ context.Context) (*nativeDevice, error) {
 	fd, err := unix.Socket(unix.AF_SYSTEM, unix.SOCK_DGRAM, sysProtoControl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DGRAM socket: %w", err)
@@ -56,49 +56,37 @@ func openTun(_ context.Context) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Device{
+	return &nativeDevice{
 		File: os.NewFile(uintptr(fd), ""),
 		name: name,
 	}, nil
 }
 
-func (t *Device) addSubnet(_ context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) addSubnet(_ context.Context, subnet *net.IPNet) error {
 	to := make(net.IP, len(subnet.IP))
 	copy(to, subnet.IP)
 	to[len(to)-1] = 1
 	if err := t.setAddr(subnet, to); err != nil {
 		return err
 	}
-	return withRouteSocket(func(s int) error {
-		return t.routeAdd(s, 1, subnet, to)
-	})
+	return routing.Add(1, subnet, to)
 }
 
-func (t *Device) removeSubnet(_ context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) index() int32 {
+	panic("not implemented")
+}
+
+func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error {
 	to := make(net.IP, len(subnet.IP))
 	copy(to, subnet.IP)
 	to[len(to)-1] = 1
 	if err := t.removeAddr(subnet, to); err != nil {
 		return err
 	}
-	return withRouteSocket(func(s int) error {
-		return t.routeClear(s, 1, subnet, to)
-	})
+	return routing.Clear(1, subnet, to)
 }
 
-func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
-	return withRouteSocket(func(s int) error {
-		return t.routeAdd(s, 1, route.RoutedNet, route.Gateway)
-	})
-}
-
-func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
-	return withRouteSocket(func(s int) error {
-		return t.routeClear(s, 1, route.RoutedNet, route.Gateway)
-	})
-}
-
-func (t *Device) setMTU(mtu int) error {
+func (t *nativeDevice) setMTU(mtu int) error {
 	return withSocket(unix.AF_INET, func(fd int) error {
 		var ifr unix.IfreqMTU
 		copy(ifr.Name[:], t.name)
@@ -111,7 +99,7 @@ func (t *Device) setMTU(mtu int) error {
 	})
 }
 
-func (t *Device) readPacket(into *buffer.Data) (int, error) {
+func (t *nativeDevice) readPacket(into *buffer.Data) (int, error) {
 	n, err := t.File.Read(into.Raw())
 	if n >= buffer.PrefixLen {
 		n -= buffer.PrefixLen
@@ -119,7 +107,7 @@ func (t *Device) readPacket(into *buffer.Data) (int, error) {
 	return n, err
 }
 
-func (t *Device) writePacket(from *buffer.Data, offset int) (n int, err error) {
+func (t *nativeDevice) writePacket(from *buffer.Data, offset int) (n int, err error) {
 	raw := from.Raw()
 	if len(raw) <= buffer.PrefixLen {
 		return 0, unix.EIO
@@ -193,7 +181,7 @@ func addrToIp4(subnet *net.IPNet, to net.IP) (*net.IPNet, net.IP, bool) {
 	return nil, nil, false
 }
 
-func (t *Device) setAddr(subnet *net.IPNet, to net.IP) error {
+func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 	if sub4, to4, ok := addrToIp4(subnet, to); ok {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
@@ -229,7 +217,7 @@ func (t *Device) setAddr(subnet *net.IPNet, to net.IP) error {
 	}
 }
 
-func (t *Device) removeAddr(subnet *net.IPNet, to net.IP) error {
+func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
 	if sub4, to4, ok := addrToIp4(subnet, to); ok {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{

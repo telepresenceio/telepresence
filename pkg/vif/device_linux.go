@@ -12,18 +12,17 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 const devicePath = "/dev/net/tun"
 
-type Device struct {
+type nativeDevice struct {
 	*os.File
-	name  string
-	index int32
+	name           string
+	interfaceIndex int32
 }
 
-func openTun(_ context.Context) (*Device, error) {
+func openTun(_ context.Context) (*nativeDevice, error) {
 	// https://www.kernel.org/doc/html/latest/networking/tuntap.html
 
 	fd, err := unix.Open(devicePath, unix.O_RDWR, 0)
@@ -89,31 +88,22 @@ func openTun(_ context.Context) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Device{File: os.NewFile(uintptr(fd), devicePath), name: name, index: index}, nil
+	return &nativeDevice{File: os.NewFile(uintptr(fd), devicePath), name: name, interfaceIndex: index}, nil
 }
 
-func (t *Device) addSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) addSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return dexec.CommandContext(ctx, "ip", "a", "add", subnet.String(), "dev", t.name).Run()
 }
 
-func (t *Device) removeSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) removeSubnet(ctx context.Context, subnet *net.IPNet) error {
 	return dexec.CommandContext(ctx, "ip", "a", "del", subnet.String(), "dev", t.name).Run()
 }
 
-func (t *Device) addStaticRoute(ctx context.Context, route routing.Route) error {
-	return dexec.CommandContext(ctx, "ip", "route", "add", route.RoutedNet.String(), "via", route.Gateway.String(), "dev", route.Interface.Name).Run()
+func (t *nativeDevice) index() int32 {
+	return t.interfaceIndex
 }
 
-func (t *Device) removeStaticRoute(ctx context.Context, route routing.Route) error {
-	return dexec.CommandContext(ctx, "ip", "route", "del", route.RoutedNet.String(), "via", route.Gateway.String(), "dev", route.Interface.Name).Run()
-}
-
-// Index returns the index of this device
-func (t *Device) Index() int32 {
-	return t.index
-}
-
-func (t *Device) setMTU(mtu int) error {
+func (t *nativeDevice) setMTU(mtu int) error {
 	return withSocket(unix.AF_INET, func(fd int) error {
 		var mtuRequest struct {
 			name [unix.IFNAMSIZ]byte
@@ -130,11 +120,11 @@ func (t *Device) setMTU(mtu int) error {
 	})
 }
 
-func (t *Device) readPacket(into *buffer.Data) (int, error) {
+func (t *nativeDevice) readPacket(into *buffer.Data) (int, error) {
 	return t.File.Read(into.Raw())
 }
 
-func (t *Device) writePacket(from *buffer.Data, offset int) (int, error) {
+func (t *nativeDevice) writePacket(from *buffer.Data, offset int) (int, error) {
 	return t.File.Write(from.Raw()[offset:])
 }
 

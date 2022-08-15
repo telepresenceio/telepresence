@@ -14,8 +14,7 @@ func TestGetRoutingTable_defaultRoute(t *testing.T) {
 	rt, err := GetRoutingTable(ctx)
 	assert.NoError(t, err)
 	var dflt *Route
-	for i := range rt {
-		r := &rt[i]
+	for _, r := range rt {
 		if r.Default {
 			dflt = r
 			break

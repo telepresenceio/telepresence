@@ -30,22 +30,30 @@ func init() {
 
 func (s *multipleServicesSuite) Test_LargeRequest() {
 	require := s.Require()
-	client := &http.Client{Timeout: 3 * time.Minute}
-	const sendSize = 1024 * 1024 * 5
-	const concurrentRequests = 3
+	client := &http.Client{Timeout: 15 * time.Minute}
+	const sendSize = 1024 * 1024 * 20
+	const varyMax = 1 << 15 // vary last 64Ki
+	const concurrentRequests = 31
 
+	tb := [sendSize + varyMax]byte{}
+	tb[0] = '!'
+	tb[1] = '\n'
+	for i := 2; i < sendSize+varyMax; i++ {
+		tb[i] = 'A'
+	}
+
+	time.Sleep(3 * time.Second)
 	wg := sync.WaitGroup{}
 	wg.Add(concurrentRequests)
 	for i := 0; i < concurrentRequests; i++ {
-		go func() {
+		go func(x int) {
 			defer wg.Done()
-			b := make([]byte, sendSize)
-			b[0] = '!'
-			b[1] = '\n'
-			for i := 2; i < sendSize; i++ {
-				b[i] = 'A'
-			}
-			req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("http://%s-0.%s/put", s.Name(), s.AppNamespace()), bytes.NewBuffer(b))
+			sendSize := sendSize + rand.Int()%varyMax // vary the last 64Ki to get random buffer sizes
+			b := tb[:sendSize]
+
+			// Distribute the requests over all services
+			url := fmt.Sprintf("http://%s-%d.%s/put", s.Name(), x%s.ServiceCount(), s.AppNamespace())
+			req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(b))
 			require.NoError(err)
 
 			resp, err := client.Do(req)
@@ -54,29 +62,32 @@ func (s *multipleServicesSuite) Test_LargeRequest() {
 			require.Equal(resp.StatusCode, 200)
 
 			// Read start
-			buf := make([]byte, 1)
-			_, err = resp.Body.Read(buf)
-			for err == nil && buf[0] != '!' {
-				_, err = resp.Body.Read(buf)
+			buf := make([]byte, sendSize)
+			var sb []byte
+			b1 := buf[:1]
+			for {
+				if _, err = resp.Body.Read(b1); err != nil || b1[0] == '!' {
+					break
+				}
+				sb = append(sb, b1[0])
 			}
 			require.NoError(err)
-			_, err = resp.Body.Read(buf)
-			require.Equal(buf[0], byte('\n'))
+			b1 = buf[1:2]
+			_, err = resp.Body.Read(b1)
+			require.Equal(b1[0], byte('\n'))
 			require.NoError(err)
 
-			buf = make([]byte, sendSize-2)
-			i := 0
+			i := 2
 			for err == nil {
 				var j int
 				j, err = resp.Body.Read(buf[i:])
 				i += j
 			}
-
-			require.Equal(len(buf), i)
-			// Do this instead of require.Equal(b[2:], buf) so that on failure we don't print two 5MB buffers to the terminal
-			require.Equal(true, bytes.Equal(b[2:], buf))
+			// Do this instead of require.Equal(b, buf) so that on failure we don't print two very large buffers to the terminal
+			require.Equalf(sendSize, i, "Size of response body not equal sent body. %s", string(sb))
+			require.Equal(true, bytes.Equal(b, buf))
 			require.Equal(io.EOF, err)
-		}()
+		}(i)
 	}
 	wg.Wait()
 }

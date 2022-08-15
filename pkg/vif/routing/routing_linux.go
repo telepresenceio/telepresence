@@ -37,7 +37,7 @@ type rtmsg struct {
 	Flags uint32
 }
 
-func GetRoutingTable(ctx context.Context) ([]Route, error) {
+func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	// Most of this logic was adapted from https://github.com/google/gopacket/blob/master/routing/routing.go
 	tab, err := syscall.NetlinkRIB(syscall.RTM_GETROUTE, syscall.AF_UNSPEC)
 	if err != nil {
@@ -47,7 +47,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse netlink messages: %w", err)
 	}
-	routes := []Route{}
+	routes := []*Route{}
 msgLoop:
 	for _, msg := range msgs {
 		switch msg.Header.Type {
@@ -115,7 +115,7 @@ msgLoop:
 				if srcIP == nil {
 					continue
 				}
-				routes = append(routes, Route{
+				routes = append(routes, &Route{
 					LocalIP:   srcIP,
 					RoutedNet: dstNet,
 					Interface: iface,
@@ -128,38 +128,46 @@ msgLoop:
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
+func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	cmd := dexec.CommandContext(ctx, "ip", "route", "get", ip.String())
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {
-		return Route{}, fmt.Errorf("failed to get route for %s: %w", ip, err)
+		return nil, fmt.Errorf("failed to get route for %s: %w", ip, err)
 	}
 	match := findInterfaceRe.FindStringSubmatch(string(out))
 	if match == nil {
-		return Route{}, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, out)
+		return nil, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, out)
 	}
 	var gatewayIP net.IP
 	gw := match[gwidx]
 	if gw != "" {
 		gatewayIP = iputil.Parse(gw)
 		if gatewayIP == nil {
-			return Route{}, fmt.Errorf("unable to parse gateway IP %s", gw)
+			return nil, fmt.Errorf("unable to parse gateway IP %s", gw)
 		}
 	}
 	iface, err := net.InterfaceByName(match[devIdx])
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to get interface %s: %w", match[devIdx], err)
+		return nil, fmt.Errorf("unable to get interface %s: %w", match[devIdx], err)
 	}
 	localIP := iputil.Parse(match[srcIdx])
 	if localIP == nil {
-		return Route{}, fmt.Errorf("unable to parse local IP %s", match[srcIdx])
+		return nil, fmt.Errorf("unable to parse local IP %s", match[srcIdx])
 	}
-	return Route{
+	return &Route{
 		Gateway:   gatewayIP,
 		Interface: iface,
 		RoutedNet: routedNet,
 		LocalIP:   localIP,
 	}, nil
+}
+
+func (r *Route) addStatic(ctx context.Context) error {
+	return dexec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
+}
+
+func (r *Route) removeStatic(ctx context.Context) error {
+	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
 }

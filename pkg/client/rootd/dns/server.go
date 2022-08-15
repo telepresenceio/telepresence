@@ -251,7 +251,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
 }
 
-func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, *vif.Device) error, dev *vif.Device) {
+func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
 	g.Go("SearchPaths", func(c context.Context) error {
 		var prevPaths []string
 		unchanged := func(paths []string) bool {

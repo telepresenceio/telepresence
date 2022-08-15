@@ -42,18 +42,21 @@ func (p *bidiPipe) Done() <-chan struct{} {
 // doPipe reads from a and writes to b.
 func doPipe(ctx context.Context, a, b Stream, wg *sync.WaitGroup) {
 	defer wg.Done()
-	wrCh := make(chan Message)
+	wrCh := make(chan Message, 50)
 	defer close(wrCh)
-	WriteLoop(ctx, b, wrCh)
+	wg.Add(1)
+	WriteLoop(ctx, b, wrCh, wg)
 	rdCh, errCh := ReadLoop(ctx, a)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case err := <-errCh:
-			dlog.Error(ctx, err)
-		case m := <-rdCh:
-			if m == nil {
+		case err, ok := <-errCh:
+			if ok {
+				dlog.Error(ctx, err)
+			}
+		case m, ok := <-rdCh:
+			if !ok {
 				return
 			}
 			select {
