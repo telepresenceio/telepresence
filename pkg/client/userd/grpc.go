@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -517,6 +518,10 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
 
+		for _, group := range cli.GlobalFlagGroups() {
+			cmd.PersistentFlags().AddFlagSet(group.Flags)
+		}
+
 		err = cmd.ParseFlags(args)
 		if err != nil {
 			if err == pflag.ErrHelp {
@@ -540,6 +545,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 			}
 		}
 
+		ctx = output.WithStructure(ctx, cmd)
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
 			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(cmdCtx context.Context, ts trafficmgr.Session) error {
 				// the context within this scope is not derived from the context of the outer scope

@@ -253,7 +253,11 @@ func initGlobalFlagGroups() {
 		flag.Hidden = true
 	})
 
-	globalFlagGroups = []cliutil.FlagGroup{{
+	globalFlagGroups = GlobalFlagGroups()
+}
+
+func GlobalFlagGroups() []cliutil.FlagGroup {
+	return []cliutil.FlagGroup{{
 		Name: "other Telepresence flags",
 		Flags: func() *pflag.FlagSet {
 			flags := pflag.NewFlagSet("", 0)
