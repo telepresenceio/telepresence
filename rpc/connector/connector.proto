@@ -41,12 +41,12 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
-  // Installs traffic-manager in the cluster.
-  rpc Install(InstallRequest) returns (InstallResult);
+  // Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
+  rpc Helm(HelmRequest) returns (Result);
 
-  // Uninstalls traffic-agents and traffic-manager from the cluster.
+  // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
-  rpc Uninstall(UninstallRequest) returns (UninstallResult);
+  rpc Uninstall(UninstallRequest) returns (Result);
 
   // Returns a list of workloads and their current intercept status.
   // Requires having already called Connect.
@@ -155,6 +155,7 @@ message Interceptor {
 message RunCommandResponse {
   bytes stdout = 1;
   bytes stderr = 2;
+  Result result = 3;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -213,14 +214,21 @@ message IngressInfos {
   repeated manager.IngressInfo ingress_infos = 1;
 }
 
-message InstallRequest {
+message HelmRequest {
+  enum Type {
+    UNSPECIFIED = 0;
+    INSTALL = 1;
+    UPGRADE = 2;
+    UNINSTALL = 3;
+  }
   ConnectRequest connect_request = 1;
-  bool upgrade = 2;
+  Type type = 2;
   repeated string value_paths = 3;
 }
 
-message InstallResult {
+message Result {
   string error_text = 1;
+  int32 error_category = 2;
 }
 
 message UninstallRequest {
@@ -232,9 +240,6 @@ message UninstallRequest {
 
     // Uninstalls all agents
     ALL_AGENTS = 2;
-
-    // Uninstalls all agents and the traffic-manager
-    EVERYTHING = 3;
   }
 
   UninstallType uninstall_type = 1;
@@ -242,11 +247,6 @@ message UninstallRequest {
 
   // Namespace of agents to remove.
   string namespace = 3;
-}
-
-message UninstallResult {
-  string error_text = 1;
-  int32 error_category = 2;
 }
 
 message CreateInterceptRequest {

@@ -93,8 +93,14 @@ PKG_VERSION = $(shell go list ./pkg/version)
 # Build: artifacts that don't get checked in to Git
 # =================================================
 
+ifeq ($(GOHOSTOS),windows)
+TELEPRESENCE=$(BINDIR)/telepresence.exe
+else
+TELEPRESENCE=$(BINDIR)/telepresence
+endif
+
 .PHONY: build
-build: $(BINDIR)/telepresence ## (Build) Producte a `telepresence` binary for GOOS/GOARCH
+build: $(TELEPRESENCE) ## (Build) Produce a `telepresence` binary for GOOS/GOARCH
 
 # We might be building for arm64 on a mac that doesn't have an M1 chip
 # (which is definitely the case with circle), so GOARCH may be set for that,
@@ -117,9 +123,9 @@ $(BINDIR)/wintun.dll: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTAR
 	cp $< $@
 endif
 
-$(BINDIR)/telepresence: FORCE
+$(TELEPRESENCE): FORCE
 ifeq ($(GOHOSTOS),windows)
-$(BINDIR)/telepresence: $(BINDIR)/wintun.dll
+$(TELEPRESENCE): $(BINDIR)/wintun.dll
 endif
 	mkdir -p $(@D)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence

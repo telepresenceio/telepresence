@@ -1,6 +1,7 @@
 run:
   build-tags:
     - citest
+  modules-download-mode: readonly
 
 issues:
   # Give me the full output

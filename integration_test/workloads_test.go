@@ -36,7 +36,7 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	itest.TelepresenceQuitOk(ctx)
 
 	dfltCtx := itest.WithUser(ctx, "default")
-	itest.TelepresenceOk(dfltCtx, "helm", "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
+	itest.TelepresenceOk(dfltCtx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
 	itest.TelepresenceQuitOk(dfltCtx)
 	itest.TelepresenceOk(ctx, "connect")
 
@@ -44,7 +44,7 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 		func() bool {
 			return !strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents"), svc)
 		},
-		120*time.Second, // waitFor
+		180*time.Second, // waitFor
 		6*time.Second,   // polling interval
 	)
 }

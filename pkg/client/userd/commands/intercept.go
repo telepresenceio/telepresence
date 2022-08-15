@@ -133,11 +133,17 @@ func (c *interceptCommand) init(ctx context.Context) {
 		_ = c.cobraCommand(ctx)
 	}
 
+	c.command.SilenceUsage = true
+	c.command.SilenceErrors = true
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
 	c.command.PostRunE = cliutil.RaiseCloudMessage
 	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
 		if c.extErr != nil {
 			return c.extErr
+		}
+		if 1 < len(positional) && ccmd.Flags().ArgsLenAtDash() != 1 {
+			err := fmt.Errorf("commands to be run with intercept must come after options")
+			return err
 		}
 		// arg-parsing
 		var (

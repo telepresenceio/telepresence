@@ -91,6 +91,35 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// Returns true if the string is encountered before a '--' or end of list. This
+// is a best effort, and it might give us false positives.
+func isCommand(s string) bool {
+	prev := ""
+	for _, arg := range os.Args[1:] {
+		if arg == "--" {
+			break
+		}
+		if arg == s {
+			// Do a best effort to rule out that this is a flag argument
+			if strings.HasPrefix(prev, "--") {
+				if prev == "--mapped-namespaces" {
+					continue
+				}
+				// all kubernetes flags take an argument
+				if kubeFlags.Lookup(strings.TrimPrefix(prev, "--")) != nil {
+					continue
+				}
+			}
+			if prev == "-s" {
+				continue
+			}
+			return true
+		}
+		prev = arg
+	}
+	return false
+}
+
 // Command returns the top level "telepresence" CLI command
 func Command(ctx context.Context) *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -104,26 +133,56 @@ func Command(ctx context.Context) *cobra.Command {
 		SilenceUsage:       true, // our FlagErrorFunc will handle it
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
+	rootCmd.SetContext(ctx)
+
+	static := cliutil.CommandGroups{
+		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
+		"Traffic Commands": []*cobra.Command{listCommand(), leaveCommand(), previewCommand()},
+		"Install Commands": []*cobra.Command{helmCommand(), uninstallCommand()},
+		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
+		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+	}
 
 	var groups cliutil.CommandGroups
-	if len(os.Args) > 1 && os.Args[1] == "quit" {
+	if isCommand("quit") {
 		groups = make(cliutil.CommandGroups)
 	} else {
+		// These are commands that known to always exist in the user daemon. If the daemon
+		// isn't running, it will be started just to retrieve the command spec.
+		wellknownRemoteCommands := []string{
+			"intercept",
+			"gather-traces",
+			"upload-traces",
+		}
+
 		var err error
-		if groups, err = getRemoteCommands(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
+		wellKnown := false
+		for _, w := range wellknownRemoteCommands {
+			if isCommand(w) {
+				wellKnown = true
+				break
+			}
+		}
+		if groups, err = getRemoteCommands(ctx, rootCmd, wellKnown); err != nil {
+			if err == cliutil.ErrNoUserDaemon {
+				// This is not a problem if the command is known to the CLI
+				for _, g := range static {
+					for _, c := range g {
+						if isCommand(c.Name()) {
+							groups = make(cliutil.CommandGroups)
+							err = nil
+						}
+					}
+				}
+			}
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
 		}
 	}
 
 	rootCmd.InitDefaultHelpCmd()
-	static := cliutil.CommandGroups{
-		"Session Commands": []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), LicenseCommand(), statusCommand(), quitCommand()},
-		"Traffic Commands": []*cobra.Command{listCommand(), leaveCommand(), previewCommand()},
-		"Install Commands": []*cobra.Command{helmCommand()},
-		"Debug Commands":   []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
-	}
 	for name, cmds := range static {
 		if _, ok := groups[name]; !ok {
 			groups[name] = []*cobra.Command{}

@@ -1,14 +1,32 @@
 # Changelog
 
-### 2.7.0 (TBD)
+### 2.7.2 (TBD)
+
+- Feature: The timeout for the initial connectivity check that Telepresence performs
+  in order to determine if the cluster's subnets are proxied or not can now be configured
+  in the `config.yml` file using `timeouts.connectivityCheck`. The default timeout was
+  changed from 5 seconds to 500 milliseconds to speed up the actual connect.
+
+- Change: The command `telepresence gather-traces` now prints out a message on success.
+
+### 2.7.1 (August 10, 2022)
+
+
+- Change: The command `telepresence uninstall` has been restored, but the `--everything` flag is now deprecated.
+
+- Change: `telepresence helm uninstall` will only uninstall the traffic-manager and no longer accepts the `--everything`, `--agent`,
+  or `--all-agents` flags.
+
+- Bugfix: `telepresence intercept` will attempt to connect to the traffic manager before creating an intercept.
+
+### 2.7.0 (August 8, 2022)
 
 - Feature: `telepresence intercept` has gained a
-  `--preview-url-add-request-headers` flag (and `telepresence preview
-  create` a `--add-request-headers` flag) that can be used to inject
+  `--preview-url-add-request-headers` flag (and `telepresence preview create` a `--add-request-headers` flag) that can be used to inject
   request headers in to every request made through the preview URL.
 
 - Feature: The Docker image now contains a new program in addition to
-  the existing traffic-manager and traffic-agent: the pod-daemon.  The
+  the existing traffic-manager and traffic-agent: the pod-daemon. The
   pod-daemon is a trimmed-down version of the user-daemon that is
   designed to run as a sidecar in a Pod, enabling CI systems to create
   preview deploys.
@@ -19,9 +37,13 @@
   all that data and place it into a gzip file, and `telepresence upload-traces` is
   a new command that will push the gzipped data into an OTLP collector.
 
-### 2.6.9 (TBD)
-
 - Feature: The agent injector now supports a new annotation, `telepresence.getambassador.io/inject-ignore-volume-mounts`, that can be used to make the injector ignore specified volume mounts denoted by a comma-separated string.
+
+- Change: The traffic manager is no longer automatically installed into the cluster. Connecting or creating an intercept in a cluster without a traffic manager will return an error.
+
+- Feature: A new telepresence helm command was added to provide an easy way to install, upgrade, or uninstall the telepresence traffic-manager.
+
+- Change: The command `telepresence uninstall` has been moved to `telepresence helm uninstall`.
 
 - Change: Add an emptyDir volume and volume mount under `/tmp` on the agent sidecar so it works with `readOnlyRootFileSystem: true`
 

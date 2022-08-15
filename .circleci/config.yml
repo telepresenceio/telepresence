@@ -135,8 +135,9 @@ jobs:
     executor: vm-linux
     steps:
     - checkout
+    - install-go
     - run: |
-        [[ $CIRCLE_TAG == *-* ]] || BUCKET_DIR="charts" make push-chart
+        [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG BUCKET_DIR="charts" make push-chart
 
   "publish-nightly-linux":
     executor: vm-linux

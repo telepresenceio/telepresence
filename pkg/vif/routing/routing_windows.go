@@ -15,12 +15,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func GetRoutingTable(ctx context.Context) ([]Route, error) {
+func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get routing table: %w", err)
 	}
-	routes := []Route{}
+	routes := []*Route{}
 	for _, row := range table {
 		dst := row.DestinationPrefix.Prefix()
 		if !dst.IsValid() {
@@ -58,7 +58,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 		} else {
 			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 		}
-		routes = append(routes, Route{
+		routes = append(routes, &Route{
 			LocalIP: localIP,
 			Gateway: gwc,
 			RoutedNet: &net.IPNet{
@@ -72,7 +72,7 @@ func GetRoutingTable(ctx context.Context) ([]Route, error) {
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (Route, error) {
+func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	pshScript := fmt.Sprintf(`
 $job = Find-NetRoute -RemoteIPAddress "%s" -AsJob | Wait-Job -Timeout 30
@@ -88,29 +88,70 @@ $obj.InterfaceIndex[0]
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %w", ip, err)
+		return nil, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %w", ip, err)
 	}
 	lines := strings.Split(string(out), "\n")
 	localIP := iputil.Parse(strings.TrimSpace(lines[0]))
 	if localIP == nil {
-		return Route{}, fmt.Errorf("unable to parse IP from %s", lines[0])
+		return nil, fmt.Errorf("unable to parse IP from %s", lines[0])
 	}
 	gatewayIP := iputil.Parse(strings.TrimSpace(lines[1]))
 	if gatewayIP == nil {
-		return Route{}, fmt.Errorf("unable to parse gateway IP from %s", lines[1])
+		return nil, fmt.Errorf("unable to parse gateway IP from %s", lines[1])
 	}
 	interfaceIndex, err := strconv.Atoi(strings.TrimSpace(lines[2]))
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to parse interface index from %s: %w", lines[2], err)
+		return nil, fmt.Errorf("unable to parse interface index from %s: %w", lines[2], err)
 	}
 	iface, err := net.InterfaceByIndex(interfaceIndex)
 	if err != nil {
-		return Route{}, fmt.Errorf("unable to get interface for index %d: %w", interfaceIndex, err)
+		return nil, fmt.Errorf("unable to get interface for index %d: %w", interfaceIndex, err)
 	}
-	return Route{
+	return &Route{
 		LocalIP:   localIP,
 		Gateway:   gatewayIP,
 		Interface: iface,
 		RoutedNet: routedNet,
 	}, nil
+}
+
+func maskToIP(mask net.IPMask) (ip net.IP) {
+	ip = make(net.IP, len(mask))
+	copy(ip[:], mask)
+	return ip
+}
+
+func (r *Route) addStatic(ctx context.Context) error {
+	mask := maskToIP(r.RoutedNet.Mask)
+	cmd := proc.CommandContext(ctx,
+		"route",
+		"ADD",
+		r.RoutedNet.IP.String(),
+		"MASK",
+		mask.String(),
+		r.Gateway.String(),
+	)
+	cmd.DisableLogging = true
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to create route %s: %w", r, err)
+	}
+	if !strings.Contains(string(out), "OK!") {
+		return fmt.Errorf("failed to create route %s: %s", r, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (r *Route) removeStatic(ctx context.Context) error {
+	cmd := proc.CommandContext(ctx,
+		"route",
+		"DELETE",
+		r.RoutedNet.IP.String(),
+	)
+	cmd.DisableLogging = true
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to delete route %s: %w", r, err)
+	}
+	return nil
 }

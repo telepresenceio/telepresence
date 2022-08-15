@@ -20,12 +20,11 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -41,9 +40,16 @@ func init() {
 	})
 }
 
+func (is *installSuite) SetupSuite() {
+	is.Suite.SetupSuite()
+	ctx := is.Context()
+	itest.TelepresenceQuitOk(ctx)
+	_ = itest.Run(ctx, "helm", "uninstall", "traffic-manager", "--namespace", is.ManagerNamespace())
+}
+
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	ctx := is.Context()
-	ctx, _ = is.installer(ctx)
+	ctx, _ = is.cluster(ctx, "default", is.ManagerNamespace()) // ensure that k8sapi is initialized
 
 	sv := version.Version
 	version.Version = "v0.0.0-bogus"
@@ -97,13 +103,12 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 			PrivateHelm: 30 * time.Second,
 		},
 	})
-	ctx, ti := is.installer(ctx)
-	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	require.Error(ensureTrafficManager(ctx, kc))
 	restoreVersion()
-
 	var err error
 	require.Eventually(func() bool {
-		err = ti.EnsureManager(ctx, &connector.InstallRequest{})
+		err = ensureTrafficManager(ctx, kc)
 		return err == nil
 	}, 3*time.Minute, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
 }
@@ -205,12 +210,12 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	require := is.Require()
 	ctx := is.Context()
 
-	ctx, ti := is.installer(ctx)
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	require.NoError(ensureTrafficManager(ctx, kc))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	is.UninstallTrafficManager(ctx, is.ManagerNamespace())
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	require.NoError(ensureTrafficManager(ctx, kc))
 	require.Eventually(func() bool {
 		obj, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
 		if err != nil {
@@ -221,18 +226,18 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
 }
 
-func (is *installSuite) Test_RemoveManagerAndAgents_canUninstall() {
+func (is *installSuite) Test_RemoveManager_canUninstall() {
 	require := is.Require()
 	ctx := is.Context()
-	ctx, ti := is.installer(ctx)
+	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
-	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
-	// We want to make sure that we can re-install the agent after it's been uninstalled,
+	require.NoError(ensureTrafficManager(ctx, kc))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
+	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
-	// Uninstall the agent one last time -- this should behave the same way as the previous uninstall
-	require.NoError(ti.RemoveManagerAndAgents(ctx, false, []*manager.AgentInfo{}))
+	require.NoError(ensureTrafficManager(ctx, kc))
+	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
@@ -243,16 +248,15 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 	is.T().Skip()
 	require := is.Require()
 	ctx := is.Context()
-	ctx, ti := is.installer(ctx)
-
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	require.NoError(ensureTrafficManager(ctx, kc))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	sv := version.Version
 	version.Version = "v3.0.0-bogus"
 	restoreVersion := func() { version.Version = sv }
 	defer restoreVersion()
-	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	require.Error(ensureTrafficManager(ctx, kc))
 
 	require.Eventually(func() bool {
 		obj, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, is.ManagerNamespace())
@@ -264,24 +268,24 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 	}, 30*time.Second, 5*time.Second, "timeout waiting for deployment to update")
 
 	restoreVersion()
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	require.NoError(ensureTrafficManager(ctx, kc))
 }
 
 func (is *installSuite) Test_No_Upgrade() {
 	ctx := is.Context()
 	require := is.Require()
-	ctx, ti := is.installer(ctx)
+	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 	// first install
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{}))
+	require.NoError(ensureTrafficManager(ctx, kc))
 	// errors and asks for --upgrade
-	require.Error(ti.EnsureManager(ctx, &connector.InstallRequest{}))
 	/*
+		require.Error(ensureTrafficManager(ctx, kc))
 		// using --upgrade and --values replaces TM with values
 		helmValues := filepath.Join("integration_test", "testdata", "dns-values.yaml")
-		require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{
-			Upgrade:    true,
+		require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
+			Type:       connector.HelmRequest_UPGRADE,
 			ValuePaths: []string{helmValues},
 		}))
 		// check that dns values were propigated from values file to to traffic manager
@@ -306,9 +310,7 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, namespace string) {
 	ctx, kc := is.cluster(ctx, context, namespace)
 	require := is.Require()
-	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
-	require.NoError(err)
-	require.NoError(ti.EnsureManager(ctx, &connector.InstallRequest{Upgrade: true}))
+	require.NoError(ensureTrafficManager(ctx, kc))
 	require.Eventually(func() bool {
 		dep, err := k8sapi.GetDeployment(ctx, install.ManagerAppName, namespace)
 		if err != nil {
@@ -334,9 +336,10 @@ func (is *installSuite) cluster(ctx context.Context, context, managerNamespace s
 	return kc.WithK8sInterface(ctx), kc
 }
 
-func (is *installSuite) installer(ctx context.Context) (context.Context, trafficmgr.Installer) {
-	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
-	ti, err := trafficmgr.NewTrafficManagerInstaller(kc)
-	is.Require().NoError(err)
-	return ctx, ti
+func ensureTrafficManager(ctx context.Context, kc *k8s.Cluster) error {
+	return helm.EnsureTrafficManager(
+		ctx,
+		kc.ConfigFlags,
+		kc.GetManagerNamespace(),
+		&connector.HelmRequest{Type: connector.HelmRequest_INSTALL})
 }

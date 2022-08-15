@@ -4,115 +4,152 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 func helmCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(installCommand(), uninstallCommand())
+	cmd.AddCommand(helmInstallCommand(), helmUninstallCommand())
 	return cmd
 }
 
-type installArgs struct {
-	upgrade          bool
-	values           []string
-	kubeFlags        *pflag.FlagSet
-	dnsIP            string
-	mappedNamespaces []string
+type helmArgs struct {
+	cmdType   connector.HelmRequest_Type
+	values    []string
+	request   *connector.ConnectRequest
+	kubeFlags *pflag.FlagSet
 }
 
-func installCommand() *cobra.Command {
-	ia := &installArgs{}
+func helmInstallCommand() *cobra.Command {
+	var upgrade bool
+	ha := &helmArgs{
+		cmdType: connector.HelmRequest_INSTALL,
+	}
 	cmd := &cobra.Command{
-		Use:  "install",
-		Args: cobra.NoArgs,
-
+		Use:   "install",
+		Args:  cobra.NoArgs,
 		Short: "Install telepresence traffic manager",
-		RunE:  ia.runInstall,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if upgrade {
+				ha.cmdType = connector.HelmRequest_UPGRADE
+			}
+			return ha.run(cmd, args)
+		},
 	}
 
 	flags := cmd.Flags()
-	flags.BoolVarP(&ia.upgrade, "upgrade", "u", false, "replace the traffic mangaer if it already exists")
-	flags.StringSliceVarP(&ia.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
+	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
+	flags.StringSliceVarP(&ha.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 
-	// copied from connect cmd
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
-	kubeConfig := genericclioptions.NewConfigFlags(false)
-	kubeConfig.Namespace = nil
-	kubeConfig.AddFlags(kubeFlags)
-	flags.AddFlagSet(kubeFlags)
-	ia.kubeFlags = kubeFlags
-
-	// copied from connect cmd
-	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
-	// TODO: Those flags aren't applicable on a Linux with systemd-resolved configured either but
-	//  that's unknown until it's been tested during the first connect attempt.
-	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
-		nwFlags.StringVarP(&ia.dnsIP,
-			"dns", "", "",
-			"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-		)
-	}
-	nwFlags.StringSliceVar(&ia.mappedNamespaces,
-		"mapped-namespaces", nil, ``+
-			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
-			`Defaults to all namespaces`)
-	flags.AddFlagSet(nwFlags)
-
+	ha.request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
 }
 
-func (ia *installArgs) runInstall(cmd *cobra.Command, args []string) error {
-	for i, path := range ia.values {
+func helmUninstallCommand() *cobra.Command {
+	ha := &helmArgs{
+		cmdType: connector.HelmRequest_UNINSTALL,
+	}
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Args:  cobra.NoArgs,
+		Short: "Uninstall telepresence traffic manager",
+		RunE:  ha.run,
+	}
+	ha.request, ha.kubeFlags = initConnectRequest(cmd)
+	return cmd
+}
+
+func (ha *helmArgs) run(cmd *cobra.Command, args []string) error {
+	ha.request.KubeFlags = kubeFlagMap(ha.kubeFlags)
+	for i, path := range ha.values {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
 			return fmt.Errorf("--values path %q not valid: %w", path, err)
 		}
-		ia.values[i] = absPath
+		ha.values[i] = absPath
 	}
-
-	request := &connector.InstallRequest{
-		Upgrade:    ia.upgrade,
-		ValuePaths: ia.values,
-
-		ConnectRequest: &connector.ConnectRequest{
-			KubeFlags:        kubeFlagMap(ia.kubeFlags),
-			MappedNamespaces: ia.mappedNamespaces,
-		},
+	request := &connector.HelmRequest{
+		Type:           ha.cmdType,
+		ValuePaths:     ha.values,
+		ConnectRequest: ha.request,
 	}
 	addKubeconfigEnv(request.ConnectRequest)
 
-	// if the traffic manager should be replaced, quit first
-	// so the roodD doesnt hang
-	if ia.upgrade {
-		err := cliutil.Disconnect(cmd.Context(), false, false)
-		if err != nil {
-			dlog.Debugf(cmd.Context(), "Dry run quit error: %v", err)
-		}
-	}
+	// always disconnect to ensure that there are no running intercepts etc.
+	_ = cliutil.Disconnect(cmd.Context(), false, false)
 
-	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+	doQuit := false
+	err := cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-			resp, err := connectorClient.Install(ctx, request)
+			status, _ := connectorClient.Status(ctx, &empty.Empty{})
+			resp, err := connectorClient.Helm(ctx, request)
 			if err != nil {
 				return err
 			}
 			if resp.ErrorText != "" {
-				return fmt.Errorf(resp.ErrorText)
+				ec := errcat.Unknown
+				if resp.ErrorCategory != 0 {
+					ec = errcat.Category(resp.ErrorCategory)
+				}
+				return ec.New(resp.ErrorText)
 			}
-			fmt.Fprint(cmd.OutOrStdout(), "\nTraffic Manager installed successfully\n")
+
+			var msg string
+			switch ha.cmdType {
+			case connector.HelmRequest_INSTALL:
+				msg = "installed"
+			case connector.HelmRequest_UPGRADE:
+				msg = "upgraded"
+			case connector.HelmRequest_UNINSTALL:
+				if status != nil {
+					if err = removeClusterFromUserCache(ctx, status); err != nil {
+						return err
+					}
+				}
+				doQuit = true
+				msg = "uninstalled"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "\nTraffic Manager %s successfully\n", msg)
 			return nil
 		})
 	})
+	if err == nil && doQuit {
+		err = cliutil.Disconnect(cmd.Context(), true, true)
+	}
+	return err
+}
+
+func removeClusterFromUserCache(ctx context.Context, connInfo *connector.ConnectInfo) (err error) {
+	// Login token is affined to the traffic-manager that just got removed. The user-info
+	// in turn, is info obtained using that token so both are removed here as a
+	// consequence of removing the manager.
+	if err := cliutil.EnsureLoggedOut(ctx); err != nil {
+		return err
+	}
+
+	// Delete the ingress info for the cluster if it exists.
+	ingresses, err := cache.LoadIngressesFromUserCache(ctx)
+	if err != nil {
+		return err
+	}
+
+	key := connInfo.ClusterServer + "/" + connInfo.ClusterContext
+	if _, ok := ingresses[key]; ok {
+		delete(ingresses, key)
+		if err = cache.SaveIngressesToUserCache(ctx, ingresses); err != nil {
+			return err
+		}
+	}
+	return nil
 }

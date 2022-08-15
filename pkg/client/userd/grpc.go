@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -324,7 +323,7 @@ func (s *Service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Conne
 	})
 }
 
-func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
+func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.Result, err error) {
 	err = s.withSession(c, "Uninstall", func(c context.Context, session trafficmgr.Session) error {
 		result, err = session.Uninstall(c, ur)
 		return err
@@ -485,22 +484,33 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 	return
 }
 
-func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (result *rpc.RunCommandResponse, err error) {
-	var cmd *cobra.Command
-	outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
-
+func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
+	result := &rpc.RunCommandResponse{}
 	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
-		cmd = &cobra.Command{
+		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
 		cmd.SetOut(outW)
 		cmd.SetErr(errW)
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
 
+		errResult := func(err error) *rpc.Result {
+			if err != nil {
+				return &rpc.Result{
+					ErrorText:     err.Error(),
+					ErrorCategory: int32(errcat.GetCategory(err)),
+				}
+			}
+			return nil
+		}
+
 		args := req.GetOsArgs()
-		cmd.SetArgs(args)
-		cmd, args, err = cmd.Find(args)
+		cmd.SetArgs(req.GetOsArgs())
+		cmd, args, err := cmd.Find(args)
+
 		if err != nil {
+			result.Result = errResult(errcat.User.New(err))
 			return
 		}
 		cmd.SetArgs(args)
@@ -509,6 +519,13 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 
 		err = cmd.ParseFlags(args)
 		if err != nil {
+			if err == pflag.ErrHelp {
+				_ = cmd.Usage()
+				result.Stdout = outW.Bytes()
+				result.Stderr = errW.Bytes()
+			} else {
+				result.Result = errResult(errcat.User.New(err))
+			}
 			return
 		}
 
@@ -548,29 +565,11 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (r
 			err = cmd.ExecuteContext(ctx)
 		}
 
-		result = &rpc.RunCommandResponse{
-			Stdout: outW.Bytes(),
-			Stderr: errW.Bytes(),
-		}
+		result.Stdout = outW.Bytes()
+		result.Stderr = errW.Bytes()
+		result.Result = errResult(err)
 	})
-	if errcat.GetCategory(err) > errcat.NoDaemonLogs {
-		if errors.Is(err, pflag.ErrHelp) {
-			err = nil
-			outW.WriteString(cmd.UsageString())
-		} else {
-			stderr, stdout := strings.TrimSpace(errW.String()), strings.TrimSpace(outW.String())
-			dlog.Errorf(ctx, "Error running command %s: %v", cmd.Name(), err)
-			if stderr == "" && stdout == "" {
-				stdout = cmd.UsageString()
-			}
-			err = fmt.Errorf("%s\n\n%s\n%s", err.Error(), stderr, stdout)
-		}
-	}
-
-	return &rpc.RunCommandResponse{
-		Stdout: outW.Bytes(),
-		Stderr: errW.Bytes(),
-	}, err
+	return result, nil
 }
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
@@ -590,12 +589,28 @@ func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.Ingres
 	return
 }
 
-func (s *Service) Install(ctx context.Context, req *rpc.InstallRequest) (*rpc.InstallResult, error) {
-	result := &rpc.InstallResult{}
-	s.logCall(ctx, "Install", func(c context.Context) {
-		err := trafficmgr.EnsureManager(c, req)
-		if err != nil {
-			result.ErrorText = err.Error()
+func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, error) {
+	result := &rpc.Result{}
+	s.logCall(ctx, "Helm", func(c context.Context) {
+		sr := s.scout
+		if req.Type == rpc.HelmRequest_UNINSTALL {
+			err := trafficmgr.DeleteManager(c, req)
+			if err != nil {
+				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+				result.ErrorText = err.Error()
+				result.ErrorCategory = int32(errcat.GetCategory(err))
+			} else {
+				sr.Report(ctx, "helm_uninstall_success")
+			}
+		} else {
+			err := trafficmgr.EnsureManager(c, req)
+			if err != nil {
+				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
+				result.ErrorText = err.Error()
+				result.ErrorCategory = int32(errcat.GetCategory(err))
+			} else {
+				sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
+			}
 		}
 	})
 	return result, nil

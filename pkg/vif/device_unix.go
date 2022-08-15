@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (t *Device) setDNS(_ context.Context, server net.IP, domains []string) (err error) {
+func (t *nativeDevice) setDNS(_ context.Context, server net.IP, domains []string) (err error) {
 	// DNS is configured by other means than through the actual device
 	return nil
 }
