@@ -13,7 +13,12 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
@@ -73,7 +78,9 @@ func (d *device) Attach(dp stack.NetworkDispatcher) {
 
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
 // is associated with the device (removing the device will automatically remove the route).
-func (d *device) AddSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (d *device) AddSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "AddSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
+	defer tracing.EndAndRecord(span, err)
 	return d.dev.addSubnet(ctx, subnet)
 }
 
@@ -102,8 +109,10 @@ func (d *device) SetMTU(mtu int) error {
 
 // RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
 // is associated with the device.
-func (d *device) RemoveSubnet(ctx context.Context, ipNet *net.IPNet) error {
-	return d.dev.removeSubnet(ctx, ipNet)
+func (d *device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
+	defer tracing.EndAndRecord(span, err)
+	return d.dev.removeSubnet(ctx, subnet)
 }
 
 func (d *device) Wait() {

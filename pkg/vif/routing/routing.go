@@ -6,7 +6,12 @@ import (
 	"fmt"
 	"net"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 type Route struct {
@@ -43,14 +48,18 @@ func (r *Route) String() string {
 
 // AddStatic adds a specific route. This can be used to prevent certain IP addresses
 // from being routed to the route's interface.
-func (r *Route) AddStatic(ctx context.Context) error {
+func (r *Route) AddStatic(ctx context.Context) (err error) {
 	dlog.Debugf(ctx, "Adding static route %s", r)
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "AddStatic", trace.WithAttributes(attribute.Stringer("tel2.route", r)))
+	defer tracing.EndAndRecord(span, err)
 	return r.addStatic(ctx)
 }
 
 // RemoveStatic removes a specific route added via AddStatic.
-func (r *Route) RemoveStatic(ctx context.Context) error {
+func (r *Route) RemoveStatic(ctx context.Context) (err error) {
 	dlog.Debugf(ctx, "Dropping static route %s", r)
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveStaticRoute", trace.WithAttributes(attribute.Stringer("tel2.route", r)))
+	defer tracing.EndAndRecord(span, err)
 	return r.removeStatic(ctx)
 }
 

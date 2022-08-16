@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -30,4 +31,12 @@ func RecordInterceptInfo(span trace.Span, info *manager.InterceptInfo) {
 
 func RecordConnID(span trace.Span, id string) {
 	span.SetAttributes(attribute.String("conn-id", id))
+}
+
+func EndAndRecord(span trace.Span, err error) {
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	span.End()
 }
