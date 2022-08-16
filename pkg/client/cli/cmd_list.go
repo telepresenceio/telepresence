@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -41,7 +41,7 @@ func listCommand() *cobra.Command {
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
 
-	cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var (
 			completions  = []string{}
 			shellCompDir = cobra.ShellCompDirectiveNoFileComp

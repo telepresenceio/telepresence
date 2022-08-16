@@ -249,8 +249,7 @@ func (c *interceptCommand) validArgsFunc() AutocompletionFunc {
 }
 
 func (c *interceptCommand) flagAutocompletionFunc(flagName string) AutocompletionFunc {
-	switch flagName {
-	case "namespace":
+	if flagName == "namespace" {
 		return c.flagAutocompletion_namespace()
 	}
 	return nil
