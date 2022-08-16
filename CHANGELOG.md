@@ -9,8 +9,11 @@
 
 - Change: The command `telepresence gather-traces` now prints out a message on success.
 
-### 2.7.1 (August 10, 2022)
+- Feature: Adds cli autocompletion for the `--namespace` flag on the `list` and `intercept` commands,
+  autocompletion for interceptable workloads on the `intercept` command, and autocompletion for
+  active intercepts on the `leave` command.
 
+### 2.7.1 (August 10, 2022)
 
 - Change: The command `telepresence uninstall` has been restored, but the `--everything` flag is now deprecated.
 
