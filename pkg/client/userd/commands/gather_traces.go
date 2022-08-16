@@ -67,7 +67,7 @@ func (c *traceCommand) cobraCommand(ctx context.Context) *cobra.Command {
 
 func (*traceCommand) init(_ context.Context) {}
 
-func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan []byte, component string) error {
+func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan<- []byte, component string) error {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "tracesFor", trace.WithAttributes(attribute.String("component", component)))
 	defer span.End()
 	cli := common.NewTracingClient(conn)
@@ -85,7 +85,7 @@ func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch ch
 	return nil
 }
 
-func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (chan []byte, chan error, error) {
+func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (chan<- []byte, <-chan error, error) {
 	ch := make(chan []byte)
 	if !filepath.IsAbs(destFile) {
 		wd := GetCwd(ctx)
@@ -132,7 +132,7 @@ func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (ch
 	return ch, errCh, nil
 }
 
-func (c *traceCommand) userdTraces(ctx context.Context, tCh chan []byte) error {
+func (c *traceCommand) userdTraces(ctx context.Context, tCh chan<- []byte) error {
 	userdConn, err := client.DialSocket(ctx, client.ConnectorSocketName, grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
 	if err != nil {
 		return err
@@ -146,7 +146,7 @@ func (c *traceCommand) userdTraces(ctx context.Context, tCh chan []byte) error {
 	return nil
 }
 
-func (c *traceCommand) rootdTraces(ctx context.Context, tCh chan []byte) error {
+func (c *traceCommand) rootdTraces(ctx context.Context, tCh chan<- []byte) error {
 	dConn, err := client.DialSocket(ctx, client.DaemonSocketName, grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
 	if err != nil {
 		return err
@@ -160,7 +160,7 @@ func (c *traceCommand) rootdTraces(ctx context.Context, tCh chan []byte) error {
 	return nil
 }
 
-func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan []byte, remotePort string) error {
+func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan<- []byte, remotePort string) error {
 	sess := trafficmgr.GetSession(ctx)
 	span := trace.SpanFromContext(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
@@ -192,7 +192,7 @@ func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan []byte
 	return nil
 }
 
-func (c *traceCommand) agentTraces(ctx context.Context, cmd *cobra.Command, tCh chan []byte, remotePort string) error {
+func (c *traceCommand) agentTraces(ctx context.Context, cmd *cobra.Command, tCh chan<- []byte, remotePort string) error {
 	sess := trafficmgr.GetSession(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
 	if err != nil {
