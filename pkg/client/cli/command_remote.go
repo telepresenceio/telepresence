@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -34,7 +35,7 @@ func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool)
 		if groups, err = cliutil.RPCToCommands(remote, funcBundle); err != nil {
 			groups = commands.GetCommandsForLocal(ctx, err)
 		}
-    
+
 		userDaemonRunning = true
 		return err
 	}

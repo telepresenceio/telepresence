@@ -3269,7 +3269,7 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 		file_rpc_connector_connector_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*InstallRequest); i {
+			switch v := v.(*UninstallRequest); i {
 			case 0:
 				return &v.state
 			case 1:
