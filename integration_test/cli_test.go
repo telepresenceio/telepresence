@@ -30,6 +30,49 @@ func (s *cliSuite) Test_Version() {
 	s.Contains(stdout, fmt.Sprintf("Client: %s", s.TelepresenceVersion()))
 }
 
+func (s *cliSuite) Test_Help() {
+	const (
+		helpHead  = `Telepresence can connect to a cluster and route all outbound traffic`
+		usageHead = `Usage:`
+	)
+
+	stdout, stderr, err := itest.Telepresence(s.Context(), "help")
+	if err != nil {
+		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence help isn't working, nothing will: %w", err))
+		s.Require().NoError(err)
+	}
+	s.Empty(stderr)
+	s.Contains(stdout, helpHead)
+	s.Contains(stdout, usageHead)
+
+	stdout, stderr, err = itest.Telepresence(s.Context(), "--help")
+	if err != nil {
+		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence --help isn't working, nothing will: %w", err))
+		s.Require().NoError(err)
+	}
+	s.Empty(stderr)
+	s.Contains(stdout, helpHead)
+	s.Contains(stdout, usageHead)
+
+	stdout, stderr, err = itest.Telepresence(s.Context(), "-h")
+	if err != nil {
+		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence --help isn't working, nothing will: %w", err))
+		s.Require().NoError(err)
+	}
+	s.Empty(stderr)
+	s.Contains(stdout, helpHead)
+	s.Contains(stdout, usageHead)
+
+	stdout, stderr, err = itest.Telepresence(s.Context(), "")
+	if err != nil {
+		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence --help isn't working, nothing will: %w", err))
+		s.Require().NoError(err)
+	}
+	s.Empty(stderr)
+	s.Contains(stdout, helpHead)
+	s.Contains(stdout, usageHead)
+}
+
 func (s *cliSuite) Test_Status() {
 	itest.TelepresenceQuitOk(s.Context())
 	stdout, stderr, err := itest.Telepresence(s.Context(), "status")
