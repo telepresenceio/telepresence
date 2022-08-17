@@ -39,28 +39,11 @@ func Main(ctx context.Context, _ ...string) error {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
 
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("unable to get the Kubernetes InClusterConfig: %w", err)
-	}
-	ki, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
-	}
-	ctx = k8sapi.WithK8sInterface(ctx, ki)
-	mgr, ctx, err := NewManager(ctx)
-	if err != nil {
-		return fmt.Errorf("unable to initialize traffic manager: %w", err)
-	}
-
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-	})
-
 	env := managerutil.GetEnv(ctx)
+	var tracer *tracing.TraceServer
 
 	if env.TracingPort != 0 {
-		tracer, err := tracing.NewTraceServer(ctx, "traffic-manager",
+		tracer, err = tracing.NewTraceServer(ctx, "traffic-manager",
 			attribute.String("tel2.agent-image", env.AgentRegistry+"/"+env.AgentImage),
 			attribute.String("tel2.managed-namespaces", env.ManagedNamespaces),
 			attribute.String("tel2.dns-service", env.DNSServiceName+"."+env.DNSServiceNamespace),
@@ -71,11 +54,26 @@ func Main(ctx context.Context, _ ...string) error {
 		if err != nil {
 			return err
 		}
-		g.Go("tracer-grpc", func(c context.Context) error {
-			return tracer.ServeGrpc(c, uint16(env.TracingPort))
-		})
 		defer tracer.Shutdown(ctx)
 	}
+
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return fmt.Errorf("unable to get the Kubernetes InClusterConfig: %w", err)
+	}
+	cfg.WrapTransport = tracing.NewWrapperFunc()
+	ki, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
+	}
+	ctx = k8sapi.WithK8sInterface(ctx, ki)
+	mgr, ctx, err := NewManager(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to initialize traffic manager: %w", err)
+	}
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableSignalHandling: true,
+	})
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
@@ -85,6 +83,12 @@ func Main(ctx context.Context, _ ...string) error {
 	g.Go("agent-injector", mutator.ServeMutator)
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
+
+	if tracer != nil {
+		g.Go("tracer-grpc", func(c context.Context) error {
+			return tracer.ServeGrpc(c, uint16(env.TracingPort))
+		})
+	}
 
 	// Wait for exit
 	return g.Wait()
