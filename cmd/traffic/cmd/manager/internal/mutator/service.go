@@ -76,6 +76,7 @@ func ServeMutator(ctx context.Context) error {
 	var ai *agentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		dlog.Debug(ctx, "Received webhook request...")
 		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.inject)
 		if err != nil {
@@ -90,6 +91,7 @@ func ServeMutator(ctx context.Context) error {
 		}
 	})
 	mux.HandleFunc("/uninstall", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		dlog.Debug(ctx, "Received uninstall request...")
 		statusCode, err := serveRequest(ctx, r, http.MethodDelete, ai.uninstall)
 		if err != nil {
@@ -102,6 +104,7 @@ func ServeMutator(ctx context.Context) error {
 		}
 	})
 	mux.HandleFunc("/upgrade-legacy", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		dlog.Debug(ctx, "Received upgrade-legacy request...")
 		statusCode, err := serveRequest(ctx, r, http.MethodPost, func(ctx context.Context) {
 			ai.upgradeLegacy(ctx)

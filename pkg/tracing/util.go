@@ -14,6 +14,7 @@ func RecordInterceptSpec(span trace.Span, spec *manager.InterceptSpec) {
 		attribute.String("tel2.service-namespace", spec.Namespace),
 		attribute.String("tel2.mechanism", spec.Mechanism),
 		attribute.String("tel2.intercept-name", spec.Name),
+		attribute.String("tel2.agent-name", spec.Agent),
 		attribute.String("tel2.workload-kind", spec.WorkloadKind),
 	)
 }

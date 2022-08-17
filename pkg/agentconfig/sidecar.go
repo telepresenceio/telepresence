@@ -1,6 +1,9 @@
 package agentconfig
 
 import (
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -132,4 +135,17 @@ type Sidecar struct {
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty" yaml:"containers,omitempty"`
+}
+
+func (s *Sidecar) RecordInSpan(span trace.Span) {
+	bytes, err := yaml.Marshal(s)
+	if err != nil {
+		span.AddEvent("tel2.agent-sidecar-marshal-fail", trace.WithAttributes(
+			attribute.String("tel2.agent-name", s.AgentName),
+		))
+		return
+	}
+	span.SetAttributes(
+		attribute.String("tel2.agent-sidecar", string(bytes)),
+	)
 }
