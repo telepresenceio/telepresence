@@ -12,13 +12,17 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 	corev1 "k8s.io/api/core/v1"
 	typedv1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -63,10 +67,14 @@ func (c *traceCommand) cobraCommand(ctx context.Context) *cobra.Command {
 
 func (*traceCommand) init(_ context.Context) {}
 
-func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan []byte) error {
-	daemonCli := common.NewTracingClient(conn)
-	result, err := daemonCli.DumpTraces(ctx, &emptypb.Empty{})
+func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch chan<- []byte, component string) error {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "tracesFor", trace.WithAttributes(attribute.String("component", component)))
+	defer span.End()
+	cli := common.NewTracingClient(conn)
+	result, err := cli.DumpTraces(ctx, &emptypb.Empty{})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	data := result.GetTraceData()
@@ -77,7 +85,7 @@ func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch ch
 	return nil
 }
 
-func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (chan []byte, chan error, error) {
+func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (chan<- []byte, <-chan error, error) {
 	ch := make(chan []byte)
 	if !filepath.IsAbs(destFile) {
 		wd := GetCwd(ctx)
@@ -124,43 +132,44 @@ func (*traceCommand) launchTraceWriter(ctx context.Context, destFile string) (ch
 	return ch, errCh, nil
 }
 
-func (c *traceCommand) userdTraces(ctx context.Context, tCh chan []byte) error {
-	userdConn, err := client.DialSocket(ctx, client.ConnectorSocketName)
+func (c *traceCommand) userdTraces(ctx context.Context, tCh chan<- []byte) error {
+	userdConn, err := client.DialSocket(ctx, client.ConnectorSocketName, grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
 	if err != nil {
 		return err
 	}
 	defer userdConn.Close()
 
-	err = c.tracesFor(ctx, userdConn, tCh)
+	err = c.tracesFor(ctx, userdConn, tCh, "user-daemon")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *traceCommand) rootdTraces(ctx context.Context, tCh chan []byte) error {
-	dConn, err := client.DialSocket(ctx, client.DaemonSocketName)
+func (c *traceCommand) rootdTraces(ctx context.Context, tCh chan<- []byte) error {
+	dConn, err := client.DialSocket(ctx, client.DaemonSocketName, grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
 	if err != nil {
 		return err
 	}
 	defer dConn.Close()
 
-	err = c.tracesFor(ctx, dConn, tCh)
+	err = c.tracesFor(ctx, dConn, tCh, "root-daemon")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan []byte, remotePort string) error {
+func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan<- []byte, remotePort string) error {
 	sess := trafficmgr.GetSession(ctx)
+	span := trace.SpanFromContext(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return err
 	}
-	grpcAddr := net.JoinHostPort(
-		"svc/traffic-manager."+sess.GetManagerNamespace(),
-		remotePort)
+	host := "svc/traffic-manager." + sess.GetManagerNamespace()
+	grpcAddr := net.JoinHostPort(host, remotePort)
+	span.SetAttributes(attribute.String("traffic-manager.host", host), attribute.String("traffic-manager.port", remotePort))
 	tc, tCancel := context.WithTimeout(ctx, 20*time.Second)
 	defer tCancel()
 
@@ -169,31 +178,28 @@ func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan []byte
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 	}
 
 	var conn *grpc.ClientConn
 	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {
 		return err
 	}
-	err = c.tracesFor(ctx, conn, tCh)
+	err = c.tracesFor(ctx, conn, tCh, "traffic-manager")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *traceCommand) agentTraces(cmd *cobra.Command, tCh chan []byte, remotePort string) error {
-	ctx := cmd.Context()
+func (c *traceCommand) agentTraces(ctx context.Context, cmd *cobra.Command, tCh chan<- []byte, remotePort string) error {
 	sess := trafficmgr.GetSession(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return err
 	}
 	return sess.ForeachAgentPod(ctx, func(ctx context.Context, pi typedv1.PodInterface, pod *corev1.Pod) {
-		if err != nil {
-			dlog.Warnf(ctx, "unable to get traces for %s.%s: %v", pod.Name, pod.Namespace, err)
-			return
-		}
+		span := trace.SpanFromContext(ctx)
 		name := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
 		addr := net.JoinHostPort(name, remotePort)
 		tc, tCancel := context.WithTimeout(ctx, 20*time.Second)
@@ -204,17 +210,28 @@ func (c *traceCommand) agentTraces(cmd *cobra.Command, tCh chan []byte, remotePo
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.WithReturnConnectionError(),
+			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		}
 
 		var conn *grpc.ClientConn
 		if conn, err = grpc.DialContext(tc, addr, opts...); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Unable to dial %s: %v", name, err)
+			err := fmt.Errorf("error getting traffic-agent traces for %s: %v", name, err)
+			span.RecordError(err, trace.WithAttributes(
+				attribute.String("host", name),
+				attribute.String("port", remotePort),
+			))
+			fmt.Fprintln(cmd.ErrOrStderr(), err)
 			return
 		}
 		defer conn.Close()
-		err := c.tracesFor(tc, conn, tCh)
+		err := c.tracesFor(tc, conn, tCh, "traffic-agent")
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Unable to get traces for %s: %v", name, err)
+			err := fmt.Errorf("error getting traffic-agent traces for %s: %v", name, err)
+			span.RecordError(err, trace.WithAttributes(
+				attribute.String("traffic-agent.host", name),
+				attribute.String("traffic-agent.port", remotePort),
+			))
+			fmt.Fprintln(cmd.ErrOrStderr(), err)
 			return
 		}
 	}, nil)
@@ -222,6 +239,8 @@ func (c *traceCommand) agentTraces(cmd *cobra.Command, tCh chan []byte, remotePo
 
 func (c *traceCommand) gatherTraces(cmd *cobra.Command, remotePort uint16, destFile string) error {
 	ctx := cmd.Context()
+	// Since we want this trace to show up in the gather traces output file, we'll declare it as a root trace and end it right after awaiting the wait group
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "gather-traces", trace.WithNewRoot())
 	port := strconv.FormatUint(uint64(remotePort), 10)
 
 	tCh, errCh, err := c.launchTraceWriter(ctx, destFile)
@@ -230,21 +249,15 @@ func (c *traceCommand) gatherTraces(cmd *cobra.Command, remotePort uint16, destF
 	}
 
 	wg := &sync.WaitGroup{}
-	wg.Add(4)
+	wg.Add(3)
 
 	go func() {
 		defer wg.Done()
 		err := c.rootdTraces(ctx, tCh)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect root daemon traces: %v", err)
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		err := c.userdTraces(ctx, tCh)
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect user daemon traces: %v", err)
+			err := fmt.Errorf("failed to collect root daemon traces: %v", err)
+			span.RecordError(err)
+			fmt.Fprintln(cmd.ErrOrStderr(), err)
 		}
 	}()
 
@@ -252,19 +265,32 @@ func (c *traceCommand) gatherTraces(cmd *cobra.Command, remotePort uint16, destF
 		defer wg.Done()
 		err = c.trafficManagerTraces(ctx, tCh, port)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect traffic-manager traces: %v", err)
+			err := fmt.Errorf("failed to collect traffic-manager traces: %v", err)
+			span.RecordError(err)
+			fmt.Fprintln(cmd.ErrOrStderr(), err)
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		err := c.agentTraces(cmd, tCh, port)
+		err := c.agentTraces(ctx, cmd, tCh, port)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect traffic agent traces: %v", err)
+			err := fmt.Errorf("failed to collect traffic agent traces: %v", err)
+			span.RecordError(err)
+			fmt.Fprintln(cmd.ErrOrStderr(), err)
 		}
 	}()
 
 	wg.Wait()
+	// End span so it gets reported via userdTraces
+	span.End()
+	// These go after the other traces so that we can capture traces from the gathering of traces itself
+	err = c.userdTraces(ctx, tCh)
+	if err != nil {
+		// Can't imagine this makes a difference, since we've failed to collect it, but we may as well record it
+		span.RecordError(err)
+		fmt.Fprintf(cmd.ErrOrStderr(), "failed to collect user daemon traces: %v\n", err)
+	}
 
 	close(tCh)
 	err = <-errCh

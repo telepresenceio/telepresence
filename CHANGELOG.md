@@ -8,6 +8,8 @@
   changed from 5 seconds to 500 milliseconds to speed up the actual connect.
 
 - Change: The command `telepresence gather-traces` now prints out a message on success.
+- Change: The command `telepresence upload-traces` now prints out a message on success.
+- Change: The command `telepresence gather-traces` now traces itself and reports errors with trace gathering
 
 ### 2.7.1 (August 10, 2022)
 
