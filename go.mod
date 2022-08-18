@@ -27,7 +27,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.7.1
+	github.com/telepresenceio/telepresence/rpc/v2 v2.7.2-test.0
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
 	golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e
