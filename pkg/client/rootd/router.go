@@ -21,7 +21,7 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 			pipeId := tunnel.NewConnID(p, id.Source(), s.dnsLocalAddr.IP, id.SourcePort(), uint16(s.dnsLocalAddr.Port))
 			dlog.Debugf(c, "Intercept DNS %s to %s", id, pipeId.DestinationAddr())
 			from, to := tunnel.NewPipe(pipeId, s.session.SessionId)
-			tunnel.NewDialer(to).Start(c)
+			tunnel.NewDialer(to, func() {}).Start(c)
 			return from, nil
 		}
 		dlog.Debugf(c, "Opening tunnel for id %s", id)

@@ -35,6 +35,7 @@ const (
 type dialer struct {
 	TimedHandler
 	stream    Stream
+	cancel    context.CancelFunc
 	conn      net.Conn
 	connected int32
 	done      chan struct{}
@@ -45,11 +46,11 @@ type dialer struct {
 //
 // The handler remains active until it's been idle for idleDuration, at which time it will automatically close
 // and call the release function it got from the tunnel.Pool to ensure that it gets properly released.
-func NewDialer(stream Stream) Endpoint {
-	return NewConnEndpoint(stream, nil)
+func NewDialer(stream Stream, cancel context.CancelFunc) Endpoint {
+	return NewConnEndpoint(stream, nil, cancel)
 }
 
-func NewConnEndpoint(stream Stream, conn net.Conn) Endpoint {
+func NewConnEndpoint(stream Stream, conn net.Conn, cancel context.CancelFunc) Endpoint {
 	ttl := tcpConnTTL
 	if stream.ID().Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
@@ -61,6 +62,7 @@ func NewConnEndpoint(stream Stream, conn net.Conn) Endpoint {
 	return &dialer{
 		TimedHandler: NewTimedHandler(stream.ID(), ttl, nil),
 		stream:       stream,
+		cancel:       cancel,
 		conn:         conn,
 		connected:    state,
 		done:         make(chan struct{}),
@@ -89,6 +91,9 @@ func (h *dialer) Start(ctx context.Context) {
 				span.SetStatus(codes.Error, err.Error())
 				if err = h.stream.Send(ctx, NewMessage(DialReject, nil)); err != nil {
 					dlog.Errorf(ctx, "!! CONN %s, failed to send DialReject: %v", id, err)
+				}
+				if err = h.stream.CloseSend(ctx); err != nil {
+					dlog.Errorf(ctx, "!! CONN %s, stream.CloseSend failed: %v", id, err)
 				}
 				h.connected = notConnected
 				return
@@ -127,7 +132,7 @@ func (h *dialer) Done() <-chan struct{} {
 
 func (h *dialer) handleControl(ctx context.Context, cm Message) {
 	switch cm.Code() {
-	case Disconnect: // Peer wants to hard-close. No more messages will arrive
+	case DialReject, Disconnect: // Peer wants to hard-close. No more messages will arrive
 		h.Stop(ctx)
 	case KeepAlive:
 		h.ResetIdle()
@@ -147,6 +152,7 @@ func (h *dialer) handleControl(ctx context.Context, cm Message) {
 // Stop will close the underlying TCP/UDP connection
 func (h *dialer) Stop(ctx context.Context) {
 	h.startDisconnect(ctx, "explicit close")
+	h.cancel()
 }
 
 func (h *dialer) startDisconnect(ctx context.Context, reason string) {
@@ -304,12 +310,14 @@ func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialReq
 		dlog.Errorf(ctx, "!! CONN %s, call to manager Tunnel failed: %v", id, err)
 		return
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	s, err := NewClientStream(ctx, mt, id, sessionID, time.Duration(dr.RoundtripLatency), time.Duration(dr.DialTimeout))
 	if err != nil {
 		dlog.Error(ctx, err)
+		cancel()
 		return
 	}
-	d := NewDialer(s)
+	d := NewDialer(s, cancel)
 	d.Start(ctx)
 	<-d.Done()
 }
