@@ -58,7 +58,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	level := logrus.InfoLevel
 	if name == "daemon" {
 		level = logLevels.RootDaemon
-	} else if name == "connector" {
+	} else if name == "connector" || name == "cli" { // Have the CLI log at the same level as the user daemon
 		level = logLevels.UserDaemon
 	}
 	log.SetLogrusLevel(logger, level.String())
