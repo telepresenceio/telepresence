@@ -14,7 +14,9 @@ import (
 	"k8s.io/client-go/transport"
 )
 
-// This code is modified from https://github.com/signalfx/splunk-otel-go/blob/main/instrumentation/k8s.io/client-go/splunkclient-go/transport/transport.go which is licensed under Apache 2.0
+// This code is modified from
+// https://github.com/signalfx/splunk-otel-go/blob/main/instrumentation/k8s.io/client-go/splunkclient-go/transport/transport.go
+// which is licensed under Apache 2.0
 // NewWrapperFunc returns a Kubernetes WrapperFunc that can be used with a
 // client configuration to trace all communication the client makes.
 func NewWrapperFunc() transport.WrapperFunc {

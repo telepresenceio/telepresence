@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -16,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	typedApps "k8s.io/client-go/kubernetes/typed/apps/v1"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 type Workload interface {
