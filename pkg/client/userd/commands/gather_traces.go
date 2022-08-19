@@ -71,7 +71,16 @@ func (*traceCommand) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch ch
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "tracesFor", trace.WithAttributes(attribute.String("component", component)))
 	defer span.End()
 	cli := common.NewTracingClient(conn)
-	result, err := cli.DumpTraces(ctx, &emptypb.Empty{})
+	cfg := client.GetConfig(ctx)
+	maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. There might be a lot of traces.
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			if mz > maxRecSize {
+				maxRecSize = mz
+			}
+		}
+	}
+	result, err := cli.DumpTraces(ctx, &emptypb.Empty{}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
