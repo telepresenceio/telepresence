@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"strings"
+	"time"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
@@ -17,18 +18,43 @@ func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*rel
 	list.Uninstalled = true
 	list.Uninstalling = true
 	list.SetStateMask()
-	releases, err := list.Run()
+	var releases []*release.Release
+	err := timedRun(ctx, func(timeout time.Duration) error {
+		// The List command never times out, so we need to do it here.
+		type rs struct {
+			err error
+			rs  []*release.Release
+		}
+		doneCh := make(chan rs)
+		go func() {
+			rels, err := list.Run()
+			doneCh <- rs{err: err, rs: rels}
+			close(doneCh)
+		}()
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case rr := <-doneCh:
+			if rr.err != nil {
+				return rr.err
+			}
+			releases = rr.rs
+			return nil
+		}
+	})
+
 	if err != nil {
 		return nil, err
 	}
-	var release *release.Release
 	for _, r := range releases {
 		if r.Name == releaseName {
-			release = r
-			break
+			return r, nil
 		}
 	}
-	return release, nil
+	return nil, nil
 }
 
 func releaseVer(rel *release.Release) string {
