@@ -30,7 +30,7 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 		defer wg.Done()
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", "localhost:8081") == nil
-		}, 15*time.Second, 2*time.Second, "Forwarded port is not reachable as localhost:8081")
+		}, 30*time.Second, 2*time.Second, "Forwarded port is not reachable as localhost:8081")
 	}()
 	wg.Add(1)
 	go func() {

@@ -3,6 +3,7 @@ package integration_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -113,6 +114,62 @@ func (s *singleServiceSuite) Test_InterceptMountRelative() {
 	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
 	mountPoint := filepath.Join(nwd, "rel-dir")
 	st, err := os.Stat(mountPoint)
+	require.NoError(err, "Stat on <mount point> failed")
+	require.True(st.IsDir(), "Mount point is not a directory")
+	st, err = os.Stat(filepath.Join(mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+func (s *singleServiceSuite) Test_NoInterceptorResponse() {
+	if runtime.GOOS == "darwin" {
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
+	}
+	if runtime.GOOS == "windows" {
+		s.T().Skip("Windows mount on driver letters. Relative mounts are not possible")
+	}
+	time.Sleep(2000 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
+	require := s.Require()
+
+	ctx := s.Context()
+
+	nwd, err := os.MkdirTemp("", "mount-") // Don't use the testing.Tempdir() because deletion is delayed.
+	require.NoError(err)
+	ctx = itest.WithWorkingDir(ctx, nwd)
+	stdout := itest.TelepresenceOk(ctx,
+		"intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", "rel-dir", "--port", "8443")
+	defer func() {
+		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	}()
+	s.Contains(stdout, "Using Deployment "+s.ServiceName())
+	stdout = itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
+
+	time.Sleep(2000 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
+	s.CapturePodLogs(ctx, "app="+s.ServiceName(), "traffic-agent", s.AppNamespace())
+
+	mountPoint := filepath.Join(nwd, "rel-dir")
+	st, err := os.Stat(mountPoint)
+	require.NoError(err, "Stat on <mount point> failed")
+	require.True(st.IsDir(), "Mount point is not a directory")
+	st, err = os.Stat(filepath.Join(mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
+
+	// Bombard the echo service with lots of traffic. It's intercepted and will redirect the
+	// traffic to the interceptor, but there's no such process listening. This must not
+	// result in stream congestion that kills the intercept.
+	url := "http://" + s.ServiceName()
+	for i := 0; i < 1000; i++ {
+		hc := http.Client{Timeout: 100 * time.Millisecond}
+		resp, err := hc.Get(url)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}
+
+	// Verify that we still have a functional mount
+	st, err = os.Stat(mountPoint)
 	require.NoError(err, "Stat on <mount point> failed")
 	require.True(st.IsDir(), "Mount point is not a directory")
 	st, err = os.Stat(filepath.Join(mountPoint, "var"))

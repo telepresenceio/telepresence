@@ -278,13 +278,15 @@ func newConnID(proto tcpip.TransportProtocolNumber, id stack.TransportEndpointID
 }
 
 func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, streamCreator tunnel.StreamCreator) {
+	ctx, cancel := context.WithCancel(ctx)
 	stream, err := streamCreator(ctx, id)
 	if err != nil {
 		if err != nil {
 			dlog.Errorf(ctx, "forward %s: %s", id, err)
 		}
+		cancel()
 		return
 	}
-	ep := tunnel.NewConnEndpoint(stream, conn)
+	ep := tunnel.NewConnEndpoint(stream, conn, cancel)
 	ep.Start(ctx)
 }

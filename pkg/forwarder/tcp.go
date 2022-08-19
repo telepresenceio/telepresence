@@ -159,7 +159,8 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 	defer span.End()
 	tracing.RecordInterceptInfo(span, iCept)
 	addr := conn.RemoteAddr()
-	dlog.Infof(ctx, "Accept got connection from %s", addr)
+	dlog.Debugf(ctx, "Accept got connection from %s", addr)
+	defer dlog.Debugf(ctx, "Done serving connection from %s", addr)
 
 	srcIp, srcPort, err := iputil.SplitToIPPort(addr)
 	if err != nil {
@@ -176,14 +177,17 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 		return fmt.Errorf("call to manager.Tunnel() failed. Id %s: %v", id, err)
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	s, err := tunnel.NewClientStream(ctx, ms, id, f.sessionInfo.SessionId, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
 	if err != nil {
+		cancel()
 		return err
 	}
 	if err = s.Send(ctx, tunnel.SessionMessage(iCept.ClientSession.SessionId)); err != nil {
+		cancel()
 		return fmt.Errorf("unable to send client session id. Id %s: %v", id, err)
 	}
-	d := tunnel.NewConnEndpoint(s, conn)
+	d := tunnel.NewConnEndpoint(s, conn, cancel)
 	d.Start(ctx)
 	<-d.Done()
 	return nil

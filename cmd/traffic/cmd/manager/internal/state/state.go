@@ -736,7 +736,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return err
 		}
 	} else {
-		endPoint = tunnel.NewDialer(stream)
+		endPoint = tunnel.NewDialer(stream, func() {})
 		endPoint.Start(ctx)
 	}
 	<-endPoint.Done()
