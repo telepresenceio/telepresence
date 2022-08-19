@@ -210,7 +210,8 @@ func (c *interceptCommand) validArgsFunc() AutocompletionFunc {
 			namespace        = "default"
 		)
 		for i := 0; i < len(args); i++ {
-			if strings.HasPrefix(args[i], "--namespace") {
+			arg := args[i]
+			if strings.HasPrefix(arg, "--namespace") || strings.HasPrefix(arg, "-n") {
 				namespaceArgsIdx = i
 				namespaceArg = args[i]
 				break
