@@ -108,7 +108,6 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(restartAnnotation)); err != nil {
 		err = fmt.Errorf("unable to patch %s %s.%s: %v", wl.GetKind(), wl.GetName(), wl.GetNamespace(), err)
 		dlog.Error(ctx, err)
-		dlog.Error(ctx, err)
 		span.SetStatus(codes.Error, err.Error())
 		return
 	}
