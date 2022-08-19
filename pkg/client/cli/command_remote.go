@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -27,7 +28,15 @@ func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool)
 		if err != nil {
 			return fmt.Errorf("unable to call ListCommands: %w", err)
 		}
-		groups, err = cliutil.RPCToCommands(remote, runRemote)
+
+		var funcBundle = cliutil.CommandFuncBundle{
+			RunE:              runRemote,
+			ValidArgsFunction: validArgsFuncRemote,
+		}
+		if groups, err = cliutil.RPCToCommands(remote, funcBundle); err != nil {
+			groups = commands.GetCommandsForLocal(ctx, err)
+		}
+
 		userDaemonRunning = true
 		return err
 	}
@@ -39,6 +48,31 @@ func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool)
 		err = cliutil.WithStartedConnector(ctx, false, listCommands)
 	}
 	return groups, err
+}
+
+func validArgsFuncRemote(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	var (
+		resp *connector.ValidArgsForCommandResponse
+		err  error
+	)
+
+	err = cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
+		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+			resp, err = connectorClient.ValidArgsForCommand(ctx, &connector.ValidArgsForCommandRequest{
+				CmdName:    cmd.Name(),
+				OsArgs:     args,
+				ToComplete: toComplete,
+			})
+
+			return err
+		})
+	})
+
+	if err != nil {
+		return []string{}, 0
+	}
+
+	return resp.Completions, cobra.ShellCompDirective(resp.ShellCompDirective)
 }
 
 func runRemote(cmd *cobra.Command, args []string) error {

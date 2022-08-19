@@ -31,10 +31,19 @@ service SystemA {
 
   // ReportInterceptCreation allows the proprietary user-daemon to report intercept creation once the intercept command
   // has completed
+  //
+  // This RPC is only used by the proprietary user-daemon and not the OSS one.
   rpc ReportInterceptCreation(InterceptCreationResult) returns (google.protobuf.Empty);
 
   // GetSavedIntercept allows the proprietary user-daemon to retrieve a saved intercept so that it can instantiate it
+  //
+  // This RPC is only used by the proprietary user-daemon and not the OSS one.
   rpc GetSavedIntercept(GetSavedInterceptRequest) returns (SavedIntercept);
+
+  // AutocompleteSavedIntercept provides the functionality for autocompleting saved intercept names on the cli
+  //
+  // This RPC is only used by the proprietary user-daemon and not the OSS one.
+  rpc AutocompleteSavedIntercept(AutocompleteSavedInterceptRequest) returns (AutocompleteSavedInterceptsResponse);
 }
 
 // AvailableServicesRequest contains a list of services that can be intercepted by the daemon
@@ -196,4 +205,12 @@ message SavedIntercept {
 
   // Exec command and arguments that can optionally be passed
   string intercept_exec_command = 5;
+}
+
+message AutocompleteSavedInterceptRequest {
+  string to_complete = 1;
+}
+
+message AutocompleteSavedInterceptsResponse {
+  repeated string completions = 1;
 }

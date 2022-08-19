@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -614,4 +615,172 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 		}
 	})
 	return result, nil
+}
+
+func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
+	var resp = rpc.ValidArgsForCommandResponse{
+		Completions: make([]string, 0),
+	}
+	var (
+		name = req.GetCmdName()
+		cmd  = commands.GetCommandByName(ctx, name)
+	)
+
+	if cmd == nil {
+		return &resp, fmt.Errorf("command %s not found", name)
+	}
+
+	if l := len(req.OsArgs); l != 0 {
+		if lastArg := req.OsArgs[l-1]; strings.HasPrefix(lastArg, "--") && !strings.Contains(lastArg, "=") {
+			// user wants autocompletion on flag value and is using --flag value
+			var (
+				flagName            = strings.TrimPrefix(lastArg, "--")
+				flagValueToComplete = req.ToComplete
+			)
+
+			var shellCompDir cobra.ShellCompDirective
+			resp.Completions, shellCompDir = s.autocompleteFlag(ctx, cmd, req.OsArgs, flagName, flagValueToComplete)
+			resp.ShellCompDirective = int32(shellCompDir)
+			return &resp, nil
+		}
+	}
+	if strings.HasPrefix(req.ToComplete, "--") {
+		if !strings.Contains(req.ToComplete, "=") {
+			// user wants autocompletion on flag name
+			return &resp, nil
+		}
+
+		// user wants autocompletion on flag value and is using --flag=value
+		var (
+			flagParts           = strings.Split(req.ToComplete, "=")
+			flagName            = strings.TrimPrefix(flagParts[0], "--")
+			flagValueToComplete = flagParts[1]
+		)
+
+		var shellCompDir cobra.ShellCompDirective
+		resp.Completions, shellCompDir = s.autocompleteFlag(ctx, cmd, req.OsArgs, flagName, flagValueToComplete)
+		resp.ShellCompDirective = int32(shellCompDir)
+
+		return &resp, nil
+	}
+
+	// user wants autocompletion on argument
+	vaf := commands.GetValidArgsFunctionFor(ctx, cmd)
+	if vaf == nil {
+		return &resp, nil
+	}
+
+	var (
+		shellCompDir cobra.ShellCompDirective
+		err          error
+	)
+	if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+			// the context within this scope is not derived from the context of the outer scope
+			cmdCtx = commands.WithSession(cmdCtx, ts)
+			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+			}
+			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+
+			resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+			return nil
+		})
+	} else {
+		cmdCtx := ctx
+		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+			cmdCtx = commands.WithConnectorServer(ctx, s)
+		}
+		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
+
+		resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+	}
+	if err != nil {
+		return &resp, err
+	}
+
+	resp.ShellCompDirective = int32(shellCompDir)
+	return &resp, nil
+}
+
+func (s *Service) autocompleteFlag(ctx context.Context, cmd *cobra.Command, args []string, flagName, toComplete string) ([]string, cobra.ShellCompDirective) {
+	faf := commands.GetFlagAutocompletionFuncFor(ctx, cmd, flagName)
+	if faf == nil {
+		// theres no autocompletion for this flag
+		return []string{}, 0
+	}
+
+	var (
+		requiresCS      bool
+		requiresSession bool
+		err             error
+
+		completions     = []string{}
+		shellCompDir    cobra.ShellCompDirective
+		csAnnotation, _ = cmd.Annotations[commands.FlagAutocompletionFuncRequiresConnectorServer]
+		sAnnotation, _  = cmd.Annotations[commands.FlagAutocompletionFuncRequiresSession]
+	)
+
+	for _, annotationFlagName := range strings.Split(csAnnotation, ",") {
+		if annotationFlagName == flagName {
+			requiresCS = true
+			break
+		}
+	}
+
+	for _, annotationFlagName := range strings.Split(sAnnotation, ",") {
+		if annotationFlagName == flagName {
+			requiresSession = true
+			break
+		}
+	}
+
+	if requiresSession {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-autoCompleteFlag", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+			// the context within this scope is not derived from the context of the outer scope
+			cmdCtx = commands.WithSession(cmdCtx, ts)
+			if requiresCS {
+				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+			}
+
+			completions, shellCompDir = faf(cmdCtx, cmd, args, toComplete)
+			return nil
+		})
+	} else {
+		cmdCtx := ctx
+		if requiresCS {
+			cmdCtx = commands.WithConnectorServer(ctx, s)
+		}
+
+		completions, shellCompDir = faf(cmdCtx, cmd, args, toComplete)
+	}
+
+	if err != nil {
+		return completions, cobra.ShellCompDirectiveError
+	}
+
+	return completions, shellCompDir
+}
+
+func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {
+	var resp rpc.GetNamespacesResponse
+	err := s.withSession(ctx, "GetNamespaces", func(ctx context.Context, session trafficmgr.Session) error {
+		resp.Namespaces = session.GetCurrentNamespaces(req.ForClientAccess)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if p := req.Prefix; p != "" {
+		var namespaces = []string{}
+		for _, namespace := range resp.Namespaces {
+			if strings.HasPrefix(namespace, p) {
+				namespaces = append(namespaces, namespace)
+			}
+		}
+		resp.Namespaces = namespaces
+	}
+
+	return &resp, nil
 }

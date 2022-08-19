@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -11,8 +12,11 @@ import (
 )
 
 const (
-	CommandRequiresSession         = "cobra.telepresence.io/with-session"
-	CommandRequiresConnectorServer = "cobra.telepresence.io/with-connector-server"
+	CommandRequiresSession                        = "cobra.telepresence.io/with-session"
+	CommandRequiresConnectorServer                = "cobra.telepresence.io/with-connector-server"
+	ValidArgsFuncRequiresConnectorServer          = "cobra.telepresence.io/valid-args-func/with-connector-server"
+	FlagAutocompletionFuncRequiresConnectorServer = "cobra.telepresence.io/flag-autocompletion-func/with-connector-server"
+	FlagAutocompletionFuncRequiresSession         = "cobra.telepresence.io/flag-autocompletion-func/with-session"
 )
 
 type command interface {
@@ -20,6 +24,16 @@ type command interface {
 	cobraCommand(context.Context) *cobra.Command
 	group() string
 }
+
+type argAutocompleter interface {
+	validArgsFunc() AutocompletionFunc
+}
+
+type flagAutocompleter interface {
+	flagAutocompletionFunc(flagName string) AutocompletionFunc
+}
+
+type AutocompletionFunc func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 
 func commands() []command {
 	return []command{
@@ -41,6 +55,66 @@ func GetCommands(ctx context.Context) cliutil.CommandGroups {
 		groups[groupName] = append(group, cmd.cobraCommand(ctx))
 	}
 	return groups
+}
+
+// GetCommandsForLocal will return the same commands as GetCommands but in a non-runnable state that reports
+// the error given. Should be used to build help strings even if it's not possible to connect to the connector daemon.
+func GetCommandsForLocal(ctx context.Context, err error) cliutil.CommandGroups {
+	var groups = cliutil.CommandGroups{}
+	for _, cmd := range commands() {
+		var (
+			groupName = cmd.group()
+			group     = groups[groupName]
+			cc        = cmd.cobraCommand(ctx)
+		)
+		cc.RunE = func(_ *cobra.Command, _ []string) error {
+			// err here will be ErrNoUserDaemon "telepresence user daemon is not running"
+			return fmt.Errorf("unable to run command: %w", err)
+		}
+		groups[groupName] = append(group, cc)
+	}
+	return groups
+}
+
+func GetCommandByName(ctx context.Context, name string) *cobra.Command {
+	for _, cmd := range commands() {
+		if cmd.cobraCommand(ctx).Name() == name {
+			cmd.init(ctx)
+			return cmd.cobraCommand(ctx)
+		}
+	}
+
+	return nil
+}
+
+func GetValidArgsFunctionFor(ctx context.Context, cmd *cobra.Command) AutocompletionFunc {
+	name := cmd.Name()
+	for _, cmd := range commands() {
+		if cmd.cobraCommand(ctx).Name() != name {
+			continue
+		}
+		if ac, ok := cmd.(argAutocompleter); ok {
+			return ac.validArgsFunc()
+		} else {
+			return nil
+		}
+	}
+	return nil
+}
+
+func GetFlagAutocompletionFuncFor(ctx context.Context, cmd *cobra.Command, flagName string) AutocompletionFunc {
+	name := cmd.Name()
+	for _, cmd := range commands() {
+		if cmd.cobraCommand(ctx).Name() != name {
+			continue
+		}
+		if ac, ok := cmd.(flagAutocompleter); ok {
+			return ac.flagAutocompletionFunc(flagName)
+		} else {
+			return nil
+		}
+	}
+	return nil
 }
 
 type sessKey struct{}

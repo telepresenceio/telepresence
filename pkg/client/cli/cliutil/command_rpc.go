@@ -34,8 +34,14 @@ func CommandsToRPC(cmds CommandGroups) *connector.CommandGroups {
 	return &connector.CommandGroups{CommandGroups: groups}
 }
 
-func RPCToCommands(remote *connector.CommandGroups, runner func(*cobra.Command, []string) error) (CommandGroups, error) {
+type CommandFuncBundle struct {
+	RunE              func(*cobra.Command, []string) error
+	ValidArgsFunction func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
+}
+
+func RPCToCommands(remote *connector.CommandGroups, funcBundle CommandFuncBundle) (CommandGroups, error) {
 	groups := CommandGroups{}
+
 	for name, cmds := range remote.GetCommandGroups() {
 		commands := []*cobra.Command{}
 		for _, cmd := range cmds.GetCommands() {
@@ -43,8 +49,9 @@ func RPCToCommands(remote *connector.CommandGroups, runner func(*cobra.Command, 
 				Use:                cmd.GetName(),
 				Long:               cmd.GetLongHelp(),
 				Short:              cmd.GetShortHelp(),
-				RunE:               runner,
+				RunE:               funcBundle.RunE,
 				DisableFlagParsing: true,
+				ValidArgsFunction:  funcBundle.ValidArgsFunction,
 			}
 			for _, flag := range cmd.GetFlags() {
 				tp, err := TypeFromString(flag.GetType())

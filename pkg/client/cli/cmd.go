@@ -218,6 +218,9 @@ func Command(ctx context.Context) *cobra.Command {
 	for _, group := range globalFlagGroups {
 		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
 	}
+
+	addCompletionCommand(rootCmd)
+
 	return rootCmd
 }
 

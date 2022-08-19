@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -39,6 +40,29 @@ func listCommand() *cobra.Command {
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
+
+	_ = cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		var (
+			completions  = []string{}
+			shellCompDir = cobra.ShellCompDirectiveNoFileComp
+		)
+		err := withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
+			resp, err := cs.userD.GetNamespaces(ctx, &connector.GetNamespacesRequest{
+				ForClientAccess: false,
+				Prefix:          toComplete,
+			})
+			if err != nil {
+				return err
+			}
+			completions = resp.Namespaces
+			return nil
+		})
+		if err != nil {
+			dlog.Debugf(cmd.Context(), "error getting namespaces: %v", err)
+			shellCompDir |= cobra.ShellCompDirectiveError
+		}
+		return completions, shellCompDir
+	})
 	return cmd
 }
 
