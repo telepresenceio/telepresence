@@ -11,6 +11,8 @@
 - Change: The command `telepresence upload-traces` now prints out a message on success.
 - Change: The command `telepresence gather-traces` now traces itself and reports errors with trace gathering
 
+- Change: The `cli.log` log is now logged at the same level as the `connector.log`
+
 - Bugfix: Streams created between the traffic-agent and the workstation are now properly closed
   when no interceptor process has been started on the workstation. This fixes a potential problem where
   a large number of attempts to connect to a non-existing interceptor would cause stream congestion
