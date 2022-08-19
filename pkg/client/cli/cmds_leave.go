@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -24,6 +25,50 @@ func leaveCommand() *cobra.Command {
 		Short: "Remove existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
+		},
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			var (
+				completions  = []string{}
+				intercepts   = []*connector.WorkloadInfo{}
+				shellCompDir = cobra.ShellCompDirectiveNoFileComp
+			)
+
+			if len(args) != 0 {
+				return completions, shellCompDir
+			}
+
+			err := cliutil.WithStartedConnector(cmd.Context(), true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+				resp, err := connectorClient.List(ctx, &connector.ListRequest{
+					Filter:    connector.ListRequest_INTERCEPTS,
+					Namespace: "",
+				})
+				if err != nil {
+					return err
+				}
+
+				intercepts = resp.Workloads
+
+				return nil
+			})
+			if err != nil {
+				dlog.Debugf(cmd.Context(), "error getting intercepts: %v", err)
+				shellCompDir |= cobra.ShellCompDirectiveError
+			}
+
+			if len(intercepts) == 0 {
+				return completions, shellCompDir
+			}
+
+			for _, intercept := range intercepts {
+				for _, ii := range intercept.InterceptInfos {
+					name := ii.Spec.Name
+					if strings.HasPrefix(name, toComplete) {
+						completions = append(completions, name)
+					}
+				}
+			}
+
+			return completions, shellCompDir
 		},
 	}
 }

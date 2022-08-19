@@ -58,8 +58,10 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 		Short: "Intercept a service",
 
 		Annotations: map[string]string{
-			CommandRequiresSession:         "",
-			CommandRequiresConnectorServer: "",
+			CommandRequiresSession:                "",
+			CommandRequiresConnectorServer:        "",
+			ValidArgsFuncRequiresConnectorServer:  "",
+			FlagAutocompletionFuncRequiresSession: "namespace",
 		},
 	}
 	cmd.args = interceptArgs{}
@@ -191,6 +193,86 @@ func (c *interceptCommand) init(ctx context.Context) {
 		}
 
 		return c.intercept(ccmd.Context(), args)
+	}
+}
+
+func (c *interceptCommand) validArgsFunc() AutocompletionFunc {
+	return func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cs := GetConnectorServer(ctx)
+		if cs == nil {
+			dlog.Debug(ctx, "no connector found")
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		var (
+			namespaceArgsIdx int
+			namespaceArg     string
+			namespace        = "default"
+		)
+		for i := 0; i < len(args); i++ {
+			arg := args[i]
+			if strings.HasPrefix(arg, "--namespace") || strings.HasPrefix(arg, "-n") {
+				namespaceArgsIdx = i
+				namespaceArg = args[i]
+				break
+			}
+		}
+		namespaceArgParts := strings.Split(namespaceArg, "=")
+		if len(namespaceArgParts) == 2 {
+			namespace = namespaceArgParts[1]
+		} else if namespaceArgsIdx+1 < len(args) {
+			namespace = args[namespaceArgsIdx+1]
+		}
+
+		req := connector.ListRequest{
+			Filter:    connector.ListRequest_INTERCEPTABLE,
+			Namespace: namespace,
+		}
+		r, err := cs.List(ctx, &req)
+		if err != nil {
+			dlog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		list := make([]string, 0)
+		for _, w := range r.Workloads {
+			// only suggest strings that start with the string were autocompleting
+			if strings.HasPrefix(w.Name, toComplete) {
+				list = append(list, w.Name)
+			}
+		}
+
+		// TODO(raphaelreyna): This list can be quite large (in the double digits of MB).
+		// There probably exists a number that would be a good cutoff limit.
+
+		return list, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+	}
+}
+
+func (c *interceptCommand) flagAutocompletionFunc(flagName string) AutocompletionFunc {
+	if flagName == "namespace" {
+		return c.flagAutocompletion_namespace()
+	}
+	return nil
+}
+
+func (c *interceptCommand) flagAutocompletion_namespace() AutocompletionFunc {
+	return func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		completions := make([]string, 0)
+		session := GetSession(ctx)
+		if session == nil {
+			dlog.Debugf(ctx, "no session found")
+			return completions, cobra.ShellCompDirectiveError
+		}
+
+		namespaces := session.GetCurrentNamespaces(true)
+		for _, namespace := range namespaces {
+			if strings.HasPrefix(namespace, toComplete) {
+				completions = append(completions, namespace)
+			}
+		}
+
+		return completions, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
