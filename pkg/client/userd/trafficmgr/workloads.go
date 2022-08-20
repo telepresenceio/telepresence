@@ -175,16 +175,17 @@ func newWASWatcher() *workloadsAndServicesWatcher {
 	return w
 }
 
-// eachService iterates over the workloads in the current snapshot. Unless namespace
-// is the empty string, the iteration is limited to the workloads matching that namespace.
-func (w *workloadsAndServicesWatcher) eachService(c context.Context, namespaces []string, f func(*core.Service)) {
+// eachService iterates over the services in the current snapshot. Unless namespace
+// is the empty string, the iteration is limited to the services matching that namespace.
+// The traffic-manager service is excluded.
+func (w *workloadsAndServicesWatcher) eachService(c context.Context, tmns string, namespaces []string, f func(*core.Service)) {
 	if len(namespaces) != 1 {
 		// Produce workloads in a predictable order
 		nss := make([]string, len(namespaces))
 		copy(nss, namespaces)
 		sort.Strings(nss)
 		for _, n := range nss {
-			w.eachService(c, []string{n}, f)
+			w.eachService(c, tmns, []string{n}, f)
 		}
 	} else {
 		ns := namespaces[0]
@@ -192,8 +193,12 @@ func (w *workloadsAndServicesWatcher) eachService(c context.Context, namespaces 
 		nw, ok := w.nsWatchers[ns]
 		w.Unlock()
 		if ok {
-			for _, svc := range nw.svcWatcher.List(c) {
-				f(svc.(*core.Service))
+			for _, o := range nw.svcWatcher.List(c) {
+				svc := o.(*core.Service)
+				// If this is our traffic-manager namespace, then exclude the traffic-manager service.
+				if !(ns == tmns && svc.Labels["app"] == "traffic-manager" && svc.Labels["telepresence"] == "manager") {
+					f(svc)
+				}
 			}
 		}
 	}
