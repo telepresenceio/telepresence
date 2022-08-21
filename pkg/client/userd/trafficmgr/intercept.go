@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -37,7 +36,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -51,41 +49,30 @@ type forwardKey struct {
 	PodIP string
 }
 
-type mountForward struct {
-	forwardKey
-	SftpPort         int32
-	RemoteMountPoint string
-}
-
-type portForward struct {
-	forwardKey
-	Port string
-}
-
-// The livePortForward struct provides synchronization for cancellation of port forwards.
+// The liveIntercept provides synchronization for cancellation of port forwards and mounts.
 // This is necessary because a volume mount process must terminate before the corresponding
 // file system is removed. The removal cannot take place when the process ends because there
 // may be subsequent processes that use the same volume mount during the lifetime of an
 // intercept (since an intercept may change pods).
-type livePortForward struct {
+type liveIntercept struct {
 	wg     sync.WaitGroup
 	cancel context.CancelFunc
 }
 
-type livePortForwards struct {
+type liveIntercepts struct {
 	// live contains a map of the currently alive port forwards
-	live map[forwardKey]*livePortForward
+	live map[forwardKey]*liveIntercept
 
 	// snapshot is recreated for each new intercept snapshot read from the manager
 	snapshot map[forwardKey]struct{}
 }
 
-func newPortForwards() *livePortForwards {
-	return &livePortForwards{live: make(map[forwardKey]*livePortForward)}
+func newPortForwards() *liveIntercepts {
+	return &liveIntercepts{live: make(map[forwardKey]*liveIntercept)}
 }
 
 // start a port forward for the given intercept and remembers that it's alive
-func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *manager.InterceptInfo) {
+func (lpf liveIntercepts) start(ctx context.Context, tm *TrafficManager, ii *manager.InterceptInfo) {
 	fk := forwardKey{
 		Name:  ii.Spec.Name,
 		PodIP: ii.PodIp,
@@ -98,12 +85,13 @@ func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *m
 		}
 	}
 
-	if tm.shouldForward(ii) {
+	if tm.shouldForward(ii) || tm.shouldMount(ii) {
 		lpf.snapshot[fk] = struct{}{}
 		if _, isLive := lpf.live[fk]; !isLive {
 			pfCtx, pfCancel := context.WithCancel(ctx)
-			livePortForward := &livePortForward{cancel: pfCancel}
-			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint, ii.Spec.LocalPorts)
+			livePortForward := &liveIntercept{cancel: pfCancel}
+			tm.startMount(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint)
+			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.Spec.LocalPorts)
 			dlog.Debugf(ctx, "Started forward for %+v", fk)
 			lpf.live[fk] = livePortForward
 		}
@@ -111,12 +99,12 @@ func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *m
 }
 
 // initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted
-func (lpf *livePortForwards) initSnapshot() {
+func (lpf *liveIntercepts) initSnapshot() {
 	lpf.snapshot = make(map[forwardKey]struct{})
 }
 
 // cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot
-func (lpf livePortForwards) cancelUnwanted(ctx context.Context) {
+func (lpf liveIntercepts) cancelUnwanted(ctx context.Context) {
 	for fk, lp := range lpf.live {
 		if _, isWanted := lpf.snapshot[fk]; !isWanted {
 			dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
@@ -647,20 +635,19 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 }
 
-// shouldForward returns true if the intercept info given should result in mounts or ports being forwarded
+// shouldForward returns true if the intercept info given should result in ports being forwarded
 func (tm *TrafficManager) shouldForward(ii *manager.InterceptInfo) bool {
-	return ii.SftpPort > 0 || len(ii.Spec.LocalPorts) > 0
+	return len(ii.Spec.LocalPorts) > 0
+}
+
+type portForward struct {
+	forwardKey
+	Port string
 }
 
 // startForwards starts port forwards and mounts for the given forwardKey.
 // It assumes that the user has called shouldForward and is sure that something will be started.
-func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, remoteMountPoint string, localPorts []string) {
-	if sftpPort > 0 {
-		// There's nothing to mount if the SftpPort is zero
-		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
-		wg.Add(1)
-		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort, remoteMountPoint}, wg)
-	}
+func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, localPorts []string) {
 	for _, port := range localPorts {
 		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", fk.PodIP, port))
 		wg.Add(1)
@@ -684,93 +671,6 @@ func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	err = f.Serve(ctx, nil)
 	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
-	}
-}
-
-func (tm *TrafficManager) mountPointForIntercept(name string) (mountPoint string) {
-	tm.mountPoints.Range(func(key, value any) bool {
-		if name == value.(string) {
-			mountPoint = key.(string)
-			return false
-		}
-		return true
-	})
-	return
-}
-
-func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	mountPoint := tm.mountPointForIntercept(mf.Name)
-	if mountPoint == "" {
-		// User has explicitly specified that no mount should take place
-		dlog.Infof(ctx, "No mount point found for intercept %q", mf.Name)
-		return
-	}
-
-	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
-
-	// The mounts performed here are synced on by podIP + sftpPort to keep track of active
-	// mounts. This is not enough in situations when a pod is deleted and another pod
-	// takes over. That is two different IPs so an additional synchronization on the actual
-	// mount point is necessary to prevent that it is established and deleted at the same
-	// time.
-	mountMutex := new(sync.Mutex)
-	mountMutex.Lock()
-	if oldMutex, loaded := tm.mountMutexes.LoadOrStore(mountPoint, mountMutex); loaded {
-		mountMutex.Unlock() // not stored, so unlock and throw away
-		mountMutex = oldMutex.(*sync.Mutex)
-		mountMutex.Lock()
-	}
-
-	defer func() {
-		tm.mountMutexes.Delete(mountPoint)
-		mountMutex.Unlock()
-	}()
-
-	// Retry mount in case it gets disconnected
-	err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
-		dl := &net.Dialer{Timeout: 3 * time.Second}
-		conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", mf.PodIP, mf.SftpPort))
-		if err != nil {
-			return err
-		}
-		defer conn.Close()
-		sshfsArgs := []string{
-			"-F", "none", // don't load the user's config file
-			"-f", // foreground operation
-
-			// connection settings
-			"-C", // compression
-			"-oConnectTimeout=10",
-			"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-			"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-			"-o", "slave",                    // Unencrypted via stdin/stdout
-
-			// mount directives
-			"-o", "follow_symlinks",
-			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-			"localhost:" + mf.RemoteMountPoint, // what to mount
-			mountPoint,                         // where to mount it
-		}
-		exe := "sshfs"
-		if runtime.GOOS == "windows" {
-			// Use sshfs-win to launch the sshfs
-			sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
-			exe = "sshfs-win"
-		}
-		err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
-		time.Sleep(time.Second)
-
-		// sshfs sometimes leave the mount point in a bad state. This will clean it up
-		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
-		defer cancel()
-		_ = proc.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
-		return err
-	}, 3*time.Second, 6*time.Second)
-
-	if err != nil && ctx.Err() == nil {
-		dlog.Error(ctx, err)
 	}
 }
 
