@@ -10,27 +10,24 @@ import (
 
 func RecordInterceptSpec(span trace.Span, spec *manager.InterceptSpec) {
 	span.SetAttributes(
-		attribute.String("service-name", spec.ServiceName),
-		attribute.String("service-namespace", spec.Namespace),
-		attribute.String("mechanism", spec.Mechanism),
-		attribute.String("name", spec.Name),
-		attribute.String("workload-kind", spec.WorkloadKind),
+		attribute.String("tel2.service-name", spec.ServiceName),
+		attribute.String("tel2.service-namespace", spec.Namespace),
+		attribute.String("tel2.mechanism", spec.Mechanism),
+		attribute.String("tel2.intercept-name", spec.Name),
+		attribute.String("tel2.agent-name", spec.Agent),
+		attribute.String("tel2.workload-kind", spec.WorkloadKind),
 	)
 }
 
 func RecordInterceptInfo(span trace.Span, info *manager.InterceptInfo) {
 	span.SetAttributes(
-		attribute.String("intercept-id", info.Id),
-		attribute.String("session-id", info.ClientSession.SessionId),
-		attribute.String("disposition", info.Disposition.String()),
+		attribute.String("tel2.intercept-id", info.Id),
+		attribute.String("tel2.session-id", info.ClientSession.SessionId),
+		attribute.String("tel2.disposition", info.Disposition.String()),
 	)
 	if info.Spec != nil {
 		RecordInterceptSpec(span, info.Spec)
 	}
-}
-
-func RecordConnID(span trace.Span, id string) {
-	span.SetAttributes(attribute.String("conn-id", id))
 }
 
 func EndAndRecord(span trace.Span, err error) {

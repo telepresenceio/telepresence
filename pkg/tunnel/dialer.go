@@ -17,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
@@ -76,7 +75,7 @@ func (h *dialer) Start(ctx context.Context) {
 		defer close(h.done)
 
 		id := h.stream.ID()
-		tracing.RecordConnID(span, id.String())
+		id.SpanRecord(span)
 
 		switch h.connected {
 		case notConnected:
@@ -304,7 +303,7 @@ func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialReq
 	ctx, span := otel.Tracer("").Start(ctx, "dialRespond")
 	defer span.End()
 	id := ConnID(dr.ConnId)
-	tracing.RecordConnID(span, id.String())
+	id.SpanRecord(span)
 	mt, err := manager.Tunnel(ctx)
 	if err != nil {
 		dlog.Errorf(ctx, "!! CONN %s, call to manager Tunnel failed: %v", id, err)

@@ -170,7 +170,7 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 	spec := iCept.Spec
 	destIp := iputil.Parse(spec.TargetHost)
 	id := tunnel.NewConnID(tunnel.IPProto(addr.Network()), srcIp, destIp, srcPort, uint16(spec.TargetPort))
-	tracing.RecordConnID(span, id.String())
+	id.SpanRecord(span)
 
 	ms, err := f.manager.Tunnel(ctx)
 	if err != nil {

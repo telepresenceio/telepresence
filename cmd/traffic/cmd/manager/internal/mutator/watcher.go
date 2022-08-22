@@ -8,6 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -64,6 +68,9 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 }
 
 func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.triggerRollout")
+	defer span.End()
+	k8sapi.RecordWorkloadInfo(span, wl)
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
 		// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
 		// set must be scaled down and then up again.
@@ -75,14 +82,19 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 		if replicas > 0 {
 			patch := `{"spec": {"replicas": 0}}`
 			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
-				dlog.Errorf(ctx, "unable to scale ReplicaSet %s.%s to zero: %v", wl.GetName(), wl.GetNamespace(), err)
+				err = fmt.Errorf("unable to scale ReplicaSet %s.%s to zero: %w", wl.GetName(), wl.GetNamespace(), err)
+				dlog.Error(ctx, err)
+				span.SetStatus(codes.Error, err.Error())
 				return
 			}
 			patch = fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
 			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
-				dlog.Errorf(ctx, "unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
+				err = fmt.Errorf("unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
+				dlog.Error(ctx, err)
+				span.SetStatus(codes.Error, err.Error())
 			}
 		} else {
+			span.AddEvent("tel2.noop-rollout")
 			dlog.Debugf(ctx, "ReplicaSet %s.%s has zero replicas so rollout was a no-op", wl.GetName(), wl.GetNamespace())
 		}
 		return
@@ -92,8 +104,11 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 		install.DomainPrefix,
 		time.Now().Format(time.RFC3339),
 	)
+	span.AddEvent("tel2.do-rollout")
 	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(restartAnnotation)); err != nil {
-		dlog.Errorf(ctx, "unable to patch %s %s.%s: %v", wl.GetKind(), wl.GetName(), wl.GetNamespace(), err)
+		err = fmt.Errorf("unable to patch %s %s.%s: %v", wl.GetKind(), wl.GetName(), wl.GetNamespace(), err)
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
@@ -121,6 +136,7 @@ type entry struct {
 	name      string
 	namespace string
 	value     string
+	link      trace.Link
 }
 
 func (c *configWatcher) Run(ctx context.Context) error {
@@ -135,46 +151,69 @@ func (c *configWatcher) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case e := <-delCh:
-			dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
-			ac, wl, err := e.workload(ctx)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					dlog.Error(ctx, err)
-				}
-				continue
-			}
-			if ac.Create || ac.Manual {
-				// Deleted before it was generated or manually added, just ignore
-				continue
-			}
-			triggerRollout(ctx, wl)
+			c.handleDelete(ctx, e)
 		case e := <-addCh:
-			dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
-			ac, wl, err := e.workload(ctx)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					dlog.Error(ctx, err)
-				}
-				continue
-			}
-			if ac.Manual {
-				// Manually added, just ignore
-				continue
-			}
-			if ac.Create {
-				if agentImage == "" {
-					agentImage = managerutil.GetAgentImage(ctx)
-				}
-				if ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage)); err != nil {
-					dlog.Error(ctx, err)
-				} else if err = c.Store(ctx, ac, false); err != nil {
-					dlog.Error(ctx, err)
-				}
-				continue // Calling Store() will generate a new event, so we skip rollout here
-			}
-			triggerRollout(ctx, wl)
+			c.handleAdd(ctx, e, agentImage)
 		}
 	}
+}
+
+func (c *configWatcher) handleAdd(ctx context.Context, e entry, agentImage string) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
+		trace.WithNewRoot(),
+		trace.WithLinks(e.link),
+	)
+	defer span.End()
+	dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
+	ac, wl, err := e.workload(ctx)
+	ac.RecordInSpan(span)
+	k8sapi.RecordWorkloadInfo(span, wl)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			dlog.Error(ctx, err)
+		}
+		return
+	}
+	if ac.Manual {
+		span.SetAttributes(attribute.Bool("tel2.manual", ac.Manual))
+		// Manually added, just ignore
+		return
+	}
+	if ac.Create {
+		if agentImage == "" {
+			agentImage = managerutil.GetAgentImage(ctx)
+		}
+		if ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage)); err != nil {
+			dlog.Error(ctx, err)
+		} else if err = c.Store(ctx, ac, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
+			dlog.Error(ctx, err)
+		}
+		return
+	}
+	triggerRollout(ctx, wl)
+}
+
+func (*configWatcher) handleDelete(ctx context.Context, e entry) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
+		trace.WithNewRoot(),
+		trace.WithLinks(e.link),
+	)
+	defer span.End()
+	dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
+	ac, wl, err := e.workload(ctx)
+	k8sapi.RecordWorkloadInfo(span, wl)
+	ac.RecordInSpan(span)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			dlog.Error(ctx, err)
+		}
+		return
+	}
+	if ac.Create || ac.Manual {
+		// Deleted before it was generated or manually added, just ignore
+		return
+	}
+	triggerRollout(ctx, wl)
 }
 
 func (c *configWatcher) GetInto(key, ns string, into any) (bool, error) {
@@ -376,23 +415,39 @@ func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan w
 		case <-ctx.Done():
 			return false
 		case event, ok := <-evCh:
-			if !ok {
-				return true // restart watcher
-			}
-			switch event.Type {
-			case watch.Deleted:
-				if m, ok := event.Object.(*core.ConfigMap); ok {
-					dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
-					c.update(ctx, m.Namespace, nil)
+			{
+				if !ok {
+					return true // restart watcher
 				}
-			case watch.Added, watch.Modified:
-				if m, ok := event.Object.(*core.ConfigMap); ok {
-					dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
-					if m.Name != agentconfig.ConfigMap {
-						continue
+				ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.configMapEventHandler",
+					trace.WithNewRoot(), // Because the watcher is long lived, if we put these spans under it there's a high chance they don't get collected.
+					trace.WithAttributes(
+						attribute.String("tel2.event-type", string(event.Type)),
+					))
+				switch event.Type {
+				case watch.Deleted:
+					if m, ok := event.Object.(*core.ConfigMap); ok {
+						span.SetAttributes(
+							attribute.String("tel2.cm-name", m.Name),
+							attribute.String("tel2.cm-namespace", m.Namespace),
+						)
+						dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
+						c.update(ctx, m.Namespace, nil)
 					}
-					c.update(ctx, m.Namespace, m.Data)
+				case watch.Added, watch.Modified:
+					if m, ok := event.Object.(*core.ConfigMap); ok {
+						span.SetAttributes(
+							attribute.String("tel2.cm-name", m.Name),
+							attribute.String("tel2.cm-namespace", m.Namespace),
+						)
+						dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
+						if m.Name != agentconfig.ConfigMap {
+							continue
+						}
+						c.update(ctx, m.Namespace, m.Data)
+					}
 				}
+				span.End()
 			}
 		}
 	}
@@ -530,6 +585,7 @@ func writeToChan(ctx context.Context, es []entry, ch chan<- entry) {
 }
 
 func (c *configWatcher) update(ctx context.Context, ns string, m map[string]string) {
+	span := trace.SpanFromContext(ctx)
 	var dels []entry
 	c.Lock()
 	data, ok := c.data[ns]
@@ -540,14 +596,22 @@ func (c *configWatcher) update(ctx context.Context, ns string, m map[string]stri
 	for k, v := range data {
 		if _, ok := m[k]; !ok {
 			delete(data, k)
-			dels = append(dels, entry{name: k, namespace: ns, value: v})
+			dels = append(dels, entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)})
+			span.AddEvent("tel2.cm-delete", trace.WithAttributes(
+				attribute.String("tel2.workload-name", k),
+				attribute.String("tel2.workload-namespace", ns),
+			))
 		}
 	}
 	var mods []entry
 	for k, v := range m {
 		if ov, ok := data[k]; !ok || ov != v {
-			mods = append(mods, entry{name: k, namespace: ns, value: v})
+			mods = append(mods, entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)})
 			data[k] = v
+			span.AddEvent("tel2.cm-mod", trace.WithAttributes(
+				attribute.String("tel2.workload-name", k),
+				attribute.String("tel2.workload-namespace", ns),
+			))
 		}
 	}
 	c.Unlock()
@@ -560,6 +624,8 @@ func (c *configWatcher) update(ctx context.Context, ns string, m map[string]stri
 }
 
 func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.DeleteMapsAndRolloutAll")
+	defer span.End()
 	c.cancel() // No more updates from watcher
 	c.RLock()
 	defer c.RUnlock()
@@ -568,7 +634,7 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	for ns, wlm := range c.data {
 		for k, v := range wlm {
-			e := &entry{name: k, namespace: ns, value: v}
+			e := &entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)}
 			ac, wl, err := e.workload(ctx)
 			if err != nil {
 				if !errors.IsNotFound(err) {
