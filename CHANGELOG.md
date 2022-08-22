@@ -7,6 +7,10 @@
   in the `config.yml` file using `timeouts.connectivityCheck`. The default timeout was
   changed from 5 seconds to 500 milliseconds to speed up the actual connect.
 
+- Feature: Adds cli autocompletion for the `--namespace` flag on the `list` and `intercept` commands,
+  autocompletion for interceptable workloads on the `intercept` command, and autocompletion for
+  active intercepts on the `leave` command.
+
 - Change: The command `telepresence gather-traces` now prints out a message on success.
 - Change: The command `telepresence upload-traces` now prints out a message on success.
 - Change: The command `telepresence gather-traces` now traces itself and reports errors with trace gathering
@@ -17,6 +21,9 @@
   and an unresponsive intercept.
 
 - Bugfix: Telepresence help message functionality without a running user daemon has been restored.
+
+- Bugfix: The `telepresence list` command no longer includes the `traffic-manager` deployment.
+
 
 ### 2.7.1 (August 10, 2022)
 

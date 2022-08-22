@@ -609,7 +609,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 ) ([]*rpc.WorkloadInfo, error) {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
 	var err error
-	tm.wlWatcher.eachService(ctx, namespaces, func(svc *core.Service) {
+	tm.wlWatcher.eachService(ctx, tm.GetManagerNamespace(), namespaces, func(svc *core.Service) {
 		var wls []k8sapi.Workload
 		if wls, err = tm.wlWatcher.findMatchingWorkloads(ctx, svc); err != nil {
 			return
