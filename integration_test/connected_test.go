@@ -20,6 +20,11 @@ func init() {
 	})
 }
 
+func (s *connectedSuite) Test_ListExcludesTM() {
+	stdout := itest.TelepresenceOk(s.Context(), "list", "-n", s.ManagerNamespace())
+	s.NotContains(stdout, "traffic-manager")
+}
+
 func (s *connectedSuite) Test_ReportsVersionFromDaemon() {
 	stdout := itest.TelepresenceOk(s.Context(), "version")
 	s.Contains(stdout, fmt.Sprintf("Client: %s", s.TelepresenceVersion()))
