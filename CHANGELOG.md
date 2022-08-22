@@ -20,7 +20,10 @@
   a large number of attempts to connect to a non-existing interceptor would cause stream congestion
   and an unresponsive intercept.
 
+- Bugfix: Telepresence help message functionality without a running user daemon has been restored.
+
 - Bugfix: The `telepresence list` command no longer includes the `traffic-manager` deployment.
+
 
 ### 2.7.1 (August 10, 2022)
 

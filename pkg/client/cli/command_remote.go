@@ -22,6 +22,7 @@ import (
 )
 
 func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool) (groups cliutil.CommandGroups, err error) {
+	groups = make(cliutil.CommandGroups)
 	listCommands := func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		remote, err := connectorClient.ListCommands(ctx, &empty.Empty{})
 		if err != nil {
