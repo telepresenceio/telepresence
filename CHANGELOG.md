@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.7.3 (TBD)
+
+- Bugfix: Graciously handle nil intercept environment from the traffic-manager.
+
 ### 2.7.2 (TBD)
 
 - Feature: The timeout for the initial connectivity check that Telepresence performs
