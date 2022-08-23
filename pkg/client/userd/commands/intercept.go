@@ -948,6 +948,9 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	is.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
 
 	is.env = intercept.Environment
+	if is.env == nil {
+		is.env = make(map[string]string)
+	}
 	is.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
 	is.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
 	if args.envFile != "" {
