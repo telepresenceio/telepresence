@@ -1,20 +1,23 @@
 package userd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/docker/pkg/ioutils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -496,87 +499,149 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 	return
 }
 
-func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
-	result := &rpc.RunCommandResponse{}
-	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
-		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, wr io.Writer) {
+	for ctx.Err() == nil {
+		cr, err := cmdStream.Recv()
+		if err != nil {
+			if err != io.EOF && ctx.Err() == nil {
+				dlog.Errorf(ctx, "command failed to read stdin: %v", err)
+			}
+			break
+		}
+		if data := cr.GetData(); data != nil {
+			if _, err = wr.Write(data); err != nil {
+				dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
+				break
+			}
+		}
+	}
+}
+
+func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case sm, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := cmdStream.Send(sm); err != nil {
+				if ctx.Err() == nil {
+					dlog.Errorf(ctx, "Send on stdout/stderr stream failed: %v", err)
+				}
+				return
+			}
+		}
+	}
+}
+
+func (s *Service) executeCmd(ctx context.Context, cmd *cobra.Command, wd string) error {
+	// the context within this scope is not derived from the context of the outer scope
+	ctx = output.WithStructure(ctx, cmd)
+	if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+		ctx = commands.WithConnectorServer(ctx, s)
+	}
+	return cmd.ExecuteContext(commands.WithCwd(ctx, wd))
+}
+
+func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err error) {
+	s.logCall(cmdStream.Context(), "RunCommand", func(ctx context.Context) {
+		var cr *rpc.RunCommandRequest
+		cr, err = cmdStream.Recv()
+		if err != nil {
+			err = status.Errorf(codes.Aborted, "RunCommand failed to read initial stream message: %v", err)
+			return
+		}
+		req := cr.GetCommand()
+		if req == nil {
+			err = status.Error(codes.InvalidArgument, "RunCommand got incorrect initial stream message")
+			return
+		}
+
+		var cmdErr error
+		defer func() {
+			if cmdErr != nil {
+				// Propagate command error as a normal error response. We use SilenceErrors = true, so
+				// it will not have appeared on stderr
+				_ = cmdStream.Send(
+					&rpc.StreamResult{
+						Final: true,
+						Data: &rpc.Result{
+							Data:          []byte(cmdErr.Error()),
+							ErrorCategory: rpc.Result_ErrorCategory(errcat.GetCategory(cmdErr)),
+						},
+					})
+			}
+		}()
+
+		pi := ioutils.NewBytesPipe()
+
+		// Start the stdin pump
+		go stdinPump(ctx, cmdStream, pi)
+
+		// Start the stdout/stderr pump
+		so := client.NewStdOutput(ctx)
+		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
+
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
-		cmd.SetOut(outW)
-		cmd.SetErr(errW)
+		cmd.SetIn(pi)
+		cmd.SetOut(so.Stdout())
+		cmd.SetErr(so.Stderr())
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
 
 		args := req.GetOsArgs()
 		cmd.SetArgs(req.GetOsArgs())
-		cmd, args, err := cmd.Find(args)
+		cmd, args, cmdErr = cmd.Find(args)
 
-		if err != nil {
-			result.Result = errcat.ToResult(errcat.User.New(err))
+		if cmdErr != nil {
 			return
 		}
 		cmd.SetArgs(args)
-		cmd.SetOut(outW)
-		cmd.SetErr(errW)
+		cmd.SetIn(pi)
+		cmd.SetOut(so.Stdout())
+		cmd.SetErr(so.Stderr())
+		cmd.SilenceUsage = true
 
 		for _, group := range cli.GlobalFlagGroups() {
 			cmd.PersistentFlags().AddFlagSet(group.Flags)
 		}
 
-		err = cmd.ParseFlags(args)
-		if err != nil {
-			if err == pflag.ErrHelp {
+		cmdErr = cmd.ParseFlags(args)
+		if cmdErr != nil {
+			if cmdErr == pflag.ErrHelp {
+				cmdErr = nil
 				_ = cmd.Usage()
-				result.Stdout = outW.Bytes()
-				result.Stderr = errW.Bytes()
-			} else {
-				result.Result = errcat.ToResult(errcat.User.New(err))
 			}
 			return
 		}
 
-		monitorCmd := func(ctx, cmdCtx context.Context) {
-			select {
-			case <-ctx.Done(): // user hit ctrl-c cli side
-				f := commands.GetCtxCancellationHandlerFunc(cmdCtx)
-				if f != nil {
-					f()
-				}
-			case <-cmdCtx.Done(): // user called quit
-			}
-		}
-
-		ctx = output.WithStructure(ctx, cmd)
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(cmdCtx context.Context, ts trafficmgr.Session) error {
-				// the context within this scope is not derived from the context of the outer scope
-				cmdCtx = commands.WithSession(cmdCtx, ts)
-				if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-					cmdCtx = commands.WithConnectorServer(cmdCtx, s)
-				}
-				cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-				cmdCtx = commands.WithCwd(cmdCtx, req.GetCwd())
+			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(sessionCtx context.Context, ts trafficmgr.Session) error {
+				// NOTE: For command termination to work properly, the command must execute using the stream
+				// context, not the session context. The fact that the command needs a session here, is just
+				// to get hold of the managerClient. For the actions where it truly needs a long-running session
+				// scoped context that survives the command invocation, it will call methods on the connectorServer.
 
-				go monitorCmd(ctx, cmdCtx)
-				return cmd.ExecuteContext(cmdCtx)
+				// Let the session context cancel the stream context in case the user quits
+				ctx, cancel := context.WithCancel(ctx)
+				go func() {
+					select {
+					case <-ctx.Done():
+					case <-sessionCtx.Done():
+						cancel()
+					}
+				}()
+				cmdErr = s.executeCmd(trafficmgr.WithSession(ctx, ts), cmd, req.GetCwd())
+				return nil
 			})
 		} else {
-			cmdCtx := ctx
-			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-				cmdCtx = commands.WithConnectorServer(ctx, s)
-			}
-			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-			cmdCtx = commands.WithCwd(cmdCtx, req.GetCwd())
-
-			go monitorCmd(ctx, cmdCtx)
-			err = cmd.ExecuteContext(ctx)
+			cmdErr = s.executeCmd(ctx, cmd, req.GetCwd())
 		}
-
-		result.Stdout = outW.Bytes()
-		result.Stderr = errW.Bytes()
-		result.Result = errcat.ToResult(errcat.User.New(err))
 	})
-	return result, nil
+	return nil
 }
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
@@ -679,25 +744,19 @@ func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsFor
 		err          error
 	)
 	if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(ctx context.Context, ts trafficmgr.Session) error {
 			// the context within this scope is not derived from the context of the outer scope
-			cmdCtx = commands.WithSession(cmdCtx, ts)
 			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+				ctx = commands.WithConnectorServer(ctx, s)
 			}
-			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-
-			resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+			resp.Completions, shellCompDir = vaf(trafficmgr.WithSession(ctx, ts), cmd, req.OsArgs, req.ToComplete)
 			return nil
 		})
 	} else {
-		cmdCtx := ctx
 		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			cmdCtx = commands.WithConnectorServer(ctx, s)
+			ctx = commands.WithConnectorServer(ctx, s)
 		}
-		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-
-		resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+		resp.Completions, shellCompDir = vaf(ctx, cmd, req.OsArgs, req.ToComplete)
 	}
 	if err != nil {
 		return &resp, err
@@ -742,7 +801,7 @@ func (s *Service) autocompleteFlag(ctx context.Context, cmd *cobra.Command, args
 	if requiresSession {
 		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-autoCompleteFlag", func(cmdCtx context.Context, ts trafficmgr.Session) error {
 			// the context within this scope is not derived from the context of the outer scope
-			cmdCtx = commands.WithSession(cmdCtx, ts)
+			cmdCtx = trafficmgr.WithSession(cmdCtx, ts)
 			if requiresCS {
 				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
 			}

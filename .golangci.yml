@@ -11,7 +11,7 @@ issues:
   exclude-use-default: false
   # ...but also add some of our own
   exclude:
-    - Error return value of `(\w+\.)+(Close|Flush|Remove|(Un)?Setenv|(Fp|P)rint(f|ln))\` is not checked
+    - Error return value of `(\w+\.)+(Close|CloseSend|Flush|Remove|(Un)?Setenv|(Fp|P)rint(f|ln))\` is not checked
     - 'structtag: struct field \w+ repeats json tag'
     - 'Subprocess launched with function call as argument or cmd arguments'
   exclude-rules:

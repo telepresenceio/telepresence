@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.7.3 (TBD)
+
+- Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.
+
 ### 2.7.2 (TBD)
 
 - Feature: The timeout for the initial connectivity check that Telepresence performs
