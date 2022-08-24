@@ -75,7 +75,7 @@ type ConnectorClient interface {
 	// ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
 	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
-	RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error)
+	RunCommand(ctx context.Context, opts ...grpc.CallOption) (Connector_RunCommandClient, error)
 	// ValidArgsForCommand handles autocompletion
 	ValidArgsForCommand(ctx context.Context, in *ValidArgsForCommandRequest, opts ...grpc.CallOption) (*ValidArgsForCommandResponse, error)
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
@@ -336,13 +336,35 @@ func (c *connectorClient) ListCommands(ctx context.Context, in *emptypb.Empty, o
 	return out, nil
 }
 
-func (c *connectorClient) RunCommand(ctx context.Context, in *RunCommandRequest, opts ...grpc.CallOption) (*RunCommandResponse, error) {
-	out := new(RunCommandResponse)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RunCommand", in, out, opts...)
+func (c *connectorClient) RunCommand(ctx context.Context, opts ...grpc.CallOption) (Connector_RunCommandClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[2], "/telepresence.connector.Connector/RunCommand", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &connectorRunCommandClient{stream}
+	return x, nil
+}
+
+type Connector_RunCommandClient interface {
+	Send(*RunCommandRequest) error
+	Recv() (*StreamResult, error)
+	grpc.ClientStream
+}
+
+type connectorRunCommandClient struct {
+	grpc.ClientStream
+}
+
+func (x *connectorRunCommandClient) Send(m *RunCommandRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *connectorRunCommandClient) Recv() (*StreamResult, error) {
+	m := new(StreamResult)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *connectorClient) ValidArgsForCommand(ctx context.Context, in *ValidArgsForCommandRequest, opts ...grpc.CallOption) (*ValidArgsForCommandResponse, error) {
@@ -452,7 +474,7 @@ type ConnectorServer interface {
 	// ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
 	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
 	// RunCommand executes a CLI command.
-	RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error)
+	RunCommand(Connector_RunCommandServer) error
 	// ValidArgsForCommand handles autocompletion
 	ValidArgsForCommand(context.Context, *ValidArgsForCommandRequest) (*ValidArgsForCommandResponse, error)
 	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
@@ -538,8 +560,8 @@ func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*empt
 func (UnimplementedConnectorServer) ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListCommands not implemented")
 }
-func (UnimplementedConnectorServer) RunCommand(context.Context, *RunCommandRequest) (*RunCommandResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
+func (UnimplementedConnectorServer) RunCommand(Connector_RunCommandServer) error {
+	return status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
 }
 func (UnimplementedConnectorServer) ValidArgsForCommand(context.Context, *ValidArgsForCommandRequest) (*ValidArgsForCommandResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidArgsForCommand not implemented")
@@ -956,22 +978,30 @@ func _Connector_ListCommands_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_RunCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RunCommandRequest)
-	if err := dec(in); err != nil {
+func _Connector_RunCommand_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ConnectorServer).RunCommand(&connectorRunCommandServer{stream})
+}
+
+type Connector_RunCommandServer interface {
+	Send(*StreamResult) error
+	Recv() (*RunCommandRequest, error)
+	grpc.ServerStream
+}
+
+type connectorRunCommandServer struct {
+	grpc.ServerStream
+}
+
+func (x *connectorRunCommandServer) Send(m *StreamResult) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *connectorRunCommandServer) Recv() (*RunCommandRequest, error) {
+	m := new(RunCommandRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).RunCommand(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/RunCommand",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).RunCommand(ctx, req.(*RunCommandRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 func _Connector_ValidArgsForCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1166,10 +1196,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_ListCommands_Handler,
 		},
 		{
-			MethodName: "RunCommand",
-			Handler:    _Connector_RunCommand_Handler,
-		},
-		{
 			MethodName: "ValidArgsForCommand",
 			Handler:    _Connector_ValidArgsForCommand_Handler,
 		},
@@ -1204,6 +1230,12 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "UserNotifications",
 			Handler:       _Connector_UserNotifications_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "RunCommand",
+			Handler:       _Connector_RunCommand_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "rpc/connector/connector.proto",
