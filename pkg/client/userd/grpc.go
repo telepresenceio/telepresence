@@ -146,11 +146,6 @@ func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 // If it is, then the first returned value will be true and the second will indicate if those intercepts are
 // on different services. Otherwise, this function returns false, false
 func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
-	s.sessionLock.RLock()
-	defer s.sessionLock.RUnlock()
-	if s.session == nil {
-		return false, false
-	}
 	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
 
 	// The InterceptsForWorkload will not include failing or removed intercepts so the
@@ -219,8 +214,9 @@ func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 }
 
 func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	var entries []scout.Entry
+	ok := false
 	defer func() {
-		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_can_intercept_success"
@@ -236,14 +232,16 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
+		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		return err
 	})
 	return
 }
 
 func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	var entries []scout.Entry
+	ok := false
 	defer func() {
-		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_create_intercept_success"
@@ -259,6 +257,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		if err == nil && result != nil && result.InterceptInfo != nil {
 			tracing.RecordInterceptInfo(span, result.InterceptInfo)
 		}
+		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		return err
 	})
 	return
@@ -266,8 +265,9 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 
 func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	var spec *manager.InterceptSpec
+	var entries []scout.Entry
+	ok := false
 	defer func() {
-		entries, ok := s.scoutInterceptEntries(spec, result, err)
 		var action string
 		if ok {
 			action = "connector_remove_intercept_success"
@@ -294,6 +294,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
+		entries, ok = s.scoutInterceptEntries(spec, result, err)
 		return nil
 	})
 	return result, err
