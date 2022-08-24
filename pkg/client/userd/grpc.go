@@ -76,10 +76,19 @@ func (s *Service) logCall(c context.Context, callName string, f func(context.Con
 
 func (s *Service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
 	s.logCall(c, callName, func(_ context.Context) {
+		if atomic.LoadInt32(&s.sessionQuitting) != 0 {
+			err = grpcStatus.Error(grpcCodes.Canceled, "session cancelled")
+			return
+		}
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
 			err = grpcStatus.Error(grpcCodes.Unavailable, "no active session")
+			return
+		}
+		if s.sessionContext.Err() != nil {
+			// Session context has been cancelled
+			err = grpcStatus.Error(grpcCodes.Canceled, "session cancelled")
 			return
 		}
 		defer func() { err = callRecovery(c, recover(), err) }()
