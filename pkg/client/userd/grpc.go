@@ -497,22 +497,12 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 		cmd.SetErr(errW)
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
 
-		errResult := func(err error) *rpc.Result {
-			if err != nil {
-				return &rpc.Result{
-					ErrorText:     err.Error(),
-					ErrorCategory: int32(errcat.GetCategory(err)),
-				}
-			}
-			return nil
-		}
-
 		args := req.GetOsArgs()
 		cmd.SetArgs(req.GetOsArgs())
 		cmd, args, err := cmd.Find(args)
 
 		if err != nil {
-			result.Result = errResult(errcat.User.New(err))
+			result.Result = errcat.ToResult(errcat.User.New(err))
 			return
 		}
 		cmd.SetArgs(args)
@@ -530,7 +520,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 				result.Stdout = outW.Bytes()
 				result.Stderr = errW.Bytes()
 			} else {
-				result.Result = errResult(errcat.User.New(err))
+				result.Result = errcat.ToResult(errcat.User.New(err))
 			}
 			return
 		}
@@ -574,7 +564,7 @@ func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*
 
 		result.Stdout = outW.Bytes()
 		result.Stderr = errW.Bytes()
-		result.Result = errResult(err)
+		result.Result = errcat.ToResult(errcat.User.New(err))
 	})
 	return result, nil
 }
@@ -604,8 +594,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 			err := trafficmgr.DeleteManager(c, req)
 			if err != nil {
 				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
-				result.ErrorText = err.Error()
-				result.ErrorCategory = int32(errcat.GetCategory(err))
+				result = errcat.ToResult(err)
 			} else {
 				sr.Report(ctx, "helm_uninstall_success")
 			}
@@ -613,8 +602,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 			err := trafficmgr.EnsureManager(c, req)
 			if err != nil {
 				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
-				result.ErrorText = err.Error()
-				result.ErrorCategory = int32(errcat.GetCategory(err))
+				result = errcat.ToResult(err)
 			} else {
 				sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 			}

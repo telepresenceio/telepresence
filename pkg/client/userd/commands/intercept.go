@@ -324,7 +324,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 		}
 		if err != nil {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
-			return err
+			return errcat.NoDaemonLogs.New(err)
 		}
 
 		// setup cleanup for the interceptor process

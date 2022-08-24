@@ -120,10 +120,7 @@ func runRemote(cmd *cobra.Command, args []string) error {
 
 			_, _ = cmd.OutOrStdout().Write(result.GetStdout())
 			_, _ = cmd.ErrOrStderr().Write(result.GetStderr())
-			if rr := result.Result; rr != nil {
-				err = errcat.Category(rr.ErrorCategory).New(rr.ErrorText)
-			}
-			return err
+			return errcat.FromResult(result.Result)
 		})
 	})
 }
