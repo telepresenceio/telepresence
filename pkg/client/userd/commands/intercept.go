@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"sort"
@@ -321,7 +320,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 			}
 			cmd, containerName, err = is.startInDocker(ctx, envFile, args.cmdline)
 		} else {
-			cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
+			cmd, err = proc.Start(ctx, is.env, c.command, args.cmdline[0], args.cmdline[1:]...)
 		}
 		if err != nil {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
@@ -381,7 +380,7 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 					dlog.Errorf(ctx, "error killing interceptor process: %v", err)
 				}
 			} else {
-				dockerStopCmd, err := proc.Start(ctx, nil, "docker", "stop", containerName)
+				dockerStopCmd, err := proc.Start(ctx, nil, c.command, "docker", "stop", containerName)
 				if err != nil {
 					dlog.Errorf(ctx, "error stopping docker container %s: %v", containerName, err)
 				} else {
@@ -442,9 +441,7 @@ type interceptArgs struct {
 // safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
 // have to worry about things using it in ways they shouldn't.
 type safeCobraCommand interface {
-	InOrStdin() io.Reader
-	OutOrStdout() io.Writer
-	ErrOrStderr() io.Writer
+	proc.Stdio
 	FlagError(error) error
 }
 
