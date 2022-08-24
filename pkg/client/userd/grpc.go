@@ -634,6 +634,12 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 						cancel()
 					}
 				}()
+
+				// Copy the SystemAPoolProvider over
+				if pool := a8rcloud.GetSystemAPoolProvider[*SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
+					ctx = a8rcloud.WithSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName, pool)
+				}
+
 				cmdErr = s.executeCmd(trafficmgr.WithSession(ctx, ts), cmd, req.GetCwd())
 				return nil
 			})

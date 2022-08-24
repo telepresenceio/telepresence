@@ -59,6 +59,13 @@ func GetSystemAPool[T Closeable](ctx context.Context, poolName string) SystemAPo
 	return nil
 }
 
+func GetSystemAPoolProvider[T Closeable](ctx context.Context, poolName string) ClientProvider[T] {
+	if p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T]); ok {
+		return p.Provider
+	}
+	return nil
+}
+
 type SystemAPool[T Closeable] interface {
 	Get(ctx context.Context) (T, error)
 	Done(ctx context.Context) error
