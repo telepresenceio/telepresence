@@ -9,6 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
@@ -26,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -43,9 +47,11 @@ import (
 //
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
-func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (*managerrpc.PreparedIntercept, error) {
+func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (pi *managerrpc.PreparedIntercept, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
+	defer tracing.EndAndRecord(span, err)
 
 	interceptError := func(err error) (*managerrpc.PreparedIntercept, error) {
 		if _, ok := status.FromError(err); ok {
@@ -112,7 +118,10 @@ func (s *State) qualifiedAgentImage(ctx context.Context, extended bool) (img str
 	return img, nil
 }
 
-func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (*agentconfig.Sidecar, error) {
+func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
+	defer tracing.EndAndRecord(span, err)
+
 	ns := wl.GetNamespace()
 	s.mu.Lock()
 	cl, ok := s.cfgMapLocks[ns]
@@ -133,14 +142,19 @@ func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, 
 	return s.loadAgentConfig(ctx, cmAPI, cm, wl, extended)
 }
 
-func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (*core.ConfigMap, error) {
-	cm, err := cmAPI.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
+func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (cm *core.ConfigMap, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadConfigMap")
+	defer tracing.EndAndRecord(span, err)
+
+	cm, err = cmAPI.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err == nil {
+		span.SetAttributes(attribute.Bool("tel2.cm-found", true))
 		return cm, nil
 	}
 	if !errors2.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to get ConfigMap %s.%s: %w", agentconfig.ConfigMap, namespace, err)
 	}
+	span.SetAttributes(attribute.Bool("tel2.cm-found", false))
 	cm, err = cmAPI.Create(ctx, &core.ConfigMap{
 		TypeMeta: meta.TypeMeta{
 			Kind:       "ConfigMap",
@@ -168,11 +182,19 @@ func (s *State) loadAgentConfig(
 	cm *core.ConfigMap,
 	wl k8sapi.Workload,
 	extended bool,
-) (*agentconfig.Sidecar, error) {
+) (sc *agentconfig.Sidecar, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
+	defer tracing.EndAndRecord(span, err)
+
 	manuallyManaged, enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(
+		attribute.Bool("tel2.manually-managed", manuallyManaged),
+		attribute.Bool("tel2.enabled", enabled),
+		attribute.Bool("tel2.extended", extended),
+	)
 	if !(manuallyManaged || enabled) {
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
@@ -181,10 +203,19 @@ func (s *State) loadAgentConfig(
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(
+		attribute.String("tel2.agent-image", agentImage),
+	)
 
 	var ac *agentconfig.Sidecar
 
-	update := func() error {
+	update := func() (err error) {
+		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig.update", trace.WithAttributes(
+			attribute.String("tel2.workload-name", wl.GetName()),
+			attribute.String("tel2.cm-name", agentconfig.ConfigMap),
+			attribute.String("tel2.cm-namespace", wl.GetNamespace()),
+		))
+		defer tracing.EndAndRecord(span, err)
 		bf := bytes.Buffer{}
 		if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
 			return err
@@ -288,7 +319,7 @@ func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface,
 		Namespace: namespace,
 	}))
 	if err != nil {
-		return nil, fmt.Errorf("Watch of ConfigMap  %s failed: %w", agentconfig.ConfigMap, ctx.Err())
+		return nil, fmt.Errorf("watch of ConfigMap  %s failed: %w", agentconfig.ConfigMap, ctx.Err())
 	}
 	defer wi.Stop()
 

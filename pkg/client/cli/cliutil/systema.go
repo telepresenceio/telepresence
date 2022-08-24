@@ -151,6 +151,7 @@ func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string
 func telProBinary(ctx context.Context) (string, error) {
 	cfg := client.GetConfig(ctx)
 	if cfg.Daemons.UserDaemonBinary != "" {
+		dlog.Debugf(ctx, "Found configured UserDaemonBinary: %s", cfg.Daemons.UserDaemonBinary)
 		return cfg.Daemons.UserDaemonBinary, nil
 	}
 	dir, err := filelocation.AppUserConfigDir(ctx)
@@ -159,6 +160,8 @@ func telProBinary(ctx context.Context) (string, error) {
 	}
 
 	telProLocation := filepath.Join(dir, "telepresence-pro")
+	dlog.Debugf(ctx, "No UserDaemonBinary found, looking in default location of %s", telProLocation)
+
 	if runtime.GOOS == "windows" {
 		telProLocation += ".exe"
 	}
@@ -170,8 +173,10 @@ func checkProVersion(ctx context.Context, telProLocation string) (bool, error) {
 	proCmd.DisableLogging = true
 	output, err := proCmd.CombinedOutput()
 	if err != nil {
+		dlog.Warnf(ctx, "failed to get telepresence pro version: %v", err)
 		return false, errcat.NoDaemonLogs.Newf("Unable to get telepresence pro version: %w", err)
 	}
+	dlog.Debugf(ctx, "Telepresence pro: %s, CLI: %s", string(output), client.Version())
 	return strings.Contains(string(output), client.Version()), nil
 }
 
@@ -179,6 +184,7 @@ func checkProVersion(ctx context.Context, telProLocation string) (bool, error) {
 // if it isn't installed. If the user installs it, it also asks the user to
 // automatically update their configuration to use the new binary.
 func GetTelepresencePro(ctx context.Context) (err error) {
+	dlog.Debugf(ctx, "Checking for telepresence-pro")
 	sc := scout.NewReporter(ctx, "cli")
 	sc.Start(ctx)
 	defer sc.Close()
@@ -194,15 +200,19 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 
 	var telProLocation string
 	if telProLocation, err = telProBinary(ctx); err != nil {
+		dlog.Warnf(ctx, "error from detecting telerpesence pro binary path: %v", err)
 		return err
 	}
 
 	if _, err := os.Stat(telProLocation); err != nil {
 		if !os.IsNotExist(err) {
+			dlog.Warnf(ctx, "Error getting file with telepresence-pro; stat %s: %v", telProLocation, err)
 			return err
 		}
+		dlog.Debugf(ctx, "telepresence pro does not exist in %s; fetching", telProLocation)
 		sc.SetMetadatum(ctx, "first_install", true)
 	} else {
+		dlog.Debugf(ctx, "telepresence-pro binary found at %s", telProLocation)
 		// If the binary is present, we check its version to ensure it's compatible
 		// with the CLI
 		ok, err := checkProVersion(ctx, telProLocation)
@@ -231,6 +241,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	downloadURL := fmt.Sprintf("https://%s/download/tel-pro/%s/%s/%s/latest/%s",
 		systemAHost, runtime.GOOS, runtime.GOARCH, clientVersion, filepath.Base(telProLocation))
 
+	dlog.Debugf(ctx, "About to download telepresence-pro from %s", downloadURL)
 	resp, err := http.Get(downloadURL)
 	if err == nil {
 		defer resp.Body.Close()
@@ -239,6 +250,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 		}
 	}
 	if err != nil {
+		dlog.Errorf(ctx, "Failed to download telepresence pro: %v", err)
 		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
 

@@ -12,6 +12,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
@@ -72,7 +75,10 @@ func getPod(req *admission.AdmissionRequest, isDelete bool) (*core.Pod, error) {
 	return &pod, nil
 }
 
-func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequest) (patchOps, error) {
+func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequest) (p patchOps, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.inject")
+	defer tracing.EndAndRecord(span, err)
+
 	isDelete := req.Operation == admission.Delete
 	if atomic.LoadInt64(&a.terminating) > 0 {
 		dlog.Debugf(ctx, "Skipping webhook for %s.%s because the agent-injector is terminating", req.Name, req.Namespace)
@@ -88,6 +94,13 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	env := managerutil.GetEnv(ctx)
 
 	ia := pod.Annotations[agentconfig.InjectAnnotation]
+	span.SetAttributes(
+		attribute.String("tel2.pod-name", pod.Name),
+		attribute.String("tel2.pod-namespace", pod.Namespace),
+		attribute.String("tel2.operation", string(req.Operation)),
+		attribute.String("tel2."+agentconfig.InjectAnnotation, ia),
+	)
+
 	var config *agentconfig.Sidecar
 	switch ia {
 	case "false", "disabled":
@@ -132,12 +145,14 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			}
 			return nil, err
 		}
+		k8sapi.RecordWorkloadInfo(span, wl)
 		if isDelete {
 			return nil, nil
 		}
 		if config, err = agentmap.Generate(ctx, wl, env.GeneratorConfig(a.getAgentImage(ctx))); err != nil {
 			return nil, err
 		}
+		config.RecordInSpan(span)
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
 			return nil, err
 		}
@@ -165,6 +180,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	if len(patches) > 0 {
 		dlog.Infof(ctx, "Injecting %d patches into pod %s.%s", len(patches), pod.Name, pod.Namespace)
 		dlog.Debugf(ctx, "Patches = %s", patches)
+		span.SetAttributes(attribute.Stringer("tel2.patches", patches))
 	}
 	return patches, nil
 }

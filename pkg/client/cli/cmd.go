@@ -38,6 +38,9 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
+	if args[0] == "-h" {
+		return nil
+	}
 	err := fmt.Errorf("invalid subcommand %q", args[0])
 	if cmd.SuggestionsMinimumDistance <= 0 {
 		cmd.SuggestionsMinimumDistance = 2
@@ -73,7 +76,7 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 	// determine if --help was explicitly asked for
 	var usedHelpFlag bool
 	for _, arg := range args {
-		if arg == "--help" {
+		if arg == "--help" || arg == "-h" {
 			usedHelpFlag = true
 		}
 	}
@@ -93,6 +96,9 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 // is a best effort, and it might give us false positives.
 func isCommand(s string) bool {
 	prev := ""
+	if len(os.Args) == 1 && s == "" {
+		return true
+	}
 	for _, arg := range os.Args[1:] {
 		if arg == "--" {
 			break
@@ -114,6 +120,18 @@ func isCommand(s string) bool {
 			return true
 		}
 		prev = arg
+	}
+	return false
+}
+
+func userWantsRootLevelHelp() bool {
+	if isCommand("help") || isCommand("") {
+		return true
+	}
+	if 1 < len(os.Args) {
+		if arg := os.Args[1]; arg == "--help" || arg == "-h" {
+			return true
+		}
 	}
 	return false
 }
@@ -141,10 +159,8 @@ func Command(ctx context.Context) *cobra.Command {
 		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
 	}
 
-	var groups cliutil.CommandGroups
-	if isCommand("quit") {
-		groups = make(cliutil.CommandGroups)
-	} else {
+	var groups = make(cliutil.CommandGroups)
+	if !isCommand("quit") && !userWantsRootLevelHelp() {
 		// These are commands that known to always exist in the user daemon. If the daemon
 		// isn't running, it will be started just to retrieve the command spec.
 		wellknownRemoteCommands := []string{
@@ -167,13 +183,11 @@ func Command(ctx context.Context) *cobra.Command {
 				for _, g := range static {
 					for _, c := range g {
 						if isCommand(c.Name()) {
-							groups = make(cliutil.CommandGroups)
 							err = nil
 						}
 					}
 				}
-			}
-			if err != nil {
+			} else if err != nil {
 				fmt.Fprintln(os.Stderr, err.Error())
 				os.Exit(1)
 			}
