@@ -4,6 +4,8 @@
 
 - Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.
 
+- Bugfix: Graciously handle nil intercept environment from the traffic-manager.
+
 ### 2.7.2 (TBD)
 
 - Feature: The timeout for the initial connectivity check that Telepresence performs
@@ -19,12 +21,17 @@
 - Change: The command `telepresence upload-traces` now prints out a message on success.
 - Change: The command `telepresence gather-traces` now traces itself and reports errors with trace gathering
 
+- Change: The `cli.log` log is now logged at the same level as the `connector.log`
+
 - Bugfix: Streams created between the traffic-agent and the workstation are now properly closed
   when no interceptor process has been started on the workstation. This fixes a potential problem where
   a large number of attempts to connect to a non-existing interceptor would cause stream congestion
   and an unresponsive intercept.
 
+- Bugfix: Telepresence help message functionality without a running user daemon has been restored.
+
 - Bugfix: The `telepresence list` command no longer includes the `traffic-manager` deployment.
+
 
 ### 2.7.1 (August 10, 2022)
 

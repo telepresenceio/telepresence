@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 const (
@@ -37,7 +39,10 @@ func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*
 	return Generate(ctx, wl, env)
 }
 
-func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*agentconfig.Sidecar, error) {
+func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
+	defer tracing.EndAndRecord(span, err)
+
 	pod := wl.GetPodTemplate()
 	pod.Namespace = wl.GetNamespace()
 	cns := pod.Spec.Containers
@@ -96,6 +101,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (*a
 		TracingPort:  cfg.TracingPort,
 		Containers:   ccs,
 	}
+	ag.RecordInSpan(span)
 	return ag, nil
 }
 

@@ -199,7 +199,7 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 		if quitUserDaemon {
 			fmt.Fprintln(stdout, "had already quit")
 		} else {
-			fmt.Fprintf(stdout, "is already disconnected")
+			fmt.Fprintln(stdout, "is already disconnected")
 		}
 		err = nil
 	}
