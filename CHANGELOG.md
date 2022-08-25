@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.7.2 (TBD)
+### 2.7.2 (August 25, 2022)
 
 - Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.
 
