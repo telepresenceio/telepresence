@@ -1,6 +1,8 @@
 package agentconfig
 
 import (
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -211,6 +213,10 @@ func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts [
 		} else {
 			m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
 		}
+
+		var re = regexp.MustCompile(`\$\((.*?)\)`)
+		m.SubPathExpr = re.ReplaceAllString(m.SubPathExpr, fmt.Sprintf(`$(%s$1)`, EnvPrefixApp+cc.EnvPrefix))
+
 		mounts = append(mounts, m)
 	}
 	return mounts

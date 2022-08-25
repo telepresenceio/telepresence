@@ -1607,6 +1607,119 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"",
 			nil,
 		},
+		{
+			"Apply Patch: volume with subPathExpr",
+			&core.Pod{
+				ObjectMeta: podObjectMeta("named-port"),
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
+						Name:  "some-container",
+						Image: "some-app-image",
+						Ports: []core.ContainerPort{{
+							Name: "http", ContainerPort: 8888},
+						},
+						VolumeMounts: []core.VolumeMount{
+							{Name: "default-token-nkspp", ReadOnly: true, MountPath: serviceAccountMountPath},
+							{
+								Name:        "logs-app",
+								MountPath:   "/var/log/app",
+								SubPathExpr: "$(NAMESPACE_NAME)_$(POD_NAME)",
+							},
+						}},
+					},
+					Volumes: []core.Volume{
+						{
+							Name: "default-token-nkspp",
+							VolumeSource: core.VolumeSource{
+								Secret: &core.SecretVolumeSource{
+									SecretName:  "default-token-nkspp",
+									DefaultMode: &secretMode,
+								},
+							},
+						},
+					},
+				},
+			},
+			true,
+			`- op: add
+  path: /spec/containers/-
+  value:
+    args:
+    - agent
+    env:
+    - name: _TEL_AGENT_POD_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.podIP
+    - name: _TEL_AGENT_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
+    image: docker.io/datawire/tel2:2.6.0
+    name: traffic-agent
+    ports:
+    - containerPort: 9900
+      name: http
+      protocol: TCP
+    readinessProbe:
+      exec:
+        command:
+        - /bin/stat
+        - /tmp/agent/ready
+    resources: {}
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: default-token-nkspp
+      readOnly: true
+    - mountPath: /tel_app_mounts/some-container/var/log/app
+      name: logs-app
+      subPathExpr: $(_TEL_APP_A_NAMESPACE_NAME)_$(_TEL_APP_A_POD_NAME)
+    - mountPath: /tel_pod_info
+      name: traffic-annotations
+    - mountPath: /etc/traffic-agent
+      name: traffic-config
+    - mountPath: /tel_app_exports
+      name: export-volume
+    - mountPath: /tmp
+      name: tel-agent-tmp
+- op: add
+  path: /spec/volumes/-
+  value:
+    downwardAPI:
+      items:
+      - fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.annotations
+        path: annotations
+    name: traffic-annotations
+- op: add
+  path: /spec/volumes/-
+  value:
+    configMap:
+      items:
+      - key: named-port
+        path: config.yaml
+      name: telepresence-agents
+    name: traffic-config
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: export-volume
+- op: add
+  path: /spec/volumes/-
+  value:
+    emptyDir: {}
+    name: tel-agent-tmp
+- op: replace
+  path: /spec/containers/0/ports/0/name
+  value: tm-http
+`,
+			"",
+			nil,
+		},
 	}
 
 	for _, test := range tests {
