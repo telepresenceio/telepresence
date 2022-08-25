@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -58,14 +59,15 @@ type sessionReply struct {
 // service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
-	quit           context.CancelFunc
-	connectCh      chan *rpc.OutboundInfo
-	connectReplyCh chan sessionReply
-	sessionLock    sync.RWMutex
-	sessionContext context.Context
-	session        *session
-	cancelCh       chan struct{}
-	timedLogLevel  log.TimedLevel
+	quit            context.CancelFunc
+	connectCh       chan *rpc.OutboundInfo
+	connectReplyCh  chan sessionReply
+	sessionLock     sync.RWMutex
+	sessionCancel   context.CancelFunc
+	sessionContext  context.Context
+	sessionQuitting int32 // atomic boolean. True if non-zero.
+	session         *session
+	timedLogLevel   log.TimedLevel
 
 	scout *scout.Reporter
 }
@@ -140,20 +142,24 @@ func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty,
 }
 
 func (d *service) cancelSession() {
-	d.sessionLock.Lock()
-	defer d.sessionLock.Unlock()
-	if d.cancelCh != nil || d.session == nil {
-		// avoid repeated cancellations
+	if !atomic.CompareAndSwapInt32(&d.sessionQuitting, 0, 1) {
 		return
 	}
-	defer func() {
-		d.session = nil
-	}()
-	d.cancelCh = make(chan struct{})
-	d.session.cancel()
+	d.sessionLock.RLock()
+	d.sessionCancel()
+	d.sessionLock.RUnlock()
+
+	d.sessionLock.Lock()
+	d.session = nil
+	d.sessionCancel()
+	atomic.StoreInt32(&d.sessionQuitting, 0)
+	d.sessionLock.Unlock()
 }
 
 func (d *service) withSession(c context.Context, f func(context.Context, *session) error) error {
+	if atomic.LoadInt32(&d.sessionQuitting) != 0 {
+		return status.Error(codes.Canceled, "session cancelled")
+	}
 	d.sessionLock.RLock()
 	defer d.sessionLock.RUnlock()
 	if d.session == nil {
@@ -229,35 +235,23 @@ nextSession:
 		var session *session
 		reply := sessionReply{}
 
-		d.sessionLock.Lock()
-		// If a cancelCh exists, we must wait for it to close and
-		// then check for it again. This ensures that the session
-		// cannot be accessed during shutdown and that a new connect
-		// must wait for an old to complete.
-		for {
-			if cancelCh := d.cancelCh; cancelCh != nil {
-				d.sessionLock.Unlock()
-				select {
-				case <-c.Done():
-					break nextSession
-				case <-cancelCh:
-					d.sessionLock.Lock()
-				}
-			} else {
-				break
-			}
-		}
-
-		// Respond by setting the session and returning the error (or nil
-		// if everything is ok)
-		if d.session != nil {
-			reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
-		} else {
-			session, reply.err = newSession(c, d.scout, oi)
-			if reply.err == nil {
-				d.session = session
-				d.sessionContext, session.cancel = context.WithCancel(c)
+		d.sessionLock.Lock() // Locked during creation
+		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
+			// Respond by setting the session and returning the error (or nil
+			// if everything is ok)
+			if d.session != nil {
 				reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+			} else {
+				sCtx, sCancel := context.WithCancel(c)
+				session, reply.err = newSession(sCtx, d.scout, oi)
+				if reply.err == nil {
+					d.session = session
+					d.sessionContext = sCtx
+					d.sessionCancel = sCancel
+					reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+				} else {
+					sCancel()
+				}
 			}
 		}
 		d.sessionLock.Unlock()
@@ -280,15 +274,7 @@ nextSession:
 		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
-			defer func() {
-				d.sessionLock.Lock()
-				if d.cancelCh != nil {
-					close(d.cancelCh)
-					d.cancelCh = nil
-				}
-				d.sessionLock.Unlock()
-				wg.Done()
-			}()
+			defer wg.Done()
 			if err := d.session.run(d.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}

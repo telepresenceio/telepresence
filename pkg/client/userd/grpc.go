@@ -1,21 +1,22 @@
 package userd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/docker/pkg/ioutils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
-	grpcCodes "google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -36,6 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -76,10 +78,19 @@ func (s *Service) logCall(c context.Context, callName string, f func(context.Con
 
 func (s *Service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
 	s.logCall(c, callName, func(_ context.Context) {
+		if atomic.LoadInt32(&s.sessionQuitting) != 0 {
+			err = status.Error(codes.Canceled, "session cancelled")
+			return
+		}
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			err = grpcStatus.Error(grpcCodes.Unavailable, "no active session")
+			err = status.Error(codes.Unavailable, "no active session")
+			return
+		}
+		if s.sessionContext.Err() != nil {
+			// Session context has been cancelled
+			err = status.Error(codes.Canceled, "session cancelled")
 			return
 		}
 		defer func() { err = callRecovery(c, recover(), err) }()
@@ -108,14 +119,14 @@ func (s *Service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	s.logCall(ctx, "Connect", func(c context.Context) {
 		select {
 		case <-ctx.Done():
-			err = grpcStatus.Error(grpcCodes.Unavailable, ctx.Err().Error())
+			err = status.Error(codes.Unavailable, ctx.Err().Error())
 			return
 		case s.connectRequest <- cr:
 		}
 
 		select {
 		case <-ctx.Done():
-			err = grpcStatus.Error(grpcCodes.Unavailable, ctx.Err().Error())
+			err = status.Error(codes.Unavailable, ctx.Err().Error())
 		case result = <-s.connectResponse:
 		}
 	})
@@ -146,11 +157,6 @@ func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 // If it is, then the first returned value will be true and the second will indicate if those intercepts are
 // on different services. Otherwise, this function returns false, false
 func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
-	s.sessionLock.RLock()
-	defer s.sessionLock.RUnlock()
-	if s.session == nil {
-		return false, false
-	}
 	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
 
 	// The InterceptsForWorkload will not include failing or removed intercepts so the
@@ -219,8 +225,9 @@ func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 }
 
 func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	var entries []scout.Entry
+	ok := false
 	defer func() {
-		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_can_intercept_success"
@@ -236,14 +243,16 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
+		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		return err
 	})
 	return
 }
 
 func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	var entries []scout.Entry
+	ok := false
 	defer func() {
-		entries, ok := s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		var action string
 		if ok {
 			action = "connector_create_intercept_success"
@@ -259,6 +268,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		if err == nil && result != nil && result.InterceptInfo != nil {
 			tracing.RecordInterceptInfo(span, result.InterceptInfo)
 		}
+		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result, err)
 		return err
 	})
 	return
@@ -266,8 +276,9 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 
 func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	var spec *manager.InterceptSpec
+	var entries []scout.Entry
+	ok := false
 	defer func() {
-		entries, ok := s.scoutInterceptEntries(spec, result, err)
 		var action string
 		if ok {
 			action = "connector_remove_intercept_success"
@@ -284,7 +295,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 			result.WorkloadKind = spec.WorkloadKind
 		}
 		if err := session.RemoveIntercept(c, rr.Name); err != nil {
-			if grpcStatus.Code(err) == grpcCodes.NotFound {
+			if status.Code(err) == codes.NotFound {
 				result.Error = common.InterceptError_NOT_FOUND
 				result.ErrorText = rr.Name
 				result.ErrorCategory = int32(errcat.User)
@@ -294,6 +305,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
+		entries, ok = s.scoutInterceptEntries(spec, result, err)
 		return nil
 	})
 	return result, err
@@ -363,7 +375,7 @@ func (s *Service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc
 			var newLogin bool
 			if newLogin, err = s.loginExecutor.LoginAPIKey(ctx, apikey); err != nil {
 				if errors.Is(err, os.ErrPermission) {
-					err = grpcStatus.Error(grpcCodes.PermissionDenied, err.Error())
+					err = status.Error(codes.PermissionDenied, err.Error())
 				}
 				return
 			}
@@ -392,7 +404,7 @@ func (s *Service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Emp
 	s.logCall(ctx, "Logout", func(c context.Context) {
 		if err = s.loginExecutor.Logout(ctx); err != nil {
 			if errors.Is(err, auth.ErrNotLoggedIn) {
-				err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
+				err = status.Error(codes.NotFound, err.Error())
 			}
 		} else {
 			result = &empty.Empty{}
@@ -461,7 +473,7 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 			duration = request.Duration.AsDuration()
 		}
 		if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
-			err = grpcStatus.Error(grpcCodes.Internal, err.Error())
+			err = status.Error(codes.Internal, err.Error())
 		} else {
 			result = &empty.Empty{}
 		}
@@ -486,97 +498,157 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 	return
 }
 
-func (s *Service) RunCommand(ctx context.Context, req *rpc.RunCommandRequest) (*rpc.RunCommandResponse, error) {
-	result := &rpc.RunCommandResponse{}
-	s.logCall(ctx, "RunCommand", func(ctx context.Context) {
-		outW, errW := bytes.NewBuffer([]byte{}), bytes.NewBuffer([]byte{})
+func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, wr io.Writer) {
+	for ctx.Err() == nil {
+		cr, err := cmdStream.Recv()
+		if err != nil {
+			if err != io.EOF && ctx.Err() == nil {
+				dlog.Errorf(ctx, "command failed to read stdin: %v", err)
+			}
+			break
+		}
+		if data := cr.GetData(); data != nil {
+			if _, err = wr.Write(data); err != nil {
+				dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
+				break
+			}
+		}
+	}
+}
+
+func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case sm, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := cmdStream.Send(sm); err != nil {
+				if ctx.Err() == nil {
+					dlog.Errorf(ctx, "Send on stdout/stderr stream failed: %v", err)
+				}
+				return
+			}
+		}
+	}
+}
+
+func (s *Service) executeCmd(ctx context.Context, cmd *cobra.Command, wd string) error {
+	// the context within this scope is not derived from the context of the outer scope
+	ctx = output.WithStructure(ctx, cmd)
+	if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
+		ctx = commands.WithConnectorServer(ctx, s)
+	}
+	return cmd.ExecuteContext(commands.WithCwd(ctx, wd))
+}
+
+func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err error) {
+	s.logCall(cmdStream.Context(), "RunCommand", func(ctx context.Context) {
+		var cr *rpc.RunCommandRequest
+		cr, err = cmdStream.Recv()
+		if err != nil {
+			err = status.Errorf(codes.Aborted, "RunCommand failed to read initial stream message: %v", err)
+			return
+		}
+		req := cr.GetCommand()
+		if req == nil {
+			err = status.Error(codes.InvalidArgument, "RunCommand got incorrect initial stream message")
+			return
+		}
+
+		var cmdErr error
+		defer func() {
+			if cmdErr != nil {
+				// Propagate command error as a normal error response. We use SilenceErrors = true, so
+				// it will not have appeared on stderr
+				_ = cmdStream.Send(
+					&rpc.StreamResult{
+						Final: true,
+						Data: &rpc.Result{
+							Data:          []byte(cmdErr.Error()),
+							ErrorCategory: rpc.Result_ErrorCategory(errcat.GetCategory(cmdErr)),
+						},
+					})
+			}
+		}()
+
+		pi := ioutils.NewBytesPipe()
+
+		// Start the stdin pump
+		go stdinPump(ctx, cmdStream, pi)
+
+		// Start the stdout/stderr pump
+		so := client.NewStdOutput(ctx)
+		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
+
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
-		cmd.SetOut(outW)
-		cmd.SetErr(errW)
+		cmd.SetIn(pi)
+		cmd.SetOut(so.Stdout())
+		cmd.SetErr(so.Stderr())
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
-
-		errResult := func(err error) *rpc.Result {
-			if err != nil {
-				return &rpc.Result{
-					ErrorText:     err.Error(),
-					ErrorCategory: int32(errcat.GetCategory(err)),
-				}
-			}
-			return nil
-		}
 
 		args := req.GetOsArgs()
 		cmd.SetArgs(req.GetOsArgs())
-		cmd, args, err := cmd.Find(args)
+		cmd, args, cmdErr = cmd.Find(args)
 
-		if err != nil {
-			result.Result = errResult(errcat.User.New(err))
+		if cmdErr != nil {
 			return
 		}
 		cmd.SetArgs(args)
-		cmd.SetOut(outW)
-		cmd.SetErr(errW)
+		cmd.SetIn(pi)
+		cmd.SetOut(so.Stdout())
+		cmd.SetErr(so.Stderr())
+		cmd.SilenceUsage = true
 
 		for _, group := range cli.GlobalFlagGroups() {
 			cmd.PersistentFlags().AddFlagSet(group.Flags)
 		}
 
-		err = cmd.ParseFlags(args)
-		if err != nil {
-			if err == pflag.ErrHelp {
+		cmdErr = cmd.ParseFlags(args)
+		if cmdErr != nil {
+			if cmdErr == pflag.ErrHelp {
+				cmdErr = nil
 				_ = cmd.Usage()
-				result.Stdout = outW.Bytes()
-				result.Stderr = errW.Bytes()
-			} else {
-				result.Result = errResult(errcat.User.New(err))
 			}
 			return
 		}
 
-		monitorCmd := func(ctx, cmdCtx context.Context) {
-			select {
-			case <-ctx.Done(): // user hit ctrl-c cli side
-				f := commands.GetCtxCancellationHandlerFunc(cmdCtx)
-				if f != nil {
-					f()
-				}
-			case <-cmdCtx.Done(): // user called quit
-			}
-		}
-
-		ctx = output.WithStructure(ctx, cmd)
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(cmdCtx context.Context, ts trafficmgr.Session) error {
-				// the context within this scope is not derived from the context of the outer scope
-				cmdCtx = commands.WithSession(cmdCtx, ts)
-				if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-					cmdCtx = commands.WithConnectorServer(cmdCtx, s)
-				}
-				cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-				cmdCtx = commands.WithCwd(cmdCtx, req.GetCwd())
+			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(sessionCtx context.Context, ts trafficmgr.Session) error {
+				// NOTE: For command termination to work properly, the command must execute using the stream
+				// context, not the session context. The fact that the command needs a session here, is just
+				// to get hold of the managerClient. For the actions where it truly needs a long-running session
+				// scoped context that survives the command invocation, it will call methods on the connectorServer.
 
-				go monitorCmd(ctx, cmdCtx)
-				return cmd.ExecuteContext(cmdCtx)
+				// Let the session context cancel the stream context in case the user quits
+				ctx, cancel := context.WithCancel(ctx)
+				go func() {
+					select {
+					case <-ctx.Done():
+					case <-sessionCtx.Done():
+						cancel()
+					}
+				}()
+
+				// Copy the SystemAPoolProvider over
+				if pool := a8rcloud.GetSystemAPoolProvider[*SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
+					ctx = a8rcloud.WithSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName, pool)
+				}
+				if ki := k8sapi.GetK8sInterface(sessionCtx); ki != nil {
+					ctx = k8sapi.WithK8sInterface(ctx, ki)
+				}
+				cmdErr = s.executeCmd(trafficmgr.WithSession(ctx, ts), cmd, req.GetCwd())
+				return nil
 			})
 		} else {
-			cmdCtx := ctx
-			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-				cmdCtx = commands.WithConnectorServer(ctx, s)
-			}
-			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-			cmdCtx = commands.WithCwd(cmdCtx, req.GetCwd())
-
-			go monitorCmd(ctx, cmdCtx)
-			err = cmd.ExecuteContext(ctx)
+			cmdErr = s.executeCmd(ctx, cmd, req.GetCwd())
 		}
-
-		result.Stdout = outW.Bytes()
-		result.Stderr = errW.Bytes()
-		result.Result = errResult(err)
 	})
-	return result, nil
+	return nil
 }
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
@@ -604,8 +676,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 			err := trafficmgr.DeleteManager(c, req)
 			if err != nil {
 				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
-				result.ErrorText = err.Error()
-				result.ErrorCategory = int32(errcat.GetCategory(err))
+				result = errcat.ToResult(err)
 			} else {
 				sr.Report(ctx, "helm_uninstall_success")
 			}
@@ -613,8 +684,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 			err := trafficmgr.EnsureManager(c, req)
 			if err != nil {
 				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
-				result.ErrorText = err.Error()
-				result.ErrorCategory = int32(errcat.GetCategory(err))
+				result = errcat.ToResult(err)
 			} else {
 				sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 			}
@@ -681,25 +751,19 @@ func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsFor
 		err          error
 	)
 	if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(cmdCtx context.Context, ts trafficmgr.Session) error {
+		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(ctx context.Context, ts trafficmgr.Session) error {
 			// the context within this scope is not derived from the context of the outer scope
-			cmdCtx = commands.WithSession(cmdCtx, ts)
 			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
+				ctx = commands.WithConnectorServer(ctx, s)
 			}
-			cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-
-			resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+			resp.Completions, shellCompDir = vaf(trafficmgr.WithSession(ctx, ts), cmd, req.OsArgs, req.ToComplete)
 			return nil
 		})
 	} else {
-		cmdCtx := ctx
 		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			cmdCtx = commands.WithConnectorServer(ctx, s)
+			ctx = commands.WithConnectorServer(ctx, s)
 		}
-		cmdCtx = commands.WithCtxCancellationHandlerFunc(cmdCtx)
-
-		resp.Completions, shellCompDir = vaf(cmdCtx, cmd, req.OsArgs, req.ToComplete)
+		resp.Completions, shellCompDir = vaf(ctx, cmd, req.OsArgs, req.ToComplete)
 	}
 	if err != nil {
 		return &resp, err
@@ -744,7 +808,7 @@ func (s *Service) autocompleteFlag(ctx context.Context, cmd *cobra.Command, args
 	if requiresSession {
 		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-autoCompleteFlag", func(cmdCtx context.Context, ts trafficmgr.Session) error {
 			// the context within this scope is not derived from the context of the outer scope
-			cmdCtx = commands.WithSession(cmdCtx, ts)
+			cmdCtx = trafficmgr.WithSession(cmdCtx, ts)
 			if requiresCS {
 				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
 			}

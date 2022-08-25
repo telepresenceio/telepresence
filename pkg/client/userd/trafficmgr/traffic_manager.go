@@ -563,10 +563,15 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
 	paths := tm.GetCurrentNamespaces(false)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
-	if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
-		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
-	}
-	dlog.Debug(c, "search paths posted successfully")
+
+	// Prevent traffic-manager from hanging here in the unlikely avent of a race where the root daemon
+	// has quit while we're still at it.
+	go func() {
+		if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+			dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
+		}
+		dlog.Debug(c, "search paths posted successfully")
+	}()
 }
 
 // Run (1) starts up with ensuring that the manager is installed and running,
@@ -960,8 +965,7 @@ func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRe
 				}
 			}
 			if !found {
-				result.ErrorText = fmt.Sprintf("unable to find a workload named %s.%s with an agent installed", di, namespace)
-				result.ErrorCategory = int32(errcat.User)
+				result = errcat.ToResult(errcat.User.Newf("unable to find a workload named %s.%s with an agent installed", di, namespace))
 			}
 		}
 		agents = selectedAgents
@@ -969,8 +973,7 @@ func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRe
 	default:
 		if len(agents) > 0 {
 			if err := legacyRemoveAgents(c, agents); err != nil {
-				result.ErrorText = err.Error()
-				result.ErrorCategory = int32(errcat.GetCategory(err))
+				result = errcat.ToResult(err)
 			}
 		}
 	}
@@ -987,15 +990,6 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 	if tm.managerVersion.LT(firstAgentConfigMapVersion) {
 		// fall back traffic-manager behaviour prior to 2.6
 		return tm.legacyUninstall(ctx, ur)
-	}
-
-	result := func(err error) (*rpc.Result, error) {
-		r := &rpc.Result{}
-		if err != nil {
-			r.ErrorText = err.Error()
-			r.ErrorCategory = int32(errcat.GetCategory(err))
-		}
-		return r, nil
 	}
 
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
@@ -1030,11 +1024,11 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 		namespace := tm.ActualNamespace(ur.Namespace)
 		if namespace == "" {
 			// namespace is not mapped
-			return result(errcat.User.Newf("namespace %s is not mapped", ur.Namespace))
+			return errcat.ToResult(errcat.User.Newf("namespace %s is not mapped", ur.Namespace)), nil
 		}
 		cm, err := loadAgentConfigMap(namespace)
 		if err != nil || cm == nil {
-			return result(err)
+			return errcat.ToResult(err), nil
 		}
 		changed := false
 		ics := tm.getCurrentIntercepts()
@@ -1051,9 +1045,9 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 			}
 		}
 		if changed {
-			return result(updateAgentConfigMap(namespace, cm))
+			return errcat.ToResult(updateAgentConfigMap(namespace, cm)), nil
 		}
-		return result(nil)
+		return errcat.ToResult(nil), nil
 	}
 	if ur.UninstallType != rpc.UninstallRequest_ALL_AGENTS {
 		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
@@ -1084,19 +1078,19 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 		namespace := tm.ActualNamespace(ur.Namespace)
 		if namespace == "" {
 			// namespace is not mapped
-			return result(errcat.User.Newf("namespace %s is not mapped", ur.Namespace))
+			return errcat.ToResult(errcat.User.Newf("namespace %s is not mapped", ur.Namespace)), nil
 		}
-		return result(clearAgentsConfigMap(namespace))
+		return errcat.ToResult(clearAgentsConfigMap(namespace)), nil
 	} else {
 		// Load all effected configmaps
 		for _, ns := range tm.GetCurrentNamespaces(true) {
 			err := clearAgentsConfigMap(ns)
 			if err != nil {
-				return result(err)
+				return errcat.ToResult(err), nil
 			}
 		}
 	}
-	return result(nil)
+	return errcat.ToResult(nil), nil
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
