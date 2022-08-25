@@ -6,6 +6,8 @@
 
 - Bugfix: Graciously handle nil intercept environment from the traffic-manager.
 
+- Bugfix: Replace env variable name for subPathExpr in the volumes
+
 ### 2.7.2 (TBD)
 
 - Feature: The timeout for the initial connectivity check that Telepresence performs
