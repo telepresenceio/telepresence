@@ -72,8 +72,6 @@ import (
 //
 // A zero session is invalid; you must use newSession.
 type session struct {
-	cancel context.CancelFunc
-
 	scout *scout.Reporter
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
@@ -220,7 +218,6 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	}
 
 	s := &session{
-		cancel:            func() {},
 		scout:             scout,
 		handlers:          tunnel.NewPool(),
 		fragmentMap:       make(map[uint16][]*buffer.Data),

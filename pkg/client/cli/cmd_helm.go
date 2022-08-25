@@ -97,12 +97,8 @@ func (ha *helmArgs) run(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			if resp.ErrorText != "" {
-				ec := errcat.Unknown
-				if resp.ErrorCategory != 0 {
-					ec = errcat.Category(resp.ErrorCategory)
-				}
-				return ec.New(resp.ErrorText)
+			if err = errcat.FromResult(resp); err != nil {
+				return err
 			}
 
 			var msg string

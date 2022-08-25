@@ -81,13 +81,6 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if r.ErrorText != "" {
-			ec := errcat.Unknown
-			if r.ErrorCategory != 0 {
-				ec = errcat.Category(r.ErrorCategory)
-			}
-			return ec.New(r.ErrorText)
-		}
-		return nil
+		return errcat.FromResult(r)
 	})
 }

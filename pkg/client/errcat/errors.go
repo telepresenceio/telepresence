@@ -3,6 +3,8 @@ package errcat
 import (
 	"errors"
 	"fmt"
+
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 )
 
 // The Category is used for categorizing errors so that we can know when
@@ -66,4 +68,24 @@ func GetCategory(err error) Category {
 			return Unknown
 		}
 	}
+}
+
+func FromResult(r *connector.Result) error {
+	if r == nil {
+		return nil
+	}
+	c := Category(r.ErrorCategory)
+	if c == OK {
+		return nil
+	}
+	return &categorized{error: errors.New(string(r.Data)), category: c}
+}
+
+func ToResult(err error) *connector.Result {
+	r := &connector.Result{}
+	if err != nil {
+		r.Data = []byte(err.Error())
+		r.ErrorCategory = connector.Result_ErrorCategory(GetCategory(err))
+	}
+	return r
 }

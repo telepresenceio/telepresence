@@ -73,8 +73,6 @@ func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 // run, because otherwise cobra will treat that as "success", and it shouldn't be "success" if the
 // user typos a command and types something invalid.
 func RunSubcommands(cmd *cobra.Command, args []string) error {
-	cmd.SetOut(cmd.ErrOrStderr())
-
 	// determine if --help was explicitly asked for
 	var usedHelpFlag bool
 	for _, arg := range args {

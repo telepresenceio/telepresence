@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -77,10 +78,11 @@ type Service struct {
 
 	quit func()
 
-	session        trafficmgr.Session
-	sessionCancel  context.CancelFunc
-	sessionContext context.Context
-	sessionLock    sync.RWMutex
+	session         trafficmgr.Session
+	sessionCancel   context.CancelFunc
+	sessionContext  context.Context
+	sessionQuitting int32 // atomic boolean. True if non-zero.
+	sessionLock     sync.RWMutex
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
@@ -227,6 +229,9 @@ func (s *Service) cancelSessionReadLocked() {
 }
 
 func (s *Service) cancelSession() {
+	if !atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
+		return
+	}
 	s.sessionLock.RLock()
 	s.cancelSessionReadLocked()
 	s.sessionLock.RUnlock()
@@ -236,6 +241,7 @@ func (s *Service) cancelSession() {
 	s.sessionLock.Lock()
 	s.session = nil
 	s.sessionCancel = nil
+	atomic.StoreInt32(&s.sessionQuitting, 0)
 	s.sessionLock.Unlock()
 }
 
