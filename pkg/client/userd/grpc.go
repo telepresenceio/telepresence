@@ -16,9 +16,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
-	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -39,6 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -80,18 +79,18 @@ func (s *Service) logCall(c context.Context, callName string, f func(context.Con
 func (s *Service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
 	s.logCall(c, callName, func(_ context.Context) {
 		if atomic.LoadInt32(&s.sessionQuitting) != 0 {
-			err = grpcStatus.Error(grpcCodes.Canceled, "session cancelled")
+			err = status.Error(codes.Canceled, "session cancelled")
 			return
 		}
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			err = grpcStatus.Error(grpcCodes.Unavailable, "no active session")
+			err = status.Error(codes.Unavailable, "no active session")
 			return
 		}
 		if s.sessionContext.Err() != nil {
 			// Session context has been cancelled
-			err = grpcStatus.Error(grpcCodes.Canceled, "session cancelled")
+			err = status.Error(codes.Canceled, "session cancelled")
 			return
 		}
 		defer func() { err = callRecovery(c, recover(), err) }()
@@ -120,14 +119,14 @@ func (s *Service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	s.logCall(ctx, "Connect", func(c context.Context) {
 		select {
 		case <-ctx.Done():
-			err = grpcStatus.Error(grpcCodes.Unavailable, ctx.Err().Error())
+			err = status.Error(codes.Unavailable, ctx.Err().Error())
 			return
 		case s.connectRequest <- cr:
 		}
 
 		select {
 		case <-ctx.Done():
-			err = grpcStatus.Error(grpcCodes.Unavailable, ctx.Err().Error())
+			err = status.Error(codes.Unavailable, ctx.Err().Error())
 		case result = <-s.connectResponse:
 		}
 	})
@@ -296,7 +295,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 			result.WorkloadKind = spec.WorkloadKind
 		}
 		if err := session.RemoveIntercept(c, rr.Name); err != nil {
-			if grpcStatus.Code(err) == grpcCodes.NotFound {
+			if status.Code(err) == codes.NotFound {
 				result.Error = common.InterceptError_NOT_FOUND
 				result.ErrorText = rr.Name
 				result.ErrorCategory = int32(errcat.User)
@@ -376,7 +375,7 @@ func (s *Service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc
 			var newLogin bool
 			if newLogin, err = s.loginExecutor.LoginAPIKey(ctx, apikey); err != nil {
 				if errors.Is(err, os.ErrPermission) {
-					err = grpcStatus.Error(grpcCodes.PermissionDenied, err.Error())
+					err = status.Error(codes.PermissionDenied, err.Error())
 				}
 				return
 			}
@@ -405,7 +404,7 @@ func (s *Service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Emp
 	s.logCall(ctx, "Logout", func(c context.Context) {
 		if err = s.loginExecutor.Logout(ctx); err != nil {
 			if errors.Is(err, auth.ErrNotLoggedIn) {
-				err = grpcStatus.Error(grpcCodes.NotFound, err.Error())
+				err = status.Error(codes.NotFound, err.Error())
 			}
 		} else {
 			result = &empty.Empty{}
@@ -474,7 +473,7 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 			duration = request.Duration.AsDuration()
 		}
 		if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
-			err = grpcStatus.Error(grpcCodes.Internal, err.Error())
+			err = status.Error(codes.Internal, err.Error())
 		} else {
 			result = &empty.Empty{}
 		}
@@ -639,7 +638,9 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 				if pool := a8rcloud.GetSystemAPoolProvider[*SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
 					ctx = a8rcloud.WithSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName, pool)
 				}
-
+				if ki := k8sapi.GetK8sInterface(sessionCtx); ki != nil {
+					ctx = k8sapi.WithK8sInterface(ctx, ki)
+				}
 				cmdErr = s.executeCmd(trafficmgr.WithSession(ctx, ts), cmd, req.GetCwd())
 				return nil
 			})
