@@ -357,12 +357,18 @@ func copyRRs(rrs []dns.RR, qType uint16) []dns.RR {
 	return cp
 }
 
+type cacheKey struct {
+	name  string
+	qType uint16
+}
+
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
 func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
-	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
+	key := cacheKey{name: q.Name, qType: q.Qtype}
+	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&s.recursive) == recursionDetected && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
@@ -372,7 +378,7 @@ func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, error) {
 		if !oldDv.expired() {
 			return copyRRs(oldDv.answer, q.Qtype), nil
 		}
-		s.cache.Store(q.Name, newDv)
+		s.cache.Store(key, newDv)
 	}
 	return s.resolveQuery(q, newDv)
 }
@@ -382,7 +388,8 @@ func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, error) {
 // to the cluster will recurse back to this resolver or not.
 func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
-	if v, loaded := s.cache.LoadOrStore(q.Name, newDv); loaded {
+	key := cacheKey{name: q.Name, qType: q.Qtype}
+	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		oldDv := v.(*cacheEntry)
 		if atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			if q.Name == recursionCheck {
@@ -396,7 +403,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, error) {
 		if !oldDv.expired() {
 			return copyRRs(oldDv.answer, q.Qtype), nil
 		}
-		s.cache.Store(q.Name, newDv)
+		s.cache.Store(key, newDv)
 	}
 
 	answer, err := s.resolveQuery(q, newDv)
@@ -566,7 +573,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, error)
 
 	rrs, err := s.resolve(s.ctx, q)
 	if err != nil || len(rrs) == 0 {
-		s.cache.Delete(q.Name) // Don't cache unless the entry is found.
+		s.cache.Delete(cacheKey{name: q.Name, qType: q.Qtype}) // Don't cache unless the entry is found.
 		return nil, err
 	}
 	dv.answer = rrs
