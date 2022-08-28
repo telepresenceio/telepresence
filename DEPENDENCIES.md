@@ -31,6 +31,7 @@ following Free and Open Source software:
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
+    github.com/datawire/go-fuseftp                                               v0.0.0-20220823081459-2b79f64b6798        Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                    Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.1                                    ISC license
     github.com/docker/cli                                                        v20.10.11+incompatible                    Apache License 2.0
@@ -45,6 +46,8 @@ following Free and Open Source software:
     github.com/exponent-io/jsonpath                                              v0.0.0-20151013193312-d6023ce2651d        MIT license
     github.com/fatih/camelcase                                                   v1.0.0                                    MIT license
     github.com/fatih/color                                                       v1.13.0                                   MIT license
+    github.com/fclairamb/ftpserverlib                                            v0.19.1                                   MIT license
+    github.com/fclairamb/go-log                                                  v0.4.1                                    MIT license
     github.com/felixge/httpsnoop                                                 v1.0.3                                    MIT license
     github.com/fsnotify/fsnotify                                                 v1.5.4                                    3-clause BSD license
     github.com/go-errors/errors                                                  v1.0.1                                    MIT license
@@ -118,8 +121,8 @@ following Free and Open Source software:
     github.com/sabhiram/go-gitignore                                             v0.0.0-20210923224102-525f6e181f06        MIT license
     github.com/sethvargo/go-envconfig                                            v0.6.1                                    Apache License 2.0
     github.com/shopspring/decimal                                                v1.2.0                                    MIT license
-    github.com/sirupsen/logrus                                                   v1.8.1                                    MIT license
-    github.com/spf13/afero                                                       v1.8.2                                    Apache License 2.0
+    github.com/sirupsen/logrus                                                   v1.9.0                                    MIT license
+    github.com/spf13/afero                                                       v1.9.2                                    Apache License 2.0
     github.com/spf13/cast                                                        v1.5.0                                    MIT license
     github.com/spf13/cobra                                                       v1.5.0                                    Apache License 2.0
     github.com/spf13/pflag                                                       v1.0.5                                    3-clause BSD license
@@ -145,7 +148,7 @@ following Free and Open Source software:
     golang.org/x/net                                                             v0.0.0-20220708220712-1185a9018129        3-clause BSD license
     golang.org/x/oauth2                                                          v0.0.0-20220622183110-fd043fe589d2        3-clause BSD license
     golang.org/x/sync                                                            v0.0.0-20220601150217-0de741cfad7f        3-clause BSD license
-    golang.org/x/sys                                                             v0.0.0-20220712014510-0a85c31ab51e        3-clause BSD license
+    golang.org/x/sys                                                             v0.0.0-20220818161305-2296e01440c6        3-clause BSD license
     golang.org/x/term                                                            v0.0.0-20220526004731-065cf7ba2467        3-clause BSD license
     golang.org/x/text                                                            v0.3.8-0.20211105212822-18b340fc7af2      3-clause BSD license
     golang.org/x/time                                                            v0.0.0-20220609170525-579cf78fd858        3-clause BSD license
