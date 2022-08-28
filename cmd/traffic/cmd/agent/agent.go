@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	ftp "github.com/datawire/go-fuseftp/pkg/server"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -154,12 +156,17 @@ func Main(ctx context.Context, args ...string) error {
 	}
 
 	sftpPortCh := make(chan uint16)
+	ftpPortCh := make(chan uint16)
 	if config.HasMounts(ctx) {
 		g.Go("sftp-server", func(ctx context.Context) error {
 			return SftpServer(ctx, sftpPortCh)
 		})
+		g.Go("ftp-server", func(ctx context.Context) error {
+			return ftp.Start(ctx, config.PodIP(), agentconfig.ExportsMountPoint, ftpPortCh)
+		})
 	} else {
 		close(sftpPortCh)
+		close(ftpPortCh)
 		dlog.Info(ctx, "Not starting sftp-server because there's nothing to mount")
 	}
 
@@ -173,6 +180,9 @@ func Main(ctx context.Context, args ...string) error {
 		defer ticker.Stop()
 
 		state := NewSimpleState(config)
+		if err := state.WaitForFtpPort(ctx, ftpPortCh); err != nil {
+			return err
+		}
 		if err := state.WaitForSftpPort(ctx, sftpPortCh); err != nil {
 			return err
 		}
