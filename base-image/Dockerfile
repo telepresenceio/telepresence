@@ -16,7 +16,7 @@
 
 FROM golang:alpine3.15 as tel2-build
 
-RUN apk add --no-cache gcc musl-dev
+RUN apk add --no-cache gcc musl-dev fuse-dev
 
 WORKDIR telepresence
 COPY go.mod go.sum .
