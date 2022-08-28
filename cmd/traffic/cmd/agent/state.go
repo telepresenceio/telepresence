@@ -23,7 +23,9 @@ type State interface {
 	ManagerVersion() semver.Version
 	SessionInfo() *manager.SessionInfo
 	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
+	FtpPort() uint16
 	SftpPort() uint16
+	WaitForFtpPort(ctx context.Context, ch <-chan uint16) error
 	WaitForSftpPort(ctx context.Context, ch <-chan uint16) error
 }
 
@@ -38,6 +40,7 @@ type InterceptState interface {
 // State of the Traffic Agent.
 type state struct {
 	Config
+	ftpPort  uint16
 	sftpPort uint16
 
 	// The sessionInfo and manager client are needed when forwarders establish their
@@ -140,8 +143,21 @@ func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.Man
 	s.mgrVer = version
 }
 
+func (s *state) FtpPort() uint16 {
+	return s.ftpPort
+}
+
 func (s *state) SftpPort() uint16 {
 	return s.sftpPort
+}
+
+func (s *state) WaitForFtpPort(ctx context.Context, ch <-chan uint16) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.ftpPort = <-ch:
+		return nil
+	}
 }
 
 func (s *state) WaitForSftpPort(ctx context.Context, ch <-chan uint16) error {
