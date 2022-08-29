@@ -564,14 +564,10 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	paths := tm.GetCurrentNamespaces(false)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
 
-	// Prevent traffic-manager from hanging here in the unlikely avent of a race where the root daemon
-	// has quit while we're still at it.
-	go func() {
-		if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
-			dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
-		}
-		dlog.Debug(c, "search paths posted successfully")
-	}()
+	if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
+	}
+	dlog.Debug(c, "search paths posted successfully")
 }
 
 // Run (1) starts up with ensuring that the manager is installed and running,
