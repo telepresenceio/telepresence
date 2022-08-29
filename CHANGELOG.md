@@ -1,12 +1,10 @@
 # Changelog
 
-### 2.7.3 (TBD)
+### 2.7.2 (August 25, 2022)
 
 - Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.
 
 - Bugfix: Graciously handle nil intercept environment from the traffic-manager.
-
-### 2.7.2 (TBD)
 
 - Feature: The timeout for the initial connectivity check that Telepresence performs
   in order to determine if the cluster's subnets are proxied or not can now be configured
