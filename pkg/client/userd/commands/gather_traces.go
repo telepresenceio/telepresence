@@ -56,6 +56,8 @@ func (c *traceCommand) cobraCommand(ctx context.Context) *cobra.Command {
 		Annotations: map[string]string{
 			CommandRequiresSession: "true",
 		},
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 	c.command.Flags().Uint16VarP(&remotePort, "port", "p", 15766,
 		"The remote port where traffic manager and agent are exposing traces."+

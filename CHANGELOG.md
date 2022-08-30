@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.7.3 (TBD)
+
+- Bugfix: CLI commands that are executed by the user daemon now use a pseudo TTY. This enables
+  `docker run -it` to allocate a TTY and will also give other commands like `bash read` the
+  same behavior as when executed directly in a terminal.
+
 ### 2.7.2 (August 25, 2022)
 
 - Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.

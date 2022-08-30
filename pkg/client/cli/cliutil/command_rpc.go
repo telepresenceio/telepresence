@@ -51,6 +51,8 @@ func RPCToCommands(remote *connector.CommandGroups, funcBundle CommandFuncBundle
 				Short:              cmd.GetShortHelp(),
 				RunE:               funcBundle.RunE,
 				DisableFlagParsing: true,
+				SilenceUsage:       true,
+				SilenceErrors:      true,
 				ValidArgsFunction:  funcBundle.ValidArgsFunction,
 			}
 			for _, flag := range cmd.GetFlags() {

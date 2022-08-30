@@ -3,6 +3,9 @@ package client
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/datawire/dlib/dcontext"
 )
 
 // An EnsuredState represents some state that is needed in order for a function to execute.
@@ -11,7 +14,7 @@ type EnsuredState interface {
 	// The boolean return value indicates if the state was activated or not.
 	EnsureState(ctx context.Context) (bool, error)
 
-	// Deactivate the state (i.e. quit, remove, disconnect)
+	// DeactivateState performs actions such as quit, remove, or disconnect
 	DeactivateState(ctx context.Context) error
 }
 
@@ -23,6 +26,11 @@ func WithEnsuredState(ctx context.Context, r EnsuredState, retain bool, f func()
 		// Always deactivate an acquired state unless there's no error
 		// and a desire to retain it.
 		if wasAcquired && (err != nil || !retain) {
+			// The state might be deactivated because the context has been cancelled, so we cannot
+			// call DeactivateState with an unmodified context here, so we use the original
+			// context without cancellation, but with a deactivation timeout of 10 seconds
+			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
 			if cerr := r.DeactivateState(ctx); cerr != nil {
 				if err == nil {
 					err = cerr

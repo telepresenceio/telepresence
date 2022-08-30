@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -19,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -498,22 +501,56 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 	return
 }
 
-func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, wr io.Writer) {
-	for ctx.Err() == nil {
-		cr, err := cmdStream.Recv()
-		if err != nil {
-			if err != io.EOF && ctx.Err() == nil {
-				dlog.Errorf(ctx, "command failed to read stdin: %v", err)
-			}
-			break
-		}
-		if data := cr.GetData(); data != nil {
-			if _, err = wr.Write(data); err != nil {
-				dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
-				break
-			}
+func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer) (context.Context, io.Reader, error) {
+	var wr io.WriteCloser
+	var rd io.Reader
+	isPTY := true
+	if runtime.GOOS == "windows" {
+		pi := ioutils.NewBytesPipe()
+		wr = pi
+		rd = pi
+		isPTY = false
+	} else {
+		// Use a PTY on unix systems.
+		var err error
+		if wr, rd, err = pty.Open(); err != nil {
+			return ctx, nil, nil
 		}
 	}
+	ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
+	go func() {
+		defer func() {
+			cancel()
+			wr.Close()
+		}()
+		for ctx.Err() == nil {
+			cr, err := cmdStream.Recv()
+			if err != nil {
+				if err != io.EOF && ctx.Err() == nil {
+					dlog.Errorf(ctx, "command failed to read stdin: %v", err)
+				}
+				break
+			}
+			if cr.GetSoftCancel() {
+				dlog.Debug(ctx, "Soft cancel")
+				if isPTY {
+					// Write a CTRL-C to the PTY. This should trigger a graceful shutdown
+					if _, err = wr.Write([]byte{0x03}); err != nil {
+						dlog.Errorf(ctx, "failed to forward <CTRL>-C stdin: %v", err)
+					}
+				} else {
+					cancel()
+				}
+			}
+			if data := cr.GetData(); data != nil {
+				if _, err = wr.Write(data); err != nil {
+					dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
+					break
+				}
+			}
+		}
+	}()
+	return ctx, rd, nil
 }
 
 func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult) {
@@ -574,19 +611,19 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 			}
 		}()
 
-		pi := ioutils.NewBytesPipe()
-
-		// Start the stdin pump
-		go stdinPump(ctx, cmdStream, pi)
-
 		// Start the stdout/stderr pump
 		so := client.NewStdOutput(ctx)
 		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
 
+		var rd io.Reader
+		if ctx, rd, cmdErr = stdinPump(ctx, cmdStream); cmdErr != nil {
+			return
+		}
+
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
-		cmd.SetIn(pi)
+		cmd.SetIn(rd)
 		cmd.SetOut(so.Stdout())
 		cmd.SetErr(so.Stderr())
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
@@ -599,7 +636,7 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 			return
 		}
 		cmd.SetArgs(args)
-		cmd.SetIn(pi)
+		cmd.SetIn(rd)
 		cmd.SetOut(so.Stdout())
 		cmd.SetErr(so.Stderr())
 		cmd.SilenceUsage = true
