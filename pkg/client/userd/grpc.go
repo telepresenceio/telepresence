@@ -519,17 +519,34 @@ func needsPTY(cmd *cobra.Command) bool {
 		return true
 	}
 
-	// This is a docker run. It needs a PTY if used with -it, but only then.
+	// This is a docker run. It needs a PTY if used with both --interactive (-i) and --tty (-t), but only then.
+	// Docker can allocate its PTY without actually running in one when it doesn't need to attach
+	// stdin. So:
+	//
+	// -i  No PTY needed. Input is simply streamed to the docker process. We terminate with signal.
+	// -t  No PTY needed because stdin is not attached. Passing a <ctrl>-c is pointless. We terminate with signal.
+	// -it Must have a PTY, because Docker requires it and signalling doesn't work properly. We terminate by
+	//     sending a <ctrl>-c to the PTY (which eventually gets translated to a signal).
 	hasI := false
 	hasT := false
 	for _, arg := range args {
-		if len(arg) >= 2 && arg[0] == '-' && arg[1] != '-' {
-			arg = arg[1:]
-			if !hasI {
-				hasI = strings.ContainsRune(arg, 'i')
-			}
-			if !hasT {
-				hasT = strings.ContainsRune(arg, 't')
+		if len(arg) >= 2 && arg[0] == '-' {
+			if arg[1] == '-' {
+				// long form
+				if !hasI {
+					hasI = arg == "--interactive"
+				}
+				if !hasT {
+					hasT = arg == "--tty"
+				}
+			} else {
+				arg = arg[1:]
+				if !hasI {
+					hasI = strings.ContainsRune(arg, 'i')
+				}
+				if !hasT {
+					hasT = strings.ContainsRune(arg, 't')
+				}
 			}
 			if hasI && hasT {
 				// found -i and -t
