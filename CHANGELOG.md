@@ -2,6 +2,10 @@
 
 ### 2.7.3 (TBD)
 
+- Feature: Telepresence can now use an embedded FTP client and load an existing FUSE library
+  instead of running an external `sshfs` or `sshfs-win` binary. This feature is experimental
+  in 2.7.x and enabled by setting `intercept.useFtp` to `true` in the `config.yml`.
+
 - Bugfix: CLI commands that are executed by the user daemon now use a pseudo TTY. This enables
   `docker run -it` to allocate a TTY and will also give other commands like `bash read` the
   same behavior as when executed directly in a terminal.
