@@ -1,15 +1,18 @@
 package userd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -19,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -498,22 +502,108 @@ func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc
 	return
 }
 
-func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, wr io.Writer) {
-	for ctx.Err() == nil {
-		cr, err := cmdStream.Recv()
-		if err != nil {
-			if err != io.EOF && ctx.Err() == nil {
-				dlog.Errorf(ctx, "command failed to read stdin: %v", err)
+func needsPTY(cmd *cobra.Command) bool {
+	if runtime.GOOS == "windows" || cmd.Name() != "intercept" {
+		// intercept is the only known command that might need a PTY, and never on Windows
+		return false
+	}
+	flags := cmd.Flags()
+	args := flags.Args()
+	if len(args) <= 1 {
+		// No extra args, so no external command will be executed
+		return false
+	}
+	args = args[1:]
+	if dr := flags.Lookup("docker-run"); dr == nil || dr.Value.String() == "false" {
+		// Don't know what type of command this is, so assume that a PTY is needed
+		return true
+	}
+
+	// This is a docker run. It needs a PTY if used with both --interactive (-i) and --tty (-t), but only then.
+	// Docker can allocate its PTY without actually running in one when it doesn't need to attach
+	// stdin. So:
+	//
+	// -i  No PTY needed. Input is simply streamed to the docker process. We terminate with signal.
+	// -t  No PTY needed because stdin is not attached. Passing a <ctrl>-c is pointless. We terminate with signal.
+	// -it Must have a PTY, because Docker requires it and signalling doesn't work properly. We terminate by
+	//     sending a <ctrl>-c to the PTY (which eventually gets translated to a signal).
+	hasI := false
+	hasT := false
+	for _, arg := range args {
+		if len(arg) >= 2 && arg[0] == '-' {
+			if arg[1] == '-' {
+				// long form
+				if !hasI {
+					hasI = arg == "--interactive"
+				}
+				if !hasT {
+					hasT = arg == "--tty"
+				}
+			} else {
+				arg = arg[1:]
+				if !hasI {
+					hasI = strings.ContainsRune(arg, 'i')
+				}
+				if !hasT {
+					hasT = strings.ContainsRune(arg, 't')
+				}
 			}
-			break
-		}
-		if data := cr.GetData(); data != nil {
-			if _, err = wr.Write(data); err != nil {
-				dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
-				break
+			if hasI && hasT {
+				// found -i and -t
+				return true
 			}
 		}
 	}
+	return false
+}
+
+func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, withPTY bool) (context.Context, io.Reader, error) {
+	var wr io.WriteCloser
+	var rd io.Reader
+	if withPTY {
+		var err error
+		if wr, rd, err = pty.Open(); err != nil {
+			return ctx, nil, err
+		}
+	} else {
+		pi := ioutils.NewBytesPipe()
+		wr = pi
+		rd = pi
+	}
+	ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
+	go func() {
+		defer func() {
+			cancel()
+			wr.Close()
+		}()
+		for ctx.Err() == nil {
+			cr, err := cmdStream.Recv()
+			if err != nil {
+				if err != io.EOF && ctx.Err() == nil {
+					dlog.Errorf(ctx, "command failed to read stdin: %v", err)
+				}
+				break
+			}
+			if cr.GetSoftCancel() {
+				dlog.Debug(ctx, "Soft cancel")
+				if withPTY {
+					// Write a CTRL-C to the PTY. This should trigger a graceful shutdown
+					if _, err = wr.Write([]byte{0x03}); err != nil {
+						dlog.Errorf(ctx, "failed to forward <CTRL>-C stdin: %v", err)
+					}
+				} else {
+					cancel()
+				}
+			}
+			if data := cr.GetData(); data != nil {
+				if _, err = wr.Write(data); err != nil {
+					dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
+					break
+				}
+			}
+		}
+	}()
+	return ctx, rd, nil
 }
 
 func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult) {
@@ -574,11 +664,6 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 			}
 		}()
 
-		pi := ioutils.NewBytesPipe()
-
-		// Start the stdin pump
-		go stdinPump(ctx, cmdStream, pi)
-
 		// Start the stdout/stderr pump
 		so := client.NewStdOutput(ctx)
 		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
@@ -586,7 +671,7 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
-		cmd.SetIn(pi)
+		cmd.SetIn(bytes.NewReader(nil))
 		cmd.SetOut(so.Stdout())
 		cmd.SetErr(so.Stderr())
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
@@ -598,8 +683,8 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		if cmdErr != nil {
 			return
 		}
+
 		cmd.SetArgs(args)
-		cmd.SetIn(pi)
 		cmd.SetOut(so.Stdout())
 		cmd.SetErr(so.Stderr())
 		cmd.SilenceUsage = true
@@ -616,6 +701,13 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 			}
 			return
 		}
+
+		var rd io.Reader
+		if ctx, rd, cmdErr = stdinPump(ctx, cmdStream, needsPTY(cmd)); cmdErr != nil {
+			return
+		}
+		cmd.SetContext(ctx)
+		cmd.SetIn(rd)
 
 		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
 			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(sessionCtx context.Context, ts trafficmgr.Session) error {

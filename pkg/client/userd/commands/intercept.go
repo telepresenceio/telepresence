@@ -21,7 +21,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
@@ -63,6 +62,8 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 			ValidArgsFuncRequiresConnectorServer:  "",
 			FlagAutocompletionFuncRequiresSession: "namespace",
 		},
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 	cmd.args = interceptArgs{}
 	flags := cmd.command.Flags()
@@ -295,8 +296,6 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 
 	return client.WithEnsuredState(ctx, is, false, func() (err error) {
 		// start the interceptor process
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
 
 		var cmd *dexec.Cmd
 		if args.dockerRun {
@@ -323,15 +322,11 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 		}
 
 		// setup cleanup for the interceptor process
-		var (
-			interceptID    = is.env["TELEPRESENCE_INTERCEPT_ID"]
-			interceptorPID = int32(cmd.Process.Pid)
+		ior := connector.Interceptor{
+			InterceptId: is.env["TELEPRESENCE_INTERCEPT_ID"],
+			Pid:         int32(cmd.Process.Pid),
+		}
 
-			ior = connector.Interceptor{
-				InterceptId: interceptID,
-				Pid:         interceptorPID,
-			}
-		)
 		// Send info about the pid and intercept id to the traffic-manager so that it kills
 		// the process if it receives a leave of quit call.
 		if _, err = is.connectorServer.AddInterceptor(ctx, &ior); err != nil {
@@ -339,14 +334,14 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 				// Deactivation was caused by a disconnect
 				err = nil
 			}
-			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", interceptorPID, err)
+			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 			_ = cmd.Process.Kill()
 			return err
 		}
 
 		// The external command will not output anything to the logs. An error here
 		// is likely caused by the user hitting <ctrl>-C to terminate the process.
-		return errcat.NoDaemonLogs.New(proc.Wait(ctx, cancel, cmd))
+		return errcat.NoDaemonLogs.New(proc.Wait(ctx, nil, cmd))
 	})
 }
 
@@ -915,8 +910,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 }
 
 func (is *interceptState) DeactivateState(ctx context.Context) error {
-	r, err := is.connectorServer.RemoveIntercept(
-		dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(is.args.name)})
+	r, err := is.connectorServer.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(is.args.name)})
 	if err != nil {
 		dlog.Errorf(ctx, "RemoveIntercept failed %T %v", err, err)
 		if grpcStatus.Code(err) == grpcCodes.Canceled {

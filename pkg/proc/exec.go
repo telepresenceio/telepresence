@@ -103,3 +103,7 @@ func StartInBackgroundAsRoot(ctx context.Context, args ...string) error {
 func IsAdmin() bool {
 	return isAdmin()
 }
+
+func Terminate(p *os.Process) error {
+	return terminate(p)
+}

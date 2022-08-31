@@ -35,9 +35,11 @@ func (c *pushTracesCommand) cobraCommand(ctx context.Context) *cobra.Command {
 		Use:  "upload-traces",
 		Args: cobra.ExactArgs(2),
 
-		Short: "Upload Traces",
-		Long:  "Upload Traces to a Jaeger instance",
-		RunE:  c.pushTraces,
+		Short:         "Upload Traces",
+		Long:          "Upload Traces to a Jaeger instance",
+		RunE:          c.pushTraces,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	return c.cmd

@@ -139,6 +139,7 @@ message RunCommandRequest {
   oneof c_or_d{
     Command command = 1;
     bytes data = 2;
+    bool soft_cancel = 3;
   }
 }
 

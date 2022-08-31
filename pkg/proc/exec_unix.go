@@ -78,3 +78,9 @@ func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 
 	return startInBackground(args...)
 }
+
+func terminate(p *os.Process) error {
+	// SIGTERM makes it through a PTY, SIGINT doesn't. Not sure why that is.
+	// thallgren
+	return p.Signal(unix.SIGTERM)
+}

@@ -27,6 +27,7 @@ following Free and Open Source software:
     github.com/chai2010/gettext-go                                               v0.0.0-20160711120539-c6fed771bfd5        3-clause BSD license
     github.com/containerd/containerd                                             v1.6.3                                    Apache License 2.0
     github.com/coreos/go-iptables                                                v0.6.0                                    Apache License 2.0
+    github.com/creack/pty                                                        v1.1.18                                   MIT license
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
@@ -164,15 +165,15 @@ following Free and Open Source software:
     gvisor.dev/gvisor                                                            v0.0.0-20220728035512-d468ae337c6a        Apache License 2.0, MIT license
     helm.sh/helm/v3                                                              v3.9.0                                    Apache License 2.0
     k8s.io/api                                                                   v0.24.2                                   Apache License 2.0
-    k8s.io/apiextensions-apiserver                                               v0.24.0                                   Apache License 2.0
+    k8s.io/apiextensions-apiserver                                               v0.24.2                                   Apache License 2.0
     k8s.io/apimachinery                                                          v0.24.2                                   3-clause BSD license, Apache License 2.0
-    k8s.io/apiserver                                                             v0.24.0                                   Apache License 2.0
-    k8s.io/cli-runtime                                                           v0.24.1                                   Apache License 2.0
+    k8s.io/apiserver                                                             v0.24.2                                   Apache License 2.0
+    k8s.io/cli-runtime                                                           v0.24.2                                   Apache License 2.0
     k8s.io/client-go                                                             v0.24.2                                   3-clause BSD license, Apache License 2.0
-    k8s.io/component-base                                                        v0.24.1                                   Apache License 2.0
+    k8s.io/component-base                                                        v0.24.2                                   Apache License 2.0
     k8s.io/klog/v2                                                               v2.60.1                                   Apache License 2.0
     k8s.io/kube-openapi                                                          v0.0.0-20220328201542-3ee0da9b0b42        Apache License 2.0
-    k8s.io/kubectl                                                               v0.24.1                                   Apache License 2.0
+    k8s.io/kubectl                                                               v0.24.2                                   Apache License 2.0
     k8s.io/utils                                                                 v0.0.0-20220210201930-3a6ce19ff2f9        3-clause BSD license, Apache License 2.0
     oras.land/oras-go                                                            v1.1.0                                    Apache License 2.0
     sigs.k8s.io/json                                                             v0.0.0-20211208200746-9f7c6b3444d2        3-clause BSD license, Apache License 2.0
