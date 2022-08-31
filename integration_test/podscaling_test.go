@@ -43,7 +43,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	if runtime.GOOS != "darwin" {
 		// Verify that volume mount is broken
 		time.Sleep(time.Second) // avoid a stat just when the intercept became inactive as it sometimes causes a hang
-		_, err := os.Stat(filepath.Join(s.mountPoint, "var"))
+		_, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
 		assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
 	}
 
@@ -64,7 +64,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 		// Verify that volume mount is restored
 		time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
 		assert.Eventually(func() bool {
-			st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
+			st, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
 			return err == nil && st.IsDir()
 		}, 5*time.Second, time.Second)
 	}
