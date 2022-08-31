@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,11 +16,27 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	tlog "github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 // loggerForTest exposes internals to initcontext_test.go
 var loggerForTest *logrus.Logger
+
+func dupStdX(name string, dupFd func(*os.File) error, logger *logrus.Logger) error {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	if err = dupFd(w); err != nil {
+		return err
+	}
+	go func() {
+		if _, err := io.Copy(logger.WithField("THREAD", name).Writer(), r); err != nil {
+			logger.Errorf("%s copy failed: %v", name, err)
+		}
+	}()
+	return nil
+}
 
 // InitContext sets up standard Telepresence logging for a background process
 func InitContext(ctx context.Context, name string, strategy RotationStrategy, captureStd bool) (context.Context, error) {
@@ -30,9 +48,9 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	logger.ReportCaller = false // turned on when level >= logrus.TraceLevel
 
 	if captureStd && IsTerminal(int(os.Stdout.Fd())) {
-		logger.Formatter = log.NewFormatter("15:04:05.0000")
+		logger.Formatter = tlog.NewFormatter("15:04:05.0000")
 	} else {
-		logger.Formatter = log.NewFormatter("2006-01-02 15:04:05.0000")
+		logger.Formatter = tlog.NewFormatter("2006-01-02 15:04:05.0000")
 		dir, err := filelocation.AppUserLogDir(ctx)
 		if err != nil {
 			return ctx, err
@@ -45,12 +63,27 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, captureStd, 0600, strategy, maxFiles)
+		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, 0600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}
 		logger.SetOutput(rf)
+
+		if captureStd {
+			if err := dupStdX("stdout", dupToStdOut, logger); err != nil {
+				return ctx, err
+			}
+			if err := dupStdX("stderr", dupToStdErr, logger); err != nil {
+				return ctx, err
+			}
+		}
+
+		// Configure the standard logger to write without any fields and with prefix "stdlog"
+		log.SetOutput(logger.Writer())
+		log.SetPrefix("stdlog : ")
+		log.SetFlags(0)
 	}
+
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
 
 	// Read the config and set the configured level.
@@ -61,8 +94,8 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	} else if name == "connector" || name == "cli" { // Have the CLI log at the same level as the user daemon
 		level = logLevels.UserDaemon
 	}
-	log.SetLogrusLevel(logger, level.String())
-	ctx = log.WithLevelSetter(ctx, logger)
+	tlog.SetLogrusLevel(logger, level.String())
+	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }
 

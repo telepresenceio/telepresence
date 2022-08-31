@@ -74,7 +74,12 @@ func testDupToStdHelper() int {
 		return 1
 	}
 
-	if err := dupToStd(file); err != nil {
+	if err := dupToStdOut(file); err != nil {
+		fmt.Fprintf(os.Stderr, "dup: %v\n", err)
+		return 1
+	}
+
+	if err := dupToStdErr(file); err != nil {
 		fmt.Fprintf(os.Stderr, "dup: %v\n", err)
 		return 1
 	}
