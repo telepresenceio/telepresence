@@ -66,7 +66,6 @@ type RotatingFile struct {
 	fileName    string
 	timeFormat  string
 	localTime   bool
-	captureStd  bool
 	maxFiles    uint16
 	strategy    RotationStrategy
 	mutex       sync.Mutex
@@ -95,8 +94,6 @@ type RotatingFile struct {
 //
 // - localTime: if true, use local time in timestamps, if false, use UTC
 //
-// - captureStd: if true, override os.Stdout and os.Stderr with the file descriptor of the current logfile
-//
 // - stdLogger: if not nil, all writes to os.Stdout and os.Stderr will be redirected to this logger as INFO level
 // messages prefixed with <stdout> or <stderr>
 //
@@ -110,7 +107,6 @@ func OpenRotatingFile(
 	logfilePath string,
 	timeFormat string,
 	localTime bool,
-	captureStd bool,
 	fileMode fs.FileMode,
 	strategy RotationStrategy,
 	maxFiles uint16,
@@ -128,7 +124,6 @@ func OpenRotatingFile(
 		fileMode:   fileMode,
 		strategy:   strategy,
 		localTime:  localTime,
-		captureStd: captureStd,
 		timeFormat: timeFormat,
 		maxFiles:   maxFiles,
 	}
@@ -204,20 +199,6 @@ func (rf *RotatingFile) Write(data []byte) (int, error) {
 }
 
 func (rf *RotatingFile) afterOpen() {
-	if rf.captureStd {
-		if err := dupToStd(rf.file); err != nil {
-			// Dup2 failed
-			os.Stdout = rf.file
-			os.Stderr = rf.file
-		} else {
-			if os.Stdout.Fd() != 1 {
-				os.Stdout = rf.file
-			}
-			if os.Stderr.Fd() != 2 {
-				os.Stderr = rf.file
-			}
-		}
-	}
 	go rf.removeOldFiles()
 }
 
