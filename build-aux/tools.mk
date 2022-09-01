@@ -41,26 +41,42 @@ clobber-tools:
 # running CI. If it isn't, the generate-check will fail.
 tools/protoc = $(TOOLSBINDIR)/protoc
 PROTOC_VERSION=3.17.3
-PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(patsubst darwin-%,osx-x86_64,$(GOHOSTOS)-$(shell uname -m)).zip
+ifeq ($(GOHOSTARCH),arm64)
+  PROTOC_ARCH=aarch_64
+else ifeq ($(GOHOSTARCH),amd64)
+  PROTOC_ARCH=x86_64
+else
+  PROTOC_ARCH=$(GOHOSTARCH)
+endif
+ifeq ($(GOHOSTOS),windows)
+  PROTOC_OS_ARCH=win64
+  EXE=.exe
+else
+  PROTOC_OS_ARCH=$(patsubst darwin,osx,$(GOHOSTOS))-$(PROTOC_ARCH)
+  EXE=
+endif
+
+PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(PROTOC_OS_ARCH).zip
 $(TOOLSDIR)/$(PROTOC_ZIP):
 	mkdir -p $(@D)
 	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $@
-%/bin/protoc %/include %/readme.txt: %/$(PROTOC_ZIP)
+%/bin/protoc$(EXE) %/include %/readme.txt: %/$(PROTOC_ZIP)
 	cd $* && unzip -q -o -DD $(<F)
 
 # Protobuf linter
 # ===============
 #
-tools/protolint = $(TOOLSBINDIR)/protolint
+tools/protolint = $(TOOLSBINDIR)/protolint$(EXE)
 PROTOLINT_VERSION=0.32.0
-PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
+PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(GOHOSTOS)_$(PROTOC_ARCH).tar.gz
 $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
 	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $@
-%/bin/protolint %/bin/protoc-gen-protolint: %/$(PROTOLINT_TGZ)
+%/bin/protolint$(EXE) %/bin/protoc-gen-protolint$(EXE): %/$(PROTOLINT_TGZ)
 	mkdir -p $(@D)
-	tar -C $(@D) -zxmf $< protolint protoc-gen-protolint
+	tar -C $(@D) -zxmf $< protolint$(EXE) protoc-gen-protolint$(EXE)
 
+ifneq ($(GOHOSTOS),windows)
 # Shellcheck
 # ==========
 #
@@ -78,24 +94,20 @@ $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 %/bin/shellcheck: %/$(notdir $(SHELLCHECK_TXZ))
 	mkdir -p $(@D)
 	tar -C $(@D) -Jxmf $< --strip-components=1 shellcheck-v$(SHELLCHECK_VERSION)/shellcheck
+endif
 
 # Helm
 # ====
 #
-ifeq ($(GOHOSTOS),windows)
-SUFFIX=.exe
-else
-SUFFIX=
-endif
-tools/helm = $(TOOLSBINDIR)/helm
+tools/helm = $(TOOLSBINDIR)/helm$(EXE)
 HELM_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select (.Path == "helm.sh/helm/v3") | .Version')
 HELM_TGZ = https://get.helm.sh/helm-$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
 $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 	mkdir -p $(@D)
 	curl -sfL $(HELM_TGZ) -o $@
-%/bin/helm: %/$(notdir $(HELM_TGZ))
+%/bin/helm$(EXE): %/$(notdir $(HELM_TGZ))
 	mkdir -p $(@D)
-	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm$(SUFFIX)
+	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm$(EXE)
 
 # `go get`-able things
 # ====================
@@ -108,10 +120,10 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 # controlled by `tools/src/${thing}/go.mod` files.  Having those in
 # separate per-tool go.mod files avoids conflicts between tools and
 # avoid them polluting our main go.mod file.
-tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go
-tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc
-tools/ko                 = $(TOOLSBINDIR)/ko
-tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint
-tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource
-$(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
+tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go$(EXE)
+tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc$(EXE)
+tools/ko                 = $(TOOLSBINDIR)/ko$(EXE)
+tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint$(EXE)
+tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource$(EXE)
+$(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
 	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)

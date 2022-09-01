@@ -119,7 +119,7 @@ jobs:
       - name: "Download sshfs"
         if: steps.get_last_run.outputs.passed != 'success'
         run: |
-          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.10/winfsp-1.10.22006.msi
+          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
           curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
         shell: bash
       - name: "Install sshfs"
