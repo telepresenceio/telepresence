@@ -167,6 +167,7 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 	exe := "telepresence"
 	if runtime.GOOS == "windows" {
+		ctx = WithEnv(ctx, map[string]string{"CGO_ENABLED": "0"})
 		exe += ".exe"
 	}
 	err := Run(ctx, "go", "build", "-ldflags",
