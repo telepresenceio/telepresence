@@ -48,14 +48,14 @@ jobs:
         with:
           version: 'v1.19.3'
         id: kubectl
-      - run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
       - run: |
           brew update
           brew install --cask macfuse
           brew install gromgit/fuse/sshfs-mac
           brew link --overwrite sshfs-mac
         name: install dependencies
+        if: steps.get_last_run.outputs.passed != 'success'
+      - run: make build
         if: steps.get_last_run.outputs.passed != 'success'
       - uses: actions/download-artifact@v2
         if: steps.get_last_run.outputs.passed != 'success'
@@ -195,7 +195,7 @@ jobs:
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y sshfs socat
+          sudo apt-get install -y sshfs socat libfuse-dev
           sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
         if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
