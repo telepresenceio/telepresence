@@ -6,6 +6,13 @@
   `docker run -it` to allocate a TTY and will also give other commands like `bash read` the
   same behavior as when executed directly in a terminal.
 
+- Bugfix: The traffic-manager will no longer log numerous warnings saying: "Issuing a 
+  systema request without ApiKey or InstallID may result in an error".
+
+- Bugfix: The traffic-manager will no longer log an error saying: "Unable to derive subnets
+  from nodes" when the `podCIDRStrategy` is `auto` and it chooses to instead derive the
+  subnets from the pod IPs.
+
 ### 2.7.2 (August 25, 2022)
 
 - Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.

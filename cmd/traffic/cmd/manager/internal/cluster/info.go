@@ -190,7 +190,7 @@ func NewInfo(ctx context.Context) Info {
 	switch {
 	case strings.EqualFold("auto", podCIDRStrategy):
 		go func() {
-			if namespaced || !oi.watchNodeSubnets(ctx) {
+			if namespaced || !oi.watchNodeSubnets(ctx, false) {
 				oi.watchPodSubnets(ctx, managedNamespaces)
 			}
 		}()
@@ -198,7 +198,7 @@ func NewInfo(ctx context.Context) Info {
 		if namespaced {
 			dlog.Errorf(ctx, "cannot use POD_CIDR_STRATEGY %q with a namespaced traffic-manager", podCIDRStrategy)
 		} else {
-			go oi.watchNodeSubnets(ctx)
+			go oi.watchNodeSubnets(ctx, true)
 		}
 	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
 		go oi.watchPodSubnets(ctx, managedNamespaces)
@@ -233,7 +233,7 @@ func NewInfo(ctx context.Context) Info {
 	return &oi
 }
 
-func (oi *info) watchNodeSubnets(ctx context.Context) bool {
+func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	informerFactory := informers.NewSharedInformerFactory(k8sapi.GetK8sInterface(ctx), 0)
@@ -246,7 +246,9 @@ func (oi *info) watchNodeSubnets(ctx context.Context) bool {
 
 	retriever := newNodeWatcher(ctx, nodeLister, nodeInformer)
 	if !retriever.viable(ctx) {
-		dlog.Errorf(ctx, "Unable to derive subnets from nodes")
+		if mustSucceed {
+			dlog.Errorf(ctx, "Unable to derive subnets from nodes")
+		}
 		return false
 	}
 	dlog.Infof(ctx, "Deriving subnets from podCIRs of nodes")
