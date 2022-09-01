@@ -39,7 +39,6 @@ clobber-tools:
 # Install protoc under $TOOLSDIR. A protoc that is already installed locally
 # cannot be trusted since this must be the exact same version as used when
 # running CI. If it isn't, the generate-check will fail.
-tools/protoc = $(TOOLSBINDIR)/protoc
 PROTOC_VERSION=21.5
 ifeq ($(GOHOSTARCH),arm64)
   PROTOC_ARCH=aarch_64
@@ -55,6 +54,7 @@ else
   PROTOC_OS_ARCH=$(patsubst darwin,osx,$(GOHOSTOS))-$(PROTOC_ARCH)
   EXE=
 endif
+tools/protoc = $(TOOLSBINDIR)/protoc$(EXE)
 
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(PROTOC_OS_ARCH).zip
 $(TOOLSDIR)/$(PROTOC_ZIP):
