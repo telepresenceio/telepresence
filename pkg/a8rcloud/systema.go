@@ -163,8 +163,6 @@ func (c *systemACredentials) GetRequestMetadata(ctx context.Context, _ ...string
 		return nil, err
 	} else if installID != "" {
 		headers[InstallIDHeader] = installID
-	} else if _, ok := headers[ApiKeyHeader]; !ok {
-		dlog.Warnf(ctx, "Issuing a systema request without ApiKey or InstallID may result in an error")
 	}
 	if extra, err := c.headers.GetExtraHeaders(ctx); err != nil {
 		return nil, err
