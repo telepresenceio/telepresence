@@ -649,8 +649,15 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		}
 
 		var cmdErr error
+		cmd := &cobra.Command{
+			Use: "telepresence",
+		}
 		defer func() {
 			if cmdErr != nil {
+				if cmdErr == pflag.ErrHelp {
+					cmdErr = nil
+					_ = cmd.Usage()
+				}
 				// Propagate command error as a normal error response. We use SilenceErrors = true, so
 				// it will not have appeared on stderr
 				_ = cmdStream.Send(
@@ -668,38 +675,30 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		so := client.NewStdOutput(ctx)
 		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
 
-		cmd := &cobra.Command{
-			Use: "telepresence",
-		}
 		cmd.SetIn(bytes.NewReader(nil))
 		cmd.SetOut(so.Stdout())
 		cmd.SetErr(so.Stderr())
+		cmd.SetFlagErrorFunc(func(_ *cobra.Command, e error) error {
+			return errcat.User.New(e)
+		})
+
 		cli.AddCommandGroups(cmd, s.getCommands(ctx))
 
 		args := req.GetOsArgs()
-		cmd.SetArgs(req.GetOsArgs())
-		cmd, args, cmdErr = cmd.Find(args)
+		cmd.SetArgs(args)
+		cmd, _, cmdErr = cmd.Find(args)
 
 		if cmdErr != nil {
+			cmdErr = errcat.User.New(cmdErr)
 			return
 		}
 
-		cmd.SetArgs(args)
 		cmd.SetOut(so.Stdout())
 		cmd.SetErr(so.Stderr())
 		cmd.SilenceUsage = true
 
 		for _, group := range cli.GlobalFlagGroups() {
 			cmd.PersistentFlags().AddFlagSet(group.Flags)
-		}
-
-		cmdErr = cmd.ParseFlags(args)
-		if cmdErr != nil {
-			if cmdErr == pflag.ErrHelp {
-				cmdErr = nil
-				_ = cmd.Usage()
-			}
-			return
 		}
 
 		var rd io.Reader

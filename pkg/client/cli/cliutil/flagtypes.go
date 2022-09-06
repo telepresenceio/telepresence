@@ -187,19 +187,7 @@ var flagTypes = map[TypeEnum]any{
 	"ipMask": func(fs *pfs, x *net.IPMask) Value { fs.IPMaskVar(x, "x", *x, ""); return nilable(fs, x) },
 	// no ipmask-slice :(
 
-	"ipNet": func(fs *pfs, x *net.IPNet) Value {
-		fs.IPNetVar(x, "x", *x, "")
-		return complexValue{
-			Value: fs.Lookup("x").Value,
-			ptr:   reflect.ValueOf(x),
-			asArgs: func(flagname string, _ reflect.Value) []string {
-				if x.IP == nil {
-					return []string{}
-				}
-				return []string{"--" + flagname + "=" + x.String()}
-			},
-		}
-	},
+	"ipNet": func(fs *pfs, x *net.IPNet) Value { fs.IPNetVar(x, "x", *x, ""); return nilable(fs, x) },
 	// no ipnet-slice :(
 
 	// strings /////////////////////////////////////////////////////////////
@@ -210,7 +198,7 @@ var flagTypes = map[TypeEnum]any{
 	"string": func(fs *pfs, x *string) Value { fs.StringVar(x, "x", *x, ""); return simple(fs) },
 	"stringSlice": func(fs *pfs, x *[]string) Value {
 		fs.StringSliceVar(x, "x", *x, "")
-		return complexValue{
+		return &sliceValue{
 			Value:  fs.Lookup("x").Value,
 			ptr:    reflect.ValueOf(x),
 			asArgs: stringSliceAsArgs,
@@ -240,33 +228,55 @@ type simpleValue struct {
 	ptr reflect.Value
 }
 
-func (v simpleValue) AsArgs(flagname string) []string {
-	if (v.ptr != reflect.Value{}) && v.ptr.Elem().IsNil() {
-		return []string{}
+func (v *simpleValue) AsArgs(flagname string) []string {
+	if v.ptr.IsValid() {
+		e := v.ptr
+		if e.Kind() == reflect.Ptr {
+			e = e.Elem()
+		}
+		if e.Kind() == reflect.Struct {
+			if e.IsZero() {
+				return []string{}
+			}
+		} else if e.IsNil() {
+			return []string{}
+		}
 	}
 	return []string{"--" + flagname + "=" + v.String()}
 }
 
 func simple(fs *pflag.FlagSet) Value {
-	return simpleValue{
+	return &simpleValue{
 		Value: fs.Lookup("x").Value,
 	}
 }
 
 func nilable(fs *pflag.FlagSet, ptr any) Value {
-	return simpleValue{
+	return &simpleValue{
 		Value: fs.Lookup("x").Value,
 		ptr:   reflect.ValueOf(ptr),
 	}
 }
 
-type complexValue struct {
+type sliceValue struct {
 	pflag.Value
 	ptr    reflect.Value
 	asArgs func(flagname string, ptr reflect.Value) []string
 }
 
-func (v complexValue) AsArgs(flagname string) []string {
+func (v *sliceValue) Append(s string) error {
+	return v.Value.(pflag.SliceValue).Append(s)
+}
+
+func (v *sliceValue) Replace(i []string) error {
+	return v.Value.(pflag.SliceValue).Replace(i)
+}
+
+func (v *sliceValue) GetSlice() []string {
+	return v.Value.(pflag.SliceValue).GetSlice()
+}
+
+func (v *sliceValue) AsArgs(flagname string) []string {
 	return v.asArgs(flagname, v.ptr)
 }
 
@@ -310,7 +320,7 @@ func stringSliceAsArgs(flagname string, slicePtr reflect.Value) []string {
 }
 
 func slice(fs *pflag.FlagSet, slicePtr any) Value {
-	return complexValue{
+	return &sliceValue{
 		Value:  fs.Lookup("x").Value,
 		ptr:    reflect.ValueOf(slicePtr),
 		asArgs: sliceAsArgs,
@@ -318,7 +328,7 @@ func slice(fs *pflag.FlagSet, slicePtr any) Value {
 }
 
 func mapping(fs *pflag.FlagSet, mapPtr any) Value {
-	return complexValue{
+	return &sliceValue{
 		Value:  fs.Lookup("x").Value,
 		ptr:    reflect.ValueOf(mapPtr),
 		asArgs: mapAsArgs,
