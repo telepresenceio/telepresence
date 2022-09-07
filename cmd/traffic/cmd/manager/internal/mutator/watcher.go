@@ -17,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -39,7 +41,7 @@ func decode(v string, into any) error {
 	return yaml.Unmarshal([]byte(v), into)
 }
 
-func Load(ctx context.Context, namespace string) (m Map, err error) {
+func Load(ctx context.Context) (m Map, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
@@ -112,6 +114,73 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
 }
 
+// RegenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
+// and then, if any of the entries changed, it updates the map.
+func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
+	env := managerutil.GetEnv(ctx)
+	gc, err := env.GeneratorConfig(agentImage)
+	if err != nil {
+		return err
+	}
+	nss := env.GetManagedNamespaces()
+	if len(nss) == 0 {
+		return regenerateAgentMaps(ctx, "", gc)
+	}
+	for _, ns := range nss {
+		if err = regenerateAgentMaps(ctx, ns, gc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// regenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
+// and then, if any of the entries changed, it updates the map.
+func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorConfig) error {
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	cml, err := api.ConfigMaps(ns).List(ctx, meta.SingleObject(meta.ObjectMeta{
+		Name: agentconfig.ConfigMap,
+	}))
+	if err != nil {
+		return err
+	}
+	cms := cml.Items
+	for i := range cms {
+		cm := &cms[i]
+		changed := false
+		ns := cm.Namespace
+		for n, d := range cm.Data {
+			e := &entry{name: n, namespace: ns, value: d}
+			ac, wl, err := e.workload(ctx)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					return err
+				}
+				delete(cm.Data, n) // Workload no longer exists
+				changed = true
+				continue
+			}
+			nc, err := agentmap.Generate(ctx, wl, gc)
+			if err != nil {
+				return err
+			}
+			if cmp.Equal(ac, nc) {
+				continue
+			}
+			js, err := yaml.Marshal(nc)
+			if err != nil {
+				return err
+			}
+			cm.Data[n] = string(js)
+			changed = true
+		}
+		if changed {
+			_, err = api.ConfigMaps(ns).Update(ctx, cm, meta.UpdateOptions{})
+		}
+	}
+	return err
+}
+
 func NewWatcher(name string, namespaces ...string) *configWatcher {
 	return &configWatcher{
 		name:       name,
@@ -143,7 +212,6 @@ func (c *configWatcher) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var agentImage string
 	for {
 		select {
 		case <-ctx.Done():
@@ -151,12 +219,12 @@ func (c *configWatcher) Run(ctx context.Context) error {
 		case e := <-delCh:
 			c.handleDelete(ctx, e)
 		case e := <-addCh:
-			c.handleAdd(ctx, e, agentImage)
+			c.handleAdd(ctx, e)
 		}
 	}
 }
 
-func (c *configWatcher) handleAdd(ctx context.Context, e entry, agentImage string) {
+func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
 		trace.WithNewRoot(),
 		trace.WithLinks(e.link),
@@ -178,11 +246,8 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry, agentImage strin
 		return
 	}
 	if ac.Create {
-		if agentImage == "" {
-			agentImage = managerutil.GetAgentImage(ctx)
-		}
-		var gc *agentmap.GeneratorConfig
-		if gc, err = managerutil.GetEnv(ctx).GeneratorConfig(agentImage); err != nil {
+		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+		if err != nil {
 			dlog.Error(ctx, err)
 			return
 		}

@@ -122,8 +122,11 @@ func ServeMutator(ctx context.Context) error {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	env := managerutil.GetEnv(ctx)
-	cw, err := Load(ctx, env.ManagerNamespace)
+	// Existing telepresence-agent config maps must be regenerated. Conditions might have changed.
+	if err := RegenerateAgentMaps(ctx, managerutil.GetAgentImage(ctx)); err != nil {
+		return err
+	}
+	cw, err := Load(ctx)
 	if err != nil {
 		return err
 	}
