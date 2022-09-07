@@ -1,10 +1,8 @@
 package mutator
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,12 +10,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
@@ -38,7 +36,7 @@ type Map interface {
 }
 
 func decode(v string, into any) error {
-	return yaml.NewDecoder(strings.NewReader(v)).Decode(into)
+	return yaml.Unmarshal([]byte(v), into)
 }
 
 func Load(ctx context.Context, namespace string) (m Map, err error) {
@@ -266,12 +264,12 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 // also update the current snapshot if the updateSnapshot is true. This update will prevent
 // the rollout that otherwise occur when the ConfigMap is updated.
 func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, updateSnapshot bool) error {
-	bf := bytes.Buffer{}
-	if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+	js, err := yaml.Marshal(ac)
+	if err != nil {
 		return err
 	}
 
-	yml := bf.String()
+	yml := string(js)
 	ns := ac.Namespace
 	c.RLock()
 	var eq bool
