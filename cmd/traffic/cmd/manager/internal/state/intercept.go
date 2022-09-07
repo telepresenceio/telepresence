@@ -252,8 +252,11 @@ func (s *State) loadAgentConfig(
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
-		ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage))
-		if err != nil {
+		var gc *agentmap.GeneratorConfig
+		if gc, err = managerutil.GetEnv(ctx).GeneratorConfig(agentImage); err != nil {
+			return nil, err
+		}
+		if ac, err = agentmap.Generate(ctx, wl, gc); err != nil {
 			return nil, err
 		}
 		if err = update(); err != nil {

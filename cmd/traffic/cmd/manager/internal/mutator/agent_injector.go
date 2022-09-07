@@ -149,7 +149,11 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if isDelete {
 			return nil, nil
 		}
-		if config, err = agentmap.Generate(ctx, wl, env.GeneratorConfig(a.getAgentImage(ctx))); err != nil {
+		var gc *agentmap.GeneratorConfig
+		if gc, err = env.GeneratorConfig(a.getAgentImage(ctx)); err != nil {
+			return nil, err
+		}
+		if config, err = agentmap.Generate(ctx, wl, gc); err != nil {
 			return nil, err
 		}
 		config.RecordInSpan(span)

@@ -181,7 +181,12 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry, agentImage strin
 		if agentImage == "" {
 			agentImage = managerutil.GetAgentImage(ctx)
 		}
-		if ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage)); err != nil {
+		var gc *agentmap.GeneratorConfig
+		if gc, err = managerutil.GetEnv(ctx).GeneratorConfig(agentImage); err != nil {
+			dlog.Error(ctx, err)
+			return
+		}
+		if ac, err = agentmap.Generate(ctx, wl, gc); err != nil {
 			dlog.Error(ctx, err)
 		} else if err = c.Store(ctx, ac, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
@@ -523,7 +528,11 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
 	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
 	// If so, include them, or if workload for the config entry isn't found, delete that entry
-	cfg := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
 	for _, ac := range c.affectedConfigs(ctx, svc, isDelete) {
 		wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 		if err != nil {
@@ -664,7 +673,11 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
 		}
 	}
-	gc := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
 	for _, wl := range affectedWorkloads {
 		ac, err := agentmap.Generate(ctx, wl, gc)
 		if err == nil {
