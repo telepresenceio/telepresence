@@ -133,6 +133,12 @@ type Sidecar struct {
 	// The port used by the agent's GRPC tracing server
 	TracingPort uint16 `json:"tracingPort,omitempty"`
 
+	// Resources for the sidecar
+	Resources *core.ResourceRequirements `json:"resources,omitempty"`
+
+	// InitResources is the resource requirements for the initContainer sidecar
+	InitResources *core.ResourceRequirements `json:"initResources,omitempty"`
+
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`
 }
