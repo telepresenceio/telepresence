@@ -50,7 +50,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	gvisor.dev/gvisor v0.0.0-20220728035512-d468ae337c6a
+	gvisor.dev/gvisor v0.0.0-20220907032551-442a3cd44a08
 	helm.sh/helm/v3 v3.9.0
 	k8s.io/api v0.24.2
 	k8s.io/apimachinery v0.24.2
