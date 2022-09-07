@@ -2,8 +2,6 @@ package agentconfig
 
 import (
 	"fmt"
-
-	"gopkg.in/yaml.v3"
 )
 
 // InjectPolicy specifies when the agent injector mutating webhook will inject a traffic-agent into
@@ -43,8 +41,8 @@ func NewEnablePolicy(s string) (InjectPolicy, error) {
 	return 0, fmt.Errorf("invalid InjectPolicy: %q", s)
 }
 
-func (aps InjectPolicy) MarshalYAML() (any, error) {
-	return aps.String(), nil
+func (aps InjectPolicy) MarshalJSON() ([]byte, error) {
+	return []byte(aps.String()), nil
 }
 
 func (aps *InjectPolicy) EnvDecode(val string) (err error) {
@@ -58,10 +56,6 @@ func (aps *InjectPolicy) EnvDecode(val string) (err error) {
 	return nil
 }
 
-func (aps *InjectPolicy) UnmarshalYAML(node *yaml.Node) (err error) {
-	var s string
-	if err := node.Decode(&s); err != nil {
-		return err
-	}
-	return aps.EnvDecode(s)
+func (aps *InjectPolicy) UnmarshalJSON(value []byte) error {
+	return aps.EnvDecode(string(value))
 }

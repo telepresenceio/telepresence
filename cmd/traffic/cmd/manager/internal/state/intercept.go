@@ -1,7 +1,6 @@
 package state
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,12 +13,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -216,11 +215,11 @@ func (s *State) loadAgentConfig(
 			attribute.String("tel2.cm-namespace", wl.GetNamespace()),
 		))
 		defer tracing.EndAndRecord(span, err)
-		bf := bytes.Buffer{}
-		if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+		js, err := yaml.Marshal(ac)
+		if err != nil {
 			return err
 		}
-		cm.Data[wl.GetName()] = bf.String()
+		cm.Data[wl.GetName()] = string(js)
 		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
 		}
