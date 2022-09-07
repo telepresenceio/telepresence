@@ -455,18 +455,17 @@ func (tm *TrafficManager) ensureNoInterceptConflict(ir *rpc.CreateInterceptReque
 	defer tm.currentInterceptsLock.Unlock()
 	spec := ir.Spec
 	for _, iCept := range tm.currentIntercepts {
-		if iCept.Spec.Name == spec.Name {
+		switch {
+		case iCept.Spec.Name == spec.Name:
 			return interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
-		}
-		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
+		case iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost:
 			return &rpc.InterceptResult{
 				Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
 				ErrorText:     spec.Name,
 				ErrorCategory: int32(errcat.User),
 				InterceptInfo: iCept.InterceptInfo,
 			}
-		}
-		if ir.MountPoint != "" && iCept.ClientMountPoint == ir.MountPoint {
+		case ir.MountPoint != "" && iCept.ClientMountPoint == ir.MountPoint:
 			return &rpc.InterceptResult{
 				Error:         common.InterceptError_MOUNT_POINT_BUSY,
 				ErrorText:     spec.Name,
