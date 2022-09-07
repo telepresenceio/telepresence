@@ -88,6 +88,19 @@ func AgentContainer(
 			MountPath: TempMountPoint,
 		},
 	)
+	if _, ok := pod.ObjectMeta.Annotations[TerminatingTLSSecretAnnotation]; ok {
+		mounts = append(mounts, core.VolumeMount{
+			Name:      TerminatingTLSVolumeName,
+			MountPath: TerminatingTLSMountPoint,
+		})
+	}
+
+	if _, ok := pod.ObjectMeta.Annotations[OriginatingTLSSecretAnnotation]; ok {
+		mounts = append(mounts, core.VolumeMount{
+			Name:      OriginatingTLSVolumeName,
+			MountPath: OriginatingTLSMountPoint,
+		})
+	}
 
 	if len(efs) == 0 {
 		efs = nil
@@ -150,7 +163,7 @@ func InitContainer(config *Sidecar) *core.Container {
 	return ic
 }
 
-func AgentVolumes(agentName string) []core.Volume {
+func AgentVolumes(agentName string, pod *core.Pod) []core.Volume {
 	var items []core.KeyToPath
 	if agentName != "" {
 		items = []core.KeyToPath{{
@@ -158,7 +171,7 @@ func AgentVolumes(agentName string) []core.Volume {
 			Path: ConfigFile,
 		}}
 	}
-	return []core.Volume{
+	volumes := []core.Volume{
 		{
 			Name: AnnotationVolumeName,
 			VolumeSource: core.VolumeSource{
@@ -197,6 +210,27 @@ func AgentVolumes(agentName string) []core.Volume {
 			},
 		},
 	}
+	if secret, ok := pod.ObjectMeta.Annotations[TerminatingTLSSecretAnnotation]; ok {
+		volumes = append(volumes, core.Volume{
+			Name: TerminatingTLSVolumeName,
+			VolumeSource: core.VolumeSource{
+				Secret: &core.SecretVolumeSource{
+					SecretName: secret,
+				},
+			},
+		})
+	}
+	if secret, ok := pod.ObjectMeta.Annotations[OriginatingTLSSecretAnnotation]; ok {
+		volumes = append(volumes, core.Volume{
+			Name: OriginatingTLSVolumeName,
+			VolumeSource: core.VolumeSource{
+				Secret: &core.SecretVolumeSource{
+					SecretName: secret,
+				},
+			},
+		})
+	}
+	return volumes
 }
 
 // EachContainer will find each container in the given config and match it against a container
