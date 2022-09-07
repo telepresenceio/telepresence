@@ -49,8 +49,8 @@ type Env struct {
 
 type envKey struct{}
 
-func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorConfig {
-	return &agentmap.GeneratorConfig{
+func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
+	gc := &agentmap.GeneratorConfig{
 		AgentPort:           uint16(e.AgentPort),
 		APIPort:             uint16(e.APIPort),
 		TracingPort:         uint16(e.TracingPort),
@@ -58,6 +58,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorCon
 		ManagerNamespace:    e.ManagerNamespace,
 		LogLevel:            e.LogLevel,
 	}
+	return gc, nil
 }
 
 func (e *Env) QualifiedAgentImage() string {

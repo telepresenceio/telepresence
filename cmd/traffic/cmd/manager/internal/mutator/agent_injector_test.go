@@ -723,7 +723,9 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		test := test // pin it
 		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		t.Run(test.name, func(t *testing.T) {
-			actualConfig, actualErr := generateForPod(t, ctx, test.request, env.GeneratorConfig("docker.io/datawire/tel2:2.6.0"))
+			gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.6.0")
+			require.NoError(t, err)
+			actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
 			if actualConfig == nil {
 				actualConfig = &agentconfig.Sidecar{}
@@ -1632,8 +1634,10 @@ func TestTrafficAgentInjector(t *testing.T) {
 			var actualErr error
 			cw := NewWatcher("")
 			if test.generateConfig {
+				gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.6.0")
+				require.NoError(t, err)
 				var ac *agentconfig.Sidecar
-				if ac, actualErr = generateForPod(t, ctx, test.pod, env.GeneratorConfig("docker.io/datawire/tel2:2.6.0")); actualErr == nil {
+				if ac, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
 					actualErr = cw.Store(ctx, ac, true)
 				}
 			}
