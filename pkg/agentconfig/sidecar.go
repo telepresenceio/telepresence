@@ -12,21 +12,25 @@ const (
 	// ConfigMap is the name of the ConfigMap that contains the agent configs.
 	ConfigMap = "telepresence-agents"
 
-	ContainerName        = "traffic-agent"
-	InitContainerName    = "tel-agent-init"
-	AnnotationVolumeName = "traffic-annotations"
-	AnnotationMountPoint = "/tel_pod_info"
-	ConfigVolumeName     = "traffic-config"
-	ConfigMountPoint     = "/etc/traffic-agent"
-	ConfigFile           = "config.yaml"
-	MountPrefixApp       = "/tel_app_mounts"
-	ExportsVolumeName    = "export-volume"
-	ExportsMountPoint    = "/tel_app_exports"
-	TempVolumeName       = "tel-agent-tmp"
-	TempMountPoint       = "/tmp"
-	EnvPrefix            = "_TEL_"
-	EnvPrefixAgent       = EnvPrefix + "AGENT_"
-	EnvPrefixApp         = EnvPrefix + "APP_"
+	ContainerName            = "traffic-agent"
+	InitContainerName        = "tel-agent-init"
+	AnnotationVolumeName     = "traffic-annotations"
+	AnnotationMountPoint     = "/tel_pod_info"
+	ConfigVolumeName         = "traffic-config"
+	ConfigMountPoint         = "/etc/traffic-agent"
+	TerminatingTLSVolumeName = "traffic-terminating-tls"
+	TerminatingTLSMountPoint = "/terminating_tls"
+	OriginatingTLSVolumeName = "traffic-originating-tls"
+	OriginatingTLSMountPoint = "/originating_tls"
+	ConfigFile               = "config.yaml"
+	MountPrefixApp           = "/tel_app_mounts"
+	ExportsVolumeName        = "export-volume"
+	ExportsMountPoint        = "/tel_app_exports"
+	TempVolumeName           = "tel-agent-tmp"
+	TempMountPoint           = "/tmp"
+	EnvPrefix                = "_TEL_"
+	EnvPrefixAgent           = EnvPrefix + "AGENT_"
+	EnvPrefixApp             = EnvPrefix + "APP_"
 
 	// EnvInterceptContainer intercepted container propagated to client during intercept.
 	EnvInterceptContainer = "TELEPRESENCE_CONTAINER"
@@ -37,8 +41,10 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
-	DomainPrefix     = "telepresence.getambassador.io/"
-	InjectAnnotation = DomainPrefix + "inject-" + ContainerName
+	DomainPrefix                   = "telepresence.getambassador.io/"
+	InjectAnnotation               = DomainPrefix + "inject-" + ContainerName
+	TerminatingTLSSecretAnnotation = DomainPrefix + "inject-terminating-tls-secret"
+	OriginatingTLSSecretAnnotation = DomainPrefix + "inject-originating-tls-secret"
 )
 
 // Intercept describes the mapping between a service port and an intercepted container port.

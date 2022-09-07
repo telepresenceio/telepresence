@@ -263,7 +263,7 @@ func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) p
 			return patches
 		}
 	}
-	avs := agentconfig.AgentVolumes(ag.AgentName)
+	avs := agentconfig.AgentVolumes(ag.AgentName, pod)
 	if len(avs) == 0 {
 		return patches
 	}
