@@ -1617,6 +1617,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			ctx = managerutil.WithEnv(ctx, env)
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
+			ctx = managerutil.WithAgentImageRetriever(ctx, nil)
 			if test.envAdditions != nil {
 				env := managerutil.GetEnv(ctx)
 				newEnv := *env
@@ -1643,7 +1644,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			}
 			if actualErr == nil {
 				request := toAdmissionRequest(podResource, test.pod)
-				a := agentInjector{agentConfigs: cw, agentImage: "docker.io/datawire/tel2:2.6.0"}
+				a := agentInjector{agentConfigs: cw}
 				actualPatch, actualErr = a.inject(ctx, request)
 			}
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.pod.Name))
