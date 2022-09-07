@@ -236,7 +236,7 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 	}
 
 	pis := pod.Spec.InitContainers
-	ic := agentconfig.InitContainer(config.AgentImage)
+	ic := agentconfig.InitContainer(config)
 	if len(pis) == 0 {
 		return append(patches, patchOperation{
 			Op:    "replace",

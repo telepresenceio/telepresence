@@ -29,6 +29,8 @@ type GeneratorConfig struct {
 	QualifiedAgentImage string
 	ManagerNamespace    string
 	LogLevel            string
+	InitResources       *core.ResourceRequirements
+	Resources           *core.ResourceRequirements
 }
 
 func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
@@ -89,17 +91,19 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 	}
 
 	ag := &agentconfig.Sidecar{
-		AgentImage:   cfg.QualifiedAgentImage,
-		AgentName:    wl.GetName(),
-		LogLevel:     cfg.LogLevel,
-		Namespace:    wl.GetNamespace(),
-		WorkloadName: wl.GetName(),
-		WorkloadKind: wl.GetKind(),
-		ManagerHost:  ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:  ManagerPortHTTP,
-		APIPort:      cfg.APIPort,
-		TracingPort:  cfg.TracingPort,
-		Containers:   ccs,
+		AgentImage:    cfg.QualifiedAgentImage,
+		AgentName:     wl.GetName(),
+		LogLevel:      cfg.LogLevel,
+		Namespace:     wl.GetNamespace(),
+		WorkloadName:  wl.GetName(),
+		WorkloadKind:  wl.GetKind(),
+		ManagerHost:   ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerPort:   ManagerPortHTTP,
+		APIPort:       cfg.APIPort,
+		TracingPort:   cfg.TracingPort,
+		Containers:    ccs,
+		InitResources: cfg.InitResources,
+		Resources:     cfg.Resources,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil

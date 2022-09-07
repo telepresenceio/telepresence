@@ -85,7 +85,7 @@ func AgentContainer(
 	if len(efs) == 0 {
 		efs = nil
 	}
-	return &core.Container{
+	ac := &core.Container{
 		Name:         ContainerName,
 		Image:        config.AgentImage,
 		Args:         []string{"agent"},
@@ -101,12 +101,16 @@ func AgentContainer(
 			},
 		},
 	}
+	if r := config.Resources; r != nil {
+		ac.Resources = *r
+	}
+	return ac
 }
 
-func InitContainer(qualifiedAgentImage string) *core.Container {
-	return &core.Container{
+func InitContainer(config *Sidecar) *core.Container {
+	ic := &core.Container{
 		Name:  InitContainerName,
-		Image: qualifiedAgentImage,
+		Image: config.AgentImage,
 		Args:  []string{"agent-init"},
 		VolumeMounts: []core.VolumeMount{{
 			Name:      ConfigVolumeName,
@@ -118,6 +122,10 @@ func InitContainer(qualifiedAgentImage string) *core.Container {
 			},
 		},
 	}
+	if r := config.InitResources; r != nil {
+		ic.Resources = *r
+	}
+	return ic
 }
 
 func AgentVolumes(agentName string) []core.Volume {
