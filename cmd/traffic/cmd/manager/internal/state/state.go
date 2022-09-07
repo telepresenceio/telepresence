@@ -195,16 +195,15 @@ type State struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts       watchable.Map[*rpc.InterceptInfo]
-	agents           watchable.Map[*rpc.AgentInfo]        // info for agent sessions
-	clients          watchable.Map[*rpc.ClientInfo]       // info for client sessions
-	sessions         map[string]SessionState              // info for all sessions
-	agentsByName     map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
-	interceptStates  map[string]*interceptState
-	timedLogLevel    log.TimedLevel
-	llSubs           *loglevelSubscribers
-	cfgMapLocks      map[string]*sync.Mutex
-	cachedAgentImage string
+	intercepts      watchable.Map[*rpc.InterceptInfo]
+	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions
+	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions
+	sessions        map[string]SessionState              // info for all sessions
+	agentsByName    map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates map[string]*interceptState
+	timedLogLevel   log.TimedLevel
+	llSubs          *loglevelSubscribers
+	cfgMapLocks     map[string]*sync.Mutex
 }
 
 func NewState(ctx context.Context) *State {

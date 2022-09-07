@@ -34,7 +34,6 @@ var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: 
 type agentInjector struct {
 	sync.Mutex
 	agentConfigs Map
-	agentImage   string
 	terminating  int64
 }
 
@@ -150,7 +149,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 		var gc *agentmap.GeneratorConfig
-		if gc, err = env.GeneratorConfig(a.getAgentImage(ctx)); err != nil {
+		if gc, err = env.GeneratorConfig(managerutil.GetAgentImage(ctx)); err != nil {
 			return nil, err
 		}
 		if config, err = agentmap.Generate(ctx, wl, gc); err != nil {
@@ -168,7 +167,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
 
 	var patches patchOps
-	patches = addInitContainer(ctx, pod, config, patches)
+	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addAgentVolumes(pod, config, patches)
 	patches = hidePorts(pod, config, patches)
@@ -186,16 +185,6 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		span.SetAttributes(attribute.Stringer("tel2.patches", patches))
 	}
 	return patches, nil
-}
-
-func (a *agentInjector) getAgentImage(ctx context.Context) string {
-	a.Lock()
-	defer a.Unlock()
-	if a.agentImage == "" {
-		a.agentImage = managerutil.GetAgentImage(ctx)
-		dlog.Infof(ctx, "using agent image %s", a.agentImage)
-	}
-	return a.agentImage
 }
 
 // uninstall ensures that no more webhook injections is made and that all the workloads of currently injected
@@ -221,7 +210,7 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 	return false
 }
 
-func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
 	if !needInitContainer(config) {
 		for i, oc := range pod.Spec.InitContainers {
 			if agentconfig.InitContainerName == oc.Name {

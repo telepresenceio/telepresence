@@ -2,7 +2,6 @@ package state
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -97,33 +96,6 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}, nil
 }
 
-func (s *State) qualifiedAgentImage(ctx context.Context, extended bool) (img string, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cachedAgentImage != "" {
-		return s.cachedAgentImage, nil
-	}
-	// We can't use managerutil.GetAgentImage here because if extended is true we can't use the OSS image that it might return
-	env := managerutil.GetEnv(ctx)
-	if env.AgentImage == "" {
-		img, err = managerutil.AgentImageFromSystemA(ctx)
-		if err != nil {
-			msg := fmt.Sprintf("unable to get Ambassador Cloud preferred agent image: %v", err)
-			if extended {
-				return "", errors.New(msg)
-			}
-			dlog.Warning(ctx, msg)
-		}
-	}
-	if img == "" {
-		img = env.QualifiedAgentImage()
-	}
-	if extended {
-		s.cachedAgentImage = img
-	}
-	return img, nil
-}
-
 func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
@@ -205,9 +177,14 @@ func (s *State) loadAgentConfig(
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
-	agentImage, err := s.qualifiedAgentImage(ctx, extended)
-	if err != nil {
-		return nil, err
+	var agentImage string
+	if extended {
+		agentImage, err = managerutil.GetExtendedAgentImage(ctx)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		agentImage = managerutil.GetAgentImage(ctx)
 	}
 	span.SetAttributes(
 		attribute.String("tel2.agent-image", agentImage),
