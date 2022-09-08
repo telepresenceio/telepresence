@@ -398,7 +398,7 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string, failed
 				case "FailedCreate", "FailedScheduling":
 					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
 					msg = fmt.Sprintf(
-						"%s\nThe traffic-agent's requested resources can be configured by providing values to telepresence helm install",
+						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
 						msg)
 				}
 				return errcat.User.New(msg)
