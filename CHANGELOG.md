@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.7.3 (TBD)
+### 2.7.3 (September 7, 2022)
 
 - Bugfix: CLI commands that are executed by the user daemon now use a pseudo TTY. This enables
   `docker run -it` to allocate a TTY and will also give other commands like `bash read` the
