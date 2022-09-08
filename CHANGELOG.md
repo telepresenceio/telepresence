@@ -1,9 +1,11 @@
 # Changelog
 
-### 2.7.3 (September 7, 2022)
+### 2.7.4 (TBD)
 
 - Bugfix: Running CLI commands on Apple M1 machines will no longer throw warnings about `/proc/cpuinfo`
   and `/proc/self/auxv`.
+
+### 2.7.3 (September 7, 2022)
 
 - Bugfix: CLI commands that are executed by the user daemon now use a pseudo TTY. This enables
   `docker run -it` to allocate a TTY and will also give other commands like `bash read` the
