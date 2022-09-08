@@ -162,7 +162,7 @@ following Free and Open Source software:
     gopkg.in/square/go-jose.v2                                                   v2.5.1                                    3-clause BSD license, Apache License 2.0
     gopkg.in/yaml.v2                                                             v2.4.0                                    Apache License 2.0, MIT license
     gopkg.in/yaml.v3                                                             v3.0.1                                    Apache License 2.0, MIT license
-    gvisor.dev/gvisor                                                            v0.0.0-20220728035512-d468ae337c6a        Apache License 2.0, MIT license
+    gvisor.dev/gvisor                                                            v0.0.0-20220907032551-442a3cd44a08        Apache License 2.0, MIT license
     helm.sh/helm/v3                                                              v3.9.0                                    Apache License 2.0
     k8s.io/api                                                                   v0.24.2                                   Apache License 2.0
     k8s.io/apiextensions-apiserver                                               v0.24.2                                   Apache License 2.0
