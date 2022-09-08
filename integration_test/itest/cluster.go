@@ -167,6 +167,7 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 	exe := "telepresence"
 	if runtime.GOOS == "windows" {
+		ctx = WithEnv(ctx, map[string]string{"CGO_ENABLED": "0"})
 		exe += ".exe"
 	}
 	err := Run(ctx, "go", "build", "-ldflags",
@@ -274,6 +275,8 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
+
+	config.Intercept.UseFtp = true
 
 	configYaml, err := yaml.Marshal(&config)
 	require.NoError(t, err)

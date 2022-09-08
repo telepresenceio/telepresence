@@ -47,6 +47,7 @@ telepresenceAPI:
 intercept:
   appProtocolStrategy: portName
   defaultPort: 9080
+  useFtp: true
 `,
 	}
 
@@ -86,6 +87,7 @@ intercept:
 	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                            // from user
 	assert.Equal(t, k8sapi.PortName, cfg.Intercept.AppProtocolStrategy)                        // from user
 	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                           // from user
+	assert.True(t, cfg.Intercept.UseFtp)                                                       // from user
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {

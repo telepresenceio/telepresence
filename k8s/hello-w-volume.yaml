@@ -44,13 +44,12 @@ spec:
       labels:
         service: hello
     spec:
-      securityContext:
-        runAsGroup: 11000
-        runAsUser: 11000
       volumes:
         - name: hello-cm-volume
           configMap:
             name: hello
+        - name: tmp-volume
+          emptyDir: {}
       containers:
         - name: hello-container
           image: nginx
@@ -60,3 +59,5 @@ spec:
           volumeMounts:
             - mountPath: "/usr/share/nginx/html"
               name: hello-cm-volume
+            - mountPath: "/tmp"
+              name: tmp-volume

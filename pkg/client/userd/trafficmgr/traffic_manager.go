@@ -15,6 +15,7 @@ import (
 
 	"github.com/blang/semver"
 	stacktrace "github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,8 +27,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
-
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -134,13 +133,6 @@ type TrafficManager struct {
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
-	// Map of desired mount points for intercepts
-	mountPoints sync.Map
-
-	// Map of mutexes, so that we don't create and delete
-	// mount points concurrently
-	mountMutexes sync.Map
-
 	wlWatcher *workloadsAndServicesWatcher
 
 	insLock sync.Mutex
@@ -153,23 +145,30 @@ type TrafficManager struct {
 
 	localIntercepts map[string]string
 
-	// currentIntercepts is the latest snapshot returned by the intercept watcher
-	currentIntercepts     []*manager.InterceptInfo
+	// currentInterceptsLock ensures that all accesses to currentIntercepts, currentMatchers,
+	// currentAPIServers, and interceptWaiters are synchronized
+	//
 	currentInterceptsLock sync.Mutex
-	currentMatchers       map[string]*apiMatcher
-	currentAPIServers     map[int]*apiServer
 
-	// Pid of interceptor owned by an intercept. This entry will only be present when
-	// the telepresence intercept command spawns a new command. The int value reflects
-	// the pid of that new command.
-	currentInterceptors map[string]int
+	// currentIntercepts is the latest snapshot returned by the intercept watcher. It
+	// is keyeed by the intercept ID
+	currentIntercepts map[string]*intercept
+
+	// currentMatches hold the matchers used when using the APIServer.
+	currentMatchers map[string]*apiMatcher
+
+	// currentAPIServers contains the APIServer in use. Typically zero or only one, but since the
+	// port is determined by the intercept, there might theoretically be serveral.
+	currentAPIServers map[int]*apiServer
+
+	// Map of desired awaited intercepts. Keyed by intercept name, because it
+	// is filled in prior to the intercept being created. Entries are short lived. They
+	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
+	interceptWaiters map[string]*awaitIntercept
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo
 	currentAgentsLock sync.Mutex
-
-	// activeInterceptsWaiters contains chan interceptResult keyed by intercept name
-	activeInterceptsWaiters sync.Map
 
 	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
 	agentWaiters sync.Map
@@ -182,12 +181,6 @@ type TrafficManager struct {
 	sr              *scout.Reporter
 
 	isPodDaemon bool
-}
-
-// interceptResult is what gets written to the activeInterceptsWaiters channels
-type interceptResult struct {
-	intercept *manager.InterceptInfo
-	err       error
 }
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
@@ -294,7 +287,7 @@ func NewSession(c context.Context, sr *scout.Reporter, cr *rpc.ConnectRequest, s
 		ClusterServer:  cluster.Config.Server,
 		ClusterId:      cluster.GetClusterId(c),
 		SessionInfo:    tmgr.session(),
-		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentIntercepts()},
+		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 	}
 	c = WithSession(c, tmgr)
 	return c, tmgr, ret
@@ -513,15 +506,15 @@ func connectMgr(c context.Context, cluster *k8s.Cluster, installID string, svc S
 		getCloudAPIKey: func(ctx context.Context, desc string, autoLogin bool) (string, error) {
 			return auth.GetCloudAPIKey(ctx, svc.LoginExecutor(), desc, autoLogin)
 		},
-		managerClient:       mClient,
-		managerConn:         conn,
-		managerVersion:      managerVersion,
-		sessionInfo:         si,
-		rootDaemon:          rootDaemon,
-		localIntercepts:     map[string]string{},
-		currentInterceptors: map[string]int{},
-		wlWatcher:           newWASWatcher(),
-		isPodDaemon:         isPodDaemon,
+		managerClient:    mClient,
+		managerConn:      conn,
+		managerVersion:   managerVersion,
+		sessionInfo:      si,
+		rootDaemon:       rootDaemon,
+		localIntercepts:  make(map[string]string),
+		interceptWaiters: make(map[string]*awaitIntercept),
+		wlWatcher:        newWASWatcher(),
+		isPodDaemon:      isPodDaemon,
 	}, nil
 }
 
@@ -582,7 +575,7 @@ func (tm *TrafficManager) Run(c context.Context) error {
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
-	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
+	g.Go("intercept-port-forward", tm.watchInterceptsHandler)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
 	for _, svc := range tm.sessionServices {
@@ -791,7 +784,7 @@ nextIs:
 	for _, i := range is {
 		for _, ns := range nss {
 			if i.Spec.Namespace == ns {
-				iMap[i.Spec.Agent] = append(iMap[i.Spec.Agent], i)
+				iMap[i.Spec.Agent] = append(iMap[i.Spec.Agent], i.InterceptInfo)
 				continue nextIs
 			}
 		}
@@ -907,7 +900,7 @@ func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterServer:  cfg.Server,
 		ClusterId:      tm.GetClusterId(c),
 		SessionInfo:    tm.session(),
-		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentIntercepts()},
+		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentInterceptInfos()},
 	}
 	return ret
 }
@@ -1031,7 +1024,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 		for _, an := range ur.Agents {
 			for _, ic := range ics {
 				if ic.Spec.Namespace == namespace && ic.Spec.Agent == an {
-					_ = tm.RemoveIntercept(ctx, ic.Spec.Name)
+					_ = tm.removeIntercept(ctx, ic)
 					break
 				}
 			}

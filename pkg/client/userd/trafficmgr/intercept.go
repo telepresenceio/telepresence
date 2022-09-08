@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
-	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"github.com/blang/semver"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -37,7 +35,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -46,122 +43,183 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
-type forwardKey struct {
-	Name  string
+type mounter interface {
+	start(ctx context.Context, ic *intercept) error
+}
+
+// intercept tracks the life-cycle of an intercept, dictated by the intercepts
+// arrival and departure in the watchInterceptsLoop
+type intercept struct {
+	sync.Mutex
+	*manager.InterceptInfo
+
+	// ctx is a context cancelled by the cancel attribute. It must be used by
+	// services that should be cancelled when the intercept ends
+	ctx context.Context
+
+	// cancel is called when the intercept is no longer present
+	cancel context.CancelFunc
+
+	// pid of interceptor owned by an intercept. This entry will only be present when
+	// the telepresence intercept command spawns a new command. The int value reflects
+	// the pid of that new command.
+	pid int
+
+	// The mounter of the remote file system.
+	mounter
+}
+
+// interceptResult is what gets written to the awaitIntercept's waitCh channel when the
+// awaited intercept arrives.
+type interceptResult struct {
+	intercept *intercept
+	err       error
+}
+
+// awaitIntercept is what the traffic-manager is using to notify the watchInterceptsLoop
+// about an expected intercept arrival.
+type awaitIntercept struct {
+	// mountPoint is the mount point assigned to the InterceptInfo's ClientMountPoint when
+	// it arrives from the traffic-manager.
+	mountPoint string
+	waitCh     chan<- interceptResult
+}
+
+// podInterceptKey identifies an intercepted pod. Although an intercept may span multiple
+// pods, the user daemon will always choose exactly one pod with an active intercept to
+// do port forwards and remote mounts.
+type podInterceptKey struct {
+	Id    string
 	PodIP string
 }
 
-type mountForward struct {
-	forwardKey
-	SftpPort         int32
-	RemoteMountPoint string
+// The podIntercept provides pod specific synchronization for cancellation of port forwards
+// and mounts. Cancellation here does not mean that the intercept is cancelled. It just
+// means that the given pod is no longer the chosen one. This typically happens when pods
+// are scaled down and then up again.
+type podIntercept struct {
+	wg        sync.WaitGroup
+	cancelPod context.CancelFunc
 }
 
-type portForward struct {
-	forwardKey
-	Port string
+// podIntercepts is what the traffic-manager is using to keep track of the chosen pods for
+// the currently active intercepts.
+type podIntercepts struct {
+	sync.Mutex
+
+	// alive contains a map of the currently alive pod intercepts
+	alivePods map[podInterceptKey]*podIntercept
+
+	// snapshot is recreated for each new intercept snapshot read from the manager.
+	// The set controls which podIntercepts that are considered alive when cancelUnwanted
+	// is called
+	snapshot map[podInterceptKey]struct{}
 }
 
-// The livePortForward struct provides synchronization for cancellation of port forwards.
-// This is necessary because a volume mount process must terminate before the corresponding
-// file system is removed. The removal cannot take place when the process ends because there
-// may be subsequent processes that use the same volume mount during the lifetime of an
-// intercept (since an intercept may change pods).
-type livePortForward struct {
-	wg     sync.WaitGroup
-	cancel context.CancelFunc
+func (ic *intercept) localPorts() []string {
+	// Older versions use ii.extraPorts (TCP only), newer versions use ii.localPorts.
+	ps := ic.Spec.LocalPorts
+	if len(ps) == 0 {
+		for _, ep := range ic.Spec.ExtraPorts {
+			ps = append(ps, strconv.Itoa(int(ep)))
+		}
+		ic.Spec.LocalPorts = ps
+	}
+	return ps
 }
 
-type livePortForwards struct {
-	// live contains a map of the currently alive port forwards
-	live map[forwardKey]*livePortForward
-
-	// snapshot is recreated for each new intercept snapshot read from the manager
-	snapshot map[forwardKey]struct{}
+func (ic *intercept) shouldForward() bool {
+	return len(ic.localPorts()) > 0
 }
 
-func newPortForwards() *livePortForwards {
-	return &livePortForwards{live: make(map[forwardKey]*livePortForward)}
+// startForwards starts port forwards and mounts for the given podInterceptKey.
+// It assumes that the user has called shouldForward and is sure that something will be started.
+func (ic *intercept) startForwards(ctx context.Context, wg *sync.WaitGroup) {
+	for _, port := range ic.localPorts() {
+		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", ic.PodIp, port))
+		wg.Add(1)
+		go ic.workerPortForward(pfCtx, port, wg)
+	}
+}
+
+func (ic *intercept) workerPortForward(ctx context.Context, port string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	pp, err := agentconfig.NewPortAndProto(port)
+	if err != nil {
+		dlog.Errorf(ctx, "malformed extra port %q: %v", port, err)
+		return
+	}
+	addr, err := pp.Addr()
+	if err != nil {
+		dlog.Errorf(ctx, "unable to resolve extra port %q: %v", port, err)
+		return
+	}
+	f := forwarder.NewInterceptor(addr, ic.PodIp, pp.Port)
+	err = f.Serve(ctx, nil)
+	if err != nil && ctx.Err() == nil {
+		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
+	}
+}
+
+func newPodIntercepts() *podIntercepts {
+	return &podIntercepts{alivePods: make(map[podInterceptKey]*podIntercept)}
 }
 
 // start a port forward for the given intercept and remembers that it's alive
-func (lpf livePortForwards) start(ctx context.Context, tm *TrafficManager, ii *manager.InterceptInfo) {
-	fk := forwardKey{
-		Name:  ii.Spec.Name,
-		PodIP: ii.PodIp,
+func (lpf *podIntercepts) start(ctx context.Context, ic *intercept) {
+	if !ic.shouldForward() && !ic.shouldMount() {
+		return
 	}
 
-	// Older versions use ii.extraPorts (TCP only), newer versions use ii.localPorts.
-	if len(ii.Spec.LocalPorts) == 0 {
-		for _, ep := range ii.Spec.ExtraPorts {
-			ii.Spec.LocalPorts = append(ii.Spec.LocalPorts, strconv.Itoa(int(ep)))
-		}
+	// The mounts performed here are synced on by podIP + port to keep track of active
+	// mounts. This is not enough in situations when a pod is deleted and another pod
+	// takes over. That is two different IPs so an additional synchronization on the actual
+	// mount point is necessary to prevent that it is established and deleted at the same
+	// time.
+	fk := podInterceptKey{
+		Id:    ic.Id,
+		PodIP: ic.PodIp,
 	}
 
-	if tm.shouldForward(ii) {
-		lpf.snapshot[fk] = struct{}{}
-		if _, isLive := lpf.live[fk]; !isLive {
-			pfCtx, pfCancel := context.WithCancel(ctx)
-			livePortForward := &livePortForward{cancel: pfCancel}
-			tm.startForwards(pfCtx, &livePortForward.wg, fk, ii.SftpPort, ii.MountPoint, ii.Spec.LocalPorts)
-			dlog.Debugf(ctx, "Started forward for %+v", fk)
-			lpf.live[fk] = livePortForward
-		}
+	// Make part of current snapshot tracking so that it isn't removed once the
+	// snapshot has been completely handled
+	lpf.snapshot[fk] = struct{}{}
+
+	// Already started?
+	if _, isLive := lpf.alivePods[fk]; isLive {
+		return
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	lp := &podIntercept{cancelPod: cancel}
+	if ic.shouldMount() {
+		ic.startMount(ctx, &lp.wg)
+	}
+	if ic.shouldForward() {
+		ic.startForwards(ctx, &lp.wg)
+	}
+	dlog.Debugf(ctx, "Started mounts and port-forwards for %+v", fk)
+	lpf.alivePods[fk] = lp
 }
 
 // initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted
-func (lpf *livePortForwards) initSnapshot() {
-	lpf.snapshot = make(map[forwardKey]struct{})
+func (lpf *podIntercepts) initSnapshot() {
+	lpf.snapshot = make(map[podInterceptKey]struct{})
 }
 
 // cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot
-func (lpf livePortForwards) cancelUnwanted(ctx context.Context) {
-	for fk, lp := range lpf.live {
+func (lpf *podIntercepts) cancelUnwanted(ctx context.Context) {
+	for fk, lp := range lpf.alivePods {
 		if _, isWanted := lpf.snapshot[fk]; !isWanted {
-			dlog.Infof(ctx, "Terminating forwards for %s", fk.PodIP)
-			lp.cancel()
-			delete(lpf.live, fk)
+			dlog.Infof(ctx, "Terminating mounts and port-forwards for %+v", fk)
+			lp.cancelPod()
+			delete(lpf.alivePods, fk)
 			lp.wg.Wait()
 		}
 	}
 }
 
-// reconcileMountPoints deletes mount points for which there no longer is an intercept
-func (tm *TrafficManager) reconcileMountPoints(ctx context.Context, existingIntercepts map[string]struct{}) {
-	var mountsToDelete []any
-	tm.mountPoints.Range(func(key, value any) bool {
-		if _, ok := existingIntercepts[value.(string)]; !ok {
-			mountsToDelete = append(mountsToDelete, key)
-		}
-		return true
-	})
-
-	for _, key := range mountsToDelete {
-		if _, loaded := tm.mountPoints.LoadAndDelete(key); loaded {
-			// Execute the removal in a separate go-routine so that we don't hang the daemon in case
-			// the removal hangs on a "resource busy".
-			go func(mountPoint string) {
-				if runtime.GOOS == "darwin" {
-					//  macFUSE will sometimes not unmount in a timely manner so we do this to avoid "resource busy" and
-					//  "Device not configured" errors.
-					_ = proc.CommandContext(ctx, "umount", mountPoint).Run()
-				}
-				err := os.Remove(mountPoint)
-				switch {
-				case err == nil:
-					dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
-				case os.IsNotExist(err):
-					dlog.Infof(ctx, "File system mount %q no longer exists", mountPoint)
-				default:
-					dlog.Errorf(ctx, "Failed to remove mount point %q: %v", mountPoint, err)
-				}
-			}(key.(string))
-		}
-	}
-}
-
-func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error { //nolint:gocognit // bugger off
+func (tm *TrafficManager) watchInterceptsHandler(ctx context.Context) error {
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
 	//     dgroup's other functionality
@@ -169,82 +227,10 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	//     their exit statuses is just a memory leak
 	//  3. because we want a per-worker cancel, we'd have to implement our own Context
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
-	portForwards := newPortForwards()
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
-		stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
-		if err != nil {
-			err = fmt.Errorf("manager.WatchIntercepts dial: %w", err)
-		}
-		for err == nil && ctx.Err() == nil {
-			var snapshot *manager.InterceptInfoSnapshot
-			snapshot, err = stream.Recv()
-			var intercepts []*manager.InterceptInfo
-
-			if err != nil {
-				if ctx.Err() == nil {
-					if !errors.Is(err, io.EOF) {
-						err = fmt.Errorf("manager.WatchIntercepts recv: %w", err)
-					}
-					break
-				}
-				// context is cancelled. Continue as if we had an empty snapshot. This
-				// will ensure that volume mounts are cancelled correctly.
-			} else {
-				intercepts = snapshot.Intercepts
-			}
-			tm.setCurrentIntercepts(ctx, intercepts)
-
-			// allNames contains the names of all intercepts, irrespective of their status
-			allNames := make(map[string]struct{})
-
-			portForwards.initSnapshot()
-			namespaces := make(map[string]struct{})
-			for _, intercept := range intercepts {
-				allNames[intercept.Spec.Name] = struct{}{}
-
-				var iceptError error
-				switch intercept.Disposition {
-				case manager.InterceptDispositionType_ACTIVE:
-					// do nothing
-				case manager.InterceptDispositionType_WAITING:
-					continue
-				default:
-					iceptError = fmt.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
-				}
-
-				// Notify waiters for active intercepts
-				if chUt, loaded := tm.activeInterceptsWaiters.Load(intercept.Spec.Name); loaded {
-					if ch, ok := chUt.(chan interceptResult); ok {
-						dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", intercept.Id, intercept.Disposition)
-						ir := interceptResult{
-							intercept: intercept,
-							err:       iceptError,
-						}
-						select {
-						case ch <- ir:
-						default:
-							// Channel was closed
-						}
-					}
-				}
-				if iceptError == nil {
-					namespaces[intercept.Spec.Namespace] = struct{}{}
-					if tm.isPodDaemon {
-						intercept.SftpPort = 0 // disable mount point logic
-					}
-					portForwards.start(ctx, tm, intercept)
-				}
-			}
-			portForwards.cancelUnwanted(ctx)
-			tm.reconcileMountPoints(ctx, allNames)
-			if ctx.Err() == nil && !tm.isPodDaemon {
-				tm.setInterceptedNamespaces(ctx, namespaces)
-			}
-		}
-
-		if ctx.Err() == nil {
-			dlog.Errorf(ctx, "reading port-forwards from manager: %v", err)
+		if err := tm.watchInterceptsLoop(ctx); err != nil {
+			dlog.Error(ctx, err)
 			dtime.SleepWithContext(ctx, backoff)
 			backoff *= 2
 			if backoff > 3*time.Second {
@@ -255,29 +241,148 @@ func (tm *TrafficManager) workerPortForwardIntercepts(ctx context.Context) error
 	return nil
 }
 
-// getCurrentIntercepts returns a copy of the current intercept snapshot amended with
-// the local filesystem mount point.
-func (tm *TrafficManager) getCurrentIntercepts() []*manager.InterceptInfo {
+func (tm *TrafficManager) watchInterceptsLoop(ctx context.Context) error {
+	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
+	if err != nil {
+		return fmt.Errorf("manager.WatchIntercepts dial: %w", err)
+	}
+	podIcepts := newPodIntercepts()
+	for ctx.Err() == nil {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are cancelled correctly.
+			tm.handleInterceptSnapshot(ctx, podIcepts, nil)
+			if ctx.Err() != nil || errors.Is(err, io.EOF) {
+				// Normal termination
+				return nil
+			}
+			return fmt.Errorf("manager.WatchIntercepts recv: %w", err)
+		}
+		tm.handleInterceptSnapshot(ctx, podIcepts, snapshot.Intercepts)
+	}
+	return nil
+}
+
+func (tm *TrafficManager) handleInterceptSnapshot(ctx context.Context, podIcepts *podIntercepts, intercepts []*manager.InterceptInfo) {
+	tm.setCurrentIntercepts(ctx, intercepts)
+	podIcepts.initSnapshot()
+	namespaces := make(map[string]struct{})
+	for _, ii := range intercepts {
+		if ii.Disposition == manager.InterceptDispositionType_WAITING {
+			continue
+		}
+
+		tm.currentInterceptsLock.Lock()
+		ic := tm.currentIntercepts[ii.Id]
+		aw := tm.interceptWaiters[ii.Spec.Name]
+		if aw != nil {
+			delete(tm.interceptWaiters, ii.Spec.Name)
+		}
+		tm.currentInterceptsLock.Unlock()
+
+		var err error
+		if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
+			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
+		}
+		// Notify waiters for active intercepts
+		if aw != nil {
+			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
+			select {
+			case aw.waitCh <- interceptResult{
+				intercept: ic,
+				err:       err,
+			}:
+			default:
+				// Channel was closed
+			}
+		}
+		if err != nil {
+			continue
+		}
+
+		namespaces[ii.Spec.Namespace] = struct{}{}
+		if tm.isPodDaemon {
+			// disable mount point logic
+			ic.FtpPort = 0
+			ic.SftpPort = 0
+		}
+		podIcepts.start(ctx, ic)
+	}
+	podIcepts.cancelUnwanted(ctx)
+	if ctx.Err() == nil && !tm.isPodDaemon {
+		tm.setInterceptedNamespaces(ctx, namespaces)
+	}
+}
+
+// getCurrentIntercepts returns a copy of the current intercept snapshot
+func (tm *TrafficManager) getCurrentIntercepts() []*intercept {
 	// Copy the current snapshot
 	tm.currentInterceptsLock.Lock()
-	intercepts := make([]*manager.InterceptInfo, len(tm.currentIntercepts))
-	for i, ii := range tm.currentIntercepts {
-		intercepts[i] = proto.Clone(ii).(*manager.InterceptInfo)
+	sz := len(tm.currentIntercepts)
+	intercepts := make([]*intercept, sz)
+	ids := make([]string, sz)
+	idx := 0
+	for id := range tm.currentIntercepts {
+		ids[idx] = id
+		idx++
+	}
+	sort.Strings(ids)
+	for idx, id := range ids {
+		intercepts[idx] = tm.currentIntercepts[id]
 	}
 	tm.currentInterceptsLock.Unlock()
-
-	// Amend with local info
-	for _, ii := range intercepts {
-		ii.ClientMountPoint = tm.mountPointForIntercept(ii.Spec.Name)
-	}
 	return intercepts
 }
 
-func (tm *TrafficManager) setCurrentIntercepts(ctx context.Context, intercepts []*manager.InterceptInfo) {
+// getCurrentInterceptInfos returns the InterceptInfos of the current intercept snapshot
+func (tm *TrafficManager) getCurrentInterceptInfos() []*manager.InterceptInfo {
+	// Copy the current snapshot
+	ics := tm.getCurrentIntercepts()
+	ifs := make([]*manager.InterceptInfo, len(ics))
+	for idx, ic := range ics {
+		ifs[idx] = ic.InterceptInfo
+	}
+	return ifs
+}
+
+func (tm *TrafficManager) setCurrentIntercepts(ctx context.Context, iis []*manager.InterceptInfo) {
 	tm.currentInterceptsLock.Lock()
+	defer tm.currentInterceptsLock.Unlock()
+	intercepts := make(map[string]*intercept, len(iis))
+	sb := strings.Builder{}
+	sb.WriteByte('[')
+	for i, ii := range iis {
+		ic, ok := tm.currentIntercepts[ii.Id]
+		if ok {
+			// retain ClientMountPoint, it's assigned in the client and never passed from the traffic-manager
+			ii.ClientMountPoint = ic.ClientMountPoint
+			ic.InterceptInfo = ii
+		} else {
+			ic = &intercept{InterceptInfo: ii}
+			ic.ctx, ic.cancel = context.WithCancel(ctx)
+			dlog.Debugf(ctx, "Received new intercept %s", ic.Spec.Name)
+			if aw, ok := tm.interceptWaiters[ii.Spec.Name]; ok {
+				ic.ClientMountPoint = aw.mountPoint
+			}
+		}
+		intercepts[ii.Id] = ic
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(ii.Spec.Name)
+	}
+	sb.WriteByte(']')
+	dlog.Debugf(ctx, "setCurrentIntercepts(%s)", sb.String())
+
+	// Cancel those that no longer exists
+	for id, ic := range tm.currentIntercepts {
+		if _, ok := intercepts[id]; !ok {
+			dlog.Debugf(ctx, "Cancelling context for intercept %s", ic.Spec.Name)
+			ic.cancel()
+		}
+	}
 	tm.currentIntercepts = intercepts
 	tm.reconcileAPIServers(ctx)
-	tm.currentInterceptsLock.Unlock()
 }
 
 func interceptError(tp common.InterceptError, err error) *rpc.InterceptResult {
@@ -345,6 +450,33 @@ func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
 	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
 }
 
+func (tm *TrafficManager) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
+	tm.currentInterceptsLock.Lock()
+	defer tm.currentInterceptsLock.Unlock()
+	spec := ir.Spec
+	for _, iCept := range tm.currentIntercepts {
+		switch {
+		case iCept.Spec.Name == spec.Name:
+			return interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
+		case iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost:
+			return &rpc.InterceptResult{
+				Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
+				ErrorText:     spec.Name,
+				ErrorCategory: int32(errcat.User),
+				InterceptInfo: iCept.InterceptInfo,
+			}
+		case ir.MountPoint != "" && iCept.ClientMountPoint == ir.MountPoint:
+			return &rpc.InterceptResult{
+				Error:         common.InterceptError_MOUNT_POINT_BUSY,
+				ErrorText:     spec.Name,
+				ErrorCategory: int32(errcat.User),
+				InterceptInfo: iCept.InterceptInfo,
+			}
+		}
+	}
+	return nil
+}
+
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
@@ -361,18 +493,8 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		return nil, interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
 	}
 
-	for _, iCept := range tm.getCurrentIntercepts() {
-		if iCept.Spec.Name == spec.Name {
-			return nil, interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
-		}
-		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
-			return nil, &rpc.InterceptResult{
-				Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
-				ErrorText:     spec.Name,
-				ErrorCategory: int32(errcat.User),
-				InterceptInfo: iCept,
-			}
-		}
+	if er := tm.ensureNoInterceptConflict(ir); er != nil {
+		return nil, er
 	}
 	if spec.Agent == "" {
 		return nil, nil
@@ -538,25 +660,6 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	spec.ServiceUid = result.ServiceUid
 	spec.WorkloadKind = result.WorkloadKind
 
-	deleteMount := false
-	if !ir.IsPodDaemon {
-		if ir.MountPoint != "" {
-			// Ensure that the mount-point is free to use
-			if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
-				return interceptError(common.InterceptError_MOUNT_POINT_BUSY, errcat.User.Newf(prev.(string))), nil
-			}
-
-			// Assume that the mount-point should to be removed from the busy map. Only a happy path
-			// to successful intercept that actually has remote mounts will set this to false.
-			deleteMount = true
-			defer func() {
-				if deleteMount {
-					tm.mountPoints.Delete(ir.MountPoint)
-				}
-			}()
-		}
-	}
-
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	tos := &client.GetConfig(c).Timeouts
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
@@ -566,12 +669,20 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
-	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel
-	tm.activeInterceptsWaiters.Store(spec.Name, waitCh)
+	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel,
+	tm.currentInterceptsLock.Lock()
+	tm.interceptWaiters[spec.Name] = &awaitIntercept{
+		mountPoint: ir.MountPoint,
+		waitCh:     waitCh,
+	}
+	tm.currentInterceptsLock.Unlock()
 	defer func() {
-		if wc, loaded := tm.activeInterceptsWaiters.LoadAndDelete(spec.Name); loaded {
-			close(wc.(chan interceptResult))
+		tm.currentInterceptsLock.Lock()
+		if _, ok := tm.interceptWaiters[spec.Name]; ok {
+			delete(tm.interceptWaiters, spec.Name)
+			close(waitCh)
 		}
+		tm.currentInterceptsLock.Unlock()
 	}()
 
 	var ii *manager.InterceptInfo
@@ -625,7 +736,8 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 			if wr.err != nil {
 				return interceptError(common.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err)), nil
 			}
-			ii = wr.intercept
+			ic := wr.intercept
+			ii = ic.InterceptInfo
 			if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
 				continue
 			}
@@ -634,143 +746,9 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
-			if !ir.IsPodDaemon {
-				mountPoint := tm.mountPointForIntercept(ii.Spec.Name)
-				if mountPoint != "" && ii.SftpPort > 0 {
-					deleteMount = false // Mount-point is busy until intercept ends
-					ii.ClientMountPoint = mountPoint
-				}
-			}
 			success = true
 			return result, nil
 		}
-	}
-}
-
-// shouldForward returns true if the intercept info given should result in mounts or ports being forwarded
-func (tm *TrafficManager) shouldForward(ii *manager.InterceptInfo) bool {
-	return ii.SftpPort > 0 || len(ii.Spec.LocalPorts) > 0
-}
-
-// startForwards starts port forwards and mounts for the given forwardKey.
-// It assumes that the user has called shouldForward and is sure that something will be started.
-func (tm *TrafficManager) startForwards(ctx context.Context, wg *sync.WaitGroup, fk forwardKey, sftpPort int32, remoteMountPoint string, localPorts []string) {
-	if sftpPort > 0 {
-		// There's nothing to mount if the SftpPort is zero
-		mntCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", fk.PodIP, sftpPort))
-		wg.Add(1)
-		go tm.workerMountForwardIntercept(mntCtx, mountForward{fk, sftpPort, remoteMountPoint}, wg)
-	}
-	for _, port := range localPorts {
-		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", fk.PodIP, port))
-		wg.Add(1)
-		go tm.workerPortForwardIntercept(pfCtx, portForward{fk, port}, wg)
-	}
-}
-
-func (tm *TrafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
-	defer wg.Done()
-	pp, err := agentconfig.NewPortAndProto(pf.Port)
-	if err != nil {
-		dlog.Errorf(ctx, "malformed extra port %q: %v", pf.Port, err)
-		return
-	}
-	addr, err := pp.Addr()
-	if err != nil {
-		dlog.Errorf(ctx, "unable to resolve extra port %q: %v", pf.Port, err)
-		return
-	}
-	f := forwarder.NewInterceptor(addr, pf.PodIP, pp.Port)
-	err = f.Serve(ctx, nil)
-	if err != nil && ctx.Err() == nil {
-		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
-	}
-}
-
-func (tm *TrafficManager) mountPointForIntercept(name string) (mountPoint string) {
-	tm.mountPoints.Range(func(key, value any) bool {
-		if name == value.(string) {
-			mountPoint = key.(string)
-			return false
-		}
-		return true
-	})
-	return
-}
-
-func (tm *TrafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	mountPoint := tm.mountPointForIntercept(mf.Name)
-	if mountPoint == "" {
-		// User has explicitly specified that no mount should take place
-		dlog.Infof(ctx, "No mount point found for intercept %q", mf.Name)
-		return
-	}
-
-	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
-
-	// The mounts performed here are synced on by podIP + sftpPort to keep track of active
-	// mounts. This is not enough in situations when a pod is deleted and another pod
-	// takes over. That is two different IPs so an additional synchronization on the actual
-	// mount point is necessary to prevent that it is established and deleted at the same
-	// time.
-	mountMutex := new(sync.Mutex)
-	mountMutex.Lock()
-	if oldMutex, loaded := tm.mountMutexes.LoadOrStore(mountPoint, mountMutex); loaded {
-		mountMutex.Unlock() // not stored, so unlock and throw away
-		mountMutex = oldMutex.(*sync.Mutex)
-		mountMutex.Lock()
-	}
-
-	defer func() {
-		tm.mountMutexes.Delete(mountPoint)
-		mountMutex.Unlock()
-	}()
-
-	// Retry mount in case it gets disconnected
-	err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
-		dl := &net.Dialer{Timeout: 3 * time.Second}
-		conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", mf.PodIP, mf.SftpPort))
-		if err != nil {
-			return err
-		}
-		defer conn.Close()
-		sshfsArgs := []string{
-			"-F", "none", // don't load the user's config file
-			"-f", // foreground operation
-
-			// connection settings
-			"-C", // compression
-			"-oConnectTimeout=10",
-			"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-			"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-			"-o", "slave",                    // Unencrypted via stdin/stdout
-
-			// mount directives
-			"-o", "follow_symlinks",
-			"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-			"localhost:" + mf.RemoteMountPoint, // what to mount
-			mountPoint,                         // where to mount it
-		}
-		exe := "sshfs"
-		if runtime.GOOS == "windows" {
-			// Use sshfs-win to launch the sshfs
-			sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
-			exe = "sshfs-win"
-		}
-		err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
-		time.Sleep(time.Second)
-
-		// sshfs sometimes leave the mount point in a bad state. This will clean it up
-		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
-		defer cancel()
-		_ = proc.CommandContext(ctx, "fusermount", "-uz", mountPoint).Run()
-		return err
-	}, 3*time.Second, 6*time.Second)
-
-	if err != nil && ctx.Err() == nil {
-		dlog.Error(ctx, err)
 	}
 }
 
@@ -782,14 +760,7 @@ func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error 
 		return tm.RemoveLocalOnlyIntercept(c, name, ns)
 	}
 
-	var ii *manager.InterceptInfo
-	for _, cept := range tm.getCurrentIntercepts() {
-		if cept.Spec.Name == name {
-			ii = cept
-			break
-		}
-	}
-
+	ii := tm.getInterceptByName(name)
 	if ii == nil {
 		dlog.Debugf(c, "Intercept %s was already removed", name)
 		return nil
@@ -797,20 +768,14 @@ func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error 
 	return tm.removeIntercept(c, ii)
 }
 
-func (tm *TrafficManager) removeIntercept(c context.Context, ii *manager.InterceptInfo) error {
-	tm.currentInterceptsLock.Lock()
-	pid, ok := tm.currentInterceptors[ii.Id]
-	if ok {
-		delete(tm.currentInterceptors, ii.Id)
-	}
-	tm.currentInterceptsLock.Unlock()
-	name := ii.Spec.Name
-	if ok {
-		p, err := os.FindProcess(pid)
+func (tm *TrafficManager) removeIntercept(c context.Context, ic *intercept) error {
+	name := ic.Spec.Name
+	if ic.pid != 0 {
+		p, err := os.FindProcess(ic.pid)
 		if err != nil {
-			dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, pid)
+			dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, ic.pid)
 		} else {
-			dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, pid)
+			dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, ic.pid)
 			_ = proc.Terminate(p)
 		}
 	}
@@ -827,14 +792,18 @@ func (tm *TrafficManager) removeIntercept(c context.Context, ii *manager.Interce
 // the running process will be signalled when the intercept is removed
 func (tm *TrafficManager) AddInterceptor(s string, i int) error {
 	tm.currentInterceptsLock.Lock()
-	tm.currentInterceptors[s] = i
+	if ci, ok := tm.currentIntercepts[s]; ok {
+		ci.pid = i
+	}
 	tm.currentInterceptsLock.Unlock()
 	return nil
 }
 
 func (tm *TrafficManager) RemoveInterceptor(s string) error {
 	tm.currentInterceptsLock.Lock()
-	delete(tm.currentInterceptors, s)
+	if ci, ok := tm.currentIntercepts[s]; ok {
+		ci.pid = 0
+	}
 	tm.currentInterceptsLock.Unlock()
 	return nil
 }
@@ -844,20 +813,31 @@ func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
 	if ns, ok := tm.localIntercepts[name]; ok {
 		return &manager.InterceptSpec{Name: name, Namespace: ns, WorkloadKind: "local"}
 	}
-	for _, cept := range tm.getCurrentIntercepts() {
-		if cept.Spec.Name == name {
-			return cept.Spec
-		}
+	if ic := tm.getInterceptByName(name); ic != nil {
+		return ic.Spec
 	}
 	return nil
+}
+
+// GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists
+func (tm *TrafficManager) getInterceptByName(name string) (found *intercept) {
+	tm.currentInterceptsLock.Lock()
+	for _, ic := range tm.currentIntercepts {
+		if ic.Spec.Name == name {
+			found = ic
+			break
+		}
+	}
+	tm.currentInterceptsLock.Unlock()
+	return found
 }
 
 // InterceptsForWorkload returns the client's current intercepts on the given namespace and workload combination
 func (tm *TrafficManager) InterceptsForWorkload(workloadName, namespace string) []*manager.InterceptSpec {
 	wlis := make([]*manager.InterceptSpec, 0)
-	for _, cept := range tm.getCurrentIntercepts() {
-		if cept.Spec.Agent == workloadName && cept.Spec.Namespace == namespace {
-			wlis = append(wlis, cept.Spec)
+	for _, ic := range tm.getCurrentIntercepts() {
+		if ic.Spec.Agent == workloadName && ic.Spec.Namespace == namespace {
+			wlis = append(wlis, ic.Spec)
 		}
 	}
 	return wlis
@@ -865,9 +845,9 @@ func (tm *TrafficManager) InterceptsForWorkload(workloadName, namespace string) 
 
 // ClearIntercepts removes all intercepts
 func (tm *TrafficManager) ClearIntercepts(c context.Context) error {
-	for _, cept := range tm.getCurrentIntercepts() {
-		dlog.Debugf(c, "Clearing intercept %s", cept.Spec.Name)
-		err := tm.removeIntercept(c, cept)
+	for _, ic := range tm.getCurrentIntercepts() {
+		dlog.Debugf(c, "Clearing intercept %s", ic.Spec.Name)
+		err := tm.removeIntercept(c, ic)
 		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {
 			return err
 		}
@@ -894,10 +874,11 @@ func (tm *TrafficManager) reconcileAPIServers(ctx context.Context) {
 	}
 
 	for _, ic := range tm.currentIntercepts {
+		ii := ic.InterceptInfo
 		if ic.Disposition == manager.InterceptDispositionType_ACTIVE {
-			if port := agentAPIPort(ic); port > 0 {
+			if port := agentAPIPort(ii); port > 0 {
 				wantedPorts[port] = struct{}{}
-				wantedMatchers[ic.Id] = ic
+				wantedMatchers[ic.Id] = ii
 			}
 		}
 	}

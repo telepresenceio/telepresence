@@ -24,14 +24,6 @@ BINDIR=$(BUILDDIR)/bin
 
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
-# Build statically on linux platforms so that the binary can be used in
-# alpine containers and the like, where libc is different.
-ifeq ($(GOHOSTOS),linux)
-CGO_ENABLED=0
-else
-CGO_ENABLED=1
-endif
-
 # DOCKER_BUILDKIT is _required_ by our Dockerfile, since we use
 # Dockerfile extensions for the Go build cache.  See
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
@@ -93,9 +85,12 @@ PKG_VERSION = $(shell go list ./pkg/version)
 # Build: artifacts that don't get checked in to Git
 # =================================================
 
+# Build using CGO_ENABLED=1 on all platforms except windows.
 ifeq ($(GOHOSTOS),windows)
+CGO_ENABLED=0
 TELEPRESENCE=$(BINDIR)/telepresence.exe
 else
+CGO_ENABLED=1
 TELEPRESENCE=$(BINDIR)/telepresence
 endif
 
@@ -227,8 +222,10 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 lint-deps: ## (QA) Everything necessary to lint
 lint-deps: $(tools/golangci-lint)
 lint-deps: $(tools/protolint)
-lint-deps: $(tools/shellcheck)
 lint-deps: $(tools/helm)
+ifneq ($(GOHOSTOS), windows)
+lint-deps: $(tools/shellcheck)
+endif
 
 .PHONY: build-tests
 build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
@@ -238,13 +235,15 @@ shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/push_chart.sh
 shellscripts += ./packaging/windows-package.sh
-.PHONY: lint
-lint: lint-deps ## (QA) Run the linters
-	GOOS=linux   $(tools/golangci-lint) run --timeout 5m ./...
-	GOOS=darwin  $(tools/golangci-lint) run --timeout 5m ./...
-	GOOS=windows $(tools/golangci-lint) run --timeout 5m ./...
+.PHONY: lint lint-rpc
+lint: lint-rpc ## (QA) Run the linter
+	CGO_ENABLED=$(CGO_ENABLED) $(tools/golangci-lint) run --timeout 8m ./...
+
+lint-rpc: lint-deps ## (QA) Run rpc linter
 	$(tools/protolint) lint rpc
+ifneq ($(GOHOSTOS), windows)
 	$(tools/shellcheck) $(shellscripts)
+endif
 	tmpdir=$$(mktemp -d) && trap 'rm -rf "$$tmpdir"' EXIT && go run ./packaging/gen_chart.go "$$tmpdir" && $(tools/helm) lint "$$tmpdir"/*.tgz --set isCI=true
 
 .PHONY: format
@@ -257,22 +256,22 @@ check-all: ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-unit
 check-unit: ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -timeout=20m ./cmd/... ./pkg/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-integration
-check-integration: tools/bin/helm ## (QA) Run the test suite
+check-integration: $(tools/helm) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=39m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=39m ./integration_test/...
 
 .PHONY: _login
 _login:
