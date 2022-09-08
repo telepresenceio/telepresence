@@ -1,9 +1,7 @@
 package state
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -14,12 +12,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
+	events "k8s.io/api/events/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -69,6 +69,11 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return interceptError(err)
 	}
 
+	failedCreateCh, err := watchFailedInjectionEvents(ctx, spec.Agent, spec.Namespace)
+	if err != nil {
+		return interceptError(err)
+	}
+
 	ac, err := s.getOrCreateAgentConfig(ctx, wl, spec.Mechanism != "tcp")
 	if err != nil {
 		return interceptError(err)
@@ -77,7 +82,7 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	if err != nil {
 		return interceptError(err)
 	}
-	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace); err != nil {
+	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
 		return interceptError(err)
 	}
 	return &managerrpc.PreparedIntercept{
@@ -89,33 +94,6 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		AgentImage:      ac.AgentImage,
 		WorkloadKind:    ac.WorkloadKind,
 	}, nil
-}
-
-func (s *State) qualifiedAgentImage(ctx context.Context, extended bool) (img string, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cachedAgentImage != "" {
-		return s.cachedAgentImage, nil
-	}
-	// We can't use managerutil.GetAgentImage here because if extended is true we can't use the OSS image that it might return
-	env := managerutil.GetEnv(ctx)
-	if env.AgentImage == "" {
-		img, err = managerutil.AgentImageFromSystemA(ctx)
-		if err != nil {
-			msg := fmt.Sprintf("unable to get Ambassador Cloud preferred agent image: %v", err)
-			if extended {
-				return "", errors.New(msg)
-			}
-			dlog.Warning(ctx, msg)
-		}
-	}
-	if img == "" {
-		img = env.QualifiedAgentImage()
-	}
-	if extended {
-		s.cachedAgentImage = img
-	}
-	return img, nil
 }
 
 func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
@@ -199,9 +177,14 @@ func (s *State) loadAgentConfig(
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
-	agentImage, err := s.qualifiedAgentImage(ctx, extended)
-	if err != nil {
-		return nil, err
+	var agentImage string
+	if extended {
+		agentImage, err = managerutil.GetExtendedAgentImage(ctx)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		agentImage = managerutil.GetAgentImage(ctx)
 	}
 	span.SetAttributes(
 		attribute.String("tel2.agent-image", agentImage),
@@ -216,11 +199,11 @@ func (s *State) loadAgentConfig(
 			attribute.String("tel2.cm-namespace", wl.GetNamespace()),
 		))
 		defer tracing.EndAndRecord(span, err)
-		bf := bytes.Buffer{}
-		if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+		js, err := yaml.Marshal(ac)
+		if err != nil {
 			return err
 		}
-		cm.Data[wl.GetName()] = bf.String()
+		cm.Data[wl.GetName()] = string(js)
 		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
 		}
@@ -253,8 +236,11 @@ func (s *State) loadAgentConfig(
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
-		ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage))
-		if err != nil {
+		var gc *agentmap.GeneratorConfig
+		if gc, err = managerutil.GetEnv(ctx).GeneratorConfig(agentImage); err != nil {
+			return nil, err
+		}
+		if ac, err = agentmap.Generate(ctx, wl, gc); err != nil {
 			return nil, err
 		}
 		if err = update(); err != nil {
@@ -355,10 +341,68 @@ func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface,
 	}
 }
 
-func (s *State) waitForAgent(ctx context.Context, name, namespace string) error {
+func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-chan *events.Event, error) {
+	// A timestamp with second granularity is needed here, because that's what the event creation time uses.
+	// Finer granularity will result in relevant events seemingly being created before this timestamp because
+	// they have the fraction of seconds trimmed off (which is odd, given that the type used is a MicroTime).
+	start := time.Unix(time.Now().Unix(), 0)
+
+	ei := k8sapi.GetK8sInterface(ctx).EventsV1().Events(namespace)
+	w, err := ei.Watch(ctx, meta.ListOptions{
+		FieldSelector: fields.OneTermNotEqualSelector("type", "Normal").String()})
+	if err != nil {
+		return nil, err
+	}
+	nd := name + "-"
+	ec := make(chan *events.Event)
+	go func() {
+		defer w.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case eo, ok := <-w.ResultChan():
+				if !ok {
+					return
+				}
+				// Using a negated Before when comparing the timestamps here is relevant. They will often be equal and still relevant
+				if e, ok := eo.Object.(*events.Event); ok &&
+					!e.CreationTimestamp.Time.Before(start) &&
+					!strings.HasPrefix(e.Note, "(combined from similar events):") {
+					n := e.Regarding.Name
+					if strings.HasPrefix(n, nd) || n == name {
+						dlog.Errorf(ctx, "%s", e.Note)
+						ec <- e
+					}
+				}
+			}
+		}
+	}()
+	return ec, nil
+}
+
+func (s *State) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
 	snapshotCh := s.WatchAgents(ctx, nil)
 	for {
 		select {
+		case fe, ok := <-failedCreateCh:
+			if ok {
+				msg := fe.Note
+				switch fe.Reason {
+				case "Unhealthy":
+					// Let readiness probe continue, this isn't fatal
+					continue
+				case "BackOff":
+					// The traffic-agent container was injected, but it fails to start
+					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
+				case "FailedCreate", "FailedScheduling":
+					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
+					msg = fmt.Sprintf(
+						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
+						msg)
+				}
+				return errcat.User.New(msg)
+			}
 		case snapshot, ok := <-snapshotCh:
 			if !ok {
 				// The request has been canceled.

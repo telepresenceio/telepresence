@@ -64,6 +64,13 @@ rules:
   - list
   - patch
   - update # Only needed for upgrade of older versions
+- apiGroups:
+    - "events.k8s.io"
+  resources:
+    - events
+  verbs:
+    - get
+    - watch
 {{- if eq . (include "telepresence.namespace" $) }}
 # Must be able to get the manager namespace in order to get the cluster-id
 - apiGroups:

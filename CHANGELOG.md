@@ -2,6 +2,13 @@
 
 ### 2.7.4 (TBD)
 
+- Feature: The `resources` for the traffic-agent container and the optional init container can
+  be specified in the Helm chart using the `resource` and `initResource` fields of the
+  `agentInjector.agentImage`.
+
+- Feature: When the traffic-manager fails to inject a traffic-agent, the cause for the failure is
+  detected by reading the cluster events, and propagated to the user.
+
 - Feature: Telepresence can now use an embedded FTP client and load an existing FUSE library
   instead of running an external `sshfs` or `sshfs-win` binary. This feature is experimental
   in 2.7.x and enabled by setting `intercept.useFtp` to `true` in the `config.yml`.
@@ -11,7 +18,7 @@
 - Bugfix: Running CLI commands on Apple M1 machines will no longer throw warnings about `/proc/cpuinfo`
   and `/proc/self/auxv`.
 
-### 2.7.3 (September 7, 2022)
+### 2.7.3 (TBD)
 
 - Bugfix: CLI commands that are executed by the user daemon now use a pseudo TTY. This enables
   `docker run -it` to allocate a TTY and will also give other commands like `bash read` the

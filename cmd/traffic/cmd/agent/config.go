@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"go.opentelemetry.io/otel/attribute"
-	"gopkg.in/yaml.v2"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -34,14 +34,13 @@ var skipKeys = map[string]bool{
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
-	cf, err := dos.Open(ctx, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile))
+	bs, err := dos.ReadFile(ctx, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile))
 	if err != nil {
 		return nil, fmt.Errorf("unable to open agent ConfigMap: %w", err)
 	}
-	defer cf.Close()
 
 	c := config{}
-	if err = yaml.NewDecoder(cf).Decode(&c.Sidecar); err != nil {
+	if err = yaml.Unmarshal(bs, &c.Sidecar); err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")

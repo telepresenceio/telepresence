@@ -180,6 +180,8 @@ agentInjector:
     registry: docker.io/datawire
     name: ""
     tag: ""
+    resources: {}
+    initResources: {}
   service:
     type: ClusterIP
     ports:

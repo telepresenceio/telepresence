@@ -1,10 +1,8 @@
 package mutator
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,12 +10,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/yaml"
+
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
@@ -38,10 +38,10 @@ type Map interface {
 }
 
 func decode(v string, into any) error {
-	return yaml.NewDecoder(strings.NewReader(v)).Decode(into)
+	return yaml.Unmarshal([]byte(v), into)
 }
 
-func Load(ctx context.Context, namespace string) (m Map, err error) {
+func Load(ctx context.Context) (m Map, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
@@ -114,6 +114,73 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
 }
 
+// RegenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
+// and then, if any of the entries changed, it updates the map.
+func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
+	env := managerutil.GetEnv(ctx)
+	gc, err := env.GeneratorConfig(agentImage)
+	if err != nil {
+		return err
+	}
+	nss := env.GetManagedNamespaces()
+	if len(nss) == 0 {
+		return regenerateAgentMaps(ctx, "", gc)
+	}
+	for _, ns := range nss {
+		if err = regenerateAgentMaps(ctx, ns, gc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// regenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
+// and then, if any of the entries changed, it updates the map.
+func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorConfig) error {
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	cml, err := api.ConfigMaps(ns).List(ctx, meta.SingleObject(meta.ObjectMeta{
+		Name: agentconfig.ConfigMap,
+	}))
+	if err != nil {
+		return err
+	}
+	cms := cml.Items
+	for i := range cms {
+		cm := &cms[i]
+		changed := false
+		ns := cm.Namespace
+		for n, d := range cm.Data {
+			e := &entry{name: n, namespace: ns, value: d}
+			ac, wl, err := e.workload(ctx)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					return err
+				}
+				delete(cm.Data, n) // Workload no longer exists
+				changed = true
+				continue
+			}
+			nc, err := agentmap.Generate(ctx, wl, gc)
+			if err != nil {
+				return err
+			}
+			if cmp.Equal(ac, nc) {
+				continue
+			}
+			js, err := yaml.Marshal(nc)
+			if err != nil {
+				return err
+			}
+			cm.Data[n] = string(js)
+			changed = true
+		}
+		if changed {
+			_, err = api.ConfigMaps(ns).Update(ctx, cm, meta.UpdateOptions{})
+		}
+	}
+	return err
+}
+
 func NewWatcher(name string, namespaces ...string) *configWatcher {
 	return &configWatcher{
 		name:       name,
@@ -145,7 +212,6 @@ func (c *configWatcher) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var agentImage string
 	for {
 		select {
 		case <-ctx.Done():
@@ -153,12 +219,12 @@ func (c *configWatcher) Run(ctx context.Context) error {
 		case e := <-delCh:
 			c.handleDelete(ctx, e)
 		case e := <-addCh:
-			c.handleAdd(ctx, e, agentImage)
+			c.handleAdd(ctx, e)
 		}
 	}
 }
 
-func (c *configWatcher) handleAdd(ctx context.Context, e entry, agentImage string) {
+func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
 		trace.WithNewRoot(),
 		trace.WithLinks(e.link),
@@ -180,10 +246,12 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry, agentImage strin
 		return
 	}
 	if ac.Create {
-		if agentImage == "" {
-			agentImage = managerutil.GetAgentImage(ctx)
+		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+		if err != nil {
+			dlog.Error(ctx, err)
+			return
 		}
-		if ac, err = agentmap.Generate(ctx, wl, managerutil.GetEnv(ctx).GeneratorConfig(agentImage)); err != nil {
+		if ac, err = agentmap.Generate(ctx, wl, gc); err != nil {
 			dlog.Error(ctx, err)
 		} else if err = c.Store(ctx, ac, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
@@ -266,12 +334,12 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 // also update the current snapshot if the updateSnapshot is true. This update will prevent
 // the rollout that otherwise occur when the ConfigMap is updated.
 func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, updateSnapshot bool) error {
-	bf := bytes.Buffer{}
-	if err := yaml.NewEncoder(&bf).Encode(ac); err != nil {
+	js, err := yaml.Marshal(ac)
+	if err != nil {
 		return err
 	}
 
-	yml := bf.String()
+	yml := string(js)
 	ns := ac.Namespace
 	c.RLock()
 	var eq bool
@@ -525,7 +593,11 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
 	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
 	// If so, include them, or if workload for the config entry isn't found, delete that entry
-	cfg := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
 	for _, ac := range c.affectedConfigs(ctx, svc, isDelete) {
 		wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 		if err != nil {
@@ -666,7 +738,11 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
 		}
 	}
-	gc := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
 	for _, wl := range affectedWorkloads {
 		ac, err := agentmap.Generate(ctx, wl, gc)
 		if err == nil {
