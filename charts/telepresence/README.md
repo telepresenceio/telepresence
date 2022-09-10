@@ -25,7 +25,7 @@ Notable chart changes are listed in the [CHANGELOG](./CHANGELOG.md)
 The following tables lists the configurable parameters of the Ambassador chart and their default values.
 
 | Parameter                                      | Description                                                                                                               | Default                                                                     |
-|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | image.registry                                 | The repository to download the image from. Set `TELEPRESENCE_REGISTRY=image.registry` locally if changing this value.     | `docker.io/datawire`                                                        |
 | image.name                                     | The name of the image to use for the traffic-manager                                                                      | `tel2`                                                                      |
 | image.pullPolicy                               | How the `Pod` will attempt to pull the image.                                                                             | `IfNotPresent`                                                              |
@@ -86,6 +86,9 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | hooks.resources                                | Define resource requests and limits for the chart hooks                                                                   | `{}`                                                                        |
 | dnsConfig.alsoProxySubnets                     | Telepresence daemons connected to this manager will also proxy these subnets                                              | `[]`                                                                        |
 | dnsConfig.neverProxySubnets                    | Telepresence daemons connected to this manager will never proxy these subnets                                             | `[]`                                                                        |
+| ambassadorAgent.enable                         | Set to false to disable ambassador-agent                                                                                  | true                                                                        |
+| ambassadorAgent.image.repository               | Sets the repository for the ambassador-agent                                                                              | ""                                                                          |
+| ambassadorAgent.image.tag                      | Sets the tag for the ambassador-agent                                                                                     | ""                                                                          |
 
 ## License Key
 
