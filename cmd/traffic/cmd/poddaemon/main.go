@@ -12,6 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/go-fuseftp/rpc"
 	rpc_userd "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc_manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -146,7 +147,11 @@ func main(ctx context.Context, args *Args) error {
 
 	grp.Go("telemetry", scoutReporter.Run)
 	grp.Go("session", func(ctx context.Context) error {
-		return userdCoreImpl.ManageSessions(ctx, []trafficmgr.SessionService{})
+		// Provide a closed channel for the fuseftp client for now.
+		// TODO: perhaps provide the real thing if we decide to embed the fuseftp binary
+		fuseftpCh := make(chan rpc.FuseFTPClient)
+		close(fuseftpCh)
+		return userdCoreImpl.ManageSessions(ctx, []trafficmgr.SessionService{}, <-fuseftpCh)
 	})
 	grp.Go("main", func(ctx context.Context) error {
 		dlog.Infof(ctx, "Connecting to traffic manager...")

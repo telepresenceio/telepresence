@@ -10,13 +10,16 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/go-fuseftp/pkg/fs"
+	"github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -26,7 +29,7 @@ func (ic *intercept) shouldMount() bool {
 
 // startMount starts the mount for the given podInterceptKey.
 // It assumes that the user has called shouldMount and is sure that something will be started.
-func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
+func (ic *intercept) startMount(ctx context.Context, fuseftp rpc.FuseFTPClient, podWG *sync.WaitGroup) {
 	useFtp := client.GetConfig(ctx).Intercept.UseFtp
 	switch {
 	case ic.FtpPort == 0 && useFtp:
@@ -40,7 +43,7 @@ func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
 	m := ic.mounter
 	if m == nil {
 		if useFtp {
-			m = &ftpMounter{}
+			m = &ftpMounter{client: fuseftp}
 		} else {
 			m = &sftpMounter{podWG: podWG}
 		}
@@ -53,7 +56,8 @@ func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
 }
 
 type ftpMounter struct {
-	client fs.FTPClient
+	client rpc.FuseFTPClient
+	id     *rpc.MountIdentifier
 }
 
 func (m *ftpMounter) start(_ context.Context, ic *intercept) error {
@@ -61,30 +65,46 @@ func (m *ftpMounter) start(_ context.Context, ic *intercept) error {
 	// is passed as a parameter, because those services will survive pod changes.
 	ctx := ic.ctx
 	addr := netip.MustParseAddrPort(fmt.Sprintf("%s:%d", ic.PodIp, ic.FtpPort))
-	if m.client == nil {
+	if m.id == nil {
 		dlog.Infof(ctx, "Mounting FTP file system for intercept %q (address %s) at %q", ic.Id, addr, ic.ClientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
 		rmp := strings.TrimPrefix(ic.MountPoint, agentconfig.ExportsMountPoint)
-
-		client, err := fs.NewFTPClient(ctx, addr, rmp, 5*time.Second)
+		id, err := m.client.Mount(ctx, &rpc.MountRequest{
+			MountPoint: ic.ClientMountPoint,
+			FtpServer: &rpc.AddressAndPort{
+				Ip:   iputil.Parse(ic.PodIp),
+				Port: ic.FtpPort,
+			},
+			ReadTimeout: durationpb.New(5 * time.Second),
+			Directory:   rmp,
+		})
 		if err != nil {
 			return err
 		}
-		m.client = client
-		host := fs.NewHost(m.client, ic.ClientMountPoint)
-		host.Start(ctx)
+		m.id = id
+
+		// Ensure unmount when intercept context is cancelled
 		go func() {
-			// Stop when the intercept dies (but not when the pod changes)
-			<-ctx.Done()
-			defer dlog.Infof(ctx, "Unmounting FTP file system for intercept %q (address %s) at %q", ic.Id, addr, ic.ClientMountPoint)
-			host.Stop()
+			<-ic.ctx.Done()
+			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
+			defer cancel()
+			if _, err = m.client.Unmount(ctx, m.id); err != nil {
+				dlog.Error(ctx, err)
+			}
 		}()
 		return nil
 	}
 
 	// Assign a new address to the FTP client. This kills any open connections but leaves the FUSE driver intact
 	dlog.Infof(ctx, "Switching remote address to %s for FTP file system for intercept %q at %q", addr, ic.Id, ic.ClientMountPoint)
-	return m.client.SetAddress(ctx, addr)
+	_, err := m.client.SetFtpServer(ctx, &rpc.SetFtpServerRequest{
+		FtpServer: &rpc.AddressAndPort{
+			Ip:   iputil.Parse(ic.PodIp),
+			Port: ic.FtpPort,
+		},
+		Id: m.id,
+	})
+	return err
 }
 
 type sftpMounter struct {

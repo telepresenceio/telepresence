@@ -118,16 +118,12 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: '1.18'
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y socat libfuse-dev gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - name: Lint
         if: steps.get_last_run.outputs.passed != 'success'
         run: make lint
       - name: "Test arm64 build"
         if: steps.get_last_run.outputs.passed != 'success'
-        run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
+        run: GOARCH=arm64 make build
       - name: "Test amd64 build"
         run: make build
         if: steps.get_last_run.outputs.passed != 'success'
