@@ -49,25 +49,6 @@ commands:
             fi
             go version
 
-  "install-macfuse":
-    steps:
-      - run:
-          name: "Install macFUSE"
-          command: |
-            set -x
-            brew update
-            brew install --cask macfuse
-
-  "install-libfuse-dev":
-    steps:
-      - run:
-          name: "Install libfuse-dev"
-          command: |
-            set -x
-            sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-            sudo apt-get update
-            sudo apt-get install -y libfuse-dev
-
 jobs:
 
   "release-linux":
@@ -75,7 +56,6 @@ jobs:
     steps:
       - checkout
       - install-go
-      - install-libfuse-dev
       - run: pip3 install awscli
       - run:
           name: Docker login
@@ -104,7 +84,6 @@ jobs:
     steps:
       - checkout
       - install-go
-      - install-macfuse
       - run: sudo pip3 install awscli
       # once we update our mac runner to a version past Catalina (12.5.1+)
       # we can remove this.  But since we all run Big Sur on our machines right now
@@ -165,7 +144,6 @@ jobs:
     steps:
     - checkout
     - install-go
-    - install-libfuse-dev
     - run: pip3 install awscli
     - run:
         name: Docker login
@@ -207,7 +185,6 @@ jobs:
     steps:
     - checkout
     - install-go
-    - install-macfuse
     - run: sudo pip3 install awscli
     - run:
         name: "Publish nightly macos (arch amd64)"
