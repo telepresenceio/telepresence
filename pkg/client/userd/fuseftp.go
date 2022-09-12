@@ -43,7 +43,7 @@ func downloadFuseFTPBinary(ctx context.Context, exe, dir string) error {
 	}
 
 	downloadURL := fmt.Sprintf(latestFuseFTPRelease, runtime.GOOS, runtime.GOARCH, suffix)
-	dlog.Debugf(ctx, "About to download telepresence-pro from %s", downloadURL)
+	dlog.Debugf(ctx, "About to download fuseftp from %s", downloadURL)
 	var resp *http.Response
 	resp, err = http.Get(downloadURL)
 	if err == nil {
