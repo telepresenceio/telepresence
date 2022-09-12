@@ -46,9 +46,9 @@ func RecordWorkloadInfo(span trace.Span, wl Workload) {
 // GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
 // is optional. A search is performed in the following order if it is empty:
 //
-//   1. Deployments
-//   2. ReplicaSets
-//   3. StatefulSets
+//  1. Deployments
+//  2. ReplicaSets
+//  3. StatefulSets
 //
 // The first match is returned.
 func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj Workload, err error) {

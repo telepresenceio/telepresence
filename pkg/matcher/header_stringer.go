@@ -9,7 +9,7 @@ import (
 // HeaderStringer turns a http.Header into a fmt.Stringer. It is useful when it's desired to defer string formatting of
 // the header depending on loglevel, for instance:
 //
-//     dlog.Debugf(c, "Header = %s", HeaderStringer(header))
+//	dlog.Debugf(c, "Header = %s", HeaderStringer(header))
 //
 // would not perform the actual formatting unless the loglevel is DEBUG or higher.
 type HeaderStringer http.Header

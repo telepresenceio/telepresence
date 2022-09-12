@@ -10,8 +10,8 @@ import (
 
 // ambassadorCloudTunnel is the intersection of these two interfaces:
 //
-//   systema.SystemAProxy_ReverseConnectionClient
-//   systema.SystemAProxy_ReverseConnectionServer
+//	systema.SystemAProxy_ReverseConnectionClient
+//	systema.SystemAProxy_ReverseConnectionServer
 type ambassadorCloudTunnel interface {
 	Send(*systema.Chunk) error
 	Recv() (*systema.Chunk, error)
@@ -19,7 +19,6 @@ type ambassadorCloudTunnel interface {
 
 // reverseConn is an unbufferedConn implementation that uses a gRPC
 // "/telepresence.systema/SystemAProxy/ReverseConnection" stream as the underlying transport.
-//
 type reverseConn struct {
 	conn  ambassadorCloudTunnel
 	close func()

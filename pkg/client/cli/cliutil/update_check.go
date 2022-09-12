@@ -54,8 +54,9 @@ func ForcedUpdateCheck(cmd *cobra.Command, _ []string) error {
 // prints a message on stdout if an update is available.
 //
 // Arguments:
-//   cmd:         the command that provides Context and stout/stderr
-//   forcedCheck: if true, perform check regardless of if it's due or not
+//
+//	cmd:         the command that provides Context and stout/stderr
+//	forcedCheck: if true, perform check regardless of if it's due or not
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	cloudCfg := client.GetConfig(cmd.Context()).Cloud
 	uc, err := NewUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))

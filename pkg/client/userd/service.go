@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -142,7 +143,7 @@ func (s *Service) configReload(c context.Context) error {
 // ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *Service) ManageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
+func (s *Service) ManageSessions(c context.Context, sessionServices []trafficmgr.SessionService, fuseFtp rpc2.FuseFTPClient) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
@@ -167,7 +168,7 @@ nextSession:
 				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
-				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices)
+				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices, fuseFtp)
 				sCtx = a8rcloud.WithSystemAPool[*SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
@@ -317,12 +318,20 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		ShutdownOnNonError:   true,
 	})
 
+	fuseFtpCh := make(chan rpc2.FuseFTPClient)
+	if cfg.Intercept.UseFtp {
+		g.Go("fuseftp-server", func(c context.Context) error {
+			return runFuseFTPServer(c, fuseFtpCh)
+		})
+	} else {
+		close(fuseFtpCh)
+	}
+
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		opts := []grpc.ServerOption{
 			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
 			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 		}
-		cfg := client.GetConfig(c)
 		if !cfg.Grpc.MaxReceiveSize.IsZero() {
 			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
 				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
@@ -354,7 +363,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		err := s.ManageSessions(c, sessionServices)
+		err := s.ManageSessions(c, sessionServices, <-fuseFtpCh)
 		cliio.Close()
 		return err
 	})

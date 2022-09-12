@@ -34,10 +34,9 @@ type request struct {
 // NewRequestFromMap creates a new Request based on the values of the given map. Aside from http headers,
 // the map may contain one of three special keys.
 //
-//   :path-equal: path will match if equal to the value
-//   :path-prefix: path will match prefixed by the value
-//   :path-regex: path will match it matches the regexp value
-//
+//	:path-equal: path will match if equal to the value
+//	:path-prefix: path will match prefixed by the value
+//	:path-regex: path will match it matches the regexp value
 func NewRequestFromMap(m map[string]string) (Request, error) {
 	var pm Value
 	hm := make(HeaderMap, len(m))
