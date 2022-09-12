@@ -12,9 +12,12 @@ import (
 	"runtime"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/go-fuseftp/rpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -91,27 +94,13 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	sf, err := os.CreateTemp("", "fuseftp-*.socket")
 	if err != nil {
 		close(cCh)
-		return err
+		return fmt.Errorf("CreateTemp failed: %w", err)
 	}
 	socketName := sf.Name()
 	_ = sf.Close()
 	_ = os.Remove(socketName)
 
-	go func() {
-		defer close(cCh)
-		if err = client.WaitUntilSocketAppears("fuseftp", socketName, 10*time.Second); err != nil {
-			return
-		}
-		conn, err := client.DialSocket(ctx, socketName)
-		if err != nil {
-			dlog.Errorf(ctx, "unable to dial fuseftp socket")
-			return
-		}
-		select {
-		case <-ctx.Done():
-		case cCh <- rpc.NewFuseFTPClient(conn):
-		}
-	}()
+	go waitForSocketAndConnect(ctx, socketName, cCh)
 
 	cmd := proc.CommandContext(ctx, qn, socketName)
 
@@ -120,4 +109,34 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	cmd.Stdout = os.Stdout
 	cmd.DisableLogging = true
 	return cmd.Run()
+}
+
+func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
+	defer close(cCh)
+	giveUp := time.After(3 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-giveUp:
+			dlog.Error(ctx, "timeout waiting for fuseftp socket")
+			return
+		default:
+			conn, err := grpc.DialContext(ctx, "unix:"+socketName,
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithNoProxy(),
+				grpc.WithBlock(),
+				grpc.FailOnNonTempDialError(true),
+			)
+			if err != nil {
+				dtime.SleepWithContext(ctx, time.Millisecond)
+				continue
+			}
+			select {
+			case <-ctx.Done():
+			case cCh <- rpc.NewFuseFTPClient(conn):
+			}
+			return
+		}
+	}
 }

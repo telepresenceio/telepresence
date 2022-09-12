@@ -35,6 +35,9 @@ func (ic *intercept) startMount(ctx context.Context, fuseftp rpc.FuseFTPClient, 
 	case ic.FtpPort == 0 && useFtp:
 		dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
 		return
+	case fuseftp == nil && useFtp:
+		dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
+		return
 	case ic.SftpPort == 0 && !useFtp:
 		dlog.Errorf(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
 		return
