@@ -32,6 +32,15 @@ export DOCKER_BUILDKIT := 1
 .PHONY: FORCE
 FORCE:
 
+# Build using CGO_ENABLED=1 on all platforms except windows.
+ifeq ($(GOOS),windows)
+CGO_ENABLED=0
+BEXE=.exe
+else
+CGO_ENABLED=1
+BEXE=
+endif
+
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
@@ -71,6 +80,7 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 
 	rm -rf vendor
 
+
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files
 	rm -rf ./rpc/vendor
@@ -79,20 +89,14 @@ generate-clean: ## (Generate) Delete generated files
 	rm -rf ./vendor
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
+	rm -f ./pkg/client/userd/fuseftp.bits
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
 # Build: artifacts that don't get checked in to Git
 # =================================================
 
-# Build using CGO_ENABLED=1 on all platforms except windows.
-ifeq ($(GOHOSTOS),windows)
-CGO_ENABLED=0
-TELEPRESENCE=$(BINDIR)/telepresence.exe
-else
-CGO_ENABLED=1
-TELEPRESENCE=$(BINDIR)/telepresence
-endif
+TELEPRESENCE=$(BINDIR)/telepresence$(BEXE)
 
 .PHONY: build
 build: $(TELEPRESENCE) ## (Build) Produce a `telepresence` binary for GOOS/GOARCH
@@ -106,6 +110,13 @@ else
 	sdkroot=
 endif
 
+FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp)
+
+pkg/client/userd/fuseftp.bits:
+	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
+
+build-deps: pkg/client/userd/fuseftp.bits
+
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1
 $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll:
@@ -118,15 +129,15 @@ $(BINDIR)/wintun.dll: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTAR
 	cp $< $@
 endif
 
-$(TELEPRESENCE): FORCE
+$(TELEPRESENCE): build-deps FORCE
 ifeq ($(GOHOSTOS),windows)
-$(TELEPRESENCE): $(BINDIR)/wintun.dll
+$(TELEPRESENCE): build-deps $(BINDIR)/wintun.dll FORCE
 endif
 	mkdir -p $(@D)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 
 .PHONY: tel2
-tel2:
+tel2: build-deps
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
@@ -219,7 +230,7 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 # ============================================
 
 .PHONY: lint-deps
-lint-deps: ## (QA) Everything necessary to lint
+lint-deps: build-deps ## (QA) Everything necessary to lint
 lint-deps: $(tools/golangci-lint)
 lint-deps: $(tools/protolint)
 lint-deps: $(tools/helm)
@@ -228,7 +239,7 @@ lint-deps: $(tools/shellcheck)
 endif
 
 .PHONY: build-tests
-build-tests: ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
+build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful for pre-loading the Go build cache.
 	go list ./... | xargs -n1 go test -c -o /dev/null
 
 shellscripts += ./packaging/homebrew-package.sh
@@ -247,12 +258,12 @@ endif
 	tmpdir=$$(mktemp -d) && trap 'rm -rf "$$tmpdir"' EXIT && go run ./packaging/gen_chart.go "$$tmpdir" && $(tools/helm) lint "$$tmpdir"/*.tgz --set isCI=true
 
 .PHONY: format
-format: $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints
+format: build-deps $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints
 	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check-all
-check-all: ## (QA) Run the test suite
+check-all: build-deps ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
@@ -260,14 +271,14 @@ check-all: ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-unit
-check-unit: ## (QA) Run the test suite
+check-unit: build-deps ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-integration
-check-integration: $(tools/helm) ## (QA) Run the test suite
+check-integration: build-deps $(tools/helm) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.

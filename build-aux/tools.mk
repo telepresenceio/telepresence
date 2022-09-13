@@ -21,8 +21,8 @@ TOOLSSRCDIR=$(TOOLSDIR)/src
 GOHOSTOS ?= $(shell go env GOHOSTOS)
 GOHOSTARCH ?= $(shell go env GOHOSTARCH)
 
-# GOARCH defaults to GOHOSTARCH but can also be set by the caller of make.
-GOARCH?=$(GOHOSTARCH)
+GOOS?=$(shell go env GOOS)
+GOARCH?=$(shell go env GOARCH)
 
 export PATH := $(abspath $(TOOLSBINDIR)):$(PATH)
 

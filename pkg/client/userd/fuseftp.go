@@ -2,11 +2,9 @@ package userd
 
 import (
 	"context"
+	_ "embed"
 	"errors"
-	"fmt"
-	"io"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -22,48 +20,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-const latestFuseFTPRelease = "https://github.com/datawire/go-fuseftp/releases/latest/download/fuseftp-%s-%s%s"
-
-// downloadFuseFTPBinary checks if the binary is present under the given dir, and if not
-// downloads the latest released version into a binary executable file.
-func downloadFuseFTPBinary(ctx context.Context, exe, dir string) error {
-	// Perform the actual download
-	qn := filepath.Join(dir, exe)
-	dest, err := os.OpenFile(qn, os.O_WRONLY|os.O_CREATE, 0700)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		dest.Close()
-		if err != nil {
-			_ = os.Remove(qn)
-		}
-	}()
-
-	suffix := ""
-	if runtime.GOOS == "windows" {
-		suffix = ".exe"
-	}
-
-	downloadURL := fmt.Sprintf(latestFuseFTPRelease, runtime.GOOS, runtime.GOARCH, suffix)
-	dlog.Debugf(ctx, "About to download fuseftp from %s", downloadURL)
-	var resp *http.Response
-	resp, err = http.Get(downloadURL)
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			err = errors.New(resp.Status)
-		}
-	}
-	if err != nil {
-		err = fmt.Errorf("failed to download %s: %v", downloadURL, err)
-		return err
-	}
-
-	dlog.Debugf(ctx, "Downloading %s...", downloadURL)
-	_, err = io.Copy(dest, resp.Body)
-	return err
-}
+//go:embed fuseftp.bits
+var fuseftpBits []byte
 
 // runFuseFtpServer ensures that the fuseftp gRPC server is downloaded into the
 // user cache, and starts it. Once the socket is created by the server, a
@@ -71,9 +29,15 @@ func downloadFuseFTPBinary(ctx context.Context, exe, dir string) error {
 //
 // The server dies when the given context is cancelled.
 func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
+	closeCh := true
+	defer func() {
+		if closeCh {
+			close(cCh)
+		}
+	}()
+
 	dir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
-		close(cCh)
 		return err
 	}
 	exe := "fuseftp"
@@ -81,25 +45,32 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 		exe = "fuseftp.exe"
 	}
 	qn := filepath.Join(dir, exe)
-	_, err = os.Stat(qn)
+	var sz int
+	st, err := os.Stat(qn)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			if err = downloadFuseFTPBinary(ctx, exe, dir); err != nil {
-				close(cCh)
-				return err
-			}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		sz = 0
+	} else {
+		sz = int(st.Size())
+	}
+
+	if len(fuseftpBits) != sz {
+		if err = os.WriteFile(qn, fuseftpBits, 0700); err != nil {
+			return err
 		}
 	}
 
 	sf, err := os.CreateTemp("", "fuseftp-*.socket")
 	if err != nil {
-		close(cCh)
-		return fmt.Errorf("CreateTemp failed: %w", err)
+		return err
 	}
 	socketName := sf.Name()
 	_ = sf.Close()
 	_ = os.Remove(socketName)
 
+	closeCh = false // closing the channel is now the responsibility of waitForSocketAndConnect
 	go waitForSocketAndConnect(ctx, socketName, cCh)
 
 	cmd := proc.CommandContext(ctx, qn, socketName)
