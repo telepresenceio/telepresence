@@ -73,8 +73,8 @@ nextMP:
 //   - Name
 //   - Namespace
 //   - Spec.Template:
-//     - Labels
-//     - Containers (must contain an equal number of equally named containers with equal ports)
+//   - Labels
+//   - Containers (must contain an equal number of equally named containers with equal ports)
 func workloadEquals(oa, ob runtime.Object) bool {
 	a, err := k8sapi.WrapWorkload(oa)
 	if err != nil {

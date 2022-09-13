@@ -49,25 +49,6 @@ commands:
             fi
             go version
 
-  "install-macfuse":
-    steps:
-      - run:
-          name: "Install macFUSE"
-          command: |
-            set -x
-            brew update
-            brew install --cask macfuse
-
-  "install-libfuse-dev":
-    steps:
-      - run:
-          name: "Install libfuse-dev"
-          command: |
-            set -x
-            sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-            sudo apt-get update
-            sudo apt-get install -y libfuse-dev gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-
 jobs:
 
   "release-linux":
@@ -75,12 +56,15 @@ jobs:
     steps:
       - checkout
       - install-go
-      - install-libfuse-dev
       - run: pip3 install awscli
       - run:
           name: Docker login
           command: |
             docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - run:
           name: Push Images
           command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images
@@ -97,14 +81,13 @@ jobs:
       - run:
           name: "Promote linux (arch arm64)"
           command: |
-            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 CC=aarch64-linux-gnu-gcc make promote-to-stable
+            [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make promote-to-stable
 
   "release-macos":
     executor: vm-macos
     steps:
       - checkout
       - install-go
-      - install-macfuse
       - run: sudo pip3 install awscli
       # once we update our mac runner to a version past Catalina (12.5.1+)
       # we can remove this.  But since we all run Big Sur on our machines right now
@@ -165,7 +148,6 @@ jobs:
     steps:
     - checkout
     - install-go
-    - install-libfuse-dev
     - run: pip3 install awscli
     - run:
         name: Docker login
@@ -207,7 +189,6 @@ jobs:
     steps:
     - checkout
     - install-go
-    - install-macfuse
     - run: sudo pip3 install awscli
     - run:
         name: "Publish nightly macos (arch amd64)"
@@ -223,8 +204,8 @@ jobs:
         name: "Publish nightly macos (arch arm64)"
         command: |
           newTag=$(go run ./build-aux/genversion nightly)
-          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 CC=aarch64-linux-gnu-gcc make push-executable
-          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 CC=aarch64-linux-gnu-gcc make promote-nightly
+          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make push-executable
+          TELEPRESENCE_VERSION=$newTag GOARCH=arm64 make promote-nightly
     - store_artifacts:
         name: "Store nightly artifacts"
         path: build-output/

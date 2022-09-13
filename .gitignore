@@ -35,6 +35,9 @@ tst-systema
 # The Chart directory
 !/charts/telepresence
 
+# Downloaded fuseftp bits
+pkg/client/userd/fuseftp.bits
+
 # Needed to build on windows
 .wintools
 .gocache

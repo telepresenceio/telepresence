@@ -91,8 +91,8 @@ func findServicesSelecting(c context.Context, namespace string, lbs labels.Label
 // that indeed do listen a port but lack a matching port description in the manifest, which is what
 // you get if you do:
 //
-//     kubectl create deploy my-deploy --image my-image
-//     kubectl expose deploy my-deploy --port 80 --target-port 8080
+//	kubectl create deploy my-deploy --image my-image
+//	kubectl expose deploy my-deploy --port 80 --target-port 8080
 func findContainerMatchingPort(port *core.ServicePort, cns []core.Container) (*core.Container, int) {
 	// The protocol of the targetPort must match the protocol of the containerPort because it is
 	// not illegal to listen with both TCP and UDP on the same port.

@@ -13,8 +13,8 @@ import (
 
 // handledConnectionImpl is the intersection of these two interfaces:
 //
-//   manager.ManagerProxy_HandleConnectionClient
-//   manager.ManagerProxy_HandleConnectionServer
+//	manager.ManagerProxy_HandleConnectionClient
+//	manager.ManagerProxy_HandleConnectionServer
 type handledConnectionImpl interface {
 	Send(*manager.ConnectionChunk) error
 	Recv() (*manager.ConnectionChunk, error)
