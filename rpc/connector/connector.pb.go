@@ -407,6 +407,7 @@ type RunCommandRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to COrD:
+	//
 	//	*RunCommandRequest_Command_
 	//	*RunCommandRequest_Data
 	//	*RunCommandRequest_SoftCancel

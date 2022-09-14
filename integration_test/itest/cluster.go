@@ -63,10 +63,10 @@ type Cluster interface {
 
 // The cluster is created once and then reused by all tests. It ensures that:
 //
-//  - executable and the images are built once
-//  - a docker repository is available
-//  - built images are pushed to the docker repository
-//  - a cluster is available
+//   - executable and the images are built once
+//   - a docker repository is available
+//   - built images are pushed to the docker repository
+//   - a cluster is available
 type cluster struct {
 	suffix           string
 	isCI             bool

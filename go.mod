@@ -9,7 +9,7 @@ require (
 	github.com/creack/pty v1.1.18
 	github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
-	github.com/datawire/go-fuseftp v0.0.0-20220823081459-2b79f64b6798
+	github.com/datawire/go-fuseftp v0.1.9
 	github.com/datawire/metriton-go-client v0.1.1
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/godbus/dbus/v5 v5.1.0
@@ -29,7 +29,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.7.3
+	github.com/telepresenceio/telepresence/rpc/v2 v2.7.4
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.32.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.33.0
 	go.opentelemetry.io/otel v1.8.0
@@ -124,7 +124,6 @@ require (
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/jlaffaye/ftp v0.0.0-20220821212529-0aeb8660a7e2 // indirect
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/intern v1.0.1-0.20211109044230-42b52b674af5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -161,7 +160,6 @@ require (
 	github.com/russross/blackfriday v1.5.2 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
-	github.com/winfsp/cgofuse v1.5.1-0.20220421173602-ce7e5a65cac7 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
@@ -189,5 +187,7 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.13.6 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 )
+
+require github.com/datawire/go-fuseftp/rpc v0.1.9
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

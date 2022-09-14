@@ -15,10 +15,12 @@ func FStat(file *os.File) (SysInfo, error) {
 // os specific.
 //
 // Unix:
-//  info.Sys().(*syscall.Stat_t)
+//
+//	info.Sys().(*syscall.Stat_t)
 //
 // Windows:
-//  info.Sys().(*syscall.Win32FileAttributeData)
+//
+//	info.Sys().(*syscall.Win32FileAttributeData)
 type SysInfo interface {
 	fmt.Stringer
 

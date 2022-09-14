@@ -61,6 +61,10 @@ jobs:
           name: Docker login
           command: |
             docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - run:
           name: Push Images
           command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images
@@ -69,7 +73,7 @@ jobs:
           command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable
       - run:
           name: "Publish linux (arch arm64)"
-          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make push-executable
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 CC=aarch64-linux-gnu-gcc make push-executable
       - run:
           name: "Promote linux (arch amd64)"
           command: |
